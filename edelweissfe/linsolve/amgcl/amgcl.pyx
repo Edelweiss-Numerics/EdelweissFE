@@ -764,16 +764,16 @@ cdef class PyAMGCLPTwoGrid(_PyAMGCLTwoLevel):
 cdef class PyAMGCLRigidBodyCoarseLevel(_PyAMGCLTwoLevel):
     """The rigid-body coarse level preconditioner of :mod:`edelweissfe.linsolve.composition.rigidbodycoarselevel`, built
     and applied entirely in C++ (``RigidBodyCoarseLevelPreconditionerT`` in ``amgcl-wrapper.hpp``, its steps in
-    ``amgcl-rigid-body-coarse-level.hpp``): the aggregates, the tentative prolongation from the rigid-body modes, the
-    smoothed prolongation, the Galerkin coarse operator, the AMGCL hierarchy below it, the fine Chebyshev smoother and
-    the cycle, all OpenMP-threaded -- no Python runs inside :meth:`applyPreconditioner`.
+    ``amgcl-rigid-body-coarse-level.hpp``) on the near null-space handed to :meth:`build`: the aggregates, the tentative
+    prolongation, the smoothed prolongation, the Galerkin coarse operator, the AMGCL hierarchy below it, the fine
+    Chebyshev smoother and the cycle, all OpenMP-threaded -- no Python runs inside :meth:`applyPreconditioner`.
     """
     cdef RigidBodyCoarseLevelPreconditioner* preconditioner
 
     def __cinit__(self, dict params):
         """
         params: {"backendBlockSize": 3, "backendPrecision": "float", "prolongation": "smoothed",
-        "coarseHierarchyPrecision": "double", "rotations": true, "amgcl": {<the field's AMGCL tree>}}, see
+        "coarseHierarchyPrecision": "double", "amgcl": {<the field's AMGCL tree>}}, see
         ``RigidBodyCoarseLevelPreconditioner`` in ``amgcl-wrapper.hpp``. Validated here, before any build.
         """
         cdef bytes json_bytes = json.dumps(params).encode("utf-8")
@@ -785,14 +785,14 @@ cdef class PyAMGCLRigidBodyCoarseLevel(_PyAMGCLTwoLevel):
         if self.preconditioner != NULL:
             del self.preconditioner
 
-    def build(self, object A, object coordinates, object scaling, double spectralRadius=0.0,
-              object dominantVector=None):
+    def build(self, object A, object nullspace, double spectralRadius=0.0, object dominantVector=None):
         """
-        Build the preconditioner for A (scipy.sparse csr_matrix, the field's equilibrated diagonal block D K D with
+        Build the preconditioner for A (scipy.sparse csr_matrix, the field's equilibrated diagonal block D A D with
         its Dirichlet identity rows, node-major with ``backendBlockSize`` DOFs per node).
 
-        coordinates: (nNodes, backendBlockSize) float64, the field's node coordinates, in its DOF order.
-        scaling: the field's equilibration D (n entries).
+        nullspace: (n, M) float64, the near null-space of A whose vectors span the coarse space of every aggregate,
+        already divided by the equilibration D: M = ``backendBlockSize`` (the translations) or ``backendBlockSize *
+        (backendBlockSize + 1) / 2`` (all rigid-body modes).
         spectralRadius: > 0 to start from this fine spectral radius instead of estimating it in full.
         dominantVector: with spectralRadius, the previous build's :attr:`fineDominantVector`, to re-check it from.
         """
@@ -801,18 +801,13 @@ cdef class PyAMGCLRigidBodyCoarseLevel(_PyAMGCLTwoLevel):
         if not A.has_sorted_indices:
             A = A.sorted_indices()
         A, indptr, indices, data = _csrArrays(A)
-        cdef int n = A.shape[0]
-        cdef int blockSize = self.preconditioner.blockSize()
-        coords = np.ascontiguousarray(coordinates, dtype=np.float64)
-        if coords.ndim != 2 or coords.shape[1] != blockSize:
-            raise ValueError(
-                "the coordinates must have the shape (nNodes, {:}), got {:}".format(blockSize, coords.shape)
-            )
-        scalingArray = _vector(scaling, n, "scaling")
+        B = np.ascontiguousarray(nullspace, dtype=np.float64)
+        if B.ndim != 2:
+            raise ValueError("the near null-space must be an (n, M) array, got the shape {:}".format(B.shape))
         dominant = np.zeros(0) if dominantVector is None else np.ascontiguousarray(dominantVector, dtype=np.float64)
-        # the C++ build checks that the nodes are the field's (nNodes blockSize = n)
-        self.preconditioner.build(n, _intData(indptr), _intData(indices), _constDoubleData(data),
-                                  _constDoubleData(coords.reshape(-1)), coords.shape[0], _constDoubleData(scalingArray),
+        # the C++ build checks the shape of the near null-space against the block
+        self.preconditioner.build(A.shape[0], _intData(indptr), _intData(indices), _constDoubleData(data),
+                                  _constDoubleData(B.reshape(-1)), B.shape[0], B.shape[1],
                                   spectralRadius, _constDoubleData(dominant), dominant.shape[0])
 
     @property
@@ -822,7 +817,8 @@ cdef class PyAMGCLRigidBodyCoarseLevel(_PyAMGCLTwoLevel):
 
     @property
     def modesPerAggregate(self):
-        """The coarse DOFs per aggregate, one per rigid-body mode: 6 in 3D, 3 in 2D."""
+        """The coarse DOFs per aggregate of the last build, M, one per column of its near null-space: 6 in 3D and 3
+        in 2D for the rigid-body modes."""
         return self.preconditioner.modesPerAggregate()
 
     @property
@@ -842,8 +838,8 @@ cdef class PyAMGCLRigidBodyCoarseLevel(_PyAMGCLTwoLevel):
         return _copied(self.preconditioner.aggregateOfNode())
 
     def coarseNullspace(self):
-        """The near null-space of the AMGCL hierarchy below, the coefficients of the field's rigid-body modes in the
-        coarse basis: (:attr:`nCoarse`, modes) float64."""
+        """The near null-space of the AMGCL hierarchy below, the coefficients of the near null-space in the coarse
+        basis (per aggregate the R factor of its QR factorization): (:attr:`nCoarse`, M) float64."""
         return _copied(self.preconditioner.coarseNullspace()).reshape(
             self.preconditioner.nCoarse(), self.preconditioner.coarseNullspaceColumns()
         )

@@ -1,8 +1,9 @@
 /*
  * The rigid-body coarse level of a vector field on a block backend (EdelweissFE blockamg, key rigidBodyCoarseLevel):
- * the building blocks of a smoothed-aggregation coarse level whose coarse space is spanned by the rigid-body modes --
- * translations and rotations -- of every aggregate, under a fine level stored in node-wise B x B blocks.
- * RigidBodyCoarseLevelPreconditionerT (amgcl-wrapper.hpp) assembles them into a two-level cycle.
+ * the building blocks of a smoothed-aggregation coarse level whose coarse space is spanned, on every aggregate, by a
+ * near null-space of M vectors -- the rigid-body modes, translations and rotations -- under a fine level stored in
+ * node-wise B x B blocks. RigidBodyCoarseLevelPreconditionerT (amgcl-wrapper.hpp) assembles them into a two-level
+ * cycle.
  *
  * Why. The near null-space of linear elasticity -- the displacements of (almost) no strain energy -- are the rigid-body
  * modes: B translations and B (B - 1) / 2 rotations. A smoothed-aggregation coarse level represents a smooth error
@@ -13,18 +14,32 @@
  * reduce it either (its spectral window starts at a fraction of the spectral radius by construction), so it converges
  * slowly. With the rotations in the coarse space, a rigid rotation of an aggregate is represented exactly.
  *
- * How. On the field's equilibrated block A = D K D (D = diag(scaling)):
+ * How. On the field's equilibrated block \hat A = D A D (D = diag(scaling)), with the near null-space B of \hat A --
+ * n x M, the field's rigid-body modes divided by D, which Python builds (nullspace.py's rigidBodyNullspace(), the one
+ * definition of the modes) -- the steps, one function each:
  *   1. the aggregates: AMGCL's plain aggregation of the node-wise B x B blocks, as AMGCL's own first level on the
- *      block backend;
- *   2. the tentative prolongation (rigidBodyTentativeProlongation()): per aggregate, its rigid-body modes, orthonormal
- *      by a QR factorization; M = B (B + 1) / 2 coarse dofs per aggregate;
- *   3. the smoothed prolongation P = (I - omega D_F^-1 A_F) P_tent, AMGCL's (amgcl-smoothed-prolongation.hpp);
- *   4. the Galerkin coarse operator A_c = P^T A P (galerkinCoarseOperator()) in M x M blocks, and its near null-space,
- *      the coefficients of the field's rigid-body modes in the coarse basis: an AMGCL hierarchy continues below.
+ *      block backend (nodesOfAggregates() lists the nodes of each);
+ *   2. the tentative prolongation (tentativeProlongation()), as AMGCL's tentative_prolongation does it: per aggregate,
+ *      the rows of B on its dofs (aggregateModes()), orthonormalized by a QR factorization (orthonormalizeModes()),
+ *      the rows of Q the blocks of P_tent (writeProlongationBlocks()); M coarse dofs per aggregate;
+ *   3. the dependent modes, dropped by that QR factorization;
+ *   4. the smoothed prolongation P = (I - omega diag_B(\hat A_F)^-1 \hat A_F) P_tent, AMGCL's
+ *      (amgcl-smoothed-prolongation.hpp), diag_B the node-wise B x B diagonal blocks;
+ *   5. the Galerkin coarse operator A_c = P^T \hat A P (galerkinCoarseOperator()) in M x M blocks, handed to AMGCL as
+ *      a scalar matrix (unblockedCoarseOperator());
+ *   6. the AMGCL hierarchy below, with the R factors of the QR factorizations as its near null-space (AMGCL's
+ *      convention).
+ * Steps 2 to 5 run outside AMGCL because its own building blocks do not fit: AMGCL's coarsening on a block backend
+ * takes the translations alone, and its as_scalar route re-blocks the prolongation into B x B blocks (3 modes do not
+ * fit 2 x 2 blocks), keeps an orthonormal completion of dependent modes in its Householder QR, and leaves the modes on
+ * the Dirichlet rows; its sparse products take one block type, where the Galerkin product chains B x B, B x M and
+ * M x B blocks.
  */
 #pragma once
 
 #include "amgcl-smoothed-prolongation.hpp"
+#include <algorithm>
+#include <amgcl/adapter/block_matrix.hpp>
 #include <amgcl/backend/builtin.hpp>
 #include <amgcl/detail/sort_row.hpp>
 #include <amgcl/value_type/static_matrix.hpp>
@@ -36,72 +51,235 @@
 #include <string>
 #include <vector>
 
-/// @brief The rigid-body modes of a vector field of B components per node: the B translations and the B (B - 1) / 2
-/// infinitesimal rotations, the displacements of zero strain energy of linear elasticity -- the same modes, in the
-/// same order, as edelweissfe/linsolve/nullspace.py's rigidBodyNullspace().
-/// @tparam B the number of components per node, 2 or 3
-template < int B >
-struct RigidBodyModes;
-
-/// @brief The rigid-body modes in 3D: the translations t_x, t_y, t_z, and the rotations about the x, y and z axes,
-/// r_x = (0, -z, y), r_y = (z, 0, -x), r_z = (-y, x, 0) -- the cross products e_axis x p of the axis with the position
-/// p = (x, y, z) relative to the centre of rotation.
-template <>
-struct RigidBodyModes< 3 > {
-  /// @brief The number of modes: three translations and three rotations.
-  enum { count = 6 };
-
-  /// @brief Component c of mode k at the position p relative to the centre of rotation.
-  static double value( int k, int c, const double* p )
-  {
-    switch ( k ) {
-    case 3:  // rotation about x: (0, -z, y)
-      return c == 1 ? -p[2] : ( c == 2 ? p[1] : 0.0 );
-    case 4:  // rotation about y: (z, 0, -x)
-      return c == 0 ? p[2] : ( c == 2 ? -p[0] : 0.0 );
-    case 5:  // rotation about z: (-y, x, 0)
-      return c == 0 ? -p[1] : ( c == 1 ? p[0] : 0.0 );
-    default: // translation along axis k
-      return c == k ? 1.0 : 0.0;
-    }
-  }
-};
-
-/// @brief The rigid-body modes in 2D: the translations t_x, t_y, and the in-plane rotation r = (-y, x).
-template <>
-struct RigidBodyModes< 2 > {
-  /// @brief The number of modes: two translations and one rotation.
-  enum { count = 3 };
-
-  /// @brief Component c of mode k at the position p relative to the centre of rotation.
-  static double value( int k, int c, const double* p )
-  {
-    if ( k == 2 )              // the in-plane rotation: (-y, x)
-      return c == 0 ? -p[1] : p[0];
-    return c == k ? 1.0 : 0.0; // translation along axis k
-  }
-};
-
-/// @brief The relative remainder at or below which rigidBodyTentativeProlongation() takes a mode of an aggregate as
-/// linearly dependent on the modes before it: sqrt(machine epsilon), 1.5e-8.
+/// @brief The relative remainder at or below which orthonormalizeModes() takes a mode of an aggregate as linearly
+/// dependent on the modes before it: sqrt(machine epsilon), 1.5e-8.
 ///
 /// Not a tuned value. An exactly dependent mode leaves a remainder at the rounding level of the Gram-Schmidt sweeps,
-/// about 1e-16 of its norm; an independent one leaves a remainder of the order of the aggregate's own geometry (a
-/// rotation about an axis across a thin aggregate: its thickness over its length, and no element is 1e8 times longer
-/// than thick). Any threshold between the two separates them; half the digits of double precision is the
-/// conventional one.
+/// about 1e-16 of its norm; an independent one leaves a remainder of the order of the aggregate's own geometry relative
+/// to the mode: a rotation about the field's centroid g carries a translation of the order of |c_a - g| across an
+/// aggregate of extent h_a around c_a, and leaves a remainder of the order of h_a once the translations are projected
+/// out, h_a / |c_a - g| of its norm -- 1e-2 to 1e-4 on a mesh of elements a hundred to ten thousand times smaller than
+/// the structure, so a rotation does not need to be centred on the aggregate to be kept. Any threshold between the two
+/// separates them; half the digits of double precision is the conventional one.
 inline double dependentModeTolerance()
 {
   return std::sqrt( std::numeric_limits< double >::epsilon() );
 }
 
-/// @brief The tentative prolongation of the rigid-body coarse level, and what the coarse level takes over from its
-/// construction, see rigidBodyTentativeProlongation().
-/// @tparam B the number of components per node, 2 or 3
-template < int B >
-struct RigidBodyTentativeProlongationT {
-  /// @brief The coarse dofs per aggregate: one per rigid-body mode.
-  enum { M = RigidBodyModes< B >::count };
+/// @brief The nodes of every aggregate, in node order: those of aggregate a are nodes[start[a]], ...,
+/// nodes[start[a + 1] - 1].
+struct AggregateMembers {
+  /// @brief Where the nodes of each aggregate begin in `nodes`, nAggregates + 1 entries.
+  std::vector< ptrdiff_t > start;
+  /// @brief The aggregated nodes, aggregate by aggregate.
+  std::vector< ptrdiff_t > nodes;
+
+  /// @brief The number of nodes of aggregate a.
+  ptrdiff_t size( ptrdiff_t a ) const { return start[a + 1] - start[a]; }
+  /// @brief The q-th node of aggregate a.
+  ptrdiff_t node( ptrdiff_t a, ptrdiff_t q ) const { return nodes[start[a] + q]; }
+};
+
+/// @brief The nodes of every aggregate: a counting sort over their aggregate ids (a node of id < 0 is in none).
+/// @param aggregateOfNode the aggregate of every node
+/// @param nAggregates the number of aggregates
+/// @return the nodes of each aggregate
+inline AggregateMembers nodesOfAggregates( const std::vector< ptrdiff_t >& aggregateOfNode, size_t nAggregates )
+{
+  AggregateMembers members;
+  members.start.assign( nAggregates + 1, 0 );
+  for ( ptrdiff_t aggregate : aggregateOfNode )
+    if ( aggregate >= 0 )
+      ++members.start[aggregate + 1];
+  std::partial_sum( members.start.begin(), members.start.end(), members.start.begin() );
+  members.nodes.resize( members.start[nAggregates] );
+  std::vector< ptrdiff_t > next( members.start.begin(), members.start.end() - 1 );
+  for ( size_t i = 0; i < aggregateOfNode.size(); ++i )
+    if ( aggregateOfNode[i] >= 0 )
+      members.nodes[next[aggregateOfNode[i]]++] = static_cast< ptrdiff_t >( i );
+  return members;
+}
+
+/// @brief The M modes of one aggregate as the columns of a d x M matrix -- column k mode k on the aggregate's
+/// d = B m dofs, row B q + c the component c of its q-th node -- with the column operations of the Gram-Schmidt sweeps
+/// of orthonormalizeModes().
+/// @tparam M the number of modes
+template < int M >
+class ModeColumns {
+public:
+  /// @brief Make it d x M, zero.
+  void reset( ptrdiff_t d )
+  {
+    d_ = d;
+    values_.assign( static_cast< size_t >( d ) * M, 0.0 );
+  }
+
+  /// @brief The rows d.
+  ptrdiff_t rows() const { return d_; }
+
+  /// @brief The entry in row `row` of column k.
+  double& operator()( ptrdiff_t row, int k ) { return values_[row + d_ * k]; }
+  /// @copydoc operator()(ptrdiff_t,int)
+  double operator()( ptrdiff_t row, int k ) const { return values_[row + d_ * k]; }
+
+  /// @brief The scalar product of the columns j and k.
+  double dot( int j, int k ) const
+  {
+    const double* vj  = column( j );
+    const double* vk  = column( k );
+    double        sum = 0.0;
+    for ( ptrdiff_t r = 0; r < d_; ++r )
+      sum += vj[r] * vk[r];
+    return sum;
+  }
+
+  /// @brief The norm of column k.
+  double norm( int k ) const { return std::sqrt( dot( k, k ) ); }
+
+  /// @brief column k <- column k - factor column j
+  void subtract( int k, double factor, int j )
+  {
+    double*       vk = column( k );
+    const double* vj = column( j );
+    for ( ptrdiff_t r = 0; r < d_; ++r )
+      vk[r] -= factor * vj[r];
+  }
+
+  /// @brief column k <- factor column k
+  void scale( int k, double factor )
+  {
+    double* vk = column( k );
+    for ( ptrdiff_t r = 0; r < d_; ++r )
+      vk[r] *= factor;
+  }
+
+  /// @brief column k <- 0
+  void zero( int k ) { std::fill( column( k ), column( k ) + d_, 0.0 ); }
+
+private:
+  ptrdiff_t             d_ = 0;
+  std::vector< double > values_;
+
+  double*       column( int k ) { return values_.data() + d_ * k; }
+  const double* column( int k ) const { return values_.data() + d_ * k; }
+};
+
+/// @brief 2. The modes V_a of aggregate a: the rows of the near null-space on its dofs, zero on the Dirichlet rows.
+///
+/// The Dirichlet rows are zero because the cycle solves a Dirichlet row -- or the identity row of a
+/// multi-point-constraint slave -- exactly, apart from the coarse-grid correction, and a rigid-body mode is near-null
+/// on the free dofs only. So P^T \hat A P = P_F^T \hat A_FF P_F, and the coarse correction leaves those rows zero.
+/// @tparam B the number of components per node
+/// @tparam M the number of modes, the columns of the near null-space
+/// @param members the nodes of the aggregates
+/// @param a the aggregate
+/// @param nullspace the near null-space, n x M, row-major
+/// @param isDirichlet per dof, whether its row is a Dirichlet row
+/// @param V the modes of the aggregate, set here
+template < int B, int M >
+void aggregateModes( const AggregateMembers& members,
+                     ptrdiff_t               a,
+                     const double*           nullspace,
+                     const char*             isDirichlet,
+                     ModeColumns< M >&       V )
+{
+  V.reset( B * members.size( a ) );
+  for ( ptrdiff_t q = 0; q < members.size( a ); ++q ) {
+    for ( int c = 0; c < B; ++c ) {
+      const ptrdiff_t dof = B * members.node( a, q ) + c;
+      if ( isDirichlet[dof] )
+        continue;
+      for ( int k = 0; k < M; ++k )
+        V( B * q + c, k ) = nullspace[M * dof + k];
+    }
+  }
+}
+
+/// @brief The QR factorization V_a = Q_a R_a of the modes of an aggregate (orthonormalizeModes()).
+/// @tparam M the number of modes
+template < int M >
+struct OrthonormalizedModes {
+  /// @brief R_a, upper triangular; the row of a dropped mode is zero.
+  amgcl::static_matrix< double, M, M > R = amgcl::math::zero< amgcl::static_matrix< double, M, M > >();
+  /// @brief Per mode, whether it is in the coarse space (not dropped as dependent).
+  char kept[M] = {};
+  /// @brief The number of modes dropped.
+  int dropped = 0;
+};
+
+/// @brief 2. and 3. V_a = Q_a R_a, by modified Gram-Schmidt with a second sweep, which makes Q_a orthonormal to
+/// rounding also for nearly dependent columns; the columns of V become those of Q_a. The columns of P_tent are then
+/// orthonormal, and P_tent R_a reproduces the modes on the aggregate exactly.
+///
+/// The dependent modes. A mode the sweeps reduce to at most `tolerance` of its norm (dependentModeTolerance()) lies in
+/// the span of the modes before it: a rotation of an aggregate of a single node, the rotation about the line through a
+/// collinear aggregate, a mode whose components are all constrained. Its normalized remainder would be rounding noise,
+/// not a direction of the aggregate, so it is dropped: a zero column of Q_a and a zero row of R_a. (AMGCL's own
+/// Householder QR keeps such a column in an aggregate of at least as many dofs as modes: an orthonormal completion,
+/// unrelated to the modes.)
+/// @tparam M the number of modes
+/// @param V the modes, which become the columns of Q
+/// @param tolerance the relative remainder at or below which a mode is dependent
+/// @return R and the modes kept
+template < int M >
+OrthonormalizedModes< M > orthonormalizeModes( ModeColumns< M >& V, double tolerance )
+{
+  OrthonormalizedModes< M > qr;
+  for ( int k = 0; k < M; ++k ) {
+    const double norm = V.norm( k );
+    for ( int sweep = 0; sweep < 2; ++sweep ) {
+      for ( int j = 0; j < k; ++j ) {
+        if ( !qr.kept[j] )
+          continue;
+        const double r_jk = V.dot( j, k );
+        V.subtract( k, r_jk, j );
+        qr.R( j, k ) += r_jk;
+      }
+    }
+    const double remainder = V.norm( k );
+    if ( norm > 0.0 && remainder > tolerance * norm ) {
+      qr.kept[k]   = 1;
+      qr.R( k, k ) = remainder;
+      V.scale( k, 1.0 / remainder );
+    }
+    else {
+      ++qr.dropped;
+      V.zero( k );
+      for ( int j = 0; j < M; ++j )
+        qr.R( k, j ) = 0.0;
+    }
+  }
+  return qr;
+}
+
+/// @brief 2. The blocks of P_tent of aggregate a: the rows of Q_a, one B x M block per node, in the column of the
+/// aggregate.
+/// @tparam B the number of components per node
+/// @tparam M the number of modes
+/// @param P P_tent, its row pointers set
+/// @param members the nodes of the aggregates
+/// @param a the aggregate
+/// @param Q the orthonormal modes of the aggregate
+template < int B, int M, class Matrix >
+void writeProlongationBlocks( Matrix& P, const AggregateMembers& members, ptrdiff_t a, const ModeColumns< M >& Q )
+{
+  for ( ptrdiff_t q = 0; q < members.size( a ); ++q ) {
+    amgcl::static_matrix< double, B, M > block;
+    for ( int c = 0; c < B; ++c )
+      for ( int k = 0; k < M; ++k )
+        block( c, k ) = Q( B * q + c, k );
+    const ptrdiff_t node = members.node( a, q );
+    P.col[P.ptr[node]]   = a;
+    P.val[P.ptr[node]]   = block;
+  }
+}
+
+/// @brief The tentative prolongation of the coarse level, and what the coarse level takes over from its construction,
+/// see tentativeProlongation().
+/// @tparam B the number of components per node
+/// @tparam M the number of modes, the coarse dofs per aggregate
+template < int B, int M >
+struct TentativeProlongationT {
   /// @brief A block of P: the B components of a node times the M coarse dofs of its aggregate.
   typedef amgcl::static_matrix< double, B, M > Block;
   /// @brief The block CSR type of P.
@@ -109,87 +287,37 @@ struct RigidBodyTentativeProlongationT {
 
   /// @brief P_tent: one block per aggregated node, in the column of its aggregate; empty rows for the other nodes.
   std::shared_ptr< Matrix > P;
-  /// @brief The near null-space of the coarse level: the coefficients of the field's M rigid-body modes in the coarse
-  /// basis, (nAggregates M) x M, row-major -- per aggregate the M x M block R_a T_a.
+  /// @brief The near null-space of the coarse level: the coefficients of the near null-space in the coarse basis,
+  /// (nAggregates M) x M, row-major -- per aggregate the M x M block R_a (P_tent R_a = V_a).
   std::vector< double > coarseNullspace;
   /// @brief Per coarse dof, whether its mode is in the coarse space; one that is not has a zero column of P.
   std::vector< char > keptMode;
   /// @brief The number of modes dropped as linearly dependent.
-  ptrdiff_t droppedModes;
+  ptrdiff_t droppedModes = 0;
 };
 
-/// @brief The tentative prolongation of the rigid-body coarse level: the rigid-body modes of every aggregate,
-/// orthonormalized.
-///
-/// Per aggregate a, with the centroid c_a of the coordinates of its nodes:
-///   * The modes V_a. Column k stacks mode k (RigidBodyModes) at x_i - c_a over the nodes i of the aggregate, divided
-///     by the equilibration: the near null-space of the equilibrated block D K D is D^-1 times that of K, as in
-///     rigidBodyNullspace(). A mode about the aggregate's own centroid, rather than about the field's, is not
-///     dominated by the translation it would carry far from the centre, so the QR factorization below loses no digits
-///     to cancellation.
-///   * The Dirichlet rows. Their entries are zero: the cycle solves a Dirichlet row -- or the identity row of a
-///     multi-point-constraint slave -- exactly, apart from the coarse-grid correction, and a rigid-body mode is
-///     near-null on the free dofs only. So P^T A P = P_F^T A_FF P_F, and the coarse correction leaves those rows zero.
-///   * The QR factorization V_a = Q_a R_a, by modified Gram-Schmidt with a second sweep, which makes Q_a orthonormal to
-///     rounding also for nearly dependent columns. The rows of Q_a are the blocks of P_tent: the columns of P_tent are
-///     orthonormal, and P_tent R_a reproduces the modes on the aggregate exactly.
-///   * The dependent modes. A mode the Gram-Schmidt sweeps reduce to at most dependentModeTolerance() of its norm lies
-///     in the span of the modes before it: a rotation of an aggregate of a single node (zero about its own centroid),
-///     the rotation about the line through a collinear aggregate, a mode whose components are all constrained. Its
-///     normalized remainder would be rounding noise, not a direction of the aggregate, so it is dropped: a zero column
-///     of P_tent and a zero row of R_a. (AMGCL's own Householder QR keeps such a column in an aggregate of at least
-///     as many dofs as modes: an orthonormal completion, unrelated to the modes.)
-///   * The coarse near null-space. The field's rigid-body modes, about the field's centroid g, are V_a T_a on the
-///     aggregate, with T_a the identity plus, in its translation rows, the rotations evaluated at c_a - g: a rotation
-///     about g is the rotation about c_a plus a translation of the whole aggregate. So they are P_tent R_a T_a, and
-///     their coefficients in the coarse basis are R_a T_a: the near null-space of the AMGCL hierarchy below (AMGCL's
-///     own recursion takes R_a as the next near null-space in the same way).
-///
-/// A node in no aggregate (aggregate id < 0: no strong connection, e.g. a fully constrained one) gets an empty row, as
-/// in AMGCL's tentative prolongation: only the smoother acts on it.
-///
+/// @brief 2. and 3. The tentative prolongation of the coarse level: the near null-space of every aggregate,
+/// orthonormalized, as AMGCL's tentative_prolongation does it -- QR of the near null-space restricted to each
+/// aggregate, with R_a as the coarse near null-space -- with the Dirichlet rows zero and the dependent modes dropped
+/// (aggregateModes(), orthonormalizeModes()). A node in no aggregate (aggregate id < 0: no strong connection, e.g. a
+/// fully constrained one) gets an empty row, as in AMGCL's tentative prolongation: only the smoother acts on it.
 /// @tparam B the number of components per node, 2 or 3
+/// @tparam M the number of modes: B (the translations) or B (B + 1) / 2 (all rigid-body modes)
 /// @param nNodes the number of nodes, the block rows of the fine operator
 /// @param nAggregates the number of aggregates
 /// @param aggregateOfNode the aggregate of every node, < 0 for none
-/// @param coordinates the node coordinates, nNodes x B, row-major
-/// @param scaling the equilibration of every dof, nNodes B entries
+/// @param nullspace the near null-space of the equilibrated block, n x M, row-major (n = B nNodes)
 /// @param isDirichlet per dof, whether its row is a Dirichlet (identity) row
-/// @param modesInCoarseSpace the modes that span the coarse space, the first ones: all M, or the B translations
-/// alone, which is AMGCL's own coarse space on the block backend (the control, see
-/// RigidBodyCoarseLevelPreconditioner: the other modes are dropped)
 /// @return P_tent, the coarse near null-space, the kept modes
-template < int B >
-RigidBodyTentativeProlongationT< B > rigidBodyTentativeProlongation( size_t                          nNodes,
-                                                                     size_t                          nAggregates,
-                                                                     const std::vector< ptrdiff_t >& aggregateOfNode,
-                                                                     const double*                   coordinates,
-                                                                     const double*                   scaling,
-                                                                     const char*                     isDirichlet,
-                                                                     int modesInCoarseSpace )
+template < int B, int M >
+TentativeProlongationT< B, M > tentativeProlongation( size_t                          nNodes,
+                                                      size_t                          nAggregates,
+                                                      const std::vector< ptrdiff_t >& aggregateOfNode,
+                                                      const double*                   nullspace,
+                                                      const char*                     isDirichlet )
 {
-  typedef RigidBodyTentativeProlongationT< B > Result;
-  const int                                    M = RigidBodyModes< B >::count;
-
-  // the nodes of every aggregate, in node order: a counting sort over their aggregate ids
-  std::vector< ptrdiff_t > aggregateStart( nAggregates + 1, 0 );
-  for ( size_t i = 0; i < nNodes; ++i )
-    if ( aggregateOfNode[i] >= 0 )
-      ++aggregateStart[aggregateOfNode[i] + 1];
-  std::partial_sum( aggregateStart.begin(), aggregateStart.end(), aggregateStart.begin() );
-  std::vector< ptrdiff_t > members( aggregateStart[nAggregates] );
-  std::vector< ptrdiff_t > next( aggregateStart.begin(), aggregateStart.end() - 1 );
-  for ( size_t i = 0; i < nNodes; ++i )
-    if ( aggregateOfNode[i] >= 0 )
-      members[next[aggregateOfNode[i]]++] = static_cast< ptrdiff_t >( i );
-
-  // the field's centroid: the centre of rotation of the field's rigid-body modes (as in rigidBodyNullspace())
-  double fieldCentroid[B] = {};
-  for ( size_t i = 0; i < nNodes; ++i )
-    for ( int c = 0; c < B; ++c )
-      fieldCentroid[c] += coordinates[B * i + c];
-  for ( int c = 0; c < B; ++c )
-    fieldCentroid[c] /= nNodes > 0 ? static_cast< double >( nNodes ) : 1.0;
+  typedef TentativeProlongationT< B, M > Result;
+  const AggregateMembers                 members = nodesOfAggregates( aggregateOfNode, nAggregates );
 
   Result result;
   result.P = std::make_shared< typename Result::Matrix >();
@@ -205,113 +333,17 @@ RigidBodyTentativeProlongationT< B > rigidBodyTentativeProlongation( size_t     
   ptrdiff_t    dropped   = 0;
 #pragma omp parallel reduction( + : dropped )
   {
-    // the aggregate's modes, column-major: entry (row, k) at V[row + d k], row = B q + c for component c of its
-    // node q, d = B m rows for its m nodes
-    std::vector< double > V;
-
+    ModeColumns< M > V;
 #pragma omp for schedule( dynamic, 16 )
     for ( ptrdiff_t a = 0; a < static_cast< ptrdiff_t >( nAggregates ); ++a ) {
-      const ptrdiff_t first = aggregateStart[a], m = aggregateStart[a + 1] - first, d = B * m;
-
-      double centroid[B] = {};
-      for ( ptrdiff_t q = 0; q < m; ++q )
-        for ( int c = 0; c < B; ++c )
-          centroid[c] += coordinates[B * members[first + q] + c];
-      for ( int c = 0; c < B; ++c )
-        centroid[c] /= static_cast< double >( m );
-
-      // the modes about the centroid, divided by the equilibration, zero on the Dirichlet rows
-      V.assign( d * M, 0.0 );
-      for ( ptrdiff_t q = 0; q < m; ++q ) {
-        const ptrdiff_t node = members[first + q];
-        double          position[B];
-        for ( int c = 0; c < B; ++c )
-          position[c] = coordinates[B * node + c] - centroid[c];
-        for ( int c = 0; c < B; ++c ) {
-          const ptrdiff_t dof = B * node + c;
-          if ( isDirichlet[dof] )
-            continue;
-          for ( int k = 0; k < M; ++k )
-            V[B * q + c + d * k] = RigidBodyModes< B >::value( k, c, position ) / scaling[dof];
-        }
-      }
-
-      // V = Q R by modified Gram-Schmidt with a second sweep; the columns of V become those of Q
-      double R[M * M] = {};
-      char   kept[M]  = {};
-      for ( int k = 0; k < M; ++k ) {
-        double* v           = &V[d * k];
-        double  normSquared = 0.0;
-        for ( ptrdiff_t r = 0; r < d; ++r )
-          normSquared += v[r] * v[r];
-        const double norm = std::sqrt( normSquared );
-
-        for ( int sweep = 0; sweep < 2; ++sweep ) {
-          for ( int j = 0; j < k; ++j ) {
-            if ( !kept[j] )
-              continue;
-            const double* qj         = &V[d * j];
-            double        projection = 0.0;
-            for ( ptrdiff_t r = 0; r < d; ++r )
-              projection += qj[r] * v[r];
-            for ( ptrdiff_t r = 0; r < d; ++r )
-              v[r] -= projection * qj[r];
-            R[M * j + k] += projection;
-          }
-        }
-
-        double remainderSquared = 0.0;
-        for ( ptrdiff_t r = 0; r < d; ++r )
-          remainderSquared += v[r] * v[r];
-        const double remainder = std::sqrt( remainderSquared );
-
-        if ( k < modesInCoarseSpace && norm > 0.0 && remainder > tolerance * norm ) {
-          kept[k]          = 1;
-          R[M * k + k]     = remainder;
-          const double inv = 1.0 / remainder;
-          for ( ptrdiff_t r = 0; r < d; ++r )
-            v[r] *= inv;
-        }
-        else {
-          // dropped: linearly dependent on the modes before it (or not in the coarse space)
-          if ( k < modesInCoarseSpace )
-            ++dropped;
-          for ( ptrdiff_t r = 0; r < d; ++r )
-            v[r] = 0.0;
-          for ( int j = 0; j < M; ++j )
-            R[M * k + j] = 0.0;
-        }
-      }
-
-      // the blocks of P_tent: the rows of Q
-      for ( ptrdiff_t q = 0; q < m; ++q ) {
-        typename Result::Block block;
-        for ( int c = 0; c < B; ++c )
-          for ( int k = 0; k < M; ++k )
-            block( c, k ) = V[B * q + c + d * k];
-        const ptrdiff_t node               = members[first + q];
-        result.P->col[result.P->ptr[node]] = a;
-        result.P->val[result.P->ptr[node]] = block;
-      }
-
-      // the coarse near null-space R T: T is the identity plus the rotations at c_a - g in the translation rows
-      double T[M * M] = {};
-      double offset[B];
-      for ( int c = 0; c < B; ++c )
-        offset[c] = centroid[c] - fieldCentroid[c];
-      for ( int k = 0; k < M; ++k )
-        T[M * k + k] = 1.0;
-      for ( int k = B; k < M; ++k )
-        for ( int c = 0; c < B; ++c )
-          T[M * c + k] = RigidBodyModes< B >::value( k, c, offset );
+      aggregateModes< B, M >( members, a, nullspace, isDirichlet, V );
+      const OrthonormalizedModes< M > qr = orthonormalizeModes< M >( V, tolerance );
+      dropped += qr.dropped;
+      writeProlongationBlocks< B, M >( *result.P, members, a, V );
       for ( int i = 0; i < M; ++i ) {
-        for ( int j = 0; j < M; ++j ) {
-          double sum = 0.0;
-          for ( int k = 0; k < M; ++k )
-            sum += R[M * i + k] * T[M * k + j];
-          result.coarseNullspace[( M * a + i ) * M + j] = sum;
-        }
-        result.keptMode[M * a + i] = kept[i];
+        for ( int j = 0; j < M; ++j )
+          result.coarseNullspace[( M * a + i ) * M + j] = qr.R( i, j );
+        result.keptMode[M * a + i] = qr.kept[i];
       }
     }
   }
@@ -448,84 +480,57 @@ std::shared_ptr< amgcl::backend::crs< CoarseBlock, ptrdiff_t, ptrdiff_t > > gale
   return Ac;
 }
 
-/// @brief The Galerkin coarse operator A_c (M x M blocks) as the scalar CSR matrix that the AMGCL hierarchy below the
-/// rigid-body coarse level is built on, without its exact zeros.
+/// @brief 5. The Galerkin coarse operator A_c (M x M blocks) as the scalar matrix the AMGCL hierarchy below is built
+/// on: AMGCL's unblock_matrix, with the diagonal entry `padding` for the coarse dof of every dropped mode.
 ///
-/// The coarse dof of a dropped mode has a zero column of P, hence a zero row and column in A_c. It gets the diagonal
-/// entry padding and nothing else, which keeps A_c regular (positive definite where A is) for the hierarchy below.
-/// For the two-level cycle the padding is exact, whatever its value: P^T maps every residual to zero there, and the
-/// zero column of P never prolongates what the hierarchy below computes there. Within the hierarchy below the padded
-/// dof is not entirely inert: where an aggregate of the next level is rank-deficient (it holds dropped modes), AMGCL's
-/// QR completes the orthonormal basis of that aggregate with directions that may include padded dofs, which then take
-/// a share of that level's coarse space -- a cost in efficiency only, the operator stays positive definite. The
-/// padding, the mean of the diagonal entries of the kept modes, lies inside the spectrum of A_c (each diagonal entry
-/// is a Rayleigh quotient), so it does not move the spectral-radius estimate of the hierarchy's smoother.
+/// The coarse dof of a dropped mode has a zero column of P, hence a zero row and column in A_c. Its diagonal entry
+/// becomes the padding, which keeps A_c regular (positive definite where \hat A is) for the hierarchy below. For the
+/// two-level cycle the padding is exact, whatever its value: P^T maps every residual to zero there, and the zero column
+/// of P never prolongates what the hierarchy below computes there. Within the hierarchy below the padded dof is not
+/// entirely inert: where an aggregate of the next level is rank-deficient (it holds dropped modes), AMGCL's QR
+/// completes the orthonormal basis of that aggregate with directions that may include padded dofs, which then take a
+/// share of that level's coarse space -- a cost in efficiency only, the operator stays positive definite. The padding,
+/// the mean of the diagonal entries of the kept modes, lies inside the spectrum of A_c (each diagonal entry is a
+/// Rayleigh quotient), so it does not move the spectral-radius estimate of the hierarchy's smoother.
+///
+/// The zeros of a dropped mode's row and column stay stored: AMGCL's aggregation below is point-wise (the M dofs of an
+/// aggregate one point, aggr.block_size), with the largest entry of every M x M block as the strength of a
+/// connection, which they do not change, and a block of zeros is never a strong connection -- so the aggregates are
+/// those of the operator without them. Filtering them out would only save stored zeros in the levels below.
 /// @tparam CoarseMatrix the block CSR type of A_c
 /// @param Ac A_c, every row sorted by column
 /// @param keptMode per coarse dof, whether its mode is in the coarse space
 /// @return the scalar A_c, M rows per block row, every row sorted by column
-/// @throws std::overflow_error if it does not fit 32-bit indices
 template < class CoarseMatrix >
-std::shared_ptr< amgcl::backend::crs< double, int, int > > paddedScalarCoarseOperator(
+std::shared_ptr< amgcl::backend::crs< double, ptrdiff_t, ptrdiff_t > > unblockedCoarseOperator(
   const CoarseMatrix&        Ac,
   const std::vector< char >& keptMode )
 {
-  typedef typename amgcl::backend::value_type< CoarseMatrix >::type CoarseBlock;
-  const int                                                         M = amgcl::math::static_rows< CoarseBlock >::value;
-  const ptrdiff_t nBlockRows = static_cast< ptrdiff_t >( Ac.nrows ), n = M * nBlockRows;
+  auto            S = amgcl::adapter::unblock_matrix( Ac );
+  const ptrdiff_t n = static_cast< ptrdiff_t >( S->nrows );
 
-  double    keptDiagonalSum = 0.0;
-  ptrdiff_t nKept           = 0;
-  for ( ptrdiff_t a = 0; a < nBlockRows; ++a )
-    for ( ptrdiff_t j = Ac.ptr[a]; j < Ac.ptr[a + 1]; ++j )
-      if ( Ac.col[j] == a )
-        for ( int k = 0; k < M; ++k )
-          if ( keptMode[M * a + k] ) {
-            keptDiagonalSum += Ac.val[j]( k, k );
-            ++nKept;
-          }
-  const double padding = nKept > 0 ? keptDiagonalSum / static_cast< double >( nKept ) : 1.0;
-
-  // an entry of the scalar row (a, k) is kept if it is not zero, and the diagonal always
-  auto isKept = [&]( ptrdiff_t a, int k, ptrdiff_t b, int l, double value ) {
-    return value != 0.0 || ( b == a && l == k );
-  };
-
-  std::vector< ptrdiff_t > width( n + 1, 0 );
-#pragma omp parallel for
-  for ( ptrdiff_t a = 0; a < nBlockRows; ++a )
-    for ( int k = 0; k < M; ++k )
-      for ( ptrdiff_t j = Ac.ptr[a]; j < Ac.ptr[a + 1]; ++j )
-        for ( int l = 0; l < M; ++l )
-          if ( isKept( a, k, Ac.col[j], l, Ac.val[j]( k, l ) ) )
-            ++width[M * a + k + 1];
-  std::partial_sum( width.begin(), width.end(), width.begin() );
-  if ( width[n] > static_cast< ptrdiff_t >( std::numeric_limits< int >::max() ) ) {
-    throw std::overflow_error( "rigid-body coarse level: the Galerkin coarse operator has " +
-                               std::to_string( width[n] ) + " entries, more than 32-bit indices hold" );
-  }
-
-  auto S = std::make_shared< amgcl::backend::crs< double, int, int > >();
-  S->set_size( n, n, false );
-  for ( ptrdiff_t i = 0; i <= n; ++i )
-    S->ptr[i] = static_cast< int >( width[i] );
-  S->set_nonzeros( S->ptr[n] );
-#pragma omp parallel for
-  for ( ptrdiff_t a = 0; a < nBlockRows; ++a ) {
-    for ( int k = 0; k < M; ++k ) {
-      int position = S->ptr[M * a + k];
-      for ( ptrdiff_t j = Ac.ptr[a]; j < Ac.ptr[a + 1]; ++j ) {
-        for ( int l = 0; l < M; ++l ) {
-          const double value = Ac.val[j]( k, l );
-          if ( !isKept( a, k, Ac.col[j], l, value ) )
-            continue;
-          const bool droppedDiagonal = Ac.col[j] == a && l == k && !keptMode[M * a + k];
-          S->col[position]           = static_cast< int >( M * Ac.col[j] + l );
-          S->val[position]           = droppedDiagonal ? padding : value;
-          ++position;
-        }
+  // the diagonal entry of every row (the columns of a row are sorted), and the mean of those of the kept modes
+  std::vector< ptrdiff_t > diagonal( n, -1 );
+  double                   keptDiagonalSum = 0.0;
+  ptrdiff_t                nKept           = 0;
+#pragma omp parallel for reduction( + : keptDiagonalSum, nKept )
+  for ( ptrdiff_t i = 0; i < n; ++i ) {
+    const ptrdiff_t* found = std::lower_bound( S->col + S->ptr[i], S->col + S->ptr[i + 1], i );
+    if ( found != S->col + S->ptr[i + 1] && *found == i ) {
+      diagonal[i] = found - S->col;
+      if ( keptMode[i] ) {
+        keptDiagonalSum += S->val[diagonal[i]];
+        ++nKept;
       }
     }
+  }
+  const double padding = nKept > 0 ? keptDiagonalSum / static_cast< double >( nKept ) : 1.0;
+  for ( ptrdiff_t i = 0; i < n; ++i ) {
+    if ( keptMode[i] )
+      continue;
+    if ( diagonal[i] < 0 )
+      throw std::logic_error( "rigid-body coarse level: a coarse dof without a diagonal entry in A_c" );
+    S->val[diagonal[i]] = padding;
   }
   return S;
 }
