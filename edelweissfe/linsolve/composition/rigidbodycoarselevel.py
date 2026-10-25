@@ -89,17 +89,6 @@ from edelweissfe.linsolve.composition.twolevelcycle import TwoLevelPreconditione
 from edelweissfe.linsolve.nullspace import rigidBodyNullspace
 
 
-def parameterRejection(
-    amgclTree: dict, blockSize: int, backendPrecision: str, prolongation: str, coarseHierarchyPrecision: str
-) -> "str | None":
-    """Why these settings of the rigid-body coarse level -- :class:`RigidBodyCoarseLevelPreconditioner`'s arguments --
-    cannot be used, or ``None``, asked without a build."""
-    reason = RigidBodyCoarseLevelPreconditioner.parameterRejection(
-        amgclTree, blockSize, backendPrecision, prolongation, coarseHierarchyPrecision
-    )
-    return None if reason is None else reason.removeprefix("rigidBodyCoarseLevel: ")
-
-
 class RigidBodyCoarseLevelPreconditioner(TwoLevelPreconditioner):
     """The preconditioner of one vector field with a rigid-body coarse level (see the module docstring): a two-level
     preconditioner (:class:`~edelweissfe.linsolve.composition.twolevelcycle.TwoLevelPreconditioner`) whose coarse level is spanned
@@ -170,7 +159,7 @@ class RigidBodyCoarseLevelPreconditioner(TwoLevelPreconditioner):
         a subclass may hand it another (the tests' control takes the translations, AMGCL's own coarse space)."""
         return rigidBodyNullspace(block, coordinates, scaling)
 
-    def build(self, A, scaling, coords) -> None:
+    def build(self, A, scaling, coordinates) -> None:
         """Build the rigid-body coarse level, the AMGCL hierarchy below it and the fine smoother, all in C++, on the
         near null-space of :meth:`nearNullspace`.
 
@@ -181,16 +170,16 @@ class RigidBodyCoarseLevelPreconditioner(TwoLevelPreconditioner):
             identity rows.
         scaling
             The field's slice of the equilibration :math:`D`: the modes are divided by it.
-        coords
+        coordinates
             The field's node coordinates in its dof order, ``(nNodes, >= blockSize)`` (columns beyond the field's
             dimension, e.g. ``z`` of a 2D field, are ignored): the modes are built from them.
         """
-        if coords is None:
+        if coordinates is None:
             raise ValueError("rigidBodyCoarseLevel: needs the field's node coordinates to build its rigid-body modes")
         block = FieldBlock("rigidBodyCoarseLevel", 0, A.shape[0], self._blockSize)
         self._preconditioner.build(
             A,
-            self.nearNullspace(block, coords, scaling),
+            self.nearNullspace(block, coordinates, scaling),
             self._suppliedFineSpectralRadius(),
             self._fineDominantVector,
         )

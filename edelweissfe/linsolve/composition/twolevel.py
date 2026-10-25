@@ -120,7 +120,7 @@ class RigidBodyModes:
                 "TwoLevel: the rigid-body modes of the field '{:}' need its node coordinates".format(field.name)
             )
         from edelweissfe.linsolve.composition.rigidbodycoarselevel import (
-            parameterRejection,
+            RigidBodyCoarseLevelPreconditioner,
         )
 
         blockSize = tree.get("backendBlockSize", 1)
@@ -130,7 +130,7 @@ class RigidBodyModes:
                 "modes as the near null-space of AMG() itself; the rigid-body coarse level is for the block backends, "
                 "backendBlockSize 2 or 3".format(field.name, blockSize)
             )
-        reason = parameterRejection(
+        reason = RigidBodyCoarseLevelPreconditioner.parameterRejection(
             amgclTreeOf(tree),
             blockSize,
             tree.get("backendPrecision", "double"),
@@ -138,7 +138,10 @@ class RigidBodyModes:
             self.coarseHierarchyPrecision,
         )
         if reason is not None:
-            raise ValueError("TwoLevel on the field '{:}': {:}".format(field.name, reason))
+            # the C++ class names itself in the message; here the component and the field do
+            raise ValueError(
+                "TwoLevel on the field '{:}': {:}".format(field.name, reason.removeprefix("rigidBodyCoarseLevel: "))
+            )
 
     def build(self, field, tree: dict, matrix, context: SetUpContext, fineSpectralRadius, fineDominantVector):
         """The two-level cycle on this coarse space for a field's matrix (SciPy CSR)."""
@@ -146,7 +149,6 @@ class RigidBodyModes:
             RigidBodyCoarseLevelPreconditioner,
         )
 
-        coords = context.coordinates(field.name)
         cycle = RigidBodyCoarseLevelPreconditioner(
             amgclTreeOf(tree),
             tree.get("backendBlockSize", 1),
@@ -157,7 +159,7 @@ class RigidBodyModes:
             fineDominantVector=fineDominantVector,
         )
         with performancetiming.timeit("{:} rigid-body coarse level build".format(field.name)):
-            cycle.build(matrix, context.scalingOf(slice(None)), coords)
+            cycle.build(matrix, context.scalingOf(slice(None)), context.coordinates(field.name))
         return cycle
 
     def sizesOf(self, cycle) -> dict:
@@ -186,9 +188,9 @@ class P1Interpolation:
     name = "P1 interpolation"
 
     def __init__(self, rigidBodyNullspace: bool = True, fineSpectralRadiusReuse: bool = False, **options):
-        from edelweissfe.linsolve.composition.ptwogrid import parameterRejection
+        from edelweissfe.linsolve.composition.ptwogrid import PTwoGridPreconditioner
 
-        reason = parameterRejection(**options)
+        reason = PTwoGridPreconditioner.parameterRejection(**options)
         if reason is not None:
             raise ValueError("P1Interpolation: " + reason)
         self.rigidBodyNullspace = rigidBodyNullspace
@@ -215,9 +217,9 @@ class P1Interpolation:
         cycle = PTwoGridPreconditioner(
             *p1Map, fineSpectralRadius=fineSpectralRadius, fineDominantVector=fineDominantVector, **self.options
         )
-        coords = context.coordinates(field.name) if self.rigidBodyNullspace else None
+        coordinates = context.coordinates(field.name) if self.rigidBodyNullspace else None
         with performancetiming.timeit("{:} p-two-grid build".format(field.name)):
-            cycle.build(matrix, context.scalingOf(slice(None)), coords=coords)
+            cycle.build(matrix, context.scalingOf(slice(None)), coordinates)
         return cycle
 
     def sizesOf(self, cycle) -> dict:

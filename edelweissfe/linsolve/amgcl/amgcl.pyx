@@ -36,12 +36,15 @@ from libcpp.string cimport string
 from libcpp.vector cimport vector
 
 
-def _csrArrays(object A):
-    """``A`` as a CSR matrix (converted if needed) and its arrays as C-contiguous int32 row pointers, int32
-    column indices and float64 values -- the form every C++ entry point of this module takes, and the one
-    place their int32 range is checked."""
+def _csrArrays(object A, bint sortIndices=False):
+    """``A`` as a CSR matrix (converted if needed; with ``sortIndices``, with the columns of every row in increasing
+    order, as the two-level builds read them) and its arrays as C-contiguous int32 row pointers, int32 column indices
+    and float64 values -- the form every C++ entry point of this module takes, and the one place their int32 range is
+    checked."""
     if not scipy.sparse.isspmatrix_csr(A):
         A = A.tocsr()
+    if sortIndices and not A.has_sorted_indices:
+        A = A.sorted_indices()
     int32Max = np.iinfo(np.int32).max
     if max(A.shape) > int32Max or A.nnz > int32Max:
         raise OverflowError("a {:}x{:} CSR matrix with {:} entries exceeds the int32 range of the AMGCL wrapper".format(
@@ -625,8 +628,12 @@ cdef object _scipyCsr(const ScalarCsr& csr, int nCols):
 cdef class _PyAMGCLTwoLevel:
     """What the two-level preconditioners share (``TwoLevelPreconditioner`` in ``amgcl-wrapper.hpp``): the cycle, the
     fine spectral radius it was built with, the timings and the report. A derived class creates the C++ object and
-    points :attr:`twoLevel` at it."""
+    points :attr:`twoLevel` at it; this class owns it (the C++ base class has a virtual destructor)."""
     cdef TwoLevelPreconditioner* twoLevel
+
+    def __dealloc__(self):
+        if self.twoLevel != NULL:
+            del self.twoLevel
 
     def applyPreconditioner(self, object r):
         """One two-level cycle: returns M^-1 r as a new float64 array (Dirichlet rows solved exactly)."""
@@ -712,10 +719,6 @@ cdef class PyAMGCLPTwoGrid(_PyAMGCLTwoLevel):
         self.preconditioner = new PTwoGridPreconditioner(c_json)
         self.twoLevel = self.preconditioner
 
-    def __dealloc__(self):
-        if self.preconditioner != NULL:
-            del self.preconditioner
-
     @staticmethod
     def dirichletRows(object A):
         """The rows of a scipy.sparse CSR matrix this preconditioner treats as Dirichlet rows: a nonzero
@@ -741,11 +744,7 @@ cdef class PyAMGCLPTwoGrid(_PyAMGCLTwoLevel):
         radius is then re-checked by a few power iterations from it (``fineRecheckIters``) and
         raised, or re-estimated in full, if the operator has stiffened.
         """
-        if not scipy.sparse.isspmatrix_csr(A):
-            A = A.tocsr()
-        if not A.has_sorted_indices:
-            A = A.sorted_indices()
-        A, indptr, indices, data = _csrArrays(A)
+        A, indptr, indices, data = _csrArrays(A, sortIndices=True)
         corner = np.ascontiguousarray(isCorner, dtype=np.int8)
         endpoints = np.ascontiguousarray(np.asarray(edgeEndpoints, dtype=np.int32).reshape(-1))
         cdef int nNodes = corner.shape[0]
@@ -781,10 +780,6 @@ cdef class PyAMGCLRigidBodyCoarseLevel(_PyAMGCLTwoLevel):
         self.preconditioner = makeRigidBodyCoarseLevelPreconditioner(c_json)
         self.twoLevel = self.preconditioner
 
-    def __dealloc__(self):
-        if self.preconditioner != NULL:
-            del self.preconditioner
-
     def build(self, object A, object nullspace, double spectralRadius=0.0, object dominantVector=None):
         """
         Build the preconditioner for A (scipy.sparse csr_matrix, the field's equilibrated diagonal block D A D with
@@ -796,11 +791,7 @@ cdef class PyAMGCLRigidBodyCoarseLevel(_PyAMGCLTwoLevel):
         spectralRadius: > 0 to start from this fine spectral radius instead of estimating it in full.
         dominantVector: with spectralRadius, the previous build's :attr:`fineDominantVector`, to re-check it from.
         """
-        if not scipy.sparse.isspmatrix_csr(A):
-            A = A.tocsr()
-        if not A.has_sorted_indices:
-            A = A.sorted_indices()
-        A, indptr, indices, data = _csrArrays(A)
+        A, indptr, indices, data = _csrArrays(A, sortIndices=True)
         B = np.ascontiguousarray(nullspace, dtype=np.float64)
         if B.ndim != 2:
             raise ValueError("the near null-space must be an (n, M) array, got the shape {:}".format(B.shape))

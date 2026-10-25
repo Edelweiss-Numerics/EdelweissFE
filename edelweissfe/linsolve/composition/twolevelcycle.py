@@ -32,7 +32,7 @@ and applied in C++: the shared cycle is ``TwoLevelPreconditioner`` in ``amgcl-wr
 ``_PyAMGCLTwoLevel`` in ``amgcl.pyx``. :class:`TwoLevelPreconditioner` mirrors those bases here: it creates the C++ object,
 which validates every parameter, keeps the fine spectral radius a build may start from, and passes the cycle, the fine
 spectral radius a build ends with, the timings and the report through. A derived class chooses the parameters and builds
-its coarse level.
+its coarse level, in :meth:`TwoLevelPreconditioner.build`, whose signature is the same for both.
 """
 
 import numpy as np
@@ -81,6 +81,25 @@ class TwoLevelPreconditioner:
         except (TypeError, ValueError) as error:
             return str(error)
         return None
+
+    def build(self, A, scaling: np.ndarray, coordinates: "np.ndarray | None") -> None:
+        """Build the coarse level, its AMGCL hierarchy and the fine Chebyshev smoother for the field's equilibrated
+        diagonal block, all in C++: everything :meth:`applyPreconditioner` needs.
+
+        Parameters
+        ----------
+        A
+            The field's equilibrated diagonal block :math:`\\hat A = D A D` (scipy CSR), node-major, with its Dirichlet
+            identity rows.
+        scaling
+            The field's slice of the equilibration :math:`D`: a near null-space of :math:`\\hat A` is :math:`D^{-1}`
+            times one of :math:`A`.
+        coordinates
+            The field's node coordinates in its dof order, ``(nNodes, >= dimension)`` (columns beyond the field's
+            dimension, e.g. ``z`` of a 2D field, are ignored), or ``None`` if they are unavailable -- whether a coarse
+            level can do without them is its own business.
+        """
+        raise NotImplementedError()
 
     def _suppliedFineSpectralRadius(self) -> float:
         """The fine spectral radius to hand to the C++ build: the supplied one, or 0 for none, which the C++ build takes
