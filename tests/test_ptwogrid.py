@@ -174,6 +174,19 @@ def test_block3_storage_matches_scalar_storage(problem):
     assert _relativeDifference(block3.applyPreconditioner(r), scalar.applyPreconditioner(r)) < 1e-12
 
 
+def test_block2_storage_of_a_two_component_field_matches_scalar_storage():
+    coords, isCorner, edgeEndpoints = lattice(5)
+    clamped = np.nonzero(coords[:, 0] == 0.0)[0]
+    As, dinv = latticeSystem(coords, np.sort((2 * clamped[:, None] + np.arange(2)).ravel()), components=2)
+    r = np.random.default_rng(3).standard_normal(As.shape[0])
+    scalar = _ptwogrid(isCorner, edgeEndpoints, fineChebyshevTree(2, 2, 8))
+    scalar.build(As, dinv, coordinates=coords)
+    block2 = _ptwogrid(isCorner, edgeEndpoints, fineChebyshevTree(2, 2, 8), backendBlockSize=2)
+    block2.build(As, dinv, coordinates=coords)
+    assert abs(block2.fineSpectralRadius - scalar.fineSpectralRadius) < 1e-12 * scalar.fineSpectralRadius
+    assert _relativeDifference(block2.applyPreconditioner(r), scalar.applyPreconditioner(r)) < 1e-12
+
+
 def test_a_reused_spectral_radius_reproduces_the_estimated_one(problem):
     As, dinv, coords, isCorner, edgeEndpoints, r = problem
     estimated = _ptwogrid(isCorner, edgeEndpoints)

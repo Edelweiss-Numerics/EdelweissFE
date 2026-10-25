@@ -62,15 +62,17 @@ def lattice(nCornersPerAxis: int, seed: int = 0):
     return coords[order], isCorner[order], edgeEndpoints
 
 
-def latticeSystem(coords, dirichletDofs, seed: int = 1):
-    """The equilibrated, Dirichlet-eliminated block and its equilibration vector."""
+def latticeSystem(coords, dirichletDofs, seed: int = 1, components: int = 3):
+    """The equilibrated, Dirichlet-eliminated block of ``components`` dofs per node and its equilibration vector."""
     nNodes = len(coords)
     pairs = cKDTree(coords).query_pairs(1.0 + 1e-9, output_type="ndarray")
     W = sp.coo_matrix((np.ones(len(pairs)), (pairs[:, 0], pairs[:, 1])), shape=(nNodes, nNodes))
     W = (W + W.T).tocsr()
     laplacian = sp.diags(np.asarray(W.sum(axis=1)).ravel() + 0.05) - W
-    skew = np.random.default_rng(seed).uniform(-1.0, 1.0, (3, 3))
-    A = sp.kron(laplacian, NODAL_COUPLING) + 0.02 * sp.kron(sp.triu(W, 1) - sp.tril(W, -1), skew)
+    skew = np.random.default_rng(seed).uniform(-1.0, 1.0, (3, 3))[:components, :components]
+    A = sp.kron(laplacian, NODAL_COUPLING[:components, :components]) + 0.02 * sp.kron(
+        sp.triu(W, 1) - sp.tril(W, -1), skew
+    )
     A = A.tolil()
     A[dirichletDofs, :] = 0.0
     A[:, dirichletDofs] = 0.0
