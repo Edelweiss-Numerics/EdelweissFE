@@ -33,6 +33,7 @@ import json
 import numpy as np
 import pytest
 import scipy.sparse as sp
+import scipy.sparse.linalg
 
 from edelweissfe.config.linsolve import (
     createLinearSolver,
@@ -40,6 +41,7 @@ from edelweissfe.config.linsolve import (
     getLinSolverByName,
     linearSolverDefinitionsFromInputFile,
 )
+from edelweissfe.linsolve.base import OneCallDirectSolverBackend
 from edelweissfe.linsolve.composition import (
     ComposedLinearSolver,
     DirectSolver,
@@ -87,6 +89,16 @@ def test_a_singular_matrix_gives_nan_for_a_cutback():
     solver = getLinSolverByName("superlu", {})
     x = solver(sp.csr_matrix(np.array([[1.0, 1.0], [1.0, 1.0]])), np.ones(2))
     assert np.isnan(x).all()
+
+
+def test_a_one_call_backend_solves_with_the_matrix_it_factorized():
+    # a reused preconditioner must not see the assembly overwrite its matrix in place
+    A, b = _system()
+    backend = OneCallDirectSolverBackend(scipy.sparse.linalg.spsolve)
+    backend.factorize(A)
+    A.data *= 2.0
+    x = backend.solveFactorized(b)
+    assert np.linalg.norm(0.5 * (A @ x) - b) < 1e-12 * np.linalg.norm(b)
 
 
 def test_an_unknown_option_is_refused():

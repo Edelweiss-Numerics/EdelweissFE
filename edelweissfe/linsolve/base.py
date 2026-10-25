@@ -313,8 +313,11 @@ class DirectSolverBackend:
 
 
 class OneCallDirectSolverBackend(DirectSolverBackend):
-    """A backend whose binding factorizes and solves in one call, ``solve(A, b) -> x``: :meth:`factorize` keeps ``A``
-    (the matrix itself, no copy), and each :meth:`solveFactorized` factorizes it again with its right-hand side.
+    """A backend whose binding factorizes and solves in one call, ``solve(A, b) -> x``: :meth:`factorize` keeps a copy
+    of ``A``, and each :meth:`solveFactorized` factorizes that copy again with its right-hand side.
+
+    The copy makes it behave like a real factorization: it solves with the matrix of the last :meth:`factorize`, also
+    when the assembly has since overwritten that matrix in place (a preconditioner reused across Newton iterations).
 
     Parameters
     ----------
@@ -327,7 +330,7 @@ class OneCallDirectSolverBackend(DirectSolverBackend):
         self._A = None
 
     def factorize(self, A) -> None:
-        self._A = A
+        self._A = A.copy()
 
     def solveFactorized(self, b):
         # a copy: some bindings (KLU) overwrite the right-hand side with the solution
