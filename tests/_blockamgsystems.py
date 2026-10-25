@@ -25,16 +25,19 @@
 #  The full text of the license can be found in the file LICENSE.md at
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
-"""Small linear systems with the field structure of a gradient-enhanced damage model, shared by the blockamg
-tests: a 3D displacement field (3 DOFs per node) and a scalar nonlocal damage field, each a grid Laplacian."""
+"""What the blockamg tests share: small linear systems with the field structure of a gradient-enhanced damage model
+(a 3D displacement field of 3 DOFs per node and a scalar nonlocal damage field, each a grid Laplacian), blockamg's
+equilibration, the assertion that a system is solved, and the test doubles of the Schur complement condensation."""
 
 import re
 
 import numpy as np
 import scipy.sparse as sp
-from scipy.sparse.linalg import splu
+from scipy.sparse.linalg import LinearOperator, gmres, splu
 
 from edelweissfe.linsolve.base import FieldBlock
+from edelweissfe.linsolve.blockamg.schurcomplement import SchurComplementCondensation
+from edelweissfe.linsolve.superlu import SuperLUSolver
 
 #: A symmetric positive definite coupling of a node's three displacement components, for vector operators that
 #: are not just three copies of a scalar one.
@@ -135,3 +138,96 @@ class ExactFieldSolve:
 def hierarchyLevels(amg) -> int:
     """The number of levels of an AMGCL hierarchy, read from its report; one level is a direct solve."""
     return int(re.search(r"Number of levels:\s+(\d+)", amg.report()).group(1))
+
+
+def equilibrated(A):
+    """``D A D`` with ``D = diag(|a_ii|^-1/2)``, as blockamg equilibrates (CSR, sorted columns), and the diagonal of
+    ``D``."""
+    scaling = 1.0 / np.sqrt(np.abs(A.diagonal()))
+    As = (sp.diags(scaling) @ A @ sp.diags(scaling)).tocsr()
+    As.sort_indices()
+    return As, scaling
+
+
+def assertSolved(A, x, b, tolerance: float = 1e-8) -> None:
+    """Assert that ``x`` solves ``A x = b`` to the relative residual ``tolerance``, with a slack of 1e-4 of it for a
+    residual that lands on the tolerance itself."""
+    assert np.linalg.norm(b - A @ x) <= (1.0 + 1e-4) * tolerance * np.linalg.norm(b)
+
+
+def blockamgSolver(blocks: list, **settings):
+    """blockamg for the field blocks ``blocks``: silent and with an outer tolerance of 1e-8, unless ``settings`` say
+    otherwise."""
+    from edelweissfe.linsolve.blockamg.blockamg import BlockAMGSolver
+
+    solver = BlockAMGSolver(**({"outerTol": 1e-8, "verbosity": "silent"} | settings))
+    solver.setFieldStructure(list(blocks))
+    return solver
+
+
+#: The iteration budget of :func:`gmresIterations`.
+GMRES_CAP = 300
+
+
+def gmresIterations(A, preconditioner) -> int:
+    """The iterations of (left-preconditioned, unrestarted) GMRES to a preconditioned relative residual of 1e-8, or
+    ``GMRES_CAP + 1`` if it does not reach a true relative residual of 1e-5 within ``GMRES_CAP``."""
+    b = np.random.default_rng(7).standard_normal(A.shape[0])
+    M = LinearOperator(A.shape, matvec=preconditioner.applyPreconditioner)
+    history = []
+    x, _ = gmres(A, b, M=M, rtol=1e-8, restart=GMRES_CAP, maxiter=1, callback=history.append, callback_type="pr_norm")
+    converged = np.linalg.norm(b - A @ x) <= 1e-5 * np.linalg.norm(b)
+    return len(history) if converged and len(history) <= GMRES_CAP else GMRES_CAP + 1
+
+
+class FixedCondensation(SchurComplementCondensation):
+    """A Schur complement condensation of given dofs, without a model and markers: the condensed dofs are set
+    directly, and may be changed between solves (as the selection of a marker changes between increments).
+
+    Parameters
+    ----------
+    dofs
+        The condensed dofs.
+    nodeOfDof
+        The node of every condensed dof, which the windows along a chain count; ``None`` for one dof per node.
+    createDirectSolver
+        See :class:`~edelweissfe.linsolve.blockamg.schurcomplement.SchurComplementCondensation`, as its other
+        ``options``.
+    """
+
+    def __init__(self, dofs, nodeOfDof=None, createDirectSolver=SuperLUSolver, **options):
+        super().__init__([], createDirectSolver, **options)
+        self.dofs, self.nodeOfDof = np.asarray(dofs), nodeOfDof
+
+    @classmethod
+    def ofNodes(cls, nodes, dimension: int, **kwargs) -> "FixedCondensation":
+        """The condensation of all dofs of the given nodes of a field of ``dimension`` components, node-major."""
+        nodes = np.asarray(nodes)
+        return cls((dimension * nodes[:, None] + np.arange(dimension)).ravel(), np.repeat(nodes, dimension), **kwargs)
+
+    def _selectCondensedDofs(self):
+        return self.dofs, self.dofs if self.nodeOfDof is None else self.nodeOfDof
+
+
+class SingularFromTheSecondFactorization(SuperLUSolver):
+    """SuperLU whose factorizations fail from the second one on: a condensed block that turns singular after a
+    successful solve, like a bond that loses all its stiffness."""
+
+    #: The first factorization that fails.
+    firstSingular = 2
+
+    def __init__(self):
+        super().__init__()
+        self.factorizations = 0
+
+    def factorize(self, A):
+        self.factorizations += 1
+        if self.factorizations >= self.firstSingular:
+            raise np.linalg.LinAlgError("the condensed block is singular, for the test")
+        super().factorize(A)
+
+
+class AlwaysSingular(SingularFromTheSecondFactorization):
+    """SuperLU that finds every matrix singular."""
+
+    firstSingular = 1

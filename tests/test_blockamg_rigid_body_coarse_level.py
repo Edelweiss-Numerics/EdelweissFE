@@ -32,7 +32,6 @@ out of the coarse space, linearly dependent modes are dropped -- its control (wi
 own first coarse level), its purpose (fewer iterations on a bending-dominated structure), and its configuration in
 ``blockamg``: the default, the fields named, and off."""
 
-import functools
 import json
 import os
 import re
@@ -44,13 +43,19 @@ import numpy as np
 import pytest
 import scipy.sparse as sp
 from _blockamgsystems import (
+    GMRES_CAP,
     NODAL_COUPLING,
+    FixedCondensation,
+    SingularFromTheSecondFactorization,
+    assertSolved,
+    blockamgSolver,
     displacementDamageSystem,
+    equilibrated,
+    gmresIterations,
     gridLaplacian,
     hierarchyLevels,
 )
-from _elasticbeam import cantilever, equilibrated
-from scipy.sparse.linalg import LinearOperator, gmres
+from _elasticbeam import slenderBeam
 
 pytest.importorskip("edelweissfe.linsolve.amgcl.amgcl")
 
@@ -66,27 +71,15 @@ from edelweissfe.linsolve.blockamg.rigidbodycoarselevel import (  # noqa: E402
     DEFAULT_OPTIONS,
     RigidBodyCoarseLevelPreconditioner,
 )
-from edelweissfe.linsolve.blockamg.schurcomplement import (  # noqa: E402
-    SchurComplementCondensation,
-)
 from edelweissfe.linsolve.nullspace import (  # noqa: E402
     rigidBodyNullspace,
     translationNullspace,
 )
-from edelweissfe.linsolve.superlu import SuperLUSolver  # noqa: E402
-
-
-@functools.lru_cache
-def _beam(dimension: int):
-    """A propped cantilever, 16:1 slender: the stiffness, the node coordinates and the constrained dofs."""
-    if dimension == 3:
-        return cantilever((32, 2, 2), (16.0, 1.0, 1.0))
-    return cantilever((64, 4), (16.0, 1.0))
 
 
 def _equilibratedBeam(dimension: int):
     """The equilibrated propped cantilever: ``D K D``, ``D``, the node coordinates and the constrained dofs."""
-    K, coordinates, constrained = _beam(dimension)
+    K, coordinates, constrained = slenderBeam(dimension)
     As, scaling = equilibrated(K)
     return As, scaling, coordinates, constrained
 
@@ -145,19 +138,13 @@ def _levelTable(report: str) -> list:
     return [(int(m.group(2)), int(m.group(3))) for m in re.finditer(r"^\s+(\d+)\s+(\d+)\s+(\d+)\s", table, re.M)]
 
 
-#: The iteration budget of :func:`_gmresIterations`.
-_GMRES_CAP = 300
-
-
-def _gmresIterations(A, preconditioner) -> int:
-    """The iterations of (left-preconditioned, unrestarted) GMRES to a preconditioned relative residual of 1e-8, or
-    ``_GMRES_CAP + 1`` if it does not reach a true relative residual of 1e-5 within ``_GMRES_CAP``."""
-    b = np.random.default_rng(7).standard_normal(A.shape[0])
-    M = LinearOperator(A.shape, matvec=preconditioner.applyPreconditioner)
-    history = []
-    x, _ = gmres(A, b, M=M, rtol=1e-8, restart=_GMRES_CAP, maxiter=1, callback=history.append, callback_type="pr_norm")
-    converged = np.linalg.norm(b - A @ x) <= 1e-5 * np.linalg.norm(b)
-    return len(history) if converged and len(history) <= _GMRES_CAP else _GMRES_CAP + 1
+def _collinearChain(direction, nNodes: int = 40):
+    """A chain of nodes along ``direction``, every aggregate collinear: the rotation about its line is no displacement
+    at all. ``D K D`` of a chain of nodal blocks, ``D`` and the node coordinates."""
+    chain = sp.diags([-1.0, 2.01, -1.0], [-1, 0, 1], shape=(nNodes, nNodes))
+    As, scaling = equilibrated(sp.kron(chain, NODAL_COUPLING).tocsr())
+    unit = np.asarray(direction, dtype=float) / np.linalg.norm(direction)
+    return As, scaling, np.outer(np.arange(nNodes, dtype=float), unit)
 
 
 @pytest.mark.parametrize("dimension", [3, 2], ids=["3D, 6 modes", "2D, 3 modes"])
@@ -220,10 +207,7 @@ def test_a_collinear_aggregate_drops_the_rotation_about_its_line(direction):
     # an axis that rotation is one of the three modes, exactly zero; along an oblique line it is a combination of the
     # three, which the Gram-Schmidt sweeps reduce to rounding. Either is dropped, and the remaining modes still
     # reproduce all six rigid-body modes of the chain.
-    nNodes = 40
-    chain = sp.diags([-1.0, 2.01, -1.0], [-1, 0, 1], shape=(nNodes, nNodes))
-    As, scaling = equilibrated(sp.kron(chain, NODAL_COUPLING).tocsr())
-    coordinates = np.outer(np.arange(nNodes, dtype=float), np.asarray(direction) / np.linalg.norm(direction))
+    As, scaling, coordinates = _collinearChain(direction)
     preconditioner = _preconditioner(3, prolongation="tentative")
     preconditioner.build(As, scaling, coordinates)
 
@@ -244,10 +228,7 @@ def test_the_coarse_dof_of_a_dropped_mode_is_padded(prolongation):
     # The Galerkin product of a chain, whose aggregates all drop a rotation: a dropped mode has a zero column of P, and
     # its coarse dof is padded with the mean of the kept diagonal entries, which keeps A_c regular for the hierarchy
     # below. The cycle is unaffected: P^T maps every residual to zero there, and P never prolongates it.
-    nNodes = 40
-    chain = sp.diags([-1.0, 2.01, -1.0], [-1, 0, 1], shape=(nNodes, nNodes))
-    As, scaling = equilibrated(sp.kron(chain, NODAL_COUPLING).tocsr())
-    coordinates = np.outer(np.arange(nNodes, dtype=float), np.array([1.0, 2.0, 3.0]) / np.sqrt(14.0))
+    As, scaling, coordinates = _collinearChain((1.0, 2.0, 3.0))
     preconditioner = _preconditioner(3, prolongation=prolongation)
     preconditioner.build(As, scaling, coordinates)
     dropped = _assertGalerkinCoarseOperator(preconditioner, As)
@@ -367,24 +348,21 @@ def test_the_hierarchy_below_takes_the_modes_of_an_aggregate_as_one_point_on_eve
 _THREADS_SCRIPT = """
 import sys
 import numpy as np
-from scipy.sparse.linalg import LinearOperator, gmres
 sys.path.insert(0, sys.argv[1])
-from _elasticbeam import cantilever, equilibrated
+from _blockamgsystems import equilibrated, gmresIterations
+from _elasticbeam import slenderBeam
 from edelweissfe.linsolve.blockamg.blockamg import _amgclTree, _defaultFieldPrecond
 from edelweissfe.linsolve.blockamg.rigidbodycoarselevel import RigidBodyCoarseLevelPreconditioner
 
-K, coordinates, _ = cantilever((32, 2, 2), (16.0, 1.0, 1.0))
+K, coordinates, _ = slenderBeam(3)
 As, scaling = equilibrated(K)
 tree = _defaultFieldPrecond(3)
 tree["coarsening"]["estimate_spectral_radius"] = sys.argv[3] == "estimate"
 preconditioner = RigidBodyCoarseLevelPreconditioner(_amgclTree(tree), 3, "double")
 preconditioner.build(As, scaling, coordinates)
-b = np.random.default_rng(7).standard_normal(As.shape[0])
-history = []
-gmres(As, b, M=LinearOperator(As.shape, matvec=preconditioner.applyPreconditioner), rtol=1e-8, restart=300, maxiter=1,
-      callback=history.append, callback_type="pr_norm")
+iterations = gmresIterations(As, preconditioner)
 Ac, P = preconditioner.coarseOperator(), preconditioner.prolongationMatrix()
-np.savez(sys.argv[2], aggregates=preconditioner.aggregates, P=P.toarray(), Ac=Ac.toarray(), iterations=len(history))
+np.savez(sys.argv[2], aggregates=preconditioner.aggregates, P=P.toarray(), Ac=Ac.toarray(), iterations=iterations)
 """
 
 
@@ -424,9 +402,9 @@ def test_the_rotations_cut_the_iterations_of_a_bending_dominated_beam(dimension)
     for rotations in (False, True):
         preconditioner = _preconditioner(dimension, rotations=rotations)
         preconditioner.build(As, scaling, coordinates)
-        iterations[rotations] = _gmresIterations(As, preconditioner)
+        iterations[rotations] = gmresIterations(As, preconditioner)
     print("GMRES iterations, translations alone / rigid-body modes:", iterations[False], iterations[True])
-    assert iterations[True] <= _GMRES_CAP and iterations[True] < 0.5 * iterations[False]
+    assert iterations[True] <= GMRES_CAP and iterations[True] < 0.5 * iterations[False]
 
 
 def test_float_storage_rounds_only_the_stored_entries():
@@ -523,24 +501,26 @@ def _coarsenedTree(tree: dict) -> dict:
     return {**tree, "coarse_enough": 100}
 
 
-def _beamSystem():
+def _beamSystem(dimension: int = 3):
     """The propped cantilever (unequilibrated: blockamg equilibrates itself), a right-hand side zero on its
     constrained dofs, its field block and node coordinates."""
-    K, coordinates, constrained = _beam(3)
-    b = np.random.default_rng(12).standard_normal(K.shape[0])
+    K, coordinates, constrained = slenderBeam(dimension)
+    b = np.random.default_rng({3: 12, 2: 14}[dimension]).standard_normal(K.shape[0])
     b[constrained] = 0.0
-    return K, b, FieldBlock("displacement", 0, K.shape[0], 3), coordinates
+    return K, b, FieldBlock("displacement", 0, K.shape[0], dimension), coordinates
 
 
-def _solve(**options):
-    """Solve the beam with blockamg, the node coordinates given; returns the solver and the relative residual."""
+def _beamSolver(block, coordinates, **settings):
+    """blockamg for the beam's field block, with its node coordinates and room for many outer iterations."""
+    return blockamgSolver([block], outerRestart=300, nodeCoordinates={block.name: coordinates}, **settings)
+
+
+def _solve(**settings):
+    """blockamg with these settings, which has solved the 3D beam."""
     K, b, block, coordinates = _beamSystem()
-    settings = {"outerTol": 1e-8, "outerRestart": 300, "verbosity": "silent"}
-    settings.update({"nodeCoordinates": {"displacement": coordinates}} | options)
-    solver = BlockAMGSolver(**settings)
-    solver.setFieldStructure([block])
-    x = solver(K, b)
-    return solver, np.linalg.norm(b - K @ x) / np.linalg.norm(b)
+    solver = _beamSolver(block, coordinates, **settings)
+    assertSolved(K, solver(K, b), b)
+    return solver
 
 
 def test_blockamg_solves_a_bending_dominated_beam_in_fewer_outer_iterations():
@@ -548,11 +528,10 @@ def test_blockamg_solves_a_bending_dominated_beam_in_fewer_outer_iterations():
     # on the translations, as which an explicit tree is kept by default, and the rigid-body coarse level, which naming
     # the field adds to it
     fieldPreconds = {"displacement": _coarsenedTree(_defaultFieldPrecond(3))}
-    translations, translationsResidual = _solve(fieldPreconds=fieldPreconds)
-    rigidBody, rigidBodyResidual = _solve(fieldPreconds=fieldPreconds, rigidBodyCoarseLevel=["displacement"])
+    translations = _solve(fieldPreconds=fieldPreconds)
+    rigidBody = _solve(fieldPreconds=fieldPreconds, rigidBodyCoarseLevel=["displacement"])
     assert isinstance(translations._preconditioners[0], PyAMGCLSolver)
-    assert type(rigidBody._preconditioners[0]).__name__ == "RigidBodyCoarseLevelPreconditioner"
-    assert translationsResidual <= 1.0001e-8 and rigidBodyResidual <= 1.0001e-8
+    assert isinstance(rigidBody._preconditioners[0], RigidBodyCoarseLevelPreconditioner)
     print(
         "outer iterations, translations / rigid-body coarse level:",
         translations._lastOuterIters,
@@ -561,35 +540,21 @@ def test_blockamg_solves_a_bending_dominated_beam_in_fewer_outer_iterations():
     assert rigidBody._lastOuterIters < 0.5 * translations._lastOuterIters
 
 
-def _beam2DSystem():
-    """The 2D propped cantilever: the stiffness, a right-hand side zero on its constrained dofs, its field block and node
-    coordinates."""
-    K, coordinates, constrained = _beam(2)
-    b = np.random.default_rng(14).standard_normal(K.shape[0])
-    b[constrained] = 0.0
-    return K, b, FieldBlock("displacement", 0, K.shape[0], 2), coordinates
-
-
 @pytest.mark.parametrize(
     "setting, kind3D, kind2D",
     [
-        (None, "RigidBodyCoarseLevelPreconditioner", "PyAMGCLSolver"),
-        (False, "PyAMGCLSolver", "PyAMGCLSolver"),
-        (["displacement"], "RigidBodyCoarseLevelPreconditioner", "RigidBodyCoarseLevelPreconditioner"),
+        (None, RigidBodyCoarseLevelPreconditioner, PyAMGCLSolver),
+        (False, PyAMGCLSolver, PyAMGCLSolver),
+        (["displacement"], RigidBodyCoarseLevelPreconditioner, RigidBodyCoarseLevelPreconditioner),
     ],
     ids=["the default", "false", "named"],
 )
 def test_a_3d_field_has_the_coarse_level_by_default_a_2d_field_when_named(setting, kind3D, kind2D):
-    for (K, b, block, coordinates), kind in ((_beamSystem(), kind3D), (_beam2DSystem(), kind2D)):
-        solver = BlockAMGSolver(
-            rigidBodyCoarseLevel=setting,
-            outerRestart=300,
-            verbosity="silent",
-            nodeCoordinates={"displacement": coordinates},
-        )
-        solver.setFieldStructure([block])
+    for dimension, kind in ((3, kind3D), (2, kind2D)):
+        K, b, block, coordinates = _beamSystem(dimension)
+        solver = _beamSolver(block, coordinates, rigidBodyCoarseLevel=setting, outerTol=None)
         solver(K, b)
-        assert type(solver._preconditioners[0]).__name__ == kind
+        assert isinstance(solver._preconditioners[0], kind)
 
 
 @pytest.mark.parametrize(
@@ -605,19 +570,18 @@ def test_an_explicit_tree_is_kept_as_written_and_naming_the_field_adds_the_level
     # Explicit beats default: a displacement field with an explicit fieldPreconds tree keeps it as written, logged once
     # at info, even a tree the coarse level would fit; naming the field adds the level to a tree that fits.
     K, b, block, coordinates = _beamSystem()
-    settings = {"outerTol": 1e-8, "outerRestart": 300, "nodeCoordinates": {"displacement": coordinates}}
-    solver = BlockAMGSolver(**settings, fieldPreconds={"displacement": tree}, verbosity="info")
-    solver.setFieldStructure([block])
+    solver = _beamSolver(block, coordinates, fieldPreconds={"displacement": tree}, verbosity="info")
     x = solver(K, b)
     solver(K, b)
-    assert np.linalg.norm(b - K @ x) <= 1.0001e-8 * np.linalg.norm(b)
+    assertSolved(K, x, b)
     assert isinstance(solver._preconditioners[0], PyAMGCLSolver)
     assert capsys.readouterr().out.count("field 'displacement' keeps its explicit fieldPreconds tree as written") == 1
     if tree == _defaultFieldPrecond(3):
-        named = BlockAMGSolver(**settings, fieldPreconds={"displacement": tree}, rigidBodyCoarseLevel=["displacement"])
-        named.setFieldStructure([block])
+        named = _beamSolver(
+            block, coordinates, fieldPreconds={"displacement": tree}, rigidBodyCoarseLevel=["displacement"]
+        )
         named(K, b)
-        assert type(named._preconditioners[0]).__name__ == "RigidBodyCoarseLevelPreconditioner"
+        assert isinstance(named._preconditioners[0], RigidBodyCoarseLevelPreconditioner)
 
 
 def test_the_default_is_for_the_displacement_field_and_other_vector_fields_get_the_level_when_named():
@@ -625,26 +589,19 @@ def test_the_default_is_for_the_displacement_field_and_other_vector_fields_get_t
     # or of the reference point of a rigid body) has another, and gets the level only when named.
     K, b, _, coordinates = _beamSystem()
     rotation = FieldBlock("rotation", 0, K.shape[0], 3)
-    for setting, kind in ((None, "PyAMGCLSolver"), (["rotation"], "RigidBodyCoarseLevelPreconditioner")):
-        solver = BlockAMGSolver(
-            rigidBodyCoarseLevel=setting,
-            outerRestart=300,
-            verbosity="silent",
-            nodeCoordinates={"rotation": coordinates},
-        )
-        solver.setFieldStructure([rotation])
+    for setting, kind in ((None, PyAMGCLSolver), (["rotation"], RigidBodyCoarseLevelPreconditioner)):
+        solver = _beamSolver(rotation, coordinates, rigidBodyCoarseLevel=setting, outerTol=None)
         solver(K, b)
-        assert type(solver._preconditioners[0]).__name__ == kind
+        assert isinstance(solver._preconditioners[0], kind)
 
 
 def test_without_node_coordinates_the_default_falls_back_to_the_translations(capsys):
     # only offline, without a model and nodeCoordinates: logged once at info; named, the same field raises (see above)
     K, b, block, _ = _beamSystem()
-    solver = BlockAMGSolver(outerTol=1e-8, outerRestart=300, verbosity="info")
-    solver.setFieldStructure([block])
+    solver = blockamgSolver([block], outerRestart=300, verbosity="info")
     x = solver(K, b)
     solver(K, b)
-    assert np.linalg.norm(b - K @ x) <= 1.0001e-8 * np.linalg.norm(b)
+    assertSolved(K, x, b)
     assert isinstance(solver._preconditioners[0], PyAMGCLSolver)
     assert capsys.readouterr().out.count("field 'displacement' has no node coordinates") == 1
 
@@ -678,8 +635,7 @@ def test_the_fields_are_named_as_for_the_p_two_grid_or_mapped_to_their_options(v
 
 def test_the_tentative_prolongation_and_a_float_hierarchy_below_are_options():
     options = {"prolongation": "tentative", "coarseHierarchyPrecision": "float"}
-    solver, residual = _solve(rigidBodyCoarseLevel={"displacement": options})
-    assert residual <= 1.0001e-8
+    solver = _solve(rigidBodyCoarseLevel={"displacement": options})
     preconditioner = solver._preconditioners[0]
     assert preconditioner.prolongationSmoothingWeight == 0.0
     assert "tentative prolongation" in preconditioner.report() and "unknowns" in preconditioner.report()
@@ -688,8 +644,7 @@ def test_the_tentative_prolongation_and_a_float_hierarchy_below_are_options():
 def test_without_node_coordinates_the_build_raises_and_names_nodecoordinates():
     # only offline, without a model: the coarse level the configuration asks for is refused rather than switched off
     K, b, block, _ = _beamSystem()
-    solver = BlockAMGSolver(rigidBodyCoarseLevel=["displacement"], outerTol=1e-8, verbosity="silent")
-    solver.setFieldStructure([block])
+    solver = blockamgSolver([block], rigidBodyCoarseLevel=["displacement"])
     with pytest.raises(ValueError, match="node coordinates are unavailable.*nodeCoordinates"):
         solver(K, b)
 
@@ -707,7 +662,7 @@ def test_the_coordinates_come_from_the_model_and_are_read_again_when_it_changes(
     solver = BlockAMGSolver(rigidBodyCoarseLevel=["displacement"], outerTol=1e-8, verbosity="silent")
     solver.setModel(*_stubModel(coordinates))
     solver(K, b)
-    assert type(solver._preconditioners[0]).__name__ == "RigidBodyCoarseLevelPreconditioner"
+    assert isinstance(solver._preconditioners[0], RigidBodyCoarseLevelPreconditioner)
     assert np.array_equal(solver._nodeCoordinateCache["displacement"], coordinates)
     # a new model (e.g. after adaptive refinement) drops the coordinates of the old one
     solver.setModel(*_stubModel(coordinates))
@@ -715,7 +670,7 @@ def test_the_coordinates_come_from_the_model_and_are_read_again_when_it_changes(
 
 
 def test_a_reused_fine_spectral_radius_is_rechecked_on_the_next_build():
-    solver, _ = _solve(rigidBodyCoarseLevel={"displacement": {"fineSpectralRadiusReuse": True}}, reuseHierarchy=False)
+    solver = _solve(rigidBodyCoarseLevel={"displacement": {"fineSpectralRadiusReuse": True}}, reuseHierarchy=False)
     first = solver._preconditioners[0]
     assert first.fineSpectralRadiusSource == "estimated"
     assert solver._fineSpectralRadiusCache["displacement"][0] == first.fineSpectralRadius
@@ -728,8 +683,8 @@ def test_a_reused_fine_spectral_radius_is_rechecked_on_the_next_build():
 def test_a_hot_reload_switches_the_rigid_body_coarse_level_on_and_off(tmp_path):
     config = tmp_path / "blockamg.json"
     config.write_text(json.dumps({"rigidBodyCoarseLevel": ["displacement"]}))
-    solver, _ = _solve(hotReloadConfigFile=str(config))
-    assert type(solver._preconditioners[0]).__name__ == "RigidBodyCoarseLevelPreconditioner"
+    solver = _solve(hotReloadConfigFile=str(config))
+    assert isinstance(solver._preconditioners[0], RigidBodyCoarseLevelPreconditioner)
     # off, with false
     config.write_text(json.dumps({"rigidBodyCoarseLevel": False}))
     K, b, _, _ = _beamSystem()
@@ -738,19 +693,7 @@ def test_a_hot_reload_switches_the_rigid_body_coarse_level_on_and_off(tmp_path):
     # and back to the default, which gives the 3D field the coarse level again
     config.write_text(json.dumps({"rigidBodyCoarseLevel": None}))
     solver(K, b)
-    assert type(solver._preconditioners[0]).__name__ == "RigidBodyCoarseLevelPreconditioner"
-
-
-class _CondensedNodes(SchurComplementCondensation):
-    """A Schur complement condensation of all dofs of given nodes, without a model."""
-
-    def __init__(self, nodes, dimension, createDirectSolver=SuperLUSolver):
-        super().__init__([], createDirectSolver)
-        self.nodes, self.dimension = np.asarray(nodes), dimension
-
-    def _selectCondensedDofs(self):
-        dofs = (self.dimension * self.nodes[:, None] + np.arange(self.dimension)).ravel()
-        return dofs, np.repeat(self.nodes, self.dimension)
+    assert isinstance(solver._preconditioners[0], RigidBodyCoarseLevelPreconditioner)
 
 
 @pytest.mark.parametrize("setting", [None, ["displacement"]], ids=["the default", "named"])
@@ -758,67 +701,44 @@ def test_the_remaining_nodes_of_a_schur_complement_condensation_get_their_coordi
     # the condensed field of schurComplement is a field like any other: its remaining nodes, with their coordinates
     K, b, block, coordinates = _beamSystem()
     condensedNodes = np.flatnonzero(coordinates[:, 0] > 14.0)
-    solver = BlockAMGSolver(
+    solver = _beamSolver(
+        block,
+        coordinates,
         rigidBodyCoarseLevel=setting,
-        outerTol=1e-8,
-        verbosity="silent",
-        nodeCoordinates={"displacement": coordinates},
-        condensation=_CondensedNodes(condensedNodes, 3),
+        condensation=FixedCondensation.ofNodes(condensedNodes, 3),
     )
-    solver.setFieldStructure([block])
     x = solver(K, b)
-    assert np.linalg.norm(b - K @ x) <= 1.0001e-8 * np.linalg.norm(b)
+    assertSolved(K, x, b)
     preconditioner = solver._preconditioners[0]
-    assert type(preconditioner).__name__ == "RigidBodyCoarseLevelPreconditioner"
+    assert isinstance(preconditioner, RigidBodyCoarseLevelPreconditioner)
     assert len(preconditioner.aggregates) == len(coordinates) - len(condensedNodes)
 
 
-class _SingularFromTheSecondFactorization(SuperLUSolver):
-    """SuperLU whose factorizations fail from the second one on: a condensed block that turns singular, like a bond that
-    loses all its stiffness."""
-
-    def __init__(self):
-        super().__init__()
-        self.factorizations = 0
-
-    def factorize(self, A):
-        self.factorizations += 1
-        if self.factorizations > 1:
-            raise np.linalg.LinAlgError("the condensed block is singular")
-        super().factorize(A)
-
-
-def _condensedBeamSolver(condensation, **settings):
-    """blockamg on the beam with this condensation and the node coordinates: by default with the rigid-body coarse
-    level."""
+def _condensedBeam(**settings):
+    """The 3D beam and blockamg for it, which condenses its nodes beyond x = 14 (by default with the rigid-body coarse
+    level): the solver, K, b, the node coordinates and the condensed nodes."""
     K, b, block, coordinates = _beamSystem()
-    solver = BlockAMGSolver(
-        outerTol=1e-8,
-        outerRestart=300,
-        nodeCoordinates={"displacement": coordinates},
-        condensation=condensation,
-        **settings,
-    )
-    solver.setFieldStructure([block])
-    return solver, K, b, coordinates
+    condensedNodes = np.flatnonzero(coordinates[:, 0] > 14.0)
+    settings = {"condensation": FixedCondensation.ofNodes(condensedNodes, 3)} | settings
+    return _beamSolver(block, coordinates, **settings), K, b, coordinates, condensedNodes
 
 
 def test_a_condensed_block_that_turns_singular_falls_back_to_the_solve_without_condensation(capsys):
     # After a successful condensed solve, A_bb cannot be factorized: the condensation keeps its last state (the update
     # is transactional), and the solve does without it -- for the whole field, its rigid-body coarse level built on
     # the coordinates of all nodes, not of the remaining ones of the last condensation.
-    K, b, block, coordinates = _beamSystem()
+    _, _, _, coordinates = _beamSystem()
     condensedNodes = np.flatnonzero(coordinates[:, 0] > 14.0)
-    condensation = _CondensedNodes(condensedNodes, 3, _SingularFromTheSecondFactorization)
-    solver, K, b, coordinates = _condensedBeamSolver(condensation, verbosity="warning")
+    condensation = FixedCondensation.ofNodes(condensedNodes, 3, createDirectSolver=SingularFromTheSecondFactorization)
+    solver, K, b, coordinates, _ = _condensedBeam(condensation=condensation, verbosity="warning")
     solver(K, b)
     assert len(solver._preconditioners[0].aggregates) == len(coordinates) - len(condensedNodes)
     condensedDofs = condensation.condensedDofs
     for _ in range(2):
         x = solver(K, b)
-        assert np.linalg.norm(b - K @ x) <= 1.0001e-8 * np.linalg.norm(b)
+        assertSolved(K, x, b)
         preconditioner = solver._preconditioners[0]
-        assert type(preconditioner).__name__ == "RigidBodyCoarseLevelPreconditioner"
+        assert isinstance(preconditioner, RigidBodyCoarseLevelPreconditioner)
         assert len(preconditioner.aggregates) == len(coordinates)
         assert condensation.condensedDofs is condensedDofs
     assert "the condensed block A_bb cannot be factorized" in capsys.readouterr().out
@@ -828,16 +748,14 @@ def test_an_approximate_schur_complement_that_cannot_be_formed_falls_back_to_the
     monkeypatch, capsys
 ):
     # e.g. a singular window block of an A_bb that factorizes as a whole: like a failed factorization
-    K, b, block, coordinates = _beamSystem()
-    condensation = _CondensedNodes(np.flatnonzero(coordinates[:, 0] > 14.0), 3)
+    solver, K, b, coordinates, _ = _condensedBeam(verbosity="warning")
 
     def singularWindow(A):
         raise np.linalg.LinAlgError("a singular window block")
 
-    monkeypatch.setattr(condensation, "approximateSchurComplement", singularWindow)
-    solver, K, b, coordinates = _condensedBeamSolver(condensation, verbosity="warning")
+    monkeypatch.setattr(solver._condensation, "approximateSchurComplement", singularWindow)
     x = solver(K, b)
-    assert np.linalg.norm(b - K @ x) <= 1.0001e-8 * np.linalg.norm(b)
+    assertSolved(K, x, b)
     assert len(solver._preconditioners[0].aggregates) == len(coordinates)
     assert "the approximate Schur complement cannot be formed" in capsys.readouterr().out
 
@@ -845,15 +763,15 @@ def test_an_approximate_schur_complement_that_cannot_be_formed_falls_back_to_the
 def test_krylov_on_the_scaled_system_is_refused_with_any_condensation(tmp_path, capsys):
     # the outer solve of a condensed solve runs on A itself: refused for a condensation handed over directly too, at
     # construction and on a hot reload
-    K, b, block, coordinates = _beamSystem()
-    condensation = _CondensedNodes(np.flatnonzero(coordinates[:, 0] > 14.0), 3)
+    _, _, _, coordinates = _beamSystem()
+    condensation = FixedCondensation.ofNodes(np.flatnonzero(coordinates[:, 0] > 14.0), 3)
     with pytest.raises(ValueError, match="krylovOnScaledSystem cannot be combined with a Schur complement"):
         BlockAMGSolver(condensation=condensation, krylovOnScaledSystem=True)
     config = tmp_path / "blockamg.json"
     config.write_text(json.dumps({"krylovOnScaledSystem": True}))
-    solver, K, b, _ = _condensedBeamSolver(condensation, verbosity="warning", hotReloadConfigFile=str(config))
+    solver, K, b, _, _ = _condensedBeam(condensation=condensation, verbosity="warning", hotReloadConfigFile=str(config))
     x = solver(K, b)
-    assert np.linalg.norm(b - K @ x) <= 1.0001e-8 * np.linalg.norm(b)
+    assertSolved(K, x, b)
     assert solver._krylovOnScaledSystem is False
     assert "cannot be combined with a Schur complement condensation" in capsys.readouterr().out
 
@@ -861,24 +779,23 @@ def test_krylov_on_the_scaled_system_is_refused_with_any_condensation(tmp_path, 
 def test_condensed_solves_keep_their_outer_operator_and_their_field_split():
     # The outer operator of a condensed solve (A itself) is kept per sparsity pattern of A, only its values refreshed;
     # the field split of S~ is kept with the hierarchies built on it. Both are rebuilt when they no longer fit.
-    K, b, block, coordinates = _beamSystem()
-    solver, K, b, _ = _condensedBeamSolver(_CondensedNodes(np.flatnonzero(coordinates[:, 0] > 14.0), 3))
+    solver, K, b, _, _ = _condensedBeam()
     solver(K, b)
     operator, system = solver._condensedOuterOperator.operator, solver._condensedSystem
     x = solver(2.0 * K, b)
-    assert np.linalg.norm(b - 2.0 * K @ x) <= 1.0001e-8 * np.linalg.norm(b)
+    assertSolved(2.0 * K, x, b)
     assert solver._condensedOuterOperator.operator is operator and solver._condensedSystem is system
     # a rebuild of the hierarchies rebuilds the field split, not the operator
     solver._refreshNext = True
     x = solver(2.0 * K, b)
-    assert np.linalg.norm(b - 2.0 * K @ x) <= 1.0001e-8 * np.linalg.norm(b)
+    assertSolved(2.0 * K, x, b)
     assert solver._condensedOuterOperator.operator is operator and solver._condensedSystem is not system
     # another sparsity pattern, two (negligible) entries more: another operator
     last = K.shape[0] - 1
     K2 = (K + sp.csr_matrix(([1e-300, 1e-300], ([0, last], [last, 0])), shape=K.shape)).tocsr()
     K2.sort_indices()
     x = solver(K2, b)
-    assert np.linalg.norm(b - K2 @ x) <= 1.0001e-8 * np.linalg.norm(b)
+    assertSolved(K2, x, b)
     assert solver._condensedOuterOperator.operator is not operator
 
 
@@ -955,8 +872,8 @@ def test_a_scalar_field_named_by_mistake_is_refused_when_the_fields_are_known():
 
 def test_a_field_the_system_does_not_have_is_unused_with_a_warning(capsys):
     # one configuration file may serve several models; a misspelt name must not switch the coarse level off unnoticed
-    solver, residual = _solve(rigidBodyCoarseLevel=["temperature"], verbosity="warning")
-    assert residual <= 1.0001e-8 and isinstance(solver._preconditioners[0], PyAMGCLSolver)
+    solver = _solve(rigidBodyCoarseLevel=["temperature"], verbosity="warning")
+    assert isinstance(solver._preconditioners[0], PyAMGCLSolver)
     assert "rigidBodyCoarseLevel names the fields ['temperature'], which the system does not have" in (
         capsys.readouterr().out
     )
