@@ -69,13 +69,14 @@ runs in C++: the steps in ``amgcl-rigid-body-coarse-level.hpp``, the cycle in ``
 When
 ----
 
-For a 2D or 3D vector field -- a displacement field of any element type -- whose solves need many outer iterations
-although its operator is (nearly) elastic: typically a bending-dominated structure. It needs the field's node
-coordinates (``blockamg`` reads them from the model). It is opt-in, named per field (``"rigidBodyCoarseLevel":
-["displacement"]``), and the field's tree (default or ``fieldPreconds``) configures its smoother, its aggregation and the
-AMGCL hierarchy below it. Its setup costs more than the default's (the Galerkin product with 6 coarse dofs per aggregate,
-the larger hierarchy below), so on a model where the default converges in a few iterations it does not pay. The theory
-page of ``blockamg`` has the measurements.
+It is ``blockamg``'s default for every 3D vector field -- a displacement field of any element type -- and pays most
+where the solves would need many outer iterations although the operator is (nearly) elastic: typically a
+bending-dominated structure. A 2D vector field has it when named (``"rigidBodyCoarseLevel": ["displacement"]``), and
+``false`` switches it off for all fields. It needs the field's node coordinates (``blockamg`` reads them from the
+model), and the field's tree (default or ``fieldPreconds``) configures its smoother, its aggregation and the AMGCL
+hierarchy below it. Its setup costs more than AMGCL's hierarchy on the translations (the Galerkin product with 6 coarse
+dofs per aggregate, the larger hierarchy below), so on a model where that converges in a few iterations it gains little.
+The theory page of ``blockamg`` has the measurements.
 """
 
 import numpy as np

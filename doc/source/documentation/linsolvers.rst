@@ -71,9 +71,9 @@ the run's bottleneck or exceeds available memory.
   precondition an outer GMRES/LGMRES. This is the route to problem sizes a direct factorization
   cannot reach at all.
   With ``schurComplement``, it condenses selected dofs exactly first, for dofs on which AMG alone
-  stalls, such as those of bars tied to their host elements by bond springs. With
-  ``rigidBodyCoarseLevel``, a displacement field gets the rotations into its coarse space, for
-  bending-dominated structures.
+  stalls, such as those of bars tied to their host elements by bond springs. The hierarchy of a 3D
+  displacement field starts with a coarse level of its rigid-body modes, rotations included
+  (``rigidBodyCoarseLevel``), which bending-dominated structures need.
 
 **A diagnostic wrapper**, which does not solve anything itself:
 
@@ -160,18 +160,26 @@ key and the caveats are on the :doc:`blockamgtheory` page (section "Schur comple
 Rigid-body coarse level (``blockamg``)
 --------------------------------------
 
-The hierarchy ``blockamg`` builds for a 2D or 3D displacement field stores the field in node-wise blocks, and its
-coarse space holds the **translations** of every aggregate of nodes, not their rotations. In a bending-dominated
-structure -- a slender beam, a tunnel lining, a plate -- the slowly converging error is bending, under which every
-aggregate rotates almost as a rigid body: neither the coarse space nor the smoother reduces it, and the outer solve
-needs many iterations. The ``rigidBodyCoarseLevel`` option of ``blockamg`` gives the fields it names a first coarse
-level built from all rigid-body modes, translations and rotations, and keeps everything else as it is:
+The hierarchy ``blockamg`` builds for a 3D displacement field stores the field in node-wise blocks, and AMGCL's coarse
+space on those blocks holds the **translations** of every aggregate of nodes, not their rotations. In a
+bending-dominated structure -- a slender beam, a tunnel lining, a plate -- the slowly converging error is bending,
+under which every aggregate rotates almost as a rigid body: neither that coarse space nor the smoother reduces it, and
+the outer solve needs many iterations. So by default, the hierarchy of every 3D vector field starts with a coarse
+level built from all rigid-body modes, translations and rotations (``rigidBodyCoarseLevel``). The testfile deck
+``testfiles/edelweiss-only/CantileverBeamHexa20BlockAMGRigidBody``, a slender cantilever, shows the effect: each
+linear solve converges in some 20 outer iterations; with the coarse level switched off, every solve stops at the
+iteration cap. On an elastic tunnel segment of quadratic hexahedra, it cut the outer iterations of the displacement
+block from 67 to 22.
 
-.. code-block:: edelweiss
+Switch it off where the solves converge in a few outer iterations without it -- there it saves little, for a larger
+setup (on an edge breakout model 22 against 20 iterations, at about the same cost). ``false`` switches it off for all
+fields, and naming fields switches it on for exactly those, which is also how a 2D displacement field gets it:
 
-    *solver, solver=NISTParallel, name=theSolver
-    linsolver=blockamg
-    linsolverConfigFile=blockamg.json
+.. code-block:: json
+
+    {
+        "rigidBodyCoarseLevel": false
+    }
 
 .. code-block:: json
 
@@ -179,12 +187,8 @@ level built from all rigid-body modes, translations and rotations, and keeps eve
         "rigidBodyCoarseLevel": ["displacement"]
     }
 
-The testfile deck ``testfiles/edelweiss-only/CantileverBeamHexa20BlockAMGRigidBody``, a slender cantilever, shows the
-effect: with the option, each linear solve converges in some 20 outer iterations; without it, every solve stops at the
-iteration cap. On an elastic tunnel segment of quadratic hexahedra, it cut the outer iterations of the displacement
-block from 67 to 22; where the default already needs few iterations, or once softening dominates, it gains less. A
-scalar field (e.g. nonlocal damage) has no rotations and is rejected. The method, its options and the measurements are
-on the :doc:`blockamgtheory` page (section "Rigid-body coarse level").
+A scalar field (e.g. nonlocal damage) has no rotations: the default leaves it out, and naming it is an error. The
+method, its options and the measurements are on the :doc:`blockamgtheory` page (section "Rigid-body coarse level").
 
 
 The ``amgcl`` solver

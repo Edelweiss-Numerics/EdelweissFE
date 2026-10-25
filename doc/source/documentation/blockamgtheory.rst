@@ -13,7 +13,7 @@ library call to name.
 Everything on this page is implemented literally in
 :mod:`~edelweissfe.linsolve.blockamg.blockamg`, :mod:`~edelweissfe.linsolve.nullspace` and
 :mod:`~edelweissfe.linsolve.base`; the opt-in p-multigrid variant lives in
-:mod:`~edelweissfe.linsolve.blockamg.ptwogrid`, the opt-in rigid-body coarse level in
+:mod:`~edelweissfe.linsolve.blockamg.ptwogrid`, the rigid-body coarse level (the default for 3D vector fields) in
 :mod:`~edelweissfe.linsolve.blockamg.rigidbodycoarselevel`. The solver requires the optional ``amgcl``
 extension (:mod:`edelweissfe.linsolve.amgcl.amgcl`) to be built.
 
@@ -283,7 +283,9 @@ the code): a **3D vector** field (e.g. displacement) is stored in :math:`3\times
 float, coarsened by smoothed aggregation with a strong-connection threshold of 0.01 and
 ``estimate_spectral_radius`` (20 power iterations) from the translations of its equilibrated block (see
 :ref:`below <blockamg-block-nullspace>`), and smoothed by a degree-16 Chebyshev polynomial
-(one post-smoothing sweep, no pre-smoothing); a **2D vector** field gets the same coarsening and
+(one post-smoothing sweep, no pre-smoothing) -- and its hierarchy starts with the rigid-body coarse level, a first
+coarse level of all its rigid-body modes, rotations included (see :ref:`below <blockamg-rigid-body-coarse-level>`);
+a **2D vector** field gets the same coarsening and
 smoothing but in :math:`2\times2` blocks, in double (this wrapper has no float 2x2 backend); a vector
 field of any other dimension gets the same recipe on the plain scalar backend -- the only backend that
 takes the full rigid-body near-null-space (see below), which keeps that path available for a field
@@ -318,8 +320,9 @@ hierarchy, and are consumed before the rest of the tree is forwarded verbatim:
     of :math:`\hat A` (see below); the two agree only where the diagonal is uniform, which it is not on
     quadratic elements (corner and midside nodes) or across a damage band. A block hierarchy also
     has no **rotational** rigid-body modes, which the scalar backend carries (described next);
-    ``blockTranslationNullspace``, on in the default trees, gives it the translations, and ``rigidBodyCoarseLevel``
-    a first coarse level of all rigid-body modes (see :ref:`below <blockamg-rigid-body-coarse-level>`).
+    ``blockTranslationNullspace``, on in the default trees, gives it the translations, and the rigid-body coarse level
+    (``rigidBodyCoarseLevel``, the default for 3D vector fields) a first coarse level of all rigid-body modes (see
+    :ref:`below <blockamg-rigid-body-coarse-level>`).
 
 ``blockTranslationNullspace``
     ``true`` in the default 2D and 3D trees, ``false`` when a ``fieldPreconds`` tree leaves it out: on a block
@@ -462,8 +465,8 @@ the coarse level, which repeats the construction. Every block stays a diagonal :
 so the hierarchy keeps AMGCL's block value type. The rotations do not fit that way (six modes on
 :math:`3 \times 3` blocks would need :math:`6 \times 6` coarse blocks): this hierarchy takes the translations only
 and refuses any other near-null-space, and the rotations stay with the scalar backend -- or with the rigid-body coarse
-level, which builds the first coarse level of a block field with those :math:`6 \times 6` coarse blocks itself, outside
-AMGCL (see :ref:`blockamg-rigid-body-coarse-level`). (AMGCL's runtime
+level, the default for 3D vector fields, which builds the first coarse level of a block field with those
+:math:`6 \times 6` coarse blocks itself, outside AMGCL (see :ref:`blockamg-rigid-body-coarse-level`). (AMGCL's runtime
 coarsening accepts a near-null-space on a block backend as well, by coarsening the unblocked scalar matrix
 (``as_scalar``) and re-blocking the prolongation; this hierarchy does not use that route, and whether the
 rotations would work through it is untested here.)
@@ -852,8 +855,9 @@ Block preconditioner and per-field hierarchies
         worth noticeably more per-field outer iterations on the scalar backend, so only for
         comparison purposes there. No effect on the block backends (``backendBlockSize`` 2 or 3)
         the default 2D/3D ``fieldPreconds`` trees use: a block hierarchy takes the translations only, so a
-        block-valued field gets the rotations only through ``rigidBodyCoarseLevel``, whatever this is set to; it takes
-        the translations with ``blockTranslationNullspace``, on in those trees.
+        block-valued field gets the rotations through the rigid-body coarse level (``rigidBodyCoarseLevel``, the
+        default for 3D vector fields), whatever this is set to; its AMGCL hierarchy takes the translations with
+        ``blockTranslationNullspace``, on in those trees.
     * - ``fieldPreconds``
       - ``{}``
       - Mapping of field name (e.g. ``"displacement"``, ``"nonlocal damage"``) to an AMGCL
@@ -897,8 +901,9 @@ Block preconditioner and per-field hierarchies
         ``npost`` = 2.
     * - ``rigidBodyCoarseLevel``
       - unset
-      - **Opt-in.** The 2D and 3D vector fields whose hierarchy starts with a coarse level of all their rigid-body
-        modes, rotations included, with the options of each; see :ref:`blockamg-rigid-body-coarse-level`.
+      - The vector fields whose hierarchy starts with a coarse level of all their rigid-body modes, rotations included.
+        Unset (or ``null``): every 3D vector field it fits; ``false``: none; a field name, a list or a JSON object
+        with options: exactly these fields, 2D ones too. See :ref:`blockamg-rigid-body-coarse-level`.
     * - ``schurComplement``
       - unset
       - **Opt-in.** Condense the dofs the markers select exactly, and build the field split on the approximate Schur
@@ -960,8 +965,10 @@ and change only what is intended. The defaults are, by the field's nodal dimensi
         }
     }
 
-The 2D tree differs from the 3D one only in ``backendPrecision``/``backendBlockSize``: this wrapper has
-no float 2x2 backend. A vector field of a dimension this solver has never been tuned for (anything but
+A 3D vector field also starts with the rigid-body coarse level by default (``rigidBodyCoarseLevel``), configured by
+the same tree: its ``relax`` and ``npre``/``npost`` are the fine smoother of the rigid-body coarse level, its
+``coarsening`` the aggregation of that level, and the whole tree the AMGCL hierarchy below it. The 2D tree differs
+from the 3D one only in ``backendPrecision``/``backendBlockSize``: this wrapper has no float 2x2 backend. A vector field of a dimension this solver has never been tuned for (anything but
 2 or 3, e.g. a 4-DOF-per-node formulation) gets the same coarsening/relaxation recipe as the 2D and 3D
 trees, but on the plain scalar backend (``backendBlockSize`` 1) rather than an untested block size --
 the scalar backend is also the only one of the four that takes the rotations (see above), so
@@ -1238,13 +1245,14 @@ changes (e.g. after adaptive refinement).
 
 .. _blockamg-rigid-body-coarse-level:
 
-Rigid-body coarse level (opt-in)
---------------------------------
+Rigid-body coarse level
+-----------------------
 
-``rigidBodyCoarseLevel`` gives a 2D or 3D vector field on a block backend a first coarse level built from **all** of
-its rigid-body modes -- the translations and the rotations -- in place of AMGCL's hierarchy on the translations
-(:mod:`~edelweissfe.linsolve.blockamg.rigidbodycoarselevel`). It keeps what makes the block backend fast, the fine
-level in node-wise blocks stored in float, and adds what that backend cannot take, the rotations.
+By default, the hierarchy of every 3D vector field starts with a coarse level built from **all** of its rigid-body
+modes -- the translations and the rotations -- in place of AMGCL's hierarchy on the translations
+(``rigidBodyCoarseLevel``, :mod:`~edelweissfe.linsolve.blockamg.rigidbodycoarselevel`); a 2D vector field gets it when
+named. It keeps what makes the block backend fast, the fine level in node-wise blocks stored in float, and adds what
+that backend cannot take, the rotations.
 
 Why the translations are not enough
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1255,13 +1263,13 @@ represents a smooth error well only where it is close to such a combination on e
 smoother leaves smooth error alone by construction: its window starts at 1% of the spectral radius (see the
 near-null-space and the Chebyshev smoother above). In a bending-dominated structure -- a slender beam, a tunnel
 lining, a plate -- the smooth error is bending: every aggregate rotates almost as a rigid body, its displacement
-varying linearly across it. Neither part of the cycle reduces such an error, and one application of the default
-preconditioner can even amplify it. Measured on the displacement blocks :math:`A_{uu}` of captured systems,
+varying linearly across it. Neither part of the cycle reduces such an error, and one application of the hierarchy
+on the translations can even amplify it. Measured on the displacement blocks :math:`A_{uu}` of captured systems,
 :math:`\lVert v - M A_{uu} v \rVert / \lVert v \rVert` after one application :math:`M` of the field's
 preconditioner, for the rigid rotations :math:`v` about the field's centroid and for a smooth quadratic field
 (:math:`u_x = y^2 + z^2` about the centroid), both zero on the Dirichlet rows:
 
-.. list-table:: One application on smooth error, the default (translations) -> the rigid-body coarse level
+.. list-table:: One application on smooth error, the hierarchy on the translations -> the rigid-body coarse level
     :width: 100%
     :header-rows: 1
 
@@ -1282,8 +1290,9 @@ preconditioner, for the rigid rotations :math:`v` about the field's centroid and
       - 0.30 -> 0.17
 
 A value above 1 means that one application amplifies that error. On the tunnel segment, a shell-like lining of
-quadratic hexahedra, the default amplifies the rotations and the quadratic field, and the outer solve pays with
-iterations: 67 of them, against 22 with the rotations in the coarse space (see the measurements below). Not every
+quadratic hexahedra, the hierarchy on the translations amplifies the rotations and the quadratic field, and the outer
+solve pays with iterations: 67 of them, against 22 with the rotations in the coarse space (see the measurements
+below). Not every
 error fares better: the rigid translations, which both coarse spaces hold, are reduced less on the elastic tunnel
 system (0.11 0.04 0.20 -> 0.70 0.18 0.41). The outer iteration counts below are the net effect.
 
@@ -1348,56 +1357,69 @@ the two preconditioners then agree up to the spectral-radius estimate of the fin
 starts from random vectors, the cycle's from a deterministic one): what the rigid-body coarse level adds is the
 rotations.
 
-When to use it, and what it does not fix
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+When it pays, and when to switch it off
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Reach for it when a displacement field (of any element type, 2D or 3D) needs many outer iterations although its
-operator is elastic or mildly damaged: typically a bending-dominated structure. Name the field; its tree -- the
-default one, or its ``fieldPreconds`` entry -- keeps configuring the smoother, the aggregation and the hierarchy below,
-so nothing else changes:
+The coarse level pays where the hierarchy on the translations needs many outer iterations although the operator is
+elastic or mildly damaged: typically a bending-dominated structure. It is the default for every 3D vector field -- a
+displacement field of any element type, and any other field of three components per node, which the default trees
+treat alike -- and the field's tree, the default one or its ``fieldPreconds`` entry, keeps configuring the smoother,
+the aggregation and the hierarchy below. A field the default selects but the coarse level does not fit keeps what it
+has, without an error, logged once at ``info``: a field on the p-two-grid (``p1FieldNames``, ``p1Maps``), one whose
+``fieldPreconds`` tree is not on the 3x3 block backend or does not smooth with Chebyshev and coarsen by smoothed
+aggregation, and one without node coordinates (see below), which keeps the hierarchy on the translations.
+
+Switch it off on a model whose solves converge in a few outer iterations with the hierarchy on the translations: the
+coarse level saves little there, and its setup is larger wherever its coarse operator is -- up to 1.2 times that of
+the hierarchy on the translations on the larger models below. On the edge breakout, where the translations need 22
+and 23 outer iterations, the coarse level saves 2 and 1, at a setup of 0.94 and 0.99 times theirs and a solve time,
+setup included, of 0.92 and 0.95 -- a wash. ``false`` switches it off for all fields; a field name, a list or an
+object switches it on for exactly the fields named, which is also how a 2D vector field gets it, and how options are
+given:
 
 .. code-block:: json
 
-    {"rigidBodyCoarseLevel": ["displacement"]}
+    {"rigidBodyCoarseLevel": false}
+
+.. code-block:: json
+
+    {"rigidBodyCoarseLevel": {"displacement": {"fineSpectralRadiusReuse": true}}}
 
 The modes are built from the node coordinates of the reference configuration, as the model holds them, which
 ``blockamg`` reads from the model: after adaptive refinement those of the new model, with ``schurComplement`` those of
 the remaining nodes. Rigid-body modes about the reference configuration suit small rotations; under large rotations
 they represent the rigid motions of the deformed structure less exactly, which costs convergence speed only, not
 accuracy. Without a model -- a script driving the solver itself -- the coordinates must be given as
-``nodeCoordinates`` (see the note at the end of this page): a build without them raises an error rather than switch
-off the coarse level the configuration asks for.
+``nodeCoordinates`` (see the note at the end of this page): without them, a field named in ``rigidBodyCoarseLevel``
+raises an error rather than switch off the coarse level the configuration asks for, while one selected by the default
+keeps the hierarchy on the translations.
 
 What it does not fix:
 
 * **Softening.** The rigid-body modes are the near-null-space of the *elastic* operator. Once damage makes the
   displacement block indefinite, other directions of low energy appear that no coarse space of rigid bodies holds: on
   the damaged tunnel system below, the iterations fall from 61 to 36, against 67 to 22 on the elastic one.
-* **Models the default already handles.** Where the default needs few outer iterations, there is little to gain: on
-  the edge breakout below, 22 -> 20.
 * **Scalar fields, and the scalar backend.** A scalar field has no rotations, and the scalar backend
   (``backendBlockSize`` 1) takes the rigid-body modes as its near-null-space itself (``useRigidBodyNullspace``); a
   field of either kind named in ``rigidBodyCoarseLevel`` is rejected.
-* **The setup.** The largest part of the setup is the estimate of the fine smoother's spectral radius, as for the
-  default; the coarse level adds its own Galerkin product and the hierarchy below, which with 6 dofs per aggregate is
-  larger than AMGCL's (see also ``fineSpectralRadiusReuse``).
 
 .. admonition:: Measured
 
    Outer iterations of ``blockamg`` to a relative residual of 1e-6 on the displacement block alone (one cycle per
-   outer iteration, the hierarchies built for the system): the defaults, ``rigidBodyCoarseLevel``, and its control
-   with the translations alone -- the same construction with the rotations left out. The first system is the
-   elastic stiffness of the testfile deck ``testfiles/edelweiss-only/CantileverBeamHexa20BlockAMGRigidBody``, a
-   slender cantilever of quadratic hexahedra; the others are captured systems of larger models.
+   outer iteration, the hierarchies built for the system): AMGCL's hierarchy on the translations (``false``), the
+   rigid-body coarse level (the default), and its control with the translations alone -- the same construction with
+   the rotations left out. The first system is the elastic stiffness of the testfile deck
+   ``testfiles/edelweiss-only/CantileverBeamHexa20BlockAMGRigidBody``, a slender cantilever of quadratic hexahedra; the
+   others are captured systems of larger models.
 
    .. list-table::
        :width: 100%
        :header-rows: 1
 
        * - system (unknowns)
-         - default
+         - translations
          - rigid-body coarse level
-         - translations alone
+         - control
        * - slender cantilever, the testfile deck (3663)
          - 307
          - 18
@@ -1427,18 +1449,18 @@ What it does not fix:
          - 22
          - 23
 
-   The control needs the iterations of the default within two: the gain is the rotations'. On the larger models the
-   setup took up to 1.2 times the default's, and the solve, setup included, 0.61 of the default's time on the elastic
-   tunnel system and 0.84 to 0.95 on the others. In a simulation, the testfile deck run with ``"verbosity": "info"``
-   shows the same: each linear solve reaches its tolerance in some 20 outer iterations, and Newton converges in two;
-   without the key, every solve stops at the iteration cap with a relative residual of about 1e-2, and Newton needs
-   five.
+   The control needs the iterations of the hierarchy on the translations within two: the gain is the rotations'. On
+   the larger models the setup took up to 1.2 times that of the hierarchy on the translations, and the solve, setup
+   included, 0.61 of its time on the elastic tunnel system and 0.84 to 0.95 on the others. In a simulation, the
+   testfile deck run with ``"verbosity": "info"`` shows the same: each linear solve reaches its tolerance in some 20
+   outer iterations, and Newton converges in two; with the coarse level switched off, every solve stops at the
+   iteration cap with a relative residual of about 1e-2, and Newton needs five.
 
    Live, from the start of each run on the same workstation, one run at a time and each capped at 10 minutes, the
-   defaults against the defaults with ``rigidBodyCoarseLevel`` for the displacement field:
+   hierarchy on the translations against the rigid-body coarse level for the displacement field:
 
    * the L-shaped concrete panel (``examples/WinklerL``, quadratic elements, damage): with the rigid-body coarse level
-     the run completed in 581 s, while the default had covered 88% of the load path when it was stopped at 600 s;
+     the run completed in 581 s, while the translations had covered 88% of the load path when stopped at 600 s;
      24.7 against 28.3 outer iterations per solve, at most 61 against one solve at the cap of 100. The
      load-displacement curves agree to 2e-4 of the peak load.
    * a coarser tunnel segment with embedded bars with bond-slip (0.28 M unknowns, ``schurComplement``, the rigid-body
@@ -1453,17 +1475,23 @@ What it does not fix:
 Configuration
 ~~~~~~~~~~~~~
 
-``rigidBodyCoarseLevel`` (unset: none; see the key table above) names the fields with the rigid-body coarse level: a
-field name or a list of them, as ``p1FieldNames``, or a JSON object mapping a field name to ``true`` (the default
-options) or to an object of options. A field has the rigid-body coarse level exactly when it is named: leaving it out
-is the way to switch it off, also with a hot reload. A field named here must be a 2D or 3D vector field on a block
-backend (``backendBlockSize`` 2 or 3, as in the default trees); a scalar field, a field on the scalar backend, and a
-field that also has the p-two-grid (``p1FieldNames``) are rejected, and so is the key inside a field's tree. A field
-the system does not have is unused, with a warning at the first build, so that a misspelt name does not switch the
-coarse level off unnoticed. The field's tree must smooth with a Chebyshev polynomial (``relax.type`` ``chebyshev``,
-without ``relax.scale``, ``relax.power_iters`` at least 1) and coarsen by smoothed aggregation, as the default trees
-do. All of this is checked when the solver is created, and for a field whose tree is the default one again at the
-first solve, when its dimension is known. The options of a field:
+``rigidBodyCoarseLevel`` (see the key table above) takes one of three forms:
+
+* unset, or ``null``: the default, every 3D vector field the coarse level fits, with the default options (fields it
+  does not fit keep what they have, logged once at ``info``, see above);
+* ``false``: no field -- the one way to switch it off; ``true``, an empty list and an empty object are refused, so
+  that off has one spelling;
+* a field name or a list of them, as ``p1FieldNames``, or a JSON object mapping a field name to ``true`` (the default
+  options) or to an object of options: exactly the fields named, 2D vector fields too.
+
+A hot reload may change the form (``null`` returns to the default). A field named here must be a 2D or 3D vector
+field on a block backend (``backendBlockSize`` 2 or 3, as in the default trees); a scalar field, a field on the
+scalar backend, and a field that also has the p-two-grid (``p1FieldNames``) are rejected, and so is the key inside a
+field's tree. A named field the system does not have is unused, with a warning at the first build, so that a misspelt
+name does not switch the coarse level off unnoticed. The field's tree must smooth with a Chebyshev polynomial
+(``relax.type`` ``chebyshev``, without ``relax.scale``, ``relax.power_iters`` at least 1) and coarsen by smoothed
+aggregation, as the default trees do. All of this is checked for the fields named when the solver is created, and for
+a field whose tree is the default one again at the first solve, when its dimension is known. The options of a field:
 
 ``prolongation`` (``"smoothed"``)
     ``"smoothed"``: :math:`P = (I - \omega D_F^{-1} \hat A_F) P^{\mathrm{tent}}`. ``"tentative"``:
@@ -1676,6 +1704,11 @@ contact anchor model with many multi-point-constraint slaves):
   per simulated time, and the contact model, with more outer iterations at fewer Newton iterations; both
   ran no slower. The translations are the near-null-space of the elastic operator, and help less on a
   softening, indefinite one.
+* **The rigid-body coarse level** for 3D vector fields (``rigidBodyCoarseLevel``), which holds the rotations the
+  translations cannot: offline, on captured systems of three models and of the testfile deck, never more outer
+  iterations than the hierarchy on the translations and up to three times fewer on a bending-dominated one, at a setup
+  of up to 1.2 times; live, faster on all three models measured, with the same results (see
+  :ref:`blockamg-rigid-body-coarse-level`).
 * ``lgmresM = 50`` matches the public outer-iteration cap (``outerRestart x outerMaxiter = 100``), so
   LGMRES restarts at most once within it; ``lgmresK`` only allocates its augmentation vectors without
   ever exhausting them before the cap.
@@ -1734,8 +1767,9 @@ Practical guidance
 * Reach for the knobs in roughly this order: ``fieldPreconds`` for a field whose hierarchy is clearly
   the weak one, then ``sweeps``/``symmetric`` for the sweep itself, then the tolerance keys.
   ``p1FieldNames`` is an alternative per-field preconditioner, see above.
-* A displacement field that needs many outer iterations although the structure is still elastic -- typically a
-  bending-dominated one, a slender beam, a lining, a plate -- is the case for ``rigidBodyCoarseLevel``, see above.
+* The rigid-body coarse level is on for 3D vector fields by default: name a 2D displacement field in
+  ``rigidBodyCoarseLevel`` to give it the coarse level too, and switch it off (``false``) on a model whose solves
+  converge in a few outer iterations without it, see above.
 * When a run degrades reproducibly, capture it with ``dumpOnDegradationDir`` plus a few
   ``dumpOnDegradationContextSolves`` rather than trying to reproduce it by rerunning the simulation.
 

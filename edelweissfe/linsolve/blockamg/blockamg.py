@@ -70,9 +70,9 @@ What it does per solve
    stiffness -- when node coordinates are available, translations alone otherwise; a scalar field
    takes the default constant. A block backend (``backendBlockSize > 1``, the default for a 3D or 2D
    vector field) cannot take the rotations: it takes the translations (``blockTranslationNullspace``, on
-   in the default trees), or AMGCL's constant blocks with that switched off. With ``rigidBodyCoarseLevel``, such a
-   field gets a first coarse level of all its rigid-body modes instead, built outside AMGCL
-   (:mod:`~edelweissfe.linsolve.blockamg.rigidbodycoarselevel`), for bending-dominated structures.
+   in the default trees), or AMGCL's constant blocks with that switched off. A 3D vector field starts instead, by
+   default, with a coarse level of all its rigid-body modes, built outside AMGCL (``rigidBodyCoarseLevel``,
+   :mod:`~edelweissfe.linsolve.blockamg.rigidbodycoarselevel`), which holds the rotations too.
 #. **Precondition the outer Krylov solve** (AMGCL's LGMRES, the only outer solver) with a block Gauss-Seidel sweep
    ``M^-1`` over the fields, each field's correction coming from one AMG V-cycle on its block, the couplings
    folded in between fields. With ``krylovOnScaledSystem = False`` (the default) the outer solve runs on
@@ -306,13 +306,29 @@ def _fieldNamesFromConfig(value) -> list | None:
     raise ValueError("expected a field name or a list of field names, got {!r}".format(value))
 
 
-def _rigidBodyCoarseLevelFromConfig(value) -> dict:
-    """The fields with the rigid-body coarse level and their options (``rigidBodyCoarseLevel``), as a mapping of field
-    name to its complete options: from a field name or a list of them (as ``p1FieldNames``), each with the default
-    options, or from a JSON object of field names to ``true`` (the default options) or an object of options; ``null``
-    is none. A field has the rigid-body coarse level exactly when it is named."""
+def _rigidBodyCoarseLevelFromConfig(value) -> "dict | bool | None":
+    """The setting ``rigidBodyCoarseLevel``, one of three:
+
+    * ``None`` (unset, or ``null``): the default -- every 3D vector field has the rigid-body coarse level, with the
+      default options, if its tree can configure it (see :meth:`BlockAMGSolver._rigidBodyCoarseLevelOptions`);
+    * ``False`` (``false``): no field has it, the one way to switch it off for all fields;
+    * a mapping of field name to its complete options: exactly the fields named -- a field name or a list of them (as
+      ``p1FieldNames``), each with the default options, or a JSON object of field names to ``true`` (the default
+      options) or an object of options. A 2D vector field has it only if named.
+
+    Other spellings are refused, so that the off switch has one spelling: ``true`` (the default is unset) and a name list
+    or object that names no field."""
+    if value is None or value is False:
+        return value
+    if value is True:
+        raise ValueError(
+            "true is not a value: the rigid-body coarse level is the default for 3D vector fields (leave the key out, or "
+            "write null); false switches it off, a field name, a list or an object names the fields"
+        )
+    if value in ([], {}, ""):
+        raise ValueError("names no field: false switches the rigid-body coarse level off for all fields")
     if not isinstance(value, dict):
-        return {name: rigidbodycoarselevel.options(True) for name in _fieldNamesFromConfig(value) or []}
+        return {name: rigidbodycoarselevel.options(True) for name in _fieldNamesFromConfig(value)}
     fields = {}
     for name, fieldOptions in value.items():
         reason = rigidbodycoarselevel.optionsRejection(fieldOptions)
@@ -320,6 +336,12 @@ def _rigidBodyCoarseLevelFromConfig(value) -> dict:
             raise ValueError("field '{:}': {:}".format(name, reason))
         fields[name] = rigidbodycoarselevel.options(fieldOptions)
     return fields
+
+
+def _namedRigidBodyFields(setting) -> dict:
+    """The fields the setting ``rigidBodyCoarseLevel`` names, with their options: none for the default (``None``) and for
+    ``False``."""
+    return setting if isinstance(setting, dict) else {}
 
 
 def _mappingFromConfig(value) -> dict | None:
@@ -524,22 +546,26 @@ class BlockAMGSolver(LinearSolver):
         blocks (``D``-weighted translations). On the scalar backend, whose rigid-body modes hold the translations
         anyway, it changes nothing, so a default tree stays valid with ``backendBlockSize`` 1 set on top.
     rigidBodyCoarseLevel
-        Opt-in. The 2D or 3D vector fields on a block backend whose first coarse level is built from all their
-        rigid-body modes, rotations included, instead of AMGCL's hierarchy on the translations
-        (:mod:`~edelweissfe.linsolve.blockamg.rigidbodycoarselevel`): for bending-dominated structures. A field name
-        or a list of them (as ``p1FieldNames``), or a mapping of field name to ``true`` or an object of options:
-        ``prolongation`` (``"smoothed"``, default, or ``"tentative"``), ``coarseHierarchyPrecision`` (``"double"``,
-        default, or ``"float"``) and ``fineSpectralRadiusReuse`` (``false``, default; as ``p1FineSpectralRadiusReuse``).
-        The field's tree, default or ``fieldPreconds``, configures its smoother, its aggregation and the AMGCL hierarchy
-        below it, as it would configure AMGCL's own hierarchy. A field named here that is not a 2D or 3D vector field on
-        a block backend is rejected, and so is one that also uses the p-two-grid; one the system does not have is
-        unused, with a warning at the first build. The coarse level needs the field's node coordinates, from the model
-        or from ``nodeCoordinates``: a build without them raises a ``ValueError``.
+        The vector fields on a block backend whose first coarse level is built from all their rigid-body modes,
+        rotations included, instead of AMGCL's hierarchy on the translations
+        (:mod:`~edelweissfe.linsolve.blockamg.rigidbodycoarselevel`). The field's tree, default or ``fieldPreconds``,
+        configures its smoother, its aggregation and the AMGCL hierarchy below it, as it would configure AMGCL's own
+        hierarchy. ``None`` (the default): every 3D vector field, with the default options -- one the coarse level does
+        not fit is skipped quietly, logged once at ``info``: a field on the p-two-grid, one whose ``fieldPreconds`` tree
+        is not on the 3x3 block backend or does not smooth with Chebyshev and coarsen by smoothed aggregation, and,
+        falling back to the translations, one without node coordinates. ``False``: no field, the one way to switch it
+        off. A field name or a list of them (as ``p1FieldNames``), or a mapping of field name to ``true`` or an object
+        of options: exactly these fields, 2D ones too, with the options ``prolongation`` (``"smoothed"``, default, or
+        ``"tentative"``), ``coarseHierarchyPrecision`` (``"double"``, default, or ``"float"``) and
+        ``fineSpectralRadiusReuse`` (``false``, default; as ``p1FineSpectralRadiusReuse``). A named field the coarse
+        level does not fit is rejected, one the system does not have is unused, with a warning at the first build, and
+        one without node coordinates (from the model, or from ``nodeCoordinates``) raises a ``ValueError``.
     useRigidBodyNullspace
         Only takes effect on the plain scalar backend (``backendBlockSize == 1``) -- a block hierarchy takes the
         translations only, so a field on a block backend (the default ``fieldPreconds`` tree for a 2D or 3D
-        vector field) gets the rotations only through ``rigidBodyCoarseLevel``, whatever this is set to; it takes
-        the translations with ``blockTranslationNullspace``, the default. ``True`` (the
+        vector field) gets the rotations through the rigid-body coarse level (``rigidBodyCoarseLevel``, the default
+        for 3D vector fields), whatever this is set to; its AMGCL hierarchy takes the translations with
+        ``blockTranslationNullspace``, the default. ``True`` (the
         default) builds a scalar-backend vector field's near null-space as the
         full rigid-body basis -- translations *and* rotations -- once nodal coordinates for that field
         are available via ``self._model`` (set by
@@ -868,7 +894,7 @@ class BlockAMGSolver(LinearSolver):
         hierarchyDropLumping: bool = False,
         fieldPreconds: dict = None,
         useRigidBodyNullspace: bool = True,
-        rigidBodyCoarseLevel: dict = None,
+        rigidBodyCoarseLevel: "dict | bool | None" = None,
         nodeCoordinates: dict = None,
         p1Maps: dict = None,
         p1FieldNames: list = None,
@@ -924,7 +950,8 @@ class BlockAMGSolver(LinearSolver):
         # Per-field node coordinates, derived from self._model; dropped in setModel(). Those given as nodeCoordinates
         # are never dropped: they were not derived from any model.
         self._nodeCoordinateCache = {}
-        # the fields with the rigid-body coarse level, and their options
+        # the rigid-body coarse level: None the default (every 3D vector field it fits), False none, or the fields
+        # named, with their options (see _rigidBodyCoarseLevelFromConfig)
         self._rigidBodyCoarseLevel = _rigidBodyCoarseLevelFromConfig(rigidBodyCoarseLevel)
         self._givenNodeCoordinates = {
             fieldName: np.asarray(coordinates, dtype=float)
@@ -1040,8 +1067,8 @@ class BlockAMGSolver(LinearSolver):
         )
         self._schurComplementMatrix = None
         self._hierarchyCondensedDofs = None
-        # warnings given once per model, see _warnOnce
-        self._warningsGiven = set()
+        # messages logged once per model, see _logOnce
+        self._messagesLogged = set()
 
         # Created only once construction is known to succeed: a configuration rejected above must not
         # leave a directory behind, and an uncreatable path should raise the ValueError above naming
@@ -1197,7 +1224,7 @@ class BlockAMGSolver(LinearSolver):
         # built for the dofs of the previous model
         self._schurComplementMatrix = None
         self._hierarchyCondensedDofs = None
-        self._warningsGiven = set()
+        self._messagesLogged = set()
         self._dropDerivedCaches()
         self._refreshNext = True
         self._lastResidualNorm = None
@@ -1537,7 +1564,9 @@ class BlockAMGSolver(LinearSolver):
                     "p1FineBlockSize",
                     "p1FieldNames",
                 )
-        rigidBodyFields = settings["rigidBodyCoarseLevel"]
+        # the fields named in rigidBodyCoarseLevel are checked here, loudly; under the default, a field the coarse level
+        # does not fit is skipped when it is built (_rigidBodyCoarseLevelOptions)
+        rigidBodyFields = _namedRigidBodyFields(settings["rigidBodyCoarseLevel"])
         both = sorted(set(rigidBodyFields) & (set(settings["p1FieldNames"]) | set(self._p1Maps)))
         if both:
             reject(
@@ -1741,23 +1770,24 @@ class BlockAMGSolver(LinearSolver):
                     "blockamg: settings that do not fit the fields: "
                     + "; ".join("{:} {:}".format(name, reason) for name, reason in rejections.items())
                 )
-        unused = sorted(set(self._rigidBodyCoarseLevel) - {block.name for block in blocks})
+        unused = sorted(set(_namedRigidBodyFields(self._rigidBodyCoarseLevel)) - {block.name for block in blocks})
         if unused:
             # a misspelt field name would otherwise switch the rigid-body coarse level off without a word
-            self._warnOnce(
+            self._logOnce(
+                "warning",
                 "blockamg: rigidBodyCoarseLevel names the fields {:}, which the system does not have: "
-                "unused".format(unused)
+                "unused".format(unused),
             )
         return [
             self._buildFieldPreconditioner(block, system, i, scaling[block.start : block.stop])
             for i, block in enumerate(blocks)
         ]
 
-    def _warnOnce(self, message: str) -> None:
-        """Log a warning only the first time it occurs for the current model."""
-        if message not in self._warningsGiven:
-            self._warningsGiven.add(message)
-            self._log("warning", message)
+    def _logOnce(self, level: str, message: str) -> None:
+        """Log a message only the first time it occurs for the current model."""
+        if message not in self._messagesLogged:
+            self._messagesLogged.add(message)
+            self._log(level, message)
 
     def _hierarchyIsCondensing(self) -> bool:
         """Whether the hierarchies being built are those of the remaining dofs of a Schur complement condensation."""
@@ -1771,11 +1801,11 @@ class BlockAMGSolver(LinearSolver):
 
     def _buildFieldPreconditioner(self, block, system, index: int, scaling: np.ndarray):
         """The preconditioner of one field: the p-two-grid cycle for a vector field that opted into it
-        (``p1Maps`` / ``p1FieldNames``), the rigid-body coarse level for one named in ``rigidBodyCoarseLevel``, one AMGCL
-        hierarchy otherwise. A vector field on the scalar backend gets
-        its rigid-body modes as near null-space (see :meth:`_nullspaceCoordinates`; the translations alone without
-        node coordinates), on a block backend the translations alone (``blockTranslationNullspace``, else AMGCL's
-        constant blocks); a scalar field takes AMGCL's default constant."""
+        (``p1Maps`` / ``p1FieldNames``), the rigid-body coarse level for one that has it (by default every 3D vector
+        field, see :meth:`_rigidBodyCoarseLevelOptions`), one AMGCL hierarchy otherwise. A vector field on the scalar
+        backend gets its rigid-body modes as near null-space (see :meth:`_nullspaceCoordinates`; the translations alone
+        without node coordinates), on a block backend the translations alone (``blockTranslationNullspace``, else
+        AMGCL's constant blocks); a scalar field takes AMGCL's default constant."""
         isVectorField = block.dimension > 1
 
         # with Schur complement condensation, the block holds only the remaining nodes of the field: what is derived
@@ -1783,7 +1813,8 @@ class BlockAMGSolver(LinearSolver):
         remainingNodes = self._condensation.remainingNodes(block.name) if self._hierarchyIsCondensing() else None
 
         p1Map = None
-        if isVectorField and (block.name in self._p1Maps or block.name in self._p1FieldNamesRequested):
+        isP1Field = isVectorField and (block.name in self._p1Maps or block.name in self._p1FieldNamesRequested)
+        if isP1Field:
             with performancetiming.timeit("p1 topology"):
                 p1Map = self._getP1Map(block.name)
             if p1Map is not None and remainingNodes is not None:
@@ -1802,10 +1833,9 @@ class BlockAMGSolver(LinearSolver):
             else _defaultFieldPrecond(block.dimension)
         )
         onScalarBackend = p1Map is not None or fieldTree.get("backendBlockSize", 1) == 1
-        # the rigid-body coarse level needs the coordinates whatever useRigidBodyNullspace (scalar backend) says; a field
-        # named in rigidBodyCoarseLevel is a 2D or 3D vector field on a block backend (_settingsRejections)
-        rigidBodyCoarseLevel = block.name in self._rigidBodyCoarseLevel
-        if rigidBodyCoarseLevel:
+        # the rigid-body coarse level needs the coordinates whatever useRigidBodyNullspace (scalar backend) says
+        rigidBodyOptions = self._rigidBodyCoarseLevelOptions(block, fieldTree, isP1Field)
+        if rigidBodyOptions is not None:
             coords = self._getNodeCoordinates(block.name)
         elif isVectorField and onScalarBackend:
             coords = self._nullspaceCoordinates(block.name)
@@ -1814,15 +1844,25 @@ class BlockAMGSolver(LinearSolver):
         if coords is not None and remainingNodes is not None:
             coords = coords[remainingNodes]
 
-        if rigidBodyCoarseLevel:
-            if coords is None:
-                # only offline, without a model: refused rather than built without the rotations, which would switch
-                # off the coarse level the configuration asks for
+        if rigidBodyOptions is not None:
+            if coords is not None:
+                return self._buildRigidBodyCoarseLevel(
+                    block, system, index, scaling, fieldTree, coords, rigidBodyOptions
+                )
+            # only offline, without a model: a field named in rigidBodyCoarseLevel is refused rather than built without
+            # the rotations, which would switch off the coarse level the configuration asks for; one the default
+            # selected keeps the hierarchy of its tree, on the translations
+            if block.name in _namedRigidBodyFields(self._rigidBodyCoarseLevel):
                 raise ValueError(
                     "blockamg: field '{:}' is named in rigidBodyCoarseLevel, but its node coordinates are unavailable: "
                     "without a model (setModel), give them as nodeCoordinates".format(block.name)
                 )
-            return self._buildRigidBodyCoarseLevel(block, system, index, scaling, fieldTree, coords)
+            self._logOnce(
+                "info",
+                "blockamg: field '{:}' has no node coordinates (no model, and no nodeCoordinates given): it keeps the "
+                "hierarchy of its tree, on the translations, instead of the default rigid-body coarse "
+                "level".format(block.name),
+            )
 
         if p1Map is not None:
             from edelweissfe.linsolve.blockamg.ptwogrid import PTwoGridPreconditioner
@@ -1872,11 +1912,40 @@ class BlockAMGSolver(LinearSolver):
             preconditioner.build(diagonalBlock)
         return preconditioner
 
-    def _buildRigidBodyCoarseLevel(self, block, system, index: int, scaling: np.ndarray, fieldTree: dict, coords):
-        """The preconditioner of a field named in ``rigidBodyCoarseLevel``
+    def _rigidBodyCoarseLevelOptions(self, block, fieldTree: dict, isP1Field: bool) -> "dict | None":
+        """The options of the field's rigid-body coarse level, or ``None`` if it has none.
+
+        A field named in ``rigidBodyCoarseLevel`` has it, with its options: the settings checks refused a named field
+        the coarse level does not fit. Under the default (``rigidBodyCoarseLevel`` unset), every 3D vector field has
+        it, with the default options, unless the coarse level does not fit the field: one on the p-two-grid
+        (``p1FieldNames``, ``p1Maps``) and one whose tree cannot configure it keep what they have, logged once at
+        ``info``. With ``False``, no field has it."""
+        setting = self._rigidBodyCoarseLevel
+        if setting is False:
+            return None
+        if setting is not None:
+            return setting.get(block.name)
+        if block.dimension != 3:
+            return None
+        if isP1Field:
+            reason, kept = "field '{:}' is on the p-two-grid (p1FieldNames)".format(block.name), "the p-two-grid"
+        else:
+            reason = self._rigidBodyCoarseLevelRejection(block.name, rigidbodycoarselevel.DEFAULT_OPTIONS, fieldTree, 3)
+            kept = "the hierarchy of its tree"
+        if reason is not None:
+            self._logOnce(
+                "info",
+                "blockamg: {:} -- so it keeps {:} instead of the default rigid-body coarse level".format(reason, kept),
+            )
+            return None
+        return rigidbodycoarselevel.options(True)
+
+    def _buildRigidBodyCoarseLevel(
+        self, block, system, index: int, scaling: np.ndarray, fieldTree: dict, coords, options: dict
+    ):
+        """The preconditioner of a field with the rigid-body coarse level and these options
         (:mod:`~edelweissfe.linsolve.blockamg.rigidbodycoarselevel`), built on its equilibrated diagonal block with the
         coordinates of its nodes; its tree configures the coarse level and the hierarchy below."""
-        options = self._rigidBodyCoarseLevel[block.name]
         fineSpectralRadius, fineDominantVector = self._reusedFineSpectralRadius(
             block.name, options["fineSpectralRadiusReuse"]
         )
@@ -2225,11 +2294,14 @@ class BlockAMGSolver(LinearSolver):
                     "complement condensation".format(self._solveCount, error),
                 )
             if condensation.selectedAllDofs:
-                self._warnOnce("⚠ blockamg: the schurComplement markers select every dof; nothing is condensed")
+                self._logOnce(
+                    "warning", "⚠ blockamg: the schurComplement markers select every dof; nothing is condensed"
+                )
             elif condensing and condensation.condensedDofs.size > n // 2:
-                self._warnOnce(
+                self._logOnce(
+                    "warning",
                     "⚠ blockamg: the schurComplement markers select more than half of the dofs: the solve is mostly a "
-                    "direct one, with the cost of AMG on top"
+                    "direct one, with the cost of AMG on top",
                 )
         condensedDofs = condensation.condensedDofs if condensing else None
         condensedDofsChanged = not _sameCondensedDofs(condensedDofs, self._hierarchyCondensedDofs)
