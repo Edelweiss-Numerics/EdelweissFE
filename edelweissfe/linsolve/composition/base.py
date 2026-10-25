@@ -181,6 +181,17 @@ class SetUpContext:
         """The number of dofs of this (sub-)problem."""
         return self.fields[-1].stop if self.fields else 0
 
+    def onlyField(self, owner: str) -> FieldBlock:
+        """The one field of this (sub-)problem, for a component that is built on one field's matrix; raises, naming
+        ``owner``, if there are several."""
+        if len(self.fields) != 1:
+            raise ValueError(
+                "{:} is built on the matrix of one field, but got the fields {:}: put it under OnField(name, ...) "
+                "for each field, combined by Multiplicative([...]) (block Gauss-Seidel) or Additive([...]) (block "
+                "Jacobi)".format(owner, ", ".join(field.name for field in self.fields))
+            )
+        return self.fields[0]
+
     def coordinates(self, fieldName: str) -> "np.ndarray | None":
         """The node coordinates of a field, or ``None``."""
         return None if self.coordinatesOf is None else self.coordinatesOf(fieldName)
@@ -305,6 +316,8 @@ class Preconditioner:
             cls.update = _recorded(cls.__dict__["update"], "update")
         if "__call__" in cls.__dict__:
             cls.__call__ = _recorded(cls.__dict__["__call__"], "apply")
+        if "applyRestricted" in cls.__dict__:
+            cls.applyRestricted = _recorded(cls.__dict__["applyRestricted"], "apply")
 
     def setUp(self, A, context: SetUpContext) -> None:
         """Build this component for the matrix ``A`` (a
@@ -320,6 +333,26 @@ class Preconditioner:
     def __call__(self, r: np.ndarray) -> np.ndarray:
         """Apply this component: :math:`z = M^{-1} r`."""
         raise NotImplementedError
+
+    @property
+    def fieldIndex(self) -> "int | None":
+        """The field this component acts on, :math:`R` in :math:`z = R^T M^{-1} R r`, as the index of the field in its
+        context (known after :meth:`setUp`), or ``None`` for all dofs. A combination
+        (:mod:`~edelweissfe.linsolve.composition.combinators`) then forms the residual of that field alone and calls
+        :meth:`applyRestricted`."""
+        return None
+
+    def applyRestricted(self, r_f: np.ndarray) -> np.ndarray:
+        """:math:`M^{-1} r_f` on the dofs of :attr:`fieldIndex` alone (all dofs: the same as calling it)."""
+        return self(r_f)
+
+    @property
+    def isFixedLinearOperator(self) -> bool:
+        """Whether :math:`z = M^{-1} r` is one fixed linear operator between two set-ups: true for a component whose
+        children all are; a Krylov solve is not (its result depends on :math:`r` nonlinearly, through the tolerance
+        and the subspace it builds). A Krylov method that relies on a fixed preconditioner (LGMRES, CG) refuses one
+        that is not."""
+        return all(child.isFixedLinearOperator for _, child in self.children())
 
     def setModel(self, model, dofManager) -> None:
         """Take a new model (the first, or one after a change of the mesh), and hand it to the children. A component
@@ -362,6 +395,17 @@ class Preconditioner:
         from edelweissfe.linsolve.composition.views import html
 
         return html(self, standalone=False)
+
+
+def requirePreconditioner(owner: str, role: str, child) -> None:
+    """Raise at construction if ``child``, the ``role`` of ``owner``, is not a component (e.g. a class instead of an
+    instance, or a bare SciPy solver)."""
+    if not isinstance(child, Preconditioner):
+        raise TypeError(
+            "{:}: its {:} must be a component (a Preconditioner such as AMG() or DirectSolver()), got {!r}".format(
+                owner, role, child
+            )
+        )
 
 
 def _recorded(method, kind: str):

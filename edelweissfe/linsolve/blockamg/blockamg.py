@@ -108,8 +108,11 @@ from edelweissfe.config.phenomena import phenomena
 from edelweissfe.linsolve.base import LinearSolver, LinearSolveSummary
 from edelweissfe.linsolve.blockamg import rigidbodycoarselevel, schurcomplement
 from edelweissfe.linsolve.composition.amg import buildFieldHierarchy
+from edelweissfe.linsolve.composition.combinators import (
+    gaussSeidelOrder,
+    multiplicativeCorrections,
+)
 from edelweissfe.linsolve.composition.diagonalscaling import diagonalScalingOf
-from edelweissfe.linsolve.composition.fieldsplit import blockGaussSeidel
 from edelweissfe.linsolve.composition.krylov import (
     STALENESS_MIN_EXCESS,
     eisenstatWalkerTolerance,
@@ -1713,9 +1716,9 @@ class BlockAMGSolver(LinearSolver):
         size, so a size change (adaptive refinement) needs a new one, and so does a change of ``lgmresM``,
         ``lgmresK`` or ``outerSolver`` -- a hot reload, or the rollback of one, drops it for that."""
         if self._lgmresSolver is None or self._lgmresN != n:
-            from edelweissfe.linsolve.amgcl.amgcl import PyAMGCLLGMRESSolver
+            from edelweissfe.linsolve.amgcl.amgcl import PyAMGCLKrylovSolver
 
-            self._lgmresSolver = PyAMGCLLGMRESSolver(n, {"M": self._lgmresM, "K": self._lgmresK})
+            self._lgmresSolver = PyAMGCLKrylovSolver(n, "lgmres", {"M": self._lgmresM, "K": self._lgmresK})
             self._lgmresN = n
         return self._lgmresSolver
 
@@ -2197,8 +2200,11 @@ class BlockAMGSolver(LinearSolver):
         ``M^-1 = (B + L)^-1`` for one forward sweep, ``B = blockdiag(M_i)``, ``M_i`` one AMG cycle on
         ``A_scaled_ii`` of the standing hierarchies; ``system`` provides the blocks ``A_scaled_ij``."""
         blocks = FieldSplitBlocks(system, [(block.start, block.stop) for block in self._blocks])
-        fieldPreconditioners = [preconditioner.applyPreconditioner for preconditioner in self._preconditioners]
-        return blockGaussSeidel(blocks, fieldPreconditioners, residual, self._sweeps, self._symmetric)
+        fieldCorrections = [
+            (i, preconditioner.applyPreconditioner) for i, preconditioner in enumerate(self._preconditioners)
+        ]
+        corrections = gaussSeidelOrder(fieldCorrections, self._sweeps, self._symmetric)
+        return multiplicativeCorrections(blocks, corrections, residual)
 
     def __call__(self, A, b):
         solveStartTime = time.time()
@@ -2382,9 +2388,13 @@ class BlockAMGSolver(LinearSolver):
             with performancetiming.timeit("equilibrated system"):
                 operator = self._condensedOuterOperatorFor(A)
 
+            from edelweissfe.linsolve.composition.schurcomplement import blockLU
+
             def outerPreconditioner(residual):
-                return condensation.precondition(
-                    residual, lambda remainingResidual: scaling * blockGaussSeidel(scaling * remainingResidual)
+                return blockLU(
+                    residual,
+                    condensation,
+                    lambda remainingResidual: scaling * blockGaussSeidel(scaling * remainingResidual),
                 )
 
             outerRightHandSide = b

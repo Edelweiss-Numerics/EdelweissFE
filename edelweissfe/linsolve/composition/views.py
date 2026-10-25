@@ -77,9 +77,11 @@ def structure(component) -> str:
 
         LGMRES(tolerance=ForcingTolerance(minimum=0.0001, maximum=0.001), maxIterations=100, M=50, K=3)
         └─ DiagonalScaling(D=diag(1/√|aᵢᵢ|))
-           └─ FieldSplit(sweep=Gauss–Seidel, sweeps=1)
-              ├─ displacement: TwoGrid(coarse space=rigid-body modes, prolongation=smoothed)
-              └─ nonlocal damage: AMG(tree=default)
+           └─ Multiplicative
+              ├─ M1: OnField(field=displacement)
+              │  └─ TwoGrid(coarse space=rigid-body modes, prolongation=smoothed)
+              └─ M2: OnField(field=nonlocal damage)
+                 └─ AMG(tree=default)
     """
     lines = []
     _tree(component, "", lines, "", True, True, lambda _: "")
@@ -96,7 +98,7 @@ def _formula(component, latex: bool) -> str:
 
 def formula(component, latex: bool = False) -> str:
     """The composed approximate inverse, each child's formula put in the place of its role, e.g.
-    ``LGMRES(A, D · GS[TwoGrid(displacement; rigid-body modes)⁻¹, AMG(nonlocal damage)⁻¹] · D)⁻¹``."""
+    ``LGMRES(A, D · (Rᵀ AMG(nonlocal damage)⁻¹ R ∘ Rᵀ TwoGrid(displacement; rigid-body modes)⁻¹ R) · D)⁻¹``."""
     return _formula(component, latex)
 
 

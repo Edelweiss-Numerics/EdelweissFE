@@ -106,6 +106,8 @@ class SystemMatrix:
         # the unscaled matrix this one is a scaled view of: a field split of the view keeps A for its Krylov operator
         self._unscaled = _unscaled
         self._krylovOperator = None
+        # the field split of this matrix, (bounds, blocks), formed at the first request (see fieldSplit)
+        self._fieldSplit = None
 
     @property
     def shape(self) -> tuple:
@@ -129,11 +131,12 @@ class SystemMatrix:
         return diagonal if self.scaling is None else diagonal * self.scaling**2
 
     def matrix(self) -> sp.csr_matrix:
-        """:math:`\\hat A` itself, formed with SciPy (for a leaf that needs the matrix, e.g. a direct solver)."""
+        """:math:`\\hat A` itself, for a component built on the whole matrix (AMG, a direct solver): :math:`A`, or
+        :math:`D A D` formed in the threaded pass of a split into one block (:meth:`fieldSplit`), which also keeps
+        :math:`A` as the Krylov operator."""
         if self.scaling is None:
             return self.A
-        D = sp.diags(self.scaling)
-        return (D @ self.A @ D).tocsr()
+        return self.fieldSplit([(0, self.A.shape[0])]).diagonalBlock(0)
 
     def __matmul__(self, x: np.ndarray) -> np.ndarray:
         """:math:`\\hat A x`."""
@@ -143,10 +146,16 @@ class SystemMatrix:
 
     def fieldSplit(self, bounds: list) -> FieldSplitBlocks:
         """The field blocks :math:`\\hat A_{ij}` for the field ranges ``bounds``, formed with :math:`\\hat A` in one
-        threaded pass. That pass also keeps :math:`A` as the operator of a Krylov solve on the unscaled matrix
-        this one is a view of (:meth:`krylovOperator`)."""
+        threaded pass at the first request and kept with this matrix: every component handed this matrix (the
+        corrections of a combination, each on its field) gets the same blocks. That pass also keeps :math:`A` as the
+        operator of a Krylov solve on the unscaled matrix this one is a view of (:meth:`krylovOperator`)."""
+        bounds = [tuple(bound) for bound in bounds]
+        if self._fieldSplit is not None and self._fieldSplit[0] == bounds:
+            return self._fieldSplit[1]
         from edelweissfe.linsolve.amgcl.amgcl import PyAMGCLEquilibratedSystem
 
+        # a split for other bounds goes before the new one is formed: never two copies at once
+        self._fieldSplit = None
         with performancetiming.timeit("equilibrated system"):
             native = PyAMGCLEquilibratedSystem()
             scaling = np.ones(self.A.shape[0]) if self.scaling is None else self.scaling
@@ -154,7 +163,8 @@ class SystemMatrix:
         unscaled = self if self.scaling is None else self._unscaled
         if unscaled is not None:
             unscaled._krylovOperator = native
-        return FieldSplitBlocks(native, bounds)
+        self._fieldSplit = (bounds, FieldSplitBlocks(native, bounds))
+        return self._fieldSplit[1]
 
     def krylovOperator(self):
         """:math:`A` as the operator of AMGCL's LGMRES (unscaled: a Krylov solve on :math:`D A D` is
@@ -169,3 +179,62 @@ class SystemMatrix:
                 self._krylovOperator = PyAMGCLEquilibratedSystem()
                 self._krylovOperator.buildOperator(self.A)
         return self._krylovOperator
+
+
+class FieldBlockMatrix(SystemMatrix):
+    """The diagonal block :math:`\\hat A_{ii}` of a field split as a :class:`SystemMatrix`, cut out only when it is
+    first used: a child that reuses its preconditioner never needs it, and the split itself is formed only when the
+    block or a product with it is first asked for.
+
+    Parameters
+    ----------
+    blocksOf
+        ``() -> FieldSplitBlocks``, the field split of the whole matrix.
+    i
+        The index of the field.
+    """
+
+    def __init__(self, blocksOf, i: int):
+        self._blocksOf = blocksOf
+        self._i = i
+        self._block = None
+        self.scaling = None
+        self._unscaled = None
+        self._krylovOperator = None
+        self._fieldSplit = None
+
+    @property
+    def A(self):
+        if self._block is None:
+            self._block = self._blocksOf().diagonalBlock(self._i)
+        return self._block
+
+    @property
+    def shape(self) -> tuple:
+        start, stop = self._blocksOf().bounds[self._i] if self._block is None else (0, self._block.shape[0])
+        return (stop - start, stop - start)
+
+    def fieldSplit(self, bounds: list) -> FieldSplitBlocks:
+        """The block as a split of one field: its products come from the split of the whole matrix, not from a copy."""
+        start, stop = self._blocksOf().bounds[self._i]
+        if [tuple(bound) for bound in bounds] != [(0, stop - start)]:
+            return super().fieldSplit(bounds)
+        return _OneFieldOf(self._blocksOf(), self._i)
+
+
+class _OneFieldOf(FieldSplitBlocks):
+    """Field ``i`` of a field split, as a split of one field (see :meth:`FieldBlockMatrix.fieldSplit`)."""
+
+    def __init__(self, blocks: FieldSplitBlocks, i: int):
+        start, stop = blocks.bounds[i]
+        super().__init__(blocks._native, [(0, stop - start)])
+        self._i = i
+
+    def diagonalBlock(self, i: int) -> sp.csr_matrix:
+        return super().diagonalBlock(self._i)
+
+    def diagonalBlockTimes(self, i: int, x: np.ndarray) -> np.ndarray:
+        return super().diagonalBlockTimes(self._i, x)
+
+    def couplingTimes(self, i: int, j: int, x: np.ndarray) -> np.ndarray:
+        raise ValueError("a split of one field has no coupling blocks")

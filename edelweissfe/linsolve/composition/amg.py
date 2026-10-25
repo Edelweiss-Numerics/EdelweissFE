@@ -140,7 +140,7 @@ class AMG(Preconditioner):
         self._field = None
 
     def setUp(self, A, context: SetUpContext) -> None:
-        (field,) = context.fields
+        field = context.onlyField("AMG")
         self._field = field
         tree = self.tree if self.tree is not None else defaultFieldTree(field.dimension)
         onScalarBackend = tree.get("backendBlockSize", 1) == 1
@@ -149,7 +149,7 @@ class AMG(Preconditioner):
             if field.dimension > 1 and onScalarBackend and self.rigidBodyNullspace
             else None
         )
-        self.hierarchy = buildFieldHierarchy(field, tree, context.scalingOf(slice(None)), coords, lambda: A.A)
+        self.hierarchy = buildFieldHierarchy(field, tree, context.scalingOf(slice(None)), coords, A.matrix)
         self.statistics.sizes["rows"] = A.shape[0]
 
     def update(self, A, change) -> None:

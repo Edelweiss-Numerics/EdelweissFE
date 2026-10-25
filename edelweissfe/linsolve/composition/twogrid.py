@@ -76,9 +76,32 @@ class RigidBodyModes:
     def __init__(
         self, prolongation: str = "smoothed", coarseHierarchyPrecision: str = "double", fineSpectralRadiusReuse=False
     ):
+        if prolongation not in ("smoothed", "tentative"):
+            raise ValueError(
+                "RigidBodyModes: prolongation must be 'smoothed' or 'tentative', got {!r}".format(prolongation)
+            )
+        if coarseHierarchyPrecision not in ("double", "float"):
+            raise ValueError(
+                "RigidBodyModes: coarseHierarchyPrecision must be 'double' or 'float', got {!r}".format(
+                    coarseHierarchyPrecision
+                )
+            )
         self.prolongation = prolongation
         self.coarseHierarchyPrecision = coarseHierarchyPrecision
         self.fineSpectralRadiusReuse = fineSpectralRadiusReuse
+
+    def check(self, field, context: SetUpContext) -> None:
+        """Raise if this coarse space cannot be built for the field: rigid-body modes are those of a 2D or 3D
+        displacement-like field with node coordinates."""
+        if field.dimension not in (2, 3):
+            raise ValueError(
+                "TwoGrid: the rigid-body modes need a 2D or 3D vector field, but the field '{:}' has {:} component(s) "
+                "per node".format(field.name, field.dimension)
+            )
+        if context.coordinates(field.name) is None:
+            raise ValueError(
+                "TwoGrid: the rigid-body modes of the field '{:}' need its node coordinates".format(field.name)
+            )
 
     def build(self, field, tree: dict, A, context: SetUpContext, fineSpectralRadius, fineDominantVector):
         """The two-grid cycle on this coarse space for a field's matrix ``A``."""
@@ -87,10 +110,6 @@ class RigidBodyModes:
         )
 
         coords = context.coordinates(field.name)
-        if coords is None:
-            raise ValueError(
-                "TwoGrid: the rigid-body modes of the field '{:}' need its node coordinates".format(field.name)
-            )
         cycle = RigidBodyCoarseLevelPreconditioner(
             amgclTreeOf(tree),
             tree.get("backendBlockSize", 1),
@@ -101,7 +120,7 @@ class RigidBodyModes:
             fineDominantVector=fineDominantVector,
         )
         with performancetiming.timeit("{:} rigid-body coarse level build".format(field.name)):
-            cycle.build(A.A, context.scalingOf(slice(None)), coords)
+            cycle.build(A.matrix(), context.scalingOf(slice(None)), coords)
         return cycle
 
     def sizesOf(self, cycle) -> dict:
@@ -134,19 +153,22 @@ class P1Interpolation:
         self.fineSpectralRadiusReuse = fineSpectralRadiusReuse
         self.options = options
 
+    def check(self, field, context: SetUpContext) -> None:
+        """Raise if this coarse space cannot be built for the field: it needs the field's P1 map."""
+        if context.p1Map(field.name) is None:
+            raise ValueError("TwoGrid: the P1 interpolation of the field '{:}' needs its P1 map".format(field.name))
+
     def build(self, field, tree: dict, A, context: SetUpContext, fineSpectralRadius, fineDominantVector):
         """The two-grid cycle on this coarse space for a field's matrix ``A``."""
         from edelweissfe.linsolve.blockamg.ptwogrid import PTwoGridPreconditioner
 
         p1Map = context.p1Map(field.name)
-        if p1Map is None:
-            raise ValueError("TwoGrid: the P1 interpolation of the field '{:}' needs its P1 map".format(field.name))
         cycle = PTwoGridPreconditioner(
             *p1Map, fineSpectralRadius=fineSpectralRadius, fineDominantVector=fineDominantVector, **self.options
         )
         coords = context.coordinates(field.name) if self.rigidBodyNullspace else None
         with performancetiming.timeit("{:} p-two-grid build".format(field.name)):
-            cycle.build(A.A, context.scalingOf(slice(None)), coords=coords)
+            cycle.build(A.matrix(), context.scalingOf(slice(None)), coords=coords)
         return cycle
 
     def sizesOf(self, cycle) -> dict:
@@ -172,6 +194,10 @@ class TwoGrid(Preconditioner):
     """
 
     def __init__(self, coarseSpace, tree: dict = None):
+        if not isinstance(coarseSpace, (RigidBodyModes, P1Interpolation)):
+            raise TypeError(
+                "TwoGrid: coarseSpace must be RigidBodyModes() or P1Interpolation(), got {!r}".format(coarseSpace)
+            )
         self.coarseSpace = coarseSpace
         self.tree = tree
         self.cycle = None
@@ -184,7 +210,8 @@ class TwoGrid(Preconditioner):
         super().setModel(model, dofManager)
 
     def setUp(self, A, context: SetUpContext) -> None:
-        (field,) = context.fields
+        field = context.onlyField("TwoGrid")
+        self.coarseSpace.check(field, context)
         self._field = field
         tree = self.tree if self.tree is not None else defaultFieldTree(field.dimension)
         fineSpectralRadius, fineDominantVector = (

@@ -10,6 +10,7 @@
 #include <amgcl/make_solver.hpp>
 #include <amgcl/preconditioner/runtime.hpp>
 #include <amgcl/relaxation/runtime.hpp>
+#include <amgcl/solver/fgmres.hpp>
 #include <amgcl/solver/lgmres.hpp>
 #include <amgcl/solver/runtime.hpp>
 #include <amgcl/value_type/static_matrix.hpp>
@@ -579,7 +580,7 @@ inline double rowDiagonal( const int* ptr, const int* col, const double* val, pt
 /// hierarchy rebuild) and the equilibrated coupling blocks between fields (on every solve). This
 /// class holds
 ///
-///   * the outer Krylov operator: matvec(), residual(), and the operator LGMRESOuterSolverT::solve()
+///   * the outer Krylov operator: matvec(), residual(), and the operator OuterKrylovSolverT::solve()
 ///     iterates on -- the equilibrated operator As = D A D or, built with `unscaled`, A itself. Only that one
 ///     is stored. An entry of As is formed exactly as SciPy's former
 ///     `As.data *= scaling[As.indices]; As.data *= scaling[rows]` did, (a_ij * s_j) * s_i, s = scaling, so the
@@ -627,7 +628,7 @@ public:
   /// @param nFields, fieldBounds the fields' DOF ranges, [fieldBounds[2k], fieldBounds[2k+1]),
   /// disjoint.
   /// @param unscaled store A itself (without its stored zeros) instead of As, for an outer Krylov solve on
-  /// the unscaled system: matvec() and residual() with unscaled, LGMRESOuterSolverT::solve(). The blocks of
+  /// the unscaled system: matvec() and residual() with unscaled, OuterKrylovSolverT::solve(). The blocks of
   /// As are the same either way.
   void build( int           n,
               const int*    ptr,
@@ -645,7 +646,7 @@ public:
 
   /// @brief Keep A itself, as given (its stored zeros too), as the operator of an outer Krylov solve on the unscaled
   /// system, without fields or blocks: what matrix( true ), matvec() and residual() with unscaled, and
-  /// LGMRESOuterSolverT::solve() read (blockamg's condensed solves). Kept with A's own sparsity pattern, its values
+  /// OuterKrylovSolverT::solve() read (blockamg's condensed solves). Kept with A's own sparsity pattern, its values
   /// can be replaced in place for the next matrix of that pattern, see refreshOperatorValues().
   /// @param n, ptr, col, val A, square CSR
   void buildOperator( int n, const int* ptr, const int* col, const double* val )
@@ -968,7 +969,7 @@ typedef int ( *PyPrecondApplyFn )( void* ctx, int n, const double* rhs, double* 
 // Adapts a PyPrecondApplyFn callback to amgcl::solver::lgmres's Precond interface: a single const
 // apply(rhs, x) method (see amgcl/solver/precond_side.hpp's spmv() -- with the default
 // preconditioning side `right` that this class assumes, apply() is the *only* thing lgmres ever calls
-// on a Precond object; see LGMRESOuterSolverT's own comment for why `right` is not overridden here).
+// on a Precond object; see OuterKrylovSolverT's own comment for why `right` is not overridden here).
 //
 // rhs/x are written directly against amgcl::backend::builtin<double>::vector (numa_vector<double>),
 // not kept as a generic template parameter: lgmres calls apply() exclusively on its own internal
@@ -977,9 +978,9 @@ typedef int ( *PyPrecondApplyFn )( void* ctx, int n, const double* rhs, double* 
 // vector type apply() is ever actually called with in this codebase's usage, so templating it, as
 // amgcl::preconditioner::dummy does for genuine backend-portability, would cost readability for no
 // real flexibility gained here.
-class PyLGMRESPrecondT {
+class PyKrylovPrecondT {
 public:
-  PyLGMRESPrecondT( PyPrecondApplyFn applyFn, void* ctx, int n ) : applyFn_( applyFn ), ctx_( ctx ), n_( n ) {}
+  PyKrylovPrecondT( PyPrecondApplyFn applyFn, void* ctx, int n ) : applyFn_( applyFn ), ctx_( ctx ), n_( n ) {}
 
   /// @brief x <- M^-1 rhs through the callback.
   /// @throw std::runtime_error if the callback failed: the exception unwinds lgmres at once, instead of
@@ -987,7 +988,7 @@ public:
   void apply( const amgcl::backend::builtin< double >::vector& rhs, amgcl::backend::builtin< double >::vector& x ) const
   {
     if ( applyFn_( ctx_, n_, rhs.data(), x.data() ) != 0 )
-      throw std::runtime_error( "LGMRESOuterSolverT: the preconditioner callback failed" );
+      throw std::runtime_error( "OuterKrylovSolverT: the preconditioner callback failed" );
   }
 
 private:
@@ -996,7 +997,7 @@ private:
   int              n_;
 };
 
-/// Wraps amgcl::solver::lgmres<builtin<double>> as blockamg.py's outer Krylov solve, in place of
+/// Wraps amgcl::solver::lgmres<builtin<double>> (or fgmres) as blockamg.py's outer Krylov solve, in place of
 /// scipy.sparse.linalg.gmres, at both of that path's call sites (the main solve and the true-residual
 /// continuation retry -- see blockamg.py's __call__).
 ///
@@ -1012,10 +1013,47 @@ private:
 /// tol/maxiter are set on every call on the solver's own public prm member -- blockamg's forcing and
 /// continuation tolerances change per call -- and every call iterates on the EquilibratedSystemT it is
 /// given, built fresh for that solve.
-class LGMRESOuterSolverT {
+/// The outer Krylov solve of either method, as Cython holds it (see makeOuterKrylovSolver()).
+class OuterKrylovSolver {
+public:
+  virtual ~OuterKrylovSolver() {}
+
+  /// @brief x <- A^-1 rhs, right-preconditioned by the callback (applyFn/ctx), see OuterKrylovSolverT::solve().
+  virtual void solve( const EquilibratedSystemT& system,
+                      const double*              rhs,
+                      double*                    x,
+                      double                     tol,
+                      int                        maxiter,
+                      PyPrecondApplyFn           applyFn,
+                      void*                      ctx,
+                      int&                       iters,
+                      double&                    error,
+                      bool                       onUnscaledOperator ) = 0;
+};
+
+/// @brief The parameters LGMRES is always run with, whatever the caller's tree says: always_reset (see the class
+/// comment) and right preconditioning -- lgmres's own convergence test is then on the residual of the operator it
+/// iterates on, which blockamg relies on (see its cap-hit and true-residual logic); left preconditioning would test
+/// the preconditioned residual instead.
+inline void forceOuterKrylovParameters( boost::property_tree::ptree& prm,
+                                        const amgcl::solver::lgmres< amgcl::backend::builtin< double > >* )
+{
+  prm.put( "always_reset", true );
+  prm.put( "pside", "right" );
+}
+
+/// @brief FGMRES has nothing to force: it is right-preconditioned by construction (x = Z_m y_m) and keeps no
+/// subspace across calls.
+inline void forceOuterKrylovParameters( boost::property_tree::ptree&,
+                                        const amgcl::solver::fgmres< amgcl::backend::builtin< double > >* )
+{
+}
+
+template < class SolverType >
+class OuterKrylovSolverT : public OuterKrylovSolver {
 public:
   typedef amgcl::backend::builtin< double > Backend;
-  typedef amgcl::solver::lgmres< Backend >  Solver;
+  typedef SolverType                        Solver;
 
   std::unique_ptr< Solver > solver_;
   int                       n_;
@@ -1023,15 +1061,11 @@ public:
   /// @brief Construct for a fixed problem size n.
   /// @param json_params lgmres::params' own sub-tree, e.g. {"M": 30, "K": 3}, forwarded verbatim;
   /// always_reset is forced to true (see the class comment).
-  LGMRESOuterSolverT( int n, const char* json_params ) : n_( n )
+  OuterKrylovSolverT( int n, const char* json_params ) : n_( n )
   {
     boost::property_tree::ptree prm = parseJsonParameters( json_params );
-    prm.put( "always_reset", true );
-    // right preconditioning, whatever the caller's tree says: lgmres's own convergence test is then on the
-    // residual of the operator it iterates on, which blockamg relies on (see its cap-hit and true-residual
-    // logic); left preconditioning would test the preconditioned residual instead
-    prm.put( "pside", "right" );
-    Solver::params p( prm );
+    forceOuterKrylovParameters( prm, static_cast< const Solver* >( nullptr ) );
+    typename Solver::params p( prm );
     solver_.reset( new Solver( static_cast< size_t >( n ), p ) );
   }
 
@@ -1049,19 +1083,19 @@ public:
               void*                      ctx,
               int&                       iters,
               double&                    error,
-              bool                       onUnscaledOperator = false )
+              bool                       onUnscaledOperator ) override
   {
     system.checkBuilt();
     const int n = system.n_;
     if ( n != n_ ) {
-      throw std::runtime_error( "LGMRESOuterSolverT::solve(): n=" + std::to_string( n ) + " does not match the size " +
+      throw std::runtime_error( "OuterKrylovSolverT::solve(): n=" + std::to_string( n ) + " does not match the size " +
                                 std::to_string( n_ ) + " this instance was constructed for." );
     }
 
     solver_->prm.tol     = tol;
     solver_->prm.maxiter = static_cast< size_t >( maxiter );
 
-    PyLGMRESPrecondT precond( applyFn, ctx, n );
+    PyKrylovPrecondT precond( applyFn, ctx, n );
 
     auto rhs_rng = amgcl::make_iterator_range( rhs, rhs + n );
     auto x_rng   = amgcl::make_iterator_range( x, x + n );
@@ -1073,6 +1107,18 @@ public:
     error                          = errorOut;
   }
 };
+
+/// @brief A new outer Krylov solve of `method` ("lgmres" or "fgmres") for size n, with AMGCL's parameters of that
+/// method as JSON; the caller owns it.
+inline OuterKrylovSolver* makeOuterKrylovSolver( const std::string& method, int n, const char* json_params )
+{
+  typedef amgcl::backend::builtin< double > Backend;
+  if ( method == "lgmres" )
+    return new OuterKrylovSolverT< amgcl::solver::lgmres< Backend > >( n, json_params );
+  if ( method == "fgmres" )
+    return new OuterKrylovSolverT< amgcl::solver::fgmres< Backend > >( n, json_params );
+  throw std::runtime_error( "makeOuterKrylovSolver(): unknown method '" + method + "' (lgmres, fgmres)" );
+}
 
 // --- two-grid preconditioners: the p-two-grid (P1) and the rigid-body coarse level -------------------------------
 //
@@ -2658,8 +2704,7 @@ inline AMGCLSolverInterface* makeAMGCLSolver( const char* json_params, int block
 // blockamg's equilibrated, field-split system, see EquilibratedSystemT above.
 typedef EquilibratedSystemT EquilibratedSystem;
 
-// AMGCL's own native outer Krylov solve (lgmres), see LGMRESOuterSolverT above.
-typedef LGMRESOuterSolverT LGMRESOuterSolver;
+// AMGCL's own native outer Krylov solves (lgmres, fgmres) are created by makeOuterKrylovSolver(), see above.
 
 // The p-two-grid (P1) preconditioner, see PTwoGridPreconditionerT above.
 typedef PTwoGridPreconditionerT PTwoGridPreconditioner;

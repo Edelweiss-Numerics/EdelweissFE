@@ -43,8 +43,9 @@ from edelweissfe.linsolve.composition import (  # noqa: E402
     ComposedLinearSolver,
     DiagonalScaling,
     DirectSolver,
-    FieldSplit,
     FixedTolerance,
+    Multiplicative,
+    OnField,
     SchurComplement,
     blockAMG,
     loadSolverScript,
@@ -54,7 +55,8 @@ from edelweissfe.linsolve.composition import (  # noqa: E402
 def _solvedTree():
     A, b, fields = displacementDamageSystem(n=10, coupling="symmetric")
     root = LGMRES(
-        DiagonalScaling(FieldSplit({"displacement": AMG(), "nonlocal damage": AMG()})), tolerance=FixedTolerance(1e-8)
+        DiagonalScaling(Multiplicative([OnField("displacement", AMG()), OnField("nonlocal damage", AMG())])),
+        tolerance=FixedTolerance(1e-8),
     )
     solver = ComposedLinearSolver(root, verbosity="silent")
     solver.setFieldStructure(fields)
@@ -67,20 +69,22 @@ def test_the_structure_view_shows_one_line_per_component_with_the_roles_of_the_c
     lines = str(root).splitlines()
     assert lines[0].startswith("LGMRES(tolerance=FixedTolerance(1e-08)")
     assert lines[1].startswith("└─ DiagonalScaling")
-    assert lines[2].startswith("   └─ FieldSplit(sweep=Gauss–Seidel")
-    assert lines[3].startswith("      ├─ displacement: AMG(")
-    assert lines[4].startswith("      └─ nonlocal damage: AMG(")
+    assert lines[2].startswith("   └─ Multiplicative")
+    assert lines[3].startswith("      ├─ M1: OnField(field=displacement)")
+    assert lines[4].startswith("      │  └─ AMG(")
+    assert lines[5].startswith("      └─ M2: OnField(field=nonlocal damage)")
 
 
 def test_the_structure_of_the_block_amg_preset_before_it_has_seen_a_matrix():
+    """Its corrections are made per field at the first set-up; before, the view says so."""
     lines = views.structure(blockAMG()).splitlines()
-    assert len(lines) == 3 and "ForcingTolerance" in lines[0] and "FieldSplit" in lines[2]
+    assert len(lines) == 3 and "ForcingTolerance" in lines[0] and "Multiplicative" in lines[2]
 
 
 def test_the_formula_puts_each_child_in_the_place_of_its_role():
     root = _solvedTree()
-    assert views.formula(root) == "LGMRES(A, D · GS[AMG(displacement)⁻¹, AMG(nonlocal damage)⁻¹] · D)⁻¹"
-    assert views.formula(root, latex=True).startswith("\\mathrm{LGMRES}\\left(A,\\, D \\, \\mathrm{GS}")
+    assert views.formula(root) == "LGMRES(A, D · (Rᵀ AMG(nonlocal damage)⁻¹ R ∘ Rᵀ AMG(displacement)⁻¹ R) · D)⁻¹"
+    assert views.formula(root, latex=True).startswith("\\mathrm{LGMRES}\\left(A,\\, D \\, \\left(R^T")
 
 
 def test_the_schur_complement_formula_and_steps():
@@ -91,14 +95,14 @@ def test_the_schur_complement_formula_and_steps():
 
 def test_the_run_statistics_annotate_every_component():
     text = views.runStatistics(_solvedTree())
-    assert text.count("applied") == 5
+    assert text.count("applied") == 7
     assert "rows 3000" in text and "rows 1000" in text
 
 
 def test_the_data_flow_is_a_graph_of_nested_clusters():
     dot = views.dataFlow(_solvedTree())
     assert dot.startswith("digraph composedSolver {")
-    assert dot.count("subgraph") == 5
+    assert dot.count("subgraph") == 7
     assert '"r" -> ' in dot and '-> "z"' in dot
 
 
@@ -122,10 +126,12 @@ def test_a_solver_script_is_the_linear_solver_of_an_input_file(tmp_path):
     script.write_text(
         textwrap.dedent(
             """
-            from edelweissfe.linsolve.composition import AMG, LGMRES, DiagonalScaling, FieldSplit, FixedTolerance
+            from edelweissfe.linsolve.composition import (
+                AMG, LGMRES, DiagonalScaling, FixedTolerance, Multiplicative, OnField
+            )
 
-            fieldSplit = FieldSplit({"displacement": AMG(), "nonlocal damage": AMG()})
-            linearSolver = LGMRES(DiagonalScaling(fieldSplit), tolerance=FixedTolerance(options.get("eta", 1e-8)))
+            blockGaussSeidel = Multiplicative([OnField("displacement", AMG()), OnField("nonlocal damage", AMG())])
+            linearSolver = LGMRES(DiagonalScaling(blockGaussSeidel), tolerance=FixedTolerance(options.get("eta", 1e-8)))
             """
         )
     )

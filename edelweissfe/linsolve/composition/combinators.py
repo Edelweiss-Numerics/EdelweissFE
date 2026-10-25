@@ -25,20 +25,33 @@
 #  The full text of the license can be found in the file LICENSE.md at
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
-"""Generic combinators: :class:`Multiplicative`, :class:`Additive`, :class:`OnField`, :class:`CoarseCorrection`, and the
-simplest smoother, :class:`Jacobi`.
+"""Combining preconditioners: :class:`Multiplicative`, :class:`Additive`, :class:`OnField`, :class:`CoarseCorrection`,
+and the simplest smoother, :class:`Jacobi`.
 
-They build new methods without new classes, and they show that methods which look unrelated share one structure:
+They are the vocabulary of Schwarz methods, and methods which look unrelated share their structure:
 
-- a block Gauss--Seidel field split is a multiplicative combination of corrections on single fields,
-  ``Multiplicative([OnField("displacement", M_u), OnField("nonlocal damage", M_d)])``;
+- a correction on one field is :math:`R_i^T M_i^{-1} R_i`, with :math:`R_i` the restriction to the field's dofs and
+  :math:`M_i^{-1}` a preconditioner of its diagonal block :math:`A_{ii} = R_i A R_i^T`: ``OnField(name, M_i)``;
+- block Gauss--Seidel over the fields is their multiplicative combination,
+  ``Multiplicative([OnField("displacement", M_u), OnField("nonlocal damage", M_d)])``, and block Jacobi their additive
+  one, ``Additive([...])``; a symmetric sweep visits the fields forward and back, see :func:`gaussSeidelOrder`;
 - a two-grid cycle is a multiplicative combination of a smoother, a coarse correction and the smoother again,
   ``Multiplicative([Jacobi(), CoarseCorrection(P, coarse), Jacobi()])``.
 
-They are written for clarity, not speed: each correction of :class:`Multiplicative` costs a product with the whole
-matrix. The fast versions of the same methods are :class:`~edelweissfe.linsolve.composition.fieldsplit.FieldSplit`
-and :class:`~edelweissfe.linsolve.composition.twogrid.TwoGrid`.
+This is also the fast way. A combination asks each correction which field it acts on (:attr:`~edelweissfe.linsolve.
+composition.base.Preconditioner.fieldIndex`), and computes the residual of a correction on field :math:`i` only on
+that field's rows, from the fields corrected so far:
+
+.. math::
+
+    r_i - \\sum_{j:\\, z_j \\neq 0} A_{ij} z_j
+
+with the blocks :math:`A_{ij}` formed once per matrix in one threaded pass
+(:meth:`~edelweissfe.linsolve.composition.systemmatrix.SystemMatrix.fieldSplit`) and read only as products. A
+correction on all dofs gets the residual of all fields.
 """
+
+from collections.abc import Callable
 
 import numpy as np
 import scipy.sparse as sp
@@ -49,93 +62,243 @@ from edelweissfe.linsolve.composition.base import (
     Preconditioner,
     SetUpContext,
     Step,
+    requirePreconditioner,
 )
-from edelweissfe.linsolve.composition.systemmatrix import SystemMatrix
+from edelweissfe.linsolve.composition.systemmatrix import (
+    FieldBlockMatrix,
+    FieldSplitBlocks,
+    SystemMatrix,
+)
 
 
-class Multiplicative(Preconditioner):
+def gaussSeidelOrder(fieldCorrections: list, sweeps: int = 1, symmetric: bool = False) -> list:
+    """The corrections of block Gauss--Seidel sweeps over fields, in the order a :class:`Multiplicative` applies
+    them: ``sweeps`` forward sweeps, each followed by a backward one if ``symmetric`` -- which starts one field before
+    the last, since the last field was just corrected with everything else current. For two fields ``u, d``:
+    ``[u, d]``, symmetric ``[u, d, u]``, two symmetric sweeps ``[u, d, u, u, d, u]`` (a field corrected twice in a row
+    is corrected twice: the second correction is one of the residual the first left)."""
+    if sweeps < 1:
+        raise ValueError("gaussSeidelOrder: sweeps must be at least 1, got {:}".format(sweeps))
+    fieldCorrections = list(fieldCorrections)
+    return (fieldCorrections + (fieldCorrections[-2::-1] if symmetric else [])) * sweeps
+
+
+def multiplicativeCorrections(blocks: FieldSplitBlocks, corrections: list, r: np.ndarray) -> np.ndarray:
+    """Successive corrections, each of the residual the previous ones left: :math:`z \\leftarrow z + R_k^T M_k^{-1} R_k
+    (r - A z)`, with the residual of correction :math:`k` formed only on its field's rows (see the module
+    documentation). Shared by :class:`Multiplicative` and
+    :class:`~edelweissfe.linsolve.blockamg.blockamg.BlockAMGSolver`.
+
+    Parameters
+    ----------
+    blocks
+        The field blocks :math:`A_{ij}` (their products with vectors).
+    corrections
+        ``(i, apply)`` per correction, in order: the index ``i`` of its field (``None``: all dofs) and its
+        :math:`M_k^{-1}`, a callable on the residual of its dofs.
+    r
+        The vector to precondition.
+
+    Returns
+    -------
+    np.ndarray
+        :math:`z`.
+    """
+    fields = blocks.slices
+    # z per field; None while still zero
+    z = [None] * len(fields)
+
+    def residualOf(i: int) -> np.ndarray:
+        r_i = r[fields[i]].copy()
+        for j, z_j in enumerate(z):
+            if j != i and z_j is not None:
+                r_i -= blocks.couplingTimes(i, j, z_j)
+        if z[i] is not None:
+            r_i -= blocks.diagonalBlockTimes(i, z[i])
+        return r_i
+
+    for i, apply in corrections:
+        if i is None:
+            residual = r if all(z_j is None for z_j in z) else np.concatenate([residualOf(k) for k in range(len(z))])
+            dz = apply(residual)
+            for k, field in enumerate(fields):
+                z[k] = dz[field] if z[k] is None else z[k] + dz[field]
+        else:
+            dz_i = apply(residualOf(i))
+            z[i] = dz_i if z[i] is None else z[i] + dz_i
+    return _assembled(z, fields)
+
+
+def _assembled(z: list, fields: list) -> np.ndarray:
+    """The vector of the per-field parts ``z`` (``None``: zero)."""
+    return np.concatenate([np.zeros(f.stop - f.start) if z_i is None else z_i for z_i, f in zip(z, fields)])
+
+
+class _Combination(Preconditioner):
+    """What :class:`Multiplicative` and :class:`Additive` share: their corrections, given as a list, or as a function
+    of the context that makes them once the fields are known (e.g. one correction per field, whatever the model)."""
+
+    def __init__(self, corrections: "list | Callable"):
+        name = type(self).__name__
+        if callable(corrections) and not isinstance(corrections, Preconditioner):
+            self._makeCorrections = corrections
+            self.corrections = []
+        else:
+            corrections = list(corrections)
+            if not corrections:
+                raise ValueError("{:}: needs at least one correction".format(name))
+            for k, correction in enumerate(corrections):
+                requirePreconditioner(name, "correction {:}".format(k + 1), correction)
+            self._makeCorrections = None
+            self.corrections = corrections
+        self._madeFor = None
+        self.bounds = None
+
+    def _distinct(self) -> list:
+        """Each correction once (a correction may be applied several times, e.g. in a symmetric sweep)."""
+        distinct = []
+        for correction in self.corrections:
+            if not any(correction is other for other in distinct):
+                distinct.append(correction)
+        return distinct
+
+    def _makeFor(self, context: SetUpContext) -> bool:
+        """Make the corrections for the fields of ``context``, if they are made from a function and not yet for these
+        fields; whether new ones were made."""
+        names = tuple(field.name for field in context.fields)
+        if self._makeCorrections is None or names == self._madeFor:
+            return False
+        corrections = list(self._makeCorrections(context))
+        name = type(self).__name__
+        if not corrections:
+            raise ValueError("{:}: the function of the corrections made none for the fields {:}".format(name, names))
+        for k, correction in enumerate(corrections):
+            requirePreconditioner(name, "correction {:}".format(k + 1), correction)
+        self.corrections, self._madeFor = corrections, names
+        return True
+
+    def setUp(self, A, context: SetUpContext) -> None:
+        self._makeFor(context)
+        self.bounds = [(field.start, field.stop) for field in context.fields]
+        for correction in self._distinct():
+            correction.setUp(A, context)
+
+    def update(self, A, change) -> None:
+        if self._makeFor(change.context) or not self.bounds:
+            self.setUp(A, change.context)
+            return
+        self.bounds = [(field.start, field.stop) for field in change.context.fields]
+        for correction in self._distinct():
+            correction.update(A, change)
+
+    def _roles(self) -> tuple:
+        """``(role, correction)`` per distinct correction, and the role of each correction in order."""
+        distinct = self._distinct()
+        roles = [self._roleOf(correction, k) for k, correction in enumerate(distinct)]
+        order = [roles[next(k for k, other in enumerate(distinct) if other is c)] for c in self.corrections]
+        return tuple(zip(roles, distinct)), order
+
+    @staticmethod
+    def _roleOf(correction, k: int) -> str:
+        return "M" + str(k + 1)
+
+
+class Multiplicative(_Combination):
     """Successive corrections, each one of the residual the previous ones left:
 
     .. math::
 
         z \\leftarrow M_1^{-1} r, \\qquad z \\leftarrow z + M_k^{-1} (r - A z), \\quad k = 2, \\ldots
 
+    A correction on one field (:class:`OnField`) gets the residual of that field alone, see the module documentation.
+
     Parameters
     ----------
     corrections
-        The preconditioners :math:`M_k^{-1}`, all set up for the same matrix.
+        The preconditioners :math:`M_k^{-1}`, all set up for the same matrix; one may appear several times (it is set
+        up once). Or a function ``context -> list`` that makes them at the first set-up, when the fields are known.
     """
 
-    def __init__(self, corrections: list):
-        self.corrections = list(corrections)
-        self.A = None
+    def __init__(self, corrections: "list | Callable"):
+        super().__init__(corrections)
+        self.blocks = None
 
     def setUp(self, A, context: SetUpContext) -> None:
-        self.A = A
-        for correction in self.corrections:
-            correction.setUp(A, context)
+        super().setUp(A, context)
+        self.blocks = A.fieldSplit(self.bounds)
 
     def update(self, A, change) -> None:
-        self.A = A
-        for correction in self.corrections:
-            correction.update(A, change)
+        super().update(A, change)
+        # the residuals always come from the current matrix
+        self.blocks = A.fieldSplit(self.bounds)
 
     def __call__(self, r: np.ndarray) -> np.ndarray:
-        first, *others = self.corrections
-        z = first(r)
-        for correction in others:
-            z = z + correction(r - self.A @ z)
-        return z
+        return multiplicativeCorrections(self.blocks, [(c.fieldIndex, c.applyRestricted) for c in self.corrections], r)
+
+    def finishSolve(self) -> None:
+        # the blocks belong to this solve's matrix
+        self.blocks = None
+        super().finishSolve()
 
     def describe(self) -> Description:
-        roles = ["M" + str(k + 1) for k in range(len(self.corrections))]
+        if not self.corrections:
+            return Description(name="Multiplicative", formula="Multiplicative(made per field)", latex="")
+        children, order = self._roles()
         return Description(
             name="Multiplicative",
-            formula="(" + " ∘ ".join("{" + role + "}" for role in reversed(roles)) + ")",
-            latex="\\left(" + " \\circ ".join("{" + role + "}" for role in reversed(roles)) + "\\right)",
-            children=tuple(zip(roles, self.corrections)),
-            steps=(Step("z = M1⁻¹ r", roles[0]),)
-            + tuple(Step("z += {0}⁻¹ (r − A z)".format(role), role) for role in roles[1:]),
+            formula="(" + " ∘ ".join("{" + role + "}" for role in reversed(order)) + ")",
+            latex="\\left(" + " \\circ ".join("{" + role + "}" for role in reversed(order)) + "\\right)",
+            children=children,
+            steps=(Step("z = {0}⁻¹ r".format(order[0]), order[0]),)
+            + tuple(Step("z += {0}⁻¹ (r − A z)".format(role), role) for role in order[1:]),
         )
 
 
-class Additive(Preconditioner):
-    """Corrections of the same residual, summed: :math:`z = \\sum_k M_k^{-1} r`.
+class Additive(_Combination):
+    """Corrections of the same residual, summed: :math:`z = \\sum_k M_k^{-1} r`. Over corrections on single fields,
+    this is block Jacobi.
 
     Parameters
     ----------
     corrections
-        The preconditioners :math:`M_k^{-1}`, all set up for the same matrix.
+        The preconditioners :math:`M_k^{-1}`, all set up for the same matrix; or a function ``context -> list`` that
+        makes them at the first set-up.
     """
 
-    def __init__(self, corrections: list):
-        self.corrections = list(corrections)
-
-    def setUp(self, A, context: SetUpContext) -> None:
-        for correction in self.corrections:
-            correction.setUp(A, context)
-
-    def update(self, A, change) -> None:
-        for correction in self.corrections:
-            correction.update(A, change)
-
     def __call__(self, r: np.ndarray) -> np.ndarray:
-        return sum(correction(r) for correction in self.corrections)
+        fields = [slice(start, stop) for start, stop in self.bounds]
+        z = [None] * len(fields)
+        for correction in self.corrections:
+            i = correction.fieldIndex
+            if i is None:
+                dz = correction(r)
+                parts = [(k, dz[field]) for k, field in enumerate(fields)]
+            else:
+                parts = [(i, correction.applyRestricted(r[fields[i]]))]
+            for k, dz_k in parts:
+                z[k] = dz_k if z[k] is None else z[k] + dz_k
+        return _assembled(z, fields)
 
     def describe(self) -> Description:
-        roles = ["M" + str(k + 1) for k in range(len(self.corrections))]
+        if not self.corrections:
+            return Description(name="Additive", formula="Additive(made per field)", latex="")
+        children, order = self._roles()
         return Description(
             name="Additive",
-            formula="(" + " + ".join("{" + role + "}" for role in roles) + ")",
-            latex="\\left(" + " + ".join("{" + role + "}" for role in roles) + "\\right)",
-            children=tuple(zip(roles, self.corrections)),
-            steps=tuple(Step("z += {0}⁻¹ r".format(role), role) for role in roles),
+            formula="(" + " + ".join("{" + role + "}" for role in order) + ")",
+            latex="\\left(" + " + ".join("{" + role + "}" for role in order) + "\\right)",
+            children=children,
+            steps=tuple(Step("z += {0}⁻¹ r".format(role), role) for role in order),
         )
 
 
 class OnField(Preconditioner):
     """A correction on the dofs of one field: :math:`z = R^T M^{-1} R r`, with :math:`R` the restriction to the field
-    and :math:`M` built on its diagonal block :math:`R A R^T`.
+    and :math:`M` built on its diagonal block :math:`A_{ff} = R A R^T`.
+
+    The block comes from the field split of the matrix (:meth:`~edelweissfe.linsolve.composition.systemmatrix.
+    SystemMatrix.fieldSplit`, one threaded pass for all fields), and is cut out only if ``inner`` builds on it: a
+    preconditioner reused for the new values never needs it.
 
     Parameters
     ----------
@@ -146,26 +309,42 @@ class OnField(Preconditioner):
     """
 
     def __init__(self, fieldName: str, inner: Preconditioner):
+        if not isinstance(fieldName, str):
+            raise TypeError("OnField: the field is given by its name, got {!r}".format(fieldName))
+        requirePreconditioner("OnField('{:}')".format(fieldName), "inner", inner)
         self.fieldName = fieldName
         self.inner = inner
         self.dofs = None
+        self._fieldIndex = None
 
-    def _fieldIn(self, context: SetUpContext) -> FieldBlock:
-        for field in context.fields:
-            if field.name == self.fieldName:
-                return field
-        raise ValueError("OnField: the system has no field '{:}'".format(self.fieldName))
+    @property
+    def fieldIndex(self) -> "int | None":
+        return self._fieldIndex
+
+    def _restricted(self, A, context: SetUpContext) -> tuple:
+        """The field's index, its block as a matrix, and its context."""
+        names = [field.name for field in context.fields]
+        if self.fieldName not in names:
+            raise ValueError(
+                "OnField: the system has no field '{:}'; its fields are {:}".format(self.fieldName, ", ".join(names))
+            )
+        i = names.index(self.fieldName)
+        field = context.fields[i]
+        self._fieldIndex = i
+        self.dofs = slice(field.start, field.stop)
+        bounds = [(f.start, f.stop) for f in context.fields]
+        return FieldBlockMatrix(lambda: A.fieldSplit(bounds), i), context.restrictedToField(field)
 
     def setUp(self, A, context: SetUpContext) -> None:
-        field = self._fieldIn(context)
-        self.dofs = slice(field.start, field.stop)
-        self.inner.setUp(SystemMatrix(A.matrix()[self.dofs, self.dofs]), context.restrictedToField(field))
+        block, fieldContext = self._restricted(A, context)
+        self.inner.setUp(block, fieldContext)
 
     def update(self, A, change) -> None:
-        field = self._fieldIn(change.context)
-        self.dofs = slice(field.start, field.stop)
-        fieldChange = change.withContext(change.context.restrictedToField(field))
-        self.inner.update(SystemMatrix(A.matrix()[self.dofs, self.dofs]), fieldChange)
+        block, fieldContext = self._restricted(A, change.context)
+        self.inner.update(block, change.withContext(fieldContext))
+
+    def applyRestricted(self, r_f: np.ndarray) -> np.ndarray:
+        return self.inner(r_f)
 
     def __call__(self, r: np.ndarray) -> np.ndarray:
         z = np.zeros_like(r)
@@ -198,6 +377,7 @@ class CoarseCorrection(Preconditioner):
     """
 
     def __init__(self, prolongation, coarse: Preconditioner):
+        requirePreconditioner("CoarseCorrection", "coarse", coarse)
         self.prolongation = prolongation
         self.coarse = coarse
         self.P = None
@@ -205,6 +385,8 @@ class CoarseCorrection(Preconditioner):
     def setUp(self, A, context: SetUpContext) -> None:
         P = self.prolongation(A, context) if callable(self.prolongation) else self.prolongation
         self.P = sp.csr_matrix(P)
+        if self.P.shape[0] != A.shape[0]:
+            raise ValueError("CoarseCorrection: P has {:} rows, but the matrix {:}".format(self.P.shape[0], A.shape[0]))
         A_c = (self.P.T @ A.matrix() @ self.P).tocsr()
         coarseContext = SetUpContext(fields=(FieldBlock("coarse", 0, A_c.shape[0], 1),))
         self.coarse.setUp(SystemMatrix(A_c), coarseContext)
@@ -237,7 +419,12 @@ class Jacobi(Preconditioner):
         self.inverseDiagonal = None
 
     def setUp(self, A, context: SetUpContext) -> None:
-        self.inverseDiagonal = 1.0 / A.matrix().diagonal()
+        diagonal = A.matrix().diagonal()
+        if np.any(diagonal == 0.0):
+            raise ValueError(
+                "Jacobi: {:} dof(s) have a zero diagonal entry".format(int(np.count_nonzero(diagonal == 0.0)))
+            )
+        self.inverseDiagonal = 1.0 / diagonal
 
     def __call__(self, r: np.ndarray) -> np.ndarray:
         return self.omega * self.inverseDiagonal * r

@@ -29,6 +29,7 @@ from edelweissfe.linsolve.blockamg.schurcomplement import (
     optionsRejection,
     restrictP1Map,
 )
+from edelweissfe.linsolve.composition.schurcomplement import blockLU
 from edelweissfe.linsolve.superlu import SuperLUSolver
 from edelweissfe.utils.fieldoutput import _FieldOutputBase
 
@@ -113,7 +114,7 @@ def test_block_lu_with_the_exact_schur_complement_is_the_inverse():
     condensation = _FixedDofs(barDofs, dropTolerance=0.0, windowNodes=10_000, blockFactors="LU")
     condensation.update(A)
     S = condensation.approximateSchurComplement(A).toarray()
-    z = condensation.precondition(b, lambda r_k: np.linalg.solve(S, r_k))
+    z = blockLU(b, condensation, lambda r_k: np.linalg.solve(S, r_k))
     assert np.allclose(A @ z, b, rtol=0.0, atol=1e-10 * np.abs(b).max())
 
 
@@ -405,7 +406,7 @@ def test_by_default_the_block_upper_triangular_factor_is_inverted():
     condensation = _FixedDofs(barDofs, dropTolerance=0.0, windowNodes=10_000)
     condensation.update(A)
     S = condensation.approximateSchurComplement(A).toarray()
-    z = condensation.precondition(b, lambda r_k: np.linalg.solve(S, r_k))
+    z = blockLU(b, condensation, lambda r_k: np.linalg.solve(S, r_k))
     U = sp.bmat([[condensation.A_bb, condensation.A_bk], [None, sp.csr_matrix(S)]])
     order = np.concatenate([barDofs, condensation.remainingDofs])
     assert np.allclose(U @ z[order], b[order], rtol=0.0, atol=1e-10 * np.abs(b).max())
@@ -434,7 +435,7 @@ def test_tutorial_why_the_condensation_works():
         assert np.array_equal(condensation.remainingDofs, remaining)
 
         def preconditioner(r):
-            return condensation.precondition(np.asarray(r).ravel(), lambda r_k: np.linalg.solve(S, r_k))
+            return blockLU(np.asarray(r).ravel(), condensation, lambda r_k: np.linalg.solve(S, r_k))
 
         counted = []
         x, info = gmres(

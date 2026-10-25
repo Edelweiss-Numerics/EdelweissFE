@@ -33,24 +33,23 @@ builds, copy it into a solver script to change it.
 
 from edelweissfe.config.phenomena import phenomena
 from edelweissfe.linsolve.composition.amg import AMG
+from edelweissfe.linsolve.composition.combinators import (
+    Multiplicative,
+    OnField,
+    gaussSeidelOrder,
+)
 from edelweissfe.linsolve.composition.diagonalscaling import DiagonalScaling
-from edelweissfe.linsolve.composition.fieldsplit import FieldSplit
 from edelweissfe.linsolve.composition.krylov import LGMRES, RebuildPolicy
 from edelweissfe.linsolve.composition.twogrid import RigidBodyModes, TwoGrid
 
 
-def blockAMGFieldPreconditioner(rigidBodyCoarseLevel: bool = True):
+def blockAMGFieldPreconditioner(field, context, rigidBodyCoarseLevel: bool = True):
     """The preconditioner of a field as ``blockamg`` chooses it by default: a two-grid cycle on the rigid-body modes
-    for a 3D displacement field (with node coordinates), one AMG hierarchy otherwise. Returned as the
-    ``otherFields`` callable of a :class:`~edelweissfe.linsolve.composition.fieldsplit.FieldSplit`."""
-
-    def fieldPreconditioner(field, context):
-        isDisplacement3D = field.dimension == 3 and phenomena.get(field.name) == "vector"
-        if rigidBodyCoarseLevel and isDisplacement3D and context.coordinates(field.name) is not None:
-            return TwoGrid(coarseSpace=RigidBodyModes())
-        return AMG()
-
-    return fieldPreconditioner
+    for a 3D displacement field (with node coordinates), one AMG hierarchy otherwise."""
+    isDisplacement3D = field.dimension == 3 and phenomena.get(field.name) == "vector"
+    if rigidBodyCoarseLevel and isDisplacement3D and context.coordinates(field.name) is not None:
+        return TwoGrid(coarseSpace=RigidBodyModes())
+    return AMG()
 
 
 def blockAMG(
@@ -61,13 +60,17 @@ def blockAMG(
     symmetric: bool = False,
     rebuild: RebuildPolicy = None,
 ) -> LGMRES:
-    """The composed equivalent of :class:`~edelweissfe.linsolve.blockamg.blockamg.BlockAMGSolver` with its defaults::
+    """The composed equivalent of :class:`~edelweissfe.linsolve.blockamg.blockamg.BlockAMGSolver` with its defaults:
+    block Gauss--Seidel over the fields of the diagonally scaled matrix, inside LGMRES::
 
         LGMRES(
             DiagonalScaling(
-                FieldSplit(per field: TwoGrid(RigidBodyModes()) for a 3D displacement field, else AMG())
-            )
+                Multiplicative([OnField(f, M_f) for every field f])   # M_f: TwoGrid(RigidBodyModes()) for a
+            )                                                         # 3D displacement field, else AMG()
         )
+
+    The corrections are made at the first set-up, for the fields of the model (:class:`~edelweissfe.linsolve.
+    composition.combinators.Multiplicative` takes a function of the context).
 
     Parameters
     ----------
@@ -79,11 +82,21 @@ def blockAMG(
     maxIterations
         The outer iteration cap.
     sweeps, symmetric
-        The block Gauss--Seidel sweeps.
+        The block Gauss--Seidel sweeps, see :func:`~edelweissfe.linsolve.composition.combinators.gaussSeidelOrder`.
     rebuild
         When the preconditioner is rebuilt.
     """
-    fieldSplit = FieldSplit(
-        otherFields=blockAMGFieldPreconditioner(rigidBodyCoarseLevel), sweeps=sweeps, symmetric=symmetric
+
+    def fieldCorrections(context):
+        corrections = [
+            OnField(field.name, blockAMGFieldPreconditioner(field, context, rigidBodyCoarseLevel))
+            for field in context.fields
+        ]
+        return gaussSeidelOrder(corrections, sweeps, symmetric)
+
+    return LGMRES(
+        DiagonalScaling(Multiplicative(fieldCorrections)),
+        tolerance=tolerance,
+        maxIterations=maxIterations,
+        rebuild=rebuild,
     )
-    return LGMRES(DiagonalScaling(fieldSplit), tolerance=tolerance, maxIterations=maxIterations, rebuild=rebuild)

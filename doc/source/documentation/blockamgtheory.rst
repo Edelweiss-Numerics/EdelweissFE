@@ -571,7 +571,7 @@ The outer Krylov solve
 
 ``outerSolver = "amgcl_lgmres"`` -- the only accepted value, and the default -- is AMGCL's own native
 ``amgcl::solver::lgmres``, driven through
-:class:`~edelweissfe.linsolve.amgcl.amgcl.PyAMGCLLGMRESSolver`; the block sweep is passed straight in
+:class:`~edelweissfe.linsolve.amgcl.amgcl.PyAMGCLKrylovSolver`; the block sweep is passed straight in
 as the preconditioner callback. A former fallback, ``outerSolver = "scipy"``, used
 :func:`scipy.sparse.linalg.gmres` instead; it was removed once the native path was gated live against
 it at several thread counts and found to produce the same Newton trajectory. Orchestrating GMRES from

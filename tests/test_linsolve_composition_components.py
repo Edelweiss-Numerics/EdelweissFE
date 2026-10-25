@@ -25,8 +25,8 @@
 #  The full text of the license can be found in the file LICENSE.md at
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
-"""The components of a composed solver, each tested for the property that defines it, and the combinator twins: the
-fast components compute what the generic combinators spell out."""
+"""The components of a composed solver, each tested for the property that defines it; and wrong compositions, which
+fail as early as possible."""
 
 import numpy as np
 import pytest
@@ -47,13 +47,13 @@ from edelweissfe.linsolve.blockamg.schurcomplement import (  # noqa: E402
 )
 from edelweissfe.linsolve.composition import (  # noqa: E402
     AMG,
+    FGMRES,
     LGMRES,
     Additive,
     CoarseCorrection,
     ComposedLinearSolver,
     DiagonalScaling,
     DirectSolver,
-    FieldSplit,
     FixedTolerance,
     Jacobi,
     Multiplicative,
@@ -63,6 +63,7 @@ from edelweissfe.linsolve.composition import (  # noqa: E402
     SetUpContext,
     SystemMatrix,
     TwoGrid,
+    gaussSeidelOrder,
 )
 from edelweissfe.linsolve.composition.amg import (  # noqa: E402
     amgclTreeOf,
@@ -96,10 +97,14 @@ def test_diagonal_scaling_around_an_exact_solve_is_the_exact_inverse():
     assert _relative(A @ scaling(b), b) < 1e-10
 
 
-def test_a_field_split_of_exact_solves_is_the_block_lower_triangular_solve():
+def _blockGaussSeidel(fields, makeInner):
+    return Multiplicative([OnField(field.name, makeInner()) for field in fields])
+
+
+def test_block_gauss_seidel_of_exact_solves_is_the_block_lower_triangular_solve():
     """With exact solves per field, one forward sweep solves (B + L) z = r exactly."""
     A, b, fields = displacementDamageSystem(n=6, coupling="symmetric")
-    split = FieldSplit({field.name: DirectSolver() for field in fields})
+    split = _blockGaussSeidel(fields, DirectSolver)
     split.setUp(SystemMatrix(A), _context(fields))
     z = split(b)
     lowerBlockTriangle = A.tolil()
@@ -109,15 +114,61 @@ def test_a_field_split_of_exact_solves_is_the_block_lower_triangular_solve():
     assert _relative(lowerBlockTriangle.tocsr() @ z, b) < 1e-10
 
 
-def test_the_field_split_is_the_multiplicative_combination_of_corrections_on_single_fields():
-    """FieldSplit (Gauss-Seidel, fast: coupling blocks only) and Multiplicative([OnField, OnField]) (each correction a
-    product with the whole matrix) are the same preconditioner."""
+def test_a_multiplicative_combination_of_field_corrections_is_the_textbook_formula():
+    """Multiplicative([OnField(u), OnField(d), OnField(u)]) forms each field's residual from the coupling blocks of the
+    fields corrected so far; it equals z <- z + R^T M^-1 R (r - A z) with the whole matrix."""
     A, b, fields = displacementDamageSystem(n=12, coupling="symmetric")
-    fast = FieldSplit({"displacement": AMG(), "nonlocal damage": AMG()})
-    generic = Multiplicative([OnField("displacement", AMG()), OnField("nonlocal damage", AMG())])
-    for preconditioner in (fast, generic):
-        preconditioner.setUp(SystemMatrix(A), _context(fields))
-    assert _relative(fast(b), generic(b)) < 1e-10
+    u, d = OnField("displacement", AMG()), OnField("nonlocal damage", AMG())
+    symmetric = Multiplicative([u, d, u])
+    symmetric.setUp(SystemMatrix(A), _context(fields))
+    assert u.statistics.setUps == 1
+    z = np.zeros_like(b)
+    for correction in (u, d, u):
+        dofs = correction.dofs
+        z[dofs] += correction.inner((b - A @ z)[dofs])
+    assert _relative(symmetric(b), z) < 1e-10
+
+
+def test_the_corrections_of_one_matrix_share_one_field_split():
+    """One threaded pass forms all field blocks of a matrix, whichever component asks first; the Krylov operator comes
+    from the same pass."""
+    A, b, fields = displacementDamageSystem(n=10, coupling="symmetric")
+    import edelweissfe.linsolve.amgcl.amgcl as amgcl
+
+    builds = []
+
+    class Counted(amgcl.PyAMGCLEquilibratedSystem):
+        def build(self, *args, **kwargs):
+            builds.append("split")
+            return super().build(*args, **kwargs)
+
+        def buildOperator(self, *args, **kwargs):
+            builds.append("operator")
+            return super().buildOperator(*args, **kwargs)
+
+    original = amgcl.PyAMGCLEquilibratedSystem
+    amgcl.PyAMGCLEquilibratedSystem = Counted
+    try:
+        root = LGMRES(DiagonalScaling(_blockGaussSeidel(fields, AMG)), tolerance=FixedTolerance(1e-8))
+        _solved(A, b, root, fields)
+    finally:
+        amgcl.PyAMGCLEquilibratedSystem = original
+    assert builds == ["split"]
+
+
+def test_gauss_seidel_orders():
+    assert gaussSeidelOrder(["u", "d"]) == ["u", "d"]
+    assert gaussSeidelOrder(["u", "d"], symmetric=True) == ["u", "d", "u"]
+    assert gaussSeidelOrder(["u", "d", "p"], sweeps=2, symmetric=True) == ["u", "d", "p", "d", "u"] * 2
+    assert gaussSeidelOrder(["u"], sweeps=2) == ["u", "u"]
+
+
+def test_an_additive_combination_of_field_corrections_is_block_jacobi():
+    A, b, fields = displacementDamageSystem(n=6, coupling="symmetric")
+    jacobi = Additive([OnField(field.name, DirectSolver()) for field in fields])
+    jacobi.setUp(SystemMatrix(A), _context(fields))
+    blockDiagonal = sp.block_diag([A[f.start : f.stop, f.start : f.stop] for f in fields]).tocsr()
+    assert _relative(blockDiagonal @ jacobi(b), b) < 1e-10
 
 
 def test_an_additive_combination_sums_its_corrections():
@@ -176,7 +227,7 @@ def test_the_p1_two_grid_matches_blockamg():
     reference = BlockAMGSolver(outerTol=1e-8, outerRestart=300, verbosity="silent", p1Maps=p1Maps)
     reference.setFieldStructure(fields)
     root = LGMRES(
-        DiagonalScaling(FieldSplit({"displacement": TwoGrid(P1Interpolation())})),
+        DiagonalScaling(TwoGrid(P1Interpolation())),
         tolerance=FixedTolerance(1e-8),
         maxIterations=300,
     )
@@ -247,7 +298,7 @@ def test_the_schur_complement_tree_matches_blockamg_with_condensation():
     solveA_bb = DirectSolver()
     root = LGMRES(
         SchurComplement(
-            preconditionS=DiagonalScaling(FieldSplit({"u": AMG()}, sweeps=2)),
+            preconditionS=DiagonalScaling(Multiplicative(gaussSeidelOrder([OnField("u", AMG())], sweeps=2))),
             solveA_bb=solveA_bb,
             condensation=_FixedDofs(barDofs, solveA_bb.newSolver),
         ),
@@ -263,11 +314,94 @@ def test_the_schur_complement_tree_matches_blockamg_with_condensation():
 
 def test_every_component_records_its_calls():
     A, b, fields = displacementDamageSystem(n=10, coupling="symmetric")
-    fieldSplit = FieldSplit({"displacement": AMG(), "nonlocal damage": AMG()})
-    root = LGMRES(DiagonalScaling(fieldSplit), tolerance=FixedTolerance(1e-8))
+    displacement = AMG()
+    blockGaussSeidel = Multiplicative([OnField("displacement", displacement), OnField("nonlocal damage", AMG())])
+    root = LGMRES(DiagonalScaling(blockGaussSeidel), tolerance=FixedTolerance(1e-8))
     _solved(A, b, root, fields)
     assert root.statistics.applications == 1 and root.statistics.updates == 1
     # once per outer iteration (and once more for the initial residual of AMGCL's LGMRES, if it asks)
-    assert root.lastIterations <= fieldSplit.statistics.applications <= root.lastIterations + 1
-    assert fieldSplit.fieldPreconditioners["displacement"].statistics.setUps == 1
-    assert fieldSplit.fieldPreconditioners["displacement"].statistics.sizes["rows"] == fields[0].stop
+    assert root.lastIterations <= blockGaussSeidel.statistics.applications <= root.lastIterations + 1
+    assert displacement.statistics.setUps == 1
+    assert displacement.statistics.applications == blockGaussSeidel.statistics.applications
+    assert displacement.statistics.sizes["rows"] == fields[0].stop
+
+
+# ----- a variable preconditioner: FGMRES -----
+
+
+def test_lgmres_refuses_a_variable_preconditioner_and_names_fgmres():
+    inner = LGMRES(AMG(), tolerance=FixedTolerance(1e-2))
+    assert not inner.isFixedLinearOperator and DiagonalScaling(AMG()).isFixedLinearOperator
+    with pytest.raises(ValueError, match="FGMRES"):
+        LGMRES(inner)
+    with pytest.raises(ValueError, match="FGMRES"):
+        LGMRES(Multiplicative([inner]))
+
+
+def test_lgmres_refuses_a_variable_preconditioner_made_at_the_set_up():
+    """A combination that makes its corrections per field shows what they are only at the first set-up."""
+    A, b, fields = displacementDamageSystem(n=6, coupling="symmetric")
+    root = LGMRES(Multiplicative(lambda context: [LGMRES(AMG(), tolerance=FixedTolerance(1e-2))]))
+    with pytest.raises(ValueError, match="FGMRES"):
+        _solved(A, b, root, [FieldBlock("all", 0, A.shape[0], 1)])
+
+
+def test_fgmres_with_an_inner_krylov_solve_converges():
+    A, b, fields = displacementDamageSystem(n=10, coupling="symmetric")
+    inner = LGMRES(DiagonalScaling(_blockGaussSeidel(fields, AMG)), tolerance=FixedTolerance(1e-1), maxIterations=5)
+    root = FGMRES(inner, tolerance=FixedTolerance(1e-8), maxIterations=100)
+    x, solver = _solved(A, b, root, fields)
+    assert _relative(A @ x, b) < 1e-7
+    assert 0 < root.lastIterations < 20 and solver.lastSolveSummary.residualMet
+
+
+def test_fgmres_with_a_fixed_preconditioner_needs_the_iterations_of_gmres():
+    A, b, fields = displacementDamageSystem(n=10, coupling="symmetric")
+    iterations = {}
+    for Krylov in (LGMRES, FGMRES):
+        root = Krylov(DiagonalScaling(_blockGaussSeidel(fields, AMG)), tolerance=FixedTolerance(1e-8))
+        x, _ = _solved(A, b, root, fields)
+        assert _relative(A @ x, b) < 1e-7
+        iterations[Krylov.__name__] = root.lastIterations
+    assert abs(iterations["FGMRES"] - iterations["LGMRES"]) <= 2
+
+
+# ----- wrong compositions fail early -----
+
+
+def test_a_child_must_be_a_component():
+    with pytest.raises(TypeError, match="must be a component"):
+        DiagonalScaling(AMG)
+    with pytest.raises(TypeError, match="must be a component"):
+        Multiplicative([AMG(), "AMG"])
+    with pytest.raises(ValueError, match="at least one correction"):
+        Additive([])
+    with pytest.raises(ValueError, match="nothing to condense"):
+        SchurComplement(preconditionS=AMG())
+    with pytest.raises(ValueError, match="blockFactors"):
+        SchurComplement(["a marker"], preconditionS=AMG(), blockFactors="L")
+
+
+def test_a_missing_field_fails_at_the_set_up_and_names_the_fields():
+    A, b, fields = displacementDamageSystem(n=6, coupling="symmetric")
+    with pytest.raises(ValueError, match="no field 'temperature'; its fields are displacement, nonlocal damage"):
+        OnField("temperature", AMG()).setUp(SystemMatrix(A), _context(fields))
+
+
+def test_a_one_field_component_on_several_fields_fails_at_the_set_up():
+    A, b, fields = displacementDamageSystem(n=6, coupling="symmetric")
+    with pytest.raises(ValueError, match="AMG is built on the matrix of one field.*OnField"):
+        AMG().setUp(SystemMatrix(A), _context(fields))
+
+
+def test_rigid_body_modes_need_a_vector_field_with_coordinates():
+    A, b, fields = displacementDamageSystem(n=6, coupling="symmetric")
+    from edelweissfe.linsolve.composition import RigidBodyModes
+
+    damage = fields[1]
+    block = SystemMatrix(A[damage.start : damage.stop, damage.start : damage.stop])
+    context = _context([FieldBlock(damage.name, 0, damage.stop - damage.start, 1)])
+    with pytest.raises(ValueError, match="2D or 3D vector field"):
+        TwoGrid(RigidBodyModes()).setUp(block, context)
+    with pytest.raises(ValueError, match="prolongation"):
+        RigidBodyModes(prolongation="smooth")

@@ -25,7 +25,7 @@
 #  The full text of the license can be found in the file LICENSE.md at
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
-"""The outer Krylov solve: :class:`LGMRES`, its tolerance per solve (:class:`ForcingTolerance`,
+"""The outer Krylov solve: :class:`LGMRES` or :class:`FGMRES`, its tolerance per solve (:class:`ForcingTolerance`,
 :class:`FixedTolerance`) and when it rebuilds its preconditioner (:class:`RebuildPolicy`).
 
 A Krylov method accelerates a basic iteration :math:`x \\leftarrow x + M^{-1}(b - A x)`: from the preconditioned
@@ -51,6 +51,7 @@ from edelweissfe.linsolve.composition.base import (
     Preconditioner,
     SetUpContext,
     Step,
+    requirePreconditioner,
 )
 
 #: The least excess over the reference outer iteration count that makes a reused preconditioner stale, on top of the
@@ -187,11 +188,11 @@ class RebuildPolicy:
         return change
 
 
-class LGMRES(Preconditioner):
-    """The outer Krylov solve :math:`A x = b`, right-preconditioned by ``preconditioner``: AMGCL's LGMRES.
-
-    As a component it is an approximate inverse of :math:`A` like any other, :math:`x = \\mathrm{LGMRES}(A, M)^{-1}
-    b`, solved to the tolerance of the solve.
+class KrylovSolver(Preconditioner):
+    """An outer Krylov solve :math:`A x = b`, right-preconditioned by ``preconditioner``, with AMGCL's implementation
+    of the method: what :class:`LGMRES` and :class:`FGMRES` share. As a component it is an approximate inverse of
+    :math:`A` like any other, solved to the tolerance of the solve -- but not a fixed linear operator
+    (:attr:`isFixedLinearOperator`).
 
     Parameters
     ----------
@@ -202,26 +203,22 @@ class LGMRES(Preconditioner):
         between solves (an offline replay pins it to the live one).
     maxIterations
         The iteration cap of a solve (across restarts). A solve that reaches it returns its iterate.
-    M, K
-        LGMRES's restart length and number of augmentation vectors.
     rebuild
         When the preconditioner is rebuilt, see :class:`RebuildPolicy`.
     """
 
-    def __init__(
-        self,
-        preconditioner: Preconditioner,
-        tolerance=None,
-        maxIterations: int = 100,
-        M: int = 50,
-        K: int = 3,
-        rebuild: RebuildPolicy = None,
-    ):
+    #: AMGCL's name of the method.
+    method = None
+
+    def __init__(self, preconditioner: Preconditioner, tolerance=None, maxIterations: int = 100, rebuild=None):
+        name = type(self).__name__
+        requirePreconditioner(name, "preconditioner", preconditioner)
+        if maxIterations < 1:
+            raise ValueError("{:}: maxIterations must be at least 1, got {:}".format(name, maxIterations))
         self.preconditioner = preconditioner
+        self._checkPreconditioner()
         self.tolerance = tolerance if tolerance is not None else ForcingTolerance()
         self.maxIterations = maxIterations
-        self.M = M
-        self.K = K
         self.rebuild = rebuild if rebuild is not None else RebuildPolicy()
         self.A = None
         self.eta = None
@@ -231,10 +228,22 @@ class LGMRES(Preconditioner):
         self.lastResidual = None
         self.lastCapHit = False
         self.lastRebuildReason = None
-        self._lgmres = None
+        self._krylov = None
         # the outer iterations of the solve the preconditioner was built for, and whether the last solve made it stale
         self._referenceIterations = None
         self._stale = False
+
+    @property
+    def isFixedLinearOperator(self) -> bool:
+        return False
+
+    def _checkPreconditioner(self) -> None:
+        """Raise if the method cannot take this preconditioner: at construction, and again after the set-up, when a
+        combination has made its corrections."""
+
+    def _parameters(self) -> dict:
+        """AMGCL's parameters of the method (its restart length, ...)."""
+        raise NotImplementedError
 
     def setUp(self, A, context: SetUpContext) -> None:
         self.update(A, MatrixChange(context, rebuildReason="first"))
@@ -248,26 +257,27 @@ class LGMRES(Preconditioner):
             with performancetiming.timeit("hierarchy build"):
                 self.preconditioner.update(A, change)
             self._stale = False
+            self._checkPreconditioner()
         else:
             self.preconditioner.update(A, change)
 
     def _solverFor(self, n: int):
-        """AMGCL's LGMRES for size ``n``: its scratch vectors are allocated for one size."""
-        if self._lgmres is None or self._lgmres.n != n:
-            from edelweissfe.linsolve.amgcl.amgcl import PyAMGCLLGMRESSolver
+        """AMGCL's solver for size ``n``: its scratch vectors are allocated for one size."""
+        if self._krylov is None or self._krylov.n != n:
+            from edelweissfe.linsolve.amgcl.amgcl import PyAMGCLKrylovSolver
 
-            self._lgmres = PyAMGCLLGMRESSolver(n, {"M": self.M, "K": self.K})
-        return self._lgmres
+            self._krylov = PyAMGCLKrylovSolver(n, self.method, self._parameters())
+        return self._krylov
 
     def __call__(self, b: np.ndarray) -> np.ndarray:
-        lgmres = self._solverFor(self.A.shape[0])
+        krylov = self._solverFor(self.A.shape[0])
         with performancetiming.timeit("outer Krylov solve"):
-            x = lgmres.solve(
+            x = krylov.solve(
                 self.A.krylovOperator(), b, self.preconditioner, self.eta, self.maxIterations, onUnscaledOperator=True
             )
-        self.lastIterations = lgmres.lastIterations
-        self.lastResidual = lgmres.lastError
-        self.lastCapHit = self.lastIterations >= self.maxIterations and not lgmres.lastError < self.eta
+        self.lastIterations = krylov.lastIterations
+        self.lastResidual = krylov.lastError
+        self.lastCapHit = self.lastIterations >= self.maxIterations and not krylov.lastError < self.eta
         self._judgeStaleness()
         return x
 
@@ -297,20 +307,102 @@ class LGMRES(Preconditioner):
         )
 
     def describe(self) -> Description:
+        name = type(self).__name__
         return Description(
-            name="LGMRES",
-            formula="LGMRES(A, {preconditioner})⁻¹",
-            latex="\\mathrm{LGMRES}\\left(A,\\, {preconditioner}\\right)^{-1}",
-            parameters={
-                "tolerance": repr(self.tolerance),
-                "maxIterations": self.maxIterations,
-                "M": self.M,
-                "K": self.K,
-            },
+            name=name,
+            formula=name + "(A, {preconditioner})⁻¹",
+            latex="\\mathrm{" + name + "}\\left(A,\\, {preconditioner}\\right)^{-1}",
+            parameters={"tolerance": repr(self.tolerance), "maxIterations": self.maxIterations, **self._parameters()},
             children=(("preconditioner", self.preconditioner),),
-            steps=(
-                Step("vₖ₊₁ ⟂ span(A M⁻¹ v₁ … A M⁻¹ vₖ)  (Arnoldi, augmented at restarts)"),
-                Step("M⁻¹ vₖ, once per iteration", "preconditioner"),
-                Step("x = M⁻¹ Vₘ yₘ,  yₘ minimizes ‖b − A x‖"),
-            ),
+            steps=self._steps(),
+        )
+
+    def _steps(self) -> tuple:
+        raise NotImplementedError
+
+
+class LGMRES(KrylovSolver):
+    """LGMRES: restarted GMRES, augmented at each restart with ``K`` error approximations of the previous cycles,
+    AMGCL's implementation. Right-preconditioned: :math:`x = M^{-1} y` with :math:`y` from the Krylov space of
+    :math:`A M^{-1}`, which is a Krylov space only for a fixed linear :math:`M^{-1}` -- so LGMRES refuses a variable
+    preconditioner (a Krylov solve inside), for which :class:`FGMRES` is made.
+
+    Parameters
+    ----------
+    preconditioner, tolerance, maxIterations, rebuild
+        See :class:`KrylovSolver`.
+    M, K
+        The restart length and the number of augmentation vectors.
+    """
+
+    method = "lgmres"
+
+    def __init__(
+        self,
+        preconditioner: Preconditioner,
+        tolerance=None,
+        maxIterations: int = 100,
+        M: int = 50,
+        K: int = 3,
+        rebuild: RebuildPolicy = None,
+    ):
+        self.M = M
+        self.K = K
+        super().__init__(preconditioner, tolerance, maxIterations, rebuild)
+
+    def _checkPreconditioner(self) -> None:
+        if not self.preconditioner.isFixedLinearOperator:
+            raise ValueError(
+                "LGMRES: its preconditioner {:} is not a fixed linear operator (it contains a Krylov solve), which "
+                "LGMRES needs: use FGMRES (flexible GMRES) for a variable preconditioner".format(
+                    self.preconditioner.describe().name
+                )
+            )
+
+    def _parameters(self) -> dict:
+        return {"M": self.M, "K": self.K}
+
+    def _steps(self) -> tuple:
+        return (
+            Step("vₖ₊₁ ⟂ span(A M⁻¹ v₁ … A M⁻¹ vₖ)  (Arnoldi, augmented at restarts)"),
+            Step("M⁻¹ vₖ, once per iteration", "preconditioner"),
+            Step("x = M⁻¹ Vₘ yₘ,  yₘ minimizes ‖b − A x‖"),
+        )
+
+
+class FGMRES(KrylovSolver):
+    """Flexible GMRES (Saad 1993), AMGCL's implementation: GMRES that keeps each preconditioned vector
+    :math:`z_k = M_k^{-1} v_k` and takes the solution from their span, :math:`x = Z_m y_m`, so the preconditioner may
+    change from one iteration to the next -- e.g. an inner Krylov solve to a loose tolerance. It stores twice the
+    vectors of GMRES (:math:`V` and :math:`Z`).
+
+    Parameters
+    ----------
+    preconditioner, tolerance, maxIterations, rebuild
+        See :class:`KrylovSolver`.
+    M
+        The restart length.
+    """
+
+    method = "fgmres"
+
+    def __init__(
+        self,
+        preconditioner: Preconditioner,
+        tolerance=None,
+        maxIterations: int = 100,
+        M: int = 30,
+        rebuild: RebuildPolicy = None,
+    ):
+        self.M = M
+        super().__init__(preconditioner, tolerance, maxIterations, rebuild)
+
+    def _parameters(self) -> dict:
+        return {"M": self.M}
+
+    def _steps(self) -> tuple:
+        return (
+            Step("zₖ = Mₖ⁻¹ vₖ, once per iteration (Mₖ may change)", "preconditioner"),
+            Step("vₖ₊₁ ⟂ span(A z₁ … A zₖ)  (Arnoldi)"),
+            Step("x = Zₘ yₘ,  yₘ minimizes ‖b − A x‖"),
         )

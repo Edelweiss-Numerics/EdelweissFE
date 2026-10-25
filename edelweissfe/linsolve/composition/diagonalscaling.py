@@ -39,8 +39,8 @@ units -- the rows of a displacement field carry stiffnesses, those of a nonlocal
 the Chebyshev eigenvalue bounds). Scaled to a unit diagonal, those comparisons measure the matrix, not the choice
 of units.
 
-Where the scaling sits in the tree says what it acts on: ``SchurComplement(..., DiagonalScaling(FieldSplit(...)))``
-scales only what the field split sees, while the outer Krylov solve still converges the true residual of
+Where the scaling sits in the tree says what it acts on: ``SchurComplement(..., DiagonalScaling(Multiplicative([...])))``
+scales only what the block Gauss--Seidel sweep sees, while the outer Krylov solve still converges the true residual of
 :math:`A`.
 """
 
@@ -52,6 +52,7 @@ from edelweissfe.linsolve.composition.base import (
     Preconditioner,
     SetUpContext,
     Step,
+    requirePreconditioner,
 )
 
 
@@ -122,6 +123,7 @@ class DiagonalScaling(Preconditioner):
     """
 
     def __init__(self, inner: Preconditioner):
+        requirePreconditioner("DiagonalScaling", "inner", inner)
         self.inner = inner
         self.D = None
 

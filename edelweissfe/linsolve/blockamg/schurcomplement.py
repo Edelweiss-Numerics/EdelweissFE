@@ -423,34 +423,15 @@ class SchurComplementCondensation:
         self._splitCache = splitCache
         self.A_bb, self.A_bk, self.A_kb = blocks
 
-    def precondition(self, r: np.ndarray, preconditionRemaining: Callable) -> np.ndarray:
-        """One application of the preconditioner (the inverse of the block factors ``blockFactors`` of :math:`A`),
-        see the module documentation.
+    @property
+    def blockFactors(self) -> str:
+        """The block factors of :math:`A` the preconditioner inverts: ``"U"`` or ``"LU"``."""
+        return self._blockFactors
 
-        Parameters
-        ----------
-        r
-            The vector to precondition (all dofs).
-        preconditionRemaining
-            :math:`M_{\\tilde S}^{-1}`, applied to a vector of the remaining dofs k.
-
-        Returns
-        -------
-        np.ndarray
-            :math:`z \\approx A^{-1} r`.
-        """
-        b, k = self.condensedDofs, self.remainingDofs
-        solveCondensed = self._directSolver.solveFactorized
-        z = np.empty_like(r)
-        # the remaining dofs first: the field-split sweep on S~; with "LU", for the residual that the condensed dofs,
-        # solved alone, leave on them
-        if self._blockFactors == "LU":
-            z[k] = preconditionRemaining(r[k] - self.A_kb @ solveCondensed(r[b]))
-        else:
-            z[k] = preconditionRemaining(r[k])
-        # then the condensed dofs follow them (the bars follow the concrete)
-        z[b] = solveCondensed(r[b] - self.A_bk @ z[k])
-        return z
+    def solveA_bb(self, r_b: np.ndarray) -> np.ndarray:
+        """:math:`A_{bb}^{-1} r_b` with the factorization of the last :meth:`update`. One application of the block
+        LU preconditioner is :func:`edelweissfe.linsolve.composition.schurcomplement.blockLU`."""
+        return self._directSolver.solveFactorized(r_b)
 
     # ----- the remaining dofs, on which blockamg builds its field split -----
 

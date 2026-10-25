@@ -251,12 +251,13 @@ class ComposedLinearSolver(LinearSolver):
             return self._notSolved(n, "the right-hand side is not finite")
 
         change = self._changeFor(A, fields, residualNorm)
-        if self._fields is None:
-            self._log("info", "composed linear solver:\n" + str(self.root) + self._scriptLine())
         try:
             self.root.update(A, change)
         except FloatingPointError as error:
             return self._notSolved(n, str(error))
+        if self._fields is None:
+            # after the first set-up: a combination made per field shows its corrections only then
+            self._log("info", "composed linear solver:\n" + str(self.root) + self._scriptLine())
         x = self.root(b)
         self.root.finishSolve()
 

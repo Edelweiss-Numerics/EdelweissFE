@@ -66,17 +66,19 @@ def _beamWithDamage(seed: int = 0, couplingStrength: float = 1e-2):
     return A, b, fields, coordinates
 
 
-def _solverPair(fields, coordinates, rigidBodyCoarseLevel: bool, outerTol=None):
+def _solverPair(fields, coordinates, rigidBodyCoarseLevel: bool, outerTol=None, sweeps=1, symmetric=False):
     reference = BlockAMGSolver(
         outerTol=outerTol,
         verbosity="silent",
         nodeCoordinates={"displacement": coordinates},
         rigidBodyCoarseLevel=None if rigidBodyCoarseLevel else False,
+        sweeps=sweeps,
+        symmetric=symmetric,
     )
     reference.setFieldStructure(fields)
     tolerance = FixedTolerance(outerTol) if outerTol is not None else None
     composed = ComposedLinearSolver(
-        blockAMG(rigidBodyCoarseLevel=rigidBodyCoarseLevel, tolerance=tolerance),
+        blockAMG(rigidBodyCoarseLevel=rigidBodyCoarseLevel, tolerance=tolerance, sweeps=sweeps, symmetric=symmetric),
         nodeCoordinates={"displacement": coordinates},
         verbosity="silent",
     )
@@ -99,6 +101,13 @@ def test_one_solve_matches_blockamg(rigidBodyCoarseLevel):
     reference, composed = _solverPair(fields, coordinates, rigidBodyCoarseLevel, outerTol=1e-8)
     iterations = _assertSameSolve(reference, composed, A, b)
     assert 1 < iterations < 100
+
+
+@pytest.mark.parametrize("sweeps, symmetric", [(2, False), (1, True), (2, True)])
+def test_several_and_symmetric_sweeps_match_blockamg(sweeps, symmetric):
+    A, b, fields, coordinates = _beamWithDamage()
+    reference, composed = _solverPair(fields, coordinates, False, outerTol=1e-8, sweeps=sweeps, symmetric=symmetric)
+    _assertSameSolve(reference, composed, A, b)
 
 
 @pytest.mark.parametrize("rigidBodyCoarseLevel", [True, False])
@@ -135,8 +144,8 @@ def test_a_solver_keeps_no_copy_of_the_last_matrix_between_solves():
     _, composed = _solverPair(fields, coordinates, rigidBodyCoarseLevel=True)
     composed(A, b)
     lgmres = composed.root
-    fieldSplit = lgmres.preconditioner.inner
-    assert lgmres.A is None and fieldSplit.blocks is None
+    blockGaussSeidel = lgmres.preconditioner.inner
+    assert lgmres.A is None and blockGaussSeidel.blocks is None
     # and the next solve with new values only still reuses the preconditioners
     composed((1.0001 * A).tocsr(), b)
     assert lgmres.lastRebuildReason is None

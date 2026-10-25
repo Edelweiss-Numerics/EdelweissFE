@@ -57,9 +57,49 @@ from edelweissfe.linsolve.composition.base import (
     Preconditioner,
     SetUpContext,
     Step,
+    requirePreconditioner,
 )
 from edelweissfe.linsolve.composition.direct import DirectSolver
 from edelweissfe.linsolve.composition.systemmatrix import SystemMatrix
+
+
+def blockLU(r: np.ndarray, condensation, preconditionS, solveA_bb=None) -> np.ndarray:
+    """One application of the block LU preconditioner, see the module documentation:
+
+    .. math::
+
+        y_b = A_{bb}^{-1} r_b, \\qquad z_k = M_{\\tilde S}^{-1} (r_k - A_{kb} y_b), \\qquad
+        z_b = A_{bb}^{-1} (r_b - A_{bk} z_k)
+
+    or, with ``blockFactors="U"``, :math:`z_k = M_{\\tilde S}^{-1} r_k` (the remaining dofs first, then the condensed
+    ones follow them: the bars follow the concrete). Shared by :class:`SchurComplement` and
+    :class:`~edelweissfe.linsolve.blockamg.blockamg.BlockAMGSolver`.
+
+    Parameters
+    ----------
+    r
+        The vector to precondition (all dofs).
+    condensation
+        The :class:`~edelweissfe.linsolve.blockamg.schurcomplement.SchurComplementCondensation`: the dofs
+        :math:`b, k`, the blocks :math:`A_{bk}, A_{kb}` and the block factors.
+    preconditionS
+        :math:`M_{\\tilde S}^{-1}`, applied to a vector of the remaining dofs :math:`k`.
+    solveA_bb
+        :math:`A_{bb}^{-1}`, default the condensation's own factorization.
+    """
+    solveA_bb = condensation.solveA_bb if solveA_bb is None else solveA_bb
+    A_bk, A_kb = condensation.A_bk, condensation.A_kb
+    b, k = condensation.condensedDofs, condensation.remainingDofs
+    r_b, r_k = r[b], r[k]
+    if condensation.blockFactors == "LU":
+        y_b = solveA_bb(r_b)
+        z_k = preconditionS(r_k - A_kb @ y_b)
+    else:
+        z_k = preconditionS(r_k)
+    z_b = solveA_bb(r_b - A_bk @ z_k)
+    z = np.empty_like(r)
+    z[b], z[k] = z_b, z_k
+    return z
 
 
 class SchurComplement(Preconditioner):
@@ -102,6 +142,16 @@ class SchurComplement(Preconditioner):
     ):
         if preconditionS is None:
             raise ValueError("SchurComplement: preconditionS, the preconditioner of the Schur complement, is needed")
+        requirePreconditioner("SchurComplement", "preconditionS", preconditionS)
+        if solveA_bb is not None:
+            requirePreconditioner("SchurComplement", "solveA_bb", solveA_bb)
+        if blockFactors not in ("U", "LU"):
+            raise ValueError("SchurComplement: blockFactors must be 'U' or 'LU', got {!r}".format(blockFactors))
+        if condensation is None and not list(condense):
+            raise ValueError(
+                "SchurComplement: nothing to condense -- give the markers of the condensed elements (condense=[...]) "
+                "or a condensation"
+            )
         self.preconditionS = preconditionS
         self.solveA_bb = solveA_bb if solveA_bb is not None else DirectSolver("superlu")
         self.blockFactors = blockFactors
@@ -120,6 +170,8 @@ class SchurComplement(Preconditioner):
                 blockFactors=blockFactors,
             )
         )
+        # a given condensation brings its own block factors
+        self.blockFactors = self.condensation.blockFactors
         self.condensing = False
         self.S_tilde = None
         self._builtForDofs = None
@@ -186,18 +238,7 @@ class SchurComplement(Preconditioner):
     def __call__(self, r: np.ndarray) -> np.ndarray:
         if not self.condensing:
             return self.preconditionS(r)
-        A_bk, A_kb = self.condensation.A_bk, self.condensation.A_kb
-        b, k = self.condensation.condensedDofs, self.condensation.remainingDofs
-        r_b, r_k = r[b], r[k]
-        if self.blockFactors == "LU":
-            y_b = self.solveA_bb(r_b)
-            z_k = self.preconditionS(r_k - A_kb @ y_b)
-        else:
-            z_k = self.preconditionS(r_k)
-        z_b = self.solveA_bb(r_b - A_bk @ z_k)
-        z = np.empty_like(r)
-        z[b], z[k] = z_b, z_k
-        return z
+        return blockLU(r, self.condensation, self.preconditionS, self.solveA_bb)
 
     def describe(self) -> Description:
         if self.blockFactors == "LU":

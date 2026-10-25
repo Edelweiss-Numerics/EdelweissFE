@@ -272,7 +272,7 @@ cdef class PyAMGCLSolver:
 cdef class PyAMGCLEquilibratedSystem:
     """blockamg's equilibrated, field-split system ``As = D A D`` (``D = diag(scaling)``), built in one
     OpenMP-threaded pass over ``A``: the outer Krylov operator (:meth:`matvec`, :meth:`residual`, and
-    the operator :meth:`PyAMGCLLGMRESSolver.solve` iterates on), the coupling blocks between fields
+    the operator :meth:`PyAMGCLKrylovSolver.solve` iterates on), the coupling blocks between fields
     (:meth:`couplingMatvec`) and, on demand, a field's diagonal block (:meth:`diagonalBlock`).
 
     Replaces a chain of serial SciPy operations -- a full copy of ``A`` scaled in place, a threaded
@@ -397,19 +397,19 @@ cdef class PyAMGCLEquilibratedSystem:
         return y
 
 
-cdef int _lgmresPrecondApplyTrampoline(void* ctx, int n, const double* rhs, double* x) noexcept:
-    """The C-callable trampoline bridging amgcl::solver::lgmres's per-``apply()`` Precond callback
-    back into Python -- passed to :class:`LGMRESOuterSolver` as a bare function pointer (see
-    ``amgcl-wrapper.hpp``'s ``PyPrecondApplyFn``/``PyLGMRESPrecondT``).
+cdef int _krylovPrecondApplyTrampoline(void* ctx, int n, const double* rhs, double* x) noexcept:
+    """The C-callable trampoline bridging amgcl::solver::lgmres's (or fgmres's) per-``apply()`` Precond callback
+    back into Python -- passed to :class:`PyAMGCLKrylovSolver` as a bare function pointer (see
+    ``amgcl-wrapper.hpp``'s ``PyPrecondApplyFn``/``PyKrylovPrecondT``).
 
-    ``ctx`` is the calling :class:`PyAMGCLLGMRESSolver` instance itself, cast to ``void*`` and back --
+    ``ctx`` is the calling :class:`PyAMGCLKrylovSolver` instance itself, cast to ``void*`` and back --
     Cython's own documented pattern for passing a Python object through an opaque C callback context.
     No manual ``PyObject*`` reference counting is needed: ``ctx`` only ever points at ``self`` from the
-    *same*, still-on-stack :meth:`PyAMGCLLGMRESSolver.solve` call that constructed it (see there), so
+    *same*, still-on-stack :meth:`PyAMGCLKrylovSolver.solve` call that constructed it (see there), so
     its lifetime is strictly nested inside this function's own call and never outlives it.
 
     Declared ``noexcept`` and *not* ``nogil``: every call into this function happens nested inside
-    :meth:`PyAMGCLLGMRESSolver.solve`'s own C++ call, made from a plain ``def`` method that never
+    :meth:`PyAMGCLKrylovSolver.solve`'s own C++ call, made from a plain ``def`` method that never
     releases the GIL (matching every other AMGCL wrapper method in this module -- the GIL only blocks
     *other* Python threads from running during the solve; AMGCL's own OpenMP worker threads never touch
     a Python object, so they are unaffected either way). Not releasing the GIL around the C++ call was
@@ -421,9 +421,9 @@ cdef int _lgmresPrecondApplyTrampoline(void* ctx, int n, const double* rhs, doub
     A Python exception raised by the preconditioner callable cannot propagate through this C
     function-pointer boundary, so it is caught here and stashed on the calling instance instead, and the
     function returns 1 (0 on success). The C++ side then throws, which ends AMGCL's lgmres at once, and
-    :meth:`PyAMGCLLGMRESSolver.solve` re-raises the stashed exception in place of the C++ one.
+    :meth:`PyAMGCLKrylovSolver.solve` re-raises the stashed exception in place of the C++ one.
     """
-    cdef PyAMGCLLGMRESSolver self = <PyAMGCLLGMRESSolver> ctx
+    cdef PyAMGCLKrylovSolver self = <PyAMGCLKrylovSolver> ctx
     cdef Py_ssize_t i
     # rhs arrives as a `const double*` (it is AMGCL's own internal Arnoldi-vector storage, never meant
     # to be written through) -- copied element-by-element into a fresh, ordinary (non-const) numpy
@@ -443,7 +443,7 @@ cdef int _lgmresPrecondApplyTrampoline(void* ctx, int n, const double* rhs, doub
         xView = np.ascontiguousarray(result, dtype=np.float64)
         if xView.shape[0] != n:
             raise ValueError(
-                "PyAMGCLLGMRESSolver: preconditioner callable returned a vector of length {:} for an "
+                "PyAMGCLKrylovSolver: preconditioner callable returned a vector of length {:} for an "
                 "input of length {:}".format(xView.shape[0], n)
             )
         for i in range(n):
@@ -454,23 +454,23 @@ cdef int _lgmresPrecondApplyTrampoline(void* ctx, int n, const double* rhs, doub
     return 0
 
 
-cdef class PyAMGCLLGMRESSolver:
-    """AMGCL's own native ``amgcl::solver::lgmres`` as blockamg.py's outer Krylov solve, in
-    place of ``scipy.sparse.linalg.gmres`` -- see ``amgcl-wrapper.hpp``'s ``LGMRESOuterSolverT`` for
+cdef class PyAMGCLKrylovSolver:
+    """AMGCL's own native ``amgcl::solver::lgmres`` (or ``fgmres``, by ``method``) as the outer Krylov solve, in
+    place of ``scipy.sparse.linalg.gmres`` -- see ``amgcl-wrapper.hpp``'s ``OuterKrylovSolverT`` for
     the full motivation and design reasoning (this class is a thin Cython shell around it).
 
     Bridges the field-split block Gauss-Seidel preconditioner
     (:mod:`edelweissfe.linsolve.blockamg.blockamg`'s ``blockGaussSeidel`` closure, dispatching to
     per-field :class:`PyAMGCLSolver`/:class:`~edelweissfe.linsolve.blockamg.ptwogrid.
     PTwoGridPreconditioner` objects) to AMGCL's native ``Precond`` interface via
-    :func:`_lgmresPrecondApplyTrampoline`, called once per Arnoldi vector.
+    :func:`_krylovPrecondApplyTrampoline`, called once per Arnoldi vector.
 
     One instance per system size (AMGCL preallocates every scratch vector for it), reused across solves
     with per-call tolerances. Every call starts from an empty augmentation subspace (``always_reset`` is
     forced): carrying the augmentation vectors across calls was measured to buy nothing and to turn a
     struggling solve's subspace into much more expensive or NaN subsequent ones, so it is not offered.
     """
-    cdef LGMRESOuterSolver* solver
+    cdef OuterKrylovSolver* solver
     cdef readonly int n
     """The fixed problem size this instance was constructed for."""
     cdef readonly int lastIterations
@@ -483,18 +483,21 @@ cdef class PyAMGCLLGMRESSolver:
     cdef object _precondCallable
     cdef object _pendingException
 
-    def __cinit__(self, int n, dict params=None):
+    def __cinit__(self, int n, str method="lgmres", dict params=None):
         """
         n
             The fixed problem size this instance is built for.
+        method
+            ``"lgmres"`` or ``"fgmres"`` (flexible GMRES, for a preconditioner that changes between iterations).
         params
             AMGCL's own ``lgmres::params`` field names, forwarded verbatim as JSON (``M``, ``K``,
             ``maxiter``, ``tol``, ``abstol``, ``ns_search``, ``verbose``; ``always_reset`` is forced to true
-            and ``pside`` to right preconditioning)
+            and ``pside`` to right preconditioning), or those of ``fgmres::params`` (the same without ``K``,
+            ``always_reset`` and ``pside``)
             -- unlike :class:`PyAMGCLSolver`, there is no ``precond``/``solver`` nesting here, since
             this wraps a single ``amgcl::solver::lgmres`` object directly, not ``amgcl::make_solver``.
             ``maxiter``/``tol`` given here only set the *initial* defaults -- :meth:`solve` overrides
-            both on every call (see ``amgcl-wrapper.hpp``'s ``LGMRESOuterSolverT`` for why).
+            both on every call (see ``amgcl-wrapper.hpp``'s ``OuterKrylovSolverT`` for why).
         """
         if params is None:
             params = {}
@@ -506,7 +509,7 @@ cdef class PyAMGCLLGMRESSolver:
 
         cdef bytes json_bytes = json.dumps(params).encode("utf-8")
         cdef const char* c_json = json_bytes
-        self.solver = new LGMRESOuterSolver(n, c_json)
+        self.solver = makeOuterKrylovSolver(method.encode("utf-8"), n, c_json)
 
     def __dealloc__(self):
         if self.solver != NULL:
@@ -523,7 +526,7 @@ cdef class PyAMGCLLGMRESSolver:
         applyPreconditioner
             A Python callable, ``residual (1D float64 array) -> correction (1D float64 array)`` --
             exactly :mod:`~edelweissfe.linsolve.blockamg.blockamg`'s ``blockGaussSeidel`` closure's own
-            shape. Called once per Arnoldi vector via :func:`_lgmresPrecondApplyTrampoline`; an
+            shape. Called once per Arnoldi vector via :func:`_krylovPrecondApplyTrampoline`; an
             exception it raises ends the AMGCL call at once and is re-raised here.
         tol, maxiter
             This call's relative residual tolerance and maximum total Arnoldi iterations (across every
@@ -541,7 +544,7 @@ cdef class PyAMGCLLGMRESSolver:
         cdef int n = system.n
         if n != self.n:
             raise ValueError(
-                "PyAMGCLLGMRESSolver: matrix size {:} does not match the size {:} this instance was "
+                "PyAMGCLKrylovSolver: matrix size {:} does not match the size {:} this instance was "
                 "constructed for -- construct a fresh instance on any field-structure/size "
                 "change.".format(n, self.n)
             )
@@ -565,7 +568,7 @@ cdef class PyAMGCLLGMRESSolver:
         cdef double error = 0.0
 
         # self is passed through as the callback's opaque context, cast to void* and back in
-        # _lgmresPrecondApplyTrampoline -- see that function's own docstring for why this needs no
+        # _krylovPrecondApplyTrampoline -- see that function's own docstring for why this needs no
         # manual PyObject* reference counting (self is kept alive by this very call's own stack frame
         # for as long as the cast pointer is in use).
         self._precondCallable = applyPreconditioner
@@ -574,7 +577,7 @@ cdef class PyAMGCLLGMRESSolver:
         try:
             self.solver.solve(
                 system.system[0], &rhs_[0], &x_[0],
-                tol, maxiter, _lgmresPrecondApplyTrampoline, ctx, iters, error, onUnscaledOperator
+                tol, maxiter, _krylovPrecondApplyTrampoline, ctx, iters, error, onUnscaledOperator
             )
         except RuntimeError:
             # the C++ side's report of a failed callback: raise the callback's own exception instead

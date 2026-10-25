@@ -29,11 +29,14 @@
 
 A solver script next to the input file::
 
-    from edelweissfe.linsolve.composition import AMG, LGMRES, DiagonalScaling, FieldSplit, RigidBodyModes, TwoGrid
+    from edelweissfe.linsolve.composition import (
+        AMG, LGMRES, DiagonalScaling, Multiplicative, OnField, RigidBodyModes, TwoGrid,
+    )
 
-    displacement = TwoGrid(coarseSpace=RigidBodyModes())
-    fieldSplit = FieldSplit({"displacement": displacement, "nonlocal damage": AMG()})
-    linearSolver = LGMRES(DiagonalScaling(fieldSplit))
+    displacement = OnField("displacement", TwoGrid(coarseSpace=RigidBodyModes()))
+    damage = OnField("nonlocal damage", AMG())
+    blockGaussSeidel = Multiplicative([displacement, damage])
+    linearSolver = LGMRES(DiagonalScaling(blockGaussSeidel))
 
 and in the input file ``linsolver=script:solver.py:linearSolver``. ``print(linearSolver)`` shows the tree; see
 :mod:`~edelweissfe.linsolve.composition.views` for the other views, and
@@ -55,11 +58,12 @@ from edelweissfe.linsolve.composition.combinators import (
     Jacobi,
     Multiplicative,
     OnField,
+    gaussSeidelOrder,
 )
 from edelweissfe.linsolve.composition.diagonalscaling import DiagonalScaling
 from edelweissfe.linsolve.composition.direct import DirectSolver
-from edelweissfe.linsolve.composition.fieldsplit import FieldSplit
 from edelweissfe.linsolve.composition.krylov import (
+    FGMRES,
     LGMRES,
     FixedTolerance,
     ForcingTolerance,
@@ -86,7 +90,7 @@ __all__ = [
     "Description",
     "DiagonalScaling",
     "DirectSolver",
-    "FieldSplit",
+    "FGMRES",
     "FixedTolerance",
     "ForcingTolerance",
     "Jacobi",
@@ -105,5 +109,6 @@ __all__ = [
     "SystemMatrix",
     "TwoGrid",
     "blockAMG",
+    "gaussSeidelOrder",
     "loadSolverScript",
 ]

@@ -74,14 +74,13 @@ cdef extern from "amgcl-wrapper.hpp":
 
     # Callback signature bridging AMGCL's native lgmres Krylov loop back into a Python-level
     # preconditioner -- see amgcl-wrapper.hpp's own comment on PyPrecondApplyFn/
-    # PyLGMRESPrecondT for why this is a bare function pointer + opaque context rather than a
+    # PyKrylovPrecondT for why this is a bare function pointer + opaque context rather than a
     # Cython-overridden C++ virtual method.
     ctypedef int (*PyPrecondApplyFn)(void* ctx, int n, const double* rhs, double* x)
 
-    # AMGCL's own native outer Krylov solve, in place of scipy.sparse.linalg.gmres; one instance per
-    # system size, no augmentation vectors carried across calls -- see LGMRESOuterSolverT.
-    cdef cppclass LGMRESOuterSolver:
-        LGMRESOuterSolver(int n, const char* json_params) except +
+    # AMGCL's own native outer Krylov solve (lgmres or fgmres), in place of scipy.sparse.linalg.gmres; one instance
+    # per system size, no subspace carried across calls -- see OuterKrylovSolverT.
+    cdef cppclass OuterKrylovSolver:
         void solve(const EquilibratedSystem& system,
                    const double* rhs,
                    double* x,
@@ -92,6 +91,8 @@ cdef extern from "amgcl-wrapper.hpp":
                    int& iters,
                    double& error,
                    bint onUnscaledOperator) except +
+
+    OuterKrylovSolver* makeOuterKrylovSolver(const string& method, int n, const char* json_params) except +
 
     # The two-grid cycle the p-two-grid and the rigid-body coarse level share: the cycle itself, the fine spectral
     # radius, the timings and the report -- see TwoGridPreconditioner's own comment.
