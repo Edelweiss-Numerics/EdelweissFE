@@ -125,3 +125,18 @@ def test_a_sequence_of_solves_matches_blockamg_with_its_reuse_decisions(rigidBod
         _assertSameSolve(reference, composed, A_k, b_k)
         rebuilds.append(composed.root.lastRebuildReason)
     assert rebuilds[0] == "first" and rebuilds[1] is None and rebuilds[3] == "increment" and rebuilds[4] == "pattern"
+
+
+def test_a_solver_keeps_no_copy_of_the_last_matrix_between_solves():
+    """Like blockamg, which drops its field split after every solve: between solves (while the nonlinear solver
+    assembles the next matrix) only what can be reused is kept, i.e. the preconditioners, not the field blocks of the
+    last matrix (on a million dofs, gigabytes)."""
+    A, b, fields, coordinates = _beamWithDamage()
+    _, composed = _solverPair(fields, coordinates, rigidBodyCoarseLevel=True)
+    composed(A, b)
+    lgmres = composed.root
+    fieldSplit = lgmres.preconditioner.inner
+    assert lgmres.A is None and fieldSplit.blocks is None
+    # and the next solve with new values only still reuses the preconditioners
+    composed((1.0001 * A).tocsr(), b)
+    assert lgmres.lastRebuildReason is None

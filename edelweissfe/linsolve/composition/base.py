@@ -327,6 +327,14 @@ class Preconditioner:
         for _, child in self.children():
             child.setModel(model, dofManager)
 
+    def finishSolve(self) -> None:
+        """The solve is done: release what only this solve needed (e.g. the field blocks of its matrix, which the next
+        solve forms anew from its own matrix), and tell the children. What the next solve may reuse (a
+        preconditioner) is kept. Without this, a solver would hold a copy of the last matrix between solves -- while
+        the nonlinear solver assembles the next one."""
+        for _, child in self.children():
+            child.finishSolve()
+
     def builtMatrices(self) -> tuple:
         """``(name, scipy matrix)`` pairs of the matrices this component formed and keeps (for the matrix view);
         empty for most."""

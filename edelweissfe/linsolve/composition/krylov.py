@@ -271,6 +271,11 @@ class LGMRES(Preconditioner):
         self._judgeStaleness()
         return x
 
+    def finishSolve(self) -> None:
+        # the matrix (and the operator formed from it) belongs to this solve
+        self.A = None
+        super().finishSolve()
+
     def _judgeStaleness(self) -> None:
         """Whether the preconditioner should be rebuilt before the next solve (see :class:`RebuildPolicy`)."""
         if self.lastRebuildReason is not None or self._referenceIterations is None:

@@ -258,6 +258,7 @@ class ComposedLinearSolver(LinearSolver):
         except FloatingPointError as error:
             return self._notSolved(n, str(error))
         x = self.root(b)
+        self.root.finishSolve()
 
         self._fields = fields
         self._modelChanged = False

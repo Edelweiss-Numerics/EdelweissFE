@@ -154,6 +154,7 @@ class FieldSplit(Preconditioner):
         self.sweeps = sweeps
         self.symmetric = symmetric
         self.blocks = None
+        self.bounds = None
         self._order = []
 
     def _preconditionerOf(self, field, context: SetUpContext) -> Preconditioner:
@@ -164,23 +165,32 @@ class FieldSplit(Preconditioner):
         return self.fieldPreconditioners[field.name]
 
     def setUp(self, A, context: SetUpContext) -> None:
-        self.blocks = A.fieldSplit([(field.start, field.stop) for field in context.fields])
+        self.bounds = [(field.start, field.stop) for field in context.fields]
+        # the blocks of the last matrix go before those of this one are formed: never two copies at once
+        self.blocks = None
+        self.blocks = A.fieldSplit(self.bounds)
         self._order = [self._preconditionerOf(field, context) for field in context.fields]
         for i, field in enumerate(context.fields):
             self._order[i].setUp(FieldBlockMatrix(self.blocks, i), context.restrictedToField(field))
 
     def update(self, A, change) -> None:
-        if change.requiresRebuild or self.blocks is None:
+        if change.requiresRebuild or not self._order:
             self.setUp(A, change.context)
             return
         # new values, the same fields: the couplings of the sweep always come from the current matrix
-        self.blocks = A.fieldSplit(self.blocks.bounds)
+        self.blocks = None
+        self.blocks = A.fieldSplit(self.bounds)
         for i, field in enumerate(change.context.fields):
             fieldChange = change.withContext(change.context.restrictedToField(field))
             self._order[i].update(FieldBlockMatrix(self.blocks, i), fieldChange)
 
     def __call__(self, r: np.ndarray) -> np.ndarray:
         return blockGaussSeidel(self.blocks, self._order, r, self.sweeps, self.symmetric)
+
+    def finishSolve(self) -> None:
+        # the blocks belong to this solve's matrix; the field preconditioners are kept for reuse
+        self.blocks = None
+        super().finishSolve()
 
     def describe(self) -> Description:
         children = tuple(self.fieldPreconditioners.items())
