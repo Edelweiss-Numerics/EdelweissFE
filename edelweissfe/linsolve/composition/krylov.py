@@ -540,8 +540,8 @@ class KrylovSolver(Preconditioner):
 
 class LGMRES(KrylovSolver):
     """LGMRES (Baker, Jessup and Manteuffel 2005): GMRES restarted every ``restart`` iterations, each cycle augmented
-    with ``augmentationVectors`` error approximations of the previous cycles, AMGCL's implementation. Right-preconditioned: :math:`x = M^{-1} y` with :math:`y` from the Krylov space of
-    :math:`A M^{-1}`, which is a Krylov space only for a fixed linear :math:`M^{-1}` -- so LGMRES refuses a variable
+    with ``augmentationVectors`` error approximations of the previous cycles, AMGCL's implementation.
+    Right-preconditioned: :math:`x = M^{-1} y` with :math:`y` from the Krylov space of :math:`A M^{-1}`, which is a Krylov space only for a fixed linear :math:`M^{-1}` -- so LGMRES refuses a variable
     preconditioner (a Krylov solve inside), for which :class:`FGMRES` is made.
 
     Parameters

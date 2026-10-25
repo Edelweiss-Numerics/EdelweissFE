@@ -91,9 +91,10 @@ def defaultFieldTree(dimension: int) -> dict:
 
 
 def checkBackend(owner: str, backendBlockSize, backendPrecision, blockTranslationNullspace=None) -> None:
-    """Raise, naming ``owner``, for a backend AMGCL does not have, at construction (``None`` is the default of the field,
-    see :func:`backendOf`): ``backendBlockSize`` 1 (scalar entries), 2 or 3 (node-wise blocks), ``backendPrecision``
-    ``"double"`` or ``"float"`` (2x2 blocks only in double), ``blockTranslationNullspace`` a bool."""
+    """Raise, naming ``owner``, for a backend AMGCL does not have, at construction (``None`` is the default of the
+    field, see :func:`backendOf`): ``backendBlockSize`` 1 (scalar entries), 2 or 3 (node-wise blocks),
+    ``backendPrecision`` ``"double"`` or ``"float"`` (2x2 blocks only in double), ``blockTranslationNullspace`` a
+    bool."""
     if backendBlockSize not in (None, 1, 2, 3):
         raise ValueError("{:}: backendBlockSize must be 1, 2 or 3, got {!r}".format(owner, backendBlockSize))
     if backendPrecision not in (None, "double", "float"):
@@ -109,9 +110,9 @@ def checkBackend(owner: str, backendBlockSize, backendPrecision, blockTranslatio
 def backendOf(
     owner: str, field, tree: dict, backendBlockSize=None, backendPrecision=None, blockTranslationNullspace=None
 ):
-    """The AMGCL backend a one-field component (:class:`AMG`, :class:`~edelweissfe.linsolve.composition.twolevel.
-    TwoLevel`) builds on for the field: what it was given, the field's default for what it was not -- the one place of
-    those defaults.
+    """The AMGCL backend a one-field component builds on for the field (:class:`AMG`,
+    :class:`~edelweissfe.linsolve.composition.twolevel.TwoLevel`): what it was given, the field's default for what it
+    was not -- the one place of those defaults.
 
     - ``backendBlockSize``: the field's dimension for a 2D or 3D field (node-wise blocks: less index and value traffic
       per product than scalar entries), else 1;
@@ -149,8 +150,8 @@ def backendOf(
     coarseningType = coarsening.get("type", "smoothed_aggregation") if isinstance(coarsening, dict) else None
     if translations and (tree.get("class", "amg") != "amg" or coarseningType != "smoothed_aggregation"):
         raise ValueError(
-            "{:} on the field '{:}': the block translations (blockTranslationNullspace, the default on a block backend) "
-            "need smoothed aggregation (coarsening.type); set blockTranslationNullspace=False for another "
+            "{:} on the field '{:}': the block translations (blockTranslationNullspace, the default on a block "
+            "backend) need smoothed aggregation (coarsening.type); set blockTranslationNullspace=False for another "
             "coarsening".format(owner, field.name)
         )
     return blockSize, precision, translations

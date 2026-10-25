@@ -98,13 +98,13 @@ class RigidBodyCoarseLevelPreconditioner(TwoLevelPreconditioner):
     Parameters
     ----------
     amgclTree, backendBlockSize, backendPrecision, coarseHierarchyPrecision
-        The parameters of the cycle, see :meth:`~edelweissfe.linsolve.composition.twolevelcycle.TwoLevelPreconditioner.
-        cycleParameters`; ``backendBlockSize`` is the field's components per node, 3 (6 rigid-body modes per
-        aggregate) or 2 (3). The AMGCL tree means what it means to AMGCL's own hierarchy, with AMGCL's defaults for
-        what it leaves out: ``relax``, ``npre`` and ``npost`` the fine smoother; ``coarsening`` (smoothed aggregation)
-        the aggregation and the prolongation smoothing of the rigid-body coarse level; and the whole tree the AMGCL
-        hierarchy below it, with the strong-connection threshold halved, as AMGCL halves it from one level to the
-        next.
+        The parameters of the cycle, see
+        :meth:`~edelweissfe.linsolve.composition.twolevelcycle.TwoLevelPreconditioner.cycleParameters`;
+        ``backendBlockSize`` is the field's components per node, 3 (6 rigid-body modes per aggregate) or 2 (3). The
+        AMGCL tree means what it means to AMGCL's own hierarchy, with AMGCL's defaults for what it leaves out:
+        ``relax``, ``npre`` and ``npost`` the fine smoother; ``coarsening`` (smoothed aggregation) the aggregation and
+        the prolongation smoothing of the rigid-body coarse level; and the whole tree the AMGCL hierarchy below it, with
+        the strong-connection threshold halved, as AMGCL halves it from one level to the next.
     prolongation
         ``"smoothed"`` (default) or ``"tentative"``: the tentative prolongation alone, a cheaper setup and a sparser
         coarse operator at the price of more outer iterations.

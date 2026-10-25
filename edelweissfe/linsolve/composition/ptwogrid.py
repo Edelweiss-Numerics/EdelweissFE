@@ -101,13 +101,14 @@ class PTwoGridPreconditioner(TwoLevelPreconditioner):
         This field's P1 topology map (:func:`edelweissfe.numerics.p1topology.buildP1Map`), in the
         field's own node order.
     amgclTree, backendBlockSize, backendPrecision, coarseHierarchyPrecision
-        The parameters of the cycle, see :meth:`~edelweissfe.linsolve.composition.twolevelcycle.TwoLevelPreconditioner.
-        cycleParameters`: the fine Chebyshev smoother is the ``relax``, ``npre`` and ``npost`` of the field's
-        AMGCL tree. With ``npre`` 0 the cycle starts with the coarse-grid correction of the right-hand side itself
-        and ends with ``npost`` sweeps: one smoother application fewer per cycle than a symmetric one, at the price of
-        a nonsymmetric preconditioner -- of no concern to the right-preconditioned GMRES around it, which needs a fixed
-        linear operator, not a symmetric one. Ending on the smoother is the right way round for that one sweep: it
-        damps the high-frequency error the prolongated correction leaves on the fine level.
+        The parameters of the cycle, see
+        :meth:`~edelweissfe.linsolve.composition.twolevelcycle.TwoLevelPreconditioner.cycleParameters`: the fine
+        Chebyshev smoother is the ``relax``, ``npre`` and ``npost`` of the field's AMGCL tree. With ``npre`` 0 the cycle
+        starts with the coarse-grid correction of the right-hand side itself and ends with ``npost`` sweeps: one
+        smoother application fewer per cycle than a symmetric one, at the price of a nonsymmetric preconditioner -- of
+        no concern to the right-preconditioned GMRES around it, which needs a fixed linear operator, not a symmetric
+        one. Ending on the smoother is the right way round for that one sweep: it damps the high-frequency error the
+        prolongated correction leaves on the fine level.
     coarsePrecond
         AMGCL parameter tree for the coarse-level (:math:`A_1`) solve.
     useCoarseNullspace

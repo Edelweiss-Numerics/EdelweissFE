@@ -77,8 +77,8 @@ from edelweissfe.linsolve.nullspace import carriesRigidBodyModes
 
 class CoarseSpace:
     """What spans the coarse level of a :class:`TwoLevel` cycle: it checks that it can be built for a field, and builds
-    the cycle on it. The cycle's own parameters (the fine smoother of the field's tree, the backend, the precision of the
-    coarse hierarchy) come from :class:`TwoLevel`, as ``cycle``, the keywords of
+    the cycle on it. The cycle's own parameters (the fine smoother of the field's tree, the backend, the precision of
+    the coarse hierarchy) come from :class:`TwoLevel`, as ``cycle``, the keywords of
     :meth:`~edelweissfe.linsolve.composition.twolevelcycle.TwoLevelPreconditioner.cycleParameters`.
     """
 
@@ -103,8 +103,8 @@ class CoarseSpace:
         context
             Its context: the node coordinates, the P1 map, the scaling.
         cycle
-            The cycle's parameters, see :meth:`~edelweissfe.linsolve.composition.twolevelcycle.TwoLevelPreconditioner.
-            cycleParameters`.
+            The cycle's parameters, see
+            :meth:`~edelweissfe.linsolve.composition.twolevelcycle.TwoLevelPreconditioner.cycleParameters`.
         fineSpectralRadius, fineDominantVector
             A previous build's fine spectral radius to start from, or ``None``.
         """
@@ -145,9 +145,9 @@ class RigidBodyModes(CoarseSpace):
         self.prolongation = prolongation
 
     def check(self, field, context: SetUpContext, cycle: dict) -> None:
-        """Rigid-body modes are those of a 2D or 3D displacement field (:func:`~edelweissfe.linsolve.nullspace.
-        carriesRigidBodyModes`) with node coordinates, on a block backend (the scalar backend takes them as the near
-        null-space of its hierarchy itself, ``AMG()``)."""
+        """Rigid-body modes are those of a 2D or 3D displacement field with node coordinates
+        (:func:`~edelweissfe.linsolve.nullspace.carriesRigidBodyModes`), on a block backend (the scalar backend takes
+        them as the near null-space of its hierarchy itself, ``AMG()``)."""
         if not carriesRigidBodyModes(field):
             raise ValueError(
                 "TwoLevel: the rigid-body modes are those of a 2D or 3D displacement field, but the field '{:}' is "
@@ -324,9 +324,8 @@ class TwoLevel(Preconditioner):
         super().setModel(model, dofManager)
 
     def _cycleParameters(self, field) -> dict:
-        """The cycle's parameters for the field (see :meth:`~edelweissfe.linsolve.composition.twolevelcycle.
-        TwoLevelPreconditioner.cycleParameters`): the tree and the backend, the field's defaults for what is not
-        given."""
+        """The cycle's parameters for the field: the tree and the backend, the field's defaults for what is not given
+        (see :meth:`~edelweissfe.linsolve.composition.twolevelcycle.TwoLevelPreconditioner.cycleParameters`)."""
         tree = fieldTreeOf("TwoLevel", self.tree, field)
         # the block translations belong to AMG's hierarchy on the block backend; a coarse space is its own
         backendBlockSize, backendPrecision, _ = backendOf(
