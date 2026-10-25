@@ -864,22 +864,22 @@ def test_condensed_solves_keep_their_outer_operator_and_their_field_split():
     K, b, block, coordinates = _beamSystem()
     solver, K, b, _ = _condensedBeamSolver(_CondensedNodes(np.flatnonzero(coordinates[:, 0] > 14.0), 3))
     solver(K, b)
-    operator, system = solver._condensedOuterOperator[0], solver._condensedSystem
+    operator, system = solver._condensedOuterOperator.operator, solver._condensedSystem
     x = solver(2.0 * K, b)
     assert np.linalg.norm(b - 2.0 * K @ x) <= 1.0001e-8 * np.linalg.norm(b)
-    assert solver._condensedOuterOperator[0] is operator and solver._condensedSystem is system
+    assert solver._condensedOuterOperator.operator is operator and solver._condensedSystem is system
     # a rebuild of the hierarchies rebuilds the field split, not the operator
     solver._refreshNext = True
     x = solver(2.0 * K, b)
     assert np.linalg.norm(b - 2.0 * K @ x) <= 1.0001e-8 * np.linalg.norm(b)
-    assert solver._condensedOuterOperator[0] is operator and solver._condensedSystem is not system
+    assert solver._condensedOuterOperator.operator is operator and solver._condensedSystem is not system
     # another sparsity pattern, two (negligible) entries more: another operator
     last = K.shape[0] - 1
     K2 = (K + sp.csr_matrix(([1e-300, 1e-300], ([0, last], [last, 0])), shape=K.shape)).tocsr()
     K2.sort_indices()
     x = solver(K2, b)
     assert np.linalg.norm(b - K2 @ x) <= 1.0001e-8 * np.linalg.norm(b)
-    assert solver._condensedOuterOperator[0] is not operator
+    assert solver._condensedOuterOperator.operator is not operator
 
 
 @pytest.mark.parametrize(

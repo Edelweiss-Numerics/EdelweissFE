@@ -99,6 +99,7 @@ import inspect
 import json
 import os
 import time
+from typing import NamedTuple
 
 import numpy as np
 import scipy.sparse as sp
@@ -107,6 +108,7 @@ import edelweissfe.utils.performancetiming as performancetiming
 from edelweissfe.config.phenomena import phenomena
 from edelweissfe.linsolve.base import FieldBlock, LinearSolver, LinearSolveSummary
 from edelweissfe.linsolve.blockamg import rigidbodycoarselevel, schurcomplement
+from edelweissfe.linsolve.blockamg.sparsity import SparsityPattern, isSignificant
 from edelweissfe.linsolve.nullspace import rigidBodyNullspace, translationNullspace
 
 # Ordered low-to-high; index comparison decides whether a message at a given level should print.
@@ -433,6 +435,14 @@ _P1_OPTIONS = {
     "p1CoarseValueType": "coarseValueType",
     "p1CoarsePrecond": "coarsePrecond",
 }
+
+
+class _OperatorOfPattern(NamedTuple):
+    """An operator built for a matrix, kept for the next matrix of the same sparsity pattern (see
+    :meth:`BlockAMGSolver._condensedOuterOperatorFor`)."""
+
+    operator: object
+    pattern: SparsityPattern
 
 
 def _sameCondensedDofs(dofs, otherDofs) -> bool:
@@ -1068,8 +1078,8 @@ class BlockAMGSolver(LinearSolver):
         if schurComplement is not None:
             self._condensation = schurcomplement.createCondensation(schurComplement)
         # Of condensed solves: the field split of the approximate Schur complement the standing hierarchies were built
-        # on, and its condensed dofs; the operator of their outer solve, kept per sparsity pattern of A (see
-        # _condensedOuterOperator).
+        # on, and its condensed dofs; the operator of their outer solve, kept per sparsity pattern of A (an
+        # _OperatorOfPattern, see _condensedOuterOperatorFor).
         self._condensedSystem = None
         self._hierarchyCondensedDofs = None
         self._condensedOuterOperator = None
@@ -1153,16 +1163,16 @@ class BlockAMGSolver(LinearSolver):
             print(message, flush=True)
 
     def _dropSmallEntries(self, block):
-        """Return `block` with off-diagonals below the relative drop tolerance removed.
+        """Return ``block`` without the off-diagonal entries that fail the relative drop test at ``hierarchyDropTol``
+        (:func:`~edelweissfe.linsolve.blockamg.sparsity.isSignificant`).
 
         Runs only on a hierarchy refresh, not on every solve, so a few array passes over nnz are cheap
         against the hierarchy build they feed. The diagonal is always kept, so no row can be emptied.
         """
         tau = self._hierarchyDropTol
-        diagonal = np.abs(block.diagonal())
         coo = block.tocoo()
-        scale = np.sqrt(diagonal[coo.row] * diagonal[coo.col])
-        keep = (coo.row == coo.col) | (np.abs(coo.data) >= tau * scale)
+        sqrtAbsDiagonal = np.sqrt(np.abs(block.diagonal()))
+        keep = (coo.row == coo.col) | isSignificant(coo.data, coo.row, coo.col, sqrtAbsDiagonal, tau)
         dropped = sp.coo_matrix((coo.data[keep], (coo.row[keep], coo.col[keep])), shape=block.shape).tocsr()
 
         lumped = ""
@@ -2246,12 +2256,12 @@ class BlockAMGSolver(LinearSolver):
         from edelweissfe.linsolve.amgcl.amgcl import PyAMGCLEquilibratedSystem
 
         kept = self._condensedOuterOperator
-        if kept is not None and np.array_equal(kept[1], A.indptr) and np.array_equal(kept[2], A.indices):
-            kept[0].refreshOperatorValues(A.data)
-            return kept[0]
+        if kept is not None and kept.pattern.matches(A):
+            kept.operator.refreshOperatorValues(A.data)
+            return kept.operator
         operator = PyAMGCLEquilibratedSystem()
         operator.buildOperator(A)
-        self._condensedOuterOperator = (operator, A.indptr.copy(), A.indices.copy())
+        self._condensedOuterOperator = _OperatorOfPattern(operator, SparsityPattern.of(A))
         return operator
 
     def _blockGaussSeidel(self, system, residual: np.ndarray) -> np.ndarray:

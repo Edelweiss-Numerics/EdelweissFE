@@ -92,6 +92,7 @@ can be condensed, and always all fields of a node together.
 
 import numbers
 from collections.abc import Callable, Mapping
+from typing import NamedTuple
 
 import numpy as np
 import scipy.sparse as sp
@@ -101,6 +102,7 @@ from scipy.sparse.csgraph import connected_components, reverse_cuthill_mckee
 import edelweissfe.utils.performancetiming as performancetiming
 from edelweissfe.adaptivity.marking import RefineableElements
 from edelweissfe.linsolve.base import FieldBlock
+from edelweissfe.linsolve.blockamg.sparsity import SparsityPattern, isSignificant
 from edelweissfe.numerics.parallelizationutilities import (
     getNumberOfThreads,
     getThreadPool,
@@ -636,15 +638,36 @@ class SchurComplementCondensation:
         return parts
 
 
-def _splitCacheFor(A: sp.csr_matrix, cache: "dict | None") -> dict:
+class _BlockGather(NamedTuple):
+    """Where the entries of one block of ``A`` (e.g. :math:`A_{bk}`) are in ``A.data``, and the block's CSR structure:
+    the block of every matrix of the same sparsity pattern is ``csr_matrix((A.data[indexInData], indices, indptr),
+    shape)``."""
+
+    indexInData: np.ndarray
+    indices: np.ndarray
+    indptr: np.ndarray
+    shape: tuple
+
+
+class _SplitCache(NamedTuple):
+    """The gathers of the blocks :func:`_split` cut out of the matrices of one sparsity pattern, by block name, for one
+    choice of the condensed dofs."""
+
+    pattern: SparsityPattern
+    blocks: dict
+
+
+def _splitCacheFor(A: sp.csr_matrix, cache: "_SplitCache | None") -> _SplitCache:
     """The cache of :func:`_split` for ``A``: ``cache`` if it was made for ``A``'s sparsity pattern, else an empty one
     for it (made, too, when ``cache`` is ``None``: a new choice of the condensed dofs)."""
-    if cache is not None and np.array_equal(cache["indptr"], A.indptr) and np.array_equal(cache["indices"], A.indices):
+    if cache is not None and cache.pattern.matches(A):
         return cache
-    return {"indptr": A.indptr.copy(), "indices": A.indices.copy(), "blocks": {}}
+    return _SplitCache(SparsityPattern.of(A), {})
 
 
-def _split(A: sp.csr_matrix, which: tuple, condensedDofs: np.ndarray, remainingDofs: np.ndarray, cache: dict) -> list:
+def _split(
+    A: sp.csr_matrix, which: tuple, condensedDofs: np.ndarray, remainingDofs: np.ndarray, cache: _SplitCache
+) -> list:
     """The blocks ``which`` (of ``"bb"``, ``"bk"``, ``"kb"``, ``"kk"``) of ``A`` for the condensed dofs b and the
     remaining dofs k, as CSR matrices.
 
@@ -656,41 +679,44 @@ def _split(A: sp.csr_matrix, which: tuple, condensedDofs: np.ndarray, remainingD
     dofsOf = {"b": condensedDofs, "k": remainingDofs}
     blocks = []
     for name in which:
-        if name not in cache["blocks"]:
+        rowDofs, colDofs = dofsOf[name[0]], dofsOf[name[1]]
+        if name not in cache.blocks:
             # index + 1: a zero value could be dropped by the slicing
             entryIndexInData = sp.csr_matrix(
                 (np.arange(1, A.nnz + 1, dtype=np.float64), A.indices, A.indptr), shape=A.shape
             )
-            block = entryIndexInData[dofsOf[name[0]]][:, dofsOf[name[1]]].tocsr()
+            block = entryIndexInData[rowDofs][:, colDofs].tocsr()
             block.sort_indices()
-            cache["blocks"][name] = (block.data.astype(np.int64) - 1, block.indices, block.indptr, block.shape)
-        indexInData, indices, indptr, shape = cache["blocks"][name]
-        blocks.append(sp.csr_matrix((A.data[indexInData], indices, indptr), shape=shape))
+            cache.blocks[name] = _BlockGather(block.data.astype(np.int64) - 1, block.indices, block.indptr, block.shape)
+        gather = cache.blocks[name]
+        blocks.append(sp.csr_matrix((A.data[gather.indexInData], gather.indices, gather.indptr), shape=gather.shape))
     return blocks
 
 
 def _significantEntries(
-    correction: np.ndarray, rows: np.ndarray, cols: np.ndarray, sqrtDiagonal: np.ndarray, tolerance: float
+    correction: np.ndarray, rows: np.ndarray, cols: np.ndarray, sqrtAbsDiagonal: np.ndarray, tolerance: float
 ) -> tuple:
-    """The entries of a dense correction block (rows ``rows``, columns ``cols`` of k) of at least ``tolerance`` times
-    :math:`\\sqrt{|A_{ii} A_{jj}|}`, as ``(rows, cols, values)``."""
-    significant = np.abs(correction) >= tolerance * np.outer(sqrtDiagonal[rows], sqrtDiagonal[cols])
+    """The entries of a dense correction block (rows ``rows``, columns ``cols`` of k) that pass the relative drop test
+    at ``tolerance`` (:func:`~edelweissfe.linsolve.blockamg.sparsity.isSignificant`, against the diagonal of
+    :math:`A_{kk}`), as ``(rows, cols, values)``."""
+    significant = isSignificant(correction, rows[:, None], cols[None, :], sqrtAbsDiagonal, tolerance)
     i, j = np.nonzero(significant)
     return rows[i], cols[j], correction[i, j]
 
 
 def _dropSmallEntries(S: sp.csr_matrix, tau: float) -> sp.csr_matrix:
-    """``S`` without the entries :math:`|S_{ij}| < \\tau \\sqrt{|S_{ii} S_{jj}|}` and without stored zeros.
+    """``S`` without the entries that fail the relative drop test :math:`|S_{ij}| \\geq \\tau \\sqrt{|S_{ii} S_{jj}|}`
+    (:func:`~edelweissfe.linsolve.blockamg.sparsity.isSignificant`) and without stored zeros.
 
-    The simple form is ``S.data[small] = 0; S.eliminate_zeros()`` with ``small`` the condition above. For the tens of
-    millions of entries of a large model, this computes it for blocks of rows in parallel threads instead."""
-    s = np.sqrt(np.abs(S.diagonal()))
+    The simple form is ``S.data[~significant] = 0; S.eliminate_zeros()``. For the tens of millions of entries of a large
+    model, this computes it for blocks of rows in parallel threads instead."""
+    sqrtAbsDiagonal = np.sqrt(np.abs(S.diagonal()))
 
     def keptEntries(rowRange):
         low, high = rowRange
         entries = slice(S.indptr[low], S.indptr[high])
         rowOfEntry = np.repeat(np.arange(low, high), np.diff(S.indptr[low : high + 1]))
-        keep = np.abs(S.data[entries]) >= tau * s[rowOfEntry] * s[S.indices[entries]]
+        keep = isSignificant(S.data[entries], rowOfEntry, S.indices[entries], sqrtAbsDiagonal, tau)
         keep &= S.data[entries] != 0.0
         return (
             S.data[entries][keep],
