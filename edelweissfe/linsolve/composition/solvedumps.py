@@ -63,8 +63,8 @@ import scipy.sparse as sp
 
 
 class SolveDumps:
-    """The dumps of a composed solver (see the module documentation), and of
-    :class:`~edelweissfe.linsolve.blockamg.blockamg.BlockAMGSolver` (``dumpOnDegradation*``), in one on-disk format.
+    """The dumps of a composed solver, see the module documentation; the data lines ``dumps``, ``dumpDirectory``,
+    ``maxDumps`` and ``dumpContextSolves`` of every type of linear solver.
 
     Parameters
     ----------

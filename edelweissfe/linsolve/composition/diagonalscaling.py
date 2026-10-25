@@ -58,8 +58,7 @@ from edelweissfe.linsolve.composition.base import (
 
 def diagonalScalingOf(absoluteDiagonal: np.ndarray, owner: str = "DiagonalScaling") -> tuple:
     """:math:`D = \\operatorname{diag}(\\lvert a_{ii} \\rvert^{-1/2})` of a matrix, from its
-    ``absoluteDiagonal`` :math:`\\lvert a_{ii} \\rvert`. Shared by :class:`DiagonalScaling` and
-    :class:`~edelweissfe.linsolve.blockamg.blockamg.BlockAMGSolver`.
+    ``absoluteDiagonal`` :math:`\\lvert a_{ii} \\rvert`, for :class:`DiagonalScaling`.
 
     A zero diagonal entry cannot be scaled: :math:`1/\\sqrt{0}` is infinite, which would poison :math:`\\hat A` with
     non-finite values before the preconditioner build, and the failure would surface much later as a NaN correction

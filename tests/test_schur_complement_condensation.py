@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Schur complement condensation in blockamg (``schurComplement``, :mod:`edelweissfe.linsolve.blockamg.schurcomplement`).
+"""The Schur complement condensation of :mod:`edelweissfe.linsolve.composition.schurcomplement` (the composed
+:class:`~edelweissfe.linsolve.composition.schurcomplement.SchurComplement` is tested with the other components).
 
 The test system is a bar on an elastic foundation: a 3D grid Laplacian (the host) and a chain of bar dofs, each tied
 to a host dof by a stiff spring, the bar much stiffer along its axis than the host. The bar dofs are condensed.
@@ -20,16 +21,12 @@ from edelweissfe.adaptivity.marking import (
     MarkerBase,
 )
 from edelweissfe.linsolve.base import FieldBlock
-from edelweissfe.linsolve.blockamg import createSolver
-from edelweissfe.linsolve.blockamg.blockamg import BlockAMGSolver
-from edelweissfe.linsolve.blockamg.schurcomplement import (
+from edelweissfe.linsolve.composition.schurcomplement import (
     SchurComplementCondensation,
     _solveTransposed,
-    createCondensation,
-    optionsRejection,
+    blockLU,
     restrictP1Map,
 )
-from edelweissfe.linsolve.composition.schurcomplement import blockLU
 from edelweissfe.linsolve.superlu import SuperLUBackend
 from edelweissfe.utils.fieldoutput import _FieldOutputBase
 
@@ -118,18 +115,6 @@ def test_block_lu_with_the_exact_schur_complement_is_the_inverse():
     assert np.allclose(A @ z, b, rtol=0.0, atol=1e-10 * np.abs(b).max())
 
 
-def test_blockamg_with_condensed_bar_dofs_converges():
-    """The hierarchies are built on S~ of the host dofs, and the outer solve converges on the whole system."""
-    A, b, barDofs = _barOnFoundation(n=18)
-    solver = BlockAMGSolver(outerTol=1e-8, verbosity="silent", sweeps=2, condensation=_FixedDofs(barDofs))
-    solver.setFieldStructure([FieldBlock("u", 0, A.shape[0], 1)])
-    x = solver(A, b)
-    assert np.linalg.norm(b - A @ x) / np.linalg.norm(b) < 1e-8
-    assert solver.lastSolveSummary.iters < 30
-    assert np.array_equal(solver._hierarchyCondensedDofs, barDofs)
-    assert solver._blocks == [FieldBlock("u", 0, A.shape[0] - barDofs.size, 1)]
-
-
 class _Node:
     def __init__(self, label):
         self.label = label
@@ -204,53 +189,6 @@ def test_superlu_factorizes_once_for_several_right_hand_sides():
     solver.factorize(A)
     B = np.column_stack([b, 2 * b])
     assert np.allclose(A @ solver.solveFactorized(B), B)
-
-
-def test_options_are_checked():
-    with pytest.raises(ValueError, match="markers"):
-        createCondensation({})
-    with pytest.raises(ValueError, match="unknown key"):
-        createCondensation({"markers": [{"type": "elementSet", "elSet": "bars"}], "windowSze": 3})
-    with pytest.raises(ValueError, match="initialOnly"):
-        createCondensation({"markers": [{"type": "elementSet", "elSet": "bars", "initialOnly": True}]})
-    with pytest.raises(ValueError, match="krylovOnScaledSystem"):
-        createSolver(
-            {"krylovOnScaledSystem": True, "schurComplement": {"markers": [{"type": "elementSet", "elSet": "bars"}]}}
-        )
-
-
-@pytest.mark.parametrize(
-    "option, reason",
-    [
-        ({"windowNodes": "50"}, "'windowNodes' must be an integer"),
-        ({"windowNodes": 50.0}, "'windowNodes' must be an integer"),
-        ({"windowNodes": True}, "'windowNodes' must be an integer"),
-        ({"haloNodes": 2.5}, "'haloNodes' must be an integer"),
-        ({"haloNodes": -1}, "'haloNodes' must be an integer, not negative"),
-        ({"dropTolerance": "1e-4"}, "'dropTolerance' must be a number"),
-        ({"dropTolerance": 1.0}, "'dropTolerance' must be a number of at least 0 and less than 1"),
-        ({"directSolver": {"linsolver": "blockamg"}}, "cannot be created"),
-        ({"directSolver": {"linsolver": "nonexistent"}}, "cannot be created"),
-    ],
-    ids=[
-        "window a string",
-        "window a float",
-        "window a bool",
-        "halo a float",
-        "halo negative",
-        "drop a string",
-        "drop 1",
-        "not a direct solver",
-        "an unknown solver",
-    ],
-)
-def test_options_of_the_wrong_type_or_an_unsuitable_direct_solver_are_rejected_up_front(option, reason):
-    # rejected with the other schurComplement options, before the model is set up, not with a TypeError or at the
-    # first solve
-    options = {"markers": [{"type": "elementSet", "elSet": "bars"}]} | option
-    assert reason in optionsRejection(options)
-    with pytest.raises(ValueError, match="schurComplement"):
-        createSolver({"schurComplement": options})
 
 
 class _FailingFromTheSecondFactorization(SuperLUBackend):
@@ -336,36 +274,6 @@ def test_a_field_output_marker_is_stamped_by_its_field_output_and_a_set_marker_b
     assert MarkerBase().selectionStamp(None) is None
 
 
-def _solverWithFixedDofs(A, dofs):
-    solver = BlockAMGSolver(outerTol=1e-8, verbosity="silent", sweeps=2, condensation=_FixedDofs(dofs))
-    solver.setFieldStructure([FieldBlock("u", 0, A.shape[0], 1)])
-    return solver
-
-
-def test_s_tilde_and_hierarchies_are_reused_and_rebuilt_when_the_condensed_dofs_change():
-    A, b, barDofs = _barOnFoundation(n=18)
-    solver = _solverWithFixedDofs(A, barDofs)
-    solver(A, b)
-    S = solver._condensedSystem
-    x = solver(A, 1.01 * b)  # the same matrix: S~ (its field split) and the hierarchies are reused
-    assert solver._condensedSystem is S
-    assert np.linalg.norm(1.01 * b - A @ x) / np.linalg.norm(1.01 * b) < 1e-8
-
-    # fewer condensed dofs (a zone that changed between increments): rebuilt for the new remaining dofs
-    solver._condensation.fixedDofs = barDofs[: barDofs.size // 2]
-    x = solver(A, b)
-    assert solver._condensedSystem is not S
-    assert np.array_equal(solver._hierarchyCondensedDofs, barDofs[: barDofs.size // 2])
-    assert np.linalg.norm(b - A @ x) / np.linalg.norm(b) < 1e-8
-
-    # nothing condensed: the plain field split on A
-    solver._condensation.fixedDofs = np.empty(0, dtype=np.int64)
-    x = solver(A, b)
-    assert solver._hierarchyCondensedDofs is None and solver._condensedSystem is None
-    assert solver._blocks == [FieldBlock("u", 0, A.shape[0], 1)]
-    assert np.linalg.norm(b - A @ x) / np.linalg.norm(b) < 1e-8
-
-
 class _SingularSolver(SuperLUBackend):
     """A direct solver that finds every matrix singular."""
 
@@ -373,31 +281,9 @@ class _SingularSolver(SuperLUBackend):
         raise np.linalg.LinAlgError("singular, for the test")
 
 
-def test_a_condensed_block_that_cannot_be_factorized_is_solved_without_condensation():
-    """A cutback would meet the same block again (the condensed dofs come from the last converged increment): the
-    solve does without the condensation."""
-    A, b, barDofs = _barOnFoundation(n=8)
-    solver = BlockAMGSolver(outerTol=1e-8, verbosity="silent", condensation=_FixedDofs(barDofs, _SingularSolver))
-    solver.setFieldStructure([FieldBlock("u", 0, A.shape[0], 1)])
-    x = solver(A, b)
-    assert np.linalg.norm(b - A @ x) / np.linalg.norm(b) < 1e-8
-    assert solver._hierarchyCondensedDofs is None
-
-
 def test_superlu_reports_a_singular_matrix_as_a_linear_algebra_error():
     with pytest.raises(np.linalg.LinAlgError):
         SuperLUBackend().factorize(sp.csr_matrix(np.array([[1.0, 1.0], [1.0, 1.0]])))
-
-
-def test_a_hot_reload_does_not_change_the_condensation(tmp_path):
-    options = {"verbosity": "silent", "schurComplement": {"markers": [{"type": "elementSet", "elSet": "bars"}]}}
-    config = tmp_path / "blockamg.json"
-    solver = createSolver(options | {"hotReloadConfigFile": str(config)})
-    config.write_text(
-        '{"verbosity": "silent", "schurComplement": {"markers": [{"type": "elementSet", "elSet": "other"}]}}'
-    )
-    assert not solver._maybeHotReloadConfig()
-    assert solver._schurComplement == options["schurComplement"]
 
 
 def test_by_default_the_block_upper_triangular_factor_is_inverted():

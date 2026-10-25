@@ -13,8 +13,8 @@ library call to name.
 Everything on this page is implemented literally in
 :mod:`~edelweissfe.linsolve.blockamg.blockamg`, :mod:`~edelweissfe.linsolve.nullspace` and
 :mod:`~edelweissfe.linsolve.base`; the opt-in p-multigrid variant lives in
-:mod:`~edelweissfe.linsolve.blockamg.ptwogrid`, the rigid-body coarse level (the default for the 3D displacement
-field) in :mod:`~edelweissfe.linsolve.blockamg.rigidbodycoarselevel`. The solver requires the optional ``amgcl``
+:mod:`~edelweissfe.linsolve.composition.ptwogrid`, the rigid-body coarse level (the default for the 3D displacement
+field) in :mod:`~edelweissfe.linsolve.composition.rigidbodycoarselevel`. The solver requires the optional ``amgcl``
 extension (:mod:`edelweissfe.linsolve.amgcl.amgcl`) to be built.
 
 
@@ -1192,7 +1192,7 @@ p-multigrid (opt-in)
 
 For a field discretized entirely with quadratic serendipity elements, ``blockamg`` can replace that
 field's single-level hierarchy with a genuine two-grid V-cycle
-(:class:`~edelweissfe.linsolve.blockamg.ptwogrid.PTwoGridPreconditioner`): :math:`\nu` Chebyshev
+(:class:`~edelweissfe.linsolve.composition.ptwogrid.PTwoGridPreconditioner`): :math:`\nu` Chebyshev
 sweeps on the field's own equilibrated block, restriction of the residual through
 :math:`P^\mathsf{T}`, one AMGCL cycle on the Galerkin-projected coarse operator :math:`A_1 =
 P^\mathsf{T} A P`, prolongation through :math:`P`, and :math:`\nu` more Chebyshev sweeps. The
@@ -1252,7 +1252,7 @@ Rigid-body coarse level
 
 By default, the hierarchy of the 3D displacement field starts with a coarse level built from **all** of its rigid-body
 modes -- the translations and the rotations -- in place of AMGCL's hierarchy on the translations
-(``rigidBodyCoarseLevel``, :mod:`~edelweissfe.linsolve.blockamg.rigidbodycoarselevel`); any other vector field gets it
+(``rigidBodyCoarseLevel``, :mod:`~edelweissfe.linsolve.composition.rigidbodycoarselevel`); any other vector field gets it
 when named. It keeps what makes the block backend fast, the fine level in node-wise blocks stored in float, and adds
 what that backend cannot take, the rotations.
 

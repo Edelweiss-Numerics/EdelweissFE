@@ -108,7 +108,7 @@ cdef extern from "amgcl-wrapper.hpp":
         double applyFineSeconds_
         double applyCoarseSeconds_
 
-    # The p-two-grid (P1) preconditioner of edelweissfe/linsolve/blockamg/ptwogrid.py, built and
+    # The p-two-grid (P1) preconditioner of edelweissfe/linsolve/composition/ptwogrid.py, built and
     # applied entirely in C++ (OpenMP) -- see PTwoGridPreconditionerT's own comment.
     cdef cppclass PTwoGridPreconditioner(TwoGridPreconditioner):
         PTwoGridPreconditioner(const char* json_params) except +
@@ -121,7 +121,7 @@ cdef extern from "amgcl-wrapper.hpp":
                    double spectralRadius, const double* dominantVector, int dominantVectorSize) except +
         int nCoarseFree()
 
-    # The rigid-body coarse level preconditioner of edelweissfe/linsolve/blockamg/rigidbodycoarselevel.py, built and
+    # The rigid-body coarse level preconditioner of edelweissfe/linsolve/composition/rigidbodycoarselevel.py, built and
     # applied entirely in C++ (OpenMP) -- see RigidBodyCoarseLevelPreconditioner's own comment, and
     # amgcl-rigid-body-coarse-level.hpp for its steps.
     cdef cppclass RigidBodyCoarseLevelPreconditioner(TwoGridPreconditioner):

@@ -156,7 +156,7 @@ class MarkerBase(OptionSchemaProvider):
     """Base class for markers.
 
     A marker selects elements: those to refine for adaptive mesh refinement, or those whose interior nodes
-    ``blockamg`` condenses (``schurComplement``, :mod:`~edelweissfe.linsolve.blockamg.schurcomplement`). It is resolved by ``type`` through the L3 registry
+    a Schur complement condenses (:mod:`~edelweissfe.linsolve.composition.schurcomplement`). It is resolved by ``type`` through the L3 registry
     (category ``marker``; see :mod:`edelweissfe.config.markerlibrary`) and constructed from its
     ``>>marker`` block options via :meth:`fromOptions`, so *any* adaptivity mechanism -- not only the
     HEX20 h-adaptivity model modifier -- can reuse the same marker library, and third-party packages
@@ -174,8 +174,8 @@ class MarkerBase(OptionSchemaProvider):
     def checkReferences(self, model):
         """Raise if a set, surface or fieldOutput this marker reads does not exist in ``model``.
 
-        For a caller that knows all of them must exist when the run starts (e.g. ``blockamg``'s Schur
-        complement, see :mod:`edelweissfe.linsolve.blockamg.schurcomplement`), so that a typo fails at setup
+        For a caller that knows all of them must exist when the run starts (e.g. the Schur
+        complement of a composed solver, see :mod:`edelweissfe.linsolve.composition.schurcomplement`), so that a typo fails at setup
         instead of silently marking nothing. Nothing to check by default.
 
         Parameters
@@ -198,8 +198,8 @@ class MarkerBase(OptionSchemaProvider):
     def selectionStamp(self, model):
         """A value that changes whenever what :meth:`isReady` and :meth:`mark` read can change, other than the model
         itself (its elements, sets and surfaces, which change only with a new model), or ``None`` if the marker
-        cannot tell. A caller may keep a selection while the stamp stays the same (``blockamg``'s Schur complement
-        does); ``None``, the default, means: mark again.
+        cannot tell. A caller may keep a selection while the stamp stays the same (the Schur complement of a
+        composed solver does); ``None``, the default, means: mark again.
 
         Parameters
         ----------

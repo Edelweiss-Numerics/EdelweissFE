@@ -459,10 +459,9 @@ cdef class PyAMGCLKrylovSolver:
     place of ``scipy.sparse.linalg.gmres`` -- see ``amgcl-wrapper.hpp``'s ``OuterKrylovSolverT`` for
     the full motivation and design reasoning (this class is a thin Cython shell around it).
 
-    Bridges the field-split block Gauss-Seidel preconditioner
-    (:mod:`edelweissfe.linsolve.blockamg.blockamg`'s ``blockGaussSeidel`` closure, dispatching to
-    per-field :class:`PyAMGCLSolver`/:class:`~edelweissfe.linsolve.blockamg.ptwogrid.
-    PTwoGridPreconditioner` objects) to AMGCL's native ``Precond`` interface via
+    Bridges the preconditioner of a composed Krylov solver
+    (:class:`~edelweissfe.linsolve.composition.krylov.KrylovSolver`, a Python callable, e.g. a block Gauss-Seidel
+    sweep over per-field AMGCL hierarchies) to AMGCL's native ``Precond`` interface via
     :func:`_krylovPrecondApplyTrampoline`, called once per Arnoldi vector.
 
     One instance per system size (AMGCL preallocates every scratch vector for it), reused across solves
@@ -525,9 +524,9 @@ cdef class PyAMGCLKrylovSolver:
             array-like, converted to 1D float64 (C-contiguous).
         applyPreconditioner
             A Python callable, ``residual (1D float64 array) -> correction (1D float64 array)`` --
-            exactly :mod:`~edelweissfe.linsolve.blockamg.blockamg`'s ``blockGaussSeidel`` closure's own
-            shape. Called once per Arnoldi vector via :func:`_krylovPrecondApplyTrampoline`; an
-            exception it raises ends the AMGCL call at once and is re-raised here.
+            the shape of a composed preconditioner's ``__call__``. Called once per Arnoldi vector via
+            :func:`_krylovPrecondApplyTrampoline`; an exception it raises ends the AMGCL call at once and is re-raised
+            here.
         tol, maxiter
             This call's relative residual tolerance and maximum total Arnoldi iterations (across every
             internal restart -- AMGCL's own ``maxiter`` semantics differ from scipy's restart x maxiter,
@@ -676,7 +675,7 @@ cdef class _PyAMGCLTwoGrid:
 
 
 cdef class PyAMGCLPTwoGrid(_PyAMGCLTwoGrid):
-    """The p-two-grid (P1) preconditioner of :mod:`edelweissfe.linsolve.blockamg.ptwogrid`, built and
+    """The p-two-grid (P1) preconditioner of :mod:`edelweissfe.linsolve.composition.ptwogrid`, built and
     applied entirely in C++: Dirichlet detection, the restricted prolongation ``P``, the Galerkin
     coarse operator ``P^T A P``, the coarse AMGCL hierarchy, the fine Chebyshev smoother and the
     whole two-grid cycle, all OpenMP-threaded -- no Python runs inside :meth:`applyPreconditioner`.
@@ -754,7 +753,7 @@ cdef class PyAMGCLPTwoGrid(_PyAMGCLTwoGrid):
 
 
 cdef class PyAMGCLRigidBodyCoarseLevel(_PyAMGCLTwoGrid):
-    """The rigid-body coarse level preconditioner of :mod:`edelweissfe.linsolve.blockamg.rigidbodycoarselevel`, built
+    """The rigid-body coarse level preconditioner of :mod:`edelweissfe.linsolve.composition.rigidbodycoarselevel`, built
     and applied entirely in C++ (``RigidBodyCoarseLevelPreconditionerT`` in ``amgcl-wrapper.hpp``, its steps in
     ``amgcl-rigid-body-coarse-level.hpp``): the aggregates, the tentative prolongation from the rigid-body modes, the
     smoothed prolongation, the Galerkin coarse operator, the AMGCL hierarchy below it, the fine Chebyshev smoother and

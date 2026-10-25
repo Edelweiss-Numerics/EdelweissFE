@@ -51,7 +51,7 @@ from edelweissfe.linsolve.composition.twogrid import RigidBodyModes, TwoGrid
 def blockAMGFieldPreconditioner(
     field, context, rigidBodyCoarseLevel: bool = True, dropTolerance: float = 0.0, lumpDroppedEntries: bool = False
 ):
-    """The preconditioner of a field as ``blockamg`` chooses it by default: a two-grid cycle on the rigid-body modes
+    """The preconditioner of a field in the ``blockamg`` preset: a two-grid cycle on the rigid-body modes
     for a 3D displacement field (with node coordinates), one AMG hierarchy otherwise."""
     isDisplacement3D = field.dimension == 3 and phenomena.get(field.name) == "vector"
     if rigidBodyCoarseLevel and isDisplacement3D and context.coordinates(field.name) is None:
@@ -78,7 +78,7 @@ def blockAMG(
     dropTolerance: float = 0.0,
     lumpDroppedEntries: bool = False,
 ) -> Preconditioner:
-    """The composed equivalent of :class:`~edelweissfe.linsolve.blockamg.blockamg.BlockAMGSolver` with its defaults:
+    """The ``blockamg`` linear solver (formerly the monolithic ``BlockAMGSolver``, whose numbers it reproduces):
     block Gauss--Seidel over the fields of the diagonally scaled matrix, inside LGMRES::
 
         LGMRES(

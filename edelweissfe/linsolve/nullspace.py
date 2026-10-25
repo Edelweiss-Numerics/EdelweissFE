@@ -29,7 +29,7 @@ Solver-independent: both functions are pure geometry/linear algebra over a
 :class:`~edelweissfe.linsolve.base.FieldBlock`, its diagonal-equilibration scaling, and (for the
 richer basis) its node coordinates -- no solver-instance state. Any algebraic-multigrid-style
 preconditioner needing an elasticity near-null-space can use them; today
-:class:`~edelweissfe.linsolve.blockamg.blockamg.BlockAMGSolver` and its p-two-grid variant do, to
+:class:`~edelweissfe.linsolve.composition.amg.AMG` and the p-two-grid cycle do, to
 seed AMGCL's smoothed-aggregation coarsening. A block backend takes :func:`translationNullspace` alone
 (``blockTranslationNullspace``): its node-major layout gives every node a diagonal block of weights.
 
@@ -85,7 +85,7 @@ def rigidBodyNullspace(block: FieldBlock, coords: np.ndarray, blockScaling: np.n
     coords = np.asarray(coords, dtype=float)[:, :components]
     if coords.shape[0] != nNodes:
         raise ValueError(
-            "blockamg: node coordinates for field '{:}' have {:} rows, expected {:} to match its "
+            "node coordinates for field '{:}' have {:} rows, expected {:} to match its "
             "{:} dofs over {:} components".format(block.name, coords.shape[0], nNodes, size, components)
         )
     centered = coords - coords.mean(axis=0)

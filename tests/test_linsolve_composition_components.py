@@ -38,12 +38,6 @@ from _p1lattice import dirichletDofs, lattice, latticeSystem
 pytest.importorskip("edelweissfe.linsolve.amgcl.amgcl")
 
 from edelweissfe.linsolve.base import FieldBlock  # noqa: E402
-from edelweissfe.linsolve.blockamg.rigidbodycoarselevel import (  # noqa: E402
-    RigidBodyCoarseLevelPreconditioner,
-)
-from edelweissfe.linsolve.blockamg.schurcomplement import (  # noqa: E402
-    SchurComplementCondensation,
-)
 from edelweissfe.linsolve.composition import (  # noqa: E402
     AMG,
     FGMRES,
@@ -67,6 +61,12 @@ from edelweissfe.linsolve.composition import (  # noqa: E402
 from edelweissfe.linsolve.composition.amg import (  # noqa: E402
     amgclTreeOf,
     defaultFieldTree,
+)
+from edelweissfe.linsolve.composition.rigidbodycoarselevel import (  # noqa: E402
+    RigidBodyCoarseLevelPreconditioner,
+)
+from edelweissfe.linsolve.composition.schurcomplement import (  # noqa: E402
+    SchurComplementCondensation,
 )
 
 
@@ -240,7 +240,7 @@ def test_the_p1_two_grid_has_blockamgs_numbers():
 
 
 def _barOnFoundation(n=10):
-    """A grid Laplacian (host) and a bar tied to cell centres by springs, as in test_blockamg_schur_complement."""
+    """A grid Laplacian (host) and a bar tied to cell centres by springs, as in test_schur_complement_condensation."""
     from _blockamgsystems import gridLaplacian
 
     host = (gridLaplacian(n) + 1e-3 * sp.identity(n**3)).tocsr()
@@ -304,6 +304,24 @@ def test_the_schur_complement_tree_has_blockamgs_numbers_with_condensation():
     assert composed.lastSolveSummary.iters == 18
     assert np.linalg.norm(x) == pytest.approx(24.215507033772518, rel=1e-8)
     assert _relative(A @ x, b) < 1e-8
+
+
+def test_the_schur_complement_keeps_nothing_formed_from_its_matrices_between_solves():
+    """S~ is kept for the next solve, but not the native split of it the solve formed (two copies of S~ on a large
+    model), and the next solve with new values still reuses the preconditioner of S~."""
+    A, b, barDofs = _barOnFoundation(n=8)
+    fields = [FieldBlock("u", 0, A.shape[0], 1)]
+    solveA_bb = DirectSolver()
+    schur = SchurComplement(
+        preconditionS=DiagonalScaling(Multiplicative([OnField("u", AMG())])),
+        solveA_bb=solveA_bb,
+        condensation=_FixedDofs(barDofs, solveA_bb.newSolver),
+    )
+    root = LGMRES(schur, tolerance=FixedTolerance(1e-8))
+    _, composed = _solved(A, b, root, fields)
+    assert schur.S_tilde._fieldSplit is None and schur.S_tilde._krylovOperator is None
+    x = composed((1.0001 * A).tocsr(), b)
+    assert root.lastRebuildReason is None and _relative(1.0001 * (A @ x), b) < 1e-7
 
 
 # ----- statistics -----
@@ -402,3 +420,20 @@ def test_rigid_body_modes_need_a_vector_field_with_coordinates():
         TwoGrid(RigidBodyModes()).setUp(block, context)
     with pytest.raises(ValueError, match="prolongation"):
         RigidBodyModes(prolongation="smooth")
+
+
+def test_the_default_trees_on_the_theory_page_are_the_code_defaults():
+    import json
+    import pathlib
+
+    from edelweissfe.linsolve.composition.amg import defaultFieldTree
+
+    page = (pathlib.Path(__file__).parents[1] / "doc/source/documentation/blockamgtheory.rst").read_text()
+    block = page.split("and change only what is intended. The defaults are", 1)[1].split(".. code-block:: json", 1)[1]
+    trees = json.JSONDecoder().raw_decode(block.strip())[0]
+    assert trees == {
+        "3D vector field (e.g. displacement)": defaultFieldTree(3),
+        "2D vector field": defaultFieldTree(2),
+        "vector field of a dimension other than 2 or 3": defaultFieldTree(4),
+        "scalar field (e.g. nonlocal damage)": defaultFieldTree(1),
+    }

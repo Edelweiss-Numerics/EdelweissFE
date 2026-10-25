@@ -180,6 +180,13 @@ class SystemMatrix:
         self._fieldSplit = (bounds, FieldSplitBlocks(native, bounds))
         return self._fieldSplit[1]
 
+    def releaseFormedMatrices(self) -> None:
+        """Drop what was formed from this matrix in a solve, the native field split and the operator of a Krylov solve
+        (formed again when next asked for), and keep only :math:`A`: for a matrix a component keeps between solves
+        (the :math:`\\tilde S` of a Schur complement)."""
+        self._fieldSplit = None
+        self._krylovOperator = None
+
     def krylovOperator(self):
         """:math:`\\hat A` as the operator of AMGCL's Krylov solvers: :math:`A` itself (applied with
         ``onUnscaledOperator``), or :math:`D A D` for a Krylov solve on a scaled matrix,

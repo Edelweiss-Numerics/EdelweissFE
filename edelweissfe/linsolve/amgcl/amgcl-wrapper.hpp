@@ -1123,9 +1123,9 @@ inline OuterKrylovSolver* makeOuterKrylovSolver( const std::string& method, int 
 // --- two-grid preconditioners: the p-two-grid (P1) and the rigid-body coarse level -------------------------------
 //
 // Two preconditioners of one vector field's diagonal block share the two-grid cycle of TwoGridPreconditioner, in
-// C++ throughout: the p-multigrid two-grid cycle of edelweissfe/linsolve/blockamg/ptwogrid.py (PTwoGridPreconditionerT,
-// its coarse level the P1 corner nodes) and the rigid-body coarse level of
-// edelweissfe/linsolve/blockamg/rigidbodycoarselevel.py (RigidBodyCoarseLevelPreconditionerT, its coarse level a
+// C++ throughout: the p-multigrid two-grid cycle of edelweissfe/linsolve/composition/ptwogrid.py
+// (PTwoGridPreconditionerT, its coarse level the P1 corner nodes) and the rigid-body coarse level of
+// edelweissfe/linsolve/composition/rigidbodycoarselevel.py (RigidBodyCoarseLevelPreconditionerT, its coarse level a
 // smoothed aggregation spanned by the rigid-body modes of the aggregates). The cycle: nu fine Chebyshev sweeps, the
 // fine residual, restriction through P^T, one AMGCL V-cycle on the Galerkin coarse operator A_c = P^T A P,
 // prolongation through P, nu more fine Chebyshev sweeps. Every stage of build() and apply() is OpenMP-threaded;
@@ -2176,7 +2176,7 @@ protected:
 };
 
 /// The rigid-body coarse level preconditioner of one vector field's equilibrated diagonal block (blockamg's key
-/// rigidBodyCoarseLevel, edelweissfe/linsolve/blockamg/rigidbodycoarselevel.py): the two-grid cycle
+/// rigidBodyCoarseLevel, edelweissfe/linsolve/composition/rigidbodycoarselevel.py): the two-grid cycle
 /// of TwoGridPreconditioner whose coarse level is a smoothed aggregation spanned by the rigid-body modes of the
 /// field's aggregates (amgcl-rigid-body-coarse-level.hpp), below which an AMGCL hierarchy continues the field's own.
 /// The interface Cython drives, whatever the number of components per node (RigidBodyCoarseLevelPreconditionerT).

@@ -41,8 +41,8 @@ with :math:`A_c^{-1}` approximated by an AMG hierarchy. The coarse space decides
   3D), where an AMG hierarchy on node-wise 3x3 blocks takes the translations alone;
 - :class:`P1Interpolation`: the linear (P1) interpolant of a quadratic field from its corner nodes.
 
-The cycle runs in C++ (:mod:`~edelweissfe.linsolve.blockamg.rigidbodycoarselevel`,
-:mod:`~edelweissfe.linsolve.blockamg.ptwogrid`). Its steps, written out in Python, are
+The cycle runs in C++ (:mod:`~edelweissfe.linsolve.composition.rigidbodycoarselevel`,
+:mod:`~edelweissfe.linsolve.composition.ptwogrid`). Its steps, written out in Python, are
 ``Multiplicative([smoother, CoarseCorrection(P, coarse), smoother])``
 (:mod:`~edelweissfe.linsolve.composition.combinators`). Both ways are kept on purpose: this one is fast (about half the
 cost per application), the spelled-out one shows the steps and takes any smoother or coarse space. Why, and what would
@@ -109,7 +109,7 @@ class RigidBodyModes:
             raise ValueError(
                 "TwoGrid: the rigid-body modes of the field '{:}' need its node coordinates".format(field.name)
             )
-        from edelweissfe.linsolve.blockamg.rigidbodycoarselevel import (
+        from edelweissfe.linsolve.composition.rigidbodycoarselevel import (
             parameterRejection,
         )
 
@@ -132,7 +132,7 @@ class RigidBodyModes:
 
     def build(self, field, tree: dict, matrix, context: SetUpContext, fineSpectralRadius, fineDominantVector):
         """The two-grid cycle on this coarse space for a field's matrix (SciPy CSR)."""
-        from edelweissfe.linsolve.blockamg.rigidbodycoarselevel import (
+        from edelweissfe.linsolve.composition.rigidbodycoarselevel import (
             RigidBodyCoarseLevelPreconditioner,
         )
 
@@ -169,14 +169,14 @@ class P1Interpolation:
     fineSpectralRadiusReuse
         Whether a rebuild re-checks the previous build's fine spectral radius instead of estimating it in full.
     options
-        :class:`~edelweissfe.linsolve.blockamg.ptwogrid.PTwoGridPreconditioner` keywords (``nu``, ``fineDegree``,
+        :class:`~edelweissfe.linsolve.composition.ptwogrid.PTwoGridPreconditioner` keywords (``nu``, ``fineDegree``,
         ...).
     """
 
     name = "P1 interpolation"
 
     def __init__(self, rigidBodyNullspace: bool = True, fineSpectralRadiusReuse: bool = False, **options):
-        from edelweissfe.linsolve.blockamg.ptwogrid import parameterRejection
+        from edelweissfe.linsolve.composition.ptwogrid import parameterRejection
 
         reason = parameterRejection(**options)
         if reason is not None:
@@ -199,7 +199,7 @@ class P1Interpolation:
 
     def build(self, field, tree: dict, matrix, context: SetUpContext, fineSpectralRadius, fineDominantVector):
         """The two-grid cycle on this coarse space for a field's matrix (SciPy CSR)."""
-        from edelweissfe.linsolve.blockamg.ptwogrid import PTwoGridPreconditioner
+        from edelweissfe.linsolve.composition.ptwogrid import PTwoGridPreconditioner
 
         p1Map = context.p1Map(field.name)
         cycle = PTwoGridPreconditioner(

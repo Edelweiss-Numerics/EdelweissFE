@@ -130,7 +130,7 @@ class LinearSolver:
 
     #: Display name for this solver's own log lines (e.g. a "linear solve" column's debug detail).
     #: Overridden by a solver that wants its messages attributed to something other than the generic
-    #: base name -- e.g. ``BlockAMGSolver`` sets this to its own identification string.
+    #: base name -- e.g. ``ComposedLinearSolver`` sets this to its own identification string.
     identification = "LinearSolver"
 
     #: Whether this solver reports per-solve diagnostics (an iteration count, a residual, etc.) that
@@ -149,7 +149,7 @@ class LinearSolver:
 
     #: Whether this solver benefits from the system matrix keeping the same sparsity pattern from one
     #: Newton iteration to the next -- i.e. whether it does something *across* solves that a changing
-    #: pattern defeats (``BlockAMGSolver`` reuses an AMG hierarchy built for the old pattern; a direct
+    #: pattern defeats (a Krylov solver reuses a preconditioner built for the old pattern; a direct
     #: factorization like PARDISO's starts from scratch on every solve regardless and has nothing to
     #: lose). ``False`` here, inherited by every solver that does not override it. Read by
     #: :attr:`~edelweissfe.solvers.nonlinearimplicitstatic.NISTSchema.pruneCondensedMatrixZeros`'s

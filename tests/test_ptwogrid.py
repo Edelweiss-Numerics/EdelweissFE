@@ -23,7 +23,7 @@
 #  The full text of the license can be found in the file LICENSE.md at
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
-"""Tests for the C++ p-two-grid preconditioner (:mod:`edelweissfe.linsolve.blockamg.ptwogrid`,
+"""Tests for the C++ p-two-grid preconditioner (:mod:`edelweissfe.linsolve.composition.ptwogrid`,
 ``PTwoGridPreconditionerT`` in ``amgcl-wrapper.hpp``).
 
 The system is a small Hex20-like lattice: corner nodes on a cubic grid, one exclusive midside node on
@@ -44,7 +44,7 @@ pytest.importorskip("edelweissfe.linsolve.amgcl.amgcl")
 
 from edelweissfe.linsolve.amgcl.amgcl import PyAMGCLSolver  # noqa: E402
 from edelweissfe.linsolve.base import FieldBlock  # noqa: E402
-from edelweissfe.linsolve.blockamg.ptwogrid import (  # noqa: E402
+from edelweissfe.linsolve.composition.ptwogrid import (  # noqa: E402
     _DEFAULT_COARSE_PRECOND,
     PTwoGridPreconditioner,
 )

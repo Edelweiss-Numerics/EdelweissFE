@@ -25,8 +25,8 @@
 #  The full text of the license can be found in the file LICENSE.md at
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
-"""The rigid-body coarse level of a vector field in :class:`~edelweissfe.linsolve.blockamg.blockamg.BlockAMGSolver`
-(``blockamg`` key ``rigidBodyCoarseLevel``).
+"""The rigid-body coarse level of a vector field: the cycle of
+``TwoGrid(coarseSpace=RigidBodyModes())`` (:class:`~edelweissfe.linsolve.composition.twogrid.TwoGrid`).
 
 Why
 ---
@@ -37,7 +37,7 @@ needs them in its coarse space. An error the Chebyshev smoother leaves alone -- 
 smoother's window, which starts at a fraction of the spectral radius by construction -- is removed by the coarse-grid
 correction only as far as the coarse space can represent it on every aggregate.
 
-The block backends of ``blockamg``, the default for 2D and 3D vector fields, take the translations alone (AMGCL's
+The block backends of :class:`~edelweissfe.linsolve.composition.amg.AMG`, the default for 2D and 3D vector fields, take the translations alone (AMGCL's
 hierarchy on node-wise blocks cannot take more): their coarse space holds displacements that are constant on every
 aggregate. In a bending-dominated structure -- a slender beam, a tunnel lining, a plate -- the smooth error is bending,
 which rotates every aggregate almost as a rigid body. The translations represent it poorly, the smoother does not touch
@@ -61,7 +61,7 @@ from all rigid-body modes:
    hierarchy continues the field's tree, with the coefficients of the rigid-body modes in the coarse basis as its near
    null-space.
 
-One application is the two-grid cycle the p-two-grid (:mod:`~edelweissfe.linsolve.blockamg.ptwogrid`) uses too:
+One application is the two-grid cycle the p-two-grid (:mod:`~edelweissfe.linsolve.composition.ptwogrid`) uses too:
 restriction of the residual, one V-cycle of the AMGCL hierarchy, prolongation, and the fine Chebyshev sweeps. Everything
 runs in C++: the steps in ``amgcl-rigid-body-coarse-level.hpp``, the cycle in ``amgcl-wrapper.hpp``
 (``RigidBodyCoarseLevelPreconditionerT``).
@@ -69,53 +69,19 @@ runs in C++: the steps in ``amgcl-rigid-body-coarse-level.hpp``, the cycle in ``
 When
 ----
 
-It is ``blockamg``'s default for the 3D displacement field (of any element type) with blockamg's default tree, and
-pays most where the solves would need many outer iterations although the operator is (nearly) elastic: typically a
+It is the default of the ``blockAMG()`` preset for the 3D displacement field (of any element type), and pays most where the solves would need many outer iterations although the operator is (nearly) elastic: typically a
 bending-dominated structure. The rigid-body modes are the near null-space of elasticity on the displacement field; a
-rotation field, or any other vector field, has another, so it has the coarse level only when named, as a 2D
-displacement field does (``"rigidBodyCoarseLevel": ["displacement"]``), and so does a field with an explicit
-``fieldPreconds`` tree; ``false`` switches it off for all fields. It needs the field's node coordinates (``blockamg``
-reads them from the model), and the field's tree (default or ``fieldPreconds``) configures its smoother, its
-aggregation and the AMGCL hierarchy below it. Its setup costs more than AMGCL's hierarchy on the translations (the
+rotation field, or any other vector field, has another, so a solver script gives it the coarse level only by name
+(``OnField("displacement", TwoGrid(coarseSpace=RigidBodyModes()))``, e.g. for a 2D displacement field). It needs the
+field's node coordinates (read from the model), and the field's tree configures its smoother, its aggregation and the
+AMGCL hierarchy below it. Its setup costs more than AMGCL's hierarchy on the translations (the
 Galerkin product with 6 coarse dofs per aggregate, the larger hierarchy below), so on a model where that converges in a
-few iterations it gains little. The theory page of ``blockamg`` has the measurements.
+few iterations it gains little. The block-AMG theory page has the measurements.
 """
 
 import numpy as np
 
-from edelweissfe.linsolve.blockamg.twogrid import TwoGridPreconditioner
-
-#: The options of the rigid-body coarse level of a field and their defaults: ``true`` for a field takes them all, an
-#: object changes some of them (``blockamg`` key ``rigidBodyCoarseLevel``).
-DEFAULT_OPTIONS = {
-    "prolongation": "smoothed",
-    "coarseHierarchyPrecision": "double",
-    "fineSpectralRadiusReuse": False,
-}
-
-
-def options(value) -> dict:
-    """The options of a field's rigid-body coarse level: :data:`DEFAULT_OPTIONS`, updated by an object of options."""
-    return DEFAULT_OPTIONS | (value if isinstance(value, dict) else {})
-
-
-def optionsRejection(value) -> "str | None":
-    """Why the value of a field in ``rigidBodyCoarseLevel`` -- ``true`` (the default options) or an object of options --
-    cannot be used, or ``None``. Checks its form; the values that the C++ class takes are checked there
-    (:func:`parameterRejection`)."""
-    if value is True:
-        return None
-    if not isinstance(value, dict):
-        return (
-            "must be true or an object of the options {:}, got {!r} (a field left out of rigidBodyCoarseLevel has no "
-            "rigid-body coarse level)".format(sorted(DEFAULT_OPTIONS), value)
-        )
-    unknown = sorted(set(value) - set(DEFAULT_OPTIONS))
-    if unknown:
-        return "has the unknown option(s) {:}; the options are {:}".format(unknown, sorted(DEFAULT_OPTIONS))
-    if not isinstance(value.get("fineSpectralRadiusReuse", False), bool):
-        return "fineSpectralRadiusReuse must be true or false"
-    return None
+from edelweissfe.linsolve.composition.twogridcycle import TwoGridPreconditioner
 
 
 def parameterRejection(
@@ -131,13 +97,14 @@ def parameterRejection(
 
 class RigidBodyCoarseLevelPreconditioner(TwoGridPreconditioner):
     """The preconditioner of one vector field with a rigid-body coarse level (see the module docstring): a two-grid
-    preconditioner (:class:`~edelweissfe.linsolve.blockamg.twogrid.TwoGridPreconditioner`) whose coarse level is spanned
+    preconditioner (:class:`~edelweissfe.linsolve.composition.twogridcycle.TwoGridPreconditioner`) whose coarse level is spanned
     by the rigid-body modes of the aggregates.
 
     Parameters
     ----------
     amgclTree
-        The field's AMGCL tree: its ``fieldPreconds`` tree without the keys of ``blockamg`` itself. It means what it
+        The field's AMGCL tree: its field tree without the keys that select the backend
+        (:func:`~edelweissfe.linsolve.composition.amg.amgclTreeOf`). It means what it
         means to AMGCL's own hierarchy, with AMGCL's defaults for what it leaves out: ``relax``, ``npre`` and ``npost``
         the fine smoother (a Chebyshev polynomial: ``relax.type`` ``chebyshev``, at least one ``relax.power_iters``);
         ``coarsening`` (smoothed aggregation) the aggregation and the prolongation smoothing of the rigid-body coarse
@@ -155,7 +122,7 @@ class RigidBodyCoarseLevelPreconditioner(TwoGridPreconditioner):
         The value type of the AMGCL hierarchy below the rigid-body coarse level: ``"double"`` (default) or ``"float"``.
     fineSpectralRadius, fineDominantVector
         A previous build's fine spectral radius and dominant vector to start from (``fineSpectralRadiusReuse``), or
-        ``None`` to estimate the radius in full, see :class:`~edelweissfe.linsolve.blockamg.twogrid.TwoGridPreconditioner`.
+        ``None`` to estimate the radius in full, see :class:`~edelweissfe.linsolve.composition.twogridcycle.TwoGridPreconditioner`.
     rotations
         ``False`` leaves the rotations out of the coarse space, which then is AMGCL's own on the block backend (the
         translations): the control for tests and measurements, not a configuration option. It is this construction
@@ -173,8 +140,8 @@ class RigidBodyCoarseLevelPreconditioner(TwoGridPreconditioner):
         amgclTree: dict,
         blockSize: int,
         backendPrecision: str = "double",
-        prolongation: str = DEFAULT_OPTIONS["prolongation"],
-        coarseHierarchyPrecision: str = DEFAULT_OPTIONS["coarseHierarchyPrecision"],
+        prolongation: str = "smoothed",
+        coarseHierarchyPrecision: str = "double",
         fineSpectralRadius: float = None,
         fineDominantVector=None,
         rotations: bool = True,

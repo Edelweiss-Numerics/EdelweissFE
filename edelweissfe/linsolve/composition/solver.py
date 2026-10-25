@@ -73,8 +73,7 @@ _WARNING_MARKER = "⚠ "
 
 def tileFieldBlocks(fieldStructure: "list | None", n: int, owner: str) -> list:
     """The field blocks tiling ``[0, n)``, in dof order, with any trailing dofs not covered by a node field (e.g.
-    scalar variables) folded into a final scalar block. Shared with
-    :class:`~edelweissfe.linsolve.blockamg.blockamg.BlockAMGSolver`.
+    scalar variables) folded into a final scalar block.
 
     Parameters
     ----------

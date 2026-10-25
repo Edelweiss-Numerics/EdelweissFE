@@ -23,9 +23,8 @@
 #  The full text of the license can be found in the file LICENSE.md at
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
-"""What the two-grid preconditioners of a vector field in :class:`~edelweissfe.linsolve.blockamg.blockamg.BlockAMGSolver`
-share: the p-two-grid (:mod:`~edelweissfe.linsolve.blockamg.ptwogrid`) and the rigid-body coarse level
-(:mod:`~edelweissfe.linsolve.blockamg.rigidbodycoarselevel`).
+"""What the two-grid cycles of a vector field (:class:`~edelweissfe.linsolve.composition.twogrid.TwoGrid`) share: the p-two-grid (:mod:`~edelweissfe.linsolve.composition.ptwogrid`) and the rigid-body coarse level
+(:mod:`~edelweissfe.linsolve.composition.rigidbodycoarselevel`).
 
 Both are one two-grid cycle -- fine Chebyshev sweeps on the field's equilibrated block, and the coarse-grid correction
 through an AMGCL hierarchy on the Galerkin coarse operator -- that differ in their coarse level alone, and both are built

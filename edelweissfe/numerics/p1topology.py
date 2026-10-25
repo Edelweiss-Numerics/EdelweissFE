@@ -25,7 +25,7 @@
 #  ---------------------------------------------------------------------
 """Corner/midside node topology for building a P1 (linear) restriction operator over a quadratic
 serendipity displacement mesh -- the enabler for p-multigrid
-(:class:`~edelweissfe.linsolve.blockamg.ptwogrid.PTwoGridPreconditioner`).
+(:class:`~edelweissfe.linsolve.composition.ptwogrid.PTwoGridPreconditioner`).
 
 The projection :math:`P` is purely topological: identity on corner nodes, ½/½ on each exclusive
 midside node from its two edge-endpoint corners (the P1 function expressed in the serendipity

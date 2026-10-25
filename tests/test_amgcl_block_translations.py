@@ -48,8 +48,7 @@ pytest.importorskip("edelweissfe.linsolve.amgcl.amgcl")
 import edelweissfe.linsolve.amgcl.amgcl as amgclModule  # noqa: E402
 from edelweissfe.linsolve.amgcl.amgcl import PyAMGCLSolver  # noqa: E402
 from edelweissfe.linsolve.base import FieldBlock  # noqa: E402
-from edelweissfe.linsolve.blockamg import createSolver  # noqa: E402
-from edelweissfe.linsolve.blockamg.blockamg import _defaultFieldPrecond  # noqa: E402
+from edelweissfe.linsolve.composition.amg import defaultFieldTree  # noqa: E402
 from edelweissfe.linsolve.nullspace import translationNullspace  # noqa: E402
 
 #: Every block backend blockamg builds, as (nodal dimension = block size, backendPrecision, nodes per grid
@@ -190,7 +189,7 @@ def test_unit_translation_weights_give_amgcls_constant_blocks(dimension, precisi
     block = FieldBlock("displacement", 0, scaled.shape[0], dimension)
     precond = {
         key: value
-        for key, value in _defaultFieldPrecond(dimension).items()
+        for key, value in defaultFieldTree(dimension).items()
         if key not in ("backendPrecision", "backendBlockSize")
     }
     constantBlocks = _hierarchy(scaled, dimension, precision, precond)
@@ -272,123 +271,6 @@ def _displacementSystem(dimension: int):
         return displacementDamageSystem(12, coupling="symmetric", rowScaling=True)
     A, displacement = _heterogeneousVectorField(2, 40)
     return A, np.random.default_rng(8).standard_normal(A.shape[0]), [displacement]
-
-
-def _solveWithAndWithoutTranslations(monkeypatch, A, b, blocks, fieldTree):
-    """Solve with blockamg twice, with ``fieldTree`` for the displacement field and ``blockTranslationNullspace``
-    switched off and on. Returns the second solver, the near null-spaces it handed over, and the outer iterations of
-    both solves (constant blocks, translations)."""
-    iterations = []
-    for translations in (False, True):
-        recorded = _recordNullspaces(monkeypatch)
-        tree = {**copy.deepcopy(fieldTree), "blockTranslationNullspace": translations}
-        solver = createSolver({"fieldPreconds": {"displacement": tree}, "verbosity": "silent", "outerTol": 1e-8})
-        solver.setFieldStructure(blocks)
-        x = solver(A, b)
-        assert np.linalg.norm(b - A @ x) <= 1.0001e-8 * np.linalg.norm(b)
-        iterations.append(solver._lastOuterIters)
-        # switched off, a block backend hands AMGCL no near null-space: it takes its constant blocks
-        assert translations or recorded == []
-    print("outer iterations, constant blocks / translations:", iterations)
-    return solver, recorded, iterations
-
-
-def test_a_3d_field_on_float_blocks_solves_with_the_translations_of_its_scaled_block(monkeypatch):
-    A, b, blocks = _displacementSystem(3)
-    solver, recorded, _ = _solveWithAndWithoutTranslations(monkeypatch, A, b, blocks, _defaultFieldPrecond(3))
-    # the displacement field only (the damage field is scalar), on its 3x3 float blocks
-    displacement = blocks[0]
-    assert len(recorded) == 1 and recorded[0][0] == 3
-    expected = translationNullspace(displacement, solver._scaling[displacement.start : displacement.stop])
-    assert np.array_equal(recorded[0][1], expected)
-    assert hierarchyLevels(solver._preconditioners[0]) > 1
-
-
-def test_a_2d_field_on_double_blocks_solves_with_the_translations_of_its_scaled_block(monkeypatch):
-    A, b, blocks = _displacementSystem(2)
-    solver, recorded, iterations = _solveWithAndWithoutTranslations(monkeypatch, A, b, blocks, _defaultFieldPrecond(2))
-    assert iterations[1] <= iterations[0]
-    assert len(recorded) == 1 and recorded[0][0] == 2
-    assert np.array_equal(recorded[0][1], translationNullspace(blocks[0], solver._scaling))
-    assert hierarchyLevels(solver._preconditioners[0]) > 1
-
-
-@pytest.mark.parametrize("dimension", [3, 2], ids=["3D, 3x3 float", "2D, 2x2 double"])
-def test_the_default_trees_build_the_hierarchy_from_the_translations(monkeypatch, dimension):
-    # no fieldPreconds at all: the default tree of the displacement field's dimension puts it on a block backend
-    # with the translations D^-1 t of its equilibrated block as near null-space
-    assert _defaultFieldPrecond(dimension)["blockTranslationNullspace"] is True
-    A, b, blocks = _displacementSystem(dimension)
-    recorded = _recordNullspaces(monkeypatch)
-    solver = createSolver({"verbosity": "silent", "outerTol": 1e-8})
-    solver.setFieldStructure(blocks)
-    x = solver(A, b)
-    assert np.linalg.norm(b - A @ x) <= 1.0001e-8 * np.linalg.norm(b)
-    # the displacement field only (a damage field is scalar and takes AMGCL's default constant)
-    displacement = blocks[0]
-    assert len(recorded) == 1 and recorded[0][0] == dimension
-    expected = translationNullspace(displacement, solver._scaling[displacement.start : displacement.stop])
-    assert np.array_equal(recorded[0][1], expected)
-    assert hierarchyLevels(solver._preconditioners[0]) > 1
-
-
-@pytest.mark.parametrize("dimension", [3, 2], ids=["3D, 3x3 float", "2D, 2x2 double"])
-def test_the_default_trees_solve_on_three_or_more_levels(monkeypatch, dimension):
-    # the translations of the coarse levels (R_a of every coarsening but the last) feed the next coarsening: a
-    # hierarchy of three or more levels builds from them, and solves to the outer tolerance, as with the constant
-    # blocks. No claim on the iteration counts: they are the AMG's own, not this feature's.
-    A, b, blocks = _displacementSystem(dimension)
-    tree = {**_defaultFieldPrecond(dimension), "coarse_enough": _DEEP_COARSE_ENOUGH}
-    solver, recorded, _ = _solveWithAndWithoutTranslations(monkeypatch, A, b, blocks, tree)
-    assert len(recorded) == 1
-    assert hierarchyLevels(solver._preconditioners[0]) >= 3
-
-
-def test_the_key_changes_nothing_on_the_scalar_backend(monkeypatch):
-    # The 3D default tree with the scalar backend set on top is valid as it is, and gives the same hierarchy
-    # whatever blockTranslationNullspace says: the scalar backend takes the rigid-body modes (the translations
-    # here, without node coordinates). In double: the float scalar backend sets its hierarchy up in single
-    # precision, whose spectral-radius estimates are not reproducible to the last bit from one build to the next.
-    A, b, blocks = _displacementSystem(3)
-    solutions, iterations, recordings = [], [], []
-    for translations in (True, False):
-        recorded = _recordNullspaces(monkeypatch)
-        tree = {
-            **_defaultFieldPrecond(3),
-            "backendBlockSize": 1,
-            "backendPrecision": "double",
-            "blockTranslationNullspace": translations,
-        }
-        solver = createSolver({"fieldPreconds": {"displacement": tree}, "verbosity": "silent", "outerTol": 1e-8})
-        solver.setFieldStructure(blocks)
-        solutions.append(solver(A, b))
-        iterations.append(solver._lastOuterIters)
-        recordings.append(recorded)
-    assert iterations[0] == iterations[1]
-    assert np.linalg.norm(solutions[0] - solutions[1]) <= 1e-12 * np.linalg.norm(solutions[1])
-    displacement = blocks[0]
-    expected = translationNullspace(displacement, solver._scaling[displacement.start : displacement.stop])
-    for recorded in recordings:
-        assert len(recorded) == 1 and recorded[0][0] == 1 and np.array_equal(recorded[0][1], expected)
-
-
-@pytest.mark.parametrize(
-    "change, reason",
-    [
-        ({"blockTranslationNullspace": 1}, "blockTranslationNullspace must be true or false"),
-        # the default tree has the translations on, so another coarsening has to switch them off
-        ({"coarsening": {"type": "ruge_stuben"}}, "needs smoothed aggregation"),
-    ],
-    ids=["not a bool", "not smoothed aggregation"],
-)
-def test_blockamg_refuses_a_translation_near_null_space_it_cannot_build(change, reason):
-    with pytest.raises(ValueError, match=reason):
-        createSolver({"fieldPreconds": {"displacement": {**_defaultFieldPrecond(3), **change}}})
-
-
-def test_another_coarsening_takes_the_translations_switched_off():
-    tree = {**_defaultFieldPrecond(3), "coarsening": {"type": "ruge_stuben"}, "blockTranslationNullspace": False}
-    assert createSolver({"fieldPreconds": {"displacement": tree}})._fieldPreconds == {"displacement": tree}
 
 
 def test_a_block_backend_takes_no_near_null_space_but_the_translations():

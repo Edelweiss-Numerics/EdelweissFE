@@ -86,8 +86,7 @@ def gaussSeidelOrder(fieldCorrections: list, sweeps: int = 1, symmetric: bool = 
 def multiplicativeCorrections(blocks: FieldSplitBlocks, corrections: list, r: np.ndarray) -> np.ndarray:
     """Successive corrections, each of the residual the previous ones left: :math:`z \\leftarrow z + R_k^T M_k^{-1} R_k
     (r - A z)`, with the residual of correction :math:`k` formed only on its field's rows (see the module
-    documentation). Shared by :class:`Multiplicative` and
-    :class:`~edelweissfe.linsolve.blockamg.blockamg.BlockAMGSolver`.
+    documentation). The application of :class:`Multiplicative`.
 
     Parameters
     ----------
