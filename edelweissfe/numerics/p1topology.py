@@ -109,7 +109,7 @@ def classifyElementTopology(nSpatialDimensions, nNodes: int):
     )
 
 
-def buildP1Map(model, fieldName: str, elements=None):
+def buildP1Map(model, fieldName: str):
     """Classify every node of ``fieldName`` (a vector field, e.g. ``"displacement"``) as a corner
     or an exclusive midside, in the same order as ``model.nodeFields[fieldName].nodes`` (the
     field's own DOF-vector row order, see ``DofManager._reserveSpaceForNodeFields``).
@@ -141,9 +141,6 @@ def buildP1Map(model, fieldName: str, elements=None):
         The model tree.
     fieldName
         The vector field to classify (e.g. ``"displacement"``).
-    elements
-        The elements whose topology defines the map (default: all elements of the model); e.g. only the host
-        continuum elements of embedded bars, whose bar and bond elements have no corner/midside topology.
 
     Returns
     -------
@@ -169,7 +166,7 @@ def buildP1Map(model, fieldName: str, elements=None):
     conflictingRows: set[int] = set()
     inSomeElement = np.zeros(nNodes, dtype=bool)
 
-    for element in model.elements.values() if elements is None else elements:
+    for element in model.elements.values():
         if not any(fieldName in nodeFields for nodeFields in element.fields):
             continue
 
