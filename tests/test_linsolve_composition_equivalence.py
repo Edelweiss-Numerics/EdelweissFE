@@ -301,7 +301,7 @@ def _manifest(directory) -> list:
 
 
 #: BlockAMGSolver's manifest lines for the sequence (threshold 0: every solve dumped), without the file names and the
-#: true residual: (solveCount, outerIters, mustRefresh, newIncrement, patternChanged, nnz, previousOuterIters).
+#: true residual: (solveCount, iterations, rebuilt, newIncrement, patternChanged, nnz, previousIterations).
 _MANIFEST = [
     (1, 8, True, False, False, 670422, None),
     (2, 50, False, False, False, 670422, 8),
@@ -311,23 +311,25 @@ _MANIFEST = [
 ]
 _MANIFEST_KEYS = {
     "blocks",
+    "capHit",
     "contextOffset",
     "continuations",
     "eta",
-    "info",
+    "geometryFile",
+    "iterations",
     "matrixFile",
-    "mustRefresh",
     "newIncrement",
     "nnz",
-    "outerIters",
     "patternChanged",
-    "previousOuterIters",
+    "previousIterations",
+    "rebuildReason",
+    "residual",
     "rhsFile",
     "role",
     "rows",
+    "scaledSystem",
     "solveCount",
     "triggerSolveCount",
-    "trueResidual",
 }
 
 
@@ -349,21 +351,25 @@ def test_the_degradation_dumps_are_blockamgs_on_disk(tmp_path, monkeypatch):
     assert len(records) == len(sequence)
     for (A_k, b_k), frozen, record in zip(sequence, _MANIFEST, records):
         assert set(record) == _MANIFEST_KEYS
-        solveCount, outerIters, mustRefresh, newIncrement, patternChanged, nnz, previousOuterIters = frozen
-        assert (record["solveCount"], record["outerIters"], record["mustRefresh"]) == (
+        solveCount, iterations, rebuilt, newIncrement, patternChanged, nnz, previousIterations = frozen
+        assert (record["solveCount"], record["iterations"], record["rebuildReason"] is not None) == (
             solveCount,
-            outerIters,
-            mustRefresh,
+            iterations,
+            rebuilt,
         )
         assert (record["newIncrement"], record["patternChanged"], record["nnz"]) == (newIncrement, patternChanged, nnz)
-        assert record["previousOuterIters"] == previousOuterIters
+        assert record["previousIterations"] == previousIterations
         assert (record["role"], record["triggerSolveCount"], record["contextOffset"]) == ("trigger", solveCount, 0)
-        assert (record["rows"], record["continuations"], record["info"], record["eta"]) == (12740, 0, 0, 0.001)
+        assert (record["rows"], record["continuations"], record["capHit"], record["eta"]) == (12740, 0, False, 0.001)
         assert record["blocks"] == [
             {"name": "displacement", "start": 0, "stop": 9555, "dimension": 3},
             {"name": "nonlocal damage", "start": 9555, "stop": 12740, "dimension": 1},
         ]
-        assert record["trueResidual"] <= record["eta"]
+        assert record["residual"] <= record["eta"]
+        # the geometry a replay of the rigid-body coarse level needs
+        geometry = np.load(tmp_path / record["geometryFile"])
+        assert list(geometry) == ["displacement_coordinates"]
+        assert np.array_equal(geometry["displacement_coordinates"], coordinates)
         assert record["matrixFile"] == "A_{:02d}_{:05d}.npz".format(composed._instanceOrdinal, record["solveCount"])
         assert abs(sp.load_npz(tmp_path / record["matrixFile"]) - A_k).max() == 0.0
         assert np.array_equal(np.load(tmp_path / record["rhsFile"]), b_k)
@@ -394,7 +400,7 @@ def test_a_dump_holds_the_context_solves_before_its_trigger(tmp_path, monkeypatc
     A, b, fields, _ = _beamWithDamage()
     dumps = SolveDumps(str(tmp_path), maxDumps=10, contextSolves=2)
     for solveCount, degraded in ((1, False), (2, False), (3, False), (4, True)):
-        dumps.afterSolve(0, solveCount, A, solveCount * b, fields, {}, None, degraded, lambda level, message: None)
+        dumps.afterSolve(0, solveCount, A, solveCount * b, fields, {}, None, {}, degraded, lambda level, message: None)
     records = _manifest(tmp_path)
     assert [(record["solveCount"], record["role"]) for record in records] == [
         (4, "trigger"),

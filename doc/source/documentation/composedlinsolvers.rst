@@ -357,8 +357,9 @@ Dumps of the solves
 -------------------
 
 The data line ``dumps`` (in Python ``SolveDumps(directory, trigger, maxDumps, contextSolves)``) writes the raw systems
-of chosen solves to ``dumpDirectory``, for an offline replay (the workbench's ``bench.py``,
-``scripts/benchmark_linsolve.py``). It works for every type, direct solvers included. The trigger:
+of chosen solves to ``dumpDirectory``, for an offline replay (``scripts/benchmark_linsolve.py``, or a
+``ComposedLinearSolver`` driven by hand with ``setFieldStructure`` and the dumped geometry as ``nodeCoordinates`` and
+``p1Maps``). It works for every type, direct solvers included, and is the one way to capture a solve. The trigger:
 
 * ``slow``: a solve with more outer iterations than ``warnOuterIterations`` (so that a dump and its warning fire
   together), or one stopped at the iteration cap short of its tolerance. A preconditioner that degrades typically shows
@@ -373,17 +374,19 @@ On disk:
   condensed dofs, ``schurDofs_<solver>_<solve>.npy``; ``<solver>`` is the ordinal of the linear solver in the process
   (one per step), so the dumps of several solvers never overwrite each other, and the solve numbering continues
   across a hot reload;
+* ``geometry_<solver>_<solve>.npz``: what a replay of the tree needs of the model, the node coordinates of every vector
+  field (``<field>_coordinates``, for its rigid-body modes) and the P1 maps the tree used (``<field>_isCorner``,
+  ``<field>_edgeEndpoints``);
 * one line per dumped system in ``manifest.jsonl``: ``solveCount``, ``role`` (``"trigger"`` or ``"context"``),
-  ``triggerSolveCount``, ``contextOffset``, ``rows``, ``nnz``, ``matrixFile``, ``rhsFile``, the field ``blocks`` (name,
-  start, stop, dimension), ``patternChanged``, ``newIncrement``, and for a Krylov solve its bookkeeping:
-  ``outerIters``, ``trueResidual``, ``eta``, ``continuations``, ``info`` (1 for a cap hit), ``mustRefresh`` (the
-  preconditioner was rebuilt for it), ``previousOuterIters``.
+  ``triggerSolveCount``, ``contextOffset``, ``rows``, ``nnz``, ``matrixFile``, ``rhsFile``, ``geometryFile``, the field
+  ``blocks`` (name, start, stop, dimension), ``patternChanged``, ``newIncrement``, and for a Krylov solve its
+  ``SolveRecord`` -- ``iterations``, ``residual`` (the true relative residual), ``eta``, ``capHit``, ``continuations``,
+  ``rebuildReason`` (``null``: the preconditioner was reused), ``scaledSystem`` -- and ``previousIterations``.
 
 ``dumpContextSolves`` also writes the solves *before* a dumped one, kept in memory as copies: one snapshot cannot tell
 a hard operator from a solve made slow by a stale preconditioner, but a replay of the sequence through one persistent
 solver can. ``maxDumps`` (default 10) bounds the systems written in the process, by all solvers, context solves
-included. The format is that of the former ``blockamg`` degradation dumps; the former ``matrixdump`` linear solver is
-``dumps=every`` (or solve numbers).
+included. A sequence of every solve is ``dumps=every`` (or solve numbers).
 
 .. _composed-hot-reload:
 

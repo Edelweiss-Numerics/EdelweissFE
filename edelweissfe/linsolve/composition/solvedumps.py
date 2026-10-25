@@ -29,8 +29,9 @@
 
 Comparing solver variants by rerunning the simulation is slow and confounded: every run repeats the assembly, and a
 variant that changes the Newton iterates changes the sequence of matrices being compared. Dumping authentic systems
-:math:`(A, b)` once and replaying them offline (the workbench's ``bench.py``) makes the comparison fast and
-controlled.
+:math:`(A, b)` once and replaying them offline -- through a
+:class:`~edelweissfe.linsolve.composition.solver.ComposedLinearSolver` with ``setFieldStructure`` and the dumped
+``nodeCoordinates`` and ``p1Maps`` -- makes the comparison fast and controlled.
 
 Which solves are dumped is the trigger:
 
@@ -50,8 +51,13 @@ solver in the same order; and every dumped solve records why it was (not) rebuil
 ``maxDumps`` caps the systems written in a process: a coupled 3D system of a million dofs takes gigabytes on disk.
 
 On disk, in ``directory``: ``A_<instance>_<solve>.npz`` (SciPy, uncompressed), ``b_<instance>_<solve>.npy``,
-``schurDofs_<instance>_<solve>.npy`` (the condensed dofs of a Schur complement, if any) and one line per dumped solve
-in ``manifest.jsonl``. ``<instance>`` is the ordinal of the solver in the process (one per analysis step).
+``schurDofs_<instance>_<solve>.npy`` (the condensed dofs of a Schur complement, if any),
+``geometry_<instance>_<solve>.npz`` (the node coordinates of the vector fields, ``<field>_coordinates``, and the P1 maps
+the tree used, ``<field>_isCorner`` and ``<field>_edgeEndpoints``, if any) and one line per dumped solve in
+``manifest.jsonl``: the field blocks and file names, and the bookkeeping of a Krylov solve in the names of its
+:class:`~edelweissfe.linsolve.composition.krylov.SolveRecord` (``iterations``, ``residual``, ``eta``, ``capHit``,
+``continuations``, ``rebuildReason``, ``scaledSystem``), with ``patternChanged``, ``newIncrement`` and
+``previousIterations``. ``<instance>`` is the ordinal of the solver in the process (one per analysis step).
 """
 
 import collections
@@ -105,7 +111,7 @@ class SolveDumps:
         self.threshold = threshold
         self.maxDumps = maxDumps
         #: The last ``contextSolves`` solves, oldest first: ``{"solveCount", "A", "b", "blocks", "state",
-        #: "condensedDofs"}``.
+        #: "condensedDofs", "geometry"}``.
         self.history = collections.deque(maxlen=contextSolves)
         #: The solves already written, so that overlapping context windows never write (or count) one twice.
         self.dumpedSolves = set()
@@ -147,6 +153,7 @@ class SolveDumps:
         blocks: list,
         state: dict,
         condensedDofs: "np.ndarray | None",
+        geometry: dict,
         slow: bool,
         log,
     ) -> None:
@@ -162,10 +169,12 @@ class SolveDumps:
         blocks
             Its :class:`~edelweissfe.linsolve.base.FieldBlock` layout.
         state
-            The solve's bookkeeping, recorded in the manifest (``outerIters``, ``trueResidual``, ``eta``,
-            ``continuations``, ``info``, ``mustRefresh``, ``patternChanged``, ``newIncrement``, ``previousOuterIters``).
+            The solve's bookkeeping, recorded in the manifest (see the module documentation).
         condensedDofs
             The dofs a Schur complement condensed in this solve, or ``None``.
+        geometry
+            ``{name: array}``: the node coordinates and P1 maps of the fields, written to ``geometry_*.npz`` (nothing
+            if empty).
         slow
             Whether the solve was slow (see :meth:`thresholdOr`), for the trigger ``"slow"``.
         log
@@ -175,7 +184,9 @@ class SolveDumps:
             return
         if self.selects(solveCount, slow) and SolveDumps.dumpsWritten < self.maxDumps:
             if solveCount not in self.dumpedSolves:
-                self._write(instance, solveCount, A, b, blocks, "trigger", solveCount, state, condensedDofs, log)
+                self._write(
+                    instance, solveCount, A, b, blocks, "trigger", solveCount, state, condensedDofs, geometry, log
+                )
             for entry in self.history:
                 if SolveDumps.dumpsWritten >= self.maxDumps:
                     break
@@ -191,6 +202,7 @@ class SolveDumps:
                     solveCount,
                     entry["state"],
                     entry["condensedDofs"],
+                    entry["geometry"],
                     log,
                 )
         # kept after the dump above, so that a trigger's context window holds only the solves strictly before it
@@ -205,10 +217,13 @@ class SolveDumps:
                     "blocks": blocks,
                     "state": state,
                     "condensedDofs": condensedDofs,
+                    "geometry": geometry,
                 }
             )
 
-    def _write(self, instance, solveCount, A, b, blocks, role, triggerSolveCount, state, condensedDofs, log) -> None:
+    def _write(
+        self, instance, solveCount, A, b, blocks, role, triggerSolveCount, state, condensedDofs, geometry, log
+    ) -> None:
         """Write one system and its manifest line."""
         stem = "{:02d}_{:05d}".format(instance, solveCount)
         matrixFile, rhsFile = "A_{:}.npz".format(stem), "b_{:}.npy".format(stem)
@@ -233,6 +248,9 @@ class SolveDumps:
         if condensedDofs is not None:
             record["condensedDofsFile"] = "schurDofs_{:}.npy".format(stem)
             np.save(os.path.join(self.directory, record["condensedDofsFile"]), condensedDofs)
+        if geometry:
+            record["geometryFile"] = "geometry_{:}.npz".format(stem)
+            np.savez(os.path.join(self.directory, record["geometryFile"]), **geometry)
         with open(os.path.join(self.directory, "manifest.jsonl"), "a") as manifestFile:
             manifestFile.write(json.dumps(record) + "\n")
         self.dumpedSolves.add(solveCount)

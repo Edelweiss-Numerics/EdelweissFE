@@ -85,8 +85,7 @@ does therefore works the same for every type, with the same data lines (:class:`
   it). The format is described in :ref:`composed-solve-dumps`; ``scripts/benchmark_linsolve.py`` replays a dumped
   sequence through direct solver variants.
 
-The dumps are what ``matrixdump`` did before (a sequence of authentic systems, replayed offline so that every solver
-variant sees the same input), with the trigger of the former degradation dumps (``slow``).
+A dump is a sequence of authentic systems, replayed offline so that every solver variant sees the same input.
 
 A direct solver keeps its backend for the whole step: PARDISO with ``reuseSymbolicFactorization=true`` keeps its
 reordering and symbolic factorization while only the values of the matrix change. A singular matrix gives NaN, which

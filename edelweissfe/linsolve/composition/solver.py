@@ -50,6 +50,7 @@ math, the adapter's settings (verbosity, dumps, hot reload) are data lines of th
     linearSolver = LGMRES(DiagonalScaling(...))
 """
 
+import dataclasses
 import hashlib
 import runpy
 import time
@@ -442,27 +443,40 @@ class ComposedLinearSolver(LinearSolver):
     def _dump(
         self, A, b: np.ndarray, fields: list, record, change: MatrixChange, patternChanged: bool, condensedDofs
     ) -> None:
-        """Hand a finished solve to the dumps, with its bookkeeping: that of its Krylov solve, if it has one (a direct
-        solve has none, and is never slow)."""
+        """Hand a finished solve to the dumps, with its bookkeeping -- that of its Krylov solve in the names of its
+        :class:`~edelweissfe.linsolve.composition.krylov.SolveRecord`, if it has one (a direct solve has none, and is
+        never slow) -- and the geometry of its fields that a replay of the tree may need (:meth:`_dumpedGeometry`)."""
         state = {"patternChanged": patternChanged, "newIncrement": change.newIncrement}
         slow = False
         if record is not None:
-            state = {
-                "outerIters": record.iterations,
-                "trueResidual": record.residual,
-                "eta": record.eta,
-                "continuations": record.continuations,
-                "info": int(record.capHit),
-                "mustRefresh": record.rebuildReason is not None,
-                **state,
-                "previousOuterIters": self._previousIterations,
-            }
+            state = {**dataclasses.asdict(record), **state, "previousIterations": self._previousIterations}
             slow = record.iterations > self.dumps.thresholdOr(self.warnOuterIterations) or (
                 record.capHit and not record.converged
             )
         self.dumps.afterSolve(
-            self._instanceOrdinal, self._solveCount, A, b, fields, state, condensedDofs, slow=slow, log=self._log
+            self._instanceOrdinal,
+            self._solveCount,
+            A,
+            b,
+            fields,
+            state,
+            condensedDofs,
+            self._dumpedGeometry(fields),
+            slow=slow,
+            log=self._log,
         )
+
+    def _dumpedGeometry(self, fields: list) -> dict:
+        """What a replay without the model needs of the fields (``nodeCoordinates`` and ``p1Maps`` of the adapter):
+        the node coordinates of every vector field, and the P1 maps the tree asked for, as ``{name: array}``."""
+        geometry = {}
+        for field in fields:
+            coordinates = self.coordinatesOf(field.name) if field.dimension > 1 else None
+            if coordinates is not None:
+                geometry[field.name + "_coordinates"] = coordinates
+        for name, (isCorner, edgeEndpoints) in {**self._p1MapCache, **self._givenP1Maps}.items():
+            geometry[name + "_isCorner"], geometry[name + "_edgeEndpoints"] = isCorner, edgeEndpoints
+        return geometry
 
     # ----- the solver script -----
 
