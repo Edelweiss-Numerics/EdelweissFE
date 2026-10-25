@@ -1,10 +1,9 @@
 Composed linear solvers
 =======================
 
-.. note::
-
-    A prototype. ``blockamg`` remains the production solver; the composed ``blockAMG()`` preset reproduces it (same
-    outer iterations, same solution) and is meant to replace its internals.
+Every linear solver of EdelweissFE is a composed solver behind one adapter (:doc:`linsolvers`): ``type=blockamg`` is
+the ``blockAMG()`` preset below, ``type=pardiso`` the one leaf ``DirectSolver("pardiso")``, and ``type=custom`` the
+tree of a solver script of your own.
 
 A composed linear solver is a **tree of small objects**, built with plain constructors in a Python script next to the
 input file. Each object is one textbook component -- a Krylov solver, a diagonal scaling, a correction on one field, a
@@ -19,7 +18,7 @@ A solver script
 
     # solver.py -- the linear solver of a displacement / nonlocal damage model
     from edelweissfe.linsolve.composition import (
-        AMG, LGMRES, ComposedLinearSolver, DiagonalScaling, Multiplicative, OnField, RigidBodyModes, TwoGrid,
+        AMG, LGMRES, DiagonalScaling, Multiplicative, OnField, RigidBodyModes, TwoGrid,
     )
 
     # the displacement field: a two-grid cycle on the rigid-body modes, AMG below the first coarse level
@@ -30,51 +29,65 @@ A solver script
     # both fields, one block Gauss-Seidel sweep: displacement first, then the nonlocal damage
     blockGaussSeidel = Multiplicative([displacement, damage])
 
-    # accelerated by LGMRES; the driver ComposedLinearSolver turns it into the linear solver of the input file
-    linearSolver = ComposedLinearSolver(LGMRES(DiagonalScaling(blockGaussSeidel)))
+    # accelerated by LGMRES
+    linearSolver = LGMRES(DiagonalScaling(blockGaussSeidel))
 
 and in the input file:
 
 .. code-block:: edelweiss
 
+    *linearSolver, name=mySolver, type=custom
+    script=solver.py
+    verbosity=info
+
     *solver, solver=NIST, name=theSolver
-    linsolver=script:solver.py:linearSolver
+    linsolver=mySolver
 
-(``script:solver.py`` alone takes the global ``linearSolver``.) The script binds the **driver**,
-``ComposedLinearSolver``, around the tree; a bare tree is refused with the one-line fix,
-``linearSolver = ComposedLinearSolver(<your tree>)``. The script runs with the global ``options`` set to the parsed
-``linsolverConfigFile``, if the solver has one. The journal logs the structure of the solver and a hash of the script
-at the first solve (with ``verbosity="info"``).
+The script defines the global ``linearSolver`` and holds only the math: the tree. What the adapter does around it --
+the verbosity, the dumps, the hot reload -- are data lines of the block (a ``ComposedLinearSolver`` bound in the script
+is refused). The journal logs the structure of the solver and a hash of the script at the first solve (with
+``verbosity=info``).
 
-The driver
-----------
+The adapter
+-----------
 
-``ComposedLinearSolver`` is what the nonlinear solver calls, ``x = solver(A, b)``, once per Newton iteration. It finds
-what changed since the last call (the first solve, a new model, a resized system, a new sparsity pattern, a jump of the
-right-hand side that marks a new increment), hands the matrix down the tree, applies the root, and reports on the solve.
-Its settings, all optional:
+:class:`~edelweissfe.linsolve.composition.solver.ComposedLinearSolver` is what the nonlinear solver calls,
+``x = solver(A, b)``, once per Newton iteration, for every type of linear solver. It finds what changed since the last
+call (the first solve, a new model, a resized system, a new sparsity pattern, a jump of the right-hand side that marks
+a new increment), hands the matrix down the tree, applies the root (to each column of ``b``, if it has several), and
+reports on the solve. Its settings are the data lines every type has (see :doc:`linsolvers`):
 
-.. code-block:: python
+.. code-block:: edelweiss
 
-    linearSolver = ComposedLinearSolver(
-        LGMRES(DiagonalScaling(blockGaussSeidel)),
-        verbosity="info",                 # "silent", "warning" (default), "info", "debug"
-        warnOuterIterations=60,           # a solve with more outer iterations gets a warning (default 100)
-        residualGrowthFactor=4.0,         # a right-hand side this many times the last one is a new increment
-        degradationDumps=DegradationDumps("slowSolves", threshold=80, maxDumps=10, contextSolves=2),
-        hotReload=True,                   # run this script again whenever it changes, during the run
-    )
+    *linearSolver, name=mySolver, type=custom
+    script=solver.py
+    ** silent, warning (default), info, debug
+    verbosity=info
+    ** a solve with more outer iterations gets a warning (default 100)
+    warnOuterIterations=60
+    ** a right-hand side this many times the last one is a new increment (default 4)
+    residualGrowthFactor=4.0
+    ** none (default), slow, every, or the numbers of the solves: 12 13 14
+    dumps=slow
+    dumpDirectory=slowSolves
+    maxDumps=10
+    dumpContextSolves=2
+    ** custom only: run the script again whenever it changes, during the run
+    hotReload=true
 
-* ``verbosity``: ``"warning"`` says nothing on a normal solve and warns about a slow one (more outer iterations than
+* ``verbosity``: ``warning`` says nothing on a normal solve and warns about a slow one (more outer iterations than
   ``warnOuterIterations``) and one that missed its tolerance (stopped at the iteration cap, or on a scaled system with
-  the scaled residual met but not the true one); ``"info"`` adds one line per solve, the structure of the solver at
-  the first solve and the "linear solve" column of the nonlinear solver's table; ``"debug"`` adds each continuation of
+  the scaled residual met but not the true one); ``info`` adds one line per solve, the structure of the solver at
+  the first solve and the "linear solve" column of the nonlinear solver's table; ``debug`` adds each continuation of
   a Krylov solve on a scaled system, and in that column why the preconditioner was rebuilt (``rebuilt(stale)``) or
   ``reused``, with the tolerance and the time of the solve.
-* ``degradationDumps``: see :ref:`composed-degradation-dumps`.
+* ``dumps``: see :ref:`composed-solve-dumps`.
 * ``hotReload``: see :ref:`composed-hot-reload`.
-* ``nodeCoordinates``, ``p1Maps``: node coordinates and P1 maps per field, instead of those of the model (an offline
-  replay without a model).
+
+In Python, the same adapter is ``ComposedLinearSolver(tree, verbosity=..., warnOuterIterations=...,
+residualGrowthFactor=..., dumps=SolveDumps(directory, trigger, maxDumps=..., contextSolves=...))``, or
+``ComposedLinearSolver.fromScript("solver.py", hotReload=True, ...)``; ``nodeCoordinates`` and ``p1Maps`` give node
+coordinates and P1 maps per field instead of those of the model (an offline replay without a model).
 
 How to read the nesting
 -----------------------
@@ -128,8 +141,10 @@ Components
     * - ``SchurComplement(condense, preconditionS, solveA_bb, blockFactors)``
       - block LU: :math:`z_k = M_{\tilde S}^{-1}(r_k - A_{kb} A_{bb}^{-1} r_b)`,
         :math:`z_b = A_{bb}^{-1}(r_b - A_{bk} z_k)`
-    * - ``DirectSolver(linsolver)``
-      - :math:`A^{-1}` by a registered direct solver (``superlu``, ``pardiso``, ...)
+    * - ``DirectSolver(backend, **options)``
+      - :math:`A^{-1}` by a registered direct solver backend (``superlu``, ``pardiso``, ``klu``, ...; registry
+        category ``directsolver``), factorized at every set-up; ``type=pardiso`` is
+        ``DirectSolver("pardiso", reuseSymbolicFactorization=...)`` alone
     * - ``CoarseCorrection(P, coarse)``, ``Jacobi(omega)``
       - :math:`P A_c^{-1} P^T` with :math:`A_c = P^T A P`, and :math:`\omega \operatorname{diag}(A)^{-1}`: the pieces
         of a two-grid cycle spelled out, ``Multiplicative([Jacobi(), CoarseCorrection(P, coarse), Jacobi()])``
@@ -156,7 +171,7 @@ A two-grid cycle can be written in two ways, and both are kept deliberately:
 
 ``TwoGrid`` is a leaf, like ``AMG``: pre-smoothing (Chebyshev), the coarse correction
 :math:`P A_c^{-1} P^T (r - A z)` with :math:`A_c = P^T A P`, and post-smoothing run as one cycle in C++. Use it for
-production runs; ``blockAMG()`` uses it for 3D displacement fields.
+production runs; ``blockAMG()`` (``type=blockamg``) uses it for 3D displacement fields.
 
 The spelled-out way builds the same cycle from general components, each of which can be replaced -- another smoother,
 a coarse space of your own (any :math:`P`), a direct coarse solve. Use it to learn how a two-grid cycle works and to
@@ -186,8 +201,8 @@ other component.
 Presets
 -------
 
-Presets are plain functions that return a tree (bound in a script as ``linearSolver =
-ComposedLinearSolver(blockAMG())``). ``blockAMG()`` builds the equivalent of ``blockamg`` with its defaults::
+Presets are plain functions that return a tree. ``blockAMG()`` is the ``blockamg`` type, its arguments the data lines
+of that type (``*linearSolver, type=blockamg``), and in a script ``linearSolver = blockAMG(...)``. It builds::
 
     LGMRES(
         DiagonalScaling(
@@ -289,68 +304,79 @@ the row sums (the "filtered matrix" of the AMG literature); for elasticity, whos
 this weakens the diagonal dominance. The run statistics record the stored entries before and after (``nnz``, ``nnz
 kept``). ``blockAMG(dropTolerance=τ, lumpDroppedEntries=...)`` passes them to every field.
 
-.. _composed-degradation-dumps:
+.. _composed-solve-dumps:
 
-Degradation dumps
------------------
+Dumps of the solves
+-------------------
 
-A preconditioner that degrades typically shows only tens of hours into a run, at a solve nobody can name in advance.
-``ComposedLinearSolver(..., degradationDumps=DegradationDumps(directory, threshold, maxDumps, contextSolves))`` decides
-by the outcome: a solve with more outer iterations than ``threshold`` (default: ``warnOuterIterations``, so that a dump
-and its warning fire together), or one stopped at the iteration cap short of its tolerance, has its raw system written
-to ``directory``, for an offline replay (the workbench's ``bench.py`` reads it unchanged):
+The data line ``dumps`` (in Python ``SolveDumps(directory, trigger, maxDumps, contextSolves)``) writes the raw systems
+of chosen solves to ``dumpDirectory``, for an offline replay (the workbench's ``bench.py``,
+``scripts/benchmark_linsolve.py``). It works for every type, direct solvers included. The trigger:
+
+* ``slow``: a solve with more outer iterations than ``warnOuterIterations`` (so that a dump and its warning fire
+  together), or one stopped at the iteration cap short of its tolerance. A preconditioner that degrades typically shows
+  only tens of hours into a run, at a solve nobody can name in advance; this trigger decides by the outcome;
+* ``every``: every solve, a sequence (whether a factorization or a preconditioner can be reused is a question about a
+  sequence, not a single matrix);
+* solve numbers, e.g. ``dumps=12 13 14``: these solves of each linear solver (counted from 1).
+
+On disk:
 
 * ``A_<solver>_<solve>.npz`` (SciPy, uncompressed), ``b_<solver>_<solve>.npy``, and with a Schur complement the
-  condensed dofs, ``schurDofs_<solver>_<solve>.npy``; ``<solver>`` is the ordinal of the solver in the process, so the
-  dumps of several solvers (one per step) never overwrite each other, and the solve numbering continues across a hot
-  reload;
+  condensed dofs, ``schurDofs_<solver>_<solve>.npy``; ``<solver>`` is the ordinal of the linear solver in the process
+  (one per step), so the dumps of several solvers never overwrite each other, and the solve numbering continues
+  across a hot reload;
 * one line per dumped system in ``manifest.jsonl``: ``solveCount``, ``role`` (``"trigger"`` or ``"context"``),
   ``triggerSolveCount``, ``contextOffset``, ``rows``, ``nnz``, ``matrixFile``, ``rhsFile``, the field ``blocks`` (name,
-  start, stop, dimension), and the bookkeeping of the solve: ``outerIters``, ``trueResidual``, ``eta``,
-  ``continuations``, ``info`` (1 for a cap hit), ``mustRefresh`` (the preconditioner was rebuilt for it),
-  ``patternChanged``, ``newIncrement``, ``previousOuterIters``.
+  start, stop, dimension), ``patternChanged``, ``newIncrement``, and for a Krylov solve its bookkeeping:
+  ``outerIters``, ``trueResidual``, ``eta``, ``continuations``, ``info`` (1 for a cap hit), ``mustRefresh`` (the
+  preconditioner was rebuilt for it), ``previousOuterIters``.
 
-``contextSolves`` also writes the solves *before* the slow one, kept in memory as copies: one snapshot cannot tell a
-hard operator from a solve made slow by a stale preconditioner, but a replay of the sequence through one persistent
+``dumpContextSolves`` also writes the solves *before* a dumped one, kept in memory as copies: one snapshot cannot tell
+a hard operator from a solve made slow by a stale preconditioner, but a replay of the sequence through one persistent
 solver can. ``maxDumps`` (default 10) bounds the systems written in the process, by all solvers, context solves
-included. The format is that of ``blockamg``'s ``dumpOnDegradation*``, from the same code.
+included. The format is that of the former ``blockamg`` degradation dumps; the former ``matrixdump`` linear solver is
+``dumps=every`` (or solve numbers).
 
 .. _composed-hot-reload:
 
 Hot reload of the solver script
 -------------------------------
 
-With ``hotReload=True``, the driver reads its script before every solve and, if it changed, runs it again and
-continues with the ``ComposedLinearSolver`` it builds -- the whole solver, its settings included -- set up on that solve
-(rebuild reason ``reload``). What the run has learnt stays: the solve count, the residual history, the numbering of the
-dumps. The journal says so at ``warning``, with the sha256 of the script and the new tree, so that a reader of the log
-knows which solver was in force from which solve onwards. This makes solver settings testable on a *live* run, at the
-state that was expensive to reach.
+With ``hotReload=true`` (``type=custom``), the adapter reads the script before every solve and, if it changed, runs
+it again and continues with the tree it builds, set up on that solve (rebuild reason ``reload``). The settings of the
+adapter stay those of the input file, and what the run has learnt stays too: the solve count, the residual history,
+the numbering of the dumps. The journal says so at ``warning``, with the sha256 of the script and the new tree, so
+that a reader of the log knows which solver was in force from which solve onwards. This makes solver settings
+testable on a *live* run, at the state that was expensive to reach.
 
 A bad edit can never end the run: a script that cannot be read or does not compile (e.g. half written by an editor) is
-retried on the next solve; one that raises, or binds no ``ComposedLinearSolver``, is reported (``REJECTED``) and the
-solver in force kept until the script changes again; a new solver whose set-up fails (e.g. an AMGCL tree naming an
-unknown smoother) is ``ROLLED BACK`` to the one in force. The contents themselves are the stamp, not the modification
-time, which coarse file timestamps can leave unchanged across two quick edits.
+retried on the next solve; one that raises, or defines no composed solver, is reported (``REJECTED``) and the tree in
+force kept until the script changes again; a new tree whose set-up fails (e.g. an AMGCL tree naming an unknown
+smoother) is ``ROLLED BACK`` to the one in force. The contents themselves are the stamp, not the modification time,
+which coarse file timestamps can leave unchanged across two quick edits.
 
-From ``blockamg`` to a composed solver
---------------------------------------
+From the former ``blockamg`` keys to a composed solver
+------------------------------------------------------
 
-Every setting of ``blockamg`` and where it lives in a composed solver. ``blockAMG(...)`` is the preset that reproduces
-``blockamg``; its keywords are listed where they exist.
+``blockamg`` was a monolithic solver, ``BlockAMGSolver``, configured by a JSON ``linsolverConfigFile``; both are gone.
+Every key it had, and where it lives now: a data line of ``*linearSolver, type=blockamg`` (an argument of the preset
+``blockAMG(...)``) where one exists, else the component of a ``type=custom`` tree. The data lines every type has
+(``verbosity``, ``warnOuterIterations``, ``residualGrowthFactor``, ``dumps``, ...) are named as such.
 
 .. list-table::
     :header-rows: 1
     :widths: 32 68
 
-    * - ``blockamg`` key
-      - composed equivalent
+    * - former ``blockamg`` key
+      - data line of ``type=blockamg`` / component of a custom tree
     * - ``outerTol`` (a number)
-      - ``LGMRES(..., tolerance=FixedTolerance(eta))``; ``blockAMG(tolerance=...)``
+      - data line ``tolerance``; ``LGMRES(..., tolerance=FixedTolerance(eta))``
     * - ``outerTol`` unset / ``"adaptive"``, ``etaMin``, ``etaMax``, ``ewGamma``, ``ewAlpha``
-      - ``ForcingTolerance(minimum, maximum, gamma, alpha)``, the default tolerance of ``LGMRES``
+      - ``tolerance`` unset: the forcing tolerance with its defaults; else ``ForcingTolerance(minimum, maximum, gamma,
+        alpha)``, the default tolerance of ``LGMRES``
     * - ``outerRestart``, ``outerMaxiter``
-      - ``LGMRES(..., maxIterations=outerRestart * outerMaxiter)``
+      - data line ``maxIterations`` (``outerRestart * outerMaxiter``); ``LGMRES(..., maxIterations)``
     * - ``outerSolver``
       - the class: ``LGMRES(...)``; ``FGMRES(...)`` for a variable preconditioner
     * - ``lgmresM``, ``lgmresK``
@@ -358,14 +384,15 @@ Every setting of ``blockamg`` and where it lives in a composed solver. ``blockAM
     * - ``lgmresAlwaysReset``, ``lgmresResetOnNewIncrement``
       - none: deprecated in ``blockamg``; every solve starts from an empty subspace
     * - ``sweeps``, ``symmetric``
-      - ``Multiplicative(gaussSeidelOrder([OnField(...), ...], sweeps, symmetric))``; ``blockAMG(sweeps, symmetric)``
+      - data lines ``sweeps``, ``symmetric``; ``Multiplicative(gaussSeidelOrder([OnField(...), ...], sweeps, symmetric))``
     * - ``fieldPreconds``
       - ``OnField(name, AMG(tree))`` or ``OnField(name, TwoGrid(coarseSpace, tree))``; checked when the component meets
         its field
     * - ``useRigidBodyNullspace``
       - ``AMG(rigidBodyNullspace=...)``
     * - ``rigidBodyCoarseLevel`` (unset, ``false``, names)
-      - ``TwoGrid(coarseSpace=RigidBodyModes())`` on the field; ``blockAMG(rigidBodyCoarseLevel=False)`` for none
+      - data line ``rigidBodyCoarseLevel`` (``true`` for the 3D displacement field, ``false`` for none); other fields:
+        ``OnField(name, TwoGrid(coarseSpace=RigidBodyModes()))``
     * - ``rigidBodyCoarseLevel`` options ``prolongation``, ``coarseHierarchyPrecision``, ``fineSpectralRadiusReuse``
       - ``RigidBodyModes(prolongation, coarseHierarchyPrecision, fineSpectralRadiusReuse)``
     * - ``p1FieldNames``
@@ -377,51 +404,52 @@ Every setting of ``blockamg`` and where it lives in a composed solver. ``blockAM
     * - ``p1FineSpectralRadiusReuse``
       - ``P1Interpolation(fineSpectralRadiusReuse=True)``
     * - ``p1Maps``, ``nodeCoordinates`` (constructor only)
-      - ``ComposedLinearSolver(..., p1Maps, nodeCoordinates)``
+      - ``ComposedLinearSolver(..., p1Maps, nodeCoordinates)`` (Python)
     * - ``hierarchyDropTol``, ``hierarchyDropLumping``
-      - ``AMG(dropTolerance, lumpDroppedEntries)``, ``TwoGrid(..., dropTolerance, lumpDroppedEntries)``;
-        ``blockAMG(dropTolerance, lumpDroppedEntries)``
+      - data lines ``dropTolerance``, ``lumpDroppedEntries``; ``AMG(dropTolerance, lumpDroppedEntries)``,
+        ``TwoGrid(..., dropTolerance, lumpDroppedEntries)``
     * - ``residualGrowthFactor``
-      - ``ComposedLinearSolver(..., residualGrowthFactor)``
+      - data line ``residualGrowthFactor`` (every type)
     * - ``hierarchyStalenessFactor``, ``refreshOnNewIncrement``, ``reuseHierarchy``
       - ``LGMRES(..., rebuild=RebuildPolicy(stalenessFactor, rebuildOnNewIncrement, reuse))``
     * - ``krylovOnScaledSystem``
-      - the order of the components: ``DiagonalScaling(LGMRES(...))`` instead of ``LGMRES(DiagonalScaling(...))``;
-        ``blockAMG(krylovOnScaledSystem=True)``
+      - data line ``krylovOnScaledSystem``; the order of the components: ``DiagonalScaling(LGMRES(...))`` instead of
+        ``LGMRES(DiagonalScaling(...))``
     * - ``trueResidualMaxContinuations``
-      - ``LGMRES(..., continuations)`` (only on a scaled matrix)
+      - data line ``continuations``; ``LGMRES(..., continuations)`` (only on a scaled matrix)
     * - ``gapCompensatedTolerance``, ``gapSafetyFactor``, ``gapMaxFactor``
-      - ``LGMRES(..., gapCompensation=GapCompensation(safetyFactor, maxFactor))``
+      - data line ``gapCompensation`` (``true``: the default factors); ``LGMRES(...,
+        gapCompensation=GapCompensation(safetyFactor, maxFactor))``
     * - ``verbosity``
-      - ``ComposedLinearSolver(..., verbosity)``
+      - data line ``verbosity`` (every type)
     * - ``warnOuterIterationsThreshold``
-      - ``ComposedLinearSolver(..., warnOuterIterations)``
+      - data line ``warnOuterIterations`` (every type)
     * - ``dumpOnDegradationDir``, ``dumpOnDegradationThreshold``, ``dumpOnDegradationMaxDumps``,
         ``dumpOnDegradationContextSolves``
-      - ``ComposedLinearSolver(..., degradationDumps=DegradationDumps(directory, threshold, maxDumps, contextSolves))``,
-        the same files
+      - data lines ``dumps=slow``, ``dumpDirectory``, ``maxDumps``, ``dumpContextSolves`` (every type), the same files;
+        the threshold is ``warnOuterIterations``
     * - ``hotReloadConfigFile``
-      - ``ComposedLinearSolver(..., hotReload=True)``: the solver script is run again when it changes
+      - data line ``hotReload=true`` of ``type=custom``: the solver script is run again when it changes
     * - ``schurComplement``: ``markers``
       - ``SchurComplement(condense=[getMarkerClass(type).fromOptions(options), ...], ...)``
         (``edelweissfe.config.markerlibrary``)
     * - ``schurComplement``: ``approximation``, ``dropTolerance``, ``windowNodes``, ``haloNodes``, ``blockFactors``
       - ``SchurComplement(..., approximation, dropTolerance, windowNodes, haloNodes, blockFactors)``
     * - ``schurComplement``: ``directSolver``
-      - ``SchurComplement(..., solveA_bb=DirectSolver(linsolver, options))``
+      - ``SchurComplement(..., solveA_bb=DirectSolver(backend, **options))``
     * - ``condensation`` (constructor only)
       - ``SchurComplement(..., condensation=...)``
 
 What ``blockamg`` did besides its keys, and where it is now:
 
 * the forcing tolerance, the new-increment detection and the reuse/staleness decisions: ``ForcingTolerance``,
-  ``ComposedLinearSolver`` (``residualGrowthFactor``) and ``RebuildPolicy`` in ``LGMRES``, with the same code;
+  the adapter (``residualGrowthFactor``) and ``RebuildPolicy`` in ``LGMRES``, with the same code;
 * a non-finite right-hand side or diagonal declines the solve (NaN, a cutback), a zero diagonal raises:
-  ``ComposedLinearSolver`` and ``DiagonalScaling``;
-* the warnings (a slow solve, a missed tolerance), the "linear solve" column and its debug lines: ``ComposedLinearSolver``;
+  the adapter and ``DiagonalScaling``;
+* the warnings (a slow solve, a missed tolerance), the "linear solve" column and its debug lines: the adapter;
 * the Schur complement's warnings (a factorization of :math:`A_{bb}` or of :math:`\tilde S` that fails, every dof or
   more than half of them selected, non-positive diagonal entries of :math:`\tilde S`) and its info line:
-  ``SchurComplement``, through the driver's verbosity;
+  ``SchurComplement``, through the adapter's verbosity;
 * the checks of the settings: each component checks its own parameters at construction, and what needs the fields
   (a field tree's backend against the field's dimension, the rigid-body coarse level on the scalar backend) when it
   meets its field. A component on a field the system does not have fails at the set-up, where ``blockamg`` only warned;
@@ -431,8 +459,8 @@ What ``blockamg`` did besides its keys, and where it is now:
 * a default 3D displacement field without node coordinates gets ``AMG()`` on the translations, logged at ``info`` by
   ``blockAMG()``.
 
-API
----
+Python API of the components
+----------------------------
 
 .. automodule:: edelweissfe.linsolve.composition.base
     :members:
@@ -470,5 +498,14 @@ API
 .. automodule:: edelweissfe.linsolve.composition.solver
     :members:
 
-.. automodule:: edelweissfe.linsolve.composition.degradationdumps
+.. automodule:: edelweissfe.linsolve.composition.solvedumps
+    :members:
+
+.. automodule:: edelweissfe.linsolve.composition.twogridcycle
+    :members:
+
+.. automodule:: edelweissfe.linsolve.composition.rigidbodycoarselevel
+    :members:
+
+.. automodule:: edelweissfe.linsolve.composition.ptwogrid
     :members:

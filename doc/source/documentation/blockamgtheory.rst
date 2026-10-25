@@ -1,22 +1,32 @@
-Field-split block AMG: theory and configuration
-================================================
+Field-split block AMG: theory
+=============================
 
-This page documents the ``blockamg`` linear solver
-(:mod:`~edelweissfe.linsolve.blockamg.blockamg`): a *field-split* algebraic-multigrid
+This page explains the method of the ``blockamg`` linear solver: a *field-split* algebraic-multigrid
 preconditioner for the coupled multi-field equation systems EdelweissFE's implicit solvers produce
 -- displacement coupled to a scalar nonlocal (gradient-enhanced) damage field, typically with
 penalty contact, tie constraints and adaptive refinement on top. It is selected like any other
-linear solver, ``linsolver=blockamg``, and is documented separately from the other entries in
-:doc:`linsolvers` because it is the only one with a method of its own to explain rather than a
-library call to name.
+linear solver, ``linsolver=blockamg`` or a ``*linearSolver, type=blockamg`` block (:doc:`linsolvers`).
 
-Everything on this page is implemented literally in
-:mod:`~edelweissfe.linsolve.blockamg.blockamg`, :mod:`~edelweissfe.linsolve.nullspace` and
-:mod:`~edelweissfe.linsolve.base`; the opt-in p-multigrid variant lives in
-:mod:`~edelweissfe.linsolve.composition.ptwogrid`, the rigid-body coarse level (the default for the 3D displacement
-field) in :mod:`~edelweissfe.linsolve.composition.rigidbodycoarselevel`. The solver requires the optional ``amgcl``
-extension (:mod:`edelweissfe.linsolve.amgcl.amgcl`) to be built.
+``blockamg`` is a composed solver (:doc:`composedlinsolvers`): the tree of the preset
+:func:`~edelweissfe.linsolve.composition.presets.blockAMG`, ``LGMRES(DiagonalScaling(Multiplicative([OnField(f,
+M_f), ...])))``. Each step of the method below is one component of that tree:
+:class:`~edelweissfe.linsolve.composition.diagonalscaling.DiagonalScaling` (the equilibration),
+:class:`~edelweissfe.linsolve.composition.combinators.Multiplicative` over
+:class:`~edelweissfe.linsolve.composition.combinators.OnField` corrections (the block Gauss--Seidel sweep),
+:class:`~edelweissfe.linsolve.composition.amg.AMG` and :class:`~edelweissfe.linsolve.composition.twogrid.TwoGrid`
+(the per-field hierarchies, the rigid-body coarse level in
+:mod:`~edelweissfe.linsolve.composition.rigidbodycoarselevel`, the p-multigrid variant in
+:mod:`~edelweissfe.linsolve.composition.ptwogrid`), :class:`~edelweissfe.linsolve.composition.krylov.LGMRES` (the outer
+solve, its tolerance and the reuse of the hierarchies), and
+:class:`~edelweissfe.linsolve.composition.schurcomplement.SchurComplement` (the condensation). The near null-spaces are
+built in :mod:`~edelweissfe.linsolve.nullspace`. It requires the optional ``amgcl`` extension
+(:mod:`edelweissfe.linsolve.amgcl.amgcl`).
 
+The method was first implemented as one monolithic solver, ``BlockAMGSolver``, configured by a JSON file; the
+composition reproduces its outer iterations, rebuild decisions and solutions, and replaced it. The theory below still
+names some of its settings by their former keys (``outerTol``, ``hierarchyStalenessFactor``, ``fieldPreconds``, ...):
+the table in :doc:`composedlinsolvers` ("From the former ``blockamg`` keys to a composed solver") translates each one
+into a data line of ``type=blockamg`` or the component of a ``custom`` tree.
 
 Why a field-split preconditioner
 --------------------------------
@@ -232,8 +242,8 @@ system instead, with the same :math:`M` between two scalings,
 
    A \, (D M^{-1} D) \, y = b, \qquad x = D M^{-1} D \, y,
 
-and its own (right-preconditioned) residual :math:`b - A x` is the true one. The numbers (1)--(7)
-reappear as comments in ``BlockAMGSolver.__call__``.
+and its own (right-preconditioned) residual :math:`b - A x` is the true one. Steps (1)--(7) are the components of
+the ``blockAMG()`` tree, see :doc:`composedlinsolvers`.
 
 
 Anatomy of one solve
@@ -278,7 +288,7 @@ Per-field AMG hierarchies
 Each diagonal block gets its own AMGCL hierarchy, applied on every visit of the sweep to its field
 (once per outer Krylov iteration with ``symmetric = false``; with ``symmetric = true`` the reverse sweep
 revisits all fields but the last) and reused across Newton iterations while it still fits the Jacobian
-(see the reuse rules below). The defaults differ by nodal dimension (:func:`_defaultFieldPrecond` in
+(see the reuse rules below). The defaults differ by nodal dimension (:func:`~edelweissfe.linsolve.composition.amg.defaultFieldTree` in
 the code): a **3D vector** field (e.g. displacement) is stored in :math:`3\times3` nodal blocks in
 float, coarsened by smoothed aggregation with a strong-connection threshold of 0.01 and
 ``estimate_spectral_radius`` (20 power iterations) from the translations of its equilibrated block (see
@@ -765,154 +775,39 @@ one of its own settings (``outerSolver``, ``lgmresM``, ``lgmresK``), which must 
 next solve rather than silently kept.
 
 
-Configuration keys
-------------------
+Configuring blockamg
+--------------------
 
-``blockamg`` is selected after the ``*solver`` keyword. A ``linsolverConfigFile`` is optional: the
-block structure is discovered from the model, so the file carries only solver knobs, and every key is
-optional. A key that is not listed in the tables below raises an error rather than being ignored, and so
-does a value out of its range -- a tolerance outside :math:`(0, 1)`, a negative count -- naming its key,
-when the solver is constructed (on a hot reload, the value is rejected and reported instead).
+``blockamg`` is configured by the data lines of its ``*linearSolver`` block, the arguments of the preset
+:func:`~edelweissfe.linsolve.composition.presets.blockAMG`, and the data lines every linear solver has (verbosity,
+dumps); an unknown data line is an error:
 
 .. code-block:: edelweiss
 
+    *linearSolver, name=fieldSplit, type=blockamg
+    sweeps=1
+    symmetric=false
+    verbosity=info
+
     *solver, solver=NIST, name=theSolver
-    linsolver=blockamg
-    linsolverConfigFile=blockamg.json
+    linsolver=fieldSplit
 
-.. code-block:: json
+.. pprint:: linsolver:blockamg
+    :caption: Data lines:
 
-    {
-        "outerSolver": "amgcl_lgmres",
-        "sweeps": 1,
-        "symmetric": false,
-        "verbosity": "info"
-    }
+Everything else -- another tree for a field, the rebuild policy, the parameters of the forcing tolerance or of LGMRES,
+the options of the rigid-body coarse level, the p-multigrid variant, a Schur complement -- is a ``custom`` solver
+script: copy the preset (:mod:`edelweissfe.linsolve.composition.presets`, a plain function) into the script and change
+what you need. The table in :doc:`composedlinsolvers` maps every former key to its place.
 
-Outer Krylov solve
-~~~~~~~~~~~~~~~~~~
+Default field trees
+~~~~~~~~~~~~~~~~~~~
 
-.. list-table:: Outer Krylov solve keys
-    :width: 100%
-    :widths: 20 10 45
-    :header-rows: 1
-
-    * - Key
-      - Default
-      - Meaning
-    * - ``outerSolver``
-      - ``"amgcl_lgmres"``
-      - Which outer Krylov implementation to use. ``"amgcl_lgmres"`` (AMGCL's own native,
-        OpenMP-threaded LGMRES) is the only accepted value; the former SciPy fallback
-        (``"scipy"``, :func:`scipy.sparse.linalg.gmres`) was removed and raises ``ValueError``.
-    * - ``outerTol``
-      - unset
-      - A fixed outer relative tolerance, switching off Eisenstat--Walker forcing. Unset, ``null``
-        and the literal string ``"adaptive"`` all mean "use forcing"; pass a float to pin a
-        tolerance.
-    * - ``outerRestart``
-      - ``100``
-      - A factor: its product with ``outerMaxiter`` is the iteration cap of a pass (the restart
-        cycle is ``lgmresM + lgmresK``).
-    * - ``outerMaxiter``
-      - ``1``
-      - A factor of the total iteration budget (see above).
-    * - ``lgmresM``
-      - ``50``
-      - Krylov steps per restart cycle, to which the cycle adds one step per
-        augmentation vector (``lgmresK``).
-    * - ``lgmresK``
-      - ``3``
-      - Number of augmentation vectors carried between the restart cycles of
-        one solve.
-    * - ``lgmresAlwaysReset``, ``lgmresResetOnNewIncrement``
-      - ``true``, ``false``
-      - Deprecated (cross-solve recycling was removed): accepted only at these values.
-
-Block preconditioner and per-field hierarchies
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. list-table:: Block preconditioner keys
-    :width: 100%
-    :widths: 20 10 45
-    :header-rows: 1
-
-    * - Key
-      - Default
-      - Meaning
-    * - ``sweeps``
-      - ``1``
-      - Block Gauss--Seidel sweeps per preconditioner application.
-    * - ``symmetric``
-      - ``false``
-      - Follow each sweep by a reverse-order sweep (starting one field before the one just
-        updated). Not required by the GMRES-type outer solve.
-    * - ``useRigidBodyNullspace``
-      - ``true``
-      - Give a vector field *on the scalar backend* the full six-mode (3D) or three-mode (2D)
-        rigid-body near-null-space. Falls back to translations only for a field whose node
-        coordinates are unavailable. Set ``false`` to force translations only unconditionally --
-        worth noticeably more per-field outer iterations on the scalar backend, so only for
-        comparison purposes there. No effect on the block backends (``backendBlockSize`` 2 or 3)
-        the default 2D/3D ``fieldPreconds`` trees use: a block hierarchy takes the translations only, so a
-        block-valued field gets the rotations through the rigid-body coarse level (``rigidBodyCoarseLevel``, the
-        default for the 3D displacement field), whatever this is set to; its AMGCL hierarchy takes the translations with
-        ``blockTranslationNullspace``, on in those trees.
-    * - ``fieldPreconds``
-      - ``{}``
-      - Mapping of field name (e.g. ``"displacement"``, ``"nonlocal damage"``) to an AMGCL
-        preconditioner parameter tree replacing the dimension-based default for that field,
-        including ``backendPrecision`` / ``backendBlockSize`` / ``blockTranslationNullspace`` (see above)
-        and the Chebyshev ``relax.power_iters`` / ``relax.lower`` / ``relax.higher`` settings.
-    * - ``p1FieldNames``
-      - ``[]``
-      - **Opt-in.** Vector fields to precondition with
-        the p-multigrid two-grid variant instead of the single-level default; see below.
-    * - ``p1Nu``
-      - ``1``
-      - p-multigrid: fine Chebyshev sweeps before and after the coarse-grid correction.
-    * - ``p1NuPre``, ``p1NuPost``
-      - ``p1Nu``
-      - p-multigrid: separate pre- and post-smoothing sweep counts, e.g. ``0`` / ``1`` for a cycle
-        that starts with the coarse-grid correction and ends on one smoothing sweep.
-    * - ``p1FineDegree``
-      - ``5``
-      - p-multigrid: fine Chebyshev polynomial degree.
-    * - ``p1FineBlockSize``
-      - ``1``
-      - p-multigrid: storage of the fine operator, ``1`` (scalar entries) or ``3`` (node-wise
-        :math:`3\times 3` blocks, 3D fields only); see below.
-    * - ``p1FineValueType``
-      - ``"double"``
-      - p-multigrid: value type of the fine operator for the smoother and residual, ``"double"`` or
-        ``"float"``; see below.
-    * - ``p1CoarseValueType``
-      - ``"double"``
-      - p-multigrid: value type of the coarse AMGCL hierarchy, ``"double"`` or ``"float"`` (AMGCL's
-        single-precision backend, setup included).
-    * - ``p1FineSpectralRadiusReuse``
-      - ``false``
-      - p-multigrid: estimate the fine smoother's spectral radius in full on a field's first build
-        only, and only re-check it on later rebuilds; see below.
-    * - ``p1CoarsePrecond``
-      - ``null``
-      - p-multigrid: the coarse level's AMGCL preconditioner tree. Unset, it is smoothed
-        aggregation (``eps_strong`` 0.01) with a degree-4 Chebyshev smoother and ``npre`` =
-        ``npost`` = 2.
-    * - ``rigidBodyCoarseLevel``
-      - unset
-      - The vector fields whose hierarchy starts with a coarse level of all their rigid-body modes, rotations included.
-        Unset (or ``null``): the 3D displacement field, if it has the default tree; ``false``: none; a field name, a
-        list or a JSON object with options: exactly these fields, any 2D or 3D vector field. See
-        :ref:`blockamg-rigid-body-coarse-level`.
-    * - ``schurComplement``
-      - unset
-      - **Opt-in.** Condense the dofs the markers select exactly, and build the field split on the approximate Schur
-        complement of the others; see :ref:`blockamg-schur-complement`.
-
-Overriding a field's parameter tree replaces the default outright, so start from the one that applies
+``AMG(tree=...)`` and ``TwoGrid(..., tree=...)`` take a field's AMGCL parameter tree, plus ``backendPrecision``,
+``backendBlockSize`` and ``blockTranslationNullspace``, which select how the hierarchy is built. A tree given replaces
+the default outright, so start from the one that applies
 and change only what is intended. The defaults are, by the field's nodal dimension
-(:func:`~edelweissfe.linsolve.blockamg.blockamg._defaultFieldPrecond` in the code):
+(:func:`~edelweissfe.linsolve.composition.amg.defaultFieldTree` in the code):
 
 .. code-block:: json
 
@@ -966,8 +861,8 @@ and change only what is intended. The defaults are, by the field's nodal dimensi
         }
     }
 
-The 3D displacement field with the default tree also starts with the rigid-body coarse level
-(``rigidBodyCoarseLevel``), configured by the same tree: its ``relax`` and ``npre``/``npost`` are the fine smoother of
+The 3D displacement field of the ``blockamg`` preset gets the rigid-body coarse level
+(``TwoGrid(coarseSpace=RigidBodyModes())``), configured by the same tree: its ``relax`` and ``npre``/``npost`` are the fine smoother of
 the rigid-body coarse level, its ``coarsening`` the aggregation of that level, and the whole tree the AMGCL hierarchy
 below it. The 2D tree differs
 from the 3D one only in ``backendPrecision``/``backendBlockSize``: this wrapper has no float 2x2 backend. A vector field of a dimension this solver has never been tuned for (anything but
@@ -982,176 +877,30 @@ gets the plain, unembellished scalar tree, which predates the vector recipe abov
 re-tuned against it. Note that AMGCL silently ignores parameter keys it does not recognise (warning
 only on stderr), so check its stderr if an override appears to do nothing.
 
-Adaptive tolerance and true-residual enforcement
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. list-table:: Tolerance keys
-    :width: 100%
-    :widths: 20 10 45
-    :header-rows: 1
-
-    * - Key
-      - Default
-      - Meaning
-    * - ``etaMin``
-      - ``1e-4``
-      - Lower clamp on the Eisenstat--Walker forcing tolerance, positive.
-    * - ``etaMax``
-      - ``1e-3``
-      - Upper clamp on the forcing tolerance, and the tolerance used whenever there is no usable
-        residual history (first solve, or the solve right after a detected new increment).
-    * - ``ewGamma``
-      - ``0.9``
-      - The forcing scheme's :math:`\gamma`.
-    * - ``ewAlpha``
-      - ``1.618033988749895``
-      - The forcing scheme's :math:`\alpha`, the golden ratio (the classic "choice 2" value).
-    * - ``trueResidualMaxContinuations``
-      - ``2``
-      - Only on the scaled system (``krylovOnScaledSystem = true``); no effect under the defaults,
-        where the outer solve already converges the true residual itself. How many warm-restart
-        continuations may be spent enforcing the requested tolerance on the true residual there.
-        ``0`` disables enforcement.
-    * - ``krylovOnScaledSystem``
-      - ``false``
-      - ``false`` (default) runs the outer Krylov solve on the unscaled system, preconditioned by
-        :math:`x = D M^{-1} (D r)` with the same block preconditioner on :math:`D A D`: the residual it
-        converges is then the true one, and the gap compensation and the continuations are bypassed.
-        At the same requested tolerance it does not over-solve; it accepts on the residual in the
-        fields' own units (see the true-residual enforcement above). ``true`` runs it on the scaled
-        system instead, where the gap compensation below becomes relevant.
-    * - ``gapCompensatedTolerance``
-      - ``false``
-      - **Opt-in**, and only relevant with ``krylovOnScaledSystem = true``. Pre-compensate the first
-        pass for the scaled-to-true residual gap so that it lands on target without a continuation.
-        Read the note above before enabling it: the per-increment win is largely given back per unit
-        of simulated time.
-    * - ``gapSafetyFactor``
-      - ``0.3``
-      - Safety factor on the gap-compensated tolerance; only used when the above is enabled. Smaller
-        values solve more accurately and behave more like the uncompensated scaled-system path.
-    * - ``gapMaxFactor``
-      - ``1e3``
-      - Upper bound on the learned scaled-to-true residual gap, so that one non-converged solve cannot
-        drive every following first pass to an unmeetable tolerance.
-
-Hierarchy reuse
-~~~~~~~~~~~~~~~
-
-.. list-table:: Hierarchy reuse keys
-    :width: 100%
-    :widths: 20 10 45
-    :header-rows: 1
-
-    * - Key
-      - Default
-      - Meaning
-    * - ``residualGrowthFactor``
-      - ``4.0``
-      - A solve whose :math:`\lVert b \rVert` exceeds this multiple of the previous solve's is
-        treated as the first of a new increment: the forcing tolerance resets to
-        ``etaMax`` and the hierarchies are refreshed.
-    * - ``hierarchyStalenessFactor``
-      - ``3.0``
-      - Refresh the hierarchies before the *next* solve if this solve's outer iteration count
-        exceeded both this factor times and 15 more than that of the solve the hierarchies were built
-        for. A cap hit always refreshes them.
-    * - ``refreshOnNewIncrement``
-      - ``true``
-      - Refresh the hierarchies on a residual jump (a new increment). With ``false`` the
-        first Newton iteration of an increment keeps the standing hierarchies; the layout/pattern
-        checks and ``hierarchyStalenessFactor`` still apply.
-    * - ``reuseHierarchy``
-      - ``true``
-      - Reuse the hierarchies across solves until a rebuild trigger fires. With ``false`` every
-        solve builds them for its own matrix (logged as ``rebuilt(always)``): more builds, but no
-        solve on hierarchies built for an older Jacobian. Measured faster on a large contact model
-        with live adaptive refinement, where the reused hierarchies needed several times the outer
-        iterations of fresh ones.
-    * - ``hierarchyDropTol``
-      - ``0.0`` (off)
-      - Build each field's AMG hierarchy from a *sparsified* copy of its diagonal block: drop
-        off-diagonal :math:`a_{ij}` where :math:`|a_{ij}| < \text{tol}\cdot\sqrt{|a_{ii}| |a_{jj}|}`.
-        Only the preconditioner is sparsified -- the operator the Krylov method applies is
-        untouched -- so this cannot change the converged solution, only the iteration count needed
-        to reach it. Worth a substantial speedup on the linear solve on operators that store many
-        numerically negligible entries (meshfree RKPM discretisations are the motivating case). Off
-        by default because the useful range is operator-dependent.
-    * - ``hierarchyDropLumping``
-      - ``false``
-      - When ``hierarchyDropTol`` drops an entry, add it onto its row's diagonal instead of
-        discarding it, so row sums are preserved exactly and the constant near-null-space vector
-        survives filtering -- the AMG literature's preferred filtered-matrix construction. Measured
-        neutral at best on operators tested so far (no change at ``1e-4``, measurably *slower* at
-        ``1e-2``, with outer GMRES iteration count unchanged either way): the whole penalty is the
-        extra pass over the matrix. Off by default; plain truncation is simpler and faster.
-
-Diagnostics
-~~~~~~~~~~~
-
-.. list-table:: Diagnostic keys
-    :width: 100%
-    :widths: 20 10 45
-    :header-rows: 1
-
-    * - Key
-      - Default
-      - Meaning
-    * - ``verbosity``
-      - ``"warning"``
-      - One of ``"silent"``, ``"warning"``, ``"info"``, ``"debug"``; see below.
-    * - ``hotReloadConfigFile``
-      - unset
-      - Path of this very configuration file: every solve rereads it when it changed and applies its
-        settings (validated as a whole; rolled back if the next hierarchy build fails with them), to try
-        settings on a running analysis.
-    * - ``warnOuterIterationsThreshold``
-      - ``100``
-      - Outer iteration count past which a solve emits a warning even at the default verbosity --
-        a preconditioner-quality red flag.
-    * - ``dumpOnDegradationDir``
-      - unset
-      - Directory (created if missing) to write degraded solves' systems to. Unset disables the
-        whole mechanism, which then costs nothing.
-    * - ``dumpOnDegradationThreshold``
-      - ``warnOuterIterationsThreshold``
-      - Outer iteration count above which a solve's system is dumped. Defaulting to the warning
-        threshold makes a dump and its warning fire on exactly the same solves. A solve that stopped at
-        the iteration cap and missed its tolerance is dumped whatever the threshold.
-    * - ``dumpOnDegradationMaxDumps``
-      - ``10``
-      - Process-wide ceiling on the number of dumped systems, counting context solves. A disk-space
-        guard: a badly degrading run could otherwise trigger on every remaining solve.
-    * - ``dumpOnDegradationContextSolves``
-      - ``0``
-      - How many solves immediately *preceding* a degraded one to dump as well.
-
 Verbosity levels
 ~~~~~~~~~~~~~~~~
 
-Messages go through the shared :class:`~edelweissfe.journal.journal.Journal`, and this level decides
-whether the solver attempts to log at all -- the Journal's own level then decides whether the attempt
-is shown.
+Messages go through the shared :class:`~edelweissfe.journal.journal.Journal`, and the data line ``verbosity`` decides
+whether the solver attempts to log at all -- the Journal's own level then decides whether the attempt is shown.
 All messages are nested inside the Newton iteration they belong to; warnings are marked ``⚠``.
 
-``"silent"``
+``silent``
     Nothing at all.
 
-``"warning"`` (default)
+``warning`` (default)
     Only abnormal conditions, so a healthy run stays quiet: an outer iteration count past
-    ``warnOuterIterationsThreshold``, a true residual still above the requested tolerance after every
-    continuation (saying whether an outer pass stopped at the iteration cap), and any degradation dump
+    ``warnOuterIterations``, a true residual still above the requested tolerance after every
+    continuation (saying whether an outer pass stopped at the iteration cap), and any dump
     written. A pass that stopped at the cap but whose solve still met the tolerance, after a continuation,
     is not reported; the hierarchies are rebuilt all the same.
 
-``"info"``
+``info``
     Turns on the "linear solve" column of the nonlinear solver's per-iteration table: outer iteration
     count, achieved true residual (and whether it met the requested tolerance) and number of
-    continuations of each solve; and, with ``hierarchyDropTol`` set, one line per hierarchy refresh
-    reporting how much of each diagonal block the sparsification dropped. This is the level to run at
+    continuations of each solve; and the structure of the solver at its first solve. This is the level to run at
     when first characterising a model on ``blockamg``.
 
-``"debug"``
+``debug``
     Adds, per solve, whether the hierarchies were rebuilt (and why) or reused, the requested
     tolerance and the wall-clock, and one line per true-residual continuation attempt.
 
@@ -1165,15 +914,14 @@ deciding whether a run is dominated by hierarchy builds or by outer iterations.
 Capturing degraded solves
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 
-``dumpOnDegradationDir`` writes the raw ``(A, b)`` of a solve -- before equilibration, in the same
-format the ``matrixdump`` solver uses, so the same offline tooling reads either -- together with the
-field-block layout active for that solve, which is what a replay needs in order to go back through
-this same block preconditioner without a live model. Unlike ``matrixdump``, which dumps at ordinals
-fixed *before* the run, this triggers on the solve's own outcome, so a pathological system (a
-late-increment, heavily damaged Jacobian, say) can be captured without knowing in advance which solve
-will misbehave.
+``dumps=slow`` writes the raw ``(A, b)`` of a solve -- before equilibration -- together with the field-block layout
+active for that solve, which is what a replay needs in order to go back through this same block preconditioner without
+a live model. Unlike ``dumps=every`` or a list of solve numbers, fixed *before* the run, ``slow`` triggers on the
+solve's own outcome (more outer iterations than ``warnOuterIterations``, or a cap hit short of the tolerance), so a
+pathological system (a late-increment, heavily damaged Jacobian, say) can be captured without knowing in advance which
+solve will misbehave.
 
-``dumpOnDegradationContextSolves`` exists because a single snapshot cannot distinguish "this operator
+``dumpContextSolves`` exists because a single snapshot cannot distinguish "this operator
 is intrinsically hard" from "this solve's own carried-over state degraded independently of the
 operator" -- such as a reused, now-stale hierarchy. Both look identical from
 the matrix alone, and a fresh solver replaying the matrix on its own can converge in a fraction of
@@ -1183,8 +931,8 @@ lets an offline replay feed one persistent solver instance the same solves in th
 A ``manifest.jsonl`` in the dump directory records, per dumped solve, its role (trigger or context),
 its field blocks, and the solver state at that point: outer iterations, achieved true residual,
 requested tolerance, continuations, and whether the solve refreshed, saw a pattern change, or was
-detected as a new increment. The staleness question can often be answered from the manifest alone,
-without a replay.
+detected as a new increment (:ref:`composed-solve-dumps`). The staleness question can often be answered from the
+manifest alone, without a replay.
 
 
 p-multigrid (opt-in)
@@ -1480,24 +1228,13 @@ What it does not fix:
 Configuration
 ~~~~~~~~~~~~~
 
-``rigidBodyCoarseLevel`` (see the key table above) takes one of three forms:
-
-* unset, or ``null``: the default, the 3D displacement field with the default options, if it has blockamg's default
-  tree (an explicit tree is kept as written, see above);
-* ``false``: no field -- the one way to switch it off; ``true``, an empty list and an empty object are refused, so
-  that off has one spelling;
-* a field name or a list of them, as ``p1FieldNames``, or a JSON object mapping a field name to ``true`` (the default
-  options) or to an object of options: exactly the fields named, any 2D or 3D vector field, the coarse level added to
-  an explicit tree too.
-
-A hot reload may change the form (``null`` returns to the default). A field named here must be a 2D or 3D vector
-field on a block backend (``backendBlockSize`` 2 or 3, as in the default trees); a scalar field, a field on the
-scalar backend, and a field that also has the p-two-grid (``p1FieldNames``) are rejected, and so is the key inside a
-field's tree. A named field the system does not have is unused, with a warning at the first build, so that a misspelt
-name does not switch the coarse level off unnoticed. The field's tree must smooth with a Chebyshev polynomial
+The ``blockamg`` preset gives the 3D displacement field the rigid-body coarse level; ``rigidBodyCoarseLevel=false``
+switches it off. Any other 2D or 3D vector field gets it in a ``custom`` solver script,
+``OnField(name, TwoGrid(coarseSpace=RigidBodyModes(...)))``. The field must be on a block backend
+(``backendBlockSize`` 2 or 3, as in the default trees), and its tree must smooth with a Chebyshev polynomial
 (``relax.type`` ``chebyshev``, without ``relax.scale``, ``relax.power_iters`` at least 1) and coarsen by smoothed
-aggregation, as the default trees do. All of this is checked for the fields named when the solver is created, and for
-a field whose tree is the default one again at the first solve, when its dimension is known. The options of a field:
+aggregation, as the default trees do; ``TwoGrid`` checks this when it meets its field, and the parameters of
+``RigidBodyModes`` at construction. The options of ``RigidBodyModes``:
 
 ``prolongation`` (``"smoothed"``)
     ``"smoothed"``: :math:`P = (I - \omega D_F^{-1} \hat A_F) P^{\mathrm{tent}}`. ``"tentative"``:
@@ -1508,7 +1245,7 @@ a field whose tree is the default one again at the first solve, when its dimensi
     setup included) for half its memory, at the price of more outer iterations.
 ``fineSpectralRadiusReuse`` (``false``)
     Estimate the fine smoother's spectral radius in full only on a field's first build, and on every later rebuild
-    only re-check it, as ``p1FineSpectralRadiusReuse`` does for the p-two-grid: 15 power iterations continued from the
+    only re-check it, as ``P1Interpolation(fineSpectralRadiusReuse=True)`` does for the p-two-grid: 15 power iterations continued from the
     previous build's dominant vector, instead of the tree's ``relax.power_iters`` (300 in the default trees) from a
     fixed start vector. The full estimate is the largest part of the setup, 7.6 of 10.7 s on the elastic tunnel
     system. It is safe where the operator changes gradually between rebuilds, as over Newton iterations and
@@ -1517,7 +1254,7 @@ a field whose tree is the default one again at the first solve, when its dimensi
     estimate again, because a radius too small for the operator would make the smoother amplify its highest modes. An
     operator that softened keeps the previous, larger radius, which costs the smoother some efficiency at the low end
     of its window. The cache is dropped when the model changes (e.g. after adaptive refinement) and when a hot reload
-    applies.
+    replaces the tree.
 
 .. _blockamg-schur-complement:
 
@@ -1639,19 +1376,17 @@ coarse level and the P1 maps of p-multigrid are restricted to the remaining node
 corner). Between rebuilds, the sweep keeps the couplings of the standing :math:`\tilde S`, while :math:`A_{bb}`,
 :math:`A_{bk}` and :math:`A_{kb}` are those of the current matrix: unlike without condensation, where the couplings
 between the fields are taken from the current matrix on every solve. The outer Krylov solve runs on :math:`A`
-itself, so ``krylovOnScaledSystem`` cannot be combined with any condensation (one of ``schurComplement``, or one
-handed over directly to the constructor), at construction or by a hot reload. ``schurComplement`` is fixed at
-construction: a hot reload that changes it is rejected.
+itself: the Schur complement sits under the outer Krylov solve, ``LGMRES(SchurComplement(...))``.
 
 **Two sweeps.** The sweep in residual-correction form makes ``sweeps = 2`` exactly two steps of the stationary
 iteration :math:`z \leftarrow z + M^{-1} (r - \tilde S z)` with the one-sweep preconditioner :math:`M^{-1}`,
 which on bar systems was found a good balance between AMG cycles and outer iterations; ``sweeps = 1`` is
 cheaper per iteration and needs more of them.
 
-**The direct solver.** ``directSolver`` names any registered linear solver that factorizes once for several
-right-hand sides (``factorize``/``solveFactorized``): ``superlu`` or ``pardiso``; one that does not (``klu``,
-``mumps``, ``petsclu``, ``amgcl``, ``blockamg``) is rejected when the solver is created. Every outer iteration solves
-with :math:`A_{bb}`, so the cost of a back substitution counts most:
+**The direct solver.** ``solveA_bb=DirectSolver(backend)`` takes any registered direct solver backend; ``superlu``
+and ``pardiso`` factorize once for several right-hand sides, the others (``klu``, ``mumps``, ``petsclu``,
+``umfpack``, ``panuapardiso``) factorize again for every one, which makes them a poor choice here. Every outer
+iteration solves with :math:`A_{bb}`, so the cost of a back substitution counts most:
 for the block-tridiagonal chains of bars, ``superlu`` (the default) is the cheaper one (with ``blockFactors =
 "LU"``, twice per iteration). A large compact zone (a
 softening zone of a 3D mesh) shifts the weight to the exact correction of :math:`\tilde S`, which solves for many
@@ -1660,12 +1395,16 @@ that condensation pays only where AMG struggles with the zone: plain ``blockamg`
 gradient-enhanced damage band well, and the condensation then costs more per iteration and per rebuild of
 :math:`\tilde S` (rebuilt whenever the zone grows) than it saves in iterations.
 
-``schurComplement`` (unset: no condensation; see the key table above) is a JSON object with these keys:
+The condensation is a ``custom`` solver script, ``LGMRES(SchurComplement(condense=[...], preconditionS=...))``
+(see :doc:`linsolvers` for a complete one); the arguments of
+:class:`~edelweissfe.linsolve.composition.schurcomplement.SchurComplement`:
 
-``markers`` (required)
-    A list of markers, each a JSON object with a ``type`` and the options of a ``>>marker`` line of
-    ``*modelModifier, type=hAdaptivity``, e.g. ``{"type": "fieldOutput", "fieldOutput": "damage",
-    "threshold": 0.05, "halo": 1}``. Sets, surfaces and fieldOutputs they name must exist.
+``condense`` (required)
+    A list of markers, created through the marker registry from the options of a ``>>marker`` line of
+    ``*modelModifier, type=hAdaptivity``, e.g. ``getMarkerClass("fieldOutput").fromOptions({"fieldOutput":
+    "damage", "threshold": 0.05, "halo": 1})``. Sets, surfaces and fieldOutputs they name must exist.
+``preconditionS`` (required)
+    The preconditioner of :math:`\tilde S`, e.g. ``DiagonalScaling(Multiplicative(...))``.
 ``approximation`` (``"local"``)
     ``"local"``: :math:`\tilde S` as above. ``"none"``: :math:`\tilde S = A_{kk}`, the coupling through :math:`b`
     ignored (for comparison).
@@ -1677,15 +1416,15 @@ gradient-enhanced damage band well, and the condensation then costs more per ite
 ``blockFactors`` (``"U"``)
     ``"U"``: the block upper triangular factor, one solve with :math:`A_{bb}` per application. ``"LU"``: the block
     LU factorization, two solves.
-``directSolver`` (``{"linsolver": "superlu"}``)
-    ``{"linsolver": <name>, "options": {...}}``, the solver of :math:`A_{bb}`.
+``solveA_bb`` (``DirectSolver("superlu")``)
+    The solver of :math:`A_{bb}`.
 
 A worked example
 ----------------
 
 The whole method, written out with NumPy, SciPy and one AMGCL hierarchy per field on a small
 displacement / damage system -- equilibration, field split, per-field AMG, one block Gauss--Seidel sweep as
-the preconditioner, and the outer Krylov solve -- and the same solve with ``BlockAMGSolver``. It is a test
+the preconditioner, and the outer Krylov solve -- and the same solve as a composed solver. It is a test
 of the test suite; ``displacementDamageSystem``, ``ExactFieldSolve`` and ``hierarchyLevels`` come from the
 suite's ``tests/_blockamgsystems.py``:
 
@@ -1696,9 +1435,9 @@ suite's ``tests/_blockamgsystems.py``:
 Why the defaults are what they are
 -----------------------------------
 
-The values documented in the key tables above are not a separate "recommended configuration" layered
-on top of different shipped defaults -- they *are* the code's defaults (:class:`BlockAMGSolver`'s
-constructor). They are the winner of a systematic comparison, against the **former** defaults, on two
+The defaults of the ``blockamg`` preset are not a separate "recommended configuration" layered
+on top of different shipped defaults -- they *are* the code's defaults (those of
+:func:`~edelweissfe.linsolve.composition.presets.blockAMG` and of its components). They are the winner of a systematic comparison, against the **former** defaults, on two
 captured models (a gradient-enhanced damage cylinder through its damage onset, and a
 contact anchor model with many multi-point-constraint slaves):
 
@@ -1768,7 +1507,7 @@ Practical guidance
 
 * Reach for ``blockamg`` when a direct factorization no longer fits in memory, or when the
   factorization dominates the run. Below that, measure against ``pardiso`` rather than assuming.
-* Run the first characterisation at ``verbosity = "info"`` and read the job's performance table.
+* Run the first characterisation at ``verbosity=info`` and read the job's performance table.
   Outer iteration counts up to the low hundreds were the expected regime at the former defaults; with
   the current ones, mostly 5--50, with the hardest damage-onset solves reaching the cap; counts
   triggering the warning threshold, or cap hits, repeatedly point at the preconditioner, not the
@@ -1777,23 +1516,19 @@ Practical guidance
   reproducible at a fixed thread count up to last-bit summation order; across thread counts the
   hierarchies differ slightly (see the Chebyshev power-iteration discussion above), and lowering the
   power-iteration setting of the vector-field default makes that difference large.
-* Reach for the knobs in roughly this order: ``fieldPreconds`` for a field whose hierarchy is clearly
-  the weak one, then ``sweeps``/``symmetric`` for the sweep itself, then the tolerance keys.
-  ``p1FieldNames`` is an alternative per-field preconditioner, see above.
-* The rigid-body coarse level is on for the 3D displacement field by default: name a 2D displacement field in
-  ``rigidBodyCoarseLevel`` to give it the coarse level too, and switch it off (``false``) on a model whose solves
+* Reach for the knobs in roughly this order: the tree of a field whose hierarchy is clearly the weak one (a
+  ``custom`` script), then ``sweeps``/``symmetric`` for the sweep itself, then the tolerance.
+  ``TwoGrid(coarseSpace=P1Interpolation())`` is an alternative per-field preconditioner, see above.
+* The rigid-body coarse level is on for the 3D displacement field by default: give a 2D displacement field the
+  coarse level in a ``custom`` script, and switch it off (``rigidBodyCoarseLevel=false``) on a model whose solves
   converge in a few outer iterations without it, see above.
-* When a run degrades reproducibly, capture it with ``dumpOnDegradationDir`` plus a few
-  ``dumpOnDegradationContextSolves`` rather than trying to reproduce it by rerunning the simulation.
+* When a run degrades reproducibly, capture it with ``dumps=slow`` plus a few ``dumpContextSolves`` rather than trying
+  to reproduce it by rerunning the simulation.
 
 .. note::
-   The solver's constructor additionally accepts a ``p1Maps`` argument, taking precomputed
-   p-multigrid topology maps directly, and a ``nodeCoordinates`` argument, taking the node coordinates
-   of fields (for the rigid-body coarse level, and for ``useRigidBodyNullspace`` on the scalar backend).
-   They are deliberately not reachable from a ``linsolverConfigFile`` -- they exist for a script that
-   constructs :class:`~edelweissfe.linsolve.blockamg.blockamg.BlockAMGSolver` itself and already knows
-   the topology or the coordinates, e.g. when replaying a captured system offline. Live runs use
-   ``p1FieldNames`` and read the coordinates from the model.
+   ``ComposedLinearSolver(tree, p1Maps=..., nodeCoordinates=...)`` takes precomputed p-multigrid topology maps and
+   node coordinates of fields directly, for a script that drives a composed solver itself and already knows them, e.g.
+   when replaying a captured system offline. Live runs read both from the model.
 
 
 Further reading

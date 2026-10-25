@@ -231,7 +231,7 @@ class NEST(NIST):
         # the datalines of the *solver keyword belong exclusively to this solver, so unknown entries
         # are user typos and must not be swallowed
         self._updateOptions(kwargs, journal, strict=True)
-        #: The *linearSolver blocks of the input file by name, which linsolver= may name (none without an input file).
+        #: The ``*linearSolver`` blocks of the input file by name, which linsolver= may name (none without an input file).
         self.linearSolverDefinitions = jobInfo.get("linearSolvers", {})
 
     def beginStep(

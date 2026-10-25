@@ -1,226 +1,237 @@
 Linear solvers
 ==============
 
-Linear solvers are defined in EdelweissFE after the ``*solver`` keyword using ``linsolver`` and an optional configuration file ``linsolverConfigFile`` as a data line.
-The ``linsolverConfigFile`` needs to be in ``.json`` format.
-
-Choose a linsolver after the ``*solver`` keyword:
+A nonlinear solver solves one linear system per Newton iteration. Which linear solver it uses is its ``linsolver``
+option: the name of a ``*linearSolver`` block, or a type of linear solver with its defaults.
 
 .. code-block:: edelweiss
 
     *solver, solver=NIST, name=theSolver
     linsolver=pardiso
 
-.. list-table:: Currently available linear solvers
+A ``*linearSolver`` block defines a linear solver with options, as ``*material`` defines a material: the keyword line
+holds only its identity, ``name`` and ``type``; the data lines are the options of that type, one ``key=value`` per line
+(an option the type does not have is an error):
+
+.. code-block:: edelweiss
+
+    *linearSolver, name=fast, type=blockamg
+    rigidBodyCoarseLevel=false
+    verbosity=info
+
+    *solver, solver=NIST, name=theSolver
+    linsolver=fast
+
+A type name in ``linsolver=`` means that type with its defaults, so a block must not be named like a type.
+``linsolver`` unset means ``pardiso`` if it was built, else ``superlu``. From Python, the same linear solver is
+``getLinSolverByName("blockamg", {"rigidBodyCoarseLevel": False})`` (:mod:`edelweissfe.config.linsolve`).
+
+.. list-table:: The types of linear solver
     :width: 100%
-    :widths: 15 1 25
+    :widths: 15 10 45
     :header-rows: 1
 
-    * - Name
-      - Direct solver
-      - Relevant module
+    * - Type
+      - Direct
+      - What it is
     * - ``superlu``
       - ✓
-      - ``scipy.sparse.linalg.spsolve``
+      - SciPy's sparse LU (SuperLU), always available
     * - ``umfpack``
       - ✓
-      - ``scipy.sparse.linalg.spsolve``
+      - UMFPACK through SciPy (SuperLU if ``scikit-umfpack`` is missing)
     * - ``pardiso``
       - ✓
-      - ``edelweissfe.linsolve.pardiso.pardiso``
+      - Intel MKL PARDISO (``edelweissfe.linsolve.pardiso.pardiso``), the default
     * - ``panuapardiso``
       - ✓
-      - ``edelweissfe.linsolve.panuapardiso.panuapardiso``
+      - Panua PARDISO (``edelweissfe.linsolve.panuapardiso.panuapardiso``)
     * - ``klu``
       - ✓
-      - ``edelweissfe.linsolve.klu.klu``
+      - SuiteSparse's KLU (``edelweissfe.linsolve.klu.klu``)
     * - ``petsclu``
       - ✓
-      - ``edelweissfe.linsolve.petsclu.petsclu``
+      - PETSc's LU, through ``petsc4py``
     * - ``mumps``
       - ✓
-      - ``edelweissfe.linsolve.mumps.mumps``
-    * - ``amgcl``
-      - ✗
-      - ``edelweissfe.linsolve.amgcl.amgcl``
+      - MUMPS, through its Python bindings
     * - ``blockamg``
       - ✗
-      - ``edelweissfe.linsolve.blockamg.blockamg``
-    * - ``matrixdump``
+      - the preset ``blockAMG()``: LGMRES around a block Gauss--Seidel sweep over the fields, with one AMG hierarchy
+        (or two-grid cycle) per field
+    * - ``custom``
       - —
-      - ``edelweissfe.linsolve.matrixdump.matrixdump``
-    * - ``script:<file>.py[:<name>]``
-      - —
-      - ``edelweissfe.linsolve.composition`` (a composed solver, see below)
+      - a composed solver defined by you, in a Python script (see :doc:`composedlinsolvers`)
 
-How the available solvers relate
---------------------------------
+One adapter for every type
+--------------------------
 
-Every entry in the table above is selected the same way (``linsolver=<name>``) and presents the same
-``(A, b) -> x`` interface, but they fall into three groups that differ in what they actually do:
+Every type is a composed solver (:doc:`composedlinsolvers`) behind one adapter,
+:class:`~edelweissfe.linsolve.composition.solver.ComposedLinearSolver`: ``blockamg`` is the tree of the ``blockAMG()``
+preset, and a direct solver is a tree of one leaf, ``type=pardiso`` being ``DirectSolver("pardiso")``. What the adapter
+does therefore works the same for every type, with the same data lines (:class:`~edelweissfe.linsolve.types.LinearSolverSchema`):
 
-**Direct solvers** factorize the matrix and back-substitute: ``superlu`` and ``umfpack`` (SciPy,
-always available), ``pardiso`` (Intel MKL, the production default), ``panuapardiso``, ``klu``,
-``petsclu`` and ``mumps``. They ignore ``linsolverConfigFile`` (except ``pardiso``, which reads a
-single ``reuseSymbolicFactorization`` flag). Pick one of these unless the factorization has become
-the run's bottleneck or exceeds available memory.
+* ``verbosity``: ``warning`` (default; a warning for a slow or unconverged solve), ``silent``, ``info`` (one line per
+  solve, the structure of the solver, and for a Krylov solver the "linear solve" column of the nonlinear solver's
+  table) or ``debug``;
+* ``warnOuterIterations``: a Krylov solve with more outer iterations than this (default 100) is warned about, and is a
+  slow solve;
+* ``residualGrowthFactor``: a right-hand side this many times larger than the previous one marks a new increment
+  (default 4);
+* ``dumps``: which solves are written to disk for an offline replay -- ``none`` (default), ``slow`` (above
+  ``warnOuterIterations``, or stopped at the iteration cap short of the tolerance), ``every``, or the numbers of the
+  solves separated by spaces, e.g. ``dumps=12 13 14``; with ``dumpDirectory`` (default ``linsolveDumps``), ``maxDumps``
+  (default 10, a disk guard for the whole run) and ``dumpContextSolves`` (the solves before a dumped one, dumped with
+  it). The format is described in :ref:`composed-solve-dumps`; ``scripts/benchmark_linsolve.py`` replays a dumped
+  sequence through direct solver variants.
 
-**Iterative solvers** never factorize the full matrix, trading exactness for O(n) memory:
+The dumps are what ``matrixdump`` did before (a sequence of authentic systems, replayed offline so that every solver
+variant sees the same input), with the trigger of the former degradation dumps (``slow``).
 
-* ``amgcl`` -- the AMGCL library's own solver/preconditioner combinations, configured through its
-  JSON parameter tree.
-* ``blockamg`` -- a *field-split* variant for coupled multi-field models: one AMG hierarchy per
-  physical field (e.g. displacement, nonlocal damage), combined by a block Gauss--Seidel sweep to
-  precondition an outer GMRES/LGMRES. This is the route to problem sizes a direct factorization
-  cannot reach at all.
-  With ``schurComplement``, it condenses selected dofs exactly first, for dofs on which AMG alone
-  stalls, such as those of bars tied to their host elements by bond springs. The hierarchy of a 3D
-  displacement field starts with a coarse level of its rigid-body modes, rotations included
-  (``rigidBodyCoarseLevel``), which bending-dominated structures need.
+A direct solver keeps its backend for the whole step: PARDISO with ``reuseSymbolicFactorization=true`` keeps its
+reordering and symbolic factorization while only the values of the matrix change. A singular matrix gives NaN, which
+the nonlinear solver turns into a cutback.
 
-**A diagnostic wrapper**, which does not solve anything itself:
+How the types relate
+--------------------
 
-* ``matrixdump`` -- writes every :math:`(A, b)` pair it is handed to disk, then hands the solve to
-  a real solver chosen with its ``delegate`` option, so the simulation proceeds normally. The point
-  is to lift solver comparisons out of the finite element run: rerunning a simulation per solver
-  variant is slow and not like-for-like (a variant that changes the Newton iterates changes the
-  *sequence* of matrices being compared). Dump one authentic sequence once, then replay it offline
-  with ``scripts/benchmark_linsolve.py`` so every variant sees byte-identical input. Use it to
-  investigate solver performance, never in a production run.
+**Direct solvers** factorize the matrix and back-substitute: ``superlu`` and ``umfpack`` (SciPy, always available),
+``pardiso`` (Intel MKL, the production default), ``panuapardiso``, ``klu``, ``petsclu`` and ``mumps``. Pick one of
+these unless the factorization has become the run's bottleneck or exceeds available memory.
 
-Several linsolvers accept an optional configuration file ``linsolverConfigFile`` (a ``.json`` file), among them ``amgcl``, ``blockamg`` and ``matrixdump``; the direct solvers ignore it (``pardiso`` additionally reads a single ``reuseSymbolicFactorization`` flag). See each solver's own section below for its configuration format.
+**Iterative solvers** never factorize the full matrix, trading exactness for O(n) memory. ``blockamg`` is the
+field-split solver for coupled multi-field models: one AMG hierarchy per physical field (e.g. displacement, nonlocal
+damage), combined by a block Gauss--Seidel sweep to precondition an outer LGMRES. This is the route to problem sizes a
+direct factorization cannot reach at all. A ``custom`` solver script composes any other tree: a Schur complement that
+condenses the dofs on which AMG alone stalls (bars tied to their host elements by bond springs, a softening zone), other
+smoothers, other coarse spaces.
 
+The options of each type
+------------------------
+
+.. pprint:: linsolver:pardiso
+    :caption: ``pardiso``:
+
+The other direct solvers take only the common data lines above.
+
+.. pprint:: linsolver:blockamg
+    :caption: ``blockamg``:
+
+.. pprint:: linsolver:custom
+    :caption: ``custom``:
 
 The ``blockamg`` solver
 -----------------------
 
-``blockamg`` is a field-split block-AMG solver for **large coupled multi-field systems** (e.g. displacement + gradient-enhanced damage). It is the O(n)-memory route to problem sizes a direct factorization cannot reach -- past roughly a million DOFs its fill-in exceeds memory, whereas algebraic multigrid stays linear.
+``blockamg`` is a field-split block-AMG solver for **large coupled multi-field systems** (e.g. displacement +
+gradient-enhanced damage). It is the O(n)-memory route to problem sizes a direct factorization cannot reach -- past
+roughly a million DOFs its fill-in exceeds memory, whereas algebraic multigrid stays linear.
 
-Applied *monolithically*, AMG is ineffective on such a coupled system (a single hierarchy cannot represent the disparate fields at once -- their physical scales and near-null-spaces differ). ``blockamg`` instead builds **one AMGCL algebraic-multigrid hierarchy per field** and combines them with a **block Gauss--Seidel** sweep to precondition an outer Krylov solve. Per solve it equilibrates the system, splits it into field blocks, builds or reuses the per-field hierarchies, and preconditions the outer solve with the block sweep.
-
-The block structure -- which DOFs belong to which field, and each field's dimension -- is **discovered automatically** from the ``DofManager`` and the live ``FEModel``, both handed to the solver via ``setModel()`` whenever the equation system is (re)built. A ``linsolverConfigFile`` is therefore optional and carries only solver knobs. Requires the optional ``amgcl`` extension.
+Applied *monolithically*, AMG is ineffective on such a coupled system (a single hierarchy cannot represent the
+disparate fields at once -- their physical scales and near-null-spaces differ). ``blockamg`` instead builds **one AMGCL
+algebraic-multigrid hierarchy per field** and combines them with a **block Gauss--Seidel** sweep to precondition an
+outer Krylov solve. Per solve it scales the system by its diagonal, splits it into field blocks, builds or reuses the
+per-field hierarchies, and preconditions the outer solve with the block sweep. The block structure -- which DOFs belong
+to which field, and each field's dimension -- is **discovered automatically** from the model. Requires the optional
+``amgcl`` extension.
 
 .. code-block:: edelweiss
+
+    *linearSolver, name=fieldSplit, type=blockamg
+    sweeps=1
+    symmetric=false
 
     *solver, solver=NIST, name=theSolver
-    linsolver=blockamg
-    linsolverConfigFile=blockamg.json
+    linsolver=fieldSplit
 
-.. code-block:: json
-
-    {
-        "outerSolver": "amgcl_lgmres",
-        "sweeps": 1,
-        "symmetric": false
-    }
-
-The method, the near-null-space construction, the adaptive outer tolerance, hierarchy reuse, every configuration key with its default, the experimental p-multigrid variant, the rigid-body coarse level and the Schur complement condensation are documented in detail on their own page:
-
-.. toctree::
-   :maxdepth: 1
-
-   blockamgtheory
-
-
-Schur complement condensation (``blockamg``)
----------------------------------------------
-
-Some dofs make ``blockamg`` stall: the dofs of embedded bars with **bond-slip**, for instance, are tied to
-the nodes of their host elements by stiff bond springs, :math:`u_{bar} \approx \sum_i N_i u_i`, a relation an
-aggregation AMG coarse space cannot represent. (With perfect bond, the same relation is a multi-point constraint,
-eliminated before the solve, and plain ``blockamg`` is the right choice.) The ``schurComplement`` option of ``blockamg``
-condenses such dofs :math:`b` exactly -- a direct factorization of their block :math:`A_{bb}` -- and builds
-the field-split AMG on the approximate Schur complement :math:`\tilde S \approx A_{kk} - A_{kb}
-A_{bb}^{-1} A_{bk}` of all other dofs :math:`k`. Everything else is ``blockamg`` as usual.
-
-The condensed dofs are chosen with the **markers** of adaptive mesh refinement (the options of a
-``>>marker`` line): the dofs of the interior nodes of the marked elements -- the nodes all of whose
-elements are marked -- are condensed. For embedded bars, mark the bar and the bond elements:
-
-.. code-block:: edelweiss
-
-    *solver, solver=NISTParallel, name=theSolver
-    linsolver=blockamg
-    linsolverConfigFile=blockamg.json
-
-.. code-block:: json
-
-    {
-        "sweeps": 2,
-        "schurComplement": {
-            "markers": [
-                {"type": "elementSet", "elSet": "bars"},
-                {"type": "elementSet", "elSet": "bondElements"}
-            ]
-        }
-    }
-
-``bars`` and ``bondElements`` are the element sets of the bar and the bond elements. A ``fieldOutput`` marker
-condenses, e.g., a softening zone instead (testfile ``GradientEnhancedDamageSchurComplement``). The method, every
-key and the caveats are on the :doc:`blockamgtheory` page (section "Schur complement condensation").
-
-
-Rigid-body coarse level (``blockamg``)
---------------------------------------
-
-The hierarchy ``blockamg`` builds for a 3D displacement field stores the field in node-wise blocks, and AMGCL's coarse
-space on those blocks holds the **translations** of every aggregate of nodes, not their rotations. In a
-bending-dominated structure -- a slender beam, a tunnel lining, a plate -- the slowly converging error is bending,
-under which every aggregate rotates almost as a rigid body: neither that coarse space nor the smoother reduces it, and
-the outer solve needs many iterations. So by default, the hierarchy of the 3D displacement field starts with a coarse
-level built from all rigid-body modes, translations and rotations (``rigidBodyCoarseLevel``): they are the near
-null-space of elasticity on the displacement field. A rotation field, or any other vector field, has another one and
-gets the coarse level only when named. An explicit tree beats the default: a displacement field with an explicit
-``fieldPreconds`` tree keeps it as written, and naming the field in ``rigidBodyCoarseLevel`` adds the coarse level to
-that tree. The testfile deck
-``testfiles/edelweiss-only/CantileverBeamHexa20BlockAMGRigidBody``, a slender cantilever, shows the effect: each
-linear solve converges in some 20 outer iterations; with the coarse level switched off, every solve stops at the
-iteration cap. On an elastic tunnel segment of quadratic hexahedra, it cut the outer iterations of the displacement
-block from 67 to 22.
-
-Switch it off where the solves converge in a few outer iterations without it -- there it saves little, for a larger
-setup (on an edge breakout model 22 against 20 iterations, at about the same cost). ``false`` switches it off for all
-fields, and naming fields switches it on for exactly those, which is also how a 2D displacement field gets it:
-
-.. code-block:: json
-
-    {
-        "rigidBodyCoarseLevel": false
-    }
-
-.. code-block:: json
-
-    {
-        "rigidBodyCoarseLevel": ["displacement"]
-    }
-
-A scalar field (e.g. nonlocal damage) has no rotations: the default leaves it out, and naming it is an error. The
-method, its options and the measurements are on the :doc:`blockamgtheory` page (section "Rigid-body coarse level").
-
-
-Composed linear solvers (prototype)
------------------------------------
-
-A linear solver can also be composed from small objects -- a Krylov solver, a diagonal scaling, a field split, AMG
-hierarchies, a Schur complement -- in a Python script next to the input file, ``linsolver=script:solver.py``. The
-components, how the nesting reads, the presets (``blockAMG()`` reproduces ``blockamg``) and the views that visualize a
-composed solver are on their own page:
+Its tree, and how to change what its data lines do not reach, are on :doc:`composedlinsolvers`; the method, the
+near-null-space construction, the adaptive outer tolerance, hierarchy reuse, the p-multigrid variant, the rigid-body
+coarse level and the Schur complement condensation are explained in detail on :doc:`blockamgtheory`.
 
 .. toctree::
    :maxdepth: 1
 
    composedlinsolvers
+   blockamgtheory
+
+Rigid-body coarse level (``blockamg``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The hierarchy of a 3D displacement field on node-wise blocks has a coarse space of the **translations** of every
+aggregate of nodes, not their rotations. In a bending-dominated structure -- a slender beam, a tunnel lining, a plate --
+the slowly converging error is bending, under which every aggregate rotates almost as a rigid body: neither that coarse
+space nor the smoother reduces it, and the outer solve needs many iterations. So by default ``blockamg`` gives the 3D
+displacement field a two-grid cycle whose coarse level is built from all rigid-body modes, translations and rotations
+(``TwoGrid(coarseSpace=RigidBodyModes())``). The testfile deck
+``testfiles/edelweiss-only/CantileverBeamHexa20BlockAMGRigidBody``, a slender cantilever, shows the effect: each linear
+solve converges in some 20 outer iterations; with the coarse level switched off, every solve stops at the iteration
+cap. On an elastic tunnel segment of quadratic hexahedra, it cut the outer iterations of the displacement block from 67
+to 22.
+
+Switch it off where the solves converge in a few outer iterations without it -- there it saves little, for a larger
+setup (on an edge breakout model 22 against 20 iterations, at about the same cost):
+
+.. code-block:: edelweiss
+
+    *linearSolver, name=translationsOnly, type=blockamg
+    rigidBodyCoarseLevel=false
+
+A 2D displacement field, or any other vector field, gets the coarse level in a ``custom`` solver script,
+``OnField("displacement", TwoGrid(coarseSpace=RigidBodyModes()))``.
+
+Schur complement condensation (``custom``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Some dofs make the field-split AMG stall: the dofs of embedded bars with **bond-slip**, for instance, are tied to the
+nodes of their host elements by stiff bond springs, :math:`u_{bar} \approx \sum_i N_i u_i`, a relation an aggregation
+AMG coarse space cannot represent. (With perfect bond, the same relation is a multi-point constraint, eliminated before
+the solve, and plain ``blockamg`` is the right choice.) A ``SchurComplement`` condenses such dofs :math:`b` exactly -- a
+direct factorization of their block :math:`A_{bb}` -- and builds its child on the approximate Schur complement
+:math:`\tilde S \approx A_{kk} - A_{kb} A_{bb}^{-1} A_{bk}` of all other dofs :math:`k`. The condensed dofs are chosen
+with the **markers** of adaptive mesh refinement: the dofs of the interior nodes of the marked elements -- the nodes all
+of whose elements are marked. It is a ``custom`` solver script; for embedded bars, mark the bar and the bond elements:
+
+.. code-block:: python
+
+    # solver.py
+    from edelweissfe.config.markerlibrary import getMarkerClass
+    from edelweissfe.linsolve.composition import (
+        LGMRES, DiagonalScaling, Multiplicative, OnField, SchurComplement, gaussSeidelOrder,
+    )
+    from edelweissfe.linsolve.composition.presets import blockAMGFieldPreconditioner
+
+    bars = getMarkerClass("elementSet").fromOptions({"elSet": "bars"})
+    bonds = getMarkerClass("elementSet").fromOptions({"elSet": "bondElements"})
 
 
-The ``amgcl`` solver
---------------------
+    def fieldCorrections(context):
+        corrections = [OnField(f.name, blockAMGFieldPreconditioner(f, context)) for f in context.fields]
+        return gaussSeidelOrder(corrections, sweeps=2)
 
-``amgcl`` is an iterative solver (Krylov method plus algebraic-multigrid or single-level preconditioner) built on the `AMGCL <https://github.com/ddemidov/amgcl>`_ library. Its ``linsolverConfigFile`` is forwarded as an AMGCL parameter tree; note that AMGCL silently ignores unknown parameter keys (warning only on stderr), so check its stderr if a configuration behaves unexpectedly.
 
+    blockGaussSeidel = Multiplicative(fieldCorrections)
+    linearSolver = LGMRES(SchurComplement(condense=[bars, bonds], preconditionS=DiagonalScaling(blockGaussSeidel)))
 
-The ``matrixdump`` diagnostic solver
-------------------------------------
+.. code-block:: edelweiss
 
-``matrixdump`` is not a solver but a diagnostic wrapper: it writes the equation systems it is handed to disk and then delegates the actual solve to a real linear solver, so a sequence of authentic ``(A, b)`` pairs can be replayed offline instead of by rerunning the simulation. Its ``linsolverConfigFile`` selects the ``delegate`` solver, the dump ``directory``, and which solves to capture (``dumpAt`` / ``skipFirst`` / ``maxDumps`` / ``instances``).
+    *linearSolver, name=barSchur, type=custom
+    script=solver.py
 
-Its instance/dump-ordinal counters are process-wide and not part of a ``*restart`` checkpoint, so a resumed run starts them back at zero -- point a resumed analysis using ``matrixdump`` at a fresh ``directory`` if you need both runs' dumps kept, rather than the resumed run silently overwriting the interrupted one's.
+    *solver, solver=NISTParallel, name=theSolver
+    linsolver=barSchur
+
+A ``fieldOutput`` marker condenses, e.g., a softening zone instead (testfile
+``GradientEnhancedDamageSchurComplement``). The method and the caveats are on the :doc:`blockamgtheory` page (section
+"Schur complement condensation").
+
+Python API of the linear solvers
+--------------------------------
+
+.. automodule:: edelweissfe.linsolve.types
+    :members:
+
+.. automodule:: edelweissfe.config.linsolve
+    :members: getLinSolverByName, getDefaultLinSolver, createLinearSolver, linearSolverDefinitionsFromInputFile
+
+.. automodule:: edelweissfe.linsolve.base
+    :members: LinearSolver, DirectSolverBackend, OneCallDirectSolverBackend

@@ -151,14 +151,18 @@ the `edelweissfe` CLI and `run_tests_edelweissfe`):
   linear solvers to reuse symbolic factorizations. Dirichlet indices are memoized per BC/DofManager.
 
 #### Linear Solvers (`edelweissfe/linsolve/`)
-All linear solvers adhere to the unified `LinearSolver` base contract (`edelweissfe.linsolve`):
-- **MKL Pardiso**: Direct sparse solver (`PardisoSolver`) with multi-RHS support, bounds checking, and optional
-  symbolic factorization reuse (`reuseSymbolicFactorization=False` by default for numerical safety in coupled DOFs).
-- **Panua Pardiso**: Alternative Pardiso interface (`optional=True`).
-- **AMGCL**: Algebraic multigrid preconditioners paired with Krylov methods (BiCGStab, CG) and outer LGMRES solvers.
-- **KLU**: SuiteSparse direct sparse solver for unsymmetric/sparse systems.
-- **Block-AMG (`BlockAMGSolver`)**: Field-split block algebraic multigrid solver for multi-physics/coupled problems.
-- **Diagnostics & Benchmarking**: Offline matrix dump (`matrixdump`) and solver benchmarking utilities (`bench_linsolve`).
+Every linear solver is a composed solver (`edelweissfe/linsolve/composition/`, a tree of components such as `LGMRES`,
+`DiagonalScaling`, `Multiplicative`/`OnField`, `AMG`, `TwoGrid`, `SchurComplement`, `DirectSolver`) behind one adapter,
+`ComposedLinearSolver`. Input: `*linearSolver, name=..., type=...` with the type's options as data lines (types in
+`edelweissfe/linsolve/types.py`, registry category `linsolver`), named by a `*solver`'s `linsolver=` (or a type name
+for its defaults); Python: `getLinSolverByName(type, options)`.
+- **Direct solvers** (`type=pardiso`, `superlu`, `umfpack`, `klu`, `petsclu`, `mumps`, `panuapardiso`): the one leaf
+  `DirectSolver(backend)`; backends in `linsolve/<name>/` (registry category `directsolver`). MKL PARDISO is the
+  default, with optional symbolic factorization reuse (`reuseSymbolicFactorization`, off by default).
+- **`type=blockamg`**: the `blockAMG()` preset, field-split block AMG for coupled multi-field problems (AMGCL).
+- **`type=custom`**: a solver script binding the tree to its global `linearSolver`.
+- **Diagnostics & Benchmarking**: the `dumps` data line of every type (`composition/solvedumps.py`) and
+  `scripts/benchmark_linsolve.py`.
 
 #### Contact, Rigid Bodies & Constraints (`edelweissfe/constraints/`)
 - **Node-to-Surface & Contact with Facets**: Penalty contact formulations (`NodeToDeformableSurfacePenaltyConstraint`,
