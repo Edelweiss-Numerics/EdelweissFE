@@ -133,7 +133,7 @@ def test_the_continuations_on_the_scaled_system_are_logged_at_debug():
         lambda: RebuildPolicy(stalenessFactor=0.5),
         lambda: GapCompensation(safetyFactor=0.0),
         lambda: GapCompensation(maxFactor=0.5),
-        lambda: LGMRES(AMG(), M=0),
+        lambda: LGMRES(AMG(), restart=0),
         lambda: LGMRES(AMG(), continuations=-1),
         lambda: AMG(dropTolerance=-1.0),
         lambda: SolveDumps("unused", maxDumps=-1),

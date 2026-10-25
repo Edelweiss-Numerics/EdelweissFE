@@ -375,7 +375,7 @@ class KrylovSolver(Preconditioner):
         combination has made its corrections."""
 
     def _parameters(self) -> dict:
-        """AMGCL's parameters of the method (its restart length, ...)."""
+        """AMGCL's parameters of the method (its restart length, ...), in AMGCL's names."""
         raise NotImplementedError
 
     def _setUp(self, A, context: SetUpContext) -> None:
@@ -528,7 +528,8 @@ class KrylovSolver(Preconditioner):
         )
 
     def _describedParameters(self) -> dict:
-        parameters = {"tolerance": repr(self.tolerance), "maxIterations": self.maxIterations, **self._parameters()}
+        """The parameters the views show, in the names of this class (a method adds its own)."""
+        parameters = {"tolerance": repr(self.tolerance), "maxIterations": self.maxIterations}
         if self.gapCompensation is not None:
             parameters["gapCompensation"] = repr(self.gapCompensation)
         return parameters
@@ -538,8 +539,8 @@ class KrylovSolver(Preconditioner):
 
 
 class LGMRES(KrylovSolver):
-    """LGMRES: restarted GMRES, augmented at each restart with ``K`` error approximations of the previous cycles,
-    AMGCL's implementation. Right-preconditioned: :math:`x = M^{-1} y` with :math:`y` from the Krylov space of
+    """LGMRES (Baker, Jessup and Manteuffel 2005): GMRES restarted every ``restart`` iterations, each cycle augmented
+    with ``augmentationVectors`` error approximations of the previous cycles, AMGCL's implementation. Right-preconditioned: :math:`x = M^{-1} y` with :math:`y` from the Krylov space of
     :math:`A M^{-1}`, which is a Krylov space only for a fixed linear :math:`M^{-1}` -- so LGMRES refuses a variable
     preconditioner (a Krylov solve inside), for which :class:`FGMRES` is made.
 
@@ -547,8 +548,10 @@ class LGMRES(KrylovSolver):
     ----------
     preconditioner, tolerance, maxIterations, rebuild, continuations, gapCompensation
         See :class:`KrylovSolver`.
-    M, K
-        The restart length and the number of augmentation vectors.
+    restart
+        The iterations of a cycle, :math:`m` (the Krylov vectors kept before a restart).
+    augmentationVectors
+        The error approximations of the previous cycles each cycle is augmented with, :math:`k`.
     """
 
     method = "lgmres"
@@ -558,16 +561,20 @@ class LGMRES(KrylovSolver):
         preconditioner: Preconditioner,
         tolerance=None,
         maxIterations: int = 100,
-        M: int = 50,
-        K: int = 3,
+        restart: int = 50,
+        augmentationVectors: int = 3,
         rebuild: RebuildPolicy = None,
         continuations: int = 2,
         gapCompensation: GapCompensation = None,
     ):
-        if M < 1 or K < 0:
-            raise ValueError("LGMRES: needs M >= 1 and K >= 0, got M={:}, K={:}".format(M, K))
-        self.M = M
-        self.K = K
+        if restart < 1 or augmentationVectors < 0:
+            raise ValueError(
+                "LGMRES: needs restart >= 1 and augmentationVectors >= 0, got {:} and {:}".format(
+                    restart, augmentationVectors
+                )
+            )
+        self.restart = restart
+        self.augmentationVectors = augmentationVectors
         super().__init__(preconditioner, tolerance, maxIterations, rebuild, continuations, gapCompensation)
 
     def _checkPreconditioner(self) -> None:
@@ -580,7 +587,15 @@ class LGMRES(KrylovSolver):
             )
 
     def _parameters(self) -> dict:
-        return {"M": self.M, "K": self.K}
+        # AMGCL's names: M the restart length, K the augmentation vectors
+        return {"M": self.restart, "K": self.augmentationVectors}
+
+    def _describedParameters(self) -> dict:
+        return {
+            **super()._describedParameters(),
+            "restart": self.restart,
+            "augmentationVectors": self.augmentationVectors,
+        }
 
     def _steps(self) -> tuple:
         return (
@@ -600,8 +615,8 @@ class FGMRES(KrylovSolver):
     ----------
     preconditioner, tolerance, maxIterations, rebuild, continuations, gapCompensation
         See :class:`KrylovSolver`.
-    M
-        The restart length.
+    restart
+        The iterations of a cycle (the vectors kept before a restart).
     """
 
     method = "fgmres"
@@ -611,18 +626,22 @@ class FGMRES(KrylovSolver):
         preconditioner: Preconditioner,
         tolerance=None,
         maxIterations: int = 100,
-        M: int = 30,
+        restart: int = 30,
         rebuild: RebuildPolicy = None,
         continuations: int = 2,
         gapCompensation: GapCompensation = None,
     ):
-        if M < 1:
-            raise ValueError("FGMRES: needs M >= 1, got {:}".format(M))
-        self.M = M
+        if restart < 1:
+            raise ValueError("FGMRES: needs restart >= 1, got {:}".format(restart))
+        self.restart = restart
         super().__init__(preconditioner, tolerance, maxIterations, rebuild, continuations, gapCompensation)
 
     def _parameters(self) -> dict:
-        return {"M": self.M}
+        # AMGCL's name of the restart length
+        return {"M": self.restart}
+
+    def _describedParameters(self) -> dict:
+        return {**super()._describedParameters(), "restart": self.restart}
 
     def _steps(self) -> tuple:
         return (

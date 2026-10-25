@@ -71,7 +71,8 @@ def structure(component) -> str:
 
     Example::
 
-        LGMRES(tolerance=ForcingTolerance(minimum=0.0001, maximum=0.001), maxIterations=100, M=50, K=3)
+        LGMRES(tolerance=ForcingTolerance(minimum=0.0001, maximum=0.001), maxIterations=100, restart=50,
+        augmentationVectors=3)
         └─ DiagonalScaling(D=diag(1/√|aᵢᵢ|))
            └─ Multiplicative
               ├─ M1: OnField(field=displacement)

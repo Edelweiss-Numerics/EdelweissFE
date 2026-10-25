@@ -114,11 +114,11 @@ Components
 
     * - Component
       - :math:`M^{-1}`
-    * - ``LGMRES(preconditioner, tolerance, maxIterations, M, K, rebuild, continuations, gapCompensation)``
+    * - ``LGMRES(preconditioner, tolerance, maxIterations, restart, augmentationVectors, rebuild, continuations, gapCompensation)``
       - the outer Krylov solve :math:`A x = b`, right-preconditioned (AMGCL); owns when the preconditioner is rebuilt
         (``RebuildPolicy(stalenessFactor, rebuildOnNewIncrement, reuse)``). Needs a fixed linear preconditioner, and
         refuses one that is not at construction. On a diagonally scaled matrix see :ref:`composed-scaled-krylov`.
-    * - ``FGMRES(preconditioner, tolerance, maxIterations, M)``
+    * - ``FGMRES(preconditioner, tolerance, maxIterations, restart)``
       - flexible GMRES (AMGCL): :math:`x = Z_m y_m` from the preconditioned vectors themselves, so the preconditioner
         may change between iterations -- e.g. an inner Krylov solve
     * - ``ForcingTolerance(minimum, maximum)``, ``FixedTolerance(eta)``
@@ -227,7 +227,7 @@ the descriptions along the tree of ``children()``. For the ``blockAMG()`` preset
 
 ``print(solver)`` -- the structure::
 
-    LGMRES(tolerance=ForcingTolerance(minimum=0.0001, maximum=0.001), maxIterations=100, M=50, K=3)
+    LGMRES(tolerance=ForcingTolerance(minimum=0.0001, maximum=0.001), maxIterations=100, restart=50, augmentationVectors=3)
     └─ DiagonalScaling(D=diag(1/√|aᵢᵢ|))
        └─ Multiplicative
           ├─ M1: OnField(field=displacement)
