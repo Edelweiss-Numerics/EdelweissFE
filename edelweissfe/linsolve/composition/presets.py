@@ -91,7 +91,7 @@ def blockAMG(
 
     The corrections are made at the first set-up, for the fields of the model (:class:`~edelweissfe.linsolve.
     composition.combinators.Multiplicative` takes a function of the context). A tree, not a solver: a solver script
-    binds ``linearSolver = ComposedLinearSolver(blockAMG())``.
+    binds it, ``linearSolver = blockAMG()``.
 
     Parameters
     ----------

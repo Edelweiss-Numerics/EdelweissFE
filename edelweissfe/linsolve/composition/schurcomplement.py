@@ -619,30 +619,6 @@ def _solveTransposed(A: sp.coo_matrix, B: np.ndarray) -> np.ndarray:
     return solve_banded((upper, lower), banded, B, check_finite=False)
 
 
-def restrictP1Map(isCorner: np.ndarray, edgeEndpoints: np.ndarray, remains: np.ndarray) -> tuple:
-    """A field's P1 map (see :func:`~edelweissfe.numerics.p1topology.buildP1Map`) restricted to its remaining
-    nodes ``remains``: the rows are renumbered, and a midside node whose edge endpoint is condensed becomes a corner.
-    That is always safe: the P1 restriction takes a corner as it is, so a promoted node only enlarges the coarse space
-    of the p-two-grid preconditioner, it never makes it wrong.
-
-    Returns
-    -------
-    tuple
-        ``(isCorner, edgeEndpoints)`` of the remaining nodes.
-    """
-    newRow = np.cumsum(remains) - 1
-    isCorner, edgeEndpoints = isCorner[remains].copy(), edgeEndpoints[remains].copy()
-    isMidside = ~isCorner
-    endpointRemains = np.ones_like(isMidside)
-    endpointRemains[isMidside] = remains[edgeEndpoints[isMidside]].all(axis=1)
-    becomesCorner = isMidside & ~endpointRemains
-    isCorner[becomesCorner] = True
-    edgeEndpoints[becomesCorner] = -1
-    stillMidside = ~isCorner
-    edgeEndpoints[stillMidside] = newRow[edgeEndpoints[stillMidside]]
-    return isCorner, edgeEndpoints
-
-
 def blockLU(r: np.ndarray, condensation, preconditionS, solveA_bb=None) -> np.ndarray:
     """One application of the block LU preconditioner, see the module documentation:
 

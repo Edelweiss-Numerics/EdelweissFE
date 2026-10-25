@@ -56,7 +56,7 @@ from edelweissfe.linsolve.composition.base import (
 )
 
 
-def diagonalScalingOf(absoluteDiagonal: np.ndarray, owner: str = "DiagonalScaling") -> tuple:
+def diagonalScalingOf(absoluteDiagonal: np.ndarray) -> np.ndarray:
     """:math:`D = \\operatorname{diag}(\\lvert a_{ii} \\rvert^{-1/2})` of a matrix, from its
     ``absoluteDiagonal`` :math:`\\lvert a_{ii} \\rvert`, for :class:`DiagonalScaling`.
 
@@ -66,45 +66,40 @@ def diagonalScalingOf(absoluteDiagonal: np.ndarray, owner: str = "DiagonalScalin
     the divisor is not a fix either -- a 1e-300 floor merely turns inf into ~1e150 and blows the scaled operator up
     to ~1e149, which is finite and equally useless. A system with a structurally zero diagonal is a saddle-point
     system (e.g. the multiplier block of a Lagrangian constraint, which never writes its own diagonal), and
-    smoothed-aggregation AMG on a zero block is not something these preconditioners do: it raises, and names the
-    offending dofs.
+    smoothed-aggregation AMG on a zero block is not something these preconditioners do: it raises a
+    :class:`ValueError`, and names the offending dofs.
 
     A diagonal entry that is NaN or infinite is no better: it makes :math:`D`, and with it a near null-space
     :math:`D^{-1} t`, non-finite, which AMGCL's hierarchy build rejects with a ``RuntimeError`` -- which nothing in
     the nonlinear solvers catches, whereas a NaN correction is a diverged solution and a cutback. Such a system is
-    declined like a non-finite right-hand side (checked after the zero diagonal, which is the user's error to see
-    first).
+    declined like a non-finite right-hand side: a :class:`FloatingPointError`, which the composed solver turns into a
+    declined solve (checked after the zero diagonal, which is the user's error to see first).
 
     Parameters
     ----------
     absoluteDiagonal
         :math:`\\lvert a_{ii} \\rvert`.
-    owner
-        The name the error message starts with.
 
     Returns
     -------
-    tuple
-        ``(D, None)``, or ``(None, reason)`` for a non-finite diagonal.
+    np.ndarray
+        The diagonal of :math:`D`.
     """
-    diagonal = absoluteDiagonal
-    zeroDiagonal = np.nonzero(diagonal == 0.0)[0]
+    zeroDiagonal = np.nonzero(absoluteDiagonal == 0.0)[0]
     if zeroDiagonal.size:
         raise ValueError(
-            "{:}: {:} dof(s) have a zero diagonal entry (first at index {:}) and "
-            "cannot be diagonally equilibrated. This is characteristic of a saddle-point "
-            "system -- a Lagrange-multiplier constraint, for instance, couples the "
-            "multiplier without ever writing its own diagonal -- which this field-split "
-            "AMG scheme does not support. Use a direct solver for such a model.".format(
-                owner, zeroDiagonal.size, int(zeroDiagonal[0])
+            "DiagonalScaling cannot scale a zero diagonal (saddle-point system?): {:} dof(s) have a zero diagonal "
+            "entry (first at index {:}), as the multiplier of a Lagrangian constraint, which never writes its own "
+            "diagonal. Use a direct solver for such a model.".format(zeroDiagonal.size, int(zeroDiagonal[0]))
+        )
+    nonFiniteDiagonal = np.nonzero(~np.isfinite(absoluteDiagonal))[0]
+    if nonFiniteDiagonal.size:
+        raise FloatingPointError(
+            "DiagonalScaling: the diagonal is not finite at {:} dof(s) (first at index {:})".format(
+                nonFiniteDiagonal.size, int(nonFiniteDiagonal[0])
             )
         )
-    nonFiniteDiagonal = np.nonzero(~np.isfinite(diagonal))[0]
-    if nonFiniteDiagonal.size:
-        return None, "the diagonal is not finite at {:} dof(s) (first at index {:})".format(
-            nonFiniteDiagonal.size, int(nonFiniteDiagonal[0])
-        )
-    return 1.0 / np.sqrt(diagonal), None
+    return 1.0 / np.sqrt(absoluteDiagonal)
 
 
 class DiagonalScaling(Preconditioner):
@@ -143,10 +138,7 @@ class DiagonalScaling(Preconditioner):
     def _findScaling(self, A) -> None:
         """:math:`D` of the matrix ``A``."""
         with performancetiming.timeit("equilibration"):
-            D, reason = diagonalScalingOf(A.absoluteDiagonal())
-        if D is None:
-            raise FloatingPointError("DiagonalScaling: " + reason)
-        self.D = D
+            self.D = diagonalScalingOf(A.absoluteDiagonal())
 
     def _apply(self, r: np.ndarray) -> np.ndarray:
         return self.D * self.inner(self.D * r)

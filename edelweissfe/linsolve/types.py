@@ -127,13 +127,18 @@ class LinearSolverType(OptionSchemaProvider):
     @classmethod
     def create(cls, configuration) -> ComposedLinearSolver:
         """The linear solver of these data lines: the tree behind the adapter."""
-        return ComposedLinearSolver(
-            cls.tree(configuration),
-            residualGrowthFactor=configuration.residualGrowthFactor,
-            verbosity=configuration.verbosity,
-            warnOuterIterations=configuration.warnOuterIterations,
-            dumps=solveDumpsOf(configuration),
-        )
+        return ComposedLinearSolver(cls.tree(configuration), **cls.adapterSettings(configuration))
+
+    @staticmethod
+    def adapterSettings(configuration) -> dict:
+        """The settings of the adapter (:class:`~edelweissfe.linsolve.composition.solver.ComposedLinearSolver`) in
+        the data lines every type shares (:class:`LinearSolverSchema`), as its keyword arguments."""
+        return {
+            "residualGrowthFactor": configuration.residualGrowthFactor,
+            "verbosity": configuration.verbosity,
+            "warnOuterIterations": configuration.warnOuterIterations,
+            "dumps": solveDumpsOf(configuration),
+        }
 
 
 class DirectSolverType(LinearSolverType):
@@ -238,12 +243,7 @@ class Custom(LinearSolverType):
     @classmethod
     def create(cls, configuration: CustomSchema) -> ComposedLinearSolver:
         return ComposedLinearSolver.fromScript(
-            configuration.script,
-            hotReload=configuration.hotReload,
-            residualGrowthFactor=configuration.residualGrowthFactor,
-            verbosity=configuration.verbosity,
-            warnOuterIterations=configuration.warnOuterIterations,
-            dumps=solveDumpsOf(configuration),
+            configuration.script, hotReload=configuration.hotReload, **cls.adapterSettings(configuration)
         )
 
 

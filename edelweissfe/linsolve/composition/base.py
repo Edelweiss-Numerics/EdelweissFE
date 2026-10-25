@@ -56,6 +56,7 @@ from dataclasses import dataclass, field, replace
 import numpy as np
 
 from edelweissfe.linsolve.base import FieldBlock
+from edelweissfe.numerics.p1topology import restrictP1Map
 
 
 @dataclass
@@ -231,7 +232,6 @@ class SetUpContext:
         """The context of a subset ``dofs`` of this problem's dofs, whose fields are ``fields`` (as the Schur
         complement leaves them). ``nodesOf``: ``fieldName -> boolean mask`` of the nodes of the field that remain,
         to restrict the coordinates and P1 maps."""
-        from edelweissfe.linsolve.composition.schurcomplement import restrictP1Map
 
         def coordinatesOf(fieldName):
             coordinates = self.coordinates(fieldName)

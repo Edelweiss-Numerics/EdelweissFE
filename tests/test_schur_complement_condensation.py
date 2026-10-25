@@ -52,9 +52,9 @@ from edelweissfe.linsolve.composition.schurcomplement import (
     _cutIntoWindows,
     _solveTransposed,
     blockLU,
-    restrictP1Map,
 )
 from edelweissfe.linsolve.superlu import SuperLUBackend
+from edelweissfe.numerics.p1topology import restrictP1Map
 from edelweissfe.utils.fieldoutput import _FieldOutputBase
 
 

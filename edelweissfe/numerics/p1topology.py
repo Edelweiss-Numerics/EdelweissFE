@@ -220,3 +220,35 @@ def buildP1Map(model, fieldName: str):
         edgeEndpoints[row] = tuple(candidate)
 
     return isCorner, edgeEndpoints, warnings
+
+
+def restrictP1Map(isCorner: np.ndarray, edgeEndpoints: np.ndarray, remains: np.ndarray) -> tuple:
+    """A field's P1 map (see :func:`buildP1Map`) restricted to some of its nodes, ``remains`` (e.g. those a Schur
+    complement does not condense): the rows are renumbered, and a midside node whose edge endpoint is not among them
+    becomes a corner.
+    That is always safe: the P1 restriction takes a corner as it is, so a promoted node only enlarges the coarse space
+    of the p-two-grid preconditioner, it never makes it wrong.
+
+    Parameters
+    ----------
+    isCorner, edgeEndpoints
+        The field's P1 map, see :func:`buildP1Map`.
+    remains
+        Per node of the field, whether it remains.
+
+    Returns
+    -------
+    tuple
+        ``(isCorner, edgeEndpoints)`` of the remaining nodes.
+    """
+    newRow = np.cumsum(remains) - 1
+    isCorner, edgeEndpoints = isCorner[remains].copy(), edgeEndpoints[remains].copy()
+    isMidside = ~isCorner
+    endpointRemains = np.ones_like(isMidside)
+    endpointRemains[isMidside] = remains[edgeEndpoints[isMidside]].all(axis=1)
+    becomesCorner = isMidside & ~endpointRemains
+    isCorner[becomesCorner] = True
+    edgeEndpoints[becomesCorner] = -1
+    stillMidside = ~isCorner
+    edgeEndpoints[stillMidside] = newRow[edgeEndpoints[stillMidside]]
+    return isCorner, edgeEndpoints
