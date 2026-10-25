@@ -189,6 +189,9 @@ class _FieldOutputBase:
         self.journal = journal
         self.appendResults = saveHistory
         self.result = [] if self.appendResults else None
+        # bumped on every change of the result: the key of whatever is derived from it and kept until it changes (e.g.
+        # a marker's selectionStamp); a cache key, not state, like the _version of a set, a surface or a node field
+        self._version = 0
         self.f = f_x
         self.f_export = fExport_x
         self.timeHistory = []
@@ -290,6 +293,7 @@ class _FieldOutputBase:
             self.result.append(result.copy())
         else:
             self.result = result
+        self._version += 1
 
     def _resultTableForExport(self) -> np.ndarray:
         """Assemble the result table that ``f_export`` is applied to.
@@ -395,6 +399,7 @@ class _FieldOutputBase:
                 offset += size
         else:
             self.result = np.array(data["result"]) if "result" in data else None
+        self._version += 1
 
     def initializeStep(self, step):
         """Write the current (just-updated) result as the first row of this step.

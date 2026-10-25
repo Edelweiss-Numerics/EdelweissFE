@@ -716,8 +716,8 @@ def test_a_hot_reload_switches_the_rigid_body_coarse_level_on_and_off(tmp_path):
 class _CondensedNodes(SchurComplementCondensation):
     """A Schur complement condensation of all dofs of given nodes, without a model."""
 
-    def __init__(self, nodes, dimension):
-        super().__init__([], SuperLUSolver)
+    def __init__(self, nodes, dimension, createDirectSolver=SuperLUSolver):
+        super().__init__([], createDirectSolver)
         self.nodes, self.dimension = np.asarray(nodes), dimension
 
     def _selectCondensedDofs(self):
@@ -743,6 +743,115 @@ def test_the_remaining_nodes_of_a_schur_complement_condensation_get_their_coordi
     preconditioner = solver._preconditioners[0]
     assert type(preconditioner).__name__ == "RigidBodyCoarseLevelPreconditioner"
     assert len(preconditioner.aggregates) == len(coordinates) - len(condensedNodes)
+
+
+class _SingularFromTheSecondFactorization(SuperLUSolver):
+    """SuperLU whose factorizations fail from the second one on: a condensed block that turns singular, like a bond that
+    loses all its stiffness."""
+
+    def __init__(self):
+        super().__init__()
+        self.factorizations = 0
+
+    def factorize(self, A):
+        self.factorizations += 1
+        if self.factorizations > 1:
+            raise np.linalg.LinAlgError("the condensed block is singular")
+        super().factorize(A)
+
+
+def _condensedBeamSolver(condensation, **settings):
+    """blockamg on the beam with this condensation and the node coordinates: by default with the rigid-body coarse
+    level."""
+    K, b, block, coordinates = _beamSystem()
+    solver = BlockAMGSolver(
+        outerTol=1e-8,
+        outerRestart=300,
+        nodeCoordinates={"displacement": coordinates},
+        condensation=condensation,
+        **settings,
+    )
+    solver.setFieldStructure([block])
+    return solver, K, b, coordinates
+
+
+def test_a_condensed_block_that_turns_singular_falls_back_to_the_solve_without_condensation(capsys):
+    # After a successful condensed solve, A_bb cannot be factorized: the condensation keeps its last state (the update
+    # is transactional), and the solve does without it -- for the whole field, its rigid-body coarse level built on
+    # the coordinates of all nodes, not of the remaining ones of the last condensation.
+    K, b, block, coordinates = _beamSystem()
+    condensedNodes = np.flatnonzero(coordinates[:, 0] > 14.0)
+    condensation = _CondensedNodes(condensedNodes, 3, _SingularFromTheSecondFactorization)
+    solver, K, b, coordinates = _condensedBeamSolver(condensation, verbosity="warning")
+    solver(K, b)
+    assert len(solver._preconditioners[0].aggregates) == len(coordinates) - len(condensedNodes)
+    condensedDofs = condensation.condensedDofs
+    for _ in range(2):
+        x = solver(K, b)
+        assert np.linalg.norm(b - K @ x) <= 1.0001e-8 * np.linalg.norm(b)
+        preconditioner = solver._preconditioners[0]
+        assert type(preconditioner).__name__ == "RigidBodyCoarseLevelPreconditioner"
+        assert len(preconditioner.aggregates) == len(coordinates)
+        assert condensation.condensedDofs is condensedDofs
+    assert "the condensed block A_bb cannot be factorized" in capsys.readouterr().out
+
+
+def test_an_approximate_schur_complement_that_cannot_be_formed_falls_back_to_the_solve_without_condensation(
+    monkeypatch, capsys
+):
+    # e.g. a singular window block of an A_bb that factorizes as a whole: like a failed factorization
+    K, b, block, coordinates = _beamSystem()
+    condensation = _CondensedNodes(np.flatnonzero(coordinates[:, 0] > 14.0), 3)
+
+    def singularWindow(A):
+        raise np.linalg.LinAlgError("a singular window block")
+
+    monkeypatch.setattr(condensation, "approximateSchurComplement", singularWindow)
+    solver, K, b, coordinates = _condensedBeamSolver(condensation, verbosity="warning")
+    x = solver(K, b)
+    assert np.linalg.norm(b - K @ x) <= 1.0001e-8 * np.linalg.norm(b)
+    assert len(solver._preconditioners[0].aggregates) == len(coordinates)
+    assert "the approximate Schur complement cannot be formed" in capsys.readouterr().out
+
+
+def test_krylov_on_the_scaled_system_is_refused_with_any_condensation(tmp_path, capsys):
+    # the outer solve of a condensed solve runs on A itself: refused for a condensation handed over directly too, at
+    # construction and on a hot reload
+    K, b, block, coordinates = _beamSystem()
+    condensation = _CondensedNodes(np.flatnonzero(coordinates[:, 0] > 14.0), 3)
+    with pytest.raises(ValueError, match="krylovOnScaledSystem cannot be combined with a Schur complement"):
+        BlockAMGSolver(condensation=condensation, krylovOnScaledSystem=True)
+    config = tmp_path / "blockamg.json"
+    config.write_text(json.dumps({"krylovOnScaledSystem": True}))
+    solver, K, b, _ = _condensedBeamSolver(condensation, verbosity="warning", hotReloadConfigFile=str(config))
+    x = solver(K, b)
+    assert np.linalg.norm(b - K @ x) <= 1.0001e-8 * np.linalg.norm(b)
+    assert solver._krylovOnScaledSystem is False
+    assert "cannot be combined with a Schur complement condensation" in capsys.readouterr().out
+
+
+def test_condensed_solves_keep_their_outer_operator_and_their_field_split():
+    # The outer operator of a condensed solve (A itself) is kept per sparsity pattern of A, only its values refreshed;
+    # the field split of S~ is kept with the hierarchies built on it. Both are rebuilt when they no longer fit.
+    K, b, block, coordinates = _beamSystem()
+    solver, K, b, _ = _condensedBeamSolver(_CondensedNodes(np.flatnonzero(coordinates[:, 0] > 14.0), 3))
+    solver(K, b)
+    operator, system = solver._condensedOuterOperator[0], solver._condensedSystem
+    x = solver(2.0 * K, b)
+    assert np.linalg.norm(b - 2.0 * K @ x) <= 1.0001e-8 * np.linalg.norm(b)
+    assert solver._condensedOuterOperator[0] is operator and solver._condensedSystem is system
+    # a rebuild of the hierarchies rebuilds the field split, not the operator
+    solver._refreshNext = True
+    x = solver(2.0 * K, b)
+    assert np.linalg.norm(b - 2.0 * K @ x) <= 1.0001e-8 * np.linalg.norm(b)
+    assert solver._condensedOuterOperator[0] is operator and solver._condensedSystem is not system
+    # another sparsity pattern, two (negligible) entries more: another operator
+    last = K.shape[0] - 1
+    K2 = (K + sp.csr_matrix(([1e-300, 1e-300], ([0, last], [last, 0])), shape=K.shape)).tocsr()
+    K2.sort_indices()
+    x = solver(K2, b)
+    assert np.linalg.norm(b - K2 @ x) <= 1.0001e-8 * np.linalg.norm(b)
+    assert solver._condensedOuterOperator[0] is not operator
 
 
 @pytest.mark.parametrize(

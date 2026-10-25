@@ -13,7 +13,12 @@ import pytest
 import scipy.sparse as sp
 from _blockamgsystems import gridLaplacian
 
-from edelweissfe.adaptivity.marking import ElementSetMarker
+import edelweissfe.adaptivity.marking as marking
+from edelweissfe.adaptivity.marking import (
+    ElementSetMarker,
+    FieldOutputMarker,
+    MarkerBase,
+)
 from edelweissfe.linsolve.base import FieldBlock
 from edelweissfe.linsolve.blockamg import createSolver
 from edelweissfe.linsolve.blockamg.blockamg import BlockAMGSolver
@@ -21,9 +26,11 @@ from edelweissfe.linsolve.blockamg.schurcomplement import (
     SchurComplementCondensation,
     _solveTransposed,
     createCondensation,
+    optionsRejection,
     restrictP1Map,
 )
 from edelweissfe.linsolve.superlu import SuperLUSolver
+from edelweissfe.utils.fieldoutput import _FieldOutputBase
 
 
 def _barOnFoundation(n=14, barLength=None, springStiffness=1e3, barStiffness=1e4):
@@ -211,6 +218,123 @@ def test_options_are_checked():
         )
 
 
+@pytest.mark.parametrize(
+    "option, reason",
+    [
+        ({"windowNodes": "50"}, "'windowNodes' must be an integer"),
+        ({"windowNodes": 50.0}, "'windowNodes' must be an integer"),
+        ({"windowNodes": True}, "'windowNodes' must be an integer"),
+        ({"haloNodes": 2.5}, "'haloNodes' must be an integer"),
+        ({"haloNodes": -1}, "'haloNodes' must be an integer, not negative"),
+        ({"dropTolerance": "1e-4"}, "'dropTolerance' must be a number"),
+        ({"dropTolerance": 1.0}, "'dropTolerance' must be a number of at least 0 and less than 1"),
+        ({"directSolver": {"linsolver": "blockamg"}}, "does not factorize once for several right-hand sides"),
+        ({"directSolver": {"linsolver": "nonexistent"}}, "cannot be created"),
+    ],
+    ids=[
+        "window a string",
+        "window a float",
+        "window a bool",
+        "halo a float",
+        "halo negative",
+        "drop a string",
+        "drop 1",
+        "a solver without the phase split",
+        "an unknown solver",
+    ],
+)
+def test_options_of_the_wrong_type_or_an_unsuitable_direct_solver_are_rejected_up_front(option, reason):
+    # rejected with the other schurComplement options, before the model is set up, not with a TypeError or at the
+    # first solve
+    options = {"markers": [{"type": "elementSet", "elSet": "bars"}]} | option
+    assert reason in optionsRejection(options)
+    with pytest.raises(ValueError, match="schurComplement"):
+        createSolver({"schurComplement": options})
+
+
+class _FailingFromTheSecondFactorization(SuperLUSolver):
+    """SuperLU whose factorizations fail from the second one on."""
+
+    def __init__(self):
+        super().__init__()
+        self.factorizations = 0
+
+    def factorize(self, A):
+        self.factorizations += 1
+        if self.factorizations > 1:
+            raise np.linalg.LinAlgError("singular, for the test")
+        super().factorize(A)
+
+
+def test_an_update_whose_factorization_fails_leaves_the_condensation_as_it_was():
+    # transactional: the condensed dofs, the remaining dofs and the blocks stay those of the last successful update
+    A, _, barDofs = _barOnFoundation(n=8)
+    condensation = _FixedDofs(barDofs, _FailingFromTheSecondFactorization)
+    condensation.update(A)
+    before = (condensation.condensedDofs, condensation.remainingDofs, condensation.A_bb, condensation.A_bk)
+    condensation.fixedDofs = barDofs[: barDofs.size // 2]
+    with pytest.raises(np.linalg.LinAlgError):
+        condensation.update(A)
+    after = (condensation.condensedDofs, condensation.remainingDofs, condensation.A_bb, condensation.A_bk)
+    assert all(x is y for x, y in zip(before, after))
+
+
+class _CountingMarker(MarkerBase):
+    """Marks given elements, counts its calls, and reports a stamp the test sets."""
+
+    def __init__(self, elements):
+        super().__init__()
+        self.elements, self.stamp, self.marks = set(elements), (), 0
+
+    def selectionStamp(self, model):
+        return self.stamp
+
+    def mark(self, model, candidateElements, mesh):
+        self.marks += 1
+        return self.elements
+
+
+def _chainModel(nElements=6):
+    """A chain of two-node elements, one dof per node: the model and the dof manager setModel reads."""
+    nodes = [_Node(i) for i in range(nElements + 1)]
+    elements = {i: _Element([nodes[i], nodes[i + 1]]) for i in range(nElements)}
+    dofManager = SimpleNamespace(idcsOfFieldVariablesInDofVector={i: i for i in range(nElements + 1)})
+    return SimpleNamespace(elements=elements), dofManager
+
+
+def test_the_condensed_dofs_are_selected_anew_only_when_a_marker_input_changes():
+    # a selection is kept while every marker's stamp stays the same; a marker that cannot tell (None) marks on every
+    # call, and a new model drops the selection
+    model, dofManager = _chainModel()
+    marker = _CountingMarker([model.elements[1], model.elements[2]])
+    condensation = SchurComplementCondensation([marker], SuperLUSolver)
+    condensation.setModel(model, dofManager)
+    first = condensation._selectCondensedDofs()
+    assert np.array_equal(first[0], [2]) and condensation._selectCondensedDofs() is first and marker.marks == 1
+    marker.stamp = (1,)
+    condensation._selectCondensedDofs()
+    assert marker.marks == 2
+    marker.stamp = None
+    condensation._selectCondensedDofs()
+    condensation._selectCondensedDofs()
+    assert marker.marks == 4
+    marker.stamp = ()
+    condensation.setModel(model, dofManager)
+    condensation._selectCondensedDofs()
+    assert marker.marks == 5
+
+
+def test_a_field_output_marker_is_stamped_by_its_field_output_and_a_set_marker_by_the_model(monkeypatch):
+    fieldOutput = _FieldOutputBase("damage", SimpleNamespace(time=0.0), None)
+    monkeypatch.setattr(marking, "_perElementFieldOutput", lambda model, name: fieldOutput)
+    marker = FieldOutputMarker("damage", threshold=0.1)
+    stamp = marker.selectionStamp(None)
+    fieldOutput._applyResultsPipleline(np.zeros(3))
+    assert fieldOutput._version == 1 and marker.selectionStamp(None) != stamp
+    assert ElementSetMarker("bars").selectionStamp(None) == ()
+    assert MarkerBase().selectionStamp(None) is None
+
+
 def _solverWithFixedDofs(A, dofs):
     solver = BlockAMGSolver(outerTol=1e-8, verbosity="silent", sweeps=2, condensation=_FixedDofs(dofs))
     solver.setFieldStructure([FieldBlock("u", 0, A.shape[0], 1)])
@@ -221,22 +345,22 @@ def test_s_tilde_and_hierarchies_are_reused_and_rebuilt_when_the_condensed_dofs_
     A, b, barDofs = _barOnFoundation(n=18)
     solver = _solverWithFixedDofs(A, barDofs)
     solver(A, b)
-    S = solver._schurComplementMatrix
-    x = solver(A, 1.01 * b)  # the same matrix: S~ and the hierarchies are reused
-    assert solver._schurComplementMatrix is S
+    S = solver._condensedSystem
+    x = solver(A, 1.01 * b)  # the same matrix: S~ (its field split) and the hierarchies are reused
+    assert solver._condensedSystem is S
     assert np.linalg.norm(1.01 * b - A @ x) / np.linalg.norm(1.01 * b) < 1e-8
 
     # fewer condensed dofs (a zone that changed between increments): rebuilt for the new remaining dofs
     solver._condensation.fixedDofs = barDofs[: barDofs.size // 2]
     x = solver(A, b)
-    assert solver._schurComplementMatrix is not S
+    assert solver._condensedSystem is not S
     assert np.array_equal(solver._hierarchyCondensedDofs, barDofs[: barDofs.size // 2])
     assert np.linalg.norm(b - A @ x) / np.linalg.norm(b) < 1e-8
 
     # nothing condensed: the plain field split on A
     solver._condensation.fixedDofs = np.empty(0, dtype=np.int64)
     x = solver(A, b)
-    assert solver._hierarchyCondensedDofs is None and solver._schurComplementMatrix is None
+    assert solver._hierarchyCondensedDofs is None and solver._condensedSystem is None
     assert solver._blocks == [FieldBlock("u", 0, A.shape[0], 1)]
     assert np.linalg.norm(b - A @ x) / np.linalg.norm(b) < 1e-8
 

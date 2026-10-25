@@ -643,6 +643,47 @@ public:
     *this = std::move( assembled );
   }
 
+  /// @brief Keep A itself, as given (its stored zeros too), as the operator of an outer Krylov solve on the unscaled
+  /// system, without fields or blocks: what matrix( true ), matvec() and residual() with unscaled, and
+  /// LGMRESOuterSolverT::solve() read (blockamg's condensed solves). Kept with A's own sparsity pattern, its values
+  /// can be replaced in place for the next matrix of that pattern, see refreshOperatorValues().
+  /// @param n, ptr, col, val A, square CSR
+  void buildOperator( int n, const int* ptr, const int* col, const double* val )
+  {
+    auto stored = std::make_shared< Matrix >();
+    stored->set_size( n, n, false );
+    std::copy( ptr, ptr + n + 1, stored->ptr );
+    stored->set_nonzeros( ptr[n] );
+    std::copy( col, col + ptr[n], stored->col );
+    std::copy( val, val + ptr[n], stored->val );
+    EquilibratedSystemT built;
+    built.operator_ = stored;
+    built.unscaled_ = true;
+    built.scaling_.assign( n, 1.0 );
+    built.n_ = n;
+    *this    = std::move( built );
+  }
+
+  /// @brief Replace the values of the operator kept by buildOperator() by those of a matrix of the same sparsity
+  /// pattern, in place: one pass over the values, without an allocation. The caller guarantees the pattern; only the
+  /// number of values is checked here.
+  /// @param nnz, val the values of the matrix, in the order of the kept pattern
+  void refreshOperatorValues( int nnz, const double* val )
+  {
+    checkBuilt();
+    if ( nFields_ != 0 || !unscaled_ ) {
+      throw std::runtime_error( "EquilibratedSystemT::refreshOperatorValues(): only for an operator kept by "
+                                "buildOperator()" );
+    }
+    if ( static_cast< ptrdiff_t >( nnz ) != static_cast< ptrdiff_t >( operator_->ptr[n_] ) ) {
+      throw std::runtime_error( "EquilibratedSystemT::refreshOperatorValues(): " + std::to_string( nnz ) +
+                                " values for an operator of " + std::to_string( operator_->ptr[n_] ) + " entries" );
+    }
+#pragma omp parallel for
+    for ( ptrdiff_t j = 0; j < static_cast< ptrdiff_t >( nnz ); ++j )
+      operator_->val[j] = val[j];
+  }
+
   /// @brief The work of build(), on this (fresh) object.
   void assemble( int           n,
                  const int*    ptr,

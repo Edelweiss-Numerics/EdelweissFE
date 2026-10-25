@@ -321,6 +321,22 @@ cdef class PyAMGCLEquilibratedSystem:
                           _constDoubleData(scalingArray), bounds.shape[0] // 2, _intData(bounds), unscaled)
         self.n = n
 
+    def buildOperator(self, object A):
+        """Keep ``A`` itself (scipy.sparse csr_matrix, square, its stored zeros too) as the operator of an outer solve
+        on the unscaled system, without fields or blocks: for :meth:`matvec`/:meth:`residual` with ``unscaled`` and the
+        outer LGMRES. :meth:`refreshOperatorValues` then takes the values of a matrix of the same sparsity pattern."""
+        if A.shape[0] != A.shape[1]:
+            raise ValueError("A must be square, got shape {:}".format(A.shape))
+        A, indptr, indices, data = _csrArrays(A)
+        self.system.buildOperator(A.shape[0], _intData(indptr), _intData(indices), _constDoubleData(data))
+        self.n = A.shape[0]
+
+    def refreshOperatorValues(self, object values):
+        """Replace the values of the operator kept by :meth:`buildOperator` by ``values``, those of a matrix of the
+        same sparsity pattern (in the order of its ``data``), in place. The caller guarantees the pattern."""
+        valuesArray = np.ascontiguousarray(values, dtype=np.float64).reshape(-1)
+        self.system.refreshOperatorValues(valuesArray.shape[0], _constDoubleData(valuesArray))
+
     def diagonalBlock(self, int field):
         """``As[field, field]`` as a new scipy.sparse csr_matrix (sorted columns if ``A``'s were), whichever
         operator :meth:`build` stored."""

@@ -90,6 +90,7 @@ fieldOutput above a threshold, with a ``halo`` so that the zone's own nodes beco
 can be condensed, and always all fields of a node together.
 """
 
+import numbers
 from collections.abc import Callable, Mapping
 
 import numpy as np
@@ -147,15 +148,51 @@ def optionsRejection(options) -> "str | None":
         return "'initialOnly' has no meaning for markers of schurComplement: they are evaluated on every solve"
     if options.get("approximation", "local") not in ("local", "none"):
         return "'approximation' must be 'local' or 'none'"
-    if not 0.0 <= options.get("dropTolerance", 1e-4) < 1.0:
-        return "'dropTolerance' must be at least 0 and less than 1 (else the diagonal would be dropped)"
-    if not options.get("windowNodes", 50) >= 1 or not (options.get("haloNodes") or 0) >= 0:
-        return "'windowNodes' must be at least 1 and 'haloNodes' not negative"
+    dropTolerance = options.get("dropTolerance", DEFAULT_OPTIONS["dropTolerance"])
+    if not _isReal(dropTolerance) or not 0.0 <= dropTolerance < 1.0:
+        return "'dropTolerance' must be a number of at least 0 and less than 1 (else the diagonal would be dropped)"
+    windowNodes, haloNodes = options.get("windowNodes", DEFAULT_OPTIONS["windowNodes"]), options.get("haloNodes")
+    if not _isInteger(windowNodes) or windowNodes < 1:
+        return "'windowNodes' must be an integer of at least 1"
+    if haloNodes is not None and (not _isInteger(haloNodes) or haloNodes < 0):
+        return "'haloNodes' must be an integer, not negative (or null for windowNodes)"
     if options.get("blockFactors", "U") not in ("U", "LU"):
         return "'blockFactors' must be 'U' or 'LU'"
     directSolver = options.get("directSolver", DEFAULT_OPTIONS["directSolver"])
     if not isinstance(directSolver, Mapping) or "linsolver" not in directSolver:
         return "'directSolver' must be an object with a 'linsolver' name (and optional 'options')"
+    return _directSolverRejection(directSolver)
+
+
+def _isInteger(value) -> bool:
+    """Whether ``value`` is an integer (a JSON integer), not a bool, a float or a string."""
+    return isinstance(value, numbers.Integral) and not isinstance(value, bool)
+
+
+def _isReal(value) -> bool:
+    """Whether ``value`` is a real number (a JSON number), not a bool or a string."""
+    return isinstance(value, numbers.Real) and not isinstance(value, bool)
+
+
+def _directSolverRejection(directSolver: Mapping) -> "str | None":
+    """Why the ``directSolver`` of ``schurComplement`` cannot be used, or ``None``: it must be a registered linear
+    solver that factorizes once for several right-hand sides, i.e. whose class overrides both
+    :meth:`~edelweissfe.linsolve.base.LinearSolver.factorize` and
+    :meth:`~edelweissfe.linsolve.base.LinearSolver.solveFactorized` of the base class, which only raise."""
+    from edelweissfe.config.linsolve import getLinSolverByName
+    from edelweissfe.linsolve.base import LinearSolver
+
+    name = directSolver["linsolver"]
+    try:
+        solver = getLinSolverByName(name, dict(directSolver.get("options", {})))
+    except (ImportError, LookupError, ValueError, TypeError) as error:
+        return "'directSolver' {!r} cannot be created: {:}".format(name, error)
+    solverClass = type(solver)
+    if solverClass.factorize is LinearSolver.factorize or solverClass.solveFactorized is LinearSolver.solveFactorized:
+        return (
+            "'directSolver' {!r} does not factorize once for several right-hand sides (factorize and solveFactorized), "
+            "which the condensed block needs: use superlu or pardiso".format(name)
+        )
     return None
 
 
@@ -263,14 +300,17 @@ class SchurComplementCondensation:
         #: The number of diagonal entries of the last :math:`\\tilde S` that are not positive (see
         #: :meth:`approximateSchurComplement`).
         self.nonPositiveDiagonalEntries = 0
-        # the blocks of A, cut out once per sparsity pattern of A and choice of b, see _split
-        self._pattern = None
-        self._blockIndexInData = None
+        # where the entries of the blocks of A are in A.data, found once per sparsity pattern of A and choice of b,
+        # see _split
+        self._splitCache = None
         self.A_bb = self.A_bk = self.A_kb = None
         # A_kb by columns, for cutting out the columns of the windows, see approximateSchurComplement
         self._A_kb_byColumns = None
         # per field: which of its nodes remain (are not condensed), see remainingFieldBlocks
         self._remainingNodes = {}
+        # the last selection of the condensed dofs, and the markers' stamps it was made with, see
+        # _selectCondensedDofs
+        self._selection = self._selectionStamp = None
 
     # ----- the condensed dofs -----
 
@@ -288,12 +328,19 @@ class SchurComplementCondensation:
                 if dofs:
                     self._dofsOfNode[node.label] = np.concatenate(dofs)
         self.condensedDofs = np.empty(0, dtype=np.int64)
-        self._pattern = None
+        self._splitCache = None
+        self._selection = self._selectionStamp = None
 
     def _selectCondensedDofs(self) -> tuple:
         """All dofs of the interior nodes of the marked elements, sorted: a node is interior if it has at least one
         element and all of its elements are marked. A marker that has nothing to decide on yet (a fieldOutput
         before the first converged increment) marks nothing.
+
+        The selection is kept, and reused while every marker's
+        :meth:`~edelweissfe.adaptivity.marking.MarkerBase.selectionStamp` stays the same: a marker of sets changes
+        only with the model (:meth:`setModel` drops the selection), one of a fieldOutput when the fieldOutput is
+        updated (after a converged increment), and a marker that cannot tell (stamp ``None``) marks again on every
+        call. So a fieldOutput marker with a halo is not re-evaluated on every Newton iteration.
 
         Returns
         -------
@@ -304,6 +351,14 @@ class SchurComplementCondensation:
             raise RuntimeError(
                 "schurComplement: the condensed dofs are chosen on the model, but setModel was not called"
             )
+        stamp = tuple(marker.selectionStamp(self._model) for marker in self._markers)
+        if self._selection is not None and None not in stamp and stamp == self._selectionStamp:
+            return self._selection
+        self._selection, self._selectionStamp = self._markedInteriorDofs(), stamp
+        return self._selection
+
+    def _markedInteriorDofs(self) -> tuple:
+        """The selection of :meth:`_selectCondensedDofs`, made anew."""
         marked = set()
         for marker in self._markers:
             if marker.isReady(self._model):
@@ -340,57 +395,33 @@ class SchurComplementCondensation:
         Raises
         ------
         numpy.linalg.LinAlgError
-            If :math:`A_{bb}` cannot be factorized (e.g. a softening zone or a bond that lost all stiffness).
+            If :math:`A_{bb}` cannot be factorized (e.g. a softening zone or a bond that lost all stiffness). The
+            update is then not applied: the condensation keeps the state of the last successful one.
         """
         with performancetiming.timeit("schur dof selection"):
             dofs, nodeOfDof = self._selectCondensedDofs()
-        self.selectedAllDofs = dofs.size == A.shape[0]
-        if self.selectedAllDofs:
+        selectedAllDofs = dofs.size == A.shape[0]
+        if selectedAllDofs:
             dofs, nodeOfDof = np.empty(0, dtype=np.int64), np.empty(0, dtype=np.int64)
-        if not np.array_equal(dofs, self.condensedDofs):
-            self.condensedDofs, self._nodeOfCondensedDof = dofs, nodeOfDof
+        # The new state is computed into locals and assigned only once A_bb is factorized: a failed update leaves the
+        # condensation as the last successful one left it, so that a solve without the condensation can take over.
+        if np.array_equal(dofs, self.condensedDofs):
+            remainingDofs, splitCache = self.remainingDofs, self._splitCache
+        else:
             isCondensed = np.zeros(A.shape[0], dtype=bool)
             isCondensed[dofs] = True
-            self.remainingDofs = np.flatnonzero(~isCondensed)
-            self._pattern = None
-        if not self.hasCondensedDofs():
-            return
-        with performancetiming.timeit("schur split"):
-            self.A_bb, self.A_bk, self.A_kb = self._split(A, ("bb", "bk", "kb"))
-        with performancetiming.timeit("schur factorization"):
-            self._directSolver.factorize(self.A_bb)
-
-    def _split(self, A: sp.csr_matrix, which: tuple) -> list:
-        """The blocks ``which`` (of ``"bb"``, ``"bk"``, ``"kb"``, ``"kk"``) of ``A``, as CSR matrices.
-
-        The simple way is fancy indexing, ``A[b][:, k]``, which copies and searches the large matrix on every solve.
-        But the sparsity pattern of ``A`` stays the same over many solves, so this finds once per pattern (and
-        choice of b), for every entry of a block, the index of that entry in ``A.data``: it slices a matrix with
-        ``A``'s pattern whose values are those indices. Every solve then only gathers ``A.data`` at these indices."""
-        if self._pattern is None or not (
-            np.array_equal(self._pattern[0], A.indptr) and np.array_equal(self._pattern[1], A.indices)
-        ):
-            self._pattern = (A.indptr.copy(), A.indices.copy())
-            self._blockIndexInData = {}
-        dofsOf = {"b": self.condensedDofs, "k": self.remainingDofs}
-        blocks = []
-        for name in which:
-            if name not in self._blockIndexInData:
-                # index + 1: a zero value could be dropped by the slicing
-                entryIndexInData = sp.csr_matrix(
-                    (np.arange(1, A.nnz + 1, dtype=np.float64), A.indices, A.indptr), shape=A.shape
-                )
-                block = entryIndexInData[dofsOf[name[0]]][:, dofsOf[name[1]]].tocsr()
-                block.sort_indices()
-                self._blockIndexInData[name] = (
-                    block.data.astype(np.int64) - 1,
-                    block.indices,
-                    block.indptr,
-                    block.shape,
-                )
-            indexInData, indices, indptr, shape = self._blockIndexInData[name]
-            blocks.append(sp.csr_matrix((A.data[indexInData], indices, indptr), shape=shape))
-        return blocks
+            remainingDofs, splitCache = np.flatnonzero(~isCondensed), None
+        blocks = (None, None, None)
+        if dofs.size > 0:
+            with performancetiming.timeit("schur split"):
+                splitCache = _splitCacheFor(A, splitCache)
+                blocks = _split(A, ("bb", "bk", "kb"), dofs, remainingDofs, splitCache)
+            with performancetiming.timeit("schur factorization"):
+                self._directSolver.factorize(blocks[0])
+        self.selectedAllDofs = selectedAllDofs
+        self.condensedDofs, self._nodeOfCondensedDof, self.remainingDofs = dofs, nodeOfDof, remainingDofs
+        self._splitCache = splitCache
+        self.A_bb, self.A_bk, self.A_kb = blocks
 
     def precondition(self, r: np.ndarray, preconditionRemaining: Callable) -> np.ndarray:
         """One application of the preconditioner (the inverse of the block factors ``blockFactors`` of :math:`A`),
@@ -460,7 +491,7 @@ class SchurComplementCondensation:
         A
             The system matrix of the last :meth:`update`.
         """
-        (A_kk,) = self._split(A, ("kk",))
+        (A_kk,) = _split(A, ("kk",), self.condensedDofs, self.remainingDofs, self._splitCache)
         if self._approximation == "none":
             S = A_kk
         else:
@@ -603,6 +634,39 @@ class SchurComplementCondensation:
             correction = A_kb_zones @ X
             parts.append(_significantEntries(correction, coupledRows, columns, sqrtDiagonalOfA_kk, thinningTolerance))
         return parts
+
+
+def _splitCacheFor(A: sp.csr_matrix, cache: "dict | None") -> dict:
+    """The cache of :func:`_split` for ``A``: ``cache`` if it was made for ``A``'s sparsity pattern, else an empty one
+    for it (made, too, when ``cache`` is ``None``: a new choice of the condensed dofs)."""
+    if cache is not None and np.array_equal(cache["indptr"], A.indptr) and np.array_equal(cache["indices"], A.indices):
+        return cache
+    return {"indptr": A.indptr.copy(), "indices": A.indices.copy(), "blocks": {}}
+
+
+def _split(A: sp.csr_matrix, which: tuple, condensedDofs: np.ndarray, remainingDofs: np.ndarray, cache: dict) -> list:
+    """The blocks ``which`` (of ``"bb"``, ``"bk"``, ``"kb"``, ``"kk"``) of ``A`` for the condensed dofs b and the
+    remaining dofs k, as CSR matrices.
+
+    The simple way is fancy indexing, ``A[b][:, k]``, which copies and searches the large matrix on every solve.
+    But the sparsity pattern of ``A`` stays the same over many solves, so this finds once per pattern (and choice of
+    b), for every entry of a block, the index of that entry in ``A.data``: it slices a matrix with ``A``'s pattern
+    whose values are those indices, and keeps them in ``cache`` (see :func:`_splitCacheFor`). Every solve then only
+    gathers ``A.data`` at these indices."""
+    dofsOf = {"b": condensedDofs, "k": remainingDofs}
+    blocks = []
+    for name in which:
+        if name not in cache["blocks"]:
+            # index + 1: a zero value could be dropped by the slicing
+            entryIndexInData = sp.csr_matrix(
+                (np.arange(1, A.nnz + 1, dtype=np.float64), A.indices, A.indptr), shape=A.shape
+            )
+            block = entryIndexInData[dofsOf[name[0]]][:, dofsOf[name[1]]].tocsr()
+            block.sort_indices()
+            cache["blocks"][name] = (block.data.astype(np.int64) - 1, block.indices, block.indptr, block.shape)
+        indexInData, indices, indptr, shape = cache["blocks"][name]
+        blocks.append(sp.csr_matrix((A.data[indexInData], indices, indptr), shape=shape))
+    return blocks
 
 
 def _significantEntries(

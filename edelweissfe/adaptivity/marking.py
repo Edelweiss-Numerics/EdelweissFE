@@ -195,6 +195,19 @@ class MarkerBase(OptionSchemaProvider):
         """
         return True
 
+    def selectionStamp(self, model):
+        """A value that changes whenever what :meth:`isReady` and :meth:`mark` read can change, other than the model
+        itself (its elements, sets and surfaces, which change only with a new model), or ``None`` if the marker
+        cannot tell. A caller may keep a selection while the stamp stays the same (``blockamg``'s Schur complement
+        does); ``None``, the default, means: mark again.
+
+        Parameters
+        ----------
+        model
+            The FEModel.
+        """
+        return None
+
     def mark(self, model, candidateElements: RefineableElements, mesh):
         """Select elements: those to refine, for adaptive mesh refinement.
 
@@ -379,6 +392,11 @@ class FieldOutputMarker(MarkerBase):
     def isReady(self, model) -> bool:
         return _perElementFieldOutput(model, self.fieldOutputName).hasResult()
 
+    def selectionStamp(self, model):
+        # the fieldOutput's result, which changes when the fieldOutput is updated (after a converged increment)
+        fieldOutput = _perElementFieldOutput(model, self.fieldOutputName)
+        return (id(fieldOutput), fieldOutput._version)
+
     def mark(self, model, candidateElements, mesh):
         elements, values = _perElementFieldOutputResult(model, self.fieldOutputName)
         if not elements:
@@ -419,6 +437,10 @@ class ElementSetMarker(MarkerBase):
         if self.elSetName not in model.elementSets:
             raise KeyError(f"marker references the element set {self.elSetName!r}, which the model does not have")
 
+    def selectionStamp(self, model):
+        # an element set changes only with the model
+        return ()
+
     def mark(self, model, candidateElements, mesh):
         if self.elSetName not in model.elementSets:
             return set()
@@ -452,6 +474,10 @@ class NodeSetMarker(MarkerBase):
     def checkReferences(self, model):
         if self.nSetName not in model.nodeSets:
             raise KeyError(f"marker references the node set {self.nSetName!r}, which the model does not have")
+
+    def selectionStamp(self, model):
+        # a node set changes only with the model
+        return ()
 
     def mark(self, model, candidateElements, mesh):
         if self.nSetName not in model.nodeSets:
@@ -491,6 +517,10 @@ class SurfaceMarker(MarkerBase):
     def checkReferences(self, model):
         if self.surfaceName not in model.surfaces:
             raise KeyError(f"marker references the surface {self.surfaceName!r}, which the model does not have")
+
+    def selectionStamp(self, model):
+        # a surface changes only with the model
+        return ()
 
     def mark(self, model, candidateElements, mesh):
         if self.surfaceName not in model.surfaces:

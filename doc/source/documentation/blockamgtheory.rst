@@ -1608,19 +1608,24 @@ marked. One rule serves every use::
   e.g. displacement and nonlocal damage. A fieldOutput has no result before the first converged increment, so
   nothing is condensed until then.
 
-The markers are evaluated on every solve (``initialOnly`` is rejected); a fieldOutput changes only between
-increments, and a changed selection rebuilds :math:`\tilde S` and the hierarchies. Should the markers select every
+The markers are evaluated again whenever what they read can change (``initialOnly`` is rejected): a fieldOutput
+marker when its fieldOutput is updated, after a converged increment; a marker of sets or surfaces when the model
+changes; a marker that cannot tell (e.g. ``recoveryError``) on every solve. A changed selection rebuilds
+:math:`\tilde S` and the hierarchies. Should the markers select every
 dof, nothing is condensed (with a warning): there would be nothing left for the field split, and a direct solver is
 the better choice; more than half of the dofs is warned about too. Only the dofs of nodes can be condensed, and
 always all fields of a node together: dofs that belong to no node (e.g. Lagrange multipliers) cannot be selected.
 
-**Robustness.** If :math:`A_{bb}` cannot be factorized (a zone or a bond that lost all stiffness), the solve does
-without the condensation, with a warning: the condensed dofs come from the last converged increment, so a cutback
-would meet the same block again. An approximate Schur complement with non-positive diagonal entries (the condensed
-zone does not hold all of the softening, and AMG on the rest may struggle) is warned about as well.
+**Robustness.** If :math:`A_{bb}` cannot be factorized (a zone or a bond that lost all stiffness), or
+:math:`\tilde S` cannot be formed (a singular window block of an :math:`A_{bb}` that factorizes as a whole), the solve
+does without the condensation, for all dofs, with a warning: the condensed dofs come from the last converged
+increment, so a cutback would meet the same block again. The condensation then keeps the state of its last successful
+update. An approximate Schur complement with non-positive diagonal entries (the condensed zone does not hold all of
+the softening, and AMG on the rest may struggle) is warned about as well.
 
 **Within a solve.** Every solve cuts :math:`A_{bb}`, :math:`A_{bk}` and :math:`A_{kb}` out of the current matrix
-(at positions found once per sparsity pattern) and factorizes :math:`A_{bb}`. :math:`\tilde S` is computed when
+(at positions found once per sparsity pattern) and factorizes :math:`A_{bb}`; the operator of its outer solve,
+:math:`A` itself, is kept per sparsity pattern too, its values refreshed in place. :math:`\tilde S` is computed when
 the hierarchies are rebuilt -- under the same reuse rules as without condensation -- and the hierarchies are
 built on it: the field blocks are those of the remaining dofs (a field whose dofs are all condensed, such as the
 rotations of embedded beams, has none), and the node coordinates of the near null-space and of the rigid-body
@@ -1628,8 +1633,9 @@ coarse level and the P1 maps of p-multigrid are restricted to the remaining node
 corner). Between rebuilds, the sweep keeps the couplings of the standing :math:`\tilde S`, while :math:`A_{bb}`,
 :math:`A_{bk}` and :math:`A_{kb}` are those of the current matrix: unlike without condensation, where the couplings
 between the fields are taken from the current matrix on every solve. The outer Krylov solve runs on :math:`A`
-itself, so ``krylovOnScaledSystem`` cannot be combined with it. ``schurComplement`` is fixed at construction: a hot
-reload that changes it is rejected.
+itself, so ``krylovOnScaledSystem`` cannot be combined with any condensation (one of ``schurComplement``, or one
+handed over directly to the constructor), at construction or by a hot reload. ``schurComplement`` is fixed at
+construction: a hot reload that changes it is rejected.
 
 **Two sweeps.** The sweep in residual-correction form makes ``sweeps = 2`` exactly two steps of the stationary
 iteration :math:`z \leftarrow z + M^{-1} (r - \tilde S z)` with the one-sweep preconditioner :math:`M^{-1}`,
@@ -1637,8 +1643,9 @@ which on bar systems was found a good balance between AMG cycles and outer itera
 cheaper per iteration and needs more of them.
 
 **The direct solver.** ``directSolver`` names any registered linear solver that factorizes once for several
-right-hand sides (``factorize``/``solveFactorized``): ``superlu`` or ``pardiso`` (``klu``, ``mumps`` and ``petsclu``
-do not). Every outer iteration solves with :math:`A_{bb}`, so the cost of a back substitution counts most:
+right-hand sides (``factorize``/``solveFactorized``): ``superlu`` or ``pardiso``; one that does not (``klu``,
+``mumps``, ``petsclu``, ``amgcl``, ``blockamg``) is rejected when the solver is created. Every outer iteration solves
+with :math:`A_{bb}`, so the cost of a back substitution counts most:
 for the block-tridiagonal chains of bars, ``superlu`` (the default) is the cheaper one (with ``blockFactors =
 "LU"``, twice per iteration). A large compact zone (a
 softening zone of a 3D mesh) shifts the weight to the exact correction of :math:`\tilde S`, which solves for many
