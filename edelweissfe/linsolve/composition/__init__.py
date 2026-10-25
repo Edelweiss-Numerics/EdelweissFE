@@ -30,15 +30,15 @@
 A solver script next to the input file::
 
     from edelweissfe.linsolve.composition import (
-        AMG, LGMRES, DiagonalScaling, Multiplicative, OnField, RigidBodyModes, TwoGrid,
+        AMG, LGMRES, ComposedLinearSolver, DiagonalScaling, Multiplicative, OnField, RigidBodyModes, TwoGrid,
     )
 
     displacement = OnField("displacement", TwoGrid(coarseSpace=RigidBodyModes()))
     damage = OnField("nonlocal damage", AMG())
     blockGaussSeidel = Multiplicative([displacement, damage])
-    linearSolver = LGMRES(DiagonalScaling(blockGaussSeidel))
+    linearSolver = ComposedLinearSolver(LGMRES(DiagonalScaling(blockGaussSeidel)))
 
-and in the input file ``linsolver=script:solver.py:linearSolver``. ``print(linearSolver)`` shows the tree; see
+and in the input file ``linsolver=script:solver.py:linearSolver``. ``print(linearSolver.root)`` shows the tree; see
 :mod:`~edelweissfe.linsolve.composition.views` for the other views, and
 :mod:`~edelweissfe.linsolve.composition.base` for how a component works.
 """
@@ -60,6 +60,7 @@ from edelweissfe.linsolve.composition.combinators import (
     OnField,
     gaussSeidelOrder,
 )
+from edelweissfe.linsolve.composition.degradationdumps import DegradationDumps
 from edelweissfe.linsolve.composition.diagonalscaling import DiagonalScaling
 from edelweissfe.linsolve.composition.direct import DirectSolver
 from edelweissfe.linsolve.composition.krylov import (
@@ -67,7 +68,9 @@ from edelweissfe.linsolve.composition.krylov import (
     LGMRES,
     FixedTolerance,
     ForcingTolerance,
+    GapCompensation,
     RebuildPolicy,
+    SolveRecord,
 )
 from edelweissfe.linsolve.composition.presets import blockAMG
 from edelweissfe.linsolve.composition.schurcomplement import SchurComplement
@@ -87,12 +90,14 @@ __all__ = [
     "Additive",
     "CoarseCorrection",
     "ComposedLinearSolver",
+    "DegradationDumps",
     "Description",
     "DiagonalScaling",
     "DirectSolver",
     "FGMRES",
     "FixedTolerance",
     "ForcingTolerance",
+    "GapCompensation",
     "Jacobi",
     "LGMRES",
     "MatrixChange",
@@ -104,6 +109,7 @@ __all__ = [
     "RigidBodyModes",
     "SchurComplement",
     "SetUpContext",
+    "SolveRecord",
     "Statistics",
     "Step",
     "SystemMatrix",

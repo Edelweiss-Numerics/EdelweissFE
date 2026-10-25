@@ -175,10 +175,13 @@ class SchurComplement(Preconditioner):
         self.condensing = False
         self.S_tilde = None
         self._builtForDofs = None
+        # the messages shown once per model
+        self._messagesShown = set()
 
     def setModel(self, model, dofManager) -> None:
         self.condensation.setModel(model, dofManager)
         self._builtForDofs = None
+        self._messagesShown = set()
         super().setModel(model, dofManager)
 
     def setUp(self, A, context: SetUpContext) -> None:
@@ -195,21 +198,50 @@ class SchurComplement(Preconditioner):
             condensation.update(A.matrix())
             condensing = condensation.hasCondensedDofs()
         except np.linalg.LinAlgError as error:
+            # e.g. a softening zone or a bond that lost all stiffness. The condensed dofs come from the last converged
+            # increment, so a cutback would meet the same block again: this solve does without.
             self._warn(context, "the condensed block A_bb cannot be factorized ({:}); solved without it".format(error))
             condensing = False
-        dofs = condensation.condensedDofs if condensing else None
-        dofsChanged = (dofs is None) != (self._builtForDofs is None) or (
-            dofs is not None and not np.array_equal(dofs, self._builtForDofs)
-        )
-        rebuild = rebuild or dofsChanged or change is None
+        if condensation.selectedAllDofs:
+            self._warnOnce(context, "the markers select every dof; nothing is condensed")
+        elif condensing and condensation.condensedDofs.size > A.shape[0] // 2:
+            self._warnOnce(
+                context,
+                "the markers select more than half of the dofs: the solve is mostly a direct one, with the cost of the "
+                "preconditioner of S̃ on top",
+            )
+        rebuild = rebuild or change is None
+        dofs, dofsChanged = self._condensedDofsOf(condensing)
+        if condensing and (rebuild or dofsChanged):
+            try:
+                with performancetiming.timeit("schur complement"):
+                    self.S_tilde = SystemMatrix(condensation.approximateSchurComplement(A.matrix()))
+            except np.linalg.LinAlgError as error:
+                # e.g. a singular window block of A_bb, which factorizes as a whole: like a failed factorization, this
+                # solve does without the condensation
+                self._warn(
+                    context, "the approximate Schur complement cannot be formed ({:}); solved without it".format(error)
+                )
+                condensing = False
+                dofs, dofsChanged = self._condensedDofsOf(condensing)
+            else:
+                context.message(
+                    "info",
+                    "SchurComplement: {:} dofs condensed; the approximate Schur complement of the {:} remaining dofs "
+                    "has {:} nonzeros".format(dofs.size, A.shape[0] - dofs.size, self.S_tilde.nnz),
+                )
+                if condensation.nonPositiveDiagonalEntries:
+                    self._warn(
+                        context,
+                        "the approximate Schur complement has {:} non-positive diagonal entries: the condensed dofs do "
+                        "not hold all of the softening, and the preconditioner of the remaining dofs may "
+                        "struggle".format(condensation.nonPositiveDiagonalEntries),
+                    )
         self.condensing = condensing
 
         if not condensing:
             childMatrix, childContext = A, context
         else:
-            if rebuild:
-                with performancetiming.timeit("schur complement"):
-                    self.S_tilde = SystemMatrix(condensation.approximateSchurComplement(A.matrix()))
             remainingFields = condensation.remainingFieldBlocks(list(context.fields))
             childMatrix = self.S_tilde
             childContext = context.restrictedTo(
@@ -224,16 +256,31 @@ class SchurComplement(Preconditioner):
                 childChange = childChange.withRebuild("condensed dofs")
             self.preconditionS.update(childMatrix, childChange)
 
+    def _condensedDofsOf(self, condensing: bool) -> tuple:
+        """The condensed dofs of this solve (``None`` without condensation), and whether they differ from those the child
+        was built for."""
+        dofs = self.condensation.condensedDofs if condensing else None
+        changed = (dofs is None) != (self._builtForDofs is None) or (
+            dofs is not None and not np.array_equal(dofs, self._builtForDofs)
+        )
+        return dofs, changed
+
     def builtMatrices(self) -> tuple:
         if not self.condensing:
             return ()
         return (("A_bb", self.condensation.A_bb), ("S̃", self.S_tilde.A))
 
     def _warn(self, context: SetUpContext, message: str) -> None:
-        if context.journal is not None:
-            context.journal.message("⚠ SchurComplement: " + message, "SchurComplement", level=2)
-        else:
-            print("⚠ SchurComplement: " + message, flush=True)
+        context.message("warning", "⚠ SchurComplement: " + message)
+
+    def _warnOnce(self, context: SetUpContext, message: str) -> None:
+        """A warning shown only the first time for the current model."""
+        if message not in self._messagesShown:
+            self._messagesShown.add(message)
+            self._warn(context, message)
+
+    def condensedDofs(self) -> "np.ndarray | None":
+        return self.condensation.condensedDofs if self.condensing else None
 
     def __call__(self, r: np.ndarray) -> np.ndarray:
         if not self.condensing:

@@ -127,11 +127,12 @@ def test_a_solver_script_is_the_linear_solver_of_an_input_file(tmp_path):
         textwrap.dedent(
             """
             from edelweissfe.linsolve.composition import (
-                AMG, LGMRES, DiagonalScaling, FixedTolerance, Multiplicative, OnField
+                AMG, LGMRES, ComposedLinearSolver, DiagonalScaling, FixedTolerance, Multiplicative, OnField
             )
 
             blockGaussSeidel = Multiplicative([OnField("displacement", AMG()), OnField("nonlocal damage", AMG())])
-            linearSolver = LGMRES(DiagonalScaling(blockGaussSeidel), tolerance=FixedTolerance(options.get("eta", 1e-8)))
+            tolerance = FixedTolerance(options.get("eta", 1e-8))
+            linearSolver = ComposedLinearSolver(LGMRES(DiagonalScaling(blockGaussSeidel), tolerance=tolerance))
             """
         )
     )
@@ -150,7 +151,14 @@ def test_a_solver_script_is_the_linear_solver_of_an_input_file(tmp_path):
 def test_a_script_must_bind_a_composed_solver(tmp_path):
     script = tmp_path / "solver.py"
     script.write_text("linearSolver = 42\n")
-    with pytest.raises(TypeError, match="not a composed solver"):
+    with pytest.raises(TypeError, match="not a solver"):
         loadSolverScript(str(script))
     with pytest.raises(ValueError, match="defines no 'other'"):
         loadSolverScript(str(script), "other")
+
+
+def test_a_script_that_binds_a_bare_tree_is_refused_with_the_fix(tmp_path):
+    script = tmp_path / "solver.py"
+    script.write_text("from edelweissfe.linsolve.composition import blockAMG\nlinearSolver = blockAMG()\n")
+    with pytest.raises(TypeError, match=r"linearSolver = ComposedLinearSolver\(<your tree>\)"):
+        loadSolverScript(str(script))

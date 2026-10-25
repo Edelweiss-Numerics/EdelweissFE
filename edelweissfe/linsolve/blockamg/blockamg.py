@@ -107,11 +107,16 @@ import edelweissfe.utils.performancetiming as performancetiming
 from edelweissfe.config.phenomena import phenomena
 from edelweissfe.linsolve.base import LinearSolver, LinearSolveSummary
 from edelweissfe.linsolve.blockamg import rigidbodycoarselevel, schurcomplement
-from edelweissfe.linsolve.composition.amg import buildFieldHierarchy
+from edelweissfe.linsolve.composition.amg import (
+    buildFieldHierarchy,
+    droppedSmallEntries,
+    fieldTreeRejection,
+)
 from edelweissfe.linsolve.composition.combinators import (
     gaussSeidelOrder,
     multiplicativeCorrections,
 )
+from edelweissfe.linsolve.composition.degradationdumps import DegradationDumps
 from edelweissfe.linsolve.composition.diagonalscaling import diagonalScalingOf
 from edelweissfe.linsolve.composition.krylov import (
     STALENESS_MIN_EXCESS,
@@ -883,11 +888,6 @@ class BlockAMGSolver(LinearSolver):
     #: multi-point-constraint slaves noticeably more wall-clock over several increments.
     needsStableSparsityPattern = True
 
-    #: Degradation dumps written across every instance in this process, so
-    #: ``dumpOnDegradationMaxDumps`` is a genuine process-wide ceiling -- the same reasoning as
-    #: :class:`~edelweissfe.linsolve.matrixdump.matrixdump.MatrixDumpSolver`'s ``_totalDumpsWritten``.
-    _degradationDumpsWritten = 0
-
     #: How many instances have been created in this process (one nonlinear solver may build a fresh
     #: ``BlockAMGSolver`` per analysis step), so dumps from different instances get distinct filenames
     #: -- same reasoning as :class:`~edelweissfe.linsolve.matrixdump.matrixdump.MatrixDumpSolver`'s
@@ -1020,15 +1020,6 @@ class BlockAMGSolver(LinearSolver):
         # in force -- which is the whole point when the file is being edited during a long run.
         self._hotReloadConfigFile = hotReloadConfigFile
         self._hotReloadStamp = None
-        # Rolling window of the last dumpOnDegradationContextSolves solves (each entry: solveCount, A,
-        # b, blocks, mustRefresh, patternChanged, newIncrement, previousOuterIters), oldest first --
-        # only populated when dumpOnDegradationDir is set, so this costs nothing otherwise. Bounded by
-        # maxlen, so memory is O(contextSolves) regardless of run length.
-        self._recentSolveHistory = collections.deque(maxlen=max(self._dumpOnDegradationContextSolves, 0))
-        # solveCounts already written to disk this run, so an overlapping context window on a second
-        # nearby trigger never dumps (or double-counts against dumpOnDegradationMaxDumps) the same
-        # solve twice.
-        self._dumpedSolveCounts = set()
 
         self._instanceOrdinal = BlockAMGSolver._instancesCreated
         BlockAMGSolver._instancesCreated += 1
@@ -1093,9 +1084,15 @@ class BlockAMGSolver(LinearSolver):
 
         # Created only once construction is known to succeed: a configuration rejected above must not
         # leave a directory behind, and an uncreatable path should raise the ValueError above naming
-        # dumpOnDegradationDir, not a bare OSError from makedirs() before validation even ran.
-        if self._dumpOnDegradationDir is not None:
-            os.makedirs(self._dumpOnDegradationDir, exist_ok=True)
+        # dumpOnDegradationDir, not a bare OSError from makedirs() before validation even ran. The dumps (and the
+        # rolling window of the preceding solves) are those of the composed solvers, see
+        # edelweissfe.linsolve.composition.degradationdumps; the settings above stay the ones a hot reload changes.
+        self._degradationDumps = DegradationDumps(
+            self._dumpOnDegradationDir,
+            self._dumpOnDegradationThreshold,
+            max(self._dumpOnDegradationMaxDumps, 0),
+            max(self._dumpOnDegradationContextSolves, 0),
+        )
 
     @property
     def reportsSolveSummary(self) -> bool:
@@ -1167,31 +1164,21 @@ class BlockAMGSolver(LinearSolver):
             print(message, flush=True)
 
     def _dropSmallEntries(self, block):
-        """Return `block` with off-diagonals below the relative drop tolerance removed.
+        """Return `block` with off-diagonals below the relative drop tolerance removed (see
+        :func:`~edelweissfe.linsolve.composition.amg.droppedSmallEntries`), and log how many entries are kept.
 
         Runs only on a hierarchy refresh, not on every solve, so a few array passes over nnz are cheap
-        against the hierarchy build they feed. The diagonal is always kept, so no row can be emptied.
+        against the hierarchy build they feed.
         """
-        tau = self._hierarchyDropTol
-        diagonal = np.abs(block.diagonal())
-        coo = block.tocoo()
-        scale = np.sqrt(diagonal[coo.row] * diagonal[coo.col])
-        keep = (coo.row == coo.col) | (np.abs(coo.data) >= tau * scale)
-        dropped = sp.coo_matrix((coo.data[keep], (coo.row[keep], coo.col[keep])), shape=block.shape).tocsr()
-
-        lumped = ""
-        if self._hierarchyDropLumping:
-            # Row-sum-preserving filtering: the discarded content of each row goes onto its diagonal, so
-            # A_filtered @ 1 == A @ 1 exactly and the constant vector is unaffected by filtering. The
-            # diagonal is always kept, so this does not change the sparsity pattern.
-            discardedRowSums = np.bincount(coo.row[~keep], weights=coo.data[~keep], minlength=block.shape[0])
-            dropped = (dropped + sp.diags(discardedRowSums, format="csr")).tocsr()
-            lumped = ", lumped onto the diagonal"
-
+        dropped = droppedSmallEntries(block, self._hierarchyDropTol, self._hierarchyDropLumping)
         self._log(
             "info",
             "blockamg: hierarchy drop tol {:.0e}: nnz {:,} -> {:,} ({:.1f}%){:}".format(
-                tau, block.nnz, dropped.nnz, 100.0 * dropped.nnz / max(block.nnz, 1), lumped
+                self._hierarchyDropTol,
+                block.nnz,
+                dropped.nnz,
+                100.0 * dropped.nnz / max(block.nnz, 1),
+                ", lumped onto the diagonal" if self._hierarchyDropLumping else "",
             ),
         )
         return dropped
@@ -1317,116 +1304,10 @@ class BlockAMGSolver(LinearSolver):
     # pure functions of a field's block layout, equilibration scaling, and (for the richer basis) node
     # coordinates, with no BlockAMGSolver-instance state, so there is nothing to keep here as a method.
 
-    def _dumpOneSystem(
-        self,
-        solveCount: int,
-        A: sp.csr_matrix,
-        b: np.ndarray,
-        blocks: list,
-        role: str,
-        triggerSolveCount: int,
-        stateFields: dict,
-        condensedDofs: "np.ndarray | None" = None,
-    ) -> None:
-        """Write one raw ``(A, b)`` pair, plus its field-block layout and solver-state bookkeeping, to
-        ``dumpOnDegradationDir`` -- see the class docstring's ``dumpOnDegradationDir``/
-        ``dumpOnDegradationContextSolves`` entries. Used both for the solve that actually crossed the
-        threshold (``role="trigger"``) and for the preceding solves ``dumpOnDegradationContextSolves``
-        adds (``role="context"``) -- both are plain ``(A, b)`` snapshots on disk, distinguished only by
-        the manifest record, so either can be replayed the same way offline.
-
-        ``A``/``b`` are the raw system as handed to :meth:`__call__` (before equilibration), matching
-        :class:`~edelweissfe.linsolve.matrixdump.matrixdump.MatrixDumpSolver`'s own dump format so the
-        same offline tooling can read either. With Schur complement condensation, the condensed dofs are written
-        too (``schurDofs_<stem>.npy``).
-        """
-        stem = "{:02d}_{:05d}".format(self._instanceOrdinal, solveCount)
-        matrixPath = os.path.join(self._dumpOnDegradationDir, "A_{:}.npz".format(stem))
-        rhsPath = os.path.join(self._dumpOnDegradationDir, "b_{:}.npy".format(stem))
-
-        # Uncompressed, same reasoning as MatrixDumpSolver: these systems are large, and compression
-        # would spend more time than the degraded solve being captured.
-        sp.save_npz(matrixPath, A, compressed=False)
-        np.save(rhsPath, np.asarray(b))
-
-        record = {
-            "solveCount": solveCount,
-            "role": role,
-            "triggerSolveCount": triggerSolveCount,
-            "contextOffset": triggerSolveCount - solveCount,
-            "rows": int(A.shape[0]),
-            "nnz": int(A.nnz),
-            "matrixFile": os.path.basename(matrixPath),
-            "rhsFile": os.path.basename(rhsPath),
-            "blocks": [
-                {"name": block.name, "start": block.start, "stop": block.stop, "dimension": block.dimension}
-                for block in blocks
-            ],
-            **stateFields,
-        }
-        if condensedDofs is not None:
-            condensedDofsPath = os.path.join(self._dumpOnDegradationDir, "schurDofs_{:}.npy".format(stem))
-            np.save(condensedDofsPath, condensedDofs)
-            record["condensedDofsFile"] = os.path.basename(condensedDofsPath)
-
-        manifestPath = os.path.join(self._dumpOnDegradationDir, "manifest.jsonl")
-        with open(manifestPath, "a") as manifestFile:
-            manifestFile.write(json.dumps(record) + "\n")
-
-        self._dumpedSolveCounts.add(solveCount)
-        BlockAMGSolver._degradationDumpsWritten += 1
-
-        self._log(
-            "warning",
-            "blockamg: dumped {:} solve #{:} (of trigger #{:}) to {:}; {:} of {:} degradation dumps "
-            "used".format(
-                role,
-                solveCount,
-                triggerSolveCount,
-                os.path.basename(matrixPath),
-                BlockAMGSolver._degradationDumpsWritten,
-                self._dumpOnDegradationMaxDumps,
-            ),
-        )
-
-    def _dumpDegradedSystem(
-        self, A: sp.csr_matrix, b: np.ndarray, blocks: list, solveState: dict, condensedDofs: "np.ndarray | None"
-    ) -> None:
-        """Dump the triggering solve itself, then as much of its context window
-        (``dumpOnDegradationContextSolves`` preceding solves, from :attr:`_recentSolveHistory`) as the
-        remaining ``dumpOnDegradationMaxDumps`` budget allows, oldest first. ``solveState`` is the solve's
-        bookkeeping (outer iterations, residuals, rebuild flags) recorded in the manifest.
-        """
-        triggerSolveCount = self._solveCount
-        if triggerSolveCount not in self._dumpedSolveCounts and (
-            BlockAMGSolver._degradationDumpsWritten < self._dumpOnDegradationMaxDumps
-        ):
-            self._dumpOneSystem(
-                triggerSolveCount,
-                A,
-                b,
-                blocks,
-                "trigger",
-                triggerSolveCount=triggerSolveCount,
-                stateFields=solveState,
-                condensedDofs=condensedDofs,
-            )
-
-        for entry in self._recentSolveHistory:
-            if BlockAMGSolver._degradationDumpsWritten >= self._dumpOnDegradationMaxDumps:
-                break
-            if entry["solveCount"] in self._dumpedSolveCounts:
-                continue
-            self._dumpOneSystem(
-                entry["solveCount"],
-                entry["A"],
-                entry["b"],
-                entry["blocks"],
-                "context",
-                triggerSolveCount=triggerSolveCount,
-                stateFields=entry["state"],
-                condensedDofs=entry["condensedDofs"],
-            )
+    @property
+    def _recentSolveHistory(self) -> collections.deque:
+        """The solves kept as the context of a degradation dump, oldest first (see ``dumpOnDegradationContextSolves``)."""
+        return self._degradationDumps.history
 
     # Settings whose stored attribute does not follow the self._<name> convention. Listed
     # explicitly rather than inferred, because a wrong guess here would apply a setting to nothing
@@ -1616,45 +1497,9 @@ class BlockAMGSolver(LinearSolver):
         if not isinstance(fieldPreconds, dict):
             return "must map field names to AMGCL preconditioner trees"
         for fieldName, precond in fieldPreconds.items():
-            if not isinstance(precond, dict):
-                return "entry '{:}' must be an AMGCL preconditioner tree (a JSON object)".format(fieldName)
-            precision = precond.get("backendPrecision", "double")
-            blockSize = precond.get("backendBlockSize", 1)
-            if precision not in ("double", "float"):
-                return "entry '{:}': backendPrecision must be 'double' or 'float'".format(fieldName)
-            if blockSize not in (1, 2, 3) or (blockSize == 2 and precision == "float"):
-                return "entry '{:}': backendBlockSize must be 1, 2 or 3 (2 only in double)".format(fieldName)
-            if "hierarchyOnUnscaledBlock" in precond:
-                # refused rather than forwarded: AMGCL only warns about a key it does not know, on stderr
-                if precond["hierarchyOnUnscaledBlock"] is False:
-                    return (
-                        "entry '{:}': hierarchyOnUnscaledBlock was removed; false was its default and did nothing, "
-                        "so drop the key".format(fieldName)
-                    )
-                return (
-                    "entry '{:}': hierarchyOnUnscaledBlock was removed. For a vector field on a block backend, "
-                    'its coarse space is blockTranslationNullspace: set "blockTranslationNullspace": true in this '
-                    "entry (an entry replaces the default tree, it does not inherit that key), and to keep its "
-                    'Jacobi-scaled smoother put "scale": true inside the existing relax dict, next to '
-                    '"type": "chebyshev". A scalar field has no replacement: its hierarchy is built on the '
-                    "scaled block".format(fieldName)
-                )
-            if not isinstance(precond.get("blockTranslationNullspace", False), bool):
-                return "entry '{:}': blockTranslationNullspace must be true or false".format(fieldName)
-            # AMGCL's defaults: class amg, coarsening.type smoothed_aggregation
-            coarsening = precond.get("coarsening", {})
-            coarseningType = coarsening.get("type", "smoothed_aggregation") if isinstance(coarsening, dict) else None
-            if _takesBlockTranslations(precond) and (
-                precond.get("class", "amg") != "amg" or coarseningType != "smoothed_aggregation"
-            ):
-                return (
-                    "entry '{:}': blockTranslationNullspace needs smoothed aggregation (coarsening.type); it is "
-                    "true in the default 2D/3D trees, set it to false for another coarsening".format(fieldName)
-                )
-            if blockSize > 1 and fieldName in dimensions and dimensions[fieldName] != blockSize:
-                return "entry '{:}': backendBlockSize {:} does not match the field's dimension {:}".format(
-                    fieldName, blockSize, dimensions[fieldName]
-                )
+            reason = fieldTreeRejection(precond, dimensions.get(fieldName))
+            if reason is not None:
+                return "entry '{:}': {:}".format(fieldName, reason)
             if "rigidBodyCoarseLevel" in precond:
                 # refused rather than forwarded: AMGCL only warns about a key it does not know, on stderr
                 return (
@@ -1707,9 +1552,7 @@ class BlockAMGSolver(LinearSolver):
     def _degradationThreshold(self) -> int:
         """The outer-iteration count above which a solve is dumped: ``dumpOnDegradationThreshold``, or the
         warning threshold if that is unset."""
-        if self._dumpOnDegradationThreshold is None:
-            return self._warnOuterIterationsThreshold
-        return self._dumpOnDegradationThreshold
+        return self._degradationDumps.thresholdOr(self._warnOuterIterationsThreshold)
 
     def _outerLgmres(self, n: int):
         """AMGCL's LGMRES for a system of size ``n``, created on demand: its scratch vectors are allocated for one
@@ -1727,12 +1570,14 @@ class BlockAMGSolver(LinearSolver):
         if name in ("outerSolver", "lgmresM", "lgmresK"):
             # rebuilt with the new settings on the next solve that needs it
             self._lgmresSolver = None
-        elif name == "dumpOnDegradationDir" and self._dumpOnDegradationDir is not None:
-            os.makedirs(self._dumpOnDegradationDir, exist_ok=True)
+        elif name == "dumpOnDegradationDir":
+            self._degradationDumps.moveTo(self._dumpOnDegradationDir)
         elif name == "dumpOnDegradationContextSolves":
-            self._recentSolveHistory = collections.deque(
-                self._recentSolveHistory, maxlen=max(self._dumpOnDegradationContextSolves, 0)
-            )
+            self._degradationDumps.keepContextSolves(self._dumpOnDegradationContextSolves)
+        elif name == "dumpOnDegradationThreshold":
+            self._degradationDumps.threshold = self._dumpOnDegradationThreshold
+        elif name == "dumpOnDegradationMaxDumps":
+            self._degradationDumps.maxDumps = self._dumpOnDegradationMaxDumps
 
     def _rollBackHotReload(self, error: Exception) -> None:
         """Restore the settings the last hot reload replaced, after the hierarchy build failed with them: a
@@ -2563,30 +2408,17 @@ class BlockAMGSolver(LinearSolver):
         converged = trueResidual <= eta
         # a cap hit with eta missed counts as degraded whatever the threshold: with a cap below it (outerRestart x
         # outerMaxiter 50 and no continuations, say), the count alone would never trigger a dump
-        if (
-            self._dumpOnDegradationDir is not None
-            and (outerIters > self._degradationThreshold() or (capHit and not converged))
-            and BlockAMGSolver._degradationDumpsWritten < self._dumpOnDegradationMaxDumps
-        ):
-            self._dumpDegradedSystem(A, b, blocks, solveState, condensedDofs)
-        # Recorded *after* the dump above, so a trigger's own context window (from
-        # _recentSolveHistory) never includes itself -- only solves strictly preceding it. Guarded on
-        # dumpOnDegradationContextSolves so a run with the feature off never holds onto extra matrices.
-        if self._dumpOnDegradationDir is not None and self._dumpOnDegradationContextSolves > 0:
-            self._recentSolveHistory.append(
-                {
-                    "solveCount": self._solveCount,
-                    # Copied, not referenced: NIST hands the same CSR matrix and residual buffer back
-                    # every Newton iteration (CSRGenerator.updateInPlace, and `R[:] = ...`), so storing
-                    # references would make every history entry alias the trigger-time values -- the
-                    # exact opposite of the authentic preceding-solve sequence this window exists for.
-                    "A": A.copy(),
-                    "b": np.array(b, copy=True),
-                    "blocks": blocks,
-                    "state": solveState,
-                    "condensedDofs": condensedDofs,
-                }
-            )
+        self._degradationDumps.afterSolve(
+            self._instanceOrdinal,
+            self._solveCount,
+            A,
+            b,
+            blocks,
+            solveState,
+            condensedDofs,
+            degraded=outerIters > self._degradationThreshold() or (capHit and not converged),
+            log=lambda level, message: self._log(level, "blockamg: " + message),
+        )
         if not converged and capHit:
             self._log(
                 "warning",

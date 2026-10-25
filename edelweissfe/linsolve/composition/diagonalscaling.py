@@ -128,18 +128,25 @@ class DiagonalScaling(Preconditioner):
         self.D = None
 
     def setUp(self, A, context: SetUpContext) -> None:
+        self._findScaling(A)
+        self.inner.setUp(A.scaled(self.D), context.scaledBy(self.D))
+
+    def update(self, A, change) -> None:
+        # D is rebuilt with what the child rebuilds, also for reasons the child adds itself (a Krylov solve below)
+        change = self.inner.withRebuildReasons(change)
+        if self.D is None:
+            change = change.withRebuild("first")
+        if change.requiresRebuild:
+            self._findScaling(A)
+        self.inner.update(A.scaled(self.D), change.withContext(change.context.scaledBy(self.D)))
+
+    def _findScaling(self, A) -> None:
+        """:math:`D` of the matrix ``A``."""
         with performancetiming.timeit("equilibration"):
             D, reason = diagonalScalingOf(A.absoluteDiagonal())
         if D is None:
             raise FloatingPointError("DiagonalScaling: " + reason)
         self.D = D
-        self.inner.setUp(A.scaled(D), context.scaledBy(D))
-
-    def update(self, A, change) -> None:
-        if change.requiresRebuild or self.D is None:
-            self.setUp(A, change.context)
-        else:
-            self.inner.update(A.scaled(self.D), change.withContext(change.context.scaledBy(self.D)))
 
     def __call__(self, r: np.ndarray) -> np.ndarray:
         return self.D * self.inner(self.D * r)

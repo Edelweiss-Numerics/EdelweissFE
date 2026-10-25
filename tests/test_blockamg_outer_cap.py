@@ -14,7 +14,7 @@ import numpy as np
 from _blockamgsystems import displacementDamageSystem
 
 from edelweissfe.linsolve.blockamg import createSolver
-from edelweissfe.linsolve.blockamg.blockamg import BlockAMGSolver
+from edelweissfe.linsolve.composition.degradationdumps import DegradationDumps
 
 
 def _system(n=12):
@@ -101,7 +101,7 @@ def test_a_cap_hit_rebuilds_the_hierarchies_for_the_next_solve():
 
 def test_a_cap_hit_is_dumped_whatever_the_threshold(tmp_path, monkeypatch):
     # the dump budget is process-wide: start from none spent, whatever ran before
-    monkeypatch.setattr(BlockAMGSolver, "_degradationDumpsWritten", 0)
+    monkeypatch.setattr(DegradationDumps, "dumpsWritten", 0)
     A, b, blocks = _system()
     solver = createSolver(
         {
@@ -121,7 +121,7 @@ def test_a_cap_hit_is_dumped_whatever_the_threshold(tmp_path, monkeypatch):
 
 
 def test_a_cap_hit_the_solve_recovered_from_rebuilds_but_is_not_reported(tmp_path, monkeypatch):
-    monkeypatch.setattr(BlockAMGSolver, "_degradationDumpsWritten", 0)
+    monkeypatch.setattr(DegradationDumps, "dumpsWritten", 0)
     A, b, blocks = _system()
     solver = createSolver(
         {

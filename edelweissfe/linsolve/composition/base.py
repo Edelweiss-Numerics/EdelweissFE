@@ -167,6 +167,9 @@ class SetUpContext:
         The model, if there is one (markers read it), else ``None``.
     journal
         The journal, if there is one, else ``None``.
+    log
+        ``(level, message) -> None``: the composed solver's log, which shows a message if its verbosity reaches
+        ``level`` (``"warning"``, ``"info"``, ``"debug"``), or ``None`` (then :meth:`message` prints warnings only).
     """
 
     fields: tuple
@@ -175,6 +178,14 @@ class SetUpContext:
     p1MapOf: object = None
     model: object = None
     journal: object = None
+    log: object = None
+
+    def message(self, level: str, text: str) -> None:
+        """Log ``text`` at ``level`` through the composed solver (see :attr:`log`)."""
+        if self.log is not None:
+            self.log(level, text)
+        elif level == "warning":
+            print(text, flush=True)
 
     @property
     def size(self) -> int:
@@ -334,6 +345,16 @@ class Preconditioner:
         """Apply this component: :math:`z = M^{-1} r`."""
         raise NotImplementedError
 
+    def withRebuildReasons(self, change: MatrixChange) -> MatrixChange:
+        """``change``, with the reasons for a rebuild that this component and its children add on their own (a Krylov
+        solver's :class:`~edelweissfe.linsolve.composition.krylov.RebuildPolicy`: a new increment, a stale
+        preconditioner). A component that keeps something built for the matrix above such a child (the :math:`D` of a
+        :class:`~edelweissfe.linsolve.composition.diagonalscaling.DiagonalScaling` around a Krylov solve) asks for
+        them first, so that it rebuilds together with the child."""
+        for _, child in self.children():
+            change = child.withRebuildReasons(change)
+        return change
+
     @property
     def fieldIndex(self) -> "int | None":
         """The field this component acts on, :math:`R` in :math:`z = R^T M^{-1} R r`, as the index of the field in its
@@ -373,9 +394,23 @@ class Preconditioner:
         empty for most."""
         return ()
 
-    def solveSummary(self):
-        """The diagnostics of the last solve as a :class:`~edelweissfe.linsolve.base.LinearSolveSummary`, for a
-        component that is a solve of its own (a Krylov solver); ``None`` for others."""
+    def solveRecord(self):
+        """What the last Krylov solve in this component did, a
+        :class:`~edelweissfe.linsolve.composition.krylov.SolveRecord`: a Krylov solver's own, else that of the first
+        child that has one (e.g. the Krylov solve under a diagonal scaling), else ``None``."""
+        for _, child in self.children():
+            record = child.solveRecord()
+            if record is not None:
+                return record
+        return None
+
+    def condensedDofs(self) -> "np.ndarray | None":
+        """The dofs a Schur complement in this component condensed in the last solve, or ``None`` (for a degradation
+        dump, which records them for an offline replay without the model)."""
+        for _, child in self.children():
+            dofs = child.condensedDofs()
+            if dofs is not None:
+                return dofs
         return None
 
     def describe(self) -> Description:

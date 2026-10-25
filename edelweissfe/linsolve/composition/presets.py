@@ -33,23 +33,36 @@ builds, copy it into a solver script to change it.
 
 from edelweissfe.config.phenomena import phenomena
 from edelweissfe.linsolve.composition.amg import AMG
+from edelweissfe.linsolve.composition.base import Preconditioner
 from edelweissfe.linsolve.composition.combinators import (
     Multiplicative,
     OnField,
     gaussSeidelOrder,
 )
 from edelweissfe.linsolve.composition.diagonalscaling import DiagonalScaling
-from edelweissfe.linsolve.composition.krylov import LGMRES, RebuildPolicy
+from edelweissfe.linsolve.composition.krylov import (
+    LGMRES,
+    GapCompensation,
+    RebuildPolicy,
+)
 from edelweissfe.linsolve.composition.twogrid import RigidBodyModes, TwoGrid
 
 
-def blockAMGFieldPreconditioner(field, context, rigidBodyCoarseLevel: bool = True):
+def blockAMGFieldPreconditioner(
+    field, context, rigidBodyCoarseLevel: bool = True, dropTolerance: float = 0.0, lumpDroppedEntries: bool = False
+):
     """The preconditioner of a field as ``blockamg`` chooses it by default: a two-grid cycle on the rigid-body modes
     for a 3D displacement field (with node coordinates), one AMG hierarchy otherwise."""
     isDisplacement3D = field.dimension == 3 and phenomena.get(field.name) == "vector"
-    if rigidBodyCoarseLevel and isDisplacement3D and context.coordinates(field.name) is not None:
-        return TwoGrid(coarseSpace=RigidBodyModes())
-    return AMG()
+    if rigidBodyCoarseLevel and isDisplacement3D and context.coordinates(field.name) is None:
+        context.message(
+            "info",
+            "blockAMG: the field '{:}' has no node coordinates (no model, and no nodeCoordinates given): it gets AMG() on "
+            "the translations instead of the two-grid cycle on its rigid-body modes".format(field.name),
+        )
+    elif rigidBodyCoarseLevel and isDisplacement3D:
+        return TwoGrid(coarseSpace=RigidBodyModes(), dropTolerance=dropTolerance, lumpDroppedEntries=lumpDroppedEntries)
+    return AMG(dropTolerance=dropTolerance, lumpDroppedEntries=lumpDroppedEntries)
 
 
 def blockAMG(
@@ -59,7 +72,12 @@ def blockAMG(
     sweeps: int = 1,
     symmetric: bool = False,
     rebuild: RebuildPolicy = None,
-) -> LGMRES:
+    krylovOnScaledSystem: bool = False,
+    continuations: int = 2,
+    gapCompensation: GapCompensation = None,
+    dropTolerance: float = 0.0,
+    lumpDroppedEntries: bool = False,
+) -> Preconditioner:
     """The composed equivalent of :class:`~edelweissfe.linsolve.blockamg.blockamg.BlockAMGSolver` with its defaults:
     block Gauss--Seidel over the fields of the diagonally scaled matrix, inside LGMRES::
 
@@ -70,7 +88,8 @@ def blockAMG(
         )
 
     The corrections are made at the first set-up, for the fields of the model (:class:`~edelweissfe.linsolve.
-    composition.combinators.Multiplicative` takes a function of the context).
+    composition.combinators.Multiplicative` takes a function of the context). A tree, not a solver: a solver script
+    binds ``linearSolver = ComposedLinearSolver(blockAMG())``.
 
     Parameters
     ----------
@@ -85,18 +104,38 @@ def blockAMG(
         The block Gauss--Seidel sweeps, see :func:`~edelweissfe.linsolve.composition.combinators.gaussSeidelOrder`.
     rebuild
         When the preconditioner is rebuilt.
+    krylovOnScaledSystem
+        Run LGMRES on the scaled matrix, ``DiagonalScaling(LGMRES(Multiplicative(...)))``, with its true-residual
+        ``continuations`` and ``gapCompensation`` (see :class:`~edelweissfe.linsolve.composition.krylov.KrylovSolver`).
+    continuations, gapCompensation
+        See :class:`~edelweissfe.linsolve.composition.krylov.KrylovSolver`; only with ``krylovOnScaledSystem``.
+    dropTolerance, lumpDroppedEntries
+        Build every field's preconditioner on its filtered block, see
+        :func:`~edelweissfe.linsolve.composition.amg.droppedSmallEntries`.
     """
 
     def fieldCorrections(context):
         corrections = [
-            OnField(field.name, blockAMGFieldPreconditioner(field, context, rigidBodyCoarseLevel))
+            OnField(
+                field.name,
+                blockAMGFieldPreconditioner(field, context, rigidBodyCoarseLevel, dropTolerance, lumpDroppedEntries),
+            )
             for field in context.fields
         ]
         return gaussSeidelOrder(corrections, sweeps, symmetric)
 
-    return LGMRES(
-        DiagonalScaling(Multiplicative(fieldCorrections)),
-        tolerance=tolerance,
-        maxIterations=maxIterations,
-        rebuild=rebuild,
-    )
+    blockGaussSeidel = Multiplicative(fieldCorrections)
+
+    def lgmres(preconditioner):
+        return LGMRES(
+            preconditioner,
+            tolerance=tolerance,
+            maxIterations=maxIterations,
+            rebuild=rebuild,
+            continuations=continuations,
+            gapCompensation=gapCompensation,
+        )
+
+    if krylovOnScaledSystem:
+        return DiagonalScaling(lgmres(blockGaussSeidel))
+    return lgmres(DiagonalScaling(blockGaussSeidel))

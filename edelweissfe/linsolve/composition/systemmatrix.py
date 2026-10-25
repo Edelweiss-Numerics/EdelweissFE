@@ -106,12 +106,19 @@ class SystemMatrix:
         # the unscaled matrix this one is a scaled view of: a field split of the view keeps A for its Krylov operator
         self._unscaled = _unscaled
         self._krylovOperator = None
+        # whether a Krylov solve runs on this matrix (see useAsKrylovOperator)
+        self._isKrylovOperator = False
         # the field split of this matrix, (bounds, blocks), formed at the first request (see fieldSplit)
         self._fieldSplit = None
 
     @property
     def shape(self) -> tuple:
         return self.A.shape
+
+    def useAsKrylovOperator(self) -> None:
+        """Say that a Krylov solve runs on this matrix: a field split formed afterwards keeps :math:`\\hat A` itself as
+        the operator of that solve, in its one threaded pass (see :meth:`krylovOperator`)."""
+        self._isKrylovOperator = True
 
     @property
     def nnz(self) -> int:
@@ -147,8 +154,9 @@ class SystemMatrix:
     def fieldSplit(self, bounds: list) -> FieldSplitBlocks:
         """The field blocks :math:`\\hat A_{ij}` for the field ranges ``bounds``, formed with :math:`\\hat A` in one
         threaded pass at the first request and kept with this matrix: every component handed this matrix (the
-        corrections of a combination, each on its field) gets the same blocks. That pass also keeps :math:`A` as the
-        operator of a Krylov solve on the unscaled matrix this one is a view of (:meth:`krylovOperator`)."""
+        corrections of a combination, each on its field) gets the same blocks. That pass also keeps the operator of the
+        Krylov solve (:meth:`krylovOperator`): :math:`D A D` if the solve runs on this scaled matrix
+        (:meth:`useAsKrylovOperator`), else :math:`A`, for a solve on the unscaled matrix this one is a view of."""
         bounds = [tuple(bound) for bound in bounds]
         if self._fieldSplit is not None and self._fieldSplit[0] == bounds:
             return self._fieldSplit[1]
@@ -156,28 +164,38 @@ class SystemMatrix:
 
         # a split for other bounds goes before the new one is formed: never two copies at once
         self._fieldSplit = None
+        # The pass keeps one operator besides the blocks: D A D for a Krylov solve on this (scaled) matrix, else A, for
+        # a Krylov solve on the unscaled matrix this one is a view of.
+        keepsScaled = self.scaling is not None and self._isKrylovOperator
         with performancetiming.timeit("equilibrated system"):
             native = PyAMGCLEquilibratedSystem()
             scaling = np.ones(self.A.shape[0]) if self.scaling is None else self.scaling
-            native.build(self.A, scaling, bounds, unscaled=True)
-        unscaled = self if self.scaling is None else self._unscaled
-        if unscaled is not None:
-            unscaled._krylovOperator = native
+            native.build(self.A, scaling, bounds, unscaled=not keepsScaled)
+        if keepsScaled:
+            self._krylovOperator = native
+        else:
+            unscaled = self if self.scaling is None else self._unscaled
+            if unscaled is not None:
+                unscaled._krylovOperator = native
         self._fieldSplit = (bounds, FieldSplitBlocks(native, bounds))
         return self._fieldSplit[1]
 
     def krylovOperator(self):
-        """:math:`A` as the operator of AMGCL's LGMRES (unscaled: a Krylov solve on :math:`D A D` is
-        ``DiagonalScaling(LGMRES(...))``, not offered by this prototype). Kept from a field split of this matrix or
-        of a scaled view of it if there was one, else built (threaded)."""
-        if self.scaling is not None:
-            raise NotImplementedError("a Krylov solve on a diagonally scaled matrix is not offered yet")
+        """:math:`\\hat A` as the operator of AMGCL's Krylov solvers: :math:`A` itself (applied with
+        ``onUnscaledOperator``), or :math:`D A D` for a Krylov solve on a scaled matrix,
+        ``DiagonalScaling(LGMRES(...))``. Kept from the field split of the matrix if there was one (see
+        :meth:`useAsKrylovOperator`), else built in a threaded pass."""
         if self._krylovOperator is None:
-            from edelweissfe.linsolve.amgcl.amgcl import PyAMGCLEquilibratedSystem
+            if self.scaling is not None:
+                # D A D comes only from a split pass; one of a single block holds nothing else
+                self.useAsKrylovOperator()
+                self.fieldSplit([(0, self.A.shape[0])])
+            else:
+                from edelweissfe.linsolve.amgcl.amgcl import PyAMGCLEquilibratedSystem
 
-            with performancetiming.timeit("equilibrated system"):
-                self._krylovOperator = PyAMGCLEquilibratedSystem()
-                self._krylovOperator.buildOperator(self.A)
+                with performancetiming.timeit("equilibrated system"):
+                    self._krylovOperator = PyAMGCLEquilibratedSystem()
+                    self._krylovOperator.buildOperator(self.A)
         return self._krylovOperator
 
 
@@ -201,6 +219,7 @@ class FieldBlockMatrix(SystemMatrix):
         self.scaling = None
         self._unscaled = None
         self._krylovOperator = None
+        self._isKrylovOperator = False
         self._fieldSplit = None
 
     @property
