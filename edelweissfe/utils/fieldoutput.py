@@ -200,6 +200,17 @@ class _FieldOutputBase:
         self._exportFileTruncated = False
         self._reshape_to_dimensions = reshape_to_dimensions
 
+    def hasResult(self) -> bool:
+        """Whether a result was computed yet: ``False`` before the first converged increment.
+
+        Returns
+        -------
+        bool
+            ``True`` once :meth:`getLastResult` has something to return.
+        """
+
+        return bool(self.result) if self.appendResults else self.result is not None
+
     def getLastResult(
         self,
     ) -> np.ndarray:

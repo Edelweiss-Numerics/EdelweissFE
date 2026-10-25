@@ -167,3 +167,15 @@ def test_inconsistent_edge_endpoints_falls_back_to_corner():
     assert isCorner[rowOf4], "a genuine edge-endpoint conflict must fall back to corner"
     assert (edgeEndpoints[rowOf4] == -1).all()
     assert len(warnings) == 1 and "conflicting edge-endpoint" in warnings[0]
+
+
+def test_node_without_elements_is_a_corner():
+    # e.g. the reference point of a rigid body: it carries the field, but belongs to no element
+    nodes = [_FakeNode(i, {"displacement": True}) for i in range(9)]
+    element = _FakeElement(nodes[:8], nSpatialDimensions=2)
+    model = _FakeModel({"displacement": _FakeNodeField(nodes)}, [element])
+
+    isCorner, edgeEndpoints, warnings = buildP1Map(model, "displacement")
+    assert list(np.nonzero(isCorner)[0]) == [0, 1, 2, 3, 8]
+    assert (edgeEndpoints[8] == -1).all()
+    assert warnings == []

@@ -290,8 +290,10 @@ class LinearSolver:
         """Factorize ``A`` and keep the factorization for later :meth:`solveFactorized` calls.
 
         The phase-split half of the contract, used instead of :meth:`__call__` by a caller that
-        reuses one factorization across several right-hand sides -- today
-        ``scripts/benchmark_linsolve.py``'s ``lagged`` subcommand. Declared here rather than only on
+        reuses one factorization across several right-hand sides: the condensed block of ``blockamg``'s
+        Schur complement condensation (:mod:`~edelweissfe.linsolve.blockamg.schurcomplement`), and
+        ``scripts/benchmark_linsolve.py``'s ``lagged`` subcommand. A matrix that cannot be factorized
+        (singular) raises :class:`numpy.linalg.LinAlgError`. Declared here rather than only on
         the solvers that implement it so that a wrapper (e.g.
         :class:`~edelweissfe.linsolve.matrixdump.matrixdump.MatrixDumpSolver`) can forward it
         polymorphically, without an out-of-band capability check.

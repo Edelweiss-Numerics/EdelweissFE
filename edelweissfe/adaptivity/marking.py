@@ -153,9 +153,10 @@ class RefineableElements:
 
 
 class MarkerBase(OptionSchemaProvider):
-    """Base class for AMR refinement markers.
+    """Base class for markers.
 
-    A marker decides which elements to refine. It is resolved by ``type`` through the L3 registry
+    A marker selects elements: those to refine for adaptive mesh refinement, or those whose interior nodes
+    ``blockamg`` condenses (``schurComplement``, :mod:`~edelweissfe.linsolve.blockamg.schurcomplement`). It is resolved by ``type`` through the L3 registry
     (category ``marker``; see :mod:`edelweissfe.config.markerlibrary`) and constructed from its
     ``>>marker`` block options via :meth:`fromOptions`, so *any* adaptivity mechanism -- not only the
     HEX20 h-adaptivity model modifier -- can reuse the same marker library, and third-party packages
@@ -170,22 +171,46 @@ class MarkerBase(OptionSchemaProvider):
     def __init__(self, initialOnly=False):
         self.initialOnly = initialOnly
 
-    def mark(self, model, refineElements: RefineableElements, mesh):
-        """Decide which elements to refine.
+    def checkReferences(self, model):
+        """Raise if a set, surface or fieldOutput this marker reads does not exist in ``model``.
+
+        For a caller that knows all of them must exist when the run starts (e.g. ``blockamg``'s Schur
+        complement, see :mod:`edelweissfe.linsolve.blockamg.schurcomplement`), so that a typo fails at setup
+        instead of silently marking nothing. Nothing to check by default.
+
+        Parameters
+        ----------
+        model
+            The FEModel.
+        """
+
+    def isReady(self, model) -> bool:
+        """Whether the marker has what it decides on, e.g. a fieldOutput result, which exists only after the first
+        converged increment. Always, by default.
+
+        Parameters
+        ----------
+        model
+            The FEModel.
+        """
+        return True
+
+    def mark(self, model, candidateElements: RefineableElements, mesh):
+        """Select elements: those to refine, for adaptive mesh refinement.
 
         Parameters
         ----------
         model
             The FEModel, for the sets, surfaces, fields and fieldOutputs a marker reads.
-        refineElements
-            The elements eligible for refinement, with their node adjacency.
+        candidateElements
+            The elements the marker may select (e.g. the refineable ones), with their node adjacency.
         mesh
-            The adaptivity mechanism's mesh mirror.
+            The adaptivity mechanism's mesh mirror; ``None`` outside adaptive refinement (no marker here reads it).
 
         Returns
         -------
         set
-            The elements to refine.
+            The selected elements.
         """
         raise NotImplementedError()
 
@@ -201,6 +226,27 @@ class MarkerBase(OptionSchemaProvider):
         raise NotImplementedError()
 
 
+def _perElementFieldOutput(model, fieldOutputName):
+    """The ``perElement`` fieldOutput ``fieldOutputName`` of ``model``; raises with an actionable message if it
+    is not defined or is not a ``perElement`` one."""
+    fieldOutputController = model.fieldOutputController
+    if fieldOutputController is None or fieldOutputName not in fieldOutputController.fieldOutputs:
+        raise KeyError(
+            f"marker references fieldOutput {fieldOutputName!r}, which is not "
+            "defined. Declare it under '*fieldOutput' (before the increment loop starts) so the "
+            "marker can look it up by name."
+        )
+    fieldOutput = fieldOutputController.fieldOutputs[fieldOutputName]
+
+    if not isinstance(fieldOutput, ElementFieldOutput):
+        raise TypeError(
+            f"marker references fieldOutput {fieldOutputName!r}, which is a "
+            f"{type(fieldOutput).__name__}; only a 'perElement' fieldOutput exposes one result "
+            "row per element, as required for marking."
+        )
+    return fieldOutput
+
+
 def _perElementFieldOutputResult(model, fieldOutputName):
     """Resolve an already-declared ``perElement`` fieldOutput and return ``(elements, values)`` --
     the element list (its associated set) and the last per-element result array ``(nElem, ...)``.
@@ -213,29 +259,14 @@ def _perElementFieldOutputResult(model, fieldOutputName):
     the fieldOutput is missing, is not a ``perElement`` one, or reports a row count that does not match
     its element set. Shared by every marker that drives refinement off a fieldOutput.
     """
-    fieldOutputController = model.fieldOutputController
-    if fieldOutputController is None or fieldOutputName not in fieldOutputController.fieldOutputs:
-        raise KeyError(
-            f"hAdaptivity marker references fieldOutput {fieldOutputName!r}, which is not "
-            "defined. Declare it under '*fieldOutput' (before the increment loop starts) so the "
-            "marker can look it up by name."
-        )
-    fieldOutput = fieldOutputController.fieldOutputs[fieldOutputName]
-
-    if not isinstance(fieldOutput, ElementFieldOutput):
-        raise TypeError(
-            f"hAdaptivity marker references fieldOutput {fieldOutputName!r}, which is a "
-            f"{type(fieldOutput).__name__}; only a 'perElement' fieldOutput exposes one result "
-            "row per element, as required for marking."
-        )
-
+    fieldOutput = _perElementFieldOutput(model, fieldOutputName)
     elements = list(fieldOutput.associatedSet)
     values = np.asarray(fieldOutput.getLastResult())
 
     if values.ndim < 1 or values.shape[0] != len(elements):
         rowCount = values.shape[0] if values.ndim >= 1 else 0
         raise ValueError(
-            f"hAdaptivity marker: fieldOutput {fieldOutputName!r} reports {rowCount} "
+            f"marker: fieldOutput {fieldOutputName!r} reports {rowCount} "
             f"result row(s) (shape {values.shape}) for {len(elements)} element(s) in its associated set; refusing to mark "
             "against a mismatched fieldOutput."
         )
@@ -281,9 +312,10 @@ class FieldOutputMarkerSchema(MarkerOptionsBase):
     )
     halo: int = schemaField(
         description=(
-            "Number of rings of node-adjacent elements to add around the thresholded set (a "
-            "refinement buffer), e.g. to keep a localization band's flanks conforming with an "
-            "interior that has not yet crossed the threshold. Grows only within refineable elements. "
+            "Number of rings of node-adjacent elements to add around the thresholded set (a buffer: "
+            "for refinement, e.g. to keep a localization band's flanks conforming with an interior that "
+            "has not yet crossed the threshold; for a Schur complement condensation, so that the nodes of "
+            "the thresholded zone become interior). Grows only within the candidate elements. "
             "0 (default) disables."
         ),
         dtype=int,
@@ -341,7 +373,13 @@ class FieldOutputMarker(MarkerBase):
             initialOnly=opts.initialOnly,
         )
 
-    def mark(self, model, refineElements, mesh):
+    def checkReferences(self, model):
+        _perElementFieldOutput(model, self.fieldOutputName)
+
+    def isReady(self, model) -> bool:
+        return _perElementFieldOutput(model, self.fieldOutputName).hasResult()
+
+    def mark(self, model, candidateElements, mesh):
         elements, values = _perElementFieldOutputResult(model, self.fieldOutputName)
         if not elements:
             return set()
@@ -349,7 +387,7 @@ class FieldOutputMarker(MarkerBase):
         entryHolds = self._compare(values.reshape(len(elements), -1), self.threshold)
         marked = {elements[i] for i in np.flatnonzero(entryHolds.any(axis=1))}
         if self.halo > 0 and marked:
-            marked = _growByNeighbors(marked, refineElements, self.halo)
+            marked = _growByNeighbors(marked, candidateElements, self.halo)
         return marked
 
 
@@ -377,7 +415,11 @@ class ElementSetMarker(MarkerBase):
         opts = buildSchemaFromOptions(cls.schema, options)
         return cls(opts.elSet, initialOnly=opts.initialOnly)
 
-    def mark(self, model, refineElements, mesh):
+    def checkReferences(self, model):
+        if self.elSetName not in model.elementSets:
+            raise KeyError(f"marker references the element set {self.elSetName!r}, which the model does not have")
+
+    def mark(self, model, candidateElements, mesh):
         if self.elSetName not in model.elementSets:
             return set()
         return set(model.elementSets[self.elSetName])
@@ -407,12 +449,16 @@ class NodeSetMarker(MarkerBase):
         opts = buildSchemaFromOptions(cls.schema, options)
         return cls(opts.nSet, initialOnly=opts.initialOnly)
 
-    def mark(self, model, refineElements, mesh):
+    def checkReferences(self, model):
+        if self.nSetName not in model.nodeSets:
+            raise KeyError(f"marker references the node set {self.nSetName!r}, which the model does not have")
+
+    def mark(self, model, candidateElements, mesh):
         if self.nSetName not in model.nodeSets:
             return set()
         ns_nodes = set(model.nodeSets[self.nSetName].nodes)
         marked = set()
-        for el in refineElements:
+        for el in candidateElements:
             if any(n in ns_nodes for n in el.nodes):
                 marked.add(el)
         return marked
@@ -442,7 +488,11 @@ class SurfaceMarker(MarkerBase):
         opts = buildSchemaFromOptions(cls.schema, options)
         return cls(opts.surface, initialOnly=opts.initialOnly)
 
-    def mark(self, model, refineElements, mesh):
+    def checkReferences(self, model):
+        if self.surfaceName not in model.surfaces:
+            raise KeyError(f"marker references the surface {self.surfaceName!r}, which the model does not have")
+
+    def mark(self, model, candidateElements, mesh):
         if self.surfaceName not in model.surfaces:
             return set()
         marked = set()
@@ -839,7 +889,7 @@ class RecoveryErrorMarker(MarkerBase):
         self.recovery = recovery
         self.entry = entry
 
-    def mark(self, model, refineElements, mesh):
+    def mark(self, model, candidateElements, mesh):
         if model.nodeFields is None or self.nodeFieldName not in model.nodeFields:
             raise KeyError(
                 f"hAdaptivity recoveryError marker references nodeField {self.nodeFieldName!r}, "
@@ -859,7 +909,7 @@ class RecoveryErrorMarker(MarkerBase):
         valuesList = []
         connectivity = []
         nodeToIndex = {}
-        for element in refineElements:
+        for element in candidateElements:
             if len(element.nodes) != N_NODES:
                 continue
             rows = [indexOf.get(node, -1) for node in element.nodes]
@@ -928,5 +978,5 @@ class RecoveryErrorMarker(MarkerBase):
         # optional refinement halo: bridge the flank-marked rows across the (locally smooth) band core
         # and buffer ahead of the front, growing only within the refineable elements
         if self.halo > 0 and marked:
-            marked = _growByNeighbors(marked, refineElements, self.halo)
+            marked = _growByNeighbors(marked, candidateElements, self.halo)
         return marked

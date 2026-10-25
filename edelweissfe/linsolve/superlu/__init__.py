@@ -42,8 +42,14 @@ class SuperLUSolver(LinearSolver):
     """SciPy's SuperLU-backed direct solver. Callable as ``(A, b) -> x``.
 
     Takes no options; ``setJournal``/``setFieldStructure`` are inherited no-ops (this solver has no
-    field-split structure and does not log).
+    field-split structure and does not log). Also factorizes once for several right-hand sides
+    (:meth:`factorize`, :meth:`solveFactorized`), e.g. for the condensed block of ``blockamg``'s Schur
+    complement.
     """
+
+    def __init__(self):
+        # the factorization of the last factorize(), for solveFactorized()
+        self._factorization = None
 
     def __call__(self, A, b):
         # Imported inside the call, not at module scope: several linsolve backends are optional and
@@ -53,6 +59,21 @@ class SuperLUSolver(LinearSolver):
         from scipy.sparse.linalg import spsolve
 
         return spsolve(A.copy(), b, use_umfpack=False)
+
+    def factorize(self, A):
+        """Factorize ``A`` (sparse LU, :func:`scipy.sparse.linalg.splu`) for :meth:`solveFactorized`; a singular
+        ``A`` raises :class:`numpy.linalg.LinAlgError`."""
+        import numpy as np
+        from scipy.sparse.linalg import splu
+
+        try:
+            self._factorization = splu(A.tocsc())
+        except RuntimeError as error:  # SuperLU's "Factor is exactly singular"
+            raise np.linalg.LinAlgError(str(error)) from error
+
+    def solveFactorized(self, b):
+        """Solve for ``b`` with the factorization of the last :meth:`factorize`."""
+        return self._factorization.solve(b)
 
 
 def createSolver(opts) -> Callable:

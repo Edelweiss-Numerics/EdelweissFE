@@ -1,0 +1,13 @@
+{
+  "outerTol": 1e-10,
+  "schurComplement": {
+    "markers": [
+      {
+        "type": "fieldOutput",
+        "fieldOutput": "kappa",
+        "threshold": 0.03,
+        "halo": 1
+      }
+    ]
+  }
+}

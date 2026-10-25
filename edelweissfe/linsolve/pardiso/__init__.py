@@ -60,7 +60,14 @@ class PardisoLinearSolver(LinearSolver):
         return self._delegate(A, b)
 
     def factorize(self, A):
-        return self._delegate.factorize(A)
+        """Factorize ``A``; a factorization error of PARDISO raises :class:`numpy.linalg.LinAlgError`, see
+        :meth:`~edelweissfe.linsolve.base.LinearSolver.factorize`."""
+        import numpy as np
+
+        try:
+            return self._delegate.factorize(A)
+        except RuntimeError as error:
+            raise np.linalg.LinAlgError(str(error)) from error
 
     def solveFactorized(self, b):
         return self._delegate.solveFactorized(b)

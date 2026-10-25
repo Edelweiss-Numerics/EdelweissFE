@@ -109,13 +109,14 @@ def classifyElementTopology(nSpatialDimensions, nNodes: int):
     )
 
 
-def buildP1Map(model, fieldName: str):
+def buildP1Map(model, fieldName: str, elements=None):
     """Classify every node of ``fieldName`` (a vector field, e.g. ``"displacement"``) as a corner
     or an exclusive midside, in the same order as ``model.nodeFields[fieldName].nodes`` (the
     field's own DOF-vector row order, see ``DofManager._reserveSpaceForNodeFields``).
 
-    A node is a corner iff it is a corner node of *at least one* element it belongs to, **or** if
-    two elements disagree about its edge endpoints (see below) -- both cases are load-bearing
+    A node is a corner iff it is a corner node of *at least one* element it belongs to, if it belongs to
+    no element at all (e.g. the reference point of a rigid body, which carries the field through a
+    constraint), **or** if two elements disagree about its edge endpoints (see below) -- both cases are load-bearing
     under AMR, and every element's own contribution only ever sets ``isCorner`` to ``True``, never
     clears it.
 
@@ -140,6 +141,9 @@ def buildP1Map(model, fieldName: str):
         The model tree.
     fieldName
         The vector field to classify (e.g. ``"displacement"``).
+    elements
+        The elements whose topology defines the map (default: all elements of the model); e.g. only the host
+        continuum elements of embedded bars, whose bar and bond elements have no corner/midside topology.
 
     Returns
     -------
@@ -163,8 +167,9 @@ def buildP1Map(model, fieldName: str):
     # `edgeEndpoints` array during this loop would leave a stale entry for exactly that case.
     provisionalEdges: dict[int, frozenset] = {}
     conflictingRows: set[int] = set()
+    inSomeElement = np.zeros(nNodes, dtype=bool)
 
-    for element in model.elements.values():
+    for element in model.elements.values() if elements is None else elements:
         if not any(fieldName in nodeFields for nodeFields in element.fields):
             continue
 
@@ -175,6 +180,7 @@ def buildP1Map(model, fieldName: str):
         elNodes = element.nodes
         cornersLocal, edgesLocal = classifyElementTopology(dim, len(elNodes))
         elRows = [nodeRows.get(node) for node in elNodes]
+        inSomeElement[[row for row in elRows if row is not None]] = True
 
         for c in cornersLocal:
             row = elRows[c]
@@ -201,6 +207,8 @@ def buildP1Map(model, fieldName: str):
             "not the exclusive midside a conforming mesh would make it.".format(row, fieldName)
         )
 
+    # a node of no element (e.g. the reference point of a rigid body) is a corner: identity in P1
+    isCorner[~inSomeElement] = True
     edgeEndpoints = -np.ones((nNodes, 2), dtype=int)
     for row in range(nNodes):
         if isCorner[row]:

@@ -70,6 +70,8 @@ the run's bottleneck or exceeds available memory.
   physical field (e.g. displacement, nonlocal damage), combined by a block Gauss--Seidel sweep to
   precondition an outer GMRES/LGMRES. This is the route to problem sizes a direct factorization
   cannot reach at all.
+  With ``schurComplement``, it condenses selected dofs exactly first, for dofs on which AMG alone
+  stalls, such as those of bars tied to their host elements by bond springs.
 
 **A diagnostic wrapper**, which does not solve anything itself:
 
@@ -113,6 +115,44 @@ The method, the near-null-space construction, the adaptive outer tolerance, hier
    :maxdepth: 1
 
    blockamgtheory
+
+
+Schur complement condensation (``blockamg``)
+---------------------------------------------
+
+Some dofs make ``blockamg`` stall: the dofs of embedded bars with **bond-slip**, for instance, are tied to
+the nodes of their host elements by stiff bond springs, :math:`u_{bar} \approx \sum_i N_i u_i`, a relation an
+aggregation AMG coarse space cannot represent. (With perfect bond, the same relation is a multi-point constraint,
+eliminated before the solve, and plain ``blockamg`` is the right choice.) The ``schurComplement`` option of ``blockamg``
+condenses such dofs :math:`b` exactly -- a direct factorization of their block :math:`A_{bb}` -- and builds
+the field-split AMG on the approximate Schur complement :math:`\tilde S \approx A_{kk} - A_{kb}
+A_{bb}^{-1} A_{bk}` of all other dofs :math:`k`. Everything else is ``blockamg`` as usual.
+
+The condensed dofs are chosen with the **markers** of adaptive mesh refinement (the options of a
+``>>marker`` line): the dofs of the interior nodes of the marked elements -- the nodes all of whose
+elements are marked -- are condensed. For embedded bars, mark the bar and the bond elements:
+
+.. code-block:: edelweiss
+
+    *solver, solver=NISTParallel, name=theSolver
+    linsolver=blockamg
+    linsolverConfigFile=blockamg.json
+
+.. code-block:: json
+
+    {
+        "sweeps": 2,
+        "schurComplement": {
+            "markers": [
+                {"type": "elementSet", "elSet": "bars"},
+                {"type": "elementSet", "elSet": "bondElements"}
+            ]
+        }
+    }
+
+``bars`` and ``bondElements`` are the element sets of the bar and the bond elements. A ``fieldOutput`` marker
+condenses, e.g., a softening zone instead (testfile ``GradientEnhancedDamageSchurComplement``). The method, every
+key and the caveats are on the :doc:`blockamgtheory` page (section "Schur complement condensation").
 
 
 The ``amgcl`` solver
