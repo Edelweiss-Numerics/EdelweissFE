@@ -30,6 +30,7 @@ import numpy as np
 import scipy.sparse
 
 cimport numpy as np
+from libc.stddef cimport ptrdiff_t
 from libcpp.pair cimport pair
 from libcpp.string cimport string
 from libcpp.vector cimport vector
@@ -596,22 +597,30 @@ cdef class PyAMGCLLGMRESSolver:
         return np.ldexp(x, exponent)
 
 
-cdef np.ndarray _intArray(const vector[int]& values):
-    """A C++ vector of ints as a new int32 array."""
-    cdef np.ndarray[np.int32_t, ndim=1, mode="c"] array = np.empty(values.size(), dtype=np.int32)
-    cdef size_t i
-    for i in range(values.size()):
-        array[i] = values[i]
-    return array
+ctypedef fused _ArrayEntry:
+    int
+    double
+    ptrdiff_t
 
 
-cdef np.ndarray _doubleArray(const vector[double]& values):
-    """A C++ vector of doubles as a new float64 array."""
-    cdef np.ndarray[np.float64_t, ndim=1, mode="c"] array = np.empty(values.size(), dtype=np.float64)
-    cdef size_t i
-    for i in range(values.size()):
-        array[i] = values[i]
-    return array
+cdef np.ndarray _copied(const vector[_ArrayEntry]& values):
+    """A C++ vector as a new numpy array -- the one way arrays come back from C++ in this module: a copy, since the
+    C++ object may change it or go."""
+    if values.size() == 0:
+        if _ArrayEntry is int:
+            return np.empty(0, dtype=np.int32)
+        elif _ArrayEntry is double:
+            return np.empty(0, dtype=np.float64)
+        else:
+            return np.empty(0, dtype=np.intp)
+    return np.asarray(<_ArrayEntry[:values.size()]> <_ArrayEntry*> values.data()).copy()
+
+
+cdef object _scipyCsr(const ScalarCsr& csr, int nCols):
+    """A ScalarCsr of the C++ side as a scipy.sparse csr_matrix of nCols columns."""
+    return scipy.sparse.csr_matrix(
+        (_copied(csr.val), _copied(csr.col), _copied(csr.ptr)), shape=(csr.ptr.size() - 1, nCols)
+    )
 
 
 cdef class _PyAMGCLTwoGrid:
@@ -643,13 +652,7 @@ cdef class _PyAMGCLTwoGrid:
         """The power iteration's last iterate, the estimate of the fine operator's dominant
         eigenvector -- hand it back to the next ``build`` with :attr:`fineSpectralRadius`. Empty
         if the radius was used as supplied, without a re-check."""
-        cdef np.ndarray[np.float64_t, ndim=1, mode="c"] v = np.empty(
-            self.twoGrid.fineDominantVectorSize(), dtype=np.float64
-        )
-        cdef double[::1] v_ = v
-        if v.shape[0] > 0:
-            self.twoGrid.copyFineDominantVector(&v_[0])
-        return v
+        return _copied(self.twoGrid.fineDominantVector())
 
     @property
     def fineSpectralRadiusSource(self):
@@ -677,6 +680,17 @@ cdef class _PyAMGCLTwoGrid:
     def report(self):
         """The report of the coarse level and its AMGCL hierarchy."""
         return self.twoGrid.report().decode("utf-8")
+
+    def prolongationMatrix(self):
+        """The prolongation P of the last build as :meth:`applyPreconditioner` uses it (stored in the precision of the
+        fine level, widened to double): a scipy.sparse csr_matrix of n rows and :attr:`nCoarse` columns, for
+        inspection."""
+        return _scipyCsr(self.twoGrid.prolongationCsr(), self.twoGrid.nCoarse())
+
+    def coarseOperator(self):
+        """The Galerkin coarse operator P^T A P of the last build as its AMGCL hierarchy holds it: a scipy.sparse
+        csr_matrix, for inspection."""
+        return _scipyCsr(self.twoGrid.coarseOperatorCsr(), self.twoGrid.nCoarse())
 
 
 cdef class PyAMGCLPTwoGrid(_PyAMGCLTwoGrid):
@@ -814,43 +828,11 @@ cdef class PyAMGCLRigidBodyCoarseLevel(_PyAMGCLTwoGrid):
     @property
     def aggregates(self):
         """The aggregate of every node of the last build, ``< 0`` for a node in none."""
-        cdef int nNodes = self.preconditioner.nNodes()
-        cdef np.ndarray[np.longlong_t, ndim=1, mode="c"] ids = np.empty(nNodes, dtype=np.longlong)
-        cdef long long[::1] ids_ = ids
-        if nNodes > 0:
-            self.preconditioner.copyAggregateOfNode(&ids_[0])
-        return ids
-
-    def prolongationMatrix(self):
-        """The prolongation P of the last build as :meth:`applyPreconditioner` uses it (stored in
-        ``backendPrecision``, widened to double): a scipy.sparse csr_matrix of n rows and :attr:`nCoarse` columns, for
-        inspection."""
-        cdef vector[int] ptr
-        cdef vector[int] col
-        cdef vector[double] val
-        self.preconditioner.prolongationCsr(ptr, col, val)
-        return scipy.sparse.csr_matrix(
-            (_doubleArray(val), _intArray(col), _intArray(ptr)), shape=(ptr.size() - 1, self.preconditioner.nCoarse())
-        )
-
-    def coarseOperator(self):
-        """The Galerkin coarse operator P^T A P of the last build as its AMGCL hierarchy holds it (with the padded
-        diagonal entries of dropped modes): a scipy.sparse csr_matrix, for inspection."""
-        cdef vector[int] ptr
-        cdef vector[int] col
-        cdef vector[double] val
-        self.preconditioner.coarseOperatorCsr(ptr, col, val)
-        return scipy.sparse.csr_matrix(
-            (_doubleArray(val), _intArray(col), _intArray(ptr)), shape=(ptr.size() - 1, ptr.size() - 1)
-        )
+        return _copied(self.preconditioner.aggregateOfNode())
 
     def coarseNullspace(self):
         """The near null-space of the AMGCL hierarchy below, the coefficients of the field's rigid-body modes in the
         coarse basis: (:attr:`nCoarse`, modes) float64."""
-        cdef int rows = self.preconditioner.nCoarse()
-        cdef int cols = self.preconditioner.coarseNullspaceColumns()
-        cdef np.ndarray[np.float64_t, ndim=2, mode="c"] B = np.empty((rows, cols), dtype=np.float64)
-        cdef double[:, ::1] B_ = B
-        if rows > 0 and cols > 0:
-            self.preconditioner.copyCoarseNullspace(&B_[0, 0])
-        return B
+        return _copied(self.preconditioner.coarseNullspace()).reshape(
+            self.preconditioner.nCoarse(), self.preconditioner.coarseNullspaceColumns()
+        )
