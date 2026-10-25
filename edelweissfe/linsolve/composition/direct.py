@@ -25,10 +25,16 @@
 #  The full text of the license can be found in the file LICENSE.md at
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
-"""An exact solve as a component: :class:`DirectSolver`, :math:`z = A^{-1} r` by a sparse LU factorization."""
+"""An exact solve as a component: :class:`DirectSolver`, :math:`z = A^{-1} r` by a sparse LU factorization.
+
+A direct solver alone is the composed solver of ``type=pardiso`` (``superlu``, ``klu``, ...): one leaf, set up (i.e.
+factorized) on every solve. Inside a larger tree it solves a block exactly, e.g. the condensed dofs of a Schur
+complement.
+"""
 
 import numpy as np
 
+from edelweissfe.config import registry
 from edelweissfe.linsolve.composition.base import (
     Description,
     Preconditioner,
@@ -37,39 +43,41 @@ from edelweissfe.linsolve.composition.base import (
 
 
 class DirectSolver(Preconditioner):
-    """:math:`z = A^{-1} r`, exactly: one of the registered direct solvers (``superlu``, ``pardiso``, ``klu``, ...),
-    factorized once per set-up and applied by back substitution.
+    """:math:`z = A^{-1} r`, exactly: one of the registered direct solver backends (``superlu``, ``pardiso``, ``klu``,
+    ...; see :class:`~edelweissfe.linsolve.base.DirectSolverBackend`), factorized once per set-up and applied by back
+    substitution.
+
+    The backend is created here, at construction, and lives as long as this component: a backend that keeps its
+    symbolic factorization while only the values of the matrix change (PARDISO's ``reuseSymbolicFactorization``)
+    keeps it from one set-up to the next. A backend whose optional extension is not installed raises
+    :class:`ImportError` here.
 
     Parameters
     ----------
-    linsolver
-        The registered name of the direct solver; it must support
-        :meth:`~edelweissfe.linsolve.base.LinearSolver.factorize`.
-    options
-        Its options, as in a ``linsolverConfigFile``.
+    backend
+        The registered name of the backend (registry category ``directsolver``).
+    **options
+        The options of the backend, e.g. ``reuseSymbolicFactorization=True`` for ``pardiso``.
     """
 
-    def __init__(self, linsolver: str = "superlu", options: dict = None):
-        self.linsolver = linsolver
-        self.options = dict(options or {})
-        #: The factorizing solver: created at the first set-up, or by the parent that factorizes it (see
-        #: :meth:`newSolver`).
-        self.solver = None
+    def __init__(self, backend: str = "superlu", **options):
+        self.backend = backend
+        self.options = options
+        self._backendClass, _ = registry.lookup("directsolver", backend)
+        #: The factorizing backend of this component.
+        self.solver = self._backendClass(**options)
+        self._solverHandedOut = False
 
     def newSolver(self):
-        """A new instance of the direct solver. The first one becomes this component's own: a parent that factorizes
-        the matrix itself (the Schur complement factorizes :math:`A_{bb}`) creates it through here, and this
-        component then only applies it."""
-        from edelweissfe.config.linsolve import getLinSolverByName
-
-        solver = getLinSolverByName(self.linsolver, dict(self.options))
-        if self.solver is None:
-            self.solver = solver
-        return solver
+        """A backend for a parent that factorizes a matrix itself (the Schur complement factorizes :math:`A_{bb}`):
+        the first call hands out this component's own, which this component then applies; later calls create new
+        ones."""
+        if not self._solverHandedOut:
+            self._solverHandedOut = True
+            return self.solver
+        return self._backendClass(**self.options)
 
     def setUp(self, A, context: SetUpContext) -> None:
-        if self.solver is None:
-            self.newSolver()
         self.solver.factorize(A.matrix())
         self.statistics.sizes["rows"] = A.shape[0]
 
@@ -77,4 +85,6 @@ class DirectSolver(Preconditioner):
         return self.solver.solveFactorized(r)
 
     def describe(self) -> Description:
-        return Description(name="DirectSolver", formula="A⁻¹", latex="A^{-1}", parameters={"linsolver": self.linsolver})
+        return Description(
+            name="DirectSolver", formula="A⁻¹", latex="A^{-1}", parameters={"backend": self.backend, **self.options}
+        )

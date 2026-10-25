@@ -362,6 +362,10 @@ class KrylovSolver(Preconditioner):
         self._stale = False
 
     @property
+    def containsKrylovSolver(self) -> bool:
+        return True
+
+    @property
     def isFixedLinearOperator(self) -> bool:
         return False
 

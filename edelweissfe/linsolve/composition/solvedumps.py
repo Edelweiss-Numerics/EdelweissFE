@@ -25,22 +25,33 @@
 #  The full text of the license can be found in the file LICENSE.md at
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
-"""Writing the systems of slow solves to disk: :class:`DegradationDumps`.
+"""Writing the systems of chosen solves to disk, for an offline replay: :class:`SolveDumps`.
 
-A preconditioner that degrades -- a reused hierarchy that no longer fits the Jacobian, a damaged operator AMG cannot
-handle -- typically shows only tens of hours into a nonlinear analysis, at a solve nobody can name in advance. A
-degradation dump decides by the solve's own outcome: a solve that needs more outer iterations than a threshold, or
-stops at the iteration cap short of its tolerance, has its raw system :math:`(A, b)` written, with its field layout
-and its bookkeeping, so that it can be replayed offline through any solver (the workbench's ``bench.py``).
+Comparing solver variants by rerunning the simulation is slow and confounded: every run repeats the assembly, and a
+variant that changes the Newton iterates changes the sequence of matrices being compared. Dumping authentic systems
+:math:`(A, b)` once and replaying them offline (the workbench's ``bench.py``) makes the comparison fast and
+controlled.
+
+Which solves are dumped is the trigger:
+
+- ``"every"``: every solve (a sequence: whether a symbolic factorization or a preconditioner can be reused across
+  Newton iterations is a question about a sequence, not about one matrix);
+- solve numbers, e.g. ``{12, 13, 14}``: these solves of each solver (counted from 1);
+- ``"slow"``: a solve that needs more outer iterations than a threshold, or stops at the iteration cap short of its
+  tolerance. A preconditioner that degrades -- a reused hierarchy that no longer fits the Jacobian, a damaged operator
+  AMG cannot handle -- typically shows only tens of hours into an analysis, at a solve nobody can name in advance; this
+  trigger decides by the solve's own outcome.
 
 One snapshot cannot tell an intrinsically hard operator from a solve made slow by its own state (a stale
 preconditioner): a fresh solver replaying the matrix alone may converge in a fraction of the live iterations. So a
-dump can also hold the solves that *preceded* the slow one (``contextSolves``), for a replay through one persistent
+dump can also hold the solves that *preceded* a dumped one (``contextSolves``), for a replay through one persistent
 solver in the same order; and every dumped solve records why it was (not) rebuilt.
+
+``maxDumps`` caps the systems written in a process: a coupled 3D system of a million dofs takes gigabytes on disk.
 
 On disk, in ``directory``: ``A_<instance>_<solve>.npz`` (SciPy, uncompressed), ``b_<instance>_<solve>.npy``,
 ``schurDofs_<instance>_<solve>.npy`` (the condensed dofs of a Schur complement, if any) and one line per dumped solve
-in ``manifest.jsonl``.
+in ``manifest.jsonl``. ``<instance>`` is the ordinal of the solver in the process (one per analysis step).
 """
 
 import collections
@@ -51,16 +62,18 @@ import numpy as np
 import scipy.sparse as sp
 
 
-class DegradationDumps:
-    """The degradation dumps of a composed solver (see the module documentation), and of
+class SolveDumps:
+    """The dumps of a composed solver (see the module documentation), and of
     :class:`~edelweissfe.linsolve.blockamg.blockamg.BlockAMGSolver` (``dumpOnDegradation*``), in one on-disk format.
 
     Parameters
     ----------
     directory
         Where the dumps go; created if missing.
+    trigger
+        Which solves are dumped: ``"slow"`` (default), ``"every"``, or a collection of solve numbers.
     threshold
-        A solve with more outer iterations than this is dumped; ``None``: the warning threshold of the solver
+        For ``"slow"``: a solve with more outer iterations than this is dumped; ``None``: the warning threshold of the solver
         (``warnOuterIterations``), so that a dump and its warning fire on the same solves. A solve that stops at the
         iteration cap short of its tolerance is dumped whatever the threshold.
     maxDumps
@@ -74,11 +87,21 @@ class DegradationDumps:
     #: The systems written in this process, by every solver: what ``maxDumps`` bounds.
     dumpsWritten = 0
 
-    def __init__(self, directory: str, threshold: int = None, maxDumps: int = 10, contextSolves: int = 0):
+    def __init__(
+        self, directory: str, trigger="slow", threshold: int = None, maxDumps: int = 10, contextSolves: int = 0
+    ):
+        if isinstance(trigger, str):
+            if trigger not in ("slow", "every"):
+                raise ValueError(
+                    "SolveDumps: trigger must be 'slow', 'every' or solve numbers, got {!r}".format(trigger)
+                )
+            self.trigger = trigger
+        else:
+            self.trigger = frozenset(int(solveCount) for solveCount in trigger)
         if threshold is not None and threshold < 0:
-            raise ValueError("DegradationDumps: threshold must not be negative, got {!r}".format(threshold))
+            raise ValueError("SolveDumps: threshold must not be negative, got {!r}".format(threshold))
         if maxDumps < 0 or contextSolves < 0:
-            raise ValueError("DegradationDumps: maxDumps and contextSolves must not be negative")
+            raise ValueError("SolveDumps: maxDumps and contextSolves must not be negative")
         self.threshold = threshold
         self.maxDumps = maxDumps
         #: The last ``contextSolves`` solves, oldest first: ``{"solveCount", "A", "b", "blocks", "state",
@@ -104,8 +127,16 @@ class DegradationDumps:
             os.makedirs(directory, exist_ok=True)
 
     def thresholdOr(self, warningThreshold: int) -> int:
-        """The outer iterations above which a solve is dumped: :attr:`threshold`, or ``warningThreshold``."""
+        """The outer iterations above which a solve is slow: :attr:`threshold`, or ``warningThreshold``."""
         return warningThreshold if self.threshold is None else self.threshold
+
+    def selects(self, solveCount: int, slow: bool) -> bool:
+        """Whether the trigger selects this solve, given whether it was slow."""
+        if self.trigger == "slow":
+            return slow
+        if self.trigger == "every":
+            return True
+        return solveCount in self.trigger
 
     def afterSolve(
         self,
@@ -116,11 +147,11 @@ class DegradationDumps:
         blocks: list,
         state: dict,
         condensedDofs: "np.ndarray | None",
-        degraded: bool,
+        slow: bool,
         log,
     ) -> None:
-        """Take a finished solve: dump it, with its context window, if it is ``degraded`` and the budget allows, then
-        keep it (copied) as context for the next ones.
+        """Take a finished solve: dump it, with its context window, if the trigger selects it and the budget allows,
+        then keep it (copied) as context for the next ones.
 
         Parameters
         ----------
@@ -135,18 +166,18 @@ class DegradationDumps:
             ``continuations``, ``info``, ``mustRefresh``, ``patternChanged``, ``newIncrement``, ``previousOuterIters``).
         condensedDofs
             The dofs a Schur complement condensed in this solve, or ``None``.
-        degraded
-            Whether the solve is dumped (see :meth:`thresholdOr`).
+        slow
+            Whether the solve was slow (see :meth:`thresholdOr`), for the trigger ``"slow"``.
         log
             ``(level, message) -> None``.
         """
         if self.directory is None:
             return
-        if degraded and DegradationDumps.dumpsWritten < self.maxDumps:
+        if self.selects(solveCount, slow) and SolveDumps.dumpsWritten < self.maxDumps:
             if solveCount not in self.dumpedSolves:
                 self._write(instance, solveCount, A, b, blocks, "trigger", solveCount, state, condensedDofs, log)
             for entry in self.history:
-                if DegradationDumps.dumpsWritten >= self.maxDumps:
+                if SolveDumps.dumpsWritten >= self.maxDumps:
                     break
                 if entry["solveCount"] in self.dumpedSolves:
                     continue
@@ -205,10 +236,10 @@ class DegradationDumps:
         with open(os.path.join(self.directory, "manifest.jsonl"), "a") as manifestFile:
             manifestFile.write(json.dumps(record) + "\n")
         self.dumpedSolves.add(solveCount)
-        DegradationDumps.dumpsWritten += 1
+        SolveDumps.dumpsWritten += 1
         log(
             "warning",
-            "dumped {:} solve #{:} (of trigger #{:}) to {:}; {:} of {:} degradation dumps used".format(
-                role, solveCount, triggerSolveCount, matrixFile, DegradationDumps.dumpsWritten, self.maxDumps
+            "dumped {:} solve #{:} (of trigger #{:}) to {:}; {:} of {:} dumps used".format(
+                role, solveCount, triggerSolveCount, matrixFile, SolveDumps.dumpsWritten, self.maxDumps
             ),
         )

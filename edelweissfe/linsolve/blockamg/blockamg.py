@@ -116,13 +116,13 @@ from edelweissfe.linsolve.composition.combinators import (
     gaussSeidelOrder,
     multiplicativeCorrections,
 )
-from edelweissfe.linsolve.composition.degradationdumps import DegradationDumps
 from edelweissfe.linsolve.composition.diagonalscaling import diagonalScalingOf
 from edelweissfe.linsolve.composition.krylov import (
     STALENESS_MIN_EXCESS,
     eisenstatWalkerTolerance,
     outerIterationsDrifted,
 )
+from edelweissfe.linsolve.composition.solvedumps import SolveDumps
 from edelweissfe.linsolve.composition.solver import tileFieldBlocks
 from edelweissfe.linsolve.composition.systemmatrix import (
     FieldSplitBlocks,
@@ -1086,12 +1086,12 @@ class BlockAMGSolver(LinearSolver):
         # leave a directory behind, and an uncreatable path should raise the ValueError above naming
         # dumpOnDegradationDir, not a bare OSError from makedirs() before validation even ran. The dumps (and the
         # rolling window of the preceding solves) are those of the composed solvers, see
-        # edelweissfe.linsolve.composition.degradationdumps; the settings above stay the ones a hot reload changes.
-        self._degradationDumps = DegradationDumps(
+        # edelweissfe.linsolve.composition.solvedumps; the settings above stay the ones a hot reload changes.
+        self._degradationDumps = SolveDumps(
             self._dumpOnDegradationDir,
-            self._dumpOnDegradationThreshold,
-            max(self._dumpOnDegradationMaxDumps, 0),
-            max(self._dumpOnDegradationContextSolves, 0),
+            threshold=self._dumpOnDegradationThreshold,
+            maxDumps=max(self._dumpOnDegradationMaxDumps, 0),
+            contextSolves=max(self._dumpOnDegradationContextSolves, 0),
         )
 
     @property
@@ -2416,7 +2416,7 @@ class BlockAMGSolver(LinearSolver):
             blocks,
             solveState,
             condensedDofs,
-            degraded=outerIters > self._degradationThreshold() or (capHit and not converged),
+            slow=outerIters > self._degradationThreshold() or (capHit and not converged),
             log=lambda level, message: self._log(level, "blockamg: " + message),
         )
         if not converged and capHit:

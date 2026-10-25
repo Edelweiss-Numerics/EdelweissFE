@@ -175,24 +175,15 @@ def _isReal(value) -> bool:
 
 
 def _directSolverRejection(directSolver: Mapping) -> "str | None":
-    """Why the ``directSolver`` of ``schurComplement`` cannot be used, or ``None``: it must be a registered linear
-    solver that factorizes once for several right-hand sides, i.e. whose class overrides both
-    :meth:`~edelweissfe.linsolve.base.LinearSolver.factorize` and
-    :meth:`~edelweissfe.linsolve.base.LinearSolver.solveFactorized` of the base class, which only raise."""
-    from edelweissfe.config.linsolve import getLinSolverByName
-    from edelweissfe.linsolve.base import LinearSolver
+    """Why the ``directSolver`` of ``schurComplement`` cannot be used, or ``None``: it must name a registered direct
+    solver backend (registry category ``directsolver``) that can be created with its options."""
+    from edelweissfe.linsolve.composition.direct import DirectSolver
 
     name = directSolver["linsolver"]
     try:
-        solver = getLinSolverByName(name, dict(directSolver.get("options", {})))
+        DirectSolver(name, **dict(directSolver.get("options", {})))
     except (ImportError, LookupError, ValueError, TypeError) as error:
         return "'directSolver' {!r} cannot be created: {:}".format(name, error)
-    solverClass = type(solver)
-    if solverClass.factorize is LinearSolver.factorize or solverClass.solveFactorized is LinearSolver.solveFactorized:
-        return (
-            "'directSolver' {!r} does not factorize once for several right-hand sides (factorize and solveFactorized), "
-            "which the condensed block needs: use superlu or pardiso".format(name)
-        )
     return None
 
 
@@ -203,8 +194,8 @@ def createCondensation(options) -> "SchurComplementCondensation":
     options of a ``>>marker`` line, the direct solvers through the linear solver registry (SuperLU by default: its
     back substitution, once or twice per outer iteration, is cheap for the chains of bars).
     """
-    from edelweissfe.config.linsolve import getLinSolverByName
     from edelweissfe.config.markerlibrary import getMarkerClass
+    from edelweissfe.linsolve.composition.direct import DirectSolver
 
     reason = optionsRejection(options)
     if reason is not None:
@@ -220,9 +211,9 @@ def createCondensation(options) -> "SchurComplementCondensation":
         markers.append(getMarkerClass(markerType).fromOptions(markerOptions))
 
     def createDirectSolver():
-        return getLinSolverByName(
-            options["directSolver"]["linsolver"], dict(options["directSolver"].get("options", {}))
-        )
+        return DirectSolver(
+            options["directSolver"]["linsolver"], **dict(options["directSolver"].get("options", {}))
+        ).solver
 
     windowNodes = int(options["windowNodes"])
     return SchurComplementCondensation(
@@ -250,8 +241,8 @@ class SchurComplementCondensation:
         The markers whose marked elements' interior nodes are condensed.
     createDirectSolver
         Creates a linear solver that factorizes once for several right-hand sides
-        (:meth:`~edelweissfe.linsolve.base.LinearSolver.factorize`,
-        :meth:`~edelweissfe.linsolve.base.LinearSolver.solveFactorized`): one for :math:`A_{bb}`, one for the zones
+        (:meth:`~edelweissfe.linsolve.base.DirectSolverBackend.factorize`,
+        :meth:`~edelweissfe.linsolve.base.DirectSolverBackend.solveFactorized`): one for :math:`A_{bb}`, one for the zones
         corrected exactly.
     approximation
         ``"local"``: :math:`\\tilde S` as described in the module documentation; ``"none"``:

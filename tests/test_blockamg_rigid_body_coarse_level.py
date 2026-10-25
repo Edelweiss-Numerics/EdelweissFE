@@ -73,7 +73,7 @@ from edelweissfe.linsolve.nullspace import (  # noqa: E402
     rigidBodyNullspace,
     translationNullspace,
 )
-from edelweissfe.linsolve.superlu import SuperLUSolver  # noqa: E402
+from edelweissfe.linsolve.superlu import SuperLUBackend  # noqa: E402
 
 
 @functools.lru_cache
@@ -744,7 +744,7 @@ def test_a_hot_reload_switches_the_rigid_body_coarse_level_on_and_off(tmp_path):
 class _CondensedNodes(SchurComplementCondensation):
     """A Schur complement condensation of all dofs of given nodes, without a model."""
 
-    def __init__(self, nodes, dimension, createDirectSolver=SuperLUSolver):
+    def __init__(self, nodes, dimension, createDirectSolver=SuperLUBackend):
         super().__init__([], createDirectSolver)
         self.nodes, self.dimension = np.asarray(nodes), dimension
 
@@ -773,7 +773,7 @@ def test_the_remaining_nodes_of_a_schur_complement_condensation_get_their_coordi
     assert len(preconditioner.aggregates) == len(coordinates) - len(condensedNodes)
 
 
-class _SingularFromTheSecondFactorization(SuperLUSolver):
+class _SingularFromTheSecondFactorization(SuperLUBackend):
     """SuperLU whose factorizations fail from the second one on: a condensed block that turns singular, like a bond that
     loses all its stiffness."""
 

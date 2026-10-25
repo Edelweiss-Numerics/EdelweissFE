@@ -60,7 +60,6 @@ from edelweissfe.linsolve.composition.combinators import (
     OnField,
     gaussSeidelOrder,
 )
-from edelweissfe.linsolve.composition.degradationdumps import DegradationDumps
 from edelweissfe.linsolve.composition.diagonalscaling import DiagonalScaling
 from edelweissfe.linsolve.composition.direct import DirectSolver
 from edelweissfe.linsolve.composition.krylov import (
@@ -74,6 +73,7 @@ from edelweissfe.linsolve.composition.krylov import (
 )
 from edelweissfe.linsolve.composition.presets import blockAMG
 from edelweissfe.linsolve.composition.schurcomplement import SchurComplement
+from edelweissfe.linsolve.composition.solvedumps import SolveDumps
 from edelweissfe.linsolve.composition.solver import (
     ComposedLinearSolver,
     loadSolverScript,
@@ -90,7 +90,6 @@ __all__ = [
     "Additive",
     "CoarseCorrection",
     "ComposedLinearSolver",
-    "DegradationDumps",
     "Description",
     "DiagonalScaling",
     "DirectSolver",
@@ -109,6 +108,7 @@ __all__ = [
     "RigidBodyModes",
     "SchurComplement",
     "SetUpContext",
+    "SolveDumps",
     "SolveRecord",
     "Statistics",
     "Step",

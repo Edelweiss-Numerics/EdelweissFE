@@ -30,7 +30,7 @@ from edelweissfe.linsolve.blockamg.schurcomplement import (
     restrictP1Map,
 )
 from edelweissfe.linsolve.composition.schurcomplement import blockLU
-from edelweissfe.linsolve.superlu import SuperLUSolver
+from edelweissfe.linsolve.superlu import SuperLUBackend
 from edelweissfe.utils.fieldoutput import _FieldOutputBase
 
 
@@ -63,7 +63,7 @@ def _barOnFoundation(n=14, barLength=None, springStiffness=1e3, barStiffness=1e4
 class _FixedDofs(SchurComplementCondensation):
     """A condensation of given dofs, without a model."""
 
-    def __init__(self, dofs, createDirectSolver=SuperLUSolver, **options):
+    def __init__(self, dofs, createDirectSolver=SuperLUBackend, **options):
         super().__init__([], createDirectSolver, **options)
         self.fixedDofs = dofs
 
@@ -154,16 +154,16 @@ def test_condensed_dofs_are_those_of_the_interior_nodes_of_the_marked_elements()
     dofs = {label: np.array([2 * (label - 1), 2 * (label - 1) + 1]) for label in nodes}
     dofManager = SimpleNamespace(idcsOfFieldVariablesInDofVector=dofs)
 
-    condensation = SchurComplementCondensation([ElementSetMarker("bars"), ElementSetMarker("bonds")], SuperLUSolver)
+    condensation = SchurComplementCondensation([ElementSetMarker("bars"), ElementSetMarker("bonds")], SuperLUBackend)
     condensation.setModel(model, dofManager)
     assert np.array_equal(condensation._selectCondensedDofs()[0], [0, 1, 2, 3])
 
-    onlyBars = SchurComplementCondensation([ElementSetMarker("bars")], SuperLUSolver)
+    onlyBars = SchurComplementCondensation([ElementSetMarker("bars")], SuperLUBackend)
     onlyBars.setModel(model, dofManager)
     assert np.array_equal(onlyBars._selectCondensedDofs()[0], [0, 1])
 
     with pytest.raises(KeyError, match="element set 'rebars'"):
-        SchurComplementCondensation([ElementSetMarker("rebars")], SuperLUSolver).setModel(model, dofManager)
+        SchurComplementCondensation([ElementSetMarker("rebars")], SuperLUBackend).setModel(model, dofManager)
 
 
 def test_remaining_field_blocks_drop_the_condensed_nodes():
@@ -200,7 +200,7 @@ def test_transposed_solve_of_banded_and_dense_matrices(bandwidth):
 
 def test_superlu_factorizes_once_for_several_right_hand_sides():
     A, b, _ = _barOnFoundation(n=5)
-    solver = SuperLUSolver()
+    solver = SuperLUBackend()
     solver.factorize(A)
     B = np.column_stack([b, 2 * b])
     assert np.allclose(A @ solver.solveFactorized(B), B)
@@ -229,7 +229,7 @@ def test_options_are_checked():
         ({"haloNodes": -1}, "'haloNodes' must be an integer, not negative"),
         ({"dropTolerance": "1e-4"}, "'dropTolerance' must be a number"),
         ({"dropTolerance": 1.0}, "'dropTolerance' must be a number of at least 0 and less than 1"),
-        ({"directSolver": {"linsolver": "blockamg"}}, "does not factorize once for several right-hand sides"),
+        ({"directSolver": {"linsolver": "blockamg"}}, "cannot be created"),
         ({"directSolver": {"linsolver": "nonexistent"}}, "cannot be created"),
     ],
     ids=[
@@ -240,7 +240,7 @@ def test_options_are_checked():
         "halo negative",
         "drop a string",
         "drop 1",
-        "a solver without the phase split",
+        "not a direct solver",
         "an unknown solver",
     ],
 )
@@ -253,7 +253,7 @@ def test_options_of_the_wrong_type_or_an_unsuitable_direct_solver_are_rejected_u
         createSolver({"schurComplement": options})
 
 
-class _FailingFromTheSecondFactorization(SuperLUSolver):
+class _FailingFromTheSecondFactorization(SuperLUBackend):
     """SuperLU whose factorizations fail from the second one on."""
 
     def __init__(self):
@@ -308,7 +308,7 @@ def test_the_condensed_dofs_are_selected_anew_only_when_a_marker_input_changes()
     # call, and a new model drops the selection
     model, dofManager = _chainModel()
     marker = _CountingMarker([model.elements[1], model.elements[2]])
-    condensation = SchurComplementCondensation([marker], SuperLUSolver)
+    condensation = SchurComplementCondensation([marker], SuperLUBackend)
     condensation.setModel(model, dofManager)
     first = condensation._selectCondensedDofs()
     assert np.array_equal(first[0], [2]) and condensation._selectCondensedDofs() is first and marker.marks == 1
@@ -366,7 +366,7 @@ def test_s_tilde_and_hierarchies_are_reused_and_rebuilt_when_the_condensed_dofs_
     assert np.linalg.norm(b - A @ x) / np.linalg.norm(b) < 1e-8
 
 
-class _SingularSolver(SuperLUSolver):
+class _SingularSolver(SuperLUBackend):
     """A direct solver that finds every matrix singular."""
 
     def factorize(self, A):
@@ -386,7 +386,7 @@ def test_a_condensed_block_that_cannot_be_factorized_is_solved_without_condensat
 
 def test_superlu_reports_a_singular_matrix_as_a_linear_algebra_error():
     with pytest.raises(np.linalg.LinAlgError):
-        SuperLUSolver().factorize(sp.csr_matrix(np.array([[1.0, 1.0], [1.0, 1.0]])))
+        SuperLUBackend().factorize(sp.csr_matrix(np.array([[1.0, 1.0], [1.0, 1.0]])))
 
 
 def test_a_hot_reload_does_not_change_the_condensation(tmp_path):

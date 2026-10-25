@@ -52,7 +52,6 @@ from edelweissfe.linsolve.composition import (  # noqa: E402
     AMG,
     LGMRES,
     ComposedLinearSolver,
-    DegradationDumps,
     DiagonalScaling,
     DirectSolver,
     FixedTolerance,
@@ -60,6 +59,7 @@ from edelweissfe.linsolve.composition import (  # noqa: E402
     Multiplicative,
     OnField,
     SchurComplement,
+    SolveDumps,
     blockAMG,
 )
 from edelweissfe.linsolve.composition.amg import droppedSmallEntries  # noqa: E402
@@ -335,12 +335,12 @@ _MANIFEST_KEYS = {
 def test_the_degradation_dumps_are_blockamgs_on_disk(tmp_path, monkeypatch):
     """The files and manifest lines blockamg wrote, for every solve of a sequence (threshold 0: all dumped)."""
     A, b, fields, coordinates = _beamWithDamage()
-    monkeypatch.setattr(DegradationDumps, "dumpsWritten", 0)
+    monkeypatch.setattr(SolveDumps, "dumpsWritten", 0)
     composed = ComposedLinearSolver(
         blockAMG(),
         nodeCoordinates={"displacement": coordinates},
         verbosity="silent",
-        degradationDumps=DegradationDumps(str(tmp_path), threshold=0, maxDumps=20),
+        dumps=SolveDumps(str(tmp_path), threshold=0, maxDumps=20),
     )
     composed.setFieldStructure(fields)
     sequence = _newtonLikeSequence(A, b, fields)
@@ -373,7 +373,7 @@ def test_the_degradation_dumps_are_blockamgs_on_disk(tmp_path, monkeypatch):
 def test_a_dump_of_a_condensed_solve_holds_its_condensed_dofs(tmp_path, monkeypatch):
     from test_linsolve_composition_components import _barOnFoundation, _FixedDofs
 
-    monkeypatch.setattr(DegradationDumps, "dumpsWritten", 0)
+    monkeypatch.setattr(SolveDumps, "dumpsWritten", 0)
     A, b, barDofs = _barOnFoundation(n=8)
     fields = [FieldBlock("u", 0, A.shape[0], 1)]
     solveA_bb = DirectSolver()
@@ -385,9 +385,7 @@ def test_a_dump_of_a_condensed_solve_holds_its_condensed_dofs(tmp_path, monkeypa
         ),
         tolerance=FixedTolerance(1e-8),
     )
-    composed = ComposedLinearSolver(
-        root, verbosity="silent", degradationDumps=DegradationDumps(str(tmp_path), threshold=0)
-    )
+    composed = ComposedLinearSolver(root, verbosity="silent", dumps=SolveDumps(str(tmp_path), threshold=0))
     composed.setFieldStructure(fields)
     composed(A, b)
     (record,) = _manifest(tmp_path)
@@ -395,9 +393,9 @@ def test_a_dump_of_a_condensed_solve_holds_its_condensed_dofs(tmp_path, monkeypa
 
 
 def test_a_dump_holds_the_context_solves_before_its_trigger(tmp_path, monkeypatch):
-    monkeypatch.setattr(DegradationDumps, "dumpsWritten", 0)
+    monkeypatch.setattr(SolveDumps, "dumpsWritten", 0)
     A, b, fields, _ = _beamWithDamage()
-    dumps = DegradationDumps(str(tmp_path), maxDumps=10, contextSolves=2)
+    dumps = SolveDumps(str(tmp_path), maxDumps=10, contextSolves=2)
     for solveCount, degraded in ((1, False), (2, False), (3, False), (4, True)):
         dumps.afterSolve(0, solveCount, A, solveCount * b, fields, {}, None, degraded, lambda level, message: None)
     records = _manifest(tmp_path)

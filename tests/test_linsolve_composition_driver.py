@@ -41,7 +41,6 @@ from edelweissfe.linsolve.composition import (  # noqa: E402
     AMG,
     LGMRES,
     ComposedLinearSolver,
-    DegradationDumps,
     FixedTolerance,
     ForcingTolerance,
     GapCompensation,
@@ -50,6 +49,7 @@ from edelweissfe.linsolve.composition import (  # noqa: E402
     RebuildPolicy,
     RigidBodyModes,
     SetUpContext,
+    SolveDumps,
     SystemMatrix,
     TwoGrid,
     blockAMG,
@@ -137,7 +137,7 @@ def test_the_continuations_on_the_scaled_system_are_logged_at_debug():
         lambda: LGMRES(AMG(), M=0),
         lambda: LGMRES(AMG(), continuations=-1),
         lambda: AMG(dropTolerance=-1.0),
-        lambda: DegradationDumps("unused", maxDumps=-1),
+        lambda: SolveDumps("unused", maxDumps=-1),
         lambda: ComposedLinearSolver(blockAMG(), verbosity="loud"),
         lambda: ComposedLinearSolver(blockAMG(), residualGrowthFactor=1.0),
     ],
@@ -269,8 +269,8 @@ def test_a_new_solver_that_fails_to_set_up_is_rolled_back(tmp_path):
 
 
 def test_the_dump_numbering_continues_across_a_reload(tmp_path, monkeypatch):
-    monkeypatch.setattr(DegradationDumps, "dumpsWritten", 0)
-    dumps = 'degradationDumps=DegradationDumps(r"{:}", threshold=0)'.format(tmp_path / "dumps")
+    monkeypatch.setattr(SolveDumps, "dumpsWritten", 0)
+    dumps = 'dumps=SolveDumps(r"{:}", threshold=0)'.format(tmp_path / "dumps")
     solver, journal, script, A, b = _scriptSolver(tmp_path, 1e-6, ", " + dumps)
     solver(A, b)
     _script(

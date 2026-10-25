@@ -286,32 +286,49 @@ class LinearSolver:
         """
         self._fieldStructure = list(fields)
 
-    def factorize(self, A):
-        """Factorize ``A`` and keep the factorization for later :meth:`solveFactorized` calls.
-
-        The phase-split half of the contract, used instead of :meth:`__call__` by a caller that
-        reuses one factorization across several right-hand sides: the condensed block of ``blockamg``'s
-        Schur complement condensation (:mod:`~edelweissfe.linsolve.blockamg.schurcomplement`), and
-        ``scripts/benchmark_linsolve.py``'s ``lagged`` subcommand. A matrix that cannot be factorized
-        (singular) raises :class:`numpy.linalg.LinAlgError`. Declared here rather than only on
-        the solvers that implement it so that a wrapper (e.g.
-        :class:`~edelweissfe.linsolve.matrixdump.matrixdump.MatrixDumpSolver`) can forward it
-        polymorphically, without an out-of-band capability check.
-
-        Default raises: most solvers have no phase split, and a caller reaching this has asked a
-        solver for something it cannot do, which should say so rather than fail obscurely later.
-        """
-        raise NotImplementedError(
-            "{:} does not support phase-split factorization; use a direct solver such as pardiso "
-            "for callers that need factorize()/solveFactorized().".format(type(self).__name__)
-        )
-
-    def solveFactorized(self, b):
-        """Solve for ``b`` against the factorization :meth:`factorize` stored. See :meth:`factorize`."""
-        raise NotImplementedError(
-            "{:} does not support phase-split factorization; use a direct solver such as pardiso "
-            "for callers that need factorize()/solveFactorized().".format(type(self).__name__)
-        )
-
     def __call__(self, A, b):
         raise NotImplementedError
+
+
+class DirectSolverBackend:
+    """A sparse direct solver library (SuperLU, PARDISO, KLU, ...): factorizes a matrix once, then solves for as many
+    right-hand sides as needed by back substitution.
+
+    Not a linear solver of its own: the composed leaf :class:`~edelweissfe.linsolve.composition.direct.DirectSolver`
+    applies it, :math:`z = A^{-1} r`, and the ``type=pardiso`` (etc.) linear solvers are that one leaf. Backends are
+    registered in the ``directsolver`` registry category, and take their options as keyword arguments.
+
+    A backend that keeps its symbolic factorization (the reordering) while only the values of the matrix change does
+    so inside :meth:`factorize`: one backend instance lives as long as its :class:`DirectSolver` leaf.
+    """
+
+    def factorize(self, A) -> None:
+        """Factorize ``A`` (CSR) for the following :meth:`solveFactorized` calls. A matrix that cannot be factorized
+        (singular) raises :class:`numpy.linalg.LinAlgError`."""
+        raise NotImplementedError
+
+    def solveFactorized(self, b):
+        """Solve ``A x = b`` with the factorization of the last :meth:`factorize`."""
+        raise NotImplementedError
+
+
+class OneCallDirectSolverBackend(DirectSolverBackend):
+    """A backend whose binding factorizes and solves in one call, ``solve(A, b) -> x``: :meth:`factorize` keeps ``A``
+    (the matrix itself, no copy), and each :meth:`solveFactorized` factorizes it again with its right-hand side.
+
+    Parameters
+    ----------
+    solve
+        The binding's ``(A, b) -> x``.
+    """
+
+    def __init__(self, solve):
+        self._solve = solve
+        self._A = None
+
+    def factorize(self, A) -> None:
+        self._A = A
+
+    def solveFactorized(self, b):
+        # a copy: some bindings (KLU) overwrite the right-hand side with the solution
+        return self._solve(self._A, np.array(b, dtype=float, copy=True))

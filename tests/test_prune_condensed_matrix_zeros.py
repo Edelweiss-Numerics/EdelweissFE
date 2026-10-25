@@ -50,16 +50,18 @@ def test_the_automatic_decision_table(explicit, needsStableSparsityPattern, expe
     assert NIST._shouldPruneCondensedMatrixZeros(stub) is expected
 
 
-def test_matrixdumpsolver_forwards_the_decision_to_its_delegate():
-    """MatrixDumpSolver wraps another linear solver for offline dumping; the automatic decision must see
-    through the wrapper to the delegate's own needsStableSparsityPattern, not the wrapper's."""
-    from edelweissfe.linsolve.matrixdump.matrixdump import MatrixDumpSolver
+def test_a_linear_solver_needs_a_stable_pattern_if_its_tree_holds_a_krylov_solver():
+    """Every linear solver is a composed one: a direct solver (one leaf, factorized anew on every solve) tolerates
+    pruning; a Krylov solver reuses its preconditioner across solves, which pruning would defeat."""
+    from edelweissfe.linsolve.composition import (
+        AMG,
+        LGMRES,
+        ComposedLinearSolver,
+        DirectSolver,
+    )
 
-    for delegateNeedsStablePattern in (True, False):
-        delegate = _LinearSolverStub(delegateNeedsStablePattern)
-        wrapper = MatrixDumpSolver.__new__(MatrixDumpSolver)
-        wrapper._delegate = delegate
-        assert wrapper.needsStableSparsityPattern is delegateNeedsStablePattern
-
-        stub = _NISTStub(None, wrapper.needsStableSparsityPattern)
-        assert NIST._shouldPruneCondensedMatrixZeros(stub) is (not delegateNeedsStablePattern)
+    direct = ComposedLinearSolver(DirectSolver("superlu"))
+    krylov = ComposedLinearSolver(LGMRES(AMG()))
+    for solver, expected in ((direct, True), (krylov, False)):
+        stub = _NISTStub(None, solver.needsStableSparsityPattern)
+        assert NIST._shouldPruneCondensedMatrixZeros(stub) is expected

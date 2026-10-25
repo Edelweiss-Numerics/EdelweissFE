@@ -375,6 +375,13 @@ class Preconditioner:
         that is not."""
         return all(child.isFixedLinearOperator for _, child in self.children())
 
+    @property
+    def containsKrylovSolver(self) -> bool:
+        """Whether this component is, or has among its children, a Krylov solver. A Krylov solver reuses its
+        preconditioner across solves (so the nonlinear solver keeps the sparsity pattern of the matrix stable) and
+        records each solve (the "linear solve" column); a direct solve does neither."""
+        return any(child.containsKrylovSolver for _, child in self.children())
+
     def setModel(self, model, dofManager) -> None:
         """Take a new model (the first, or one after a change of the mesh), and hand it to the children. A component
         that derives something from the model (e.g. which dofs a marker selects) overrides this."""

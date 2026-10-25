@@ -32,8 +32,8 @@ The nonlinear solver calls its linear solver as ``x = solver(A, b)`` once per Ne
 :class:`ComposedLinearSolver` turns that call into the life cycle of a composed solver: it finds what changed since
 the last call (a new pattern, a resized system, a jump of the right-hand side that marks a new increment),
 hands the changed matrix down the tree (:meth:`~edelweissfe.linsolve.composition.base.Preconditioner.update`), and
-applies the root to :math:`b`. It is also what reports on the solves: the journal, the warnings, the degradation
-dumps (:mod:`~edelweissfe.linsolve.composition.degradationdumps`), and the hot reload of its script.
+applies the root to :math:`b`. It is also what reports on the solves: the journal, the warnings, the dumps
+(:mod:`~edelweissfe.linsolve.composition.solvedumps`), and the hot reload of its script.
 
 In an input file, a solver script is named as the linear solver::
 
@@ -59,7 +59,7 @@ from edelweissfe.linsolve.composition.base import (
     Preconditioner,
     SetUpContext,
 )
-from edelweissfe.linsolve.composition.degradationdumps import DegradationDumps
+from edelweissfe.linsolve.composition.solvedumps import SolveDumps
 from edelweissfe.linsolve.composition.systemmatrix import SystemMatrix
 
 _IDENTIFICATION = "ComposedLinearSolver"
@@ -113,7 +113,7 @@ class _Settings:
     residualGrowthFactor: float
     verbosity: str
     warnOuterIterations: int
-    degradationDumps: "DegradationDumps | None"
+    dumps: "SolveDumps | None"
     hotReload: bool
     nodeCoordinates: dict = field(default_factory=dict)
     p1Maps: dict = field(default_factory=dict)
@@ -145,9 +145,9 @@ class ComposedLinearSolver(LinearSolver):
     warnOuterIterations
         A solve with more outer iterations than this gets a warning (a sign that the preconditioner no longer fits).
         A solve that misses its tolerance gets a warning of its own, whatever this says.
-    degradationDumps
-        A :class:`~edelweissfe.linsolve.composition.degradationdumps.DegradationDumps`: write the systems of slow
-        solves to disk, for an offline replay. ``None`` (default): none.
+    dumps
+        A :class:`~edelweissfe.linsolve.composition.solvedumps.SolveDumps`: write the systems of chosen solves to disk,
+        for an offline replay. ``None`` (default): none.
     hotReload
         Re-read the solver script whenever it changed on disk, before a solve, and continue with the solver it builds:
         tree and settings (see :meth:`_hotReload`). Only for a solver built by a script (:func:`loadSolverScript`).
@@ -158,9 +158,8 @@ class ComposedLinearSolver(LinearSolver):
     """
 
     identification = _IDENTIFICATION
-    needsStableSparsityPattern = True
 
-    #: Instances created in this process: the ordinal of an instance names its degradation dumps, so that the dumps of
+    #: Instances created in this process: the ordinal of an instance names its dumps, so that the dumps of
     #: several solvers (one per analysis step, say) never overwrite each other.
     _instancesCreated = 0
 
@@ -170,7 +169,7 @@ class ComposedLinearSolver(LinearSolver):
         residualGrowthFactor: float = 4.0,
         verbosity: str = "warning",
         warnOuterIterations: int = 100,
-        degradationDumps: DegradationDumps = None,
+        dumps: SolveDumps = None,
         hotReload: bool = False,
         nodeCoordinates: dict = None,
         p1Maps: dict = None,
@@ -194,7 +193,7 @@ class ComposedLinearSolver(LinearSolver):
                 residualGrowthFactor,
                 verbosity,
                 warnOuterIterations,
-                degradationDumps,
+                dumps,
                 hotReload,
                 {name: np.asarray(coordinates, dtype=float) for name, coordinates in (nodeCoordinates or {}).items()},
                 dict(p1Maps or {}),
@@ -231,7 +230,7 @@ class ComposedLinearSolver(LinearSolver):
             self.residualGrowthFactor,
             self.verbosity,
             self.warnOuterIterations,
-            self.degradationDumps,
+            self.dumps,
             self.hotReload,
             self._givenCoordinates,
             self._givenP1Maps,
@@ -242,7 +241,7 @@ class ComposedLinearSolver(LinearSolver):
         self.residualGrowthFactor = settings.residualGrowthFactor
         self.verbosity = settings.verbosity
         self.warnOuterIterations = settings.warnOuterIterations
-        self.degradationDumps = settings.degradationDumps
+        self.dumps = settings.dumps
         self.hotReload = settings.hotReload
         self._givenCoordinates = settings.nodeCoordinates
         self._givenP1Maps = settings.p1Maps
@@ -288,8 +287,16 @@ class ComposedLinearSolver(LinearSolver):
     # ----- the solve -----
 
     @property
+    def needsStableSparsityPattern(self) -> bool:
+        """A Krylov solver reuses its preconditioner across solves, which a new sparsity pattern defeats; a direct
+        solve factorizes anew every time."""
+        return self.root.containsKrylovSolver
+
+    @property
     def reportsSolveSummary(self) -> bool:
-        return self.verbosity in ("info", "debug")
+        """The "linear solve" column of the nonlinear solver: the outer iterations of a Krylov solve, at verbosity
+        ``"info"`` or ``"debug"``."""
+        return self.verbosity in ("info", "debug") and self.root.containsKrylovSolver
 
     @property
     def lastSolveSummary(self) -> "LinearSolveSummary | None":
@@ -334,30 +341,35 @@ class ComposedLinearSolver(LinearSolver):
         )
         return MatrixChange(context, reason, newIncrement, residualNorm, self.lastResidualNorm)
 
-    def _notSolved(self, n: int, reason: str) -> np.ndarray:
+    def _notSolved(self, shape: tuple, reason: str) -> np.ndarray:
         """A declined solve: NaN, which reaches the nonlinear solver as a diverged solution (a cutback)."""
         self._log("warning", "solve #{:}: {:}; returning NaN without solving.".format(self._solveCount, reason))
         self._lastSolveSummary = LinearSolveSummary(iters=0, residual=float("nan"), residualMet=False, retries=0)
-        return np.full(n, np.nan)
+        return np.full(shape, np.nan)
 
     def __call__(self, A, b):
+        """Solve :math:`A x = b`, for one right-hand side ``b`` (a vector) or several (the columns of a matrix, e.g.
+        the two of an arc-length method), each with the same set-up of the tree."""
         start = time.time()
         self._solveCount += 1
         if self.hotReload:
             self._hotReload()
         A = SystemMatrix(A)
         n = A.shape[0]
-        fields = tileFieldBlocks(self._fieldStructure, n, _IDENTIFICATION)
-        b = np.asarray(b, dtype=float).reshape(n)
+        # a direct solve needs no fields: a caller may not hand over any (EdelweissMeshfree's solvers)
+        fields = [] if self._fieldStructure is None else tileFieldBlocks(self._fieldStructure, n, _IDENTIFICATION)
+        b = np.asarray(b, dtype=float)
+        rightHandSides = b.reshape(n, -1)
         residualNorm = float(np.linalg.norm(b))
         if not np.isfinite(residualNorm):
-            return self._notSolved(n, "the right-hand side is not finite")
+            return self._notSolved(b.shape, "the right-hand side is not finite")
 
         change = self._changeFor(A, fields, residualNorm)
         try:
             self.root.update(A, change)
-        except FloatingPointError as error:
-            return self._notSolved(n, str(error))
+        except (FloatingPointError, np.linalg.LinAlgError) as error:
+            # a non-finite scaling, a singular matrix: the nonlinear solver cuts the increment back
+            return self._notSolved(b.shape, str(error))
         except Exception as error:
             if self._settingsBeforeReload is None:
                 raise
@@ -368,7 +380,7 @@ class ComposedLinearSolver(LinearSolver):
         if self._fields is None or self._reloaded:
             # after the first set-up: a combination made per field shows its corrections only then
             self._log("info", "composed linear solver:\n" + str(self.root) + self._scriptLine())
-        x = self.root(b)
+        x = np.column_stack([self.root(np.ascontiguousarray(r)) for r in rightHandSides.T]).reshape(b.shape)
         record = self.root.solveRecord()
         condensedDofs = self.root.condensedDofs()
         self.root.finishSolve()
@@ -381,11 +393,12 @@ class ComposedLinearSolver(LinearSolver):
         self.lastResidualNorm = residualNorm
         if record is not None:
             self._report(record, change, time.time() - start)
-            if self.degradationDumps is not None:
-                self._dump(A.A, b, fields, record, change, patternChanged, condensedDofs)
-            self._previousIterations = record.iterations
         else:
             self._lastSolveSummary = None
+        if self.dumps is not None:
+            self._dump(A.A, b, fields, record, change, patternChanged, condensedDofs)
+        if record is not None:
+            self._previousIterations = record.iterations
         return x
 
     def _report(self, record, change: MatrixChange, seconds: float) -> None:
@@ -450,29 +463,26 @@ class ComposedLinearSolver(LinearSolver):
     def _dump(
         self, A, b: np.ndarray, fields: list, record, change: MatrixChange, patternChanged: bool, condensedDofs
     ) -> None:
-        """Hand a finished solve to the degradation dumps, with the bookkeeping blockamg records."""
-        state = {
-            "outerIters": record.iterations,
-            "trueResidual": record.residual,
-            "eta": record.eta,
-            "continuations": record.continuations,
-            "info": int(record.capHit),
-            "mustRefresh": record.rebuildReason is not None,
-            "patternChanged": patternChanged,
-            "newIncrement": change.newIncrement,
-            "previousOuterIters": self._previousIterations,
-        }
-        self.degradationDumps.afterSolve(
-            self._instanceOrdinal,
-            self._solveCount,
-            A,
-            b,
-            fields,
-            state,
-            condensedDofs,
-            degraded=record.iterations > self.degradationDumps.thresholdOr(self.warnOuterIterations)
-            or (record.capHit and not record.converged),
-            log=self._log,
+        """Hand a finished solve to the dumps, with its bookkeeping: that of its Krylov solve, if it has one (a direct
+        solve has none, and is never slow)."""
+        state = {"patternChanged": patternChanged, "newIncrement": change.newIncrement}
+        slow = False
+        if record is not None:
+            state = {
+                "outerIters": record.iterations,
+                "trueResidual": record.residual,
+                "eta": record.eta,
+                "continuations": record.continuations,
+                "info": int(record.capHit),
+                "mustRefresh": record.rebuildReason is not None,
+                **state,
+                "previousOuterIters": self._previousIterations,
+            }
+            slow = record.iterations > self.dumps.thresholdOr(self.warnOuterIterations) or (
+                record.capHit and not record.converged
+            )
+        self.dumps.afterSolve(
+            self._instanceOrdinal, self._solveCount, A, b, fields, state, condensedDofs, slow=slow, log=self._log
         )
 
     # ----- the solver script -----
@@ -485,7 +495,7 @@ class ComposedLinearSolver(LinearSolver):
     def _hotReload(self) -> None:
         """Before a solve: if the solver script changed on disk, run it again and continue with the solver it builds
         -- its tree and its settings, all of them; what the run has learnt stays (the solve count, the residual
-        history, the numbering of the degradation dumps, so that a reload never overwrites earlier dumps). The new tree
+        history, the numbering of the dumps, so that a reload never overwrites earlier dumps). The new tree
         is set up on this solve (rebuild reason ``"reload"``).
 
         Editing a file a running process reads is racy, so this fails safely, and nothing about a bad edit can end
@@ -535,12 +545,12 @@ class ComposedLinearSolver(LinearSolver):
         self._log(
             "warning",
             "{:}: the whole solver is replaced, its settings included (verbosity {:}, residualGrowthFactor {:g}, "
-            "warnOuterIterations {:}, degradationDumps {:}, hotReload {:}); it is set up on this solve:\n{:}".format(
+            "warnOuterIterations {:}, dumps {:}, hotReload {:}); it is set up on this solve:\n{:}".format(
                 header,
                 self.verbosity,
                 self.residualGrowthFactor,
                 self.warnOuterIterations,
-                "none" if self.degradationDumps is None else self.degradationDumps.directory,
+                "none" if self.dumps is None else self.dumps.directory,
                 self.hotReload,
                 self.root,
             ),

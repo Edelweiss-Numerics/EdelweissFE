@@ -26,51 +26,24 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 
-"""Registry-facing factory for the UMFPACK sparse LU solver, through SciPy.
+"""The UMFPACK sparse LU, through SciPy, as a direct solver backend.
 
-``use_umfpack=True`` is a *request*, not a guarantee: SciPy silently falls back to SuperLU when
-``scikit-umfpack`` is not installed, so this name never fails to produce a working solver -- it
-just may not produce an UMFPACK-backed one.
+``use_umfpack=True`` is a *request*, not a guarantee: SciPy silently falls back to SuperLU when ``scikit-umfpack`` is
+not installed, so this backend never fails to solve -- it just may not be UMFPACK.
 """
 
-from collections.abc import Callable
-
-from edelweissfe.linsolve.base import LinearSolver
+from edelweissfe.linsolve.base import OneCallDirectSolverBackend
 
 
-class UMFPACKSolver(LinearSolver):
-    """SciPy's UMFPACK-backed direct solver. Callable as ``(A, b) -> x``.
+def _umfpackSolve(A, b):
+    from scipy.sparse.linalg import spsolve
 
-    Takes no options; ``setJournal``/``setFieldStructure`` are inherited no-ops (this solver has no
-    field-split structure and does not log).
-    """
-
-    def __call__(self, A, b):
-        # Imported inside the call, not at module scope -- see the note in the `superlu` sibling for
-        # why every one of the factories does it this way.
-        from scipy.sparse.linalg import spsolve
-
-        return spsolve(A.copy(), b, use_umfpack=True)
+    return spsolve(A.copy(), b, use_umfpack=True)
 
 
-def createSolver(opts) -> Callable:
-    """Create an UMFPACK-backed linear solver.
+class UMFPACKBackend(OneCallDirectSolverBackend):
+    """UMFPACK through :func:`scipy.sparse.linalg.spsolve`, which factorizes and solves in one call. Takes no
+    options."""
 
-    The factory the ``linsolver`` registry category resolves for the name ``umfpack``: every ``linsolve``
-    subpackage exposes this one signature, so that a third party can contribute a linear solver through an
-    entry point.
-
-    Parameters
-    ----------
-    opts
-        The linear-solver options parsed from the solver's ``linsolverConfigFile``. Not consulted:
-        UMFPACK is used with SciPy's defaults and takes no options here. It is still accepted so
-        that every ``createSolver`` presents the identical signature.
-
-    Returns
-    -------
-    Callable
-        A :class:`UMFPACKSolver`, callable as ``(A, b) -> x``, solving ``A x = b`` via
-        :func:`scipy.sparse.linalg.spsolve` with ``use_umfpack=True``.
-    """
-    return UMFPACKSolver()
+    def __init__(self):
+        super().__init__(_umfpackSolve)

@@ -376,23 +376,33 @@ for _materialName, _materialDotted in {
 }.items():
     _BUILTINS[("material", _materialName)] = _materialDotted
 
-# The linsolver category: every `linsolve/*` subpackage exposes a module-level
-# `createSolver(opts) -> Callable[[A, b], x]` factory. See each solver's own module docstring
-# for what it does and how the optional-backend import is handled, and
-# doc/source/documentation/linsolvers.rst for how the solvers relate to one another.
-for _linsolverName in [
-    "superlu",
-    "umfpack",
-    "pardiso",
-    "panuapardiso",
-    "klu",
-    "petsclu",
-    "mumps",
-    "amgcl",
-    "blockamg",
-    "matrixdump",
-]:
-    _BUILTINS[("linsolver", _linsolverName)] = f"edelweissfe.linsolve.{_linsolverName}:createSolver"
+# The linsolver category: the types of *linearSolver (and of a *solver's linsolver=), each a class with the schema
+# of its data lines and the composed solver they define; see edelweissfe/linsolve/types.py and
+# doc/source/documentation/linsolvers.rst.
+for _linsolverName, _linsolverClass in {
+    "superlu": "SuperLU",
+    "umfpack": "UMFPACK",
+    "pardiso": "Pardiso",
+    "panuapardiso": "PanuaPardiso",
+    "klu": "KLU",
+    "petsclu": "PetscLU",
+    "mumps": "Mumps",
+}.items():
+    _BUILTINS[("linsolver", _linsolverName)] = f"edelweissfe.linsolve.types:{_linsolverClass}"
+_BUILTINS[("linsolver", "blockamg")] = "edelweissfe.linsolve.blockamg:BlockAMGType"
+
+# The directsolver category: the sparse direct solver libraries a DirectSolver leaf of a composed solver applies
+# (edelweissfe.linsolve.base.DirectSolverBackend), one linsolve/<name> subpackage each.
+for _directSolverName, _directSolverClass in {
+    "superlu": "SuperLUBackend",
+    "umfpack": "UMFPACKBackend",
+    "pardiso": "PardisoBackend",
+    "panuapardiso": "PanuaPardisoBackend",
+    "klu": "KLUBackend",
+    "petsclu": "PetscLUBackend",
+    "mumps": "MumpsBackend",
+}.items():
+    _BUILTINS[("directsolver", _directSolverName)] = f"edelweissfe.linsolve.{_directSolverName}:{_directSolverClass}"
 
 
 # The "keyword" category: each top-level keyword is its own module with its own class name, so,

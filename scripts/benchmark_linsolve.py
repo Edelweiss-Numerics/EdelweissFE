@@ -25,8 +25,8 @@
 
 """Offline benchmark of linear-solver strategies on a captured sequence of equation systems.
 
-Reads what the ``matrixdump`` linear solver wrote (see
-:mod:`edelweissfe.linsolve.matrixdump.matrixdump`) and replays it, so solver variants are compared
+Reads the systems a linear solver dumped (data line ``dumps=every`` or ``dumps=<solve numbers>``, see
+:mod:`edelweissfe.linsolve.composition.solvedumps`) and replays them, so solver variants are compared
 on byte-identical input instead of by rerunning the simulation. Each check is a separate subcommand
 because they cost wildly different amounts of time: ``pattern`` is seconds, ``reuse`` and ``threads``
 are minutes, and ``lagged`` involves a SuperLU factorization of the whole system and can run much
@@ -63,6 +63,10 @@ def loadManifest(dumpDir: str) -> list[dict]:
     with open(manifestPath) as manifestFile:
         records = [json.loads(line) for line in manifestFile if line.strip()]
 
+    for record in records:
+        # the file names are A_<instance>_<solve>.npz
+        record["instance"] = int(record["matrixFile"].split("_")[1])
+        record["ordinal"] = record["solveCount"]
     records.sort(key=lambda record: (record["instance"], record["ordinal"]))
     return records
 
@@ -118,8 +122,8 @@ def commandPattern(args):
                 record["instance"],
                 record["ordinal"],
                 A.nnz,
-                record["rhsNorm"],
-                record["diagonalNorm"],
+                np.linalg.norm(b),
+                np.linalg.norm(A.diagonal()),
                 nnzDelta,
                 patternNote,
             )

@@ -6,8 +6,7 @@ all
 
 *job, name=c3d8job, domain=2d
 *solver, solver=NIST, name=theSolver
-linsolver=amgcl
-linsolverConfigFile=opt.json
+linsolver=script:solver.py
 
 *modelGenerator, generator=planeRectQuad, name=gen
 l=10
