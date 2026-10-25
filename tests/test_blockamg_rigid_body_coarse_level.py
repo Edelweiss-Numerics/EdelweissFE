@@ -544,11 +544,12 @@ def _solve(**options):
 
 
 def test_blockamg_solves_a_bending_dominated_beam_in_fewer_outer_iterations():
-    # the field's tree, here the default one with the hierarchy coarsened further, configures both: the rigid-body
-    # coarse level, the default for a 3D vector field, and AMGCL's hierarchy on the translations, with it switched off
+    # the field's tree, here an explicit one with the hierarchy coarsened further, configures both: AMGCL's hierarchy
+    # on the translations, as which an explicit tree is kept by default, and the rigid-body coarse level, which naming
+    # the field adds to it
     fieldPreconds = {"displacement": _coarsenedTree(_defaultFieldPrecond(3))}
-    translations, translationsResidual = _solve(fieldPreconds=fieldPreconds, rigidBodyCoarseLevel=False)
-    rigidBody, rigidBodyResidual = _solve(fieldPreconds=fieldPreconds)
+    translations, translationsResidual = _solve(fieldPreconds=fieldPreconds)
+    rigidBody, rigidBodyResidual = _solve(fieldPreconds=fieldPreconds, rigidBodyCoarseLevel=["displacement"])
     assert isinstance(translations._preconditioners[0], PyAMGCLSolver)
     assert type(rigidBody._preconditioners[0]).__name__ == "RigidBodyCoarseLevelPreconditioner"
     assert translationsResidual <= 1.0001e-8 and rigidBodyResidual <= 1.0001e-8
@@ -592,40 +593,67 @@ def test_a_3d_field_has_the_coarse_level_by_default_a_2d_field_when_named(settin
 
 
 @pytest.mark.parametrize(
-    "configuration, reason",
+    "tree",
     [
-        (
-            {"fieldPreconds": {"displacement": {**_defaultFieldPrecond(3), "backendBlockSize": 1}}},
-            "field 'displacement' is on the scalar backend",
-        ),
-        (
-            {"fieldPreconds": {"displacement": {**_defaultFieldPrecond(3), "relax": {"type": "spai0"}}}},
-            "relax.type must be chebyshev",
-        ),
-        ({"nodeCoordinates": {}}, "field 'displacement' has no node coordinates"),
+        _defaultFieldPrecond(3),
+        {**_defaultFieldPrecond(3), "backendBlockSize": 1},
+        {**_defaultFieldPrecond(3), "relax": {"type": "spai0"}},
     ],
-    ids=["scalar backend", "not Chebyshev", "no coordinates"],
+    ids=["the default tree, spelled out", "scalar backend", "not Chebyshev"],
 )
-def test_the_default_skips_a_field_it_does_not_fit_quietly(configuration, reason, capsys):
-    # A field the default selects but the coarse level does not fit keeps the hierarchy of its tree, without an error,
-    # logged once at info; named, the same field is refused or raises.
+def test_an_explicit_tree_is_kept_as_written_and_naming_the_field_adds_the_level(tree, capsys):
+    # Explicit beats default: a displacement field with an explicit fieldPreconds tree keeps it as written, logged once
+    # at info, even a tree the coarse level would fit; naming the field adds the level to a tree that fits.
     K, b, block, coordinates = _beamSystem()
-    settings = {"outerTol": 1e-8, "verbosity": "info", "nodeCoordinates": {"displacement": coordinates}}
-    solver = BlockAMGSolver(**(settings | configuration))
+    settings = {"outerTol": 1e-8, "outerRestart": 300, "nodeCoordinates": {"displacement": coordinates}}
+    solver = BlockAMGSolver(**settings, fieldPreconds={"displacement": tree}, verbosity="info")
     solver.setFieldStructure([block])
     x = solver(K, b)
     solver(K, b)
     assert np.linalg.norm(b - K @ x) <= 1.0001e-8 * np.linalg.norm(b)
     assert isinstance(solver._preconditioners[0], PyAMGCLSolver)
-    output = capsys.readouterr().out
-    assert output.count(reason) == 1 and "instead of the default rigid-body coarse level" in output
+    assert capsys.readouterr().out.count("field 'displacement' keeps its explicit fieldPreconds tree as written") == 1
+    if tree == _defaultFieldPrecond(3):
+        named = BlockAMGSolver(**settings, fieldPreconds={"displacement": tree}, rigidBodyCoarseLevel=["displacement"])
+        named.setFieldStructure([block])
+        named(K, b)
+        assert type(named._preconditioners[0]).__name__ == "RigidBodyCoarseLevelPreconditioner"
+
+
+def test_the_default_is_for_the_displacement_field_and_other_vector_fields_get_the_level_when_named():
+    # The rigid-body modes are the near null-space of elasticity on the displacement field: a rotation field (of beams,
+    # or of the reference point of a rigid body) has another, and gets the level only when named.
+    K, b, _, coordinates = _beamSystem()
+    rotation = FieldBlock("rotation", 0, K.shape[0], 3)
+    for setting, kind in ((None, "PyAMGCLSolver"), (["rotation"], "RigidBodyCoarseLevelPreconditioner")):
+        solver = BlockAMGSolver(
+            rigidBodyCoarseLevel=setting,
+            outerRestart=300,
+            verbosity="silent",
+            nodeCoordinates={"rotation": coordinates},
+        )
+        solver.setFieldStructure([rotation])
+        solver(K, b)
+        assert type(solver._preconditioners[0]).__name__ == kind
+
+
+def test_without_node_coordinates_the_default_falls_back_to_the_translations(capsys):
+    # only offline, without a model and nodeCoordinates: logged once at info; named, the same field raises (see above)
+    K, b, block, _ = _beamSystem()
+    solver = BlockAMGSolver(outerTol=1e-8, outerRestart=300, verbosity="info")
+    solver.setFieldStructure([block])
+    x = solver(K, b)
+    solver(K, b)
+    assert np.linalg.norm(b - K @ x) <= 1.0001e-8 * np.linalg.norm(b)
+    assert isinstance(solver._preconditioners[0], PyAMGCLSolver)
+    assert capsys.readouterr().out.count("field 'displacement' has no node coordinates") == 1
 
 
 def test_the_default_leaves_a_field_on_the_p_two_grid_to_it(capsys):
     # p1FieldNames and p1Maps win over the default; named in both, a field is refused (see the rejections below)
     solver = BlockAMGSolver(p1FieldNames=["displacement"], verbosity="info")
     block = FieldBlock("displacement", 0, 3, 3)
-    assert solver._rigidBodyCoarseLevelOptions(block, _defaultFieldPrecond(3), isP1Field=True) is None
+    assert solver._rigidBodyCoarseLevelOptions(block, isP1Field=True) is None
     assert "field 'displacement' is on the p-two-grid" in capsys.readouterr().out
 
 

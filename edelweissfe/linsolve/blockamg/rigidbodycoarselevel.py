@@ -69,14 +69,16 @@ runs in C++: the steps in ``amgcl-rigid-body-coarse-level.hpp``, the cycle in ``
 When
 ----
 
-It is ``blockamg``'s default for every 3D vector field -- a displacement field of any element type -- and pays most
-where the solves would need many outer iterations although the operator is (nearly) elastic: typically a
-bending-dominated structure. A 2D vector field has it when named (``"rigidBodyCoarseLevel": ["displacement"]``), and
-``false`` switches it off for all fields. It needs the field's node coordinates (``blockamg`` reads them from the
-model), and the field's tree (default or ``fieldPreconds``) configures its smoother, its aggregation and the AMGCL
-hierarchy below it. Its setup costs more than AMGCL's hierarchy on the translations (the Galerkin product with 6 coarse
-dofs per aggregate, the larger hierarchy below), so on a model where that converges in a few iterations it gains little.
-The theory page of ``blockamg`` has the measurements.
+It is ``blockamg``'s default for the 3D displacement field (of any element type) with blockamg's default tree, and
+pays most where the solves would need many outer iterations although the operator is (nearly) elastic: typically a
+bending-dominated structure. The rigid-body modes are the near null-space of elasticity on the displacement field; a
+rotation field, or any other vector field, has another, so it has the coarse level only when named, as a 2D
+displacement field does (``"rigidBodyCoarseLevel": ["displacement"]``), and so does a field with an explicit
+``fieldPreconds`` tree; ``false`` switches it off for all fields. It needs the field's node coordinates (``blockamg``
+reads them from the model), and the field's tree (default or ``fieldPreconds``) configures its smoother, its
+aggregation and the AMGCL hierarchy below it. Its setup costs more than AMGCL's hierarchy on the translations (the
+Galerkin product with 6 coarse dofs per aggregate, the larger hierarchy below), so on a model where that converges in a
+few iterations it gains little. The theory page of ``blockamg`` has the measurements.
 """
 
 import numpy as np

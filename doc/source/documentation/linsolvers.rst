@@ -164,8 +164,12 @@ The hierarchy ``blockamg`` builds for a 3D displacement field stores the field i
 space on those blocks holds the **translations** of every aggregate of nodes, not their rotations. In a
 bending-dominated structure -- a slender beam, a tunnel lining, a plate -- the slowly converging error is bending,
 under which every aggregate rotates almost as a rigid body: neither that coarse space nor the smoother reduces it, and
-the outer solve needs many iterations. So by default, the hierarchy of every 3D vector field starts with a coarse
-level built from all rigid-body modes, translations and rotations (``rigidBodyCoarseLevel``). The testfile deck
+the outer solve needs many iterations. So by default, the hierarchy of the 3D displacement field starts with a coarse
+level built from all rigid-body modes, translations and rotations (``rigidBodyCoarseLevel``): they are the near
+null-space of elasticity on the displacement field. A rotation field, or any other vector field, has another one and
+gets the coarse level only when named. An explicit tree beats the default: a displacement field with an explicit
+``fieldPreconds`` tree keeps it as written, and naming the field in ``rigidBodyCoarseLevel`` adds the coarse level to
+that tree. The testfile deck
 ``testfiles/edelweiss-only/CantileverBeamHexa20BlockAMGRigidBody``, a slender cantilever, shows the effect: each
 linear solve converges in some 20 outer iterations; with the coarse level switched off, every solve stops at the
 iteration cap. On an elastic tunnel segment of quadratic hexahedra, it cut the outer iterations of the displacement

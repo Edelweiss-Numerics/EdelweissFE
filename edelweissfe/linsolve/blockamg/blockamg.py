@@ -70,9 +70,10 @@ What it does per solve
    stiffness -- when node coordinates are available, translations alone otherwise; a scalar field
    takes the default constant. A block backend (``backendBlockSize > 1``, the default for a 3D or 2D
    vector field) cannot take the rotations: it takes the translations (``blockTranslationNullspace``, on
-   in the default trees), or AMGCL's constant blocks with that switched off. A 3D vector field starts instead, by
-   default, with a coarse level of all its rigid-body modes, built outside AMGCL (``rigidBodyCoarseLevel``,
-   :mod:`~edelweissfe.linsolve.blockamg.rigidbodycoarselevel`), which holds the rotations too.
+   in the default trees), or AMGCL's constant blocks with that switched off. The 3D displacement field starts
+   instead, by default, with a coarse level of all its rigid-body modes, built outside AMGCL
+   (``rigidBodyCoarseLevel``, :mod:`~edelweissfe.linsolve.blockamg.rigidbodycoarselevel`), which holds the rotations
+   too.
 #. **Precondition the outer Krylov solve** (AMGCL's LGMRES, the only outer solver) with a block Gauss-Seidel sweep
    ``M^-1`` over the fields, each field's correction coming from one AMG V-cycle on its block, the couplings
    folded in between fields. With ``krylovOnScaledSystem = False`` (the default) the outer solve runs on
@@ -103,6 +104,7 @@ import numpy as np
 import scipy.sparse as sp
 
 import edelweissfe.utils.performancetiming as performancetiming
+from edelweissfe.config.phenomena import phenomena
 from edelweissfe.linsolve.base import FieldBlock, LinearSolver, LinearSolveSummary
 from edelweissfe.linsolve.blockamg import rigidbodycoarselevel, schurcomplement
 from edelweissfe.linsolve.nullspace import rigidBodyNullspace, translationNullspace
@@ -309,12 +311,12 @@ def _fieldNamesFromConfig(value) -> list | None:
 def _rigidBodyCoarseLevelFromConfig(value) -> "dict | bool | None":
     """The setting ``rigidBodyCoarseLevel``, one of three:
 
-    * ``None`` (unset, or ``null``): the default -- every 3D vector field has the rigid-body coarse level, with the
-      default options, if its tree can configure it (see :meth:`BlockAMGSolver._rigidBodyCoarseLevelOptions`);
+    * ``None`` (unset, or ``null``): the default -- the 3D displacement field has the rigid-body coarse level, with
+      the default options, if it has blockamg's default tree (see :meth:`BlockAMGSolver._rigidBodyCoarseLevelOptions`);
     * ``False`` (``false``): no field has it, the one way to switch it off for all fields;
     * a mapping of field name to its complete options: exactly the fields named -- a field name or a list of them (as
       ``p1FieldNames``), each with the default options, or a JSON object of field names to ``true`` (the default
-      options) or an object of options. A 2D vector field has it only if named.
+      options) or an object of options. Any other vector field (a 2D one, a rotation field) has it only if named.
 
     Other spellings are refused, so that the off switch has one spelling: ``true`` (the default is unset) and a name list
     or object that names no field."""
@@ -322,8 +324,8 @@ def _rigidBodyCoarseLevelFromConfig(value) -> "dict | bool | None":
         return value
     if value is True:
         raise ValueError(
-            "true is not a value: the rigid-body coarse level is the default for 3D vector fields (leave the key out, or "
-            "write null); false switches it off, a field name, a list or an object names the fields"
+            "true is not a value: the rigid-body coarse level is the default for the 3D displacement field (leave the "
+            "key out, or write null); false switches it off, a field name, a list or an object names the fields"
         )
     if value in ([], {}, ""):
         raise ValueError("names no field: false switches the rigid-body coarse level off for all fields")
@@ -550,12 +552,12 @@ class BlockAMGSolver(LinearSolver):
         rotations included, instead of AMGCL's hierarchy on the translations
         (:mod:`~edelweissfe.linsolve.blockamg.rigidbodycoarselevel`). The field's tree, default or ``fieldPreconds``,
         configures its smoother, its aggregation and the AMGCL hierarchy below it, as it would configure AMGCL's own
-        hierarchy. ``None`` (the default): every 3D vector field, with the default options -- one the coarse level does
-        not fit is skipped quietly, logged once at ``info``: a field on the p-two-grid, one whose ``fieldPreconds`` tree
-        is not on the 3x3 block backend or does not smooth with Chebyshev and coarsen by smoothed aggregation, and,
-        falling back to the translations, one without node coordinates. ``False``: no field, the one way to switch it
-        off. A field name or a list of them (as ``p1FieldNames``), or a mapping of field name to ``true`` or an object
-        of options: exactly these fields, 2D ones too, with the options ``prolongation`` (``"smoothed"``, default, or
+        hierarchy. ``None`` (the default): the 3D displacement field, with the default options, if it has blockamg's
+        default tree -- an explicit ``fieldPreconds`` tree is kept as written, and a field on the p-two-grid keeps that,
+        both logged once at ``info``; without node coordinates, it falls back to the translations. ``False``: no field,
+        the one way to switch it off. A field name or a list of them (as ``p1FieldNames``), or a mapping of field name
+        to ``true`` or an object of options: exactly these fields, any 2D or 3D vector field, the level added to an
+        explicit tree too, with the options ``prolongation`` (``"smoothed"``, default, or
         ``"tentative"``), ``coarseHierarchyPrecision`` (``"double"``, default, or ``"float"``) and
         ``fineSpectralRadiusReuse`` (``false``, default; as ``p1FineSpectralRadiusReuse``). A named field the coarse
         level does not fit is rejected, one the system does not have is unused, with a warning at the first build, and
@@ -564,7 +566,7 @@ class BlockAMGSolver(LinearSolver):
         Only takes effect on the plain scalar backend (``backendBlockSize == 1``) -- a block hierarchy takes the
         translations only, so a field on a block backend (the default ``fieldPreconds`` tree for a 2D or 3D
         vector field) gets the rotations through the rigid-body coarse level (``rigidBodyCoarseLevel``, the default
-        for 3D vector fields), whatever this is set to; its AMGCL hierarchy takes the translations with
+        for the 3D displacement field), whatever this is set to; its AMGCL hierarchy takes the translations with
         ``blockTranslationNullspace``, the default. ``True`` (the
         default) builds a scalar-backend vector field's near null-space as the
         full rigid-body basis -- translations *and* rotations -- once nodal coordinates for that field
@@ -950,8 +952,8 @@ class BlockAMGSolver(LinearSolver):
         # Per-field node coordinates, derived from self._model; dropped in setModel(). Those given as nodeCoordinates
         # are never dropped: they were not derived from any model.
         self._nodeCoordinateCache = {}
-        # the rigid-body coarse level: None the default (every 3D vector field it fits), False none, or the fields
-        # named, with their options (see _rigidBodyCoarseLevelFromConfig)
+        # the rigid-body coarse level: None the default (the 3D displacement field with the default tree), False none,
+        # or the fields named, with their options (see _rigidBodyCoarseLevelFromConfig)
         self._rigidBodyCoarseLevel = _rigidBodyCoarseLevelFromConfig(rigidBodyCoarseLevel)
         self._givenNodeCoordinates = {
             fieldName: np.asarray(coordinates, dtype=float)
@@ -1805,11 +1807,11 @@ class BlockAMGSolver(LinearSolver):
 
     def _buildFieldPreconditioner(self, block, system, index: int, scaling: np.ndarray, condensing: bool = False):
         """The preconditioner of one field: the p-two-grid cycle for a vector field that opted into it
-        (``p1Maps`` / ``p1FieldNames``), the rigid-body coarse level for one that has it (by default every 3D vector
-        field, see :meth:`_rigidBodyCoarseLevelOptions`), one AMGCL hierarchy otherwise. A vector field on the scalar
-        backend gets its rigid-body modes as near null-space (see :meth:`_nullspaceCoordinates`; the translations alone
-        without node coordinates), on a block backend the translations alone (``blockTranslationNullspace``, else
-        AMGCL's constant blocks); a scalar field takes AMGCL's default constant."""
+        (``p1Maps`` / ``p1FieldNames``), the rigid-body coarse level for one that has it (by default the 3D
+        displacement field, see :meth:`_rigidBodyCoarseLevelOptions`), one AMGCL hierarchy otherwise. A vector field
+        on the scalar backend gets its rigid-body modes as near null-space (see :meth:`_nullspaceCoordinates`; the
+        translations alone without node coordinates), on a block backend the translations alone
+        (``blockTranslationNullspace``, else AMGCL's constant blocks); a scalar field takes AMGCL's default constant."""
         isVectorField = block.dimension > 1
 
         # with Schur complement condensation in this solve, the block holds only the remaining nodes of the field: what
@@ -1839,7 +1841,7 @@ class BlockAMGSolver(LinearSolver):
         )
         onScalarBackend = p1Map is not None or fieldTree.get("backendBlockSize", 1) == 1
         # the rigid-body coarse level needs the coordinates whatever useRigidBodyNullspace (scalar backend) says
-        rigidBodyOptions = self._rigidBodyCoarseLevelOptions(block, fieldTree, isP1Field)
+        rigidBodyOptions = self._rigidBodyCoarseLevelOptions(block, isP1Field)
         if rigidBodyOptions is not None:
             coords = self._getNodeCoordinates(block.name)
         elif isVectorField and onScalarBackend:
@@ -1917,30 +1919,38 @@ class BlockAMGSolver(LinearSolver):
             preconditioner.build(diagonalBlock)
         return preconditioner
 
-    def _rigidBodyCoarseLevelOptions(self, block, fieldTree: dict, isP1Field: bool) -> "dict | None":
+    def _rigidBodyCoarseLevelOptions(self, block, isP1Field: bool) -> "dict | None":
         """The options of the field's rigid-body coarse level, or ``None`` if it has none.
 
-        A field named in ``rigidBodyCoarseLevel`` has it, with its options: the settings checks refused a named field
-        the coarse level does not fit. Under the default (``rigidBodyCoarseLevel`` unset), every 3D vector field has
-        it, with the default options, unless the coarse level does not fit the field: one on the p-two-grid
-        (``p1FieldNames``, ``p1Maps``) and one whose tree cannot configure it keep what they have, logged once at
-        ``info``. With ``False``, no field has it."""
+        A field named in ``rigidBodyCoarseLevel`` has it, with its options, added to its tree, default or explicit: the
+        settings checks, run once per change of the settings or of the fields, refused a named field the coarse level
+        does not fit. Under the default (``rigidBodyCoarseLevel`` unset), the 3D displacement field has it -- the field
+        of type ``vector`` in :data:`~edelweissfe.config.phenomena.phenomena`, whose near null-space the rigid-body
+        modes are (a rotation field has another) -- with the default options and blockamg's default tree, which
+        always fits. A displacement field with an explicit ``fieldPreconds`` tree keeps that tree as written, and one
+        on the p-two-grid (``p1FieldNames``, ``p1Maps``) keeps that; both logged once at ``info``. With ``False``, no
+        field has it."""
         setting = self._rigidBodyCoarseLevel
         if setting is False:
             return None
         if setting is not None:
             return setting.get(block.name)
-        if block.dimension != 3:
+        if block.dimension != 3 or phenomena.get(block.name) != "vector":
             return None
-        if isP1Field:
-            reason, kept = "field '{:}' is on the p-two-grid (p1FieldNames)".format(block.name), "the p-two-grid"
-        else:
-            reason = self._rigidBodyCoarseLevelRejection(block.name, rigidbodycoarselevel.DEFAULT_OPTIONS, fieldTree, 3)
-            kept = "the hierarchy of its tree"
-        if reason is not None:
+        if block.name in self._fieldPreconds:
             self._logOnce(
                 "info",
-                "blockamg: {:} -- so it keeps {:} instead of the default rigid-body coarse level".format(reason, kept),
+                "blockamg: field '{:}' keeps its explicit fieldPreconds tree as written, without the default "
+                "rigid-body coarse level (naming it in rigidBodyCoarseLevel adds the level to that tree)".format(
+                    block.name
+                ),
+            )
+            return None
+        if isP1Field:
+            self._logOnce(
+                "info",
+                "blockamg: field '{:}' is on the p-two-grid (p1FieldNames), so it keeps that instead of the default "
+                "rigid-body coarse level".format(block.name),
             )
             return None
         return rigidbodycoarselevel.options(True)
