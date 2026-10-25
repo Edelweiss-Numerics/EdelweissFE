@@ -15,6 +15,7 @@ from _blockamgsystems import gridLaplacian
 
 import edelweissfe.adaptivity.marking as marking
 from edelweissfe.adaptivity.marking import (
+    STABLE_FOR_THE_MODEL,
     ElementSetMarker,
     FieldOutputMarker,
     MarkerBase,
@@ -330,8 +331,8 @@ def test_a_field_output_marker_is_stamped_by_its_field_output_and_a_set_marker_b
     marker = FieldOutputMarker("damage", threshold=0.1)
     stamp = marker.selectionStamp(None)
     fieldOutput._applyResultsPipleline(np.zeros(3))
-    assert fieldOutput._version == 1 and marker.selectionStamp(None) != stamp
-    assert ElementSetMarker("bars").selectionStamp(None) == ()
+    assert fieldOutput.resultVersion == 1 and marker.selectionStamp(None) != stamp
+    assert ElementSetMarker("bars").selectionStamp(None) == STABLE_FOR_THE_MODEL
     assert MarkerBase().selectionStamp(None) is None
 
 

@@ -189,8 +189,7 @@ class _FieldOutputBase:
         self.journal = journal
         self.appendResults = saveHistory
         self.result = [] if self.appendResults else None
-        # bumped on every change of the result: the key of whatever is derived from it and kept until it changes (e.g.
-        # a marker's selectionStamp); a cache key, not state, like the _version of a set, a surface or a node field
+        # bumped on every change of the result, see resultVersion
         self._version = 0
         self.f = f_x
         self.f_export = fExport_x
@@ -213,6 +212,18 @@ class _FieldOutputBase:
         """
 
         return bool(self.result) if self.appendResults else self.result is not None
+
+    @property
+    def resultVersion(self) -> int:
+        """The number of changes of :attr:`result` so far -- its updates and a restart's load: the key of whatever is
+        derived from the result and kept until it changes (e.g. a marker's
+        :meth:`~edelweissfe.adaptivity.marking.MarkerBase.selectionStamp`).
+
+        A cache key, not state: a resumed run counts from its restart, not from the start of the analysis. It is backed
+        by the change counter ``_version``, which, like the ``_version`` of a set, a surface or a node field, a
+        restart need not reproduce.
+        """
+        return self._version
 
     def getLastResult(
         self,
