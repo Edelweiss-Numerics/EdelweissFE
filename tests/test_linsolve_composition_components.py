@@ -38,7 +38,6 @@ from _p1lattice import dirichletDofs, lattice, latticeSystem
 pytest.importorskip("edelweissfe.linsolve.amgcl.amgcl")
 
 from edelweissfe.linsolve.base import FieldBlock  # noqa: E402
-from edelweissfe.linsolve.blockamg.blockamg import BlockAMGSolver  # noqa: E402
 from edelweissfe.linsolve.blockamg.rigidbodycoarselevel import (  # noqa: E402
     RigidBodyCoarseLevelPreconditioner,
 )
@@ -215,7 +214,9 @@ def test_a_two_grid_cycle_spelled_out_by_combinators_beats_its_smoother_alone():
     assert iterations["two-grid"] < iterations["jacobi"] / 5
 
 
-def test_the_p1_two_grid_matches_blockamg():
+def test_the_p1_two_grid_has_blockamgs_numbers():
+    """The outer iterations and ||x|| of BlockAMGSolver (deleted; recorded at ffe4b681, see
+    test_linsolve_composition_equivalence)."""
     coords, isCorner, edgeEndpoints = lattice(6)
     constrained = dirichletDofs(coords)
     As, dinv = latticeSystem(coords, constrained)
@@ -224,17 +225,15 @@ def test_the_p1_two_grid_matches_blockamg():
     b[constrained] = 0.0
     fields = [FieldBlock("displacement", 0, 3 * len(isCorner), 3)]
     p1Maps = {"displacement": (isCorner, edgeEndpoints)}
-    reference = BlockAMGSolver(outerTol=1e-8, outerRestart=300, verbosity="silent", p1Maps=p1Maps)
-    reference.setFieldStructure(fields)
     root = LGMRES(
         DiagonalScaling(TwoGrid(P1Interpolation())),
         tolerance=FixedTolerance(1e-8),
         maxIterations=300,
     )
     x, composed = _solved(A, b, root, fields, p1Maps=p1Maps)
-    x_reference = reference(A, b)
-    assert composed.lastSolveSummary.iters == reference.lastSolveSummary.iters
-    assert _relative(x, x_reference) < 1e-9
+    assert composed.lastSolveSummary.iters == 10
+    assert np.linalg.norm(x) == pytest.approx(6.006723593302372, rel=1e-8)
+    assert _relative(A @ x, b) < 1e-8
 
 
 # ----- the Schur complement -----
@@ -287,14 +286,11 @@ def test_block_lu_with_the_exact_schur_complement_and_exact_solves_is_the_invers
     assert _relative(A @ schur(b), b) < 1e-10
 
 
-def test_the_schur_complement_tree_matches_blockamg_with_condensation():
+def test_the_schur_complement_tree_has_blockamgs_numbers_with_condensation():
+    """The outer iterations and ||x|| of BlockAMGSolver with its Schur complement condensation (deleted; recorded at
+    ffe4b681, see test_linsolve_composition_equivalence)."""
     A, b, barDofs = _barOnFoundation(n=18)
     fields = [FieldBlock("u", 0, A.shape[0], 1)]
-    reference = BlockAMGSolver(
-        outerTol=1e-8, verbosity="silent", sweeps=2, condensation=_FixedDofs(barDofs, DirectSolver().newSolver)
-    )
-    reference.setFieldStructure(fields)
-    x_reference = reference(A, b)
     solveA_bb = DirectSolver()
     root = LGMRES(
         SchurComplement(
@@ -305,8 +301,9 @@ def test_the_schur_complement_tree_matches_blockamg_with_condensation():
         tolerance=FixedTolerance(1e-8),
     )
     x, composed = _solved(A, b, root, fields)
-    assert composed.lastSolveSummary.iters == reference.lastSolveSummary.iters < 30
-    assert _relative(x, x_reference) < 1e-9
+    assert composed.lastSolveSummary.iters == 18
+    assert np.linalg.norm(x) == pytest.approx(24.215507033772518, rel=1e-8)
+    assert _relative(A @ x, b) < 1e-8
 
 
 # ----- statistics -----
