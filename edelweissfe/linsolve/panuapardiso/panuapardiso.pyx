@@ -111,7 +111,8 @@ cdef class PanuaPardisoFactorization:
         self._releaseMemory()
         A = A.tocsr()
         self.rows = A.shape[0]
-        self.data = np.ascontiguousarray(A.data, dtype=np.float64)
+        # a copy: phase 33 reads the values again (iterative refinement), which must be those it factorized
+        self.data = np.array(A.data, dtype=np.float64, copy=True)
         self.indices = np.ascontiguousarray(A.indices + 1, dtype=np.intc)  # pardiso uses fortran 1-based indexing
         self.indptr = np.ascontiguousarray(A.indptr + 1, dtype=np.intc)
         if self.rows == 0:

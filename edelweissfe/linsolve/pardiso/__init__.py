@@ -59,7 +59,9 @@ class PardisoBackend(DirectSolverBackend):
 
     def factorize(self, A) -> None:
         try:
-            self._solver.factorize(A)
+            # a copy: PARDISO reads the values again in the back substitution (iterative refinement), which must see
+            # the matrix it factorized, also after the assembly overwrote it in place
+            self._solver.factorize(A.copy())
         except RuntimeError as error:
             raise np.linalg.LinAlgError(str(error)) from error
 
