@@ -19,7 +19,7 @@ A solver script
 
     # solver.py -- the linear solver of a displacement / nonlocal damage model
     from edelweissfe.linsolve.composition import (
-        AMG, LGMRES, DiagonalScaling, ForcingTolerance, Multiplicative, OnField, RigidBodyModes, TwoGrid,
+        AMG, LGMRES, ComposedLinearSolver, DiagonalScaling, Multiplicative, OnField, RigidBodyModes, TwoGrid,
     )
 
     # the displacement field: a two-grid cycle on the rigid-body modes, AMG below the first coarse level
@@ -30,7 +30,8 @@ A solver script
     # both fields, one block Gauss-Seidel sweep: displacement first, then the nonlocal damage
     blockGaussSeidel = Multiplicative([displacement, damage])
 
-    linearSolver = LGMRES(DiagonalScaling(blockGaussSeidel), tolerance=ForcingTolerance(maximum=1e-3))
+    # accelerated by LGMRES; the driver ComposedLinearSolver turns it into the linear solver of the input file
+    linearSolver = ComposedLinearSolver(LGMRES(DiagonalScaling(blockGaussSeidel)))
 
 and in the input file:
 
@@ -39,9 +40,41 @@ and in the input file:
     *solver, solver=NIST, name=theSolver
     linsolver=script:solver.py:linearSolver
 
-(``script:solver.py`` alone takes the global ``linearSolver``.) The script runs with the global ``options`` set to the
-parsed ``linsolverConfigFile``, if the solver has one. The journal logs the structure of the solver and a hash of the
-script at the first solve (with ``verbosity="info"``).
+(``script:solver.py`` alone takes the global ``linearSolver``.) The script binds the **driver**,
+``ComposedLinearSolver``, around the tree; a bare tree is refused with the one-line fix,
+``linearSolver = ComposedLinearSolver(<your tree>)``. The script runs with the global ``options`` set to the parsed
+``linsolverConfigFile``, if the solver has one. The journal logs the structure of the solver and a hash of the script
+at the first solve (with ``verbosity="info"``).
+
+The driver
+----------
+
+``ComposedLinearSolver`` is what the nonlinear solver calls, ``x = solver(A, b)``, once per Newton iteration. It finds
+what changed since the last call (the first solve, a new model, a resized system, a new sparsity pattern, a jump of the
+right-hand side that marks a new increment), hands the matrix down the tree, applies the root, and reports on the solve.
+Its settings, all optional:
+
+.. code-block:: python
+
+    linearSolver = ComposedLinearSolver(
+        LGMRES(DiagonalScaling(blockGaussSeidel)),
+        verbosity="info",                 # "silent", "warning" (default), "info", "debug"
+        warnOuterIterations=60,           # a solve with more outer iterations gets a warning (default 100)
+        residualGrowthFactor=4.0,         # a right-hand side this many times the last one is a new increment
+        degradationDumps=DegradationDumps("slowSolves", threshold=80, maxDumps=10, contextSolves=2),
+        hotReload=True,                   # run this script again whenever it changes, during the run
+    )
+
+* ``verbosity``: ``"warning"`` says nothing on a normal solve and warns about a slow one (more outer iterations than
+  ``warnOuterIterations``) and one that missed its tolerance (stopped at the iteration cap, or on a scaled system with
+  the scaled residual met but not the true one); ``"info"`` adds one line per solve, the structure of the solver at
+  the first solve and the "linear solve" column of the nonlinear solver's table; ``"debug"`` adds each continuation of
+  a Krylov solve on a scaled system, and in that column why the preconditioner was rebuilt (``rebuilt(stale)``) or
+  ``reused``, with the tolerance and the time of the solve.
+* ``degradationDumps``: see :ref:`composed-degradation-dumps`.
+* ``hotReload``: see :ref:`composed-hot-reload`.
+* ``nodeCoordinates``, ``p1Maps``: node coordinates and P1 maps per field, instead of those of the model (an offline
+  replay without a model).
 
 How to read the nesting
 -----------------------
@@ -68,9 +101,10 @@ Components
 
     * - Component
       - :math:`M^{-1}`
-    * - ``LGMRES(preconditioner, tolerance, maxIterations, M, K)``
+    * - ``LGMRES(preconditioner, tolerance, maxIterations, M, K, rebuild, continuations, gapCompensation)``
       - the outer Krylov solve :math:`A x = b`, right-preconditioned (AMGCL); owns when the preconditioner is rebuilt
-        (``RebuildPolicy``). Needs a fixed linear preconditioner, and refuses one that is not at construction.
+        (``RebuildPolicy(stalenessFactor, rebuildOnNewIncrement, reuse)``). Needs a fixed linear preconditioner, and
+        refuses one that is not at construction. On a diagonally scaled matrix see :ref:`composed-scaled-krylov`.
     * - ``FGMRES(preconditioner, tolerance, maxIterations, M)``
       - flexible GMRES (AMGCL): :math:`x = Z_m y_m` from the preconditioned vectors themselves, so the preconditioner
         may change between iterations -- e.g. an inner Krylov solve
@@ -86,9 +120,10 @@ Components
         over ``OnField`` corrections, block Gauss--Seidel and block Jacobi. ``gaussSeidelOrder(corrections, sweeps,
         symmetric)`` gives the order of several or symmetric sweeps. The corrections may also be a function of the
         context, made at the first set-up (one per field, whatever the model)
-    * - ``AMG(tree)``
-      - one AMGCL hierarchy on a field, one cycle per application
-    * - ``TwoGrid(coarseSpace=RigidBodyModes() | P1Interpolation())``
+    * - ``AMG(tree, rigidBodyNullspace, dropTolerance, lumpDroppedEntries)``
+      - one AMGCL hierarchy on a field, one cycle per application; with ``dropTolerance`` built on the filtered block
+        (:ref:`composed-drop-tolerance`)
+    * - ``TwoGrid(coarseSpace=RigidBodyModes() | P1Interpolation(), tree, dropTolerance, lumpDroppedEntries)``
       - a two-grid cycle with a coarse space of its own: all rigid-body modes per aggregate, or the P1 interpolant
     * - ``SchurComplement(condense, preconditionS, solveA_bb, blockFactors)``
       - block LU: :math:`z_k = M_{\tilde S}^{-1}(r_k - A_{kb} A_{bb}^{-1} r_b)`,
@@ -151,8 +186,8 @@ other component.
 Presets
 -------
 
-Presets are plain functions that return a tree. ``blockAMG()`` builds the equivalent of ``blockamg`` with its
-defaults::
+Presets are plain functions that return a tree (bound in a script as ``linearSolver =
+ComposedLinearSolver(blockAMG())``). ``blockAMG()`` builds the equivalent of ``blockamg`` with its defaults::
 
     LGMRES(
         DiagonalScaling(
@@ -161,7 +196,9 @@ defaults::
     )
 
 The corrections are made at the first set-up, for the fields of the model; ``sweeps`` and ``symmetric`` order them
-with ``gaussSeidelOrder``.
+with ``gaussSeidelOrder``. ``blockAMG(krylovOnScaledSystem=True)`` puts the scaling around LGMRES instead
+(:ref:`composed-scaled-krylov`), ``continuations`` and ``gapCompensation`` go to LGMRES, and ``dropTolerance`` and
+``lumpDroppedEntries`` to every field (:ref:`composed-drop-tolerance`).
 
 Views
 -----
@@ -186,7 +223,7 @@ the description. For the ``blockAMG()`` preset on a displacement / nonlocal dama
 ``views.runStatistics(solver)`` -- what each component recorded (inclusive times)::
 
     LGMRES(...)   updated 2× 0.07s · applied 2× 0.05s
-    └─ DiagonalScaling(...)   set up 1× 0.06s · updated 2× 0.07s · applied 18× 0.04s
+    └─ DiagonalScaling(...)   updated 2× 0.07s · applied 18× 0.04s
        └─ Multiplicative   set up 1× 0.06s · updated 1× 0.00s · applied 18× 0.04s
           ├─ M1: OnField(...)   set up 1× 0.06s · ... · applied 18× 0.03s
           │  └─ TwoGrid(...)   set up 1× 0.06s · ... · applied 18× 0.03s · rows 9555 · aggregates 198 · coarse dofs 1188
@@ -208,9 +245,191 @@ stale preconditioner (too many more iterations than the solve it was built for, 
 and every component decides in ``update`` what to keep: an ``AMG`` hierarchy is kept unless a rebuild is asked for,
 a ``DiagonalScaling`` keeps its :math:`D`, a ``Multiplicative`` always takes the new couplings.
 
+A ``DiagonalScaling`` rebuilds its :math:`D` together with what is below it, also for the reasons a Krylov solver below
+it adds itself (``Preconditioner.withRebuildReasons``), so that ``DiagonalScaling(LGMRES(...))`` rebuilds as
+``LGMRES(DiagonalScaling(...))`` does.
+
 Performance: a diagonal scaling does not form :math:`D A D`; the first component below it that needs a block forms
 :math:`\hat A` and all field blocks in one threaded native pass, kept with the matrix for all others, which also keeps :math:`A` as the operator of the outer Krylov solve
 (:class:`~edelweissfe.linsolve.composition.systemmatrix.SystemMatrix`).
+
+.. _composed-scaled-krylov:
+
+A Krylov solve on the scaled system
+-----------------------------------
+
+Where the diagonal scaling sits says what the Krylov solve converges. ``LGMRES(DiagonalScaling(M))`` (the default of
+``blockAMG()``) solves :math:`A x = b`, preconditioned by :math:`D \hat M^{-1} D`: its residual is the true one,
+:math:`\lVert b - A x \rVert / \lVert b \rVert`. ``DiagonalScaling(LGMRES(M))`` (``blockAMG(krylovOnScaledSystem=True)``)
+solves :math:`\hat A \hat x = D b` with :math:`\hat A = D A D`, :math:`x = D \hat x`, and converges the scaled
+residual :math:`\lVert D (b - A x) \rVert`, which weighs every row by its own diagonal -- a field with small residual
+entries is resolved as well as the others -- but which can be smaller than the true one, on which the solve is accepted.
+
+So a Krylov solver on a scaled matrix checks the true residual after its pass (in the physical variables of its
+problem: :math:`b - A x = D^{-1} (\hat b - \hat A \hat x)`) and, while it misses :math:`\eta`, continues from its
+iterate with a tighter tolerance, 0.01 times the last, at most ``continuations`` times (default 2). With
+``gapCompensation=GapCompensation(safetyFactor=0.3, maxFactor=1e3)`` the first pass asks for
+:math:`s \, \eta / g` instead, with :math:`g` the ratio of the true to the scaled residual learnt from the previous
+solves, and a continuation tightens by the measured ratio; measured to save continuations per increment, but the
+uncompensated scaled solve over-solves, which Newton relies on -- so it is opt-in. On an unscaled matrix there are no
+continuations: a pass that misses :math:`\eta` has hit the iteration cap, which a warm restart would only extend.
+
+.. _composed-drop-tolerance:
+
+A preconditioner on the filtered matrix
+---------------------------------------
+
+``AMG(dropTolerance=τ)`` and ``TwoGrid(..., dropTolerance=τ)`` build on the filtered block :math:`\tilde A`: the
+off-diagonal entries with :math:`\lvert a_{ij} \rvert < \tau \sqrt{\lvert a_{ii} a_{jj} \rvert}` dropped, the
+diagonal always kept. For operators with many entries per row that are numerically far sparser than structurally (e.g.
+RKPM), smoothed aggregation then weighs only the entries that matter, and the Galerkin products carry fewer of them to
+the coarse levels. Only the preconditioner sees :math:`\tilde A`; the Krylov solve applies :math:`A`, so the solution
+is that of :math:`A`. ``lumpDroppedEntries=True`` adds the dropped entries of each row onto its diagonal, which keeps
+the row sums (the "filtered matrix" of the AMG literature); for elasticity, whose off-diagonals are mostly negative,
+this weakens the diagonal dominance. The run statistics record the stored entries before and after (``nnz``, ``nnz
+kept``). ``blockAMG(dropTolerance=τ, lumpDroppedEntries=...)`` passes them to every field.
+
+.. _composed-degradation-dumps:
+
+Degradation dumps
+-----------------
+
+A preconditioner that degrades typically shows only tens of hours into a run, at a solve nobody can name in advance.
+``ComposedLinearSolver(..., degradationDumps=DegradationDumps(directory, threshold, maxDumps, contextSolves))`` decides
+by the outcome: a solve with more outer iterations than ``threshold`` (default: ``warnOuterIterations``, so that a dump
+and its warning fire together), or one stopped at the iteration cap short of its tolerance, has its raw system written
+to ``directory``, for an offline replay (the workbench's ``bench.py`` reads it unchanged):
+
+* ``A_<solver>_<solve>.npz`` (SciPy, uncompressed), ``b_<solver>_<solve>.npy``, and with a Schur complement the
+  condensed dofs, ``schurDofs_<solver>_<solve>.npy``; ``<solver>`` is the ordinal of the solver in the process, so the
+  dumps of several solvers (one per step) never overwrite each other, and the solve numbering continues across a hot
+  reload;
+* one line per dumped system in ``manifest.jsonl``: ``solveCount``, ``role`` (``"trigger"`` or ``"context"``),
+  ``triggerSolveCount``, ``contextOffset``, ``rows``, ``nnz``, ``matrixFile``, ``rhsFile``, the field ``blocks`` (name,
+  start, stop, dimension), and the bookkeeping of the solve: ``outerIters``, ``trueResidual``, ``eta``,
+  ``continuations``, ``info`` (1 for a cap hit), ``mustRefresh`` (the preconditioner was rebuilt for it),
+  ``patternChanged``, ``newIncrement``, ``previousOuterIters``.
+
+``contextSolves`` also writes the solves *before* the slow one, kept in memory as copies: one snapshot cannot tell a
+hard operator from a solve made slow by a stale preconditioner, but a replay of the sequence through one persistent
+solver can. ``maxDumps`` (default 10) bounds the systems written in the process, by all solvers, context solves
+included. The format is that of ``blockamg``'s ``dumpOnDegradation*``, from the same code.
+
+.. _composed-hot-reload:
+
+Hot reload of the solver script
+-------------------------------
+
+With ``hotReload=True``, the driver reads its script before every solve and, if it changed, runs it again and
+continues with the ``ComposedLinearSolver`` it builds -- the whole solver, its settings included -- set up on that solve
+(rebuild reason ``reload``). What the run has learnt stays: the solve count, the residual history, the numbering of the
+dumps. The journal says so at ``warning``, with the sha256 of the script and the new tree, so that a reader of the log
+knows which solver was in force from which solve onwards. This makes solver settings testable on a *live* run, at the
+state that was expensive to reach.
+
+A bad edit can never end the run: a script that cannot be read or does not compile (e.g. half written by an editor) is
+retried on the next solve; one that raises, or binds no ``ComposedLinearSolver``, is reported (``REJECTED``) and the
+solver in force kept until the script changes again; a new solver whose set-up fails (e.g. an AMGCL tree naming an
+unknown smoother) is ``ROLLED BACK`` to the one in force. The contents themselves are the stamp, not the modification
+time, which coarse file timestamps can leave unchanged across two quick edits.
+
+From ``blockamg`` to a composed solver
+--------------------------------------
+
+Every setting of ``blockamg`` and where it lives in a composed solver. ``blockAMG(...)`` is the preset that reproduces
+``blockamg``; its keywords are listed where they exist.
+
+.. list-table::
+    :header-rows: 1
+    :widths: 32 68
+
+    * - ``blockamg`` key
+      - composed equivalent
+    * - ``outerTol`` (a number)
+      - ``LGMRES(..., tolerance=FixedTolerance(eta))``; ``blockAMG(tolerance=...)``
+    * - ``outerTol`` unset / ``"adaptive"``, ``etaMin``, ``etaMax``, ``ewGamma``, ``ewAlpha``
+      - ``ForcingTolerance(minimum, maximum, gamma, alpha)``, the default tolerance of ``LGMRES``
+    * - ``outerRestart``, ``outerMaxiter``
+      - ``LGMRES(..., maxIterations=outerRestart * outerMaxiter)``
+    * - ``outerSolver``
+      - the class: ``LGMRES(...)``; ``FGMRES(...)`` for a variable preconditioner
+    * - ``lgmresM``, ``lgmresK``
+      - ``LGMRES(..., M, K)``
+    * - ``lgmresAlwaysReset``, ``lgmresResetOnNewIncrement``
+      - none: deprecated in ``blockamg``; every solve starts from an empty subspace
+    * - ``sweeps``, ``symmetric``
+      - ``Multiplicative(gaussSeidelOrder([OnField(...), ...], sweeps, symmetric))``; ``blockAMG(sweeps, symmetric)``
+    * - ``fieldPreconds``
+      - ``OnField(name, AMG(tree))`` or ``OnField(name, TwoGrid(coarseSpace, tree))``; checked when the component meets
+        its field
+    * - ``useRigidBodyNullspace``
+      - ``AMG(rigidBodyNullspace=...)``
+    * - ``rigidBodyCoarseLevel`` (unset, ``false``, names)
+      - ``TwoGrid(coarseSpace=RigidBodyModes())`` on the field; ``blockAMG(rigidBodyCoarseLevel=False)`` for none
+    * - ``rigidBodyCoarseLevel`` options ``prolongation``, ``coarseHierarchyPrecision``, ``fineSpectralRadiusReuse``
+      - ``RigidBodyModes(prolongation, coarseHierarchyPrecision, fineSpectralRadiusReuse)``
+    * - ``p1FieldNames``
+      - ``OnField(name, TwoGrid(coarseSpace=P1Interpolation(...)))``
+    * - ``p1Nu``, ``p1NuPre``, ``p1NuPost``, ``p1FineDegree``, ``p1FineBlockSize``, ``p1FineValueType``,
+        ``p1CoarseValueType``, ``p1CoarsePrecond``
+      - ``P1Interpolation(nu, nuPre, nuPost, fineDegree, fineBlockSize, fineValueType, coarseValueType,
+        coarsePrecond)``, checked at construction
+    * - ``p1FineSpectralRadiusReuse``
+      - ``P1Interpolation(fineSpectralRadiusReuse=True)``
+    * - ``p1Maps``, ``nodeCoordinates`` (constructor only)
+      - ``ComposedLinearSolver(..., p1Maps, nodeCoordinates)``
+    * - ``hierarchyDropTol``, ``hierarchyDropLumping``
+      - ``AMG(dropTolerance, lumpDroppedEntries)``, ``TwoGrid(..., dropTolerance, lumpDroppedEntries)``;
+        ``blockAMG(dropTolerance, lumpDroppedEntries)``
+    * - ``residualGrowthFactor``
+      - ``ComposedLinearSolver(..., residualGrowthFactor)``
+    * - ``hierarchyStalenessFactor``, ``refreshOnNewIncrement``, ``reuseHierarchy``
+      - ``LGMRES(..., rebuild=RebuildPolicy(stalenessFactor, rebuildOnNewIncrement, reuse))``
+    * - ``krylovOnScaledSystem``
+      - the order of the components: ``DiagonalScaling(LGMRES(...))`` instead of ``LGMRES(DiagonalScaling(...))``;
+        ``blockAMG(krylovOnScaledSystem=True)``
+    * - ``trueResidualMaxContinuations``
+      - ``LGMRES(..., continuations)`` (only on a scaled matrix)
+    * - ``gapCompensatedTolerance``, ``gapSafetyFactor``, ``gapMaxFactor``
+      - ``LGMRES(..., gapCompensation=GapCompensation(safetyFactor, maxFactor))``
+    * - ``verbosity``
+      - ``ComposedLinearSolver(..., verbosity)``
+    * - ``warnOuterIterationsThreshold``
+      - ``ComposedLinearSolver(..., warnOuterIterations)``
+    * - ``dumpOnDegradationDir``, ``dumpOnDegradationThreshold``, ``dumpOnDegradationMaxDumps``,
+        ``dumpOnDegradationContextSolves``
+      - ``ComposedLinearSolver(..., degradationDumps=DegradationDumps(directory, threshold, maxDumps, contextSolves))``,
+        the same files
+    * - ``hotReloadConfigFile``
+      - ``ComposedLinearSolver(..., hotReload=True)``: the solver script is run again when it changes
+    * - ``schurComplement``: ``markers``
+      - ``SchurComplement(condense=[getMarkerClass(type).fromOptions(options), ...], ...)``
+        (``edelweissfe.config.markerlibrary``)
+    * - ``schurComplement``: ``approximation``, ``dropTolerance``, ``windowNodes``, ``haloNodes``, ``blockFactors``
+      - ``SchurComplement(..., approximation, dropTolerance, windowNodes, haloNodes, blockFactors)``
+    * - ``schurComplement``: ``directSolver``
+      - ``SchurComplement(..., solveA_bb=DirectSolver(linsolver, options))``
+    * - ``condensation`` (constructor only)
+      - ``SchurComplement(..., condensation=...)``
+
+What ``blockamg`` did besides its keys, and where it is now:
+
+* the forcing tolerance, the new-increment detection and the reuse/staleness decisions: ``ForcingTolerance``,
+  ``ComposedLinearSolver`` (``residualGrowthFactor``) and ``RebuildPolicy`` in ``LGMRES``, with the same code;
+* a non-finite right-hand side or diagonal declines the solve (NaN, a cutback), a zero diagonal raises:
+  ``ComposedLinearSolver`` and ``DiagonalScaling``;
+* the warnings (a slow solve, a missed tolerance), the "linear solve" column and its debug lines: ``ComposedLinearSolver``;
+* the Schur complement's warnings (a factorization of :math:`A_{bb}` or of :math:`\tilde S` that fails, every dof or
+  more than half of them selected, non-positive diagonal entries of :math:`\tilde S`) and its info line:
+  ``SchurComplement``, through the driver's verbosity;
+* the checks of the settings: each component checks its own parameters at construction, and what needs the fields
+  (a field tree's backend against the field's dimension, the rigid-body coarse level on the scalar backend) when it
+  meets its field. A component on a field the system does not have fails at the set-up, where ``blockamg`` only warned;
+* the performance timers (``equilibration``, ``equilibrated system``, ``diagonal blocks``, ``hierarchy build``, the
+  builds per field, ``outer Krylov solve``, ``true-residual continuations``, ``schur complement``, ``p1 topology``):
+  the same names, recorded by the components;
+* a default 3D displacement field without node coordinates gets ``AMG()`` on the translations, logged at ``info`` by
+  ``blockAMG()``.
 
 API
 ---
@@ -249,4 +468,7 @@ API
     :members:
 
 .. automodule:: edelweissfe.linsolve.composition.solver
+    :members:
+
+.. automodule:: edelweissfe.linsolve.composition.degradationdumps
     :members:
