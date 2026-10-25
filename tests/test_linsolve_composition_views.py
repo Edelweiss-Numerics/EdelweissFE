@@ -91,6 +91,8 @@ def test_the_schur_complement_formula_and_steps():
     schur = SchurComplement(["a marker"], preconditionS=AMG(), solveA_bb=DirectSolver(), blockFactors="LU")
     assert views.formula(schur) == "BlockLU[A⁻¹, AMG(A)⁻¹]"
     assert [step.child for step in schur.describe().steps] == ["solveA_bb", "preconditionS", "solveA_bb"]
+    assert schur.describe().parameters["S̃"] == "A_kk − A_kb A_bb⁻¹ A_bk, local"
+    assert SchurComplement(["a marker"], preconditionS=AMG(), approximation="none").describe().parameters["S̃"] == "A_kk"
 
 
 def test_the_run_statistics_annotate_every_component():

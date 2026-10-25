@@ -298,8 +298,12 @@ class DirectSolverBackend:
     applies it, :math:`z = A^{-1} r`, and the ``type=pardiso`` (etc.) linear solvers are that one leaf. Backends are
     registered in the ``directsolver`` registry category, and take their options as keyword arguments.
 
-    A backend that keeps its symbolic factorization (the reordering) while only the values of the matrix change does
-    so inside :meth:`factorize`: one backend instance lives as long as its :class:`DirectSolver` leaf.
+    The contract every backend keeps: :meth:`factorize` factorizes (once per set-up of its leaf), and reports a matrix
+    it cannot factorize there; :meth:`solveFactorized` only applies the factors, as often as asked -- inside a Krylov
+    solve, once per iteration -- and solves with the factorization of the last :meth:`factorize`, also when the
+    assembly has since overwritten that matrix in place. A backend that keeps its symbolic factorization (the
+    reordering) while only the values of the matrix change does so inside :meth:`factorize`: one backend instance
+    lives as long as its :class:`DirectSolver` leaf.
     """
 
     def factorize(self, A) -> None:
@@ -308,30 +312,6 @@ class DirectSolverBackend:
         raise NotImplementedError
 
     def solveFactorized(self, b):
-        """Solve ``A x = b`` with the factorization of the last :meth:`factorize`."""
+        """Solve ``A x = b`` with the factorization of the last :meth:`factorize`, for one right-hand side (a vector)
+        or several (the columns of a matrix), returned in the shape of ``b``."""
         raise NotImplementedError
-
-
-class OneCallDirectSolverBackend(DirectSolverBackend):
-    """A backend whose binding factorizes and solves in one call, ``solve(A, b) -> x``: :meth:`factorize` keeps a copy
-    of ``A``, and each :meth:`solveFactorized` factorizes that copy again with its right-hand side.
-
-    The copy makes it behave like a real factorization: it solves with the matrix of the last :meth:`factorize`, also
-    when the assembly has since overwritten that matrix in place (a preconditioner reused across Newton iterations).
-
-    Parameters
-    ----------
-    solve
-        The binding's ``(A, b) -> x``.
-    """
-
-    def __init__(self, solve):
-        self._solve = solve
-        self._A = None
-
-    def factorize(self, A) -> None:
-        self._A = A.copy()
-
-    def solveFactorized(self, b):
-        # a copy: some bindings (KLU) overwrite the right-hand side with the solution
-        return self._solve(self._A, np.array(b, dtype=float, copy=True))

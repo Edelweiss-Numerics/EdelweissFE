@@ -144,13 +144,17 @@ Components
       - a two-level cycle with a coarse space of its own (a ``CoarseSpace``): all rigid-body modes per aggregate,
         ``RigidBodyModes(prolongation)``, or the P1 interpolant, ``P1Interpolation(coarsePrecond,
         useCoarseNullspace)``. Both read the fine Chebyshev smoother from the tree's ``relax``, ``npre`` and ``npost``
-    * - ``SchurComplement(condense, preconditionS, solveA_bb, blockFactors)``
+    * - ``SchurComplement(condense, preconditionS, solveA_bb, approximation, dropTolerance, windowNodes, haloNodes,
+        blockFactors)``
       - block LU: :math:`z_k = M_{\tilde S}^{-1}(r_k - A_{kb} A_{bb}^{-1} r_b)`,
-        :math:`z_b = A_{bb}^{-1}(r_b - A_{bk} z_k)`
+        :math:`z_b = A_{bb}^{-1}(r_b - A_{bk} z_k)`; ``solveA_bb`` is a ``DirectSolver``, set up on :math:`A_{bb}`
+        on every solve
     * - ``DirectSolver(backend, **options)``
-      - :math:`A^{-1}` by a registered direct solver backend (``superlu``, ``pardiso``, ``klu``, ...; registry
-        category ``directsolver``), factorized at every set-up; ``type=pardiso`` is
-        ``DirectSolver("pardiso", reuseSymbolicFactorization=...)`` alone
+      - :math:`A^{-1}` by a registered direct solver backend (``superlu``, ``umfpack``, ``pardiso``, ``klu``,
+        ``mumps``, ``petsclu``, ``panuapardiso``; registry category ``directsolver``): every backend factorizes once
+        per set-up (a singular matrix is reported there) and back-substitutes in every application, so it is as
+        cheap inside a Krylov tree as alone; ``type=pardiso`` is ``DirectSolver("pardiso",
+        reuseSymbolicFactorization=...)`` alone
     * - ``CoarseCorrection(P, coarse)``, ``Jacobi(omega)``
       - :math:`P A_c^{-1} P^T` with :math:`A_c = P^T A P`, and :math:`\omega \operatorname{diag}(A)^{-1}`: the pieces
         of a two-level cycle spelled out, ``Multiplicative([Jacobi(), CoarseCorrection(P, coarse), Jacobi()])``

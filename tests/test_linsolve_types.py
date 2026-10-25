@@ -33,7 +33,6 @@ import json
 import numpy as np
 import pytest
 import scipy.sparse as sp
-import scipy.sparse.linalg
 
 from edelweissfe.config.linsolve import (
     createLinearSolver,
@@ -41,7 +40,6 @@ from edelweissfe.config.linsolve import (
     getLinSolverByName,
     linearSolverDefinitionsFromInputFile,
 )
-from edelweissfe.linsolve.base import OneCallDirectSolverBackend
 from edelweissfe.linsolve.composition import (
     ComposedLinearSolver,
     DirectSolver,
@@ -73,7 +71,7 @@ def test_the_default_linear_solver_solves():
     assert np.linalg.norm(A @ x - b) < 1e-12 * np.linalg.norm(b)
 
 
-def test_pardiso_keeps_its_backend_and_symbolic_factorization_across_solves():
+def test_pardiso_keeps_its_backend_across_solves():
     pytest.importorskip("edelweissfe.linsolve.pardiso.pardiso")
     A, b = _system()
     solver = getLinSolverByName("pardiso", {"reuseSymbolicFactorization": "True"})
@@ -91,14 +89,26 @@ def test_a_singular_matrix_gives_nan_for_a_cutback():
     assert np.isnan(x).all()
 
 
-def test_a_one_call_backend_solves_with_the_matrix_it_factorized():
-    # a reused preconditioner must not see the assembly overwrite its matrix in place
+@pytest.mark.parametrize("backend", ["superlu", "umfpack", "pardiso", "klu", "mumps", "petsclu", "panuapardiso"])
+def test_a_backend_factorizes_once_and_solves_with_that_factorization(backend):
+    # every backend is factorized in factorize and solves with that factorization: also after the assembly overwrote
+    # the matrix in place (a preconditioner reused across Newton iterations), for one or several right-hand sides, and
+    # a singular matrix is reported at factorize
+    try:
+        solver = DirectSolver(backend).solver
+    except ImportError:
+        pytest.skip("the {:} backend is not installed".format(backend))
     A, b = _system()
-    backend = OneCallDirectSolverBackend(scipy.sparse.linalg.spsolve)
-    backend.factorize(A)
+    solver.factorize(A)
     A.data *= 2.0
-    x = backend.solveFactorized(b)
-    assert np.linalg.norm(0.5 * (A @ x) - b) < 1e-12 * np.linalg.norm(b)
+    x = solver.solveFactorized(b)
+    assert x.shape == b.shape and np.linalg.norm(0.5 * (A @ x) - b) < 1e-12 * np.linalg.norm(b)
+    B = np.column_stack([b, 3.0 * b])
+    X = solver.solveFactorized(B)
+    assert X.shape == B.shape and np.linalg.norm(0.5 * (A @ X) - B) < 1e-12 * np.linalg.norm(B)
+    if backend not in ("pardiso", "panuapardiso"):  # PARDISO perturbs a zero pivot instead of failing
+        with pytest.raises(np.linalg.LinAlgError):
+            solver.factorize(sp.csr_matrix(np.array([[1.0, 1.0], [1.0, 1.0]])))
 
 
 def test_an_unknown_option_is_refused():

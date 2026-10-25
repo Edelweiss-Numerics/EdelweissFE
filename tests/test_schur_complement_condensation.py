@@ -37,7 +37,13 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 import scipy.sparse as sp
-from _linsolvesystems import FixedCondensation, barOnFoundation, gridLaplacian
+from _linsolvesystems import (
+    FixedCondensation,
+    barOnFoundation,
+    condensingGivenDofs,
+    gridLaplacian,
+    solveA_bbOf,
+)
 
 import edelweissfe.adaptivity.marking as marking
 from edelweissfe.adaptivity.marking import (
@@ -47,6 +53,12 @@ from edelweissfe.adaptivity.marking import (
     MarkerBase,
 )
 from edelweissfe.linsolve.base import FieldBlock
+from edelweissfe.linsolve.composition import (
+    DirectSolver,
+    SchurComplement,
+    SetUpContext,
+    SystemMatrix,
+)
 from edelweissfe.linsolve.composition.schurcomplement import (
     SchurComplementCondensation,
     _cutIntoWindows,
@@ -125,15 +137,6 @@ def test_a_chain_is_cut_into_windows_whose_cores_partition_it():
     assert np.array_equal(window.dofs, chain) and np.array_equal(window.core, np.arange(10))
 
 
-def test_block_lu_with_the_exact_schur_complement_is_the_inverse():
-    A, b, barDofs = barOnFoundation(n=6)
-    condensation = FixedCondensation(barDofs, dropTolerance=0.0, windowNodes=10_000, blockFactors="LU")
-    condensation.update(A)
-    S = condensation.approximateSchurComplement(A).toarray()
-    z = blockLU(b, condensation, lambda r_k: np.linalg.solve(S, r_k))
-    assert np.allclose(A @ z, b, rtol=0.0, atol=1e-10 * np.abs(b).max())
-
-
 class _Node:
     def __init__(self, label):
         self.label = label
@@ -158,16 +161,16 @@ def test_condensed_dofs_are_those_of_the_interior_nodes_of_the_marked_elements()
     dofs = {label: np.array([2 * (label - 1), 2 * (label - 1) + 1]) for label in nodes}
     dofManager = SimpleNamespace(idcsOfFieldVariablesInDofVector=dofs)
 
-    condensation = SchurComplementCondensation([ElementSetMarker("bars"), ElementSetMarker("bonds")], SuperLUBackend)
+    condensation = SchurComplementCondensation([ElementSetMarker("bars"), ElementSetMarker("bonds")])
     condensation.setModel(model, dofManager)
     assert np.array_equal(condensation._selectCondensedDofs()[0], [0, 1, 2, 3])
 
-    onlyBars = SchurComplementCondensation([ElementSetMarker("bars")], SuperLUBackend)
+    onlyBars = SchurComplementCondensation([ElementSetMarker("bars")])
     onlyBars.setModel(model, dofManager)
     assert np.array_equal(onlyBars._selectCondensedDofs()[0], [0, 1])
 
     with pytest.raises(KeyError, match="element set 'rebars'"):
-        SchurComplementCondensation([ElementSetMarker("rebars")], SuperLUBackend).setModel(model, dofManager)
+        SchurComplementCondensation([ElementSetMarker("rebars")]).setModel(model, dofManager)
 
 
 def test_remaining_field_blocks_drop_the_condensed_nodes():
@@ -211,31 +214,35 @@ def test_superlu_factorizes_once_for_several_right_hand_sides():
     assert np.allclose(A @ solver.solveFactorized(B), B)
 
 
-class _FailingFromTheSecondFactorization(SuperLUBackend):
+class _FailingFromTheSecondFactorization(DirectSolver):
     """SuperLU whose factorizations fail from the second one on."""
 
     def __init__(self):
-        super().__init__()
+        super().__init__("superlu")
         self.factorizations = 0
 
-    def factorize(self, A):
+    def _setUp(self, A, context):
         self.factorizations += 1
         if self.factorizations > 1:
             raise np.linalg.LinAlgError("singular, for the test")
-        super().factorize(A)
+        super()._setUp(A, context)
 
 
-def test_an_update_whose_factorization_fails_leaves_the_condensation_as_it_was():
-    # transactional: the condensed dofs, the remaining dofs and the blocks stay those of the last successful update
-    A, _, barDofs = barOnFoundation(n=8)
-    condensation = FixedCondensation(barDofs, _FailingFromTheSecondFactorization)
-    condensation.update(A)
-    before = (condensation.condensedDofs, condensation.remainingDofs, condensation.A_bb, condensation.A_bk)
-    condensation.dofs = barDofs[: barDofs.size // 2]
-    with pytest.raises(np.linalg.LinAlgError):
-        condensation.update(A)
-    after = (condensation.condensedDofs, condensation.remainingDofs, condensation.A_bb, condensation.A_bk)
-    assert all(x is y for x, y in zip(before, after))
+def test_a_solve_whose_condensed_block_cannot_be_factorized_does_without_the_condensation():
+    A, b, barDofs = barOnFoundation(n=8)
+    solveA_bb = _FailingFromTheSecondFactorization()
+    schur = condensingGivenDofs(SchurComplement(["bars"], preconditionS=DirectSolver(), solveA_bb=solveA_bb), barDofs)
+    warnings = []
+    context = SetUpContext(
+        fields=(FieldBlock("u", 0, A.shape[0], 1),), log=lambda level, message: warnings.append(message)
+    )
+    schur.setUp(SystemMatrix(A), context)
+    assert schur.condensing and schur.condensedDofs() is not None
+    schur.setUp(SystemMatrix(A), context)
+    assert not schur.condensing and schur.condensedDofs() is None and solveA_bb.factorizations == 2
+    assert any("cannot be factorized" in message for message in warnings)
+    # without the condensation, the child alone solves the system
+    assert np.linalg.norm(A @ schur(b) - b) < 1e-10 * np.linalg.norm(b)
 
 
 class _CountingMarker(MarkerBase):
@@ -266,7 +273,7 @@ def test_the_condensed_dofs_are_selected_anew_only_when_a_marker_input_changes()
     # call, and a new model drops the selection
     model, dofManager = _chainModel()
     marker = _CountingMarker([model.elements[1], model.elements[2]])
-    condensation = SchurComplementCondensation([marker], SuperLUBackend)
+    condensation = SchurComplementCondensation([marker])
     condensation.setModel(model, dofManager)
     first = condensation._selectCondensedDofs()
     assert np.array_equal(first[0], [2]) and condensation._selectCondensedDofs() is first and marker.marks == 1
@@ -305,7 +312,7 @@ def test_by_default_the_block_upper_triangular_factor_is_inverted():
     condensation = FixedCondensation(barDofs, dropTolerance=0.0, windowNodes=10_000)
     condensation.update(A)
     S = condensation.approximateSchurComplement(A).toarray()
-    z = blockLU(b, condensation, lambda r_k: np.linalg.solve(S, r_k))
+    z = blockLU(b, condensation, lambda r_k: np.linalg.solve(S, r_k), solveA_bbOf(condensation), "U")
     U = sp.bmat([[condensation.A_bb, condensation.A_bk], [None, sp.csr_matrix(S)]])
     order = np.concatenate([barDofs, condensation.remainingDofs])
     assert np.allclose(U @ z[order], b[order], rtol=0.0, atol=1e-10 * np.abs(b).max())
@@ -329,12 +336,15 @@ def test_tutorial_why_the_condensation_works():
     # 3. ... and the block upper triangular factor alone two (A U^-1 = L, unit block lower triangular, (L - I)^2 = 0)
     S = _exactSchurComplement(A, barDofs)
     for blockFactors, iterations in (("LU", 1), ("U", 2)):
-        condensation = FixedCondensation(barDofs, dropTolerance=0.0, windowNodes=10_000, blockFactors=blockFactors)
+        condensation = FixedCondensation(barDofs, dropTolerance=0.0, windowNodes=10_000)
         condensation.update(A)
+        solveA_bb = solveA_bbOf(condensation)
         assert np.array_equal(condensation.remainingDofs, remaining)
 
         def preconditioner(r):
-            return blockLU(np.asarray(r).ravel(), condensation, lambda r_k: np.linalg.solve(S, r_k))
+            return blockLU(
+                np.asarray(r).ravel(), condensation, lambda r_k: np.linalg.solve(S, r_k), solveA_bb, blockFactors
+            )
 
         counted = []
         x, info = gmres(

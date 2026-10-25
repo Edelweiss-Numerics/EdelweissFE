@@ -32,14 +32,20 @@ The binding, :mod:`edelweissfe.linsolve.mumps.mumps`, imports the optional ``mum
 created: an install without them raises :class:`ImportError` there.
 """
 
-from edelweissfe.linsolve.base import OneCallDirectSolverBackend
+from edelweissfe.linsolve.base import DirectSolverBackend
 
 
-class MumpsBackend(OneCallDirectSolverBackend):
-    """MUMPS through :func:`~edelweissfe.linsolve.mumps.mumps.mumpsSolve`, which factorizes and solves in one call.
-    Takes no options."""
+class MumpsBackend(DirectSolverBackend):
+    """MUMPS through :class:`~edelweissfe.linsolve.mumps.mumps.MumpsFactorization`: analysis and factorization in
+    :meth:`factorize`, the solves in :meth:`solveFactorized`. Takes no options."""
 
     def __init__(self):
-        from edelweissfe.linsolve.mumps.mumps import mumpsSolve
+        from edelweissfe.linsolve.mumps.mumps import MumpsFactorization
 
-        super().__init__(mumpsSolve)
+        self._factorization = MumpsFactorization()
+
+    def factorize(self, A) -> None:
+        self._factorization.factorize(A)
+
+    def solveFactorized(self, b):
+        return self._factorization.solve(b)

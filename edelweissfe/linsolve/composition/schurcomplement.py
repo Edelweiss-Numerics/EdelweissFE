@@ -90,7 +90,6 @@ fieldOutput above a threshold, with a ``halo`` so that the zone's own nodes beco
 can be condensed, and always all fields of a node together.
 """
 
-from collections.abc import Callable
 from typing import NamedTuple
 
 import numpy as np
@@ -143,19 +142,18 @@ class SchurComplementCondensation:
     """The condensed dofs :math:`b`, the factorization of :math:`A_{bb}`, the approximate Schur complement
     :math:`\\tilde S` of all other dofs :math:`k`, and the preconditioner; see the module documentation.
 
-    :class:`SchurComplement` uses it in three steps: :meth:`update` on every solve (select :math:`b`, split :math:`A`,
-    factorize :math:`A_{bb}`), :meth:`approximateSchurComplement` whenever it rebuilds its child (built on
-    :math:`\\tilde S` instead of :math:`A`), and :func:`blockLU` in every outer iteration.
+    :class:`SchurComplement` uses it in three steps: :meth:`update` on every solve (select :math:`b`, split :math:`A`;
+    the Schur complement then factorizes :math:`A_{bb}` with its ``solveA_bb``), :meth:`approximateSchurComplement`
+    whenever it rebuilds its child (built on :math:`\\tilde S` instead of :math:`A`), and :func:`blockLU` in every outer
+    iteration.
 
     Parameters
     ----------
     markers
         The markers whose marked elements' interior nodes are condensed.
-    createDirectSolver
-        Creates a linear solver that factorizes once for several right-hand sides
-        (:meth:`~edelweissfe.linsolve.base.DirectSolverBackend.factorize`,
-        :meth:`~edelweissfe.linsolve.base.DirectSolverBackend.solveFactorized`): one for :math:`A_{bb}`, one for the zones
-        corrected exactly.
+    zoneSolver
+        The :class:`~edelweissfe.linsolve.composition.direct.DirectSolver` of the zones corrected exactly (see
+        :meth:`_exactCorrection`): set up on their block, and applied to batches of right-hand sides. Default: SuperLU.
     approximation
         ``"local"``: :math:`\\tilde S` as described in the module documentation; ``"none"``:
         :math:`\\tilde S = A_{kk}` (the coupling through :math:`b` is ignored).
@@ -163,29 +161,25 @@ class SchurComplementCondensation:
         The relative size :math:`\\tau` below which entries of :math:`\\tilde S` are dropped.
     windowNodes, haloNodes
         The nodes of a window's core along a chain, and of its halo on either side (``None``: as many as the core).
-    blockFactors
-        The block factors of :math:`A` the preconditioner inverts: ``"U"``, the block upper triangular one (one solve
-        with :math:`A_{bb}`), or ``"LU"``, both (two solves), see the module documentation.
     """
 
     def __init__(
         self,
         markers: list,
-        createDirectSolver: Callable,
+        zoneSolver: DirectSolver = None,
         approximation: str = "local",
         dropTolerance: float = 1e-4,
         windowNodes: int = 50,
         haloNodes: "int | None" = None,
-        blockFactors: str = "U",
     ):
+        if approximation not in ("local", "none"):
+            raise ValueError("SchurComplement: approximation must be 'local' or 'none', got {!r}".format(approximation))
         self._markers = markers
-        self._directSolver = createDirectSolver()
-        self._zoneSolver = createDirectSolver()
+        self._zoneSolver = zoneSolver if zoneSolver is not None else DirectSolver("superlu")
         self._approximation = approximation
         self._dropTolerance = dropTolerance
         self._windowNodes = windowNodes
         self._haloNodes = windowNodes if haloNodes is None else haloNodes
-        self._blockFactors = blockFactors
 
         # the model, its elements as the candidates of the markers (with the elements at each node), and the dofs of
         # each node, by node label; see setModel
@@ -285,27 +279,18 @@ class SchurComplementCondensation:
     # ----- every solve -----
 
     def update(self, A: sp.csr_matrix) -> None:
-        """Select the condensed dofs, cut the blocks :math:`A_{bb}`, :math:`A_{bk}`, :math:`A_{kb}` out of ``A`` and
-        factorize :math:`A_{bb}`.
+        """Select the condensed dofs and cut the blocks :math:`A_{bb}`, :math:`A_{bk}`, :math:`A_{kb}` out of ``A``.
 
         Parameters
         ----------
         A
             The system matrix, CSR in canonical format.
-
-        Raises
-        ------
-        numpy.linalg.LinAlgError
-            If :math:`A_{bb}` cannot be factorized (e.g. a softening zone or a bond that lost all stiffness). The
-            update is then not applied: the condensation keeps the state of the last successful one.
         """
         with performancetiming.timeit("schur dof selection"):
             dofs, nodeOfDof = self._selectCondensedDofs()
         selectedAllDofs = dofs.size == A.shape[0]
         if selectedAllDofs:
             dofs, nodeOfDof = np.empty(0, dtype=np.int64), np.empty(0, dtype=np.int64)
-        # The new state is computed into locals and assigned only once A_bb is factorized: a failed update leaves the
-        # condensation as the last successful one left it, so that a solve without the condensation can take over.
         if np.array_equal(dofs, self.condensedDofs):
             remainingDofs, splitCache = self.remainingDofs, self._splitCache
         else:
@@ -317,22 +302,15 @@ class SchurComplementCondensation:
             with performancetiming.timeit("schur split"):
                 splitCache = _splitCacheFor(A, splitCache)
                 A_bb, A_bk, A_kb = _split(A, ("bb", "bk", "kb"), dofs, remainingDofs, splitCache)
-            with performancetiming.timeit("schur factorization"):
-                self._directSolver.factorize(A_bb)
         self.selectedAllDofs = selectedAllDofs
         self.condensedDofs, self._nodeOfCondensedDof, self.remainingDofs = dofs, nodeOfDof, remainingDofs
         self._splitCache = splitCache
         self.A_bb, self.A_bk, self.A_kb = A_bb, A_bk, A_kb
 
     @property
-    def blockFactors(self) -> str:
-        """The block factors of :math:`A` the preconditioner inverts: ``"U"`` or ``"LU"``."""
-        return self._blockFactors
-
-    def solveA_bb(self, r_b: np.ndarray) -> np.ndarray:
-        """:math:`A_{bb}^{-1} r_b` with the factorization of the last :meth:`update`. One application of the block
-        LU preconditioner is :func:`blockLU`."""
-        return self._directSolver.solveFactorized(r_b)
+    def approximation(self) -> str:
+        """How :math:`\\tilde S` is formed: ``"local"`` or ``"none"`` (:math:`\\tilde S = A_{kk}`)."""
+        return self._approximation
 
     # ----- the remaining dofs, on which the child is built -----
 
@@ -476,7 +454,8 @@ class SchurComplementCondensation:
         """
         if zoneDofs.size == 0:
             return []
-        self._zoneSolver.factorize(self.A_bb[zoneDofs][:, zoneDofs].tocsr())
+        A_zz = self.A_bb[zoneDofs][:, zoneDofs].tocsr()
+        self._zoneSolver.setUp(SystemMatrix(A_zz), SetUpContext(fields=(FieldBlock("zones", 0, zoneDofs.size, 1),)))
         A_bk_zones = self.A_bk[zoneDofs].tocsc()
         coupledColumns = np.flatnonzero(np.diff(A_bk_zones.indptr))
         A_kb_zones = self.A_kb[:, zoneDofs].tocsr()
@@ -487,7 +466,7 @@ class SchurComplementCondensation:
         for start in range(0, len(coupledColumns), batch):
             columns = coupledColumns[start : start + batch]
             rightHandSides = A_bk_zones[:, columns].toarray()
-            X = np.asarray(self._zoneSolver.solveFactorized(rightHandSides)).reshape(rightHandSides.shape)
+            X = np.asarray(self._zoneSolver(rightHandSides)).reshape(rightHandSides.shape)
             correction = A_kb_zones @ X
             parts.append(
                 _significantEntries(correction, coupledRows, columns, sqrtAbsDiagonalOfA_kk, thinningTolerance)
@@ -619,7 +598,7 @@ def _solveTransposed(A: sp.coo_matrix, B: np.ndarray) -> np.ndarray:
     return solve_banded((upper, lower), banded, B, check_finite=False)
 
 
-def blockLU(r: np.ndarray, condensation, preconditionS, solveA_bb=None) -> np.ndarray:
+def blockLU(r: np.ndarray, condensation, preconditionS, solveA_bb, blockFactors: str) -> np.ndarray:
     """One application of the block LU preconditioner, see the module documentation:
 
     .. math::
@@ -628,25 +607,25 @@ def blockLU(r: np.ndarray, condensation, preconditionS, solveA_bb=None) -> np.nd
         z_b = A_{bb}^{-1} (r_b - A_{bk} z_k)
 
     or, with ``blockFactors="U"``, :math:`z_k = M_{\\tilde S}^{-1} r_k` (the remaining dofs first, then the condensed
-    ones follow them: the bars follow the concrete). The ``__call__`` of :class:`SchurComplement`.
+    ones follow them: the bars follow the concrete). The application of :class:`SchurComplement`.
 
     Parameters
     ----------
     r
         The vector to precondition (all dofs).
     condensation
-        The :class:`SchurComplementCondensation`: the dofs
-        :math:`b, k`, the blocks :math:`A_{bk}, A_{kb}` and the block factors.
+        The :class:`SchurComplementCondensation`: the dofs :math:`b, k` and the blocks :math:`A_{bk}, A_{kb}`.
     preconditionS
         :math:`M_{\\tilde S}^{-1}`, applied to a vector of the remaining dofs :math:`k`.
     solveA_bb
-        :math:`A_{bb}^{-1}`, default the condensation's own factorization.
+        :math:`A_{bb}^{-1}`, applied to a vector of the condensed dofs :math:`b`.
+    blockFactors
+        ``"U"`` or ``"LU"``, see the module documentation.
     """
-    solveA_bb = condensation.solveA_bb if solveA_bb is None else solveA_bb
     A_bk, A_kb = condensation.A_bk, condensation.A_kb
     b, k = condensation.condensedDofs, condensation.remainingDofs
     r_b, r_k = r[b], r[k]
-    if condensation.blockFactors == "LU":
+    if blockFactors == "LU":
         y_b = solveA_bb(r_b)
         z_k = preconditionS(r_k - A_kb @ y_b)
     else:
@@ -660,10 +639,10 @@ def blockLU(r: np.ndarray, condensation, preconditionS, solveA_bb=None) -> np.nd
 class SchurComplement(Preconditioner):
     """The block LU preconditioner around the Schur complement of the condensed dofs; see the module documentation.
 
-    Every solve selects the condensed dofs again and factorizes :math:`A_{bb}`; :math:`\\tilde S` and the child are
-    rebuilt when a rebuild is asked for, and when the condensed dofs change. If :math:`A_{bb}` cannot be factorized
-    (a bond that lost all stiffness), that solve does without the condensation: the child is built on the whole
-    :math:`A`.
+    Every solve selects the condensed dofs again and sets up ``solveA_bb`` on :math:`A_{bb}` (factorizes it);
+    :math:`\\tilde S` and the child are rebuilt when a rebuild is asked for, and when the condensed dofs change. If
+    :math:`A_{bb}` cannot be factorized (a bond that lost all stiffness), that solve does without the condensation: the
+    child is built on the whole :math:`A`.
 
     Parameters
     ----------
@@ -672,15 +651,13 @@ class SchurComplement(Preconditioner):
     preconditionS
         :math:`M_{\\tilde S}^{-1}`, built on :math:`\\tilde S`.
     solveA_bb
-        The exact solve with :math:`A_{bb}` (default: SuperLU).
+        The exact solve with :math:`A_{bb}`, a :class:`~edelweissfe.linsolve.composition.direct.DirectSolver`
+        (default: SuperLU). The zones corrected exactly in :math:`\\tilde S` are factorized by a second one of the same
+        backend and options.
     approximation, dropTolerance, windowNodes, haloNodes
-        How :math:`\\tilde S` is formed, see
-        :class:`SchurComplementCondensation`.
+        How :math:`\\tilde S` is formed, see :class:`SchurComplementCondensation`.
     blockFactors
         ``"U"`` or ``"LU"``.
-    condensation
-        A condensation to use instead of one created from ``condense`` (e.g. of given dofs, without a model). It must
-        create its direct solvers through ``solveA_bb.newSolver``.
     """
 
     def __init__(
@@ -693,41 +670,34 @@ class SchurComplement(Preconditioner):
         windowNodes: int = 50,
         haloNodes: int = None,
         blockFactors: str = "U",
-        condensation: SchurComplementCondensation = None,
     ):
         super().__init__()
         if preconditionS is None:
             raise ValueError("SchurComplement: preconditionS, the preconditioner of the Schur complement, is needed")
         requirePreconditioner("SchurComplement", "preconditionS", preconditionS)
-        if solveA_bb is not None:
-            requirePreconditioner("SchurComplement", "solveA_bb", solveA_bb)
+        if solveA_bb is not None and not isinstance(solveA_bb, DirectSolver):
+            raise TypeError(
+                "SchurComplement: solveA_bb must be a DirectSolver, the exact solve with A_bb, got {!r}".format(
+                    solveA_bb
+                )
+            )
         if blockFactors not in ("U", "LU"):
             raise ValueError("SchurComplement: blockFactors must be 'U' or 'LU', got {!r}".format(blockFactors))
-        if condensation is None and not list(condense):
+        if not list(condense):
             raise ValueError(
-                "SchurComplement: nothing to condense -- give the markers of the condensed elements (condense=[...]) "
-                "or a condensation"
+                "SchurComplement: nothing to condense -- give the markers of the condensed elements (condense=[...])"
             )
         self.preconditionS = preconditionS
         self.solveA_bb = solveA_bb if solveA_bb is not None else DirectSolver("superlu")
         self.blockFactors = blockFactors
-        # The condensation factorizes A_bb with the first solver it creates, which becomes solveA_bb's own (see
-        # DirectSolver.newSolver); the second one is for the zones it corrects exactly.
-        self.condensation = (
-            condensation
-            if condensation is not None
-            else SchurComplementCondensation(
-                list(condense),
-                self.solveA_bb.newSolver,
-                approximation=approximation,
-                dropTolerance=dropTolerance,
-                windowNodes=windowNodes,
-                haloNodes=haloNodes,
-                blockFactors=blockFactors,
-            )
+        self.condensation = SchurComplementCondensation(
+            list(condense),
+            DirectSolver(self.solveA_bb.backend, **self.solveA_bb.options),
+            approximation=approximation,
+            dropTolerance=dropTolerance,
+            windowNodes=windowNodes,
+            haloNodes=haloNodes,
         )
-        # a given condensation brings its own block factors
-        self.blockFactors = self.condensation.blockFactors
         self.condensing = False
         self.S_tilde = None
         self._builtForDofs = None
@@ -750,9 +720,15 @@ class SchurComplement(Preconditioner):
         """Select the condensed dofs and factorize A_bb, then set up or update the child on S~ (or, without condensed
         dofs, on A)."""
         condensation = self.condensation
+        condensation.update(A.matrix())
+        condensing = condensation.hasCondensedDofs()
         try:
-            condensation.update(A.matrix())
-            condensing = condensation.hasCondensedDofs()
+            if condensing:
+                A_bb = condensation.A_bb
+                with performancetiming.timeit("schur factorization"):
+                    self.solveA_bb.setUp(
+                        SystemMatrix(A_bb), SetUpContext(fields=(FieldBlock("condensed", 0, A_bb.shape[0], 1),))
+                    )
         except np.linalg.LinAlgError as error:
             # e.g. a softening zone or a bond that lost all stiffness. The condensed dofs come from the last converged
             # increment, so a cutback would meet the same block again: this solve does without.
@@ -846,7 +822,7 @@ class SchurComplement(Preconditioner):
     def _apply(self, r: np.ndarray) -> np.ndarray:
         if not self.condensing:
             return self.preconditionS(r)
-        return blockLU(r, self.condensation, self.preconditionS, self.solveA_bb)
+        return blockLU(r, self.condensation, self.preconditionS, self.solveA_bb, self.blockFactors)
 
     def children(self) -> tuple:
         return (("solveA_bb", self.solveA_bb), ("preconditionS", self.preconditionS))
@@ -867,6 +843,9 @@ class SchurComplement(Preconditioner):
             name="SchurComplement",
             formula="BlockLU[{solveA_bb}, {preconditionS}]",
             latex="\\mathrm{BlockLU}\\left[{solveA_bb},\\, {preconditionS}\\right]",
-            parameters={"blockFactors": self.blockFactors, "S̃": "A_kk − A_kb A_bb⁻¹ A_bk, local"},
+            parameters={
+                "blockFactors": self.blockFactors,
+                "S̃": "A_kk" if self.condensation.approximation == "none" else "A_kk − A_kb A_bb⁻¹ A_bk, local",
+            },
             steps=steps,
         )

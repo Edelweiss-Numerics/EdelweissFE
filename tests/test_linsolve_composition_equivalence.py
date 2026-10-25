@@ -53,7 +53,6 @@ from edelweissfe.linsolve.composition import (  # noqa: E402
     LGMRES,
     ComposedLinearSolver,
     DiagonalScaling,
-    DirectSolver,
     FixedTolerance,
     GapCompensation,
     Multiplicative,
@@ -371,17 +370,15 @@ def test_the_degradation_dumps_are_blockamgs_on_disk(tmp_path, monkeypatch):
 
 
 def test_a_dump_of_a_condensed_solve_holds_its_condensed_dofs(tmp_path, monkeypatch):
-    from _linsolvesystems import FixedCondensation, barOnFoundation
+    from _linsolvesystems import barOnFoundation, condensingGivenDofs
 
     monkeypatch.setattr(SolveDumps, "dumpsWritten", 0)
     A, b, barDofs = barOnFoundation(n=8)
     fields = [FieldBlock("u", 0, A.shape[0], 1)]
-    solveA_bb = DirectSolver()
     root = LGMRES(
-        SchurComplement(
-            preconditionS=DiagonalScaling(Multiplicative([OnField("u", AMG())])),
-            solveA_bb=solveA_bb,
-            condensation=FixedCondensation(barDofs, solveA_bb.newSolver),
+        condensingGivenDofs(
+            SchurComplement(["bars"], preconditionS=DiagonalScaling(Multiplicative([OnField("u", AMG())]))),
+            barDofs,
         ),
         tolerance=FixedTolerance(1e-8),
     )

@@ -288,7 +288,6 @@ extensions += [
         "*",
         sources=[
             "edelweissfe/linsolve/klu/klu.pyx",
-            "edelweissfe/linsolve/klu/kluInterface.c",
         ],
         include_dirs=[
             numpy.get_include(),

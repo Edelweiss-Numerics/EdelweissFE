@@ -33,14 +33,23 @@ PARDISO library at build time), imported when a backend is created: an install w
 there.
 """
 
-from edelweissfe.linsolve.base import OneCallDirectSolverBackend
+from edelweissfe.linsolve.base import DirectSolverBackend
 
 
-class PanuaPardisoBackend(OneCallDirectSolverBackend):
-    """Panua PARDISO through :func:`~edelweissfe.linsolve.panuapardiso.panuapardiso.panuaPardisoSolve`, which
-    factorizes and solves in one call. Takes no options."""
+class PanuaPardisoBackend(DirectSolverBackend):
+    """Panua PARDISO through :class:`~edelweissfe.linsolve.panuapardiso.panuapardiso.PanuaPardisoFactorization`:
+    reordering and factorization (phases 11 and 22) in :meth:`factorize`, back substitution (phase 33) in
+    :meth:`solveFactorized`. Takes no options."""
 
     def __init__(self):
-        from edelweissfe.linsolve.panuapardiso.panuapardiso import panuaPardisoSolve
+        from edelweissfe.linsolve.panuapardiso.panuapardiso import (
+            PanuaPardisoFactorization,
+        )
 
-        super().__init__(panuaPardisoSolve)
+        self._factorization = PanuaPardisoFactorization()
+
+    def factorize(self, A) -> None:
+        self._factorization.factorize(A)
+
+    def solveFactorized(self, b):
+        return self._factorization.solve(b)

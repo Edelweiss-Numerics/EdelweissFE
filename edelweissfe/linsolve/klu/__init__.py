@@ -32,14 +32,20 @@ The binding is the optional Cython extension :mod:`edelweissfe.linsolve.klu.klu`
 imported when a backend is created: an install without it raises :class:`ImportError` there.
 """
 
-from edelweissfe.linsolve.base import OneCallDirectSolverBackend
+from edelweissfe.linsolve.base import DirectSolverBackend
 
 
-class KLUBackend(OneCallDirectSolverBackend):
-    """KLU through :func:`~edelweissfe.linsolve.klu.klu.kluSolve`, which factorizes and solves in one call. Takes no
-    options."""
+class KLUBackend(DirectSolverBackend):
+    """KLU through :class:`~edelweissfe.linsolve.klu.klu.KLUFactorization`: ordering and LU factors in
+    :meth:`factorize`, the triangular solves in :meth:`solveFactorized`. Takes no options."""
 
     def __init__(self):
-        from edelweissfe.linsolve.klu.klu import kluSolve
+        from edelweissfe.linsolve.klu.klu import KLUFactorization
 
-        super().__init__(kluSolve)
+        self._factorization = KLUFactorization()
+
+    def factorize(self, A) -> None:
+        self._factorization.factorize(A)
+
+    def solveFactorized(self, b):
+        return self._factorization.solve(b)

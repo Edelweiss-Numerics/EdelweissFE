@@ -32,14 +32,20 @@ The binding, :mod:`edelweissfe.linsolve.petsclu.petsclu`, imports the optional `
 an install without it raises :class:`ImportError` there.
 """
 
-from edelweissfe.linsolve.base import OneCallDirectSolverBackend
+from edelweissfe.linsolve.base import DirectSolverBackend
 
 
-class PetscLUBackend(OneCallDirectSolverBackend):
-    """PETSc's LU through :func:`~edelweissfe.linsolve.petsclu.petsclu.petscluSolve`, which factorizes and solves in
-    one call. Takes no options."""
+class PetscLUBackend(DirectSolverBackend):
+    """PETSc's LU through :class:`~edelweissfe.linsolve.petsclu.petsclu.PetscLUFactorization`: the factorization in
+    :meth:`factorize`, the solves in :meth:`solveFactorized`. Takes no options."""
 
     def __init__(self):
-        from edelweissfe.linsolve.petsclu.petsclu import petscluSolve
+        from edelweissfe.linsolve.petsclu.petsclu import PetscLUFactorization
 
-        super().__init__(petscluSolve)
+        self._factorization = PetscLUFactorization()
+
+    def factorize(self, A) -> None:
+        self._factorization.factorize(A)
+
+    def solveFactorized(self, b):
+        return self._factorization.solve(b)

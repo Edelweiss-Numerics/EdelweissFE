@@ -234,4 +234,4 @@ Python API of the linear solvers
     :members: getLinSolverByName, getDefaultLinSolver, createLinearSolver, linearSolverDefinitionsFromInputFile
 
 .. automodule:: edelweissfe.linsolve.base
-    :members: LinearSolver, DirectSolverBackend, OneCallDirectSolverBackend
+    :members: LinearSolver, DirectSolverBackend

@@ -37,8 +37,10 @@ import scipy.sparse as sp
 from scipy.sparse.linalg import LinearOperator, gmres, splu
 
 from edelweissfe.linsolve.base import FieldBlock
+from edelweissfe.linsolve.composition.base import SetUpContext
+from edelweissfe.linsolve.composition.direct import DirectSolver
 from edelweissfe.linsolve.composition.schurcomplement import SchurComplementCondensation
-from edelweissfe.linsolve.superlu import SuperLUBackend
+from edelweissfe.linsolve.composition.systemmatrix import SystemMatrix
 
 #: A symmetric positive definite coupling of a node's three displacement components, for vector operators that
 #: are not just three copies of a scalar one.
@@ -200,14 +202,28 @@ class FixedCondensation(SchurComplementCondensation):
     ----------
     dofs
         The condensed dofs.
-    createDirectSolver
-        See :class:`~edelweissfe.linsolve.composition.schurcomplement.SchurComplementCondensation`, as its other
-        ``options``.
+    options
+        See :class:`~edelweissfe.linsolve.composition.schurcomplement.SchurComplementCondensation`.
     """
 
-    def __init__(self, dofs, createDirectSolver=SuperLUBackend, **options):
-        super().__init__([], createDirectSolver, **options)
+    def __init__(self, dofs, **options):
+        super().__init__([], **options)
         self.dofs = np.asarray(dofs)
 
     def _selectCondensedDofs(self):
         return self.dofs, self.dofs
+
+
+def solveA_bbOf(condensation) -> DirectSolver:
+    """:math:`A_{bb}^{-1}` of a condensation's last update: a SuperLU leaf set up on its :math:`A_{bb}`."""
+    solveA_bb = DirectSolver()
+    n = condensation.A_bb.shape[0]
+    solveA_bb.setUp(SystemMatrix(condensation.A_bb), SetUpContext(fields=(FieldBlock("condensed", 0, n, 1),)))
+    return solveA_bb
+
+
+def condensingGivenDofs(schur, dofs, **options):
+    """``schur`` (a :class:`~edelweissfe.linsolve.composition.schurcomplement.SchurComplement`), condensing the given
+    dofs instead of those its markers select: a test without a model."""
+    schur.condensation = FixedCondensation(dofs, **options)
+    return schur

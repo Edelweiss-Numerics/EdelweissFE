@@ -28,8 +28,9 @@
 """An exact solve as a component: :class:`DirectSolver`, :math:`z = A^{-1} r` by a sparse LU factorization.
 
 A direct solver alone is the composed solver of ``type=pardiso`` (``superlu``, ``klu``, ...): one leaf, set up (i.e.
-factorized) on every solve. Inside a larger tree it solves a block exactly, e.g. the condensed dofs of a Schur
-complement.
+factorized) on every solve and applied once. Inside a larger tree it solves a block exactly, e.g. the condensed dofs
+of a Schur complement, factorized once per set-up and applied in every outer iteration: every backend factorizes in
+:meth:`~edelweissfe.linsolve.base.DirectSolverBackend.factorize` and only back-substitutes afterwards.
 """
 
 import numpy as np
@@ -43,9 +44,9 @@ from edelweissfe.linsolve.composition.base import (
 
 
 class DirectSolver(Preconditioner):
-    """:math:`z = A^{-1} r`, exactly: one of the registered direct solver backends (``superlu``, ``pardiso``, ``klu``,
-    ...; see :class:`~edelweissfe.linsolve.base.DirectSolverBackend`), factorized once per set-up and applied by back
-    substitution.
+    """:math:`z = A^{-1} r`, exactly: one of the registered direct solver backends (``superlu``, ``umfpack``,
+    ``pardiso``, ``klu``, ...; see :class:`~edelweissfe.linsolve.base.DirectSolverBackend`), factorized once per
+    set-up -- a singular matrix raises :class:`numpy.linalg.LinAlgError` there -- and applied by back substitution.
 
     The backend is created here, at construction, and lives as long as this component: a backend that keeps its
     symbolic factorization while only the values of the matrix change (PARDISO's ``reuseSymbolicFactorization``)
@@ -64,19 +65,9 @@ class DirectSolver(Preconditioner):
         super().__init__()
         self.backend = backend
         self.options = options
-        self._backendClass, _ = registry.lookup("directsolver", backend)
+        backendClass, _ = registry.lookup("directsolver", backend)
         #: The factorizing backend of this component.
-        self.solver = self._backendClass(**options)
-        self._solverHandedOut = False
-
-    def newSolver(self):
-        """A backend for a parent that factorizes a matrix itself (the Schur complement factorizes :math:`A_{bb}`):
-        the first call hands out this component's own, which this component then applies; later calls create new
-        ones."""
-        if not self._solverHandedOut:
-            self._solverHandedOut = True
-            return self.solver
-        return self._backendClass(**self.options)
+        self.solver = backendClass(**options)
 
     def _setUp(self, A, context: SetUpContext) -> None:
         self.solver.factorize(A.matrix())
