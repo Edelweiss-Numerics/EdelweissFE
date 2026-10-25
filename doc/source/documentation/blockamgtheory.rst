@@ -465,11 +465,11 @@ the coarse level, which repeats the construction. Every block stays a diagonal :
 so the hierarchy keeps AMGCL's block value type. The rotations do not fit that way (six modes on
 :math:`3 \times 3` blocks would need :math:`6 \times 6` coarse blocks): this hierarchy takes the translations only
 and refuses any other near-null-space, and the rotations stay with the scalar backend -- or with the rigid-body coarse
-level, the default for the 3D displacement field, which builds the first coarse level of a block field with those
-:math:`6 \times 6` coarse blocks itself, outside AMGCL (see :ref:`blockamg-rigid-body-coarse-level`). (AMGCL's runtime
-coarsening accepts a near-null-space on a block backend as well, by coarsening the unblocked scalar matrix
-(``as_scalar``) and re-blocking the prolongation; this hierarchy does not use that route, and whether the
-rotations would work through it is untested here.)
+level, the default for the 3D displacement field, which builds the first coarse level of a block field itself (its
+prolongation in :math:`B \times M` blocks, the Galerkin product in :math:`M \times M` blocks) and hands the unblocked
+coarse operator to a scalar AMGCL hierarchy with ``aggr.block_size`` :math:`M` (see
+:ref:`blockamg-rigid-body-coarse-level`, which also says why AMGCL's ``as_scalar`` coarsening, the route of AMGCL's
+runtime coarsening for a near-null-space on a block backend, does not fit).
 Everything else is AMGCL's smoothed aggregation, unchanged: the aggregation on :math:`\hat A_{ii}`, the
 prolongation smoothing and the Galerkin product. Unit weights :math:`w = 1` give AMGCL's own hierarchy back,
 up to a scaling of the coarse variables.
@@ -1301,60 +1301,73 @@ system (0.11 0.04 0.20 -> 0.70 0.18 0.41). The outer iteration counts below are 
 How the coarse level is built
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-On the field's equilibrated block :math:`\hat A = D A D` -- in C++, ``amgcl-rigid-body-coarse-level.hpp``, one function
-per step:
+On the field's equilibrated block :math:`\hat A = D A D`, with its near-null-space :math:`B` -- the field's rigid-body
+modes divided by :math:`D` (the near-null-space of :math:`D A D` is :math:`D^{-1}` times that of :math:`A`, as for the
+translations), which Python builds with :func:`~edelweissfe.linsolve.nullspace.rigidBodyNullspace`, the one definition
+of the modes, and hands to C++ -- in C++, ``amgcl-rigid-body-coarse-level.hpp``, one function per step:
 
 #. **Aggregates.** AMGCL's plain aggregation of the nodes: the aggregates of AMGCL's own first level on the block
    backend, with its strength test on the :math:`B \times B` blocks (see :ref:`above <blockamg-block-nullspace>`) and
    the tree's ``coarsening.aggr.eps_strong``. A node without a strong connection -- a fully constrained one, for
    instance -- is in no aggregate and left to the smoother.
-#. **Tentative prolongation.** Per aggregate :math:`a`, its rigid-body modes, orthonormalized:
+#. **Tentative prolongation.** Per aggregate :math:`a`, the rows of :math:`B` on its dofs, orthonormalized -- what
+   AMGCL's own tentative prolongation does with a near-null-space:
 
    .. math::
 
-      V_a = D_a^{-1} \begin{bmatrix} m_1(x_i - c_a) & \cdots & m_M(x_i - c_a) \end{bmatrix}_{i \in a} = Q_a R_a,
+      V_a = B \big|_a = \begin{bmatrix} b_1 & \cdots & b_M \end{bmatrix}_a = Q_a R_a,
       \qquad P^{\mathrm{tent}} \big|_a = Q_a ,
 
-   with :math:`m_1, \dots, m_B` the translations and :math:`m_{B+1}, \dots, m_M` the rotations (those of
-   :func:`~edelweissfe.linsolve.nullspace.rigidBodyNullspace`), :math:`c_a` the centroid of the aggregate's nodes, and
-   :math:`D_a` the aggregate's part of the equilibration -- the near-null-space of :math:`D A D` is :math:`D^{-1}`
-   times that of :math:`A`, as for the translations. The rows of Dirichlet dofs and multi-point-constraint slaves are
-   zero. The QR factorization (modified Gram--Schmidt with a second sweep) makes the columns of
-   :math:`P^{\mathrm{tent}}` orthonormal, and :math:`P^{\mathrm{tent}} R_a` reproduces the modes on the aggregate
-   exactly. About the aggregate's own centroid rather than the field's, the rotation columns are not dominated by the
-   translation they would carry far from the centre, and no digits are lost to cancellation. The Dirichlet rows are
-   zero because the cycle solves them exactly, apart from the coarse-grid correction (as the p-two-grid does), and a
-   rigid-body mode is near-null only on the free dofs: so :math:`P^\mathsf{T} \hat A P = P_F^\mathsf{T} \hat A_{FF}
-   P_F`.
+   with :math:`b_1, \dots, b_B` the translations and :math:`b_{B+1}, \dots, b_M` the rotations about the field's
+   centroid. The rows of Dirichlet dofs and multi-point-constraint slaves are zero. The QR factorization (modified
+   Gram--Schmidt with a second sweep) makes the columns of :math:`P^{\mathrm{tent}}` orthonormal, and
+   :math:`P^{\mathrm{tent}} R_a` reproduces the modes on the aggregate exactly. A rotation about the field's centroid
+   :math:`g` carries a translation of the order of :math:`|c_a - g|` across an aggregate of extent :math:`h_a` around
+   its centroid :math:`c_a`; projecting the translations out loses about :math:`\log_{10}(|c_a - g| / h_a)` digits, 2 to
+   4 on a mesh of elements a hundred to ten thousand times smaller than the structure, far from the threshold of the
+   dependent modes below, so the modes need no recentring on every aggregate. The Dirichlet rows are zero because the
+   cycle solves them exactly, apart from the coarse-grid correction (as the p-two-grid does), and a rigid-body mode is
+   near-null only on the free dofs: so :math:`P^\mathsf{T} \hat A P = P_F^\mathsf{T} \hat A_{FF} P_F`.
 #. **Dependent modes.** A mode the Gram--Schmidt sweeps reduce to at most :math:`\sqrt{\varepsilon_{\mathrm{mach}}}`
    (1.5e-8) of its norm lies in the span of the modes before it: the rotations of an aggregate of a single node, the
    rotation about the line through a collinear aggregate, a mode whose components are all constrained (an aggregate
    on a symmetry plane). Its normalized remainder would be rounding noise, not a direction of the aggregate, so it is
    dropped: its column of :math:`P^{\mathrm{tent}}` is zero, and its coarse dof gets a diagonal entry and nothing
    else. The threshold is not tuned: an exactly dependent mode leaves a remainder of about 1e-16 of its norm, an
-   independent one of the order of the aggregate's aspect ratio.
-#. **Smoothed prolongation.** :math:`P = (I - \omega D_F^{-1} \hat A_F) P^{\mathrm{tent}}`, AMGCL's own, shared with
-   the translations of the block backend: :math:`\hat A_F` holds the strong connections, the weak ones lumped onto the
-   diagonal blocks, and :math:`\omega` follows the tree's ``coarsening`` (``relax``, ``estimate_spectral_radius``,
+   independent one of the order of :math:`h_a / |c_a - g|` (see above), or of the aggregate's aspect ratio.
+#. **Smoothed prolongation.** :math:`P = (I - \omega\, \mathrm{diag}_B(\hat A_F)^{-1} \hat A_F) P^{\mathrm{tent}}`,
+   AMGCL's own, shared with the translations of the block backend: :math:`\hat A_F` holds the strong connections, the
+   weak ones lumped onto the diagonal blocks, :math:`\mathrm{diag}_B` takes its node-wise :math:`B \times B` diagonal
+   blocks, and :math:`\omega` follows the tree's ``coarsening`` (``relax``, ``estimate_spectral_radius``,
    ``power_iters``). One damped block-Jacobi step widens every column by a layer of nodes and smooths away its jump at
    the aggregate's boundary. With the option ``"prolongation": "tentative"``, :math:`P = P^{\mathrm{tent}}`.
 #. **Galerkin coarse operator.** :math:`A_c = P^\mathsf{T} \hat A P`, with :math:`M = B (B + 1) / 2` coarse dofs per
-   aggregate, 6 in 3D and 3 in 2D, formed block by block.
-#. **The hierarchy below.** On aggregate :math:`a`, the field's rigid-body modes about the field's centroid :math:`g`
-   are :math:`V_a T_a = P^{\mathrm{tent}} R_a T_a`, with :math:`T_a` the identity plus, in its translation rows, the
-   rotations at :math:`c_a - g` (a rotation about :math:`g` is the rotation about :math:`c_a` plus a translation).
-   Their coefficients in the coarse basis, :math:`R_a T_a`, are the near-null-space of an AMGCL hierarchy on
-   :math:`A_c` -- AMGCL's own recursion takes :math:`R_a` the same way. The field's tree configures it as AMGCL would
-   configure its next level: the strong-connection threshold halved, the :math:`M` dofs of an aggregate one point
-   (``aggr.block_size``).
+   aggregate, 6 in 3D and 3 in 2D, formed block by block, in :math:`M \times M` blocks, and handed to AMGCL unblocked
+   to a scalar matrix: a dropped mode's coarse dof gets the mean of the kept diagonal entries as its diagonal entry,
+   and the zeros of its row and column stay stored -- AMGCL's aggregation below takes the largest entry of every
+   :math:`M \times M` block, which they do not change.
+#. **The hierarchy below.** On aggregate :math:`a`, the field's rigid-body modes are :math:`V_a = P^{\mathrm{tent}} R_a`:
+   their coefficients in the coarse basis, :math:`R_a`, are the near-null-space of an AMGCL hierarchy on
+   :math:`A_c`, as in AMGCL's own recursion. The field's tree configures it as AMGCL would configure its next level:
+   the strong-connection threshold halved, the :math:`M` dofs of an aggregate one point (``aggr.block_size``), in a
+   scalar hierarchy.
+
+What runs outside AMGCL is steps 2 to 5: the tentative prolongation (in :math:`B \times M` blocks), its smoothing
+(AMGCL's own algorithm, on those blocks), the Galerkin product (in :math:`M \times M` blocks) and its unblocking; the
+aggregates of step 1 and the hierarchy below are AMGCL's. AMGCL's ``as_scalar`` coarsening, which would run a scalar
+smoothed aggregation with all modes on the block backend, is not used, for three reasons: it re-blocks the prolongation
+into :math:`B \times B` blocks, which the :math:`M = 3` modes of a 2D field do not fit; its Householder QR keeps an
+orthonormal completion of a dependent mode instead of dropping it; and its modes are not zero on the Dirichlet rows.
+And AMGCL's sparse products take one block type, where the Galerkin product chains :math:`B \times B`,
+:math:`B \times M` and :math:`M \times B` blocks: so the blocks have kernels of their own.
 
 One application is the two-grid cycle the p-two-grid uses too: restriction :math:`P^\mathsf{T} r`, one V-cycle of the
 hierarchy below, prolongation, and the fine Chebyshev sweeps of the tree (``npre`` before, ``npost`` after the
 coarse-grid correction: 0 and 1, degree 16, in the default trees), with the Dirichlet rows decoupled exactly.
 :math:`P` and :math:`P^\mathsf{T}` are stored like the fine level (in float with the 3D default tree), every sum in
 double. With the translations alone in place of all modes, the construction *is* AMGCL's first level on the block
-backend -- the same aggregates, tentative prolongation, smoothing and Galerkin product -- except on the Dirichlet
-rows, where AMGCL's translations are not zero. A test of the suite checks that, on a system without Dirichlet rows,
+backend -- the same aggregates, tentative prolongation, smoothing and Galerkin product, :math:`M = B` -- except on the
+Dirichlet rows, where AMGCL's translations are not zero. A test of the suite checks that, on a system without Dirichlet rows,
 the two preconditioners then agree up to the spectral-radius estimate of the fine smoother (AMGCL's power iteration
 starts from random vectors, the cycle's from a deterministic one): what the rigid-body coarse level adds is the
 rotations.
@@ -1412,8 +1425,8 @@ What it does not fix:
 
    Outer iterations of ``blockamg`` to a relative residual of 1e-6 on the displacement block alone (one cycle per
    outer iteration, the hierarchies built for the system): AMGCL's hierarchy on the translations (``false``), the
-   rigid-body coarse level (the default), and its control with the translations alone -- the same construction with
-   the rotations left out. The first system is the elastic stiffness of the testfile deck
+   rigid-body coarse level (the default), and its control with the translations alone -- the same construction on the
+   translations, :math:`M = B`. The first system is the elastic stiffness of the testfile deck
    ``testfiles/edelweiss-only/CantileverBeamHexa20BlockAMGRigidBody``, a slender cantilever of quadratic hexahedra; the
    others are captured systems of larger models.
 
@@ -1432,7 +1445,7 @@ What it does not fix:
        * - tunnel segment, elastic (1.37 M)
          - 67
          - 22
-         - 68
+         - 69
        * - tunnel segment, damaged (1.37 M)
          - 61
          - 36
@@ -1500,7 +1513,8 @@ aggregation, as the default trees do. All of this is checked for the fields name
 a field whose tree is the default one again at the first solve, when its dimension is known. The options of a field:
 
 ``prolongation`` (``"smoothed"``)
-    ``"smoothed"``: :math:`P = (I - \omega D_F^{-1} \hat A_F) P^{\mathrm{tent}}`. ``"tentative"``:
+    ``"smoothed"``: :math:`P = (I - \omega\, \mathrm{diag}_B(\hat A_F)^{-1} \hat A_F) P^{\mathrm{tent}}`.
+    ``"tentative"``:
     :math:`P^{\mathrm{tent}}` itself -- a cheaper setup and a sparser coarse operator, for more outer iterations (32
     instead of 22 on the elastic tunnel system).
 ``coarseHierarchyPrecision`` (``"double"``)

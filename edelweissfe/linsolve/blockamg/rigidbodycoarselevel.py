@@ -46,20 +46,23 @@ it, and the outer Krylov solve pays with iterations.
 What
 ----
 
-The rigid-body coarse level keeps the fine level of the block backend -- the field's equilibrated block ``D K D`` in
-node-wise blocks, smoothed by the Chebyshev polynomial of the field's tree -- and builds the first coarse level itself,
-from all rigid-body modes:
+The rigid-body coarse level keeps the fine level of the block backend -- the field's equilibrated block
+:math:`\\hat A = D A D` in node-wise blocks, smoothed by the Chebyshev polynomial of the field's tree -- and builds the
+first coarse level itself, from all rigid-body modes:
 
 #. **aggregates**: AMGCL's plain aggregation of the nodes, as AMGCL's own first level on the block backend;
-#. **tentative prolongation**: per aggregate, its rigid-body modes about its centroid, divided by the equilibration
-   (the near null-space of ``D K D`` is ``D^-1`` times that of ``K``) and zero on the Dirichlet rows (which the cycle
-   solves exactly), made orthonormal by a QR factorization. A mode that depends linearly on the ones before it -- a
-   rotation of a single-node aggregate, the rotation about the line through a collinear aggregate, a mode whose
-   components are all constrained -- is dropped;
-#. **smoothed prolongation**: ``P = (I - omega D_F^-1 A_F) P_tent``, AMGCL's;
-#. **Galerkin coarse operator**: ``A_c = P^T A P``, 6 coarse dofs per aggregate in 3D (3 in 2D), on which an AMGCL
-   hierarchy continues the field's tree, with the coefficients of the rigid-body modes in the coarse basis as its near
-   null-space.
+#. **tentative prolongation**: the field's rigid-body modes about its centroid, divided by the equilibration (the near
+   null-space of :math:`\\hat A` is :math:`D^{-1}` times that of :math:`A`) -- built in Python by
+   :func:`~edelweissfe.linsolve.nullspace.rigidBodyNullspace`, the one definition of the modes, and handed to C++ --
+   restricted to every aggregate, zero on the Dirichlet rows (which the cycle solves exactly), and made orthonormal by
+   a QR factorization, as AMGCL's tentative prolongation does with a near null-space. A mode that depends linearly on
+   the ones before it -- a rotation of a single-node aggregate, the rotation about the line through a collinear
+   aggregate, a mode whose components are all constrained -- is dropped;
+#. **smoothed prolongation**: :math:`P = (I - \\omega\\, \\mathrm{diag}_B(\\hat A_F)^{-1} \\hat A_F) P_{tent}`,
+   AMGCL's, with :math:`\\mathrm{diag}_B` the node-wise :math:`B \\times B` diagonal blocks of the filtered operator;
+#. **Galerkin coarse operator**: :math:`A_c = P^T \\hat A P`, 6 coarse dofs per aggregate in 3D (3 in 2D), on which an
+   AMGCL hierarchy continues the field's tree, with the R factors of the QR factorizations -- the coefficients of the
+   rigid-body modes in the coarse basis -- as its near null-space.
 
 One application is the two-grid cycle the p-two-grid (:mod:`~edelweissfe.linsolve.blockamg.ptwogrid`) uses too:
 restriction of the residual, one V-cycle of the AMGCL hierarchy, prolongation, and the fine Chebyshev sweeps. Everything
@@ -83,7 +86,9 @@ few iterations it gains little. The theory page of ``blockamg`` has the measurem
 
 import numpy as np
 
+from edelweissfe.linsolve.base import FieldBlock
 from edelweissfe.linsolve.blockamg.twogrid import TwoGridPreconditioner
+from edelweissfe.linsolve.nullspace import rigidBodyNullspace
 
 #: The options of the rigid-body coarse level of a field and their defaults: ``true`` for a field takes them all, an
 #: object changes some of them (``blockamg`` key ``rigidBodyCoarseLevel``).
@@ -121,7 +126,8 @@ def optionsRejection(value) -> "str | None":
 class RigidBodyCoarseLevelPreconditioner(TwoGridPreconditioner):
     """The preconditioner of one vector field with a rigid-body coarse level (see the module docstring): a two-grid
     preconditioner (:class:`~edelweissfe.linsolve.blockamg.twogrid.TwoGridPreconditioner`) whose coarse level is spanned
-    by the rigid-body modes of the aggregates.
+    by the rigid-body modes of the aggregates. The C++ class takes any near null-space; this class hands it the
+    rigid-body modes (:meth:`nearNullspace`).
 
     Parameters
     ----------
@@ -145,11 +151,6 @@ class RigidBodyCoarseLevelPreconditioner(TwoGridPreconditioner):
     fineSpectralRadius, fineDominantVector
         A previous build's fine spectral radius and dominant vector to start from (``fineSpectralRadiusReuse``), or
         ``None`` to estimate the radius in full, see :class:`~edelweissfe.linsolve.blockamg.twogrid.TwoGridPreconditioner`.
-    rotations
-        ``False`` leaves the rotations out of the coarse space, which then is AMGCL's own on the block backend (the
-        translations): the control for tests and measurements, not a configuration option. It is this construction
-        with the rotations left out, rather than AMGCL's own hierarchy, so that the control differs from the rigid-body
-        coarse level in the rotations alone; a test checks that it reproduces AMGCL's first coarse level to rounding.
 
     Raises
     ------
@@ -166,7 +167,6 @@ class RigidBodyCoarseLevelPreconditioner(TwoGridPreconditioner):
         coarseHierarchyPrecision: str = DEFAULT_OPTIONS["coarseHierarchyPrecision"],
         fineSpectralRadius: float = None,
         fineDominantVector=None,
-        rotations: bool = True,
     ):
         from edelweissfe.linsolve.amgcl.amgcl import PyAMGCLRigidBodyCoarseLevel
 
@@ -178,30 +178,41 @@ class RigidBodyCoarseLevelPreconditioner(TwoGridPreconditioner):
                 "backendPrecision": backendPrecision,
                 "prolongation": prolongation,
                 "coarseHierarchyPrecision": coarseHierarchyPrecision,
-                "rotations": rotations,
                 "amgcl": amgclTree,
             },
             fineSpectralRadius,
             fineDominantVector,
         )
 
+    @staticmethod
+    def nearNullspace(block: FieldBlock, coordinates: np.ndarray, scaling: np.ndarray) -> np.ndarray:
+        """The near null-space whose vectors span the coarse space of every aggregate: the field's rigid-body modes,
+        divided by the equilibration -- :func:`~edelweissfe.linsolve.nullspace.rigidBodyNullspace`, the one definition
+        of the modes (6 in 3D, 3 in 2D). The C++ class takes any near null-space of ``B`` or ``B (B + 1) / 2`` columns;
+        a subclass may hand it another (the tests' control takes the translations, AMGCL's own coarse space)."""
+        return rigidBodyNullspace(block, coordinates, scaling)
+
     def build(self, A, scaling, coordinates) -> None:
-        """Build the rigid-body coarse level, the AMGCL hierarchy below it and the fine smoother, all in C++.
+        """Build the rigid-body coarse level, the AMGCL hierarchy below it and the fine smoother, all in C++, on the
+        near null-space of :meth:`nearNullspace`.
 
         Parameters
         ----------
         A
-            The field's equilibrated diagonal block ``D K D`` (scipy CSR), node-major, with its Dirichlet identity rows.
+            The field's equilibrated diagonal block :math:`\\hat A = D A D` (scipy CSR), node-major, with its Dirichlet
+            identity rows.
         scaling
-            The field's slice of the equilibration vector ``D``: the modes are divided by it.
+            The field's slice of the equilibration :math:`D`: the modes are divided by it.
         coordinates
             The field's node coordinates in its dof order, ``(nNodes, >= blockSize)`` (columns beyond the field's
-            dimension, e.g. ``z`` of a 2D field, are ignored); required.
+            dimension, e.g. ``z`` of a 2D field, are ignored): the modes are built from them.
         """
+        if coordinates is None:
+            raise ValueError("rigidBodyCoarseLevel: needs the field's node coordinates to build its rigid-body modes")
+        block = FieldBlock("rigidBodyCoarseLevel", 0, A.shape[0], self._blockSize)
         self._preconditioner.build(
             A,
-            np.ascontiguousarray(np.asarray(coordinates, dtype=float)[:, : self._blockSize]),
-            scaling,
+            self.nearNullspace(block, coordinates, scaling),
             self._suppliedFineSpectralRadius(),
             self._fineDominantVector,
         )
@@ -213,7 +224,7 @@ class RigidBodyCoarseLevelPreconditioner(TwoGridPreconditioner):
 
     @property
     def nCoarse(self) -> int:
-        """The coarse dofs: one per rigid-body mode of every aggregate."""
+        """The coarse dofs: one per mode of the near null-space on every aggregate."""
         return self._preconditioner.nCoarse
 
     @property
@@ -236,11 +247,12 @@ class RigidBodyCoarseLevelPreconditioner(TwoGridPreconditioner):
         return self._preconditioner.prolongationMatrix()
 
     def coarseOperator(self):
-        """The Galerkin coarse operator ``P^T A P`` as the hierarchy below holds it, a scipy CSR matrix (for
+        """The Galerkin coarse operator ``P^T \\hat A P`` as the hierarchy below holds it, a scipy CSR matrix (for
         inspection); a dropped mode has a zero row and column but for its diagonal entry."""
         return self._preconditioner.coarseOperator()
 
     def coarseNullspace(self) -> np.ndarray:
-        """The near null-space of the hierarchy below: the coefficients of the field's rigid-body modes, about its
-        centroid, in the coarse basis (for inspection)."""
+        """The near null-space of the hierarchy below: the coefficients of the near null-space -- the field's
+        rigid-body modes, about its centroid -- in the coarse basis, per aggregate the R factor of its QR factorization
+        (for inspection)."""
         return self._preconditioner.coarseNullspace()

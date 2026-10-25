@@ -77,18 +77,29 @@ from edelweissfe.linsolve.nullspace import (  # noqa: E402
 )
 
 
+class _TranslationsOnly(RigidBodyCoarseLevelPreconditioner):
+    """The control of the construction: the coarse level on the translations alone, M = B -- AMGCL's own coarse space
+    on the block backend, so that it differs from the rigid-body coarse level in the rotations alone."""
+
+    @staticmethod
+    def nearNullspace(block, coordinates, scaling):
+        return translationNullspace(block, scaling)
+
+
 def _equilibratedBeam(dimension: int):
-    """The equilibrated propped cantilever: ``D K D``, ``D``, the node coordinates and the constrained dofs."""
+    """The equilibrated propped cantilever: ``\\hat A = D A D``, ``D``, the node coordinates and the constrained
+    dofs."""
     K, coordinates, constrained = slenderBeam(dimension)
     As, scaling = equilibrated(K)
     return As, scaling, coordinates, constrained
 
 
-def _preconditioner(dimension: int, backendPrecision: str = "double", **options) -> RigidBodyCoarseLevelPreconditioner:
-    """The rigid-body coarse level of the default tree of a field of this dimension, stored in backendPrecision."""
-    return RigidBodyCoarseLevelPreconditioner(
-        _amgclTree(_defaultFieldPrecond(dimension)), dimension, backendPrecision, **options
-    )
+def _preconditioner(
+    dimension: int, backendPrecision: str = "double", kind=RigidBodyCoarseLevelPreconditioner, **options
+) -> RigidBodyCoarseLevelPreconditioner:
+    """The rigid-body coarse level (or its control, ``kind``) of the default tree of a field of this dimension, stored in
+    backendPrecision."""
+    return kind(_amgclTree(_defaultFieldPrecond(dimension)), dimension, backendPrecision, **options)
 
 
 def _relativeDifference(x, y) -> float:
@@ -121,8 +132,8 @@ def _assertGalerkinCoarseOperator(preconditioner, As) -> np.ndarray:
 
 
 def _scaledGrid(n: int):
-    """A grid of n^3 nodes with 3 coupled components each, rows scaled over two decades, equilibrated: ``D K D``,
-    ``D`` and the node coordinates."""
+    """A grid of n^3 nodes with 3 coupled components each, rows scaled over two decades, equilibrated:
+    ``\\hat A = D A D``, ``D`` and the node coordinates."""
     stiffness = sp.kron(gridLaplacian(n) + 0.01 * sp.identity(n**3), NODAL_COUPLING)
     rowScaling = sp.diags(10.0 ** np.random.default_rng(3).uniform(0.0, 2.0, 3 * n**3))
     As, scaling = equilibrated((rowScaling @ stiffness @ rowScaling).tocsr())
@@ -140,7 +151,7 @@ def _levelTable(report: str) -> list:
 
 def _collinearChain(direction, nNodes: int = 40):
     """A chain of nodes along ``direction``, every aggregate collinear: the rotation about its line is no displacement
-    at all. ``D K D`` of a chain of nodal blocks, ``D`` and the node coordinates."""
+    at all. ``\\hat A = D A D`` of a chain of nodal blocks, ``D`` and the node coordinates."""
     chain = sp.diags([-1.0, 2.01, -1.0], [-1, 0, 1], shape=(nNodes, nNodes))
     As, scaling = equilibrated(sp.kron(chain, NODAL_COUPLING).tocsr())
     unit = np.asarray(direction, dtype=float) / np.linalg.norm(direction)
@@ -267,8 +278,8 @@ def test_modes_whose_components_are_all_constrained_are_dropped():
 
 
 def test_the_translations_alone_are_amgcls_own_first_coarse_level():
-    # The control of the construction: with the rotations left out, the coarse space of every aggregate is spanned by
-    # its translations D^-1 t, as in AMGCL's hierarchy on the block backend with blockTranslationNullspace -- the same
+    # The control of the construction: on the translations alone, the coarse space of every aggregate is spanned by its
+    # translations D^-1 t, as in AMGCL's hierarchy on the block backend with blockTranslationNullspace -- the same
     # aggregates, the same tentative prolongation (per component, normalized), the same smoothing and the same
     # Galerkin product. With both coarse levels solved directly, the two preconditioners then differ only by the
     # spectral-radius estimate of the fine Chebyshev smoother (AMGCL's from per-thread random vectors, the two-grid
@@ -290,7 +301,7 @@ def test_the_translations_alone_are_amgcls_own_first_coarse_level():
     amgcl.build(As)
     assert hierarchyLevels(amgcl) == 2
 
-    translations = RigidBodyCoarseLevelPreconditioner(_amgclTree(tree), 3, "double", rotations=False)
+    translations = _TranslationsOnly(_amgclTree(tree), 3, "double")
     translations.build(As, scaling, coordinates)
     rigidBody = RigidBodyCoarseLevelPreconditioner(_amgclTree(tree), 3, "double")
     rigidBody.build(As, scaling, coordinates)
@@ -309,19 +320,22 @@ def test_the_translations_alone_are_amgcls_own_first_coarse_level():
     assert _relativeDifference(rigidBody.applyPreconditioner(r), expected) > 1e-3
 
 
-@pytest.mark.parametrize("rotations", [True, False], ids=["rigid-body modes", "translations alone"])
-def test_the_hierarchy_below_takes_the_modes_of_an_aggregate_as_one_point_on_every_level(rotations):
+@pytest.mark.parametrize(
+    "kind, modes",
+    [(RigidBodyCoarseLevelPreconditioner, 6), (_TranslationsOnly, 3)],
+    ids=["rigid-body modes", "translations alone"],
+)
+def test_the_hierarchy_below_takes_the_modes_of_an_aggregate_as_one_point_on_every_level(kind, modes):
     # Below the rigid-body coarse level, AMGCL coarsens A_c further. It gives every aggregate of a level one coarse dof
-    # per column of the near null-space and keeps aggr.block_size from level to level, so the dofs of an aggregate are
-    # one point on every level below only if aggr.block_size is the number of modes in the coarse space: 6 with the
-    # rotations, 3 without (where the padded rotation dofs of an aggregate are a point of their own, which has no strong
-    # connection). Checked on three levels below against AMGCL's own hierarchy of the same coarse operator.
+    # per column of the near null-space and keeps aggr.block_size from level to level, so the M dofs of an aggregate are
+    # one point on every level below if aggr.block_size is M, the number of modes: 6 with the rotations, 3 without.
+    # Checked on three levels below against AMGCL's own hierarchy of the same coarse operator.
     As, scaling, coordinates = _scaledGrid(12)
     tree = _defaultFieldPrecond(3) | {"coarse_enough": 20}
-    preconditioner = RigidBodyCoarseLevelPreconditioner(_amgclTree(tree), 3, "double", rotations=rotations)
+    preconditioner = kind(_amgclTree(tree), 3, "double")
     preconditioner.build(As, scaling, coordinates)
+    assert preconditioner.nCoarse == modes * preconditioner.nAggregates
 
-    modes = 6 if rotations else 3
     coarsening = tree["coarsening"] | {"aggr": {"eps_strong": 0.5 * tree["coarsening"]["aggr"]["eps_strong"]}}
     coarsening["aggr"]["block_size"] = modes
     reference = PyAMGCLSolver(
@@ -399,12 +413,13 @@ def test_the_rotations_cut_the_iterations_of_a_bending_dominated_beam(dimension)
     # aggregate. The translations alone cannot represent it, the rotations can.
     As, scaling, coordinates, _ = _equilibratedBeam(dimension)
     iterations = {}
-    for rotations in (False, True):
-        preconditioner = _preconditioner(dimension, rotations=rotations)
+    for kind in (_TranslationsOnly, RigidBodyCoarseLevelPreconditioner):
+        preconditioner = _preconditioner(dimension, kind=kind)
         preconditioner.build(As, scaling, coordinates)
-        iterations[rotations] = gmresIterations(As, preconditioner)
-    print("GMRES iterations, translations alone / rigid-body modes:", iterations[False], iterations[True])
-    assert iterations[True] <= GMRES_CAP and iterations[True] < 0.5 * iterations[False]
+        iterations[kind] = gmresIterations(As, preconditioner)
+    translations, rigidBody = iterations[_TranslationsOnly], iterations[RigidBodyCoarseLevelPreconditioner]
+    print("GMRES iterations, translations alone / rigid-body modes:", translations, rigidBody)
+    assert rigidBody <= GMRES_CAP and rigidBody < 0.5 * translations
 
 
 def test_float_storage_rounds_only_the_stored_entries():
@@ -457,13 +472,19 @@ def test_a_fully_constrained_field_is_the_identity():
     assert "identity" in preconditioner.report()
 
 
-def test_coordinates_of_other_nodes_are_refused():
+def test_coordinates_of_other_nodes_and_a_near_null_space_it_cannot_take_are_refused():
     As, scaling, coordinates, _ = _equilibratedBeam(3)
     preconditioner = _preconditioner(3)
-    with pytest.raises(RuntimeError, match="not the field's nodes"):
+    with pytest.raises(ValueError, match="node coordinates .* have {:} rows".format(len(coordinates) - 1)):
         preconditioner.build(As, scaling, coordinates[:-1])
     with pytest.raises(RuntimeError, match="no preconditioner built"):
         preconditioner.applyPreconditioner(np.ones(As.shape[0]))
+    # the C++ class takes the translations or all rigid-body modes, as many rows as the field has dofs
+    native = preconditioner._preconditioner
+    with pytest.raises(RuntimeError, match="near null-space of 3 columns .* or 6 .*, got 4"):
+        native.build(As, np.ones((As.shape[0], 4)))
+    with pytest.raises(RuntimeError, match="near null-space has {:} rows".format(As.shape[0] - 3)):
+        native.build(As, np.ones((As.shape[0] - 3, 6)))
 
 
 @pytest.mark.parametrize(

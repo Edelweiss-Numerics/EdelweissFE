@@ -40,7 +40,7 @@
 namespace amgcl {
   namespace coarsening {
 
-    /// @brief The damping weight omega of the prolongation smoothing P = (I - omega D_F^-1 A_F) P_tent (see
+    /// @brief The damping weight omega of the prolongation smoothing P = (I - omega diag_B(A_F)^-1 A_F) P_tent (see
     /// smoothed_prolongation()), chosen as AMGCL's smoothed aggregation chooses it.
     ///
     /// One damped block-Jacobi step reduces the error components with the largest eigenvalues of D^-1 A most: with
@@ -74,8 +74,10 @@ namespace amgcl {
       return omega;
     }
 
-    /// @brief The smoothed prolongation P = (I - omega D_F^-1 A_F) P_tent of smoothed aggregation: one damped
-    /// block-Jacobi step applied to every column of the tentative prolongation.
+    /// @brief The smoothed prolongation P = (I - omega diag_B(A_F)^-1 A_F) P_tent of smoothed aggregation: one damped
+    /// block-Jacobi step applied to every column of the tentative prolongation, diag_B(A_F) the node-wise B x B
+    /// diagonal blocks of A_F. (A is the level's operator: the equilibrated \hat A = D A D on the first level of
+    /// blockamg.)
     ///
     /// A column of P_tent is a near-null-space vector cut off at the boundary of its aggregate, so it jumps there, and
     /// its energy is large. The Jacobi step smooths the jump away and widens the column by one layer of nodes, so that
@@ -83,9 +85,10 @@ namespace amgcl {
     /// what the coarse-grid correction is for.
     ///
     /// The step is taken with the filtered operator A_F: its off-diagonal blocks are those of the strong connections
-    /// only (from the aggregation), and the blocks of the weak ones are lumped onto the diagonal block, D_F = a_ii +
-    /// sum of the weak a_ij of the row, so that A_F keeps the row sums of A. Filtering keeps P as sparse as the
-    /// aggregates are connected, instead of as wide as every (also numerically tiny) entry of A reaches.
+    /// only (from the aggregation), and the blocks of the weak ones are lumped onto the diagonal block,
+    /// diag_B(A_F)_ii = a_ii + sum of the weak a_ij of the row, so that A_F keeps the row sums of A. Filtering keeps P
+    /// as sparse as the aggregates are connected, instead of as wide as every (also numerically tiny) entry of A
+    /// reaches.
     ///
     /// @tparam Matrix the block CSR type of the operator, B x B blocks
     /// @tparam Prolongation the block CSR type of the tentative prolongation, B x M blocks (M = B for the

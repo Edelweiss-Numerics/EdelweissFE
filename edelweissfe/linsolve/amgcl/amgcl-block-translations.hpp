@@ -187,7 +187,7 @@ namespace amgcl {
       {
       }
 
-      /// @brief The prolongation P = (I - omega D_F^-1 A_F) P_tent and the restriction R = P^T, formed as
+      /// @brief The prolongation P = (I - omega diag_B(A_F)^-1 A_F) P_tent and the restriction R = P^T, formed as
       /// smoothed_aggregation::transfer_operators() forms them, with the tentative prolongation P_tent from the
       /// translations (which this replaces by the coarse level's).
       /// @tparam Matrix the block CSR type of the hierarchy build
@@ -212,7 +212,7 @@ namespace amgcl {
         auto P_tent = translation_tentative_prolongation< Matrix >( n, aggr.count, aggr.id, this->prm.nullspace );
         AMGCL_TOC( "tentative" );
 
-        // from here on smoothed_aggregation::transfer_operators(): P = (I - omega D_F^-1 A_F) P_tent
+        // from here on smoothed_aggregation::transfer_operators(): P = (I - omega diag_B(A_F)^-1 A_F) P_tent
         const scalar_type omega = prolongation_smoothing_weight( A,
                                                                  this->prm.relax,
                                                                  this->prm.estimate_spectral_radius,
