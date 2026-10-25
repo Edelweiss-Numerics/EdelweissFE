@@ -394,7 +394,9 @@ def _builtWithThreads(tmp_path, threads: int, estimate: bool) -> dict:
     environment = os.environ | {"OMP_NUM_THREADS": str(threads)}
     testDirectory = os.path.dirname(os.path.abspath(__file__))
     arguments = [testDirectory, str(output), "estimate" if estimate else "fixed"]
-    subprocess.run([sys.executable, "-c", _THREADS_SCRIPT, *arguments], env=environment, check=True)
+    # run in tmp_path: "python -c" puts its working directory first on sys.path, and in the repository root that is
+    # the source tree without the compiled extensions, which would shadow an installed package (as in CI)
+    subprocess.run([sys.executable, "-c", _THREADS_SCRIPT, *arguments], env=environment, cwd=tmp_path, check=True)
     return dict(np.load(output))
 
 
