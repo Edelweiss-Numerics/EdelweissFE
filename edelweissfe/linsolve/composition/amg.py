@@ -177,10 +177,32 @@ def takesBlockTranslations(fieldTree: dict) -> bool:
     return fieldTree.get("blockTranslationNullspace", False) is True and fieldTree.get("backendBlockSize", 1) > 1
 
 
+def isSignificant(values, rows, cols, sqrtAbsDiagonal: np.ndarray, tau: float) -> np.ndarray:
+    """Whether the entries ``values`` at the positions ``(rows, cols)`` pass the relative drop test of AMG's strength
+    of connection,
+
+    .. math::
+
+        \\lvert a_{ij} \\rvert \\geq \\tau \\sqrt{\\lvert a_{ii} a_{jj} \\rvert},
+
+    with ``sqrtAbsDiagonal`` holding :math:`\\sqrt{\\lvert a_{ii} \\rvert}`. The one definition of the test: the
+    filtered matrix of :func:`droppedSmallEntries` and the drop and thinning of the approximate Schur complement
+    (:mod:`~edelweissfe.linsolve.composition.schurcomplement`) use it. ``rows`` and ``cols`` broadcast against
+    ``values``: the row and the column of every stored entry of a sparse matrix, or ``rows[:, None]`` and
+    ``cols[None, :]`` for a dense block.
+
+    Returns
+    -------
+    np.ndarray
+        The keep mask, of the shape of ``values``.
+    """
+    return np.abs(values) >= tau * sqrtAbsDiagonal[rows] * sqrtAbsDiagonal[cols]
+
+
 def droppedSmallEntries(A: sp.csr_matrix, dropTolerance: float, lumpDroppedEntries: bool = False) -> sp.csr_matrix:
     """The *filtered* matrix :math:`\\tilde A` of ``A`` that a preconditioner is built on: the off-diagonal entries
-    with :math:`\\lvert a_{ij} \\rvert < \\tau \\sqrt{\\lvert a_{ii} a_{jj} \\rvert}` dropped,
-    :math:`\\tau` = ``dropTolerance``. The diagonal is always kept, so no row is emptied. Shared by :class:`AMG` and
+    that fail the relative drop test (:func:`isSignificant`) at :math:`\\tau` = ``dropTolerance`` dropped. The diagonal
+    is always kept, so no row is emptied. Shared by :class:`AMG` and
     :class:`~edelweissfe.linsolve.composition.twolevel.TwoLevel`.
 
     Why: some operators (e.g. of RKPM) store many entries per row whose median off-diagonal is orders of magnitude
@@ -202,10 +224,9 @@ def droppedSmallEntries(A: sp.csr_matrix, dropTolerance: float, lumpDroppedEntri
         matrix" of the AMG literature). For elasticity, whose off-diagonals are mostly negative, this weakens the
         diagonal dominance; whether that helps depends on the operator.
     """
-    diagonal = np.abs(A.diagonal())
     coo = A.tocoo()
-    scale = np.sqrt(diagonal[coo.row] * diagonal[coo.col])
-    keep = (coo.row == coo.col) | (np.abs(coo.data) >= dropTolerance * scale)
+    sqrtAbsDiagonal = np.sqrt(np.abs(A.diagonal()))
+    keep = (coo.row == coo.col) | isSignificant(coo.data, coo.row, coo.col, sqrtAbsDiagonal, dropTolerance)
     filtered = sp.coo_matrix((coo.data[keep], (coo.row[keep], coo.col[keep])), shape=A.shape).tocsr()
     if lumpDroppedEntries:
         droppedRowSums = np.bincount(coo.row[~keep], weights=coo.data[~keep], minlength=A.shape[0])

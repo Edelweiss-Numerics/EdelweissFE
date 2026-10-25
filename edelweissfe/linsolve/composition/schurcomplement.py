@@ -100,6 +100,7 @@ from scipy.sparse.csgraph import connected_components, reverse_cuthill_mckee
 import edelweissfe.utils.performancetiming as performancetiming
 from edelweissfe.adaptivity.marking import RefineableElements
 from edelweissfe.linsolve.base import FieldBlock
+from edelweissfe.linsolve.composition.amg import isSignificant
 from edelweissfe.linsolve.composition.base import (
     Description,
     Preconditioner,
@@ -372,7 +373,7 @@ class SchurComplementCondensation:
     def _localSchurComplement(self, A_kk: sp.csr_matrix) -> sp.csr_matrix:
         """:math:`A_{kk}` minus the corrections of the windows and of the zones, with small entries dropped."""
         tau = self._dropTolerance
-        sqrtDiagonalOfA_kk = np.sqrt(np.abs(A_kk.diagonal()))
+        sqrtAbsDiagonalOfA_kk = np.sqrt(np.abs(A_kk.diagonal()))
         # The correction of every window or batch is thinned against A_kk's diagonal at a tenth of the drop tolerance
         # before the parts are summed, which bounds the memory; the final drop is against the diagonal of S~ itself.
         thinningTolerance = 0.1 * tau
@@ -383,12 +384,12 @@ class SchurComplementCondensation:
         with performancetiming.timeit("schur windows"):
             pool = getThreadPool(getNumberOfThreads())
             for part in pool.map(
-                lambda window: self._windowCorrection(window, sqrtDiagonalOfA_kk, thinningTolerance), windows
+                lambda window: self._windowCorrection(window, sqrtAbsDiagonalOfA_kk, thinningTolerance), windows
             ):
                 if part is not None:
                     parts.append(part)
         with performancetiming.timeit("schur exact correction"):
-            parts += self._exactCorrection(zoneDofs, sqrtDiagonalOfA_kk, thinningTolerance)
+            parts += self._exactCorrection(zoneDofs, sqrtAbsDiagonalOfA_kk, thinningTolerance)
 
         with performancetiming.timeit("schur assembly"):
             if parts:
@@ -444,7 +445,7 @@ class SchurComplementCondensation:
         zoneDofs = np.sort(np.concatenate(zoneDofs)) if zoneDofs else np.empty(0, dtype=np.int64)
         return windows, zoneDofs
 
-    def _windowCorrection(self, window: tuple, sqrtDiagonalOfA_kk: np.ndarray, thinningTolerance: float):
+    def _windowCorrection(self, window: tuple, sqrtAbsDiagonalOfA_kk: np.ndarray, thinningTolerance: float):
         """The correction :math:`A_{kb} A_{bb}^{-1} A_{bk}` of one window's core, in which :math:`A_{bb}^{-1}` is
         replaced by the inverse of the window's block :math:`A_{ww}`. Only the core rows of that inverse are needed,
         :math:`(A_{ww}^{-1})_{core,:}`, far fewer right-hand sides than there are remaining dofs coupled to the window:
@@ -474,9 +475,11 @@ class SchurComplementCondensation:
         # the product above; transposed only because SciPy's sparse factor (A_bk) must multiply from the left
         coreTimesInverse = A_kb_core[coupledToCore] @ inverseRowsOfCore
         correction = (A_bk_window[:, coupledToWindow].T @ coreTimesInverse.T).T
-        return _significantEntries(correction, coupledToCore, coupledToWindow, sqrtDiagonalOfA_kk, thinningTolerance)
+        return _significantEntries(correction, coupledToCore, coupledToWindow, sqrtAbsDiagonalOfA_kk, thinningTolerance)
 
-    def _exactCorrection(self, zoneDofs: np.ndarray, sqrtDiagonalOfA_kk: np.ndarray, thinningTolerance: float) -> list:
+    def _exactCorrection(
+        self, zoneDofs: np.ndarray, sqrtAbsDiagonalOfA_kk: np.ndarray, thinningTolerance: float
+    ) -> list:
         """The exact correction :math:`A_{kz} A_{zz}^{-1} A_{zk}` of the zones (dofs ``zoneDofs`` of b): their block
         :math:`A_{zz}` of :math:`A_{bb}` (block diagonal over the components, so its inverse is the zones' part of
         :math:`A_{bb}^{-1}`) is factorized once, and solved for the remaining dofs coupled to the zones in batches of
@@ -502,7 +505,9 @@ class SchurComplementCondensation:
             rightHandSides = A_bk_zones[:, columns].toarray()
             X = np.asarray(self._zoneSolver.solveFactorized(rightHandSides)).reshape(rightHandSides.shape)
             correction = A_kb_zones @ X
-            parts.append(_significantEntries(correction, coupledRows, columns, sqrtDiagonalOfA_kk, thinningTolerance))
+            parts.append(
+                _significantEntries(correction, coupledRows, columns, sqrtAbsDiagonalOfA_kk, thinningTolerance)
+            )
         return parts
 
 
@@ -540,27 +545,29 @@ def _split(A: sp.csr_matrix, which: tuple, condensedDofs: np.ndarray, remainingD
 
 
 def _significantEntries(
-    correction: np.ndarray, rows: np.ndarray, cols: np.ndarray, sqrtDiagonal: np.ndarray, tolerance: float
+    correction: np.ndarray, rows: np.ndarray, cols: np.ndarray, sqrtAbsDiagonal: np.ndarray, tolerance: float
 ) -> tuple:
-    """The entries of a dense correction block (rows ``rows``, columns ``cols`` of k) of at least ``tolerance`` times
-    :math:`\\sqrt{|A_{ii} A_{jj}|}`, as ``(rows, cols, values)``."""
-    significant = np.abs(correction) >= tolerance * np.outer(sqrtDiagonal[rows], sqrtDiagonal[cols])
+    """The entries of a dense correction block (rows ``rows``, columns ``cols`` of k) that pass the relative drop test
+    at ``tolerance`` (:func:`~edelweissfe.linsolve.composition.amg.isSignificant`, against the diagonal of
+    :math:`A_{kk}`), as ``(rows, cols, values)``."""
+    significant = isSignificant(correction, rows[:, None], cols[None, :], sqrtAbsDiagonal, tolerance)
     i, j = np.nonzero(significant)
     return rows[i], cols[j], correction[i, j]
 
 
 def _dropSmallEntries(S: sp.csr_matrix, tau: float) -> sp.csr_matrix:
-    """``S`` without the entries :math:`|S_{ij}| < \\tau \\sqrt{|S_{ii} S_{jj}|}` and without stored zeros.
+    """``S`` without the entries that fail the relative drop test :math:`|S_{ij}| \\geq \\tau \\sqrt{|S_{ii} S_{jj}|}`
+    (:func:`~edelweissfe.linsolve.composition.amg.isSignificant`) and without stored zeros.
 
-    The simple form is ``S.data[small] = 0; S.eliminate_zeros()`` with ``small`` the condition above. For the tens of
-    millions of entries of a large model, this computes it for blocks of rows in parallel threads instead."""
-    s = np.sqrt(np.abs(S.diagonal()))
+    The simple form is ``S.data[~significant] = 0; S.eliminate_zeros()``. For the tens of millions of entries of a large
+    model, this computes it for blocks of rows in parallel threads instead."""
+    sqrtAbsDiagonal = np.sqrt(np.abs(S.diagonal()))
 
     def keptEntries(rowRange):
         low, high = rowRange
         entries = slice(S.indptr[low], S.indptr[high])
         rowOfEntry = np.repeat(np.arange(low, high), np.diff(S.indptr[low : high + 1]))
-        keep = np.abs(S.data[entries]) >= tau * s[rowOfEntry] * s[S.indices[entries]]
+        keep = isSignificant(S.data[entries], rowOfEntry, S.indices[entries], sqrtAbsDiagonal, tau)
         keep &= S.data[entries] != 0.0
         return (
             S.data[entries][keep],
