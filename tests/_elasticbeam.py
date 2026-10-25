@@ -30,6 +30,7 @@ hexahedra (3D) or of bilinear quadrilaterals in plane stress (2D), clamped at x 
 constrained) at the far end -- bending-dominated structures, whose smooth error rotates the cross-sections, with fully
 and partially constrained nodes."""
 
+import functools
 import itertools
 
 import numpy as np
@@ -37,36 +38,40 @@ import scipy.sparse as sp
 
 
 def _elasticityMatrix(dimension: int, youngsModulus: float, poissonsRatio: float) -> np.ndarray:
-    """The isotropic elasticity matrix in Voigt notation with engineering shear strains: 3D, or plane stress in 2D."""
+    """The isotropic elasticity matrix C in Voigt notation with engineering shear strains: 3D, or plane stress in
+    2D."""
     E, nu = youngsModulus, poissonsRatio
     if dimension == 2:
         return E / (1.0 - nu**2) * np.array([[1.0, nu, 0.0], [nu, 1.0, 0.0], [0.0, 0.0, 0.5 * (1.0 - nu)]])
     lame = E * nu / ((1.0 + nu) * (1.0 - 2.0 * nu))
     shear = E / (2.0 * (1.0 + nu))
-    D = np.zeros((6, 6))
-    D[:3, :3] = lame
-    D[np.arange(3), np.arange(3)] += 2.0 * shear
-    D[np.arange(3, 6), np.arange(3, 6)] = shear
-    return D
+    C = np.zeros((6, 6))
+    C[:3, :3] = lame
+    C[np.arange(3), np.arange(3)] += 2.0 * shear
+    C[np.arange(3, 6), np.arange(3, 6)] = shear
+    return C
 
 
-def _elementStiffness(elementSize: np.ndarray, D: np.ndarray) -> np.ndarray:
-    """The stiffness of a rectangular (2D) or brick (3D) element of the given edge lengths with 2 x 2 (x 2) Gauss
-    points; its nodes are the corners in lexicographic order of their reference coordinates (x fastest)."""
+def _elementStiffness(elementSize: np.ndarray, C: np.ndarray) -> np.ndarray:
+    """The stiffness K = sum over the Gauss points of B^T C B det J of a rectangular (2D) or brick (3D) element of the
+    given edge lengths, with 2 x 2 (x 2) Gauss points; its nodes are the corners in lexicographic order of their
+    reference coordinates (x fastest)."""
     dimension = len(elementSize)
     corners = np.array(list(itertools.product((-1.0, 1.0), repeat=dimension)))[:, ::-1]
-    jacobian = 0.5 * np.asarray(elementSize, dtype=float)
+    # the element is axis-aligned: the Jacobian dx/dxi of its map from the reference element is diagonal
+    dx_dxi = 0.5 * np.asarray(elementSize, dtype=float)
+    detJ = np.prod(dx_dxi)
     K = np.zeros((dimension * len(corners), dimension * len(corners)))
     for point in itertools.product((-1.0 / np.sqrt(3.0), 1.0 / np.sqrt(3.0)), repeat=dimension):
         point = np.asarray(point)
-        # the gradients of the shape functions N_i = prod_d (1 + xi_d xi_id) / 2 in physical coordinates
+        # the shape functions N_i = prod_d (1 + xi_d xi_id) / 2 and their derivatives, by the product rule
         factors = 0.5 * (1.0 + corners * point)
-        gradients = np.empty((len(corners), dimension))
+        dN_dxi = np.empty((len(corners), dimension))
         for d in range(dimension):
-            others = np.prod(np.delete(factors, d, axis=1), axis=1)
-            gradients[:, d] = 0.5 * corners[:, d] * others / jacobian[d]
-        B = np.zeros((D.shape[0], dimension * len(corners)))
-        for i, g in enumerate(gradients):
+            dN_dxi[:, d] = 0.5 * corners[:, d] * np.prod(np.delete(factors, d, axis=1), axis=1)
+        dN_dx = dN_dxi / dx_dxi
+        B = np.zeros((C.shape[0], dimension * len(corners)))
+        for i, g in enumerate(dN_dx):
             columns = slice(dimension * i, dimension * (i + 1))
             if dimension == 2:
                 B[:, columns] = [[g[0], 0.0], [0.0, g[1]], [g[1], g[0]]]
@@ -79,7 +84,7 @@ def _elementStiffness(elementSize: np.ndarray, D: np.ndarray) -> np.ndarray:
                     [g[2], 0.0, g[0]],
                     [g[1], g[0], 0.0],
                 ]
-        K += B.T @ D @ B * np.prod(jacobian)
+        K += B.T @ C @ B * detJ
     return K
 
 
@@ -134,9 +139,10 @@ def cantilever(elements: tuple, lengths: tuple, youngsModulus: float = 30000.0, 
     return K, coordinates, constrainedDofs
 
 
-def equilibrated(K):
-    """``D K D`` with ``D = diag(|k_ii|^-1/2)``, as blockamg equilibrates (CSR, sorted columns), and the diagonal of D."""
-    scaling = 1.0 / np.sqrt(np.abs(K.diagonal()))
-    As = (sp.diags(scaling) @ K @ sp.diags(scaling)).tocsr()
-    As.sort_indices()
-    return As, scaling
+@functools.lru_cache
+def slenderBeam(dimension: int):
+    """The propped cantilever of the tests, 16:1 slender: 32 x 2 x 2 hexahedra in 3D, 64 x 4 quadrilaterals in 2D
+    (see :func:`cantilever`, whose result it returns; cached, so not to be changed in place)."""
+    if dimension == 3:
+        return cantilever((32, 2, 2), (16.0, 1.0, 1.0))
+    return cantilever((64, 4), (16.0, 1.0))

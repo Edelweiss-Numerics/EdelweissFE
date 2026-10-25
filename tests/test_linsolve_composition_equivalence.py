@@ -371,17 +371,17 @@ def test_the_degradation_dumps_are_blockamgs_on_disk(tmp_path, monkeypatch):
 
 
 def test_a_dump_of_a_condensed_solve_holds_its_condensed_dofs(tmp_path, monkeypatch):
-    from test_linsolve_composition_components import _barOnFoundation, _FixedDofs
+    from _linsolvesystems import FixedCondensation, barOnFoundation
 
     monkeypatch.setattr(SolveDumps, "dumpsWritten", 0)
-    A, b, barDofs = _barOnFoundation(n=8)
+    A, b, barDofs = barOnFoundation(n=8)
     fields = [FieldBlock("u", 0, A.shape[0], 1)]
     solveA_bb = DirectSolver()
     root = LGMRES(
         SchurComplement(
             preconditionS=DiagonalScaling(Multiplicative([OnField("u", AMG())])),
             solveA_bb=solveA_bb,
-            condensation=_FixedDofs(barDofs, solveA_bb.newSolver),
+            condensation=FixedCondensation(barDofs, solveA_bb.newSolver),
         ),
         tolerance=FixedTolerance(1e-8),
     )

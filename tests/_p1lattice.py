@@ -32,7 +32,7 @@ one face and a single constrained component on another (partially constrained no
 
 import numpy as np
 import scipy.sparse as sp
-from _blockamgsystems import NODAL_COUPLING
+from _linsolvesystems import NODAL_COUPLING, equilibrated
 from scipy.spatial import cKDTree
 
 
@@ -77,11 +77,7 @@ def latticeSystem(coords, dirichletDofs, seed: int = 1):
     A[dirichletDofs, dirichletDofs] = 1.0
     A = A.tocsr()
     A.eliminate_zeros()
-    dinv = 1.0 / np.sqrt(np.abs(A.diagonal()))
-    As = sp.diags(dinv) @ A @ sp.diags(dinv)
-    As = As.tocsr()
-    As.sort_indices()
-    return As, dinv
+    return equilibrated(A)
 
 
 def dirichletDofs(coords):

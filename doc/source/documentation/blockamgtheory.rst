@@ -1440,7 +1440,7 @@ The whole method, written out with NumPy, SciPy and one AMGCL hierarchy per fiel
 displacement / damage system -- equilibration, field split, per-field AMG, one block Gauss--Seidel sweep as
 the preconditioner, and the outer Krylov solve -- and the same solve as a composed solver. It is a test
 of the test suite; ``displacementDamageSystem``, ``ExactFieldSolve`` and ``hierarchyLevels`` come from the
-suite's ``tests/_blockamgsystems.py``:
+suite's ``tests/_linsolvesystems.py``:
 
 .. literalinclude:: ../../../tests/test_blockamg_tutorial.py
    :start-after: # The worked example of the theory page.

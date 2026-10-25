@@ -32,7 +32,6 @@ Dirichlet rows stay out of the coarse space, linearly dependent modes are droppe
 alone it is AMGCL's own first coarse level) and its purpose (fewer iterations on a bending-dominated structure). Its
 place in the composed solvers is tested with them (test_linsolve_composition_*)."""
 
-import functools
 import os
 import re
 import subprocess
@@ -41,9 +40,15 @@ import sys
 import numpy as np
 import pytest
 import scipy.sparse as sp
-from _blockamgsystems import NODAL_COUPLING, gridLaplacian, hierarchyLevels
-from _elasticbeam import cantilever, equilibrated
-from scipy.sparse.linalg import LinearOperator, gmres
+from _elasticbeam import slenderBeam
+from _linsolvesystems import (
+    GMRES_CAP,
+    NODAL_COUPLING,
+    equilibrated,
+    gmresIterations,
+    gridLaplacian,
+    hierarchyLevels,
+)
 
 pytest.importorskip("edelweissfe.linsolve.amgcl.amgcl")
 
@@ -62,14 +67,6 @@ from edelweissfe.linsolve.nullspace import (  # noqa: E402
 )
 
 
-@functools.lru_cache
-def _beam(dimension: int):
-    """A propped cantilever, 16:1 slender: the stiffness, the node coordinates and the constrained dofs."""
-    if dimension == 3:
-        return cantilever((32, 2, 2), (16.0, 1.0, 1.0))
-    return cantilever((64, 4), (16.0, 1.0))
-
-
 class _TranslationsOnly(RigidBodyCoarseLevelPreconditioner):
     """The control of the construction: the coarse level on the translations alone, M = B -- AMGCL's own coarse space
     on the block backend, so that it differs from the rigid-body coarse level in the rotations alone."""
@@ -82,7 +79,7 @@ class _TranslationsOnly(RigidBodyCoarseLevelPreconditioner):
 def _equilibratedBeam(dimension: int):
     """The equilibrated propped cantilever: ``\\hat A = D A D``, ``D``, the node coordinates and the constrained
     dofs."""
-    K, coordinates, constrained = _beam(dimension)
+    K, coordinates, constrained = slenderBeam(dimension)
     As, scaling = equilibrated(K)
     return As, scaling, coordinates, constrained
 
@@ -142,19 +139,13 @@ def _levelTable(report: str) -> list:
     return [(int(m.group(2)), int(m.group(3))) for m in re.finditer(r"^\s+(\d+)\s+(\d+)\s+(\d+)\s", table, re.M)]
 
 
-#: The iteration budget of :func:`_gmresIterations`.
-_GMRES_CAP = 300
-
-
-def _gmresIterations(A, preconditioner) -> int:
-    """The iterations of (left-preconditioned, unrestarted) GMRES to a preconditioned relative residual of 1e-8, or
-    ``_GMRES_CAP + 1`` if it does not reach a true relative residual of 1e-5 within ``_GMRES_CAP``."""
-    b = np.random.default_rng(7).standard_normal(A.shape[0])
-    M = LinearOperator(A.shape, matvec=preconditioner.applyPreconditioner)
-    history = []
-    x, _ = gmres(A, b, M=M, rtol=1e-8, restart=_GMRES_CAP, maxiter=1, callback=history.append, callback_type="pr_norm")
-    converged = np.linalg.norm(b - A @ x) <= 1e-5 * np.linalg.norm(b)
-    return len(history) if converged and len(history) <= _GMRES_CAP else _GMRES_CAP + 1
+def _collinearChain(direction, nNodes: int = 40):
+    """A chain of nodes along ``direction``, every aggregate collinear: the rotation about its line is no displacement
+    at all. ``\\hat A = D A D`` of a chain of nodal blocks, ``D`` and the node coordinates."""
+    chain = sp.diags([-1.0, 2.01, -1.0], [-1, 0, 1], shape=(nNodes, nNodes))
+    As, scaling = equilibrated(sp.kron(chain, NODAL_COUPLING).tocsr())
+    unit = np.asarray(direction, dtype=float) / np.linalg.norm(direction)
+    return As, scaling, np.outer(np.arange(nNodes, dtype=float), unit)
 
 
 @pytest.mark.parametrize("dimension", [3, 2], ids=["3D, 6 modes", "2D, 3 modes"])
@@ -217,10 +208,7 @@ def test_a_collinear_aggregate_drops_the_rotation_about_its_line(direction):
     # an axis that rotation is one of the three modes, exactly zero; along an oblique line it is a combination of the
     # three, which the Gram-Schmidt sweeps reduce to rounding. Either is dropped, and the remaining modes still
     # reproduce all six rigid-body modes of the chain.
-    nNodes = 40
-    chain = sp.diags([-1.0, 2.01, -1.0], [-1, 0, 1], shape=(nNodes, nNodes))
-    As, scaling = equilibrated(sp.kron(chain, NODAL_COUPLING).tocsr())
-    coordinates = np.outer(np.arange(nNodes, dtype=float), np.asarray(direction) / np.linalg.norm(direction))
+    As, scaling, coordinates = _collinearChain(direction)
     preconditioner = _preconditioner(3, prolongation="tentative")
     preconditioner.build(As, scaling, coordinates)
 
@@ -241,10 +229,7 @@ def test_the_coarse_dof_of_a_dropped_mode_is_padded(prolongation):
     # The Galerkin product of a chain, whose aggregates all drop a rotation: a dropped mode has a zero column of P, and
     # its coarse dof is padded with the mean of the kept diagonal entries, which keeps A_c regular for the hierarchy
     # below. The cycle is unaffected: P^T maps every residual to zero there, and P never prolongates it.
-    nNodes = 40
-    chain = sp.diags([-1.0, 2.01, -1.0], [-1, 0, 1], shape=(nNodes, nNodes))
-    As, scaling = equilibrated(sp.kron(chain, NODAL_COUPLING).tocsr())
-    coordinates = np.outer(np.arange(nNodes, dtype=float), np.array([1.0, 2.0, 3.0]) / np.sqrt(14.0))
+    As, scaling, coordinates = _collinearChain((1.0, 2.0, 3.0))
     preconditioner = _preconditioner(3, prolongation=prolongation)
     preconditioner.build(As, scaling, coordinates)
     dropped = _assertGalerkinCoarseOperator(preconditioner, As)
@@ -367,24 +352,21 @@ def test_the_hierarchy_below_takes_the_modes_of_an_aggregate_as_one_point_on_eve
 _THREADS_SCRIPT = """
 import sys
 import numpy as np
-from scipy.sparse.linalg import LinearOperator, gmres
 sys.path.insert(0, sys.argv[1])
-from _elasticbeam import cantilever, equilibrated
+from _elasticbeam import slenderBeam
+from _linsolvesystems import equilibrated, gmresIterations
 from edelweissfe.linsolve.composition.amg import amgclTreeOf, defaultFieldTree
 from edelweissfe.linsolve.composition.rigidbodycoarselevel import RigidBodyCoarseLevelPreconditioner
 
-K, coordinates, _ = cantilever((32, 2, 2), (16.0, 1.0, 1.0))
+K, coordinates, _ = slenderBeam(3)
 As, scaling = equilibrated(K)
 tree = defaultFieldTree(3)
 tree["coarsening"]["estimate_spectral_radius"] = sys.argv[3] == "estimate"
 preconditioner = RigidBodyCoarseLevelPreconditioner(amgclTreeOf(tree), 3, "double")
 preconditioner.build(As, scaling, coordinates)
-b = np.random.default_rng(7).standard_normal(As.shape[0])
-history = []
-gmres(As, b, M=LinearOperator(As.shape, matvec=preconditioner.applyPreconditioner), rtol=1e-8, restart=300, maxiter=1,
-      callback=history.append, callback_type="pr_norm")
+iterations = gmresIterations(As, preconditioner)
 Ac, P = preconditioner.coarseOperator(), preconditioner.prolongationMatrix()
-np.savez(sys.argv[2], aggregates=preconditioner.aggregates, P=P.toarray(), Ac=Ac.toarray(), iterations=len(history))
+np.savez(sys.argv[2], aggregates=preconditioner.aggregates, P=P.toarray(), Ac=Ac.toarray(), iterations=iterations)
 """
 
 
@@ -424,10 +406,10 @@ def test_the_rotations_cut_the_iterations_of_a_bending_dominated_beam(dimension)
     for kind in (_TranslationsOnly, RigidBodyCoarseLevelPreconditioner):
         preconditioner = _preconditioner(dimension, kind=kind)
         preconditioner.build(As, scaling, coordinates)
-        iterations[kind] = _gmresIterations(As, preconditioner)
+        iterations[kind] = gmresIterations(As, preconditioner)
     translations, rigidBody = iterations[_TranslationsOnly], iterations[RigidBodyCoarseLevelPreconditioner]
     print("GMRES iterations, translations alone / rigid-body modes:", translations, rigidBody)
-    assert rigidBody <= _GMRES_CAP and rigidBody < 0.5 * translations
+    assert rigidBody <= GMRES_CAP and rigidBody < 0.5 * translations
 
 
 def test_float_storage_rounds_only_the_stored_entries():

@@ -31,7 +31,7 @@ import textwrap
 
 import numpy as np
 import pytest
-from _blockamgsystems import displacementDamageSystem
+from _linsolvesystems import displacementDamageSystem
 
 pytest.importorskip("edelweissfe.linsolve.amgcl.amgcl")
 

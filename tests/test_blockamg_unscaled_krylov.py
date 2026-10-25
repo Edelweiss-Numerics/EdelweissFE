@@ -6,7 +6,7 @@ continuations: a miss is a cap hit.
 """
 
 import numpy as np
-from _blockamgsystems import displacementDamageSystem
+from _linsolvesystems import displacementDamageSystem
 
 from edelweissfe.config.linsolve import getLinSolverByName
 

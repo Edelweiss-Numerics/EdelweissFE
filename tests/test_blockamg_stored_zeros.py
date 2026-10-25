@@ -8,7 +8,7 @@ the last bits -- while the hierarchy-reuse pattern gate still sees the input's o
 
 import numpy as np
 import scipy.sparse as sp
-from _blockamgsystems import DirichletStub, displacementDamageSystem
+from _linsolvesystems import DirichletStub, displacementDamageSystem
 
 from edelweissfe.config.linsolve import getLinSolverByName
 from edelweissfe.solvers.base.dirichlet import applyDirichletToStiffness

@@ -37,7 +37,7 @@ extracted free submatrix, with the fine spectral radius taken from the C++ build
 import numpy as np
 import pytest
 import scipy.sparse as sp
-from _blockamgsystems import DirichletStub
+from _linsolvesystems import DirichletStub
 from _p1lattice import dirichletDofs, lattice, latticeSystem
 
 pytest.importorskip("edelweissfe.linsolve.amgcl.amgcl")

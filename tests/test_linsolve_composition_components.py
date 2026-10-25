@@ -31,8 +31,12 @@ fail as early as possible."""
 import numpy as np
 import pytest
 import scipy.sparse as sp
-from _blockamgsystems import displacementDamageSystem
 from _elasticbeam import cantilever
+from _linsolvesystems import (
+    FixedCondensation,
+    barOnFoundation,
+    displacementDamageSystem,
+)
 from _p1lattice import dirichletDofs, lattice, latticeSystem
 
 pytest.importorskip("edelweissfe.linsolve.amgcl.amgcl")
@@ -64,9 +68,6 @@ from edelweissfe.linsolve.composition.amg import (  # noqa: E402
 )
 from edelweissfe.linsolve.composition.rigidbodycoarselevel import (  # noqa: E402
     RigidBodyCoarseLevelPreconditioner,
-)
-from edelweissfe.linsolve.composition.schurcomplement import (  # noqa: E402
-    SchurComplementCondensation,
 )
 
 
@@ -239,46 +240,12 @@ def test_the_p1_two_grid_has_blockamgs_numbers():
 # ----- the Schur complement -----
 
 
-def _barOnFoundation(n=10):
-    """A grid Laplacian (host) and a bar tied to cell centres by springs, as in test_schur_complement_condensation."""
-    from _blockamgsystems import gridLaplacian
-
-    host = (gridLaplacian(n) + 1e-3 * sp.identity(n**3)).tocsr()
-    nBar = n * n
-    bar = 1e4 * sp.diags([-1.0, 2.0, -1.0], [-1, 0, 1], shape=(nBar, nBar))
-    cells = np.arange(nBar) % (n - 1)
-    corners = [
-        cells + dx + n * (cells + dy) + n * n * ((cells * 7) % (n - 1) + dz)
-        for dx in (0, 1)
-        for dy in (0, 1)
-        for dz in (0, 1)
-    ]
-    N = sp.csr_matrix(
-        (np.full(8 * nBar, 1.0 / 8.0), (np.tile(np.arange(nBar), 8), np.concatenate(corners))), shape=(nBar, n**3)
-    )
-    k = 1e3
-    A = sp.bmat([[host + k * (N.T @ N), -k * N.T], [-k * N, bar + k * sp.identity(nBar)]]).tocsr()
-    A.sort_indices()
-    barDofs = np.arange(n**3, n**3 + nBar)
-    b = np.random.default_rng(1).standard_normal(A.shape[0])
-    return A, b, barDofs
-
-
-class _FixedDofs(SchurComplementCondensation):
-    """A condensation of given dofs, without a model."""
-
-    def __init__(self, dofs, createDirectSolver, **options):
-        super().__init__([], createDirectSolver, **options)
-        self.fixedDofs = dofs
-
-    def _selectCondensedDofs(self):
-        return self.fixedDofs, self.fixedDofs
-
-
 def test_block_lu_with_the_exact_schur_complement_and_exact_solves_is_the_inverse():
-    A, b, barDofs = _barOnFoundation(n=6)
+    A, b, barDofs = barOnFoundation(n=6)
     solveA_bb = DirectSolver()
-    condensation = _FixedDofs(barDofs, solveA_bb.newSolver, dropTolerance=0.0, windowNodes=10_000, blockFactors="LU")
+    condensation = FixedCondensation(
+        barDofs, solveA_bb.newSolver, dropTolerance=0.0, windowNodes=10_000, blockFactors="LU"
+    )
     schur = SchurComplement(
         preconditionS=DirectSolver(), solveA_bb=solveA_bb, blockFactors="LU", condensation=condensation
     )
@@ -289,14 +256,14 @@ def test_block_lu_with_the_exact_schur_complement_and_exact_solves_is_the_invers
 def test_the_schur_complement_tree_has_blockamgs_numbers_with_condensation():
     """The outer iterations and ||x|| of BlockAMGSolver with its Schur complement condensation (deleted; recorded at
     ffe4b681, see test_linsolve_composition_equivalence)."""
-    A, b, barDofs = _barOnFoundation(n=18)
+    A, b, barDofs = barOnFoundation(n=18)
     fields = [FieldBlock("u", 0, A.shape[0], 1)]
     solveA_bb = DirectSolver()
     root = LGMRES(
         SchurComplement(
             preconditionS=DiagonalScaling(Multiplicative(gaussSeidelOrder([OnField("u", AMG())], sweeps=2))),
             solveA_bb=solveA_bb,
-            condensation=_FixedDofs(barDofs, solveA_bb.newSolver),
+            condensation=FixedCondensation(barDofs, solveA_bb.newSolver),
         ),
         tolerance=FixedTolerance(1e-8),
     )
@@ -309,13 +276,13 @@ def test_the_schur_complement_tree_has_blockamgs_numbers_with_condensation():
 def test_the_schur_complement_keeps_nothing_formed_from_its_matrices_between_solves():
     """S~ is kept for the next solve, but not the native split of it the solve formed (two copies of S~ on a large
     model), and the next solve with new values still reuses the preconditioner of S~."""
-    A, b, barDofs = _barOnFoundation(n=8)
+    A, b, barDofs = barOnFoundation(n=8)
     fields = [FieldBlock("u", 0, A.shape[0], 1)]
     solveA_bb = DirectSolver()
     schur = SchurComplement(
         preconditionS=DiagonalScaling(Multiplicative([OnField("u", AMG())])),
         solveA_bb=solveA_bb,
-        condensation=_FixedDofs(barDofs, solveA_bb.newSolver),
+        condensation=FixedCondensation(barDofs, solveA_bb.newSolver),
     )
     root = LGMRES(schur, tolerance=FixedTolerance(1e-8))
     _, composed = _solved(A, b, root, fields)

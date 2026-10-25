@@ -1,5 +1,30 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+#  ---------------------------------------------------------------------
+#
+#  _____    _      _              _         _____ _____
+# | ____|__| | ___| |_      _____(_)___ ___|  ___| ____|
+# |  _| / _` |/ _ \ \ \ /\ / / _ \ / __/ __| |_  |  _|
+# | |__| (_| |  __/ |\ V  V /  __/ \__ \__ \  _| | |___
+# |_____\__,_|\___|_| \_/\_/ \___|_|___/___/_|   |_____|
+#
+#
+#  Unit of Strength of Materials and Structural Analysis
+#  University of Innsbruck,
+#  2017 - today
+#
+#  Matthias Neuner matthias.neuner@uibk.ac.at
+#
+#  This file is part of EdelweissFE.
+#
+#  This library is free software; you can redistribute it and/or
+#  modify it under the terms of the GNU Lesser General Public
+#  License as published by the Free Software Foundation; either
+#  version 2.1 of the License, or (at your option) any later version.
+#
+#  The full text of the license can be found in the file LICENSE.md at
+#  the top level directory of EdelweissFE.
+#  ---------------------------------------------------------------------
 """The Schur complement condensation of :mod:`edelweissfe.linsolve.composition.schurcomplement` (the composed
 :class:`~edelweissfe.linsolve.composition.schurcomplement.SchurComplement` is tested with the other components).
 
@@ -12,7 +37,7 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 import scipy.sparse as sp
-from _blockamgsystems import gridLaplacian
+from _linsolvesystems import FixedCondensation, barOnFoundation, gridLaplacian
 
 import edelweissfe.adaptivity.marking as marking
 from edelweissfe.adaptivity.marking import (
@@ -32,44 +57,6 @@ from edelweissfe.linsolve.superlu import SuperLUBackend
 from edelweissfe.utils.fieldoutput import _FieldOutputBase
 
 
-def _barOnFoundation(n=14, barLength=None, springStiffness=1e3, barStiffness=1e4):
-    """The host grid (n^3 dofs) followed by a bar of ``barLength`` dofs (default n^2). Like a bond, the spring of bar
-    dof i ties it to the mean of the 8 corners of a host cell, N u_host: the energy k/2 (u_bar - N u_host)^2 gives the
-    blocks k N^T N, -k N^T, k I."""
-    host = (gridLaplacian(n) + 1e-3 * sp.identity(n**3)).tocsr()
-    nBar = barLength or n * n
-    bar = barStiffness * sp.diags([-1.0, 2.0, -1.0], [-1, 0, 1], shape=(nBar, nBar))
-    # cell corners (x, y, z) .. (x + 1, y + 1, z + 1), the cells along a line through the grid
-    cells = np.arange(nBar) % (n - 1)
-    corners = [
-        cells + dx + n * (cells + dy) + n * n * ((cells * 7) % (n - 1) + dz)
-        for dx in (0, 1)
-        for dy in (0, 1)
-        for dz in (0, 1)
-    ]
-    N = sp.csr_matrix(
-        (np.full(8 * nBar, 1.0 / 8.0), (np.tile(np.arange(nBar), 8), np.concatenate(corners))), shape=(nBar, n**3)
-    )
-    k = springStiffness
-    A = sp.bmat([[host + k * (N.T @ N), -k * N.T], [-k * N, bar + k * sp.identity(nBar)]]).tocsr()
-    A.sort_indices()
-    barDofs = np.arange(n**3, n**3 + nBar)
-    b = np.random.default_rng(1).standard_normal(A.shape[0])
-    return A, b, barDofs
-
-
-class _FixedDofs(SchurComplementCondensation):
-    """A condensation of given dofs, without a model."""
-
-    def __init__(self, dofs, createDirectSolver=SuperLUBackend, **options):
-        super().__init__([], createDirectSolver, **options)
-        self.fixedDofs = dofs
-
-    def _selectCondensedDofs(self):
-        # one dof per node: the windows count dofs
-        return self.fixedDofs, self.fixedDofs
-
-
 def _exactSchurComplement(A, barDofs):
     others = np.setdiff1d(np.arange(A.shape[0]), barDofs)
     A_kk, A_kb = A[others][:, others].toarray(), A[others][:, barDofs].toarray()
@@ -81,8 +68,8 @@ def _exactSchurComplement(A, barDofs):
 def test_approximate_schur_complement_is_close_to_the_exact_one(windowNodes):
     """Without dropping, one window over the whole bar (an exact correction) gives the exact S, and short windows
     with halos give it up to the decay of A_bb^-1 along the bar."""
-    A, _, barDofs = _barOnFoundation(n=8)
-    condensation = _FixedDofs(barDofs, dropTolerance=0.0, windowNodes=windowNodes, haloNodes=40)
+    A, _, barDofs = barOnFoundation(n=8)
+    condensation = FixedCondensation(barDofs, dropTolerance=0.0, windowNodes=windowNodes, haloNodes=40)
     condensation.update(A)
     S = condensation.approximateSchurComplement(A).toarray()
     exact = _exactSchurComplement(A, barDofs)
@@ -98,7 +85,7 @@ def test_a_zone_that_is_no_chain_gets_its_exact_correction():
     A.sort_indices()
     i, j, k = np.meshgrid(*(np.arange(4, 12),) * 3, indexing="ij")
     zone = np.sort((i + n * j + n * n * k).ravel())
-    condensation = _FixedDofs(zone, dropTolerance=0.0, windowNodes=8, haloNodes=8)
+    condensation = FixedCondensation(zone, dropTolerance=0.0, windowNodes=8, haloNodes=8)
     condensation.update(A)
     windows, zoneDofs = condensation._windowsAndZones()
     assert windows == [] and zoneDofs.size == zone.size
@@ -107,9 +94,29 @@ def test_a_zone_that_is_no_chain_gets_its_exact_correction():
     assert np.abs(S - exact).max() / np.abs(exact).max() < 1e-12
 
 
+def test_the_approximate_schur_complement_of_a_spd_system_has_a_positive_diagonal_and_is_nearly_symmetric():
+    """What AMG on S~ relies on. For a symmetric positive definite A, the exact S is symmetric positive definite too;
+    S~ keeps a positive diagonal. Restricted additive Schwarz keeps only the core rows of every window's inverse, so S~
+    is symmetric to rounding only where a single window covers a whole bar (an exact correction); with windows along a
+    bar, the symmetry defect is the decay of A_bb^-1 over a halo: small with halos of 40 nodes, larger with 10."""
+
+    def symmetryDefect(S):
+        return sp.linalg.norm(S - S.T) / sp.linalg.norm(S)
+
+    A, _, barDofs = barOnFoundation(n=12)
+    defects = {}
+    for windowNodes, haloNodes in ((10_000, 0), (40, 40), (40, 10)):
+        condensation = FixedCondensation(barDofs, dropTolerance=0.0, windowNodes=windowNodes, haloNodes=haloNodes)
+        condensation.update(A)
+        S = condensation.approximateSchurComplement(A)
+        assert condensation.nonPositiveDiagonalEntries == 0 and S.diagonal().min() > 0.0
+        defects[haloNodes] = symmetryDefect(S)
+    assert defects[0] < 1e-14 and defects[40] < 1e-6 < defects[10]
+
+
 def test_block_lu_with_the_exact_schur_complement_is_the_inverse():
-    A, b, barDofs = _barOnFoundation(n=6)
-    condensation = _FixedDofs(barDofs, dropTolerance=0.0, windowNodes=10_000, blockFactors="LU")
+    A, b, barDofs = barOnFoundation(n=6)
+    condensation = FixedCondensation(barDofs, dropTolerance=0.0, windowNodes=10_000, blockFactors="LU")
     condensation.update(A)
     S = condensation.approximateSchurComplement(A).toarray()
     z = blockLU(b, condensation, lambda r_k: np.linalg.solve(S, r_k))
@@ -153,7 +160,7 @@ def test_condensed_dofs_are_those_of_the_interior_nodes_of_the_marked_elements()
 
 
 def test_remaining_field_blocks_drop_the_condensed_nodes():
-    condensation = _FixedDofs(np.array([3, 4, 5, 13]))
+    condensation = FixedCondensation(np.array([3, 4, 5, 13]))
     condensation.condensedDofs = np.array([3, 4, 5, 13])
     blocks = [FieldBlock("displacement", 0, 12, 3), FieldBlock("damage", 12, 16, 1)]
     remaining = condensation.remainingFieldBlocks(blocks)
@@ -185,7 +192,7 @@ def test_transposed_solve_of_banded_and_dense_matrices(bandwidth):
 
 
 def test_superlu_factorizes_once_for_several_right_hand_sides():
-    A, b, _ = _barOnFoundation(n=5)
+    A, b, _ = barOnFoundation(n=5)
     solver = SuperLUBackend()
     solver.factorize(A)
     B = np.column_stack([b, 2 * b])
@@ -208,11 +215,11 @@ class _FailingFromTheSecondFactorization(SuperLUBackend):
 
 def test_an_update_whose_factorization_fails_leaves_the_condensation_as_it_was():
     # transactional: the condensed dofs, the remaining dofs and the blocks stay those of the last successful update
-    A, _, barDofs = _barOnFoundation(n=8)
-    condensation = _FixedDofs(barDofs, _FailingFromTheSecondFactorization)
+    A, _, barDofs = barOnFoundation(n=8)
+    condensation = FixedCondensation(barDofs, _FailingFromTheSecondFactorization)
     condensation.update(A)
     before = (condensation.condensedDofs, condensation.remainingDofs, condensation.A_bb, condensation.A_bk)
-    condensation.fixedDofs = barDofs[: barDofs.size // 2]
+    condensation.dofs = barDofs[: barDofs.size // 2]
     with pytest.raises(np.linalg.LinAlgError):
         condensation.update(A)
     after = (condensation.condensedDofs, condensation.remainingDofs, condensation.A_bb, condensation.A_bk)
@@ -275,13 +282,6 @@ def test_a_field_output_marker_is_stamped_by_its_field_output_and_a_set_marker_b
     assert MarkerBase().selectionStamp(None) is None
 
 
-class _SingularSolver(SuperLUBackend):
-    """A direct solver that finds every matrix singular."""
-
-    def factorize(self, A):
-        raise np.linalg.LinAlgError("singular, for the test")
-
-
 def test_superlu_reports_a_singular_matrix_as_a_linear_algebra_error():
     with pytest.raises(np.linalg.LinAlgError):
         SuperLUBackend().factorize(sp.csr_matrix(np.array([[1.0, 1.0], [1.0, 1.0]])))
@@ -289,8 +289,8 @@ def test_superlu_reports_a_singular_matrix_as_a_linear_algebra_error():
 
 def test_by_default_the_block_upper_triangular_factor_is_inverted():
     """With the exact S, the default applies the inverse of U = [A_bb A_bk; 0 S]."""
-    A, b, barDofs = _barOnFoundation(n=6)
-    condensation = _FixedDofs(barDofs, dropTolerance=0.0, windowNodes=10_000)
+    A, b, barDofs = barOnFoundation(n=6)
+    condensation = FixedCondensation(barDofs, dropTolerance=0.0, windowNodes=10_000)
     condensation.update(A)
     S = condensation.approximateSchurComplement(A).toarray()
     z = blockLU(b, condensation, lambda r_k: np.linalg.solve(S, r_k))
@@ -303,7 +303,7 @@ def test_tutorial_why_the_condensation_works():
     """The method in three observations, on a bar on an elastic foundation (small enough for dense matrices)."""
     from scipy.sparse.linalg import LinearOperator, gmres
 
-    A, b, barDofs = _barOnFoundation(n=6, barLength=36)
+    A, b, barDofs = barOnFoundation(n=6, barLength=36)
     remaining = np.setdiff1d(np.arange(A.shape[0]), barDofs)
 
     # 1. The inverse of the bar block decays exponentially along the bar (Demko, Moss and Smith): a load on a bar
@@ -317,7 +317,7 @@ def test_tutorial_why_the_condensation_works():
     # 3. ... and the block upper triangular factor alone two (A U^-1 = L, unit block lower triangular, (L - I)^2 = 0)
     S = _exactSchurComplement(A, barDofs)
     for blockFactors, iterations in (("LU", 1), ("U", 2)):
-        condensation = _FixedDofs(barDofs, dropTolerance=0.0, windowNodes=10_000, blockFactors=blockFactors)
+        condensation = FixedCondensation(barDofs, dropTolerance=0.0, windowNodes=10_000, blockFactors=blockFactors)
         condensation.update(A)
         assert np.array_equal(condensation.remainingDofs, remaining)
 

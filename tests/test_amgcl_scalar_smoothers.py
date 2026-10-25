@@ -41,7 +41,7 @@ all, so a bug confined to the smoother construction/apply would pass unnoticed.
 import numpy as np
 import pytest
 import scipy.sparse as sp
-from _blockamgsystems import gridLaplacian
+from _linsolvesystems import gridLaplacian
 
 pytest.importorskip("edelweissfe.linsolve.amgcl.amgcl")
 

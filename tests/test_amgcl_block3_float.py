@@ -32,7 +32,7 @@ GMRES.
 import numpy as np
 import pytest
 import scipy.sparse as sp
-from _blockamgsystems import NODAL_COUPLING, gridLaplacian
+from _linsolvesystems import NODAL_COUPLING, gridLaplacian
 from scipy.sparse.linalg import LinearOperator, gmres
 
 pytest.importorskip("edelweissfe.linsolve.amgcl.amgcl")

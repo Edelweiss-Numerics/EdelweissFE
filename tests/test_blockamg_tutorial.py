@@ -34,7 +34,7 @@ The theory page includes this file as its worked example, from the marker commen
 # The worked example of the theory page.
 import numpy as np
 import scipy.sparse as sp
-from _blockamgsystems import ExactFieldSolve, displacementDamageSystem, hierarchyLevels
+from _linsolvesystems import ExactFieldSolve, displacementDamageSystem, hierarchyLevels
 from scipy.sparse.linalg import LinearOperator, gmres
 
 from edelweissfe.linsolve.composition import (

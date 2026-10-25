@@ -25,16 +25,20 @@
 #  The full text of the license can be found in the file LICENSE.md at
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
-"""Small linear systems with the field structure of a gradient-enhanced damage model, shared by the blockamg
-tests: a 3D displacement field (3 DOFs per node) and a scalar nonlocal damage field, each a grid Laplacian."""
+"""What the linear-solver tests share: small linear systems -- with the field structure of a gradient-enhanced damage
+model (a 3D displacement field of 3 DOFs per node and a scalar nonlocal damage field, each a grid Laplacian), and a bar
+on an elastic foundation for the Schur complement -- the diagonal scaling, the GMRES iterations of a preconditioner,
+and the test double of the Schur complement condensation."""
 
 import re
 
 import numpy as np
 import scipy.sparse as sp
-from scipy.sparse.linalg import splu
+from scipy.sparse.linalg import LinearOperator, gmres, splu
 
 from edelweissfe.linsolve.base import FieldBlock
+from edelweissfe.linsolve.composition.schurcomplement import SchurComplementCondensation
+from edelweissfe.linsolve.superlu import SuperLUBackend
 
 #: A symmetric positive definite coupling of a node's three displacement components, for vector operators that
 #: are not just three copies of a scalar one.
@@ -135,3 +139,75 @@ class ExactFieldSolve:
 def hierarchyLevels(amg) -> int:
     """The number of levels of an AMGCL hierarchy, read from its report; one level is a direct solve."""
     return int(re.search(r"Number of levels:\s+(\d+)", amg.report()).group(1))
+
+
+def equilibrated(A):
+    """:math:`\\hat A = D A D` with :math:`D = \\mathrm{diag}(|a_{ii}|^{-1/2})`, as the diagonal scaling forms it (CSR,
+    sorted columns), and the diagonal of :math:`D`."""
+    scaling = 1.0 / np.sqrt(np.abs(A.diagonal()))
+    As = (sp.diags(scaling) @ A @ sp.diags(scaling)).tocsr()
+    As.sort_indices()
+    return As, scaling
+
+
+#: The iteration budget of :func:`gmresIterations`.
+GMRES_CAP = 300
+
+
+def gmresIterations(A, preconditioner) -> int:
+    """The iterations of (left-preconditioned, unrestarted) GMRES to a preconditioned relative residual of 1e-8, or
+    ``GMRES_CAP + 1`` if it does not reach a true relative residual of 1e-5 within ``GMRES_CAP``."""
+    b = np.random.default_rng(7).standard_normal(A.shape[0])
+    M = LinearOperator(A.shape, matvec=preconditioner.applyPreconditioner)
+    history = []
+    x, _ = gmres(A, b, M=M, rtol=1e-8, restart=GMRES_CAP, maxiter=1, callback=history.append, callback_type="pr_norm")
+    converged = np.linalg.norm(b - A @ x) <= 1e-5 * np.linalg.norm(b)
+    return len(history) if converged and len(history) <= GMRES_CAP else GMRES_CAP + 1
+
+
+def barOnFoundation(n=14, barLength=None, springStiffness=1e3, barStiffness=1e4):
+    """The host grid (n^3 dofs) followed by a bar of ``barLength`` dofs (default n^2). Like a bond, the spring of bar
+    dof i ties it to the mean of the 8 corners of a host cell, N u_host: the energy k/2 (u_bar - N u_host)^2 gives the
+    blocks k N^T N, -k N^T, k I. Returns A, a right-hand side b and the bar dofs."""
+    host = (gridLaplacian(n) + 1e-3 * sp.identity(n**3)).tocsr()
+    nBar = barLength or n * n
+    bar = barStiffness * sp.diags([-1.0, 2.0, -1.0], [-1, 0, 1], shape=(nBar, nBar))
+    # cell corners (x, y, z) .. (x + 1, y + 1, z + 1), the cells along a line through the grid
+    cells = np.arange(nBar) % (n - 1)
+    corners = [
+        cells + dx + n * (cells + dy) + n * n * ((cells * 7) % (n - 1) + dz)
+        for dx in (0, 1)
+        for dy in (0, 1)
+        for dz in (0, 1)
+    ]
+    N = sp.csr_matrix(
+        (np.full(8 * nBar, 1.0 / 8.0), (np.tile(np.arange(nBar), 8), np.concatenate(corners))), shape=(nBar, n**3)
+    )
+    k = springStiffness
+    A = sp.bmat([[host + k * (N.T @ N), -k * N.T], [-k * N, bar + k * sp.identity(nBar)]]).tocsr()
+    A.sort_indices()
+    barDofs = np.arange(n**3, n**3 + nBar)
+    b = np.random.default_rng(1).standard_normal(A.shape[0])
+    return A, b, barDofs
+
+
+class FixedCondensation(SchurComplementCondensation):
+    """A Schur complement condensation of given dofs, without a model and markers: the condensed dofs are set directly,
+    and may be changed between updates (as the selection of a marker changes between increments). One dof per node:
+    the windows along a chain count dofs.
+
+    Parameters
+    ----------
+    dofs
+        The condensed dofs.
+    createDirectSolver
+        See :class:`~edelweissfe.linsolve.composition.schurcomplement.SchurComplementCondensation`, as its other
+        ``options``.
+    """
+
+    def __init__(self, dofs, createDirectSolver=SuperLUBackend, **options):
+        super().__init__([], createDirectSolver, **options)
+        self.dofs = np.asarray(dofs)
+
+    def _selectCondensedDofs(self):
+        return self.dofs, self.dofs

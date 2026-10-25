@@ -35,9 +35,10 @@ import re
 import numpy as np
 import pytest
 import scipy.sparse as sp
-from _blockamgsystems import (
+from _linsolvesystems import (
     NODAL_COUPLING,
     displacementDamageSystem,
+    equilibrated,
     gridLaplacian,
     hierarchyLevels,
     variableCoefficientLaplacian,
@@ -96,15 +97,6 @@ def _heterogeneousVectorField(dimension: int, n: int):
     return A, FieldBlock("displacement", 0, dimension * nodes, dimension)
 
 
-def _equilibrated(A):
-    """D A D with D = diag(|a_ii|^-1/2), as blockamg equilibrates, and the diagonal of D."""
-    scaling = 1.0 / np.sqrt(np.abs(A.diagonal()))
-    D = sp.diags(scaling)
-    scaled = (D @ A @ D).tocsr()
-    scaled.sort_indices()
-    return scaled, scaling
-
-
 def _hierarchy(A, dimension: int, precision: str, precond: dict, nullspace=None):
     """An AMGCL hierarchy for A on the block backend, with the near null-space ``nullspace`` if given."""
     hierarchy = PyAMGCLSolver(
@@ -154,7 +146,7 @@ def test_the_translations_of_d_a_d_give_the_hierarchy_of_a_on_its_constant_block
     # connection is weak at eps_strong 0, and the identity holds level by level. That checks the coarse
     # translations R each coarsening hands to the next.
     A, block = _scaledVectorLaplacian(dimension, n, coupled)
-    scaled, scaling = _equilibrated(A)
+    scaled, scaling = equilibrated(A)
     precond = {
         "coarsening": {"type": "smoothed_aggregation", "aggr": {"eps_strong": 0.0}},
         "relax": {"type": "damped_jacobi"},
@@ -185,7 +177,7 @@ def test_unit_translation_weights_give_amgcls_constant_blocks(dimension, precisi
     # Weights 1 make the tentative prolongation AMGCL's constant blocks, normalized per aggregate: on a hierarchy of
     # two levels (the coarse one a direct solve) that is the same preconditioner to rounding, here with the
     # vector-field default tree. An (n, 0) near null-space clears the translations again.
-    scaled, _ = _equilibrated(_scaledVectorLaplacian(dimension, n)[0])
+    scaled, _ = equilibrated(_scaledVectorLaplacian(dimension, n)[0])
     block = FieldBlock("displacement", 0, scaled.shape[0], dimension)
     precond = {
         key: value
@@ -238,7 +230,7 @@ def test_unit_translation_weights_aggregate_the_first_coarse_level_as_amgcl_does
     # but not the coarse translations N wherever a weak connection joins aggregates of different sizes (relative
     # differences of 2e-4 to 2e-3 here). From the third level on the matrices differ in more than a scaling, so
     # their aggregates need not agree.
-    scaled, _ = _equilibrated(_scaledVectorLaplacian(dimension, n)[0])
+    scaled, _ = equilibrated(_scaledVectorLaplacian(dimension, n)[0])
     block = FieldBlock("displacement", 0, scaled.shape[0], dimension)
     precond = {"coarsening": {"type": "smoothed_aggregation"}, "coarse_enough": _DEEP_COARSE_ENOUGH}
     constantBlocks = _hierarchy(scaled, dimension, precision, precond)
@@ -275,7 +267,7 @@ def _displacementSystem(dimension: int):
 
 def test_a_block_backend_takes_no_near_null_space_but_the_translations():
     A, block = _scaledVectorLaplacian(3, 4)
-    scaled, scaling = _equilibrated(A)
+    scaled, scaling = equilibrated(A)
     translations = translationNullspace(block, scaling)
     params = {
         "precond": {"coarsening": {"type": "smoothed_aggregation"}},
