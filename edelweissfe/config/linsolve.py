@@ -66,7 +66,9 @@ def getLinSolverByName(linsolverName: str, opts) -> Callable:
     Parameters
     ----------
     linsolverName
-        The name of the linear solver, case-insensitively (e.g. ``"pardiso"``, ``"amgcl"``).
+        The name of the linear solver, case-insensitively (e.g. ``"pardiso"``, ``"amgcl"``), or a solver script,
+        ``script:<file>.py`` or ``script:<file>.py:<name>`` (a composed solver, see
+        :mod:`edelweissfe.linsolve.composition`).
     opts
         The linear-solver options parsed from the solver's ``linsolverConfigFile``, passed to the
         factory unchanged. Not necessarily a mapping: the implicit-static solver passes ``""`` when
@@ -86,6 +88,18 @@ def getLinSolverByName(linsolverName: str, opts) -> Callable:
         by the factory and not caught here; see :func:`getDefaultLinSolver`, which relies on it.
     """
 
+    if linsolverName.startswith("script:"):
+        return _solverFromScript(linsolverName.removeprefix("script:"), opts)
+
     factory, _ = registry.lookup("linsolver", linsolverName)
 
     return factory(opts)
+
+
+def _solverFromScript(reference: str, opts) -> Callable:
+    """The composed solver of a solver script, named ``<file>.py`` (its global ``linearSolver``) or
+    ``<file>.py:<name>``; see :mod:`edelweissfe.linsolve.composition.solver`."""
+    from edelweissfe.linsolve.composition.solver import loadSolverScript
+
+    path, name = (reference, "linearSolver") if reference.endswith(".py") else reference.rsplit(":", 1)
+    return loadSolverScript(path, name, opts if isinstance(opts, dict) else {})

@@ -49,6 +49,9 @@ Choose a linsolver after the ``*solver`` keyword:
     * - ``matrixdump``
       - —
       - ``edelweissfe.linsolve.matrixdump.matrixdump``
+    * - ``script:<file>.py[:<name>]``
+      - —
+      - ``edelweissfe.linsolve.composition`` (a composed solver, see below)
 
 How the available solvers relate
 --------------------------------
@@ -193,6 +196,20 @@ fields, and naming fields switches it on for exactly those, which is also how a 
 
 A scalar field (e.g. nonlocal damage) has no rotations: the default leaves it out, and naming it is an error. The
 method, its options and the measurements are on the :doc:`blockamgtheory` page (section "Rigid-body coarse level").
+
+
+Composed linear solvers (prototype)
+-----------------------------------
+
+A linear solver can also be composed from small objects -- a Krylov solver, a diagonal scaling, a field split, AMG
+hierarchies, a Schur complement -- in a Python script next to the input file, ``linsolver=script:solver.py``. The
+components, how the nesting reads, the presets (``blockAMG()`` reproduces ``blockamg``) and the views that visualize a
+composed solver are on their own page:
+
+.. toctree::
+   :maxdepth: 1
+
+   composedlinsolvers
 
 
 The ``amgcl`` solver
