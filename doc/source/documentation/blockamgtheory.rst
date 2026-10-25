@@ -22,11 +22,10 @@ solve, its tolerance and the reuse of the hierarchies), and
 built in :mod:`~edelweissfe.linsolve.nullspace`. It requires the optional ``amgcl`` extension
 (:mod:`edelweissfe.linsolve.amgcl.amgcl`).
 
-The method was first implemented as one monolithic solver, ``BlockAMGSolver``, configured by a JSON file; the
-composition reproduces its outer iterations, rebuild decisions and solutions, and replaced it. The theory below still
-names some of its settings by their former keys (``outerTol``, ``hierarchyStalenessFactor``, ``fieldPreconds``, ...):
-the table in :doc:`composedlinsolvers` ("From the former ``blockamg`` keys to a composed solver") translates each one
-into a data line of ``type=blockamg`` or the component of a ``custom`` tree.
+The method was first implemented as one monolithic solver; the composition reproduces its outer iterations, rebuild
+decisions and solutions, and replaced it. Each setting below is named where it now lives: a data line of
+``*linearSolver, type=blockamg``, or an argument of a component in a ``custom`` solver script (see "Configuring
+blockamg" below).
 
 Why a field-split preconditioner
 --------------------------------
@@ -55,7 +54,7 @@ non-symmetric (contact-condensed) displacement block, so the outer Krylov solve 
 many iterations -- with the former defaults typically :math:`O(100)`; with the current
 defaults (see "Why the defaults are what they are" below), mostly 5--50. The hardest damage-onset
 solves stop at its cap of 100 iterations
-(``outerRestart`` x ``outerMaxiter`` = 100 x 1), return their iterate, and the hierarchies are rebuilt for
+(``maxIterations``), return their iterate, and the hierarchies are rebuilt for
 the next solve. The cap is a deliberate budget: a solve that needs more is taken as a sign that the
 hierarchies no longer fit the Jacobian, not given more iterations. That is an acceptable price where the
 alternative is not fitting in memory at all; at problem sizes a direct
@@ -125,7 +124,7 @@ every registered linear solver it is called as ``(A, b) -> x``. Both of its stat
 (adaptive tolerance and hierarchy reuse) therefore *reconstruct* the loop state from
 :math:`\lVert b \rVert` and from the matrix's own bookkeeping across calls.
 
-The symbols of this page and their names in the code (``blockamg.py``, and the worked example below):
+The symbols of this page and their names in the code (the components, and the worked example below):
 
 .. list-table:: Notation
     :widths: 30 35 35
@@ -157,7 +156,7 @@ The symbols of this page and their names in the code (``blockamg.py``, and the w
       - ``blockGaussSeidel``
     * - :math:`\eta`
       - the requested relative tolerance of one solve
-      - ``eta`` (``outerTol`` when fixed)
+      - ``eta`` (``FixedTolerance(eta)`` when fixed)
 
 .. code-block:: text
 
@@ -174,8 +173,8 @@ The symbols of this page and their names in the code (``blockamg.py``, and the w
                 |
           (1)   Newton state, from ||b|| and the solver's own bookkeeping
                     ||b|| > residualGrowthFactor * ||b||_prev  ?
-                        yes -> a new increment: eta = etaMax,
-                               refresh (with refreshOnNewIncrement)
+                        yes -> a new increment: eta = its maximum,
+                               refresh (with rebuildOnNewIncrement)
                         no  -> eta from Eisenstat-Walker forcing
                     refresh the hierarchies?  first solve | block layout | size |
                         nnz differs from the rebuild's | new increment | setModel |
@@ -235,7 +234,8 @@ unknown :math:`y`,
 
 whose residual :math:`\hat b - \hat A M^{-1} y = \hat b - \hat A z = D (b - A x)` is the scaled one --
 hence the true-residual check of step (6). With
-``krylovOnScaledSystem = false`` (the default) the outer method solves the unscaled
+``krylovOnScaledSystem = false`` (the default, ``LGMRES(DiagonalScaling(...))`` rather than
+``DiagonalScaling(LGMRES(...))``) the outer method solves the unscaled
 system instead, with the same :math:`M` between two scalings,
 
 .. math::
@@ -300,16 +300,16 @@ smoothing but in :math:`2\times2` blocks, in double (this wrapper has no float 2
 field of any other dimension gets the same recipe on the plain scalar backend -- the only backend that
 takes the full rigid-body near-null-space (see below), which keeps that path available for a field
 shape the block backend was never tuned for; a **scalar** field takes the plain scalar tree (smoothed
-aggregation, Chebyshev at AMGCL's own defaults). All of these can be overridden per field with
-``fieldPreconds``.
+aggregation, Chebyshev at AMGCL's own defaults). Any field can be given another tree in a ``custom`` solver
+script, ``OnField(name, AMG(tree=...))``.
 
-Three keys of a per-field parameter tree are not AMGCL parameters but select how the wrapper builds the
-hierarchy, and are consumed before the rest of the tree is forwarded verbatim:
+The tree holds AMGCL parameters only. Three keyword arguments of ``AMG`` (the first two also of ``TwoLevel``) select
+the backend the hierarchy is built on; left unset, :func:`~edelweissfe.linsolve.composition.amg.backendOf` chooses
+them from the field:
 
 ``backendPrecision``
-    ``"double"`` (default when this key is omitted from a ``fieldPreconds`` tree -- not what the
-    shipped field defaults use: a 3D vector field's own default tree sets it to ``"float"``
-    explicitly, see below) or ``"float"``. A single-precision backend should in principle roughly
+    ``"double"`` or ``"float"``; by default ``"float"`` on :math:`3\times3` blocks and ``"double"`` otherwise.
+    A single-precision backend should in principle roughly
     halve the hierarchy's memory traffic, but measured across a full set of captured reference
     systems it inflated outer iteration counts and netted only a small gain in aggregate --
     plausibly because the Chebyshev smoother's own spectral-radius estimate loses accuracy in
@@ -330,19 +330,18 @@ hierarchy, and are consumed before the rest of the tree is forwarded verbatim:
     of :math:`\hat A` (see below); the two agree only where the diagonal is uniform, which it is not on
     quadratic elements (corner and midside nodes) or across a damage band. A block hierarchy also
     has no **rotational** rigid-body modes, which the scalar backend carries (described next);
-    ``blockTranslationNullspace``, on in the default trees, gives it the translations, and the rigid-body coarse level
-    (``rigidBodyCoarseLevel``, the default for the 3D displacement field) a first coarse level of all rigid-body modes
-    (see :ref:`below <blockamg-rigid-body-coarse-level>`).
+    ``blockTranslationNullspace``, on by default on a block backend, gives it the translations, and the rigid-body
+    coarse level (``TwoLevel(coarseSpace=RigidBodyModes())``, the default for the 3D displacement field) a first coarse
+    level of all rigid-body modes (see :ref:`below <blockamg-rigid-body-coarse-level>`).
 
 ``blockTranslationNullspace``
-    ``true`` in the default 2D and 3D trees, ``false`` when a ``fieldPreconds`` tree leaves it out: on a block
-    backend (``backendBlockSize`` 2 or 3), build smoothed aggregation with the translations :math:`D^{-1} t`
-    of :math:`\hat A_{ii}` as its near-null-space, instead of AMGCL's identity blocks -- see :ref:`the
-    near-null-space of a block backend <blockamg-block-nullspace>` below. The aggregation, the prolongation
-    smoothing and the smoother stay AMGCL's. It needs smoothed aggregation, which is checked: a tree that
-    switches to another coarsening sets it to ``false``. On the scalar backend, which takes the rigid-body
-    modes, the translations among them, the key changes nothing and either value is accepted, so a default
-    tree stays valid with ``backendBlockSize`` 1 set on top.
+    On by default on a block backend (``backendBlockSize`` 2 or 3): build smoothed aggregation with the translations
+    :math:`D^{-1} t` of :math:`\hat A_{ii}` as its near-null-space, instead of AMGCL's identity blocks -- see
+    :ref:`the near-null-space of a block backend <blockamg-block-nullspace>` below. The aggregation, the prolongation
+    smoothing and the smoother stay AMGCL's. It needs smoothed aggregation, which is checked: a tree with another
+    coarsening needs ``blockTranslationNullspace=False``. On the scalar backend, which takes the rigid-body
+    modes, the translations among them, the keyword changes nothing and either value is accepted, so
+    ``AMG(backendBlockSize=1)`` needs nothing else.
 
 Near-null-space and the Chebyshev smoother
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -454,7 +453,7 @@ are :math:`z = D^{-1} x`, and a constant :math:`z` is the displacement :math:`x 
 :math:`D`-weighted translation. The translations of :math:`\hat A_{ii}` are :math:`D^{-1} t` instead, the
 same transformation the scalar backend applies to its rigid-body modes (see above).
 
-``blockTranslationNullspace``, on in the default 2D and 3D trees, builds the hierarchy from those translations
+``blockTranslationNullspace``, on by default on a block backend, builds the hierarchy from those translations
 (``amgcl-block-translations.hpp`` of the AMGCL wrapper :mod:`edelweissfe.linsolve.amgcl.amgcl`). Per node
 they form the diagonal block :math:`W_i = \operatorname{diag}(w_{i1}, \dots, w_{iB})`,
 :math:`w_{ik} = 1/s_{ik}` with :math:`s` the equilibration
@@ -517,8 +516,8 @@ diagonal scaling leaves unchanged only where :math:`D` is uniform within each no
    beam and an anchor pry-out, fewer outer iterations, fewer solves stopping at the iteration cap -- almost
    none left on the panel and the beam -- and faster runs, with matching load-displacement curves where the
    runs completed; on the damage cylinder fewer Newton iterations and a faster run. On the contact model
-   fewer Newton iterations but more outer iterations, level within the run-to-run noise. Hence part of the
-   default trees. The translations are the near-null-space of the elastic operator, so they help less once
+   fewer Newton iterations but more outer iterations, level within the run-to-run noise. Hence the
+   default. The translations are the near-null-space of the elastic operator, so they help less once
    softening makes the operator indefinite: on the damage cylinder after its damage onset, the outer
    iterations per simulated time were the same with and without them, and more solves stopped at the cap
    with them.
@@ -552,7 +551,9 @@ with inexact :math:`M_i`, a reverse sweep in correction form over *all* fields w
 :math:`(B + U)^{-1} (2B - \hat D) (B + L)^{-1}`, :math:`\hat D = \operatorname{blockdiag}(\hat A_{ii})`,
 the classic operator for :math:`B = \hat D`; skipping the last field changes its last block row.
 
-``sweeps`` repeats the (possibly reversed) sweep.
+``sweeps`` repeats the (possibly reversed) sweep. Both are data lines of ``type=blockamg``; in a tree,
+``Multiplicative(gaussSeidelOrder([OnField(...), ...], sweeps, symmetric))``
+(:func:`~edelweissfe.linsolve.composition.combinators.gaussSeidelOrder`).
 Neither is needed for the outer solve: right-preconditioned GMRES/LGMRES only needs :math:`M^{-1}`
 to be a fixed linear operator, not a symmetric one -- the measured configurations use
 ``sweeps = 1``, ``symmetric = false``.
@@ -579,32 +580,30 @@ the true-residual bookkeeping below exists.
 The outer Krylov solve
 ~~~~~~~~~~~~~~~~~~~~~~
 
-``outerSolver = "amgcl_lgmres"`` -- the only accepted value, and the default -- is AMGCL's own native
+The outer solve, :class:`~edelweissfe.linsolve.composition.krylov.LGMRES`, is AMGCL's own native
 ``amgcl::solver::lgmres``, driven through
 :class:`~edelweissfe.linsolve.amgcl.amgcl.PyAMGCLKrylovSolver`; the block sweep is passed straight in
-as the preconditioner callback. A former fallback, ``outerSolver = "scipy"``, used
-:func:`scipy.sparse.linalg.gmres` instead; it was removed once the native path was gated live against
+as the preconditioner callback. (:class:`~edelweissfe.linsolve.composition.krylov.FGMRES` is the alternative for a
+variable preconditioner, one with a Krylov solve inside, which LGMRES refuses.) A former fallback on
+:func:`scipy.sparse.linalg.gmres` was removed once the native path was gated live against
 it at several thread counts and found to produce the same Newton trajectory. Orchestrating GMRES from
 Python -- the Arnoldi steps, orthogonalization and restart bookkeeping -- was measured as a
 substantial share of this solver's wall-clock on a reference model when run that way, and, being serial Python,
 anti-scaled past one NUMA node on multi-socket hardware, which the native implementation does not.
 
-``lgmres`` bounds *all* Arnoldi steps across all internal restarts with a single ``maxiter``;
-``outerRestart`` and ``outerMaxiter`` are multiplied together and passed through as one total-iteration
-budget.
+``LGMRES(..., maxIterations)`` (the data line ``maxIterations``) bounds *all* Arnoldi steps of a solve, across all
+its internal restarts.
 
 LGMRES augments each restart with a few vectors carried over from the previous restart cycle of the same
-solve. ``lgmresK`` sets how many, and a restart cycle is ``lgmresM + lgmresK`` iterations, every one of
-them a preconditioner application: ``lgmresM`` Krylov steps plus one step per augmentation vector
-(``amgcl/solver/lgmres.hpp``). The first cycle of a solve has no augmentation vectors yet and is plain
-GMRES(``lgmresM + lgmresK``). Every solve starts from an empty augmentation subspace. Keeping it alive
+solve. ``LGMRES(..., augmentationVectors)`` sets how many, and a restart cycle is ``restart + augmentationVectors``
+iterations, every one of them a preconditioner application: ``restart`` Krylov steps plus one step per augmentation
+vector (``amgcl/solver/lgmres.hpp``). The first cycle of a solve has no augmentation vectors yet and is plain
+GMRES(``restart + augmentationVectors``). Every solve starts from an empty augmentation subspace. Keeping it alive
 *across* solves ("recycling") sounds attractive -- a hard solve's converged subspace as a warm start for
 the next -- but measured on captured systems it contributed nothing (bit-identical iteration counts), and
 on a live run it was actively harmful: a solve that had already struggled left a poorly conditioned
 subspace which compounded into a following solve needing far more iterations than a fresh one, and in
-one run an outright ``NaN``. It was therefore removed; the former keys ``lgmresAlwaysReset`` and
-``lgmresResetOnNewIncrement`` are still accepted at their non-recycling values ``true`` / ``false``, with
-a deprecation note, and rejected otherwise.
+one run an outright ``NaN``. It was therefore removed.
 
 
 Adaptive outer tolerance (Eisenstat--Walker forcing)
@@ -612,15 +611,16 @@ Adaptive outer tolerance (Eisenstat--Walker forcing)
 
 Most Newton iterates do not need their linear solve solved tightly, and loosening the requested
 tolerance for those cuts outer iterations substantially. By default ``blockamg`` therefore chooses
-its own outer tolerance per solve by Eisenstat--Walker forcing ("choice 2"), from the ratio of
-successive residual norms:
+its own outer tolerance per solve by Eisenstat--Walker forcing ("choice 2"; ``ForcingTolerance(minimum, maximum,
+gamma, alpha)``, :class:`~edelweissfe.linsolve.composition.krylov.ForcingTolerance`, the default tolerance of
+``LGMRES``), from the ratio of successive residual norms:
 
 .. math::
 
    \eta_k = \gamma \left( \frac{\lVert b_k \rVert}{\lVert b_{k-1} \rVert} \right)^{\alpha},
    \qquad \gamma = 0.9, \quad \alpha = \tfrac{1}{2}\bigl(1+\sqrt 5\bigr),
 
-clamped to :math:`[\eta_\mathrm{min}, \eta_\mathrm{max}]`. The classic safeguard against
+clamped to :math:`[\eta_\mathrm{min}, \eta_\mathrm{max}]` (``minimum``, ``maximum``). The classic safeguard against
 over-loosening is applied: a large tightening step is only trusted if the previous tolerance was
 already small, i.e. :math:`\eta_k` is raised back to :math:`\gamma \eta_{k-1}^{\alpha}` whenever that
 quantity exceeds 0.1. At the classic parameters that needs :math:`\eta_{k-1} > 0.26`, so the safeguard
@@ -638,8 +638,8 @@ hierarchies of the discarded attempt. Only a cutback after an attempt whose resi
 detected. (A notification from the nonlinear solver at the start of every increment would replace the
 guess; that is planned.)
 
-Pass an explicit ``outerTol`` to pin a fixed relative tolerance instead and switch the scheme off
-entirely. Adaptive forcing is safe to use as the default only because the requested tolerance is
+A fixed relative tolerance -- the data line ``tolerance``, ``LGMRES(..., tolerance=FixedTolerance(eta))`` -- switches
+the scheme off entirely. Adaptive forcing is safe to use as the default only because the requested tolerance is
 enforced on the *true* residual, which is the subject of the next section: without that enforcement,
 a loosened request combined with an imperfect preconditioner can quietly let the true residual run
 looser still, which does change the Newton path.
@@ -661,15 +661,16 @@ Every solve on the scaled system therefore measures the true relative residual :
 \rVert` explicitly (computed as :math:`D^{-1}(\hat A z - \hat b)`, which is exact and rides on the
 threaded operator already built, rather than paying a second unscaled matrix-vector product). If it
 still exceeds :math:`\eta`, the solve is **continued**: a warm restart from the current iterate at a
-tighter requested tolerance, up to ``trueResidualMaxContinuations`` times. By default the tolerance
+tighter requested tolerance, up to ``continuations`` times (the data line, ``LGMRES(..., continuations)``). By
+default the tolerance
 is tightened geometrically by a fixed factor of 0.01 per round -- deliberately expressed purely in
 the units of the requested relative tolerance, which the Krylov solver interprets consistently by
 construction, rather than being derived from the solver's internal residual bookkeeping. Setting
-``trueResidualMaxContinuations = 0`` disables enforcement: the outer solve's own test decides.
+``continuations = 0`` disables enforcement: the outer solve's own test decides.
 
 On the unscaled system (``krylovOnScaledSystem = false``) none of this is needed: the residual the
 outer solve converges is the true one, so a pass that misses :math:`\eta` has stopped at its iteration
-cap, and a continuation would only extend the cap (``outerMaxiter`` is the knob for more cycles). What
+cap, and a continuation would only extend the cap (``maxIterations`` is the knob for more iterations). What
 it trades is the norm itself. :math:`\lVert b - A x \rVert` sums the residuals of all
 fields in their own units, while the scaled residual :math:`D (b - A x)` weighs every row by its own
 diagonal. In a system whose fields differ widely in residual scale -- a displacement field in newtons
@@ -691,13 +692,15 @@ gradient-enhanced damage model, nearly every solve ran one, i.e. effectively eve
 performed twice. A continuation is disproportionately expensive, because restarting discards most of
 the accumulated Krylov subspace.
 
-With ``gapCompensatedTolerance = true`` the gap is measured on each pass (as the achieved true
+With gap compensation (the data line ``gapCompensation=true``; in a tree
+``LGMRES(..., gapCompensation=GapCompensation(safetyFactor, maxFactor))``) the gap is measured on each pass (as the
+achieved true
 relative residual over the achieved scaled relative residual of the same solution -- not over the
 tolerance the pass was given, which a pass stopped at the iteration cap does not reach; that version
 inflated the gap by the unreached factor and made every following first pass ask for that much more
 accuracy), smoothed across solves by an exponential moving
-average and floored at 1, and used to pre-compensate the *first* pass: it is asked for
-``gapSafetyFactor``:math:`\cdot\,\eta\,/\,\text{gap}` so that it lands on target in one pass. Any
+average, floored at 1 and capped at ``maxFactor``, and used to pre-compensate the *first* pass: it is asked for
+``safetyFactor``:math:`\cdot\,\eta\,/\,\text{gap}` so that it lands on target in one pass. Any
 continuation that is still needed then tightens by the *measured* gap rather than by the fixed factor
 (never looser, and always at least a factor of two per round so the loop still terminates).
 
@@ -715,7 +718,7 @@ continuation that is still needed then tightens by the *measured* gap rather tha
    path grew its increment and covered more simulated time, while the compensated one never grew.
    Judged per unit of *simulated time* rather than per increment, the per-increment saving is largely
    or wholly given back. Hence this stays opt-in, for a model still run with
-   ``krylovOnScaledSystem = true``; ``gapSafetyFactor`` is the knob between the two regimes there --
+   ``krylovOnScaledSystem = true``; ``safetyFactor`` is the knob between the two regimes there --
    smaller values solve more accurately and behave more like the uncompensated path -- and its
    optimum has not been explored.
 
@@ -725,7 +728,9 @@ Hierarchy reuse across Newton iterations
 
 Building the per-field hierarchies is a large fraction of a solve, and it is avoidable when the
 Jacobian has barely moved since the last one. ``blockamg`` therefore keeps its hierarchies (and the
-equilibration they were built for) standing across solves by default.
+equilibration they were built for) standing across solves by default; when they are rebuilt is the outer solve's
+:class:`~edelweissfe.linsolve.composition.krylov.RebuildPolicy`,
+``LGMRES(..., rebuild=RebuildPolicy(stalenessFactor, rebuildOnNewIncrement, reuse))``.
 
 The outer Krylov solve always operates on the current matrix (equilibrated with the scaling the standing
 hierarchies were built for, which is the same system whatever the scaling); only the preconditioner may be
@@ -734,7 +739,7 @@ accuracy of that one Newton step; the next solve is then rebuilt (see below).
 
 The hierarchies are rebuilt when
 
-* ``reuseHierarchy`` is off: then every solve builds its own, and none of the triggers below matters,
+* ``reuse`` is off: then every solve builds its own, and none of the triggers below matters,
 * there is nothing to reuse yet (the first solve),
 * the field-block layout or the system size changed (e.g. an adaptive-refinement event),
 * the number of stored nonzeros changed -- a free :math:`O(1)` proxy for "the sparsity pattern
@@ -743,8 +748,8 @@ The hierarchies are rebuilt when
   a graceful degradation: measured on one transition, a hierarchy built for the previous pattern
   needed far more outer iterations than a fresh one, an outright wall-clock regression,
 * a residual jump marks a new increment (see ``residualGrowthFactor`` and its blind spot above) and
-  ``refreshOnNewIncrement`` is set (the default), or
-* the previous solve's outer iteration count exceeded both ``hierarchyStalenessFactor`` times and 15
+  ``rebuildOnNewIncrement`` is set (the default), or
+* the previous solve's outer iteration count exceeded both ``stalenessFactor`` times and 15
   more than the count of the solve the hierarchies were built for -- a growing count being the signal
   that the reused hierarchies are drifting away from the current Jacobian. The reference is that
   first solve, not the previous one, so a slow drift across several solves is caught; the
@@ -770,9 +775,8 @@ models without any extra configuration (on a contact model with many multi-point
 a configuration relying on it ran noticeably faster than with pruning on).
 
 The native LGMRES instance is deliberately *not* torn down on a hierarchy refresh -- only on an
-actual system-size change, which invalidates AMGCL's preallocated scratch vectors, or a hot reload of
-one of its own settings (``outerSolver``, ``lgmresM``, ``lgmresK``), which must be picked up on the
-next solve rather than silently kept.
+actual system-size change, which invalidates AMGCL's preallocated scratch vectors. (A hot reload of a ``custom``
+solver script builds a new ``LGMRES``, and with it a new instance.)
 
 
 Configuring blockamg
@@ -798,15 +802,15 @@ dumps); an unknown data line is an error:
 Everything else -- another tree for a field, the rebuild policy, the parameters of the forcing tolerance or of LGMRES,
 the options of the rigid-body coarse level, the p-multigrid variant, a Schur complement -- is a ``custom`` solver
 script: copy the preset (:mod:`edelweissfe.linsolve.composition.presets`, a plain function) into the script and change
-what you need. The table in :doc:`composedlinsolvers` maps every former key to its place.
+what you need.
 
 Default field trees
 ~~~~~~~~~~~~~~~~~~~
 
 ``AMG(tree=...)`` and ``TwoLevel(..., tree=...)`` take a field's AMGCL parameter tree, forwarded to AMGCL verbatim. A
-tree given replaces the default outright, so start from the one that applies and change only what is intended. The
-defaults are, by the field's nodal dimension (:func:`~edelweissfe.linsolve.composition.amg.defaultFieldTree` in the
-code):
+tree given replaces the default outright, so start from the one that applies
+and change only what is intended. The defaults are, by the field's nodal dimension
+(:func:`~edelweissfe.linsolve.composition.amg.defaultFieldTree` in the code):
 
 .. code-block:: json
 
@@ -929,28 +933,30 @@ manifest alone, without a replay.
 p-multigrid (opt-in)
 --------------------
 
-For a field discretized entirely with quadratic serendipity elements, ``blockamg`` can replace that
-field's single-level hierarchy with a genuine two-level V-cycle
-(:class:`~edelweissfe.linsolve.composition.ptwogrid.PTwoGridPreconditioner`): :math:`\nu` Chebyshev
+For a field discretized entirely with quadratic serendipity elements, a ``custom`` solver script can replace that
+field's single-level hierarchy with a genuine two-level V-cycle, ``OnField(name,
+TwoLevel(coarseSpace=P1Interpolation()))``
+(:class:`~edelweissfe.linsolve.composition.ptwogrid.PTwoGridPreconditioner`): ``npre`` Chebyshev
 sweeps on the field's own equilibrated block, restriction of the residual through
 :math:`P^\mathsf{T}`, one AMGCL cycle on the Galerkin-projected coarse operator :math:`A_1 =
-P^\mathsf{T} A P`, prolongation through :math:`P`, and :math:`\nu` more Chebyshev sweeps. The
+P^\mathsf{T} A P`, prolongation through :math:`P`, and ``npost`` more Chebyshev sweeps. The
 coarse space is purely topological -- the mesh's corner nodes -- so no re-discretization is involved:
 :math:`P` is the identity on corner nodes and the average of the two edge-endpoint corners on each
 midside node. The coarse solve always runs on the plain scalar backend, so it is given the same
 rigid-body near-null-space treatment the single-level default gives a scalar-backend field,
-restricted to the corner-node subset -- independent of what backend the field's own single-level
-``fieldPreconds`` tree uses (a block backend, the default for 2D/3D fields, takes the translations at
-most; see ``useRigidBodyNullspace`` above).
+restricted to the corner-node subset (``P1Interpolation(useCoarseNullspace=True)``, the default) -- independent of
+the backend the field's fine level is stored on (a block backend, the default for 2D/3D fields, takes the translations
+at most; see ``backendBlockSize`` above).
 
 Its preconditioner is rebuilt exactly when the single-level hierarchies are (see the reuse rules
 above), and its coarse solve gets a near-null-space while the fine-level Chebyshev smoother, having
 no coarsening step of its own, needs none. Measured against the default single-level
-configuration with the same outer settings (fine operator in float, ``p1NuPre = 0``,
-``p1NuPost = 1``, fine degree 16, the same coarse ``estimate_spectral_radius``), it was
+configuration with the same outer settings (fine operator in float, ``npre = 0``,
+``npost = 1``, Chebyshev degree 16, the same coarse ``estimate_spectral_radius``), it was
 slower on a cylinder sequence and level within noise on a contact sequence, with the cheaper
 rebuild -- an alternative worth measuring on a model with expensive rebuilds, not the default.
-Enable it per field with ``p1FieldNames``; the topology map is computed lazily from the model and
+Enable it per field with ``OnField(name, TwoLevel(coarseSpace=P1Interpolation(coarsePrecond, useCoarseNullspace),
+tree=...))``; the topology map is computed lazily from the model and
 recomputed whenever the model changes (``setModel``, e.g. after adaptive refinement). There is no
 fallback to the single-level default: on linear elements every node is a corner, so the coarse
 operator is the field's block itself and the cycle gains nothing, and an element topology the map
@@ -963,19 +969,22 @@ slave rows of the multi-point-constraint condensation -- are decoupled exactly r
 the fine right-hand side and iterate are kept zero on them, which a Dirichlet row
 preserves under every residual and every smoothing step, and :math:`P` has no rows or columns for
 them. This is the free-submatrix cycle up to floating-point summation order, without extracting the
-free submatrix, and it allows ``p1FineBlockSize = 3``: the fine operator is stored in node-wise
+free submatrix, and it allows ``TwoLevel(..., backendBlockSize=3)``: the fine operator is stored in node-wise
 :math:`3\times 3` blocks even where a node is only partially constrained, which roughly halves the
 memory traffic of the fine smoother and residual -- the dominant cost of the apply.
-``p1FineValueType = "float"`` halves the bytes per stored entry once more. Only the stored entries
+``backendPrecision="float"`` (the default on :math:`3\times 3` blocks) halves the bytes per stored entry once more.
+Only the stored entries
 are rounded: vectors and every sum stay double (a float matrix times a double vector), and the
 spectral radius is estimated and re-checked on the double operator before it is rounded -- unlike
-``backendPrecision = "float"``, where AMGCL's own power iteration runs in single precision.
+``AMG(backendPrecision="float")`` on the scalar backend, where AMGCL's own power iteration runs in single precision.
 
-The fine Chebyshev smoother uses AMGCL's polynomial, with the bounds of the vector-field default
+The fine Chebyshev smoother is the tree's ``relax`` (``degree``, ``lower``, ``higher``, ``power_iters``), applied
+``npre`` times before and ``npost`` times after the coarse-grid correction -- the same spelling as for the rigid-body
+coarse level. It uses AMGCL's polynomial, with the bounds of the vector-field default tree
 (``lower`` 0.01, ``higher`` 1.1 times the spectral radius; AMGCL's own defaults are 1/30 and 1), but its
-spectral-radius estimate -- 300 power iterations, the most
+spectral-radius estimate -- 300 power iterations in the default tree, the most
 expensive stage of the build -- starts from a deterministic, thread-count-independent vector, and can
-be reduced to a re-check: with ``p1FineSpectralRadiusReuse`` a field's first build estimates it in
+be reduced to a re-check: with ``TwoLevel(..., fineSpectralRadiusReuse=True)`` a field's first build estimates it in
 full, and every later rebuild continues the power iteration for 15 steps from the previous build's
 dominant vector. A re-check estimate up to 1% above the previous radius keeps it (the full estimate is
 itself converged only to about 1e-5); one further above replaces it; and one above it by more than the
@@ -991,9 +1000,9 @@ Rigid-body coarse level
 
 By default, the hierarchy of the 3D displacement field starts with a coarse level built from **all** of its rigid-body
 modes -- the translations and the rotations -- in place of AMGCL's hierarchy on the translations
-(``rigidBodyCoarseLevel``, :mod:`~edelweissfe.linsolve.composition.rigidbodycoarselevel`); any other vector field gets it
-when named. It keeps what makes the block backend fast, the fine level in node-wise blocks stored in float, and adds
-what that backend cannot take, the rotations.
+(``TwoLevel(coarseSpace=RigidBodyModes())``, :mod:`~edelweissfe.linsolve.composition.rigidbodycoarselevel`); a 2D
+displacement field gets it in a ``custom`` solver script. It keeps what makes the block backend fast, the fine level
+in node-wise blocks stored in float, and adds what that backend cannot take, the rotations.
 
 Why the translations are not enough
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1118,38 +1127,30 @@ The coarse level pays where the hierarchy on the translations needs many outer i
 elastic or mildly damaged: typically a bending-dominated structure. It is the default for the 3D displacement field, of
 any element type: the rigid-body modes are the near null-space of elasticity on the displacement field (the field of
 type ``vector`` in :data:`~edelweissfe.config.phenomena.phenomena`). A rotation field -- of beams, or of the reference
-point of a rigid body -- or any other vector field has another near null-space, and gets the coarse level only when
-named, as does a 2D displacement field. **An explicit tree beats the default:** a displacement field with an explicit
-``fieldPreconds`` tree keeps that tree as written, and naming the field in ``rigidBodyCoarseLevel`` adds the coarse
-level to it. A displacement field on the p-two-grid (``p1FieldNames``, ``p1Maps``) keeps that; one with an explicit
-tree or on the p-two-grid is logged once at ``info``, and so is one without node coordinates (see below), which keeps
-the hierarchy on the translations. The field's tree, the default one or a named field's explicit one, configures the
-smoother, the aggregation and the hierarchy below.
+point of a rigid body -- or any other vector field has another near null-space (its translations), and
+``RigidBodyModes`` rejects it (:func:`~edelweissfe.linsolve.nullspace.carriesRigidBodyModes` decides, by the field's
+phenomenon). A 2D displacement field gets the coarse level in a ``custom`` script, where every field's preconditioner
+is written out, ``OnField(name, TwoLevel(coarseSpace=RigidBodyModes(), tree=...))``, and nothing is added to it. A 3D
+displacement field without node coordinates (see below) keeps the hierarchy on the translations in the preset, logged
+once at ``info``. The field's tree, the default one or one given to ``TwoLevel(tree=...)``, configures the smoother,
+the aggregation and the hierarchy below.
 
 Switch it off on a model whose solves converge in a few outer iterations with the hierarchy on the translations: the
 coarse level saves little there, and its setup is larger wherever its coarse operator is -- up to 1.2 times that of
 the hierarchy on the translations on the larger models below. On the edge breakout, where the translations need 22
 and 23 outer iterations, the coarse level saves 2 and 1, at a setup of 0.94 and 0.99 times theirs and a solve time,
-setup included, of 0.92 and 0.95 -- a wash. ``false`` switches it off for all fields; a field name, a list or an
-object switches it on for exactly the fields named, which is also how a 2D vector field gets it, and how options are
-given:
-
-.. code-block:: json
-
-    {"rigidBodyCoarseLevel": false}
-
-.. code-block:: json
-
-    {"rigidBodyCoarseLevel": {"displacement": {"fineSpectralRadiusReuse": true}}}
+setup included, of 0.92 and 0.95 -- a wash. The data line ``rigidBodyCoarseLevel=false`` of ``type=blockamg``
+switches it off; its options are those of a ``custom`` script (see :ref:`the configuration below
+<blockamg-rigid-body-coarse-level-configuration>`).
 
 The modes are built from the node coordinates of the reference configuration, as the model holds them, which
-``blockamg`` reads from the model: after adaptive refinement those of the new model, with ``schurComplement`` those of
-the remaining nodes. Rigid-body modes about the reference configuration suit small rotations; under large rotations
+``blockamg`` reads from the model: after adaptive refinement those of the new model, under a ``SchurComplement`` those
+of the remaining nodes. Rigid-body modes about the reference configuration suit small rotations; under large rotations
 they represent the rigid motions of the deformed structure less exactly, which costs convergence speed only, not
 accuracy. Without a model -- a script driving the solver itself -- the coordinates must be given as
-``nodeCoordinates`` (see the note at the end of this page): without them, a field named in ``rigidBodyCoarseLevel``
-raises an error rather than switch off the coarse level the configuration asks for, while one selected by the default
-keeps the hierarchy on the translations.
+``nodeCoordinates`` (see the note at the end of this page): without them, ``TwoLevel(coarseSpace=RigidBodyModes())``
+raises an error rather than switch off the coarse level it asks for, while the preset keeps the hierarchy on the
+translations.
 
 What it does not fix:
 
@@ -1157,8 +1158,8 @@ What it does not fix:
   displacement block indefinite, other directions of low energy appear that no coarse space of rigid bodies holds: on
   the damaged tunnel system below, the iterations fall from 61 to 36, against 67 to 22 on the elastic one.
 * **Scalar fields, and the scalar backend.** A scalar field has no rotations, and the scalar backend
-  (``backendBlockSize`` 1) takes the rigid-body modes as its near-null-space itself (``useRigidBodyNullspace``); a
-  field of either kind named in ``rigidBodyCoarseLevel`` is rejected.
+  (``AMG(backendBlockSize=1)``) takes the rigid-body modes as its near-null-space itself
+  (``AMG(rigidBodyNullspace=True)``, the default); ``TwoLevel(coarseSpace=RigidBodyModes())`` on either is rejected.
 
 .. admonition:: Measured
 
@@ -1209,7 +1210,7 @@ What it does not fix:
    The control needs the iterations of the hierarchy on the translations within two: the gain is the rotations'. On
    the larger models the setup took up to 1.2 times that of the hierarchy on the translations, and the solve, setup
    included, 0.61 of its time on the elastic tunnel system and 0.84 to 0.95 on the others. In a simulation, the
-   testfile deck run with ``"verbosity": "info"`` shows the same: each linear solve reaches its tolerance in some 20
+   testfile deck run with ``verbosity=info`` shows the same: each linear solve reaches its tolerance in some 20
    outer iterations, and Newton converges in two; with the coarse level switched off, every solve stops at the
    iteration cap with a relative residual of about 1e-2, and Newton needs five.
 
@@ -1220,7 +1221,7 @@ What it does not fix:
      the run completed in 581 s, while the translations had covered 88% of the load path when stopped at 600 s;
      24.7 against 28.3 outer iterations per solve, at most 61 against one solve at the cap of 100. The
      load-displacement curves agree to 2e-4 of the peak load.
-   * a coarser tunnel segment with embedded bars with bond-slip (0.28 M unknowns, ``schurComplement``, the rigid-body
+   * a coarser tunnel segment with embedded bars with bond-slip (0.28 M unknowns, ``SchurComplement``, the rigid-body
      coarse level on the displacement field of the remaining nodes), run to its end: 46 against 65 s of computation,
      13 against 21 Newton iterations and linear solves, and 9.1 against 14.7 outer iterations per solve. The final
      load agrees to 2e-4.
@@ -1233,24 +1234,27 @@ Configuration
 ~~~~~~~~~~~~~
 
 The ``blockamg`` preset gives the 3D displacement field the rigid-body coarse level; ``rigidBodyCoarseLevel=false``
-switches it off. Any other 2D or 3D vector field gets it in a ``custom`` solver script,
-``OnField(name, TwoLevel(coarseSpace=RigidBodyModes(...)))``. The field must be on a block backend
-(``backendBlockSize`` 2 or 3, as in the default trees), and its tree must smooth with a Chebyshev polynomial
+switches it off. A 2D displacement field, or a 3D one with other options, gets it in a ``custom`` solver script,
+``OnField(name, TwoLevel(coarseSpace=RigidBodyModes(...), ...))``. The field must be on a block backend
+(``backendBlockSize`` 2 or 3, the default of a 2D or 3D field), and its tree must smooth with a Chebyshev polynomial
 (``relax.type`` ``chebyshev``, without ``relax.scale``, ``relax.power_iters`` at least 1) and coarsen by smoothed
 aggregation, as the default trees do; ``TwoLevel`` checks this when it meets its field, and the parameters of
-``RigidBodyModes`` at construction. The options of ``RigidBodyModes``:
+``RigidBodyModes`` at construction. The option of ``RigidBodyModes``:
 
 ``prolongation`` (``"smoothed"``)
     ``"smoothed"``: :math:`P = (I - \omega\, \mathrm{diag}_B(\hat A_F)^{-1} \hat A_F) P^{\mathrm{tent}}`.
     ``"tentative"``:
     :math:`P^{\mathrm{tent}}` itself -- a cheaper setup and a sparser coarse operator, for more outer iterations (32
     instead of 22 on the elastic tunnel system).
+
+and those of ``TwoLevel`` (the same for the p-two-grid):
+
 ``coarseHierarchyPrecision`` (``"double"``)
     The value type of the AMGCL hierarchy below: ``"double"``, or ``"float"`` (AMGCL's single-precision backend, its
     setup included) for half its memory, at the price of more outer iterations.
 ``fineSpectralRadiusReuse`` (``false``)
     Estimate the fine smoother's spectral radius in full only on a field's first build, and on every later rebuild
-    only re-check it, as ``P1Interpolation(fineSpectralRadiusReuse=True)`` does for the p-two-grid: 15 power iterations continued from the
+    only re-check it, as for the p-two-grid: 15 power iterations continued from the
     previous build's dominant vector, instead of the tree's ``relax.power_iters`` (300 in the default trees) from a
     fixed start vector. The full estimate is the largest part of the setup, 7.6 of 10.7 s on the elastic tunnel
     system. It is safe where the operator changes gradually between rebuilds, as over Newton iterations and
@@ -1272,7 +1276,7 @@ low-energy error has the bar follow the host, :math:`u_{bar} \approx \sum_i N_i 
 nodes at other positions, which an aggregate moving as a rigid body cannot represent. The bars are also
 stiff 1D chains inside a softer 3D continuum, a strong anisotropy. ``blockamg`` alone stalls on such systems.
 
-``schurComplement`` condenses these dofs exactly -- we call them :math:`b`, the condensed ("bar") dofs -- and leaves
+``SchurComplement`` condenses these dofs exactly -- we call them :math:`b`, the condensed ("bar") dofs -- and leaves
 AMG the remaining (kept) dofs :math:`k`:
 
 .. math::
@@ -1466,16 +1470,16 @@ contact anchor model with many multi-point-constraint slaves):
   iterations than the hierarchy on the translations and up to three times fewer on a bending-dominated one, at a setup
   of up to 1.2 times; live, faster on all three models measured, with the same results (see
   :ref:`blockamg-rigid-body-coarse-level`).
-* ``lgmresM = 50`` matches the public outer-iteration cap (``outerRestart x outerMaxiter = 100``), so
-  LGMRES restarts at most once within it; ``lgmresK`` only allocates its augmentation vectors without
+* ``LGMRES(restart=50)`` matches the outer-iteration cap (``maxIterations = 100``), so
+  LGMRES restarts at most once within it; ``augmentationVectors`` only allocates its augmentation vectors without
   ever exhausting them before the cap.
-* ``hierarchyStalenessFactor = 3`` reuses hierarchies longer than the former ``1.5``, which fired on
-  noise at small iteration counts; with the public cap of 100 it can fire only while the solve the
+* ``RebuildPolicy(stalenessFactor=3)`` reuses hierarchies longer than the former factor of 1.5, which fired on
+  noise at small iteration counts; with the cap of 100 it can fire only while the solve the
   hierarchies were built for took fewer than about 34 iterations -- beyond that, only a cap hit (or a
   new increment, a pattern change) rebuilds them.
-* ``etaMax = 1e-3`` is not about the linear solver at all: through a damage onset, Newton needs linear
-  solves about ten times tighter than the Eisenstat--Walker forcing allowed at ``etaMax = 1e-2``.
-  ``etaMin = 1e-4`` was measured against ``1e-3``: the looser value cost Newton extra
+* ``ForcingTolerance(maximum=1e-3)`` is not about the linear solver at all: through a damage onset, Newton needs
+  linear solves about ten times tighter than the Eisenstat--Walker forcing allowed at a maximum of 1e-2.
+  ``minimum = 1e-4`` was measured against ``1e-3``: the looser value cost Newton extra
   iterations already before the damage onset, and more wall-clock to match.
 * ``krylovOnScaledSystem = false`` converges the true residual directly, so the gap compensation and
   the continuations of the scaled system have nothing to do and are left at their own, otherwise
@@ -1485,16 +1489,16 @@ contact anchor model with many multi-point-constraint slaves):
   model with multi-point constraints the hierarchies are now reused automatically; the former setup
   needed this set by hand (see the reuse rules above).
 
-Measured live, from the same checkpoints, the defaults against the former defaults (no per-model keys in
+Measured live, from the same checkpoints, the defaults against the former defaults (no per-model settings in
 either run): the contact model's increments finished markedly faster; on the damage cylinder, the
 former defaults had still not cleared the damage-onset increment in a comparable time budget, while
 the current defaults carried the run through it and beyond.
 
 How the settings got there, live against the production settings the reference runs had used: both
 the contact model and the damage cylinder solved faster, judged per Newton iteration on the cylinder,
-with ``etaMax = 1e-2`` and on the scaled system. On the
+with a forcing maximum of 1e-2 and on the scaled system. On the
 cylinder that setting took Newton more iterations per increment before the damage onset and failed
-the onset increment outright (a cutback); ``etaMax = 1e-3`` restores the fewer-iteration path,
+the onset increment outright (a cutback); a maximum of 1e-3 restores the fewer-iteration path,
 converges the onset increment and reaches the same load, and is neutral on the contact model.
 ``krylovOnScaledSystem = false`` then saves a further amount on the cylinder, with fewer Newton
 iterations, and on the contact model. Offline, on captured consecutive systems of both models, the
@@ -1502,8 +1506,7 @@ same configuration with a 200-iteration cap needed less wall-clock than with
 the displacement blocks stored in double, at identical outer iteration counts.
 
 All of the above, except the offline 200-iteration-cap comparison just above, was measured with the
-outer-iteration cap at 50 (``outerRestart x outerMaxiter``). The public default cap is 100
-(``outerRestart = 100``, ``outerMaxiter = 1``) instead: more forgiving on
+outer-iteration cap at 50 (``maxIterations``). The default cap is 100 instead: more forgiving on
 a model that has not yet been characterised on this solver, at the cost of a capped solve possibly
 spending up to twice the iterations before its hierarchies are rebuilt.
 
