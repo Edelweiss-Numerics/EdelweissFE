@@ -2110,9 +2110,6 @@ public:
     PT_ = amgcl::backend::transpose( *P_ );
   }
 
-  /// @brief The number of free coarse DOFs, the size of the Galerkin operator.
-  int nCoarseFree() const { return nCoarse_; }
-
 protected:
   void restrictResidual( const double* fine, double* coarse ) const override
   {

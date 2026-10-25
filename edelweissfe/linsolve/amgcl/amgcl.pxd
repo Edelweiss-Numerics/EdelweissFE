@@ -118,7 +118,6 @@ cdef extern from "amgcl-wrapper.hpp":
                    int nNodes, const signed char* isCorner, const int* edgeEndpoints,
                    const double* nullspace, int nullspaceRows, int nullspaceCols,
                    double spectralRadius, const double* dominantVector, int dominantVectorSize) except +
-        int nCoarseFree()
 
     # The rigid-body coarse level preconditioner of edelweissfe/linsolve/blockamg/rigidbodycoarselevel.py, built and
     # applied entirely in C++ (OpenMP) -- see RigidBodyCoarseLevelPreconditioner's own comment, and

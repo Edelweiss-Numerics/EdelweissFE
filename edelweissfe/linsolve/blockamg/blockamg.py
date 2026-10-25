@@ -95,6 +95,7 @@ dependency.
 
 import collections
 import copy
+import functools
 import inspect
 import json
 import os
@@ -1521,7 +1522,7 @@ class BlockAMGSolver(LinearSolver):
         The generic apply of a hot reload still goes through ``hasattr``/``setattr`` on the ``_<name>``
         attribute convention; an explicit per-key table is left for the configuration refactor.
         """
-        from edelweissfe.linsolve.blockamg.ptwogrid import parameterRejection
+        from edelweissfe.linsolve.blockamg.ptwogrid import PTwoGridPreconditioner
 
         rejections = {}
 
@@ -1568,7 +1569,7 @@ class BlockAMGSolver(LinearSolver):
             reject("must be an AMGCL preconditioner tree (a JSON object) or null", "p1CoarsePrecond")
         else:
             p1Options = {option: settings[key] for key, option in _P1_OPTIONS.items() if settings[key] is not None}
-            reason = parameterRejection(**p1Options)
+            reason = PTwoGridPreconditioner.parameterRejection(**p1Options)
             if reason is not None:
                 reject(reason, *_P1_OPTIONS)
         if settings["p1FineBlockSize"] == 3:
@@ -1693,7 +1694,8 @@ class BlockAMGSolver(LinearSolver):
         null-space itself (``useRigidBodyNullspace``), and a scalar field has none. The field's tree (its
         ``fieldPreconds`` entry, or the default tree of its dimension) configures the coarse level: the C++ class
         checks it as it would configure it
-        (:func:`~edelweissfe.linsolve.blockamg.rigidbodycoarselevel.parameterRejection`). Before the fields are known
+        (:meth:`~edelweissfe.linsolve.blockamg.rigidbodycoarselevel.RigidBodyCoarseLevelPreconditioner.parameterRejection`).
+        Before the fields are known
         (``dimension`` ``None``) and without an explicit tree, the options are checked with the default tree of a 3D
         field -- they do not depend on the field -- and the field and its tree follow at the first build.
         """
@@ -1715,14 +1717,17 @@ class BlockAMGSolver(LinearSolver):
                 "near null-space itself (useRigidBodyNullspace); the rigid-body coarse level is for the block backends, "
                 "backendBlockSize 2 or 3".format(fieldName, blockSize)
             )
-        reason = rigidbodycoarselevel.parameterRejection(
+        reason = rigidbodycoarselevel.RigidBodyCoarseLevelPreconditioner.parameterRejection(
             _amgclTree(tree),
             blockSize,
             tree.get("backendPrecision", "double"),
             options["prolongation"],
             options["coarseHierarchyPrecision"],
         )
-        return None if reason is None else "field '{:}': {:}".format(fieldName, reason)
+        if reason is None:
+            return None
+        # the C++ class names itself in the message; here the key does
+        return "field '{:}': {:}".format(fieldName, reason.removeprefix("rigidBodyCoarseLevel: "))
 
     def _degradationThreshold(self) -> int:
         """The outer-iteration count above which a solve is dumped: ``dumpOnDegradationThreshold``, or the
@@ -1863,8 +1868,23 @@ class BlockAMGSolver(LinearSolver):
 
         if rigidBodyOptions is not None:
             if coords is not None:
-                return self._buildRigidBodyCoarseLevel(
-                    block, system, index, scaling, fieldTree, coords, rigidBodyOptions
+                createRigidBodyCoarseLevel = functools.partial(
+                    rigidbodycoarselevel.RigidBodyCoarseLevelPreconditioner,
+                    _amgclTree(fieldTree),
+                    fieldTree.get("backendBlockSize", 1),
+                    fieldTree.get("backendPrecision", "double"),
+                    prolongation=rigidBodyOptions["prolongation"],
+                    coarseHierarchyPrecision=rigidBodyOptions["coarseHierarchyPrecision"],
+                )
+                return self._buildTwoGrid(
+                    block,
+                    system,
+                    index,
+                    scaling,
+                    coords,
+                    createRigidBodyCoarseLevel,
+                    rigidBodyOptions["fineSpectralRadiusReuse"],
+                    "rigid-body coarse level",
                 )
             # only offline, without a model: a field named in rigidBodyCoarseLevel is refused rather than built without
             # the rotations, which would switch off the coarse level the configuration asks for; one the default
@@ -1885,17 +1905,16 @@ class BlockAMGSolver(LinearSolver):
             from edelweissfe.linsolve.blockamg.ptwogrid import PTwoGridPreconditioner
 
             p1Options = {option: value for option, value in self._p1Options().items() if value is not None}
-            fineSpectralRadius, fineDominantVector = self._reusedFineSpectralRadius(
-                block.name, self._p1FineSpectralRadiusReuse
+            return self._buildTwoGrid(
+                block,
+                system,
+                index,
+                scaling,
+                coords,
+                functools.partial(PTwoGridPreconditioner, *p1Map, **p1Options),
+                self._p1FineSpectralRadiusReuse,
+                "p-two-grid",
             )
-            preconditioner = PTwoGridPreconditioner(
-                *p1Map, fineSpectralRadius=fineSpectralRadius, fineDominantVector=fineDominantVector, **p1Options
-            )
-            diagonalBlock = self._diagonalBlock(system, index)
-            with performancetiming.timeit("{:} p-two-grid build".format(block.name)):
-                preconditioner.build(diagonalBlock, scaling, coords=coords)
-            self._keepFineSpectralRadius(block.name, preconditioner, self._p1FineSpectralRadiusReuse)
-            return preconditioner
 
         from edelweissfe.linsolve.amgcl.amgcl import PyAMGCLSolver
 
@@ -1965,28 +1984,38 @@ class BlockAMGSolver(LinearSolver):
             return None
         return rigidbodycoarselevel.options(True)
 
-    def _buildRigidBodyCoarseLevel(
-        self, block, system, index: int, scaling: np.ndarray, fieldTree: dict, coords, options: dict
+    def _buildTwoGrid(
+        self,
+        block,
+        system,
+        index: int,
+        scaling: np.ndarray,
+        coordinates,
+        createPreconditioner,
+        reuseFineSpectralRadius: bool,
+        label: str,
     ):
-        """The preconditioner of a field with the rigid-body coarse level and these options
-        (:mod:`~edelweissfe.linsolve.blockamg.rigidbodycoarselevel`), built on its equilibrated diagonal block with the
-        coordinates of its nodes; its tree configures the coarse level and the hierarchy below."""
-        fineSpectralRadius, fineDominantVector = self._reusedFineSpectralRadius(
-            block.name, options["fineSpectralRadiusReuse"]
-        )
-        preconditioner = rigidbodycoarselevel.RigidBodyCoarseLevelPreconditioner(
-            _amgclTree(fieldTree),
-            fieldTree.get("backendBlockSize", 1),
-            fieldTree.get("backendPrecision", "double"),
-            prolongation=options["prolongation"],
-            coarseHierarchyPrecision=options["coarseHierarchyPrecision"],
-            fineSpectralRadius=fineSpectralRadius,
-            fineDominantVector=fineDominantVector,
+        """A two-grid preconditioner of the field (the p-two-grid or the rigid-body coarse level, see
+        :class:`~edelweissfe.linsolve.blockamg.twogrid.TwoGridPreconditioner`), built on its equilibrated diagonal block.
+
+        Parameters
+        ----------
+        coordinates
+            The node coordinates of the field's block, or ``None``.
+        createPreconditioner
+            Creates the preconditioner, given the keywords ``fineSpectralRadius`` and ``fineDominantVector``: those of
+            the field's previous build with ``reuseFineSpectralRadius``, ``None`` otherwise.
+        label
+            The preconditioner's name in the timings.
+        """
+        fineSpectralRadius, fineDominantVector = self._reusedFineSpectralRadius(block.name, reuseFineSpectralRadius)
+        preconditioner = createPreconditioner(
+            fineSpectralRadius=fineSpectralRadius, fineDominantVector=fineDominantVector
         )
         diagonalBlock = self._diagonalBlock(system, index)
-        with performancetiming.timeit("{:} rigid-body coarse level build".format(block.name)):
-            preconditioner.build(diagonalBlock, scaling, coords)
-        self._keepFineSpectralRadius(block.name, preconditioner, options["fineSpectralRadiusReuse"])
+        with performancetiming.timeit("{:} {:} build".format(block.name, label)):
+            preconditioner.build(diagonalBlock, scaling, coordinates)
+        self._keepFineSpectralRadius(block.name, preconditioner, reuseFineSpectralRadius)
         return preconditioner
 
     def _reusedFineSpectralRadius(self, fieldName: str, reuse: bool) -> tuple:

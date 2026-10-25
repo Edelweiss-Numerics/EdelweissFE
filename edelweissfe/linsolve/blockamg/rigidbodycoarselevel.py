@@ -102,7 +102,7 @@ def options(value) -> dict:
 def optionsRejection(value) -> "str | None":
     """Why the value of a field in ``rigidBodyCoarseLevel`` -- ``true`` (the default options) or an object of options --
     cannot be used, or ``None``. Checks its form; the values that the C++ class takes are checked there
-    (:func:`parameterRejection`)."""
+    (:meth:`RigidBodyCoarseLevelPreconditioner.parameterRejection`)."""
     if value is True:
         return None
     if not isinstance(value, dict):
@@ -116,17 +116,6 @@ def optionsRejection(value) -> "str | None":
     if not isinstance(value.get("fineSpectralRadiusReuse", False), bool):
         return "fineSpectralRadiusReuse must be true or false"
     return None
-
-
-def parameterRejection(
-    amgclTree: dict, blockSize: int, backendPrecision: str, prolongation: str, coarseHierarchyPrecision: str
-) -> "str | None":
-    """Why these settings of the rigid-body coarse level -- :class:`RigidBodyCoarseLevelPreconditioner`'s arguments --
-    cannot be used, or ``None``, asked without a build."""
-    reason = RigidBodyCoarseLevelPreconditioner.parameterRejection(
-        amgclTree, blockSize, backendPrecision, prolongation, coarseHierarchyPrecision
-    )
-    return None if reason is None else reason.removeprefix("rigidBodyCoarseLevel: ")
 
 
 class RigidBodyCoarseLevelPreconditioner(TwoGridPreconditioner):
@@ -196,7 +185,7 @@ class RigidBodyCoarseLevelPreconditioner(TwoGridPreconditioner):
             fineDominantVector,
         )
 
-    def build(self, A, scaling, coords) -> None:
+    def build(self, A, scaling, coordinates) -> None:
         """Build the rigid-body coarse level, the AMGCL hierarchy below it and the fine smoother, all in C++.
 
         Parameters
@@ -205,14 +194,13 @@ class RigidBodyCoarseLevelPreconditioner(TwoGridPreconditioner):
             The field's equilibrated diagonal block ``D K D`` (scipy CSR), node-major, with its Dirichlet identity rows.
         scaling
             The field's slice of the equilibration vector ``D``: the modes are divided by it.
-        coords
+        coordinates
             The field's node coordinates in its dof order, ``(nNodes, >= blockSize)`` (columns beyond the field's
-            dimension, e.g. ``z`` of a 2D field, are ignored).
+            dimension, e.g. ``z`` of a 2D field, are ignored); required.
         """
-        coordinates = np.ascontiguousarray(np.asarray(coords, dtype=float)[:, : self._blockSize])
         self._preconditioner.build(
             A,
-            coordinates,
+            np.ascontiguousarray(np.asarray(coordinates, dtype=float)[:, : self._blockSize]),
             scaling,
             self._suppliedFineSpectralRadius(),
             self._fineDominantVector,

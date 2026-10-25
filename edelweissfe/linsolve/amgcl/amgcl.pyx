@@ -35,12 +35,15 @@ from libcpp.string cimport string
 from libcpp.vector cimport vector
 
 
-def _csrArrays(object A):
-    """``A`` as a CSR matrix (converted if needed) and its arrays as C-contiguous int32 row pointers, int32
-    column indices and float64 values -- the form every C++ entry point of this module takes, and the one
-    place their int32 range is checked."""
+def _csrArrays(object A, bint sortIndices=False):
+    """``A`` as a CSR matrix (converted if needed; with ``sortIndices``, with the columns of every row in increasing
+    order, as the two-grid builds read them) and its arrays as C-contiguous int32 row pointers, int32 column indices
+    and float64 values -- the form every C++ entry point of this module takes, and the one place their int32 range is
+    checked."""
     if not scipy.sparse.isspmatrix_csr(A):
         A = A.tocsr()
+    if sortIndices and not A.has_sorted_indices:
+        A = A.sorted_indices()
     int32Max = np.iinfo(np.int32).max
     if max(A.shape) > int32Max or A.nnz > int32Max:
         raise OverflowError("a {:}x{:} CSR matrix with {:} entries exceeds the int32 range of the AMGCL wrapper".format(
@@ -614,8 +617,12 @@ cdef np.ndarray _doubleArray(const vector[double]& values):
 cdef class _PyAMGCLTwoGrid:
     """What the two-grid preconditioners share (``TwoGridPreconditioner`` in ``amgcl-wrapper.hpp``): the cycle, the
     fine spectral radius it was built with, the timings and the report. A derived class creates the C++ object and
-    points :attr:`twoGrid` at it."""
+    points :attr:`twoGrid` at it; this class owns it (the C++ base class has a virtual destructor)."""
     cdef TwoGridPreconditioner* twoGrid
+
+    def __dealloc__(self):
+        if self.twoGrid != NULL:
+            del self.twoGrid
 
     def applyPreconditioner(self, object r):
         """One two-grid cycle: returns M^-1 r as a new float64 array (Dirichlet rows solved exactly)."""
@@ -696,10 +703,6 @@ cdef class PyAMGCLPTwoGrid(_PyAMGCLTwoGrid):
         self.preconditioner = new PTwoGridPreconditioner(c_json)
         self.twoGrid = self.preconditioner
 
-    def __dealloc__(self):
-        if self.preconditioner != NULL:
-            del self.preconditioner
-
     @staticmethod
     def dirichletRows(object A):
         """The rows of a scipy.sparse CSR matrix this preconditioner treats as Dirichlet rows: a nonzero
@@ -725,11 +728,7 @@ cdef class PyAMGCLPTwoGrid(_PyAMGCLTwoGrid):
         radius is then re-checked by a few power iterations from it (``fineRecheckIters``) and
         raised, or re-estimated in full, if the operator has stiffened.
         """
-        if not scipy.sparse.isspmatrix_csr(A):
-            A = A.tocsr()
-        if not A.has_sorted_indices:
-            A = A.sorted_indices()
-        A, indptr, indices, data = _csrArrays(A)
+        A, indptr, indices, data = _csrArrays(A, sortIndices=True)
         corner = np.ascontiguousarray(isCorner, dtype=np.int8)
         endpoints = np.ascontiguousarray(np.asarray(edgeEndpoints, dtype=np.int32).reshape(-1))
         cdef int nNodes = corner.shape[0]
@@ -743,11 +742,6 @@ cdef class PyAMGCLPTwoGrid(_PyAMGCLTwoGrid):
                                   nNodes, _byteData(corner), _intData(endpoints),
                                   _constDoubleData(B.reshape(-1)), B.shape[0], B.shape[1],
                                   spectralRadius, _constDoubleData(dominant), dominant.shape[0])
-
-    @property
-    def nCoarseFree(self):
-        """The number of free coarse DOFs (rows of the Galerkin operator)."""
-        return self.preconditioner.nCoarseFree()
 
 
 cdef class PyAMGCLRigidBodyCoarseLevel(_PyAMGCLTwoGrid):
@@ -770,10 +764,6 @@ cdef class PyAMGCLRigidBodyCoarseLevel(_PyAMGCLTwoGrid):
         self.preconditioner = makeRigidBodyCoarseLevelPreconditioner(c_json)
         self.twoGrid = self.preconditioner
 
-    def __dealloc__(self):
-        if self.preconditioner != NULL:
-            del self.preconditioner
-
     def build(self, object A, object coordinates, object scaling, double spectralRadius=0.0,
               object dominantVector=None):
         """
@@ -785,11 +775,7 @@ cdef class PyAMGCLRigidBodyCoarseLevel(_PyAMGCLTwoGrid):
         spectralRadius: > 0 to start from this fine spectral radius instead of estimating it in full.
         dominantVector: with spectralRadius, the previous build's :attr:`fineDominantVector`, to re-check it from.
         """
-        if not scipy.sparse.isspmatrix_csr(A):
-            A = A.tocsr()
-        if not A.has_sorted_indices:
-            A = A.sorted_indices()
-        A, indptr, indices, data = _csrArrays(A)
+        A, indptr, indices, data = _csrArrays(A, sortIndices=True)
         cdef int n = A.shape[0]
         cdef int blockSize = self.preconditioner.blockSize()
         coords = np.ascontiguousarray(coordinates, dtype=np.float64)
