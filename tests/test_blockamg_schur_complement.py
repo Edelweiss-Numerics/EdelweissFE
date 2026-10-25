@@ -56,6 +56,7 @@ from edelweissfe.linsolve.base import FieldBlock
 from edelweissfe.linsolve.blockamg import createSolver
 from edelweissfe.linsolve.blockamg.schurcomplement import (
     SchurComplementCondensation,
+    _cutIntoWindows,
     _solveTransposed,
     createCondensation,
     optionsRejection,
@@ -148,6 +149,16 @@ def test_the_approximate_schur_complement_of_a_spd_system_has_a_positive_diagona
     assert defects[0] < 1e-14 and defects[40] < 1e-6 < defects[10]
 
 
+def test_a_chain_is_cut_into_windows_whose_cores_partition_it():
+    chain = np.arange(100, 110)
+    windows = _cutIntoWindows(chain, core=4, halo=2)
+    assert [list(w.dofs) for w in windows] == [list(range(100, 106)), list(range(102, 110)), list(range(106, 110))]
+    assert np.array_equal(np.concatenate([w.dofs[w.core] for w in windows]), chain)
+    # a chain no longer than one core with both halos is one window, an exact correction
+    (window,) = _cutIntoWindows(chain, core=4, halo=3)
+    assert np.array_equal(window.dofs, chain) and np.array_equal(window.core, np.arange(10))
+
+
 def test_block_lu_with_the_exact_schur_complement_is_the_inverse():
     A, b, barDofs = _barOnFoundation(n=6)
     condensation = FixedCondensation(barDofs, dropTolerance=0.0, windowNodes=10_000, blockFactors="LU")
@@ -210,8 +221,9 @@ def test_remaining_field_blocks_drop_the_condensed_nodes():
     blocks = [FieldBlock("displacement", 0, 12, 3), FieldBlock("damage", 12, 16, 1)]
     remaining = condensation.remainingFieldBlocks(blocks)
     assert remaining == [FieldBlock("displacement", 0, 9, 3), FieldBlock("damage", 9, 12, 1)]
-    assert np.array_equal(condensation.remainingNodes("displacement"), [True, False, True, True])
-    assert np.array_equal(condensation.remainingNodes("damage"), [True, False, True, True])
+    # a pure function of the condensed dofs and the field block, whatever was asked before
+    assert np.array_equal(condensation.remainingNodes(blocks[1]), [True, False, True, True])
+    assert np.array_equal(condensation.remainingNodes(blocks[0]), [True, False, True, True])
 
 
 def test_restricted_p1_map_turns_a_midside_node_with_a_condensed_endpoint_into_a_corner():

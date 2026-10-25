@@ -1782,10 +1782,13 @@ class BlockAMGSolver(LinearSolver):
         probe driving this solver through :meth:`setFieldStructure`, with no model)."""
         return self._getNodeCoordinates(fieldName) if self._useRigidBodyNullspace else None
 
-    def _buildFieldPreconditioners(self, system, blocks: list, scaling: np.ndarray, condensing: bool = False) -> list:
-        """One preconditioner per field, built for its equilibrated diagonal block -- with ``condensing``, the blocks of
-        the remaining dofs of this solve's Schur complement condensation. The first build for a field layout also
-        checks the settings against the fields' dimensions, which construction could not."""
+    def _buildFieldPreconditioners(
+        self, system, blocks: list, scaling: np.ndarray, remainingNodesOfField: "dict | None" = None
+    ) -> list:
+        """One preconditioner per field, built for its equilibrated diagonal block -- with ``remainingNodesOfField``
+        (the remaining nodes of every field, by name), the blocks of the remaining dofs of this solve's Schur complement
+        condensation. The first build for a field layout also checks the settings against the fields' dimensions, which
+        construction could not."""
         if blocks != self._blocks:
             rejections = self._settingsRejections(
                 self._settingsInForce(), {block.name: block.dimension for block in blocks}
@@ -1804,7 +1807,13 @@ class BlockAMGSolver(LinearSolver):
                 "unused".format(unused),
             )
         return [
-            self._buildFieldPreconditioner(block, system, i, scaling[block.start : block.stop], condensing)
+            self._buildFieldPreconditioner(
+                block,
+                system,
+                i,
+                scaling[block.start : block.stop],
+                None if remainingNodesOfField is None else remainingNodesOfField[block.name],
+            )
             for i, block in enumerate(blocks)
         ]
 
@@ -1820,7 +1829,9 @@ class BlockAMGSolver(LinearSolver):
             diagonalBlock = system.diagonalBlock(index)
             return self._dropSmallEntries(diagonalBlock) if self._hierarchyDropTol > 0.0 else diagonalBlock
 
-    def _buildFieldPreconditioner(self, block, system, index: int, scaling: np.ndarray, condensing: bool = False):
+    def _buildFieldPreconditioner(
+        self, block, system, index: int, scaling: np.ndarray, remainingNodes: "np.ndarray | None" = None
+    ):
         """The preconditioner of one field: the p-two-grid cycle for a vector field that opted into it
         (``p1Maps`` / ``p1FieldNames``), the rigid-body coarse level for one that has it (by default the 3D
         displacement field, see :meth:`_rigidBodyCoarseLevelOptions`), one AMGCL hierarchy otherwise. A vector field
@@ -1829,10 +1840,9 @@ class BlockAMGSolver(LinearSolver):
         (``blockTranslationNullspace``, else AMGCL's constant blocks); a scalar field takes AMGCL's default constant."""
         isVectorField = block.dimension > 1
 
-        # with Schur complement condensation in this solve, the block holds only the remaining nodes of the field: what
-        # is derived from the model is restricted to them. Decided by the solve, not by the condensation's state: a
-        # solve whose condensation failed builds for the whole field.
-        remainingNodes = self._condensation.remainingNodes(block.name) if condensing else None
+        # with Schur complement condensation in this solve, the block holds only the remaining nodes of the field
+        # (remainingNodes, a mask over the field's nodes): what is derived from the model is restricted to them. Decided
+        # by the solve, not by the condensation's state: a solve whose condensation failed builds for the whole field.
 
         p1Map = None
         isP1Field = isVectorField and (block.name in self._p1Maps or block.name in self._p1FieldNamesRequested)
@@ -2255,19 +2265,19 @@ class BlockAMGSolver(LinearSolver):
         return 1.0 / np.sqrt(diagonal), None
 
     def _buildHierarchies(
-        self, system, blocks: list, scaling: np.ndarray, A: sp.csr_matrix, condensing: bool = False
+        self, system, blocks: list, scaling: np.ndarray, A: sp.csr_matrix, remainingNodesOfField: "dict | None" = None
     ) -> None:
-        """Build the per-field hierarchies from the field split ``system`` of ``A`` (with ``condensing``, of the
-        remaining dofs of this solve's Schur complement condensation) and make them the standing ones, with the
+        """Build the per-field hierarchies from the field split ``system`` of ``A`` (with ``remainingNodesOfField``, of
+        the remaining dofs of this solve's Schur complement condensation) and make them the standing ones, with the
         equilibration and the field-block layout they were built for."""
         with performancetiming.timeit("hierarchy build"):
             try:
-                preconditioners = self._buildFieldPreconditioners(system, blocks, scaling, condensing)
+                preconditioners = self._buildFieldPreconditioners(system, blocks, scaling, remainingNodesOfField)
             except Exception as error:
                 if not self._hotReloadRollback:
                     raise
                 self._rollBackHotReload(error)
-                preconditioners = self._buildFieldPreconditioners(system, blocks, scaling, condensing)
+                preconditioners = self._buildFieldPreconditioners(system, blocks, scaling, remainingNodesOfField)
             self._hotReloadRollback = []
             # cleared only now: a failed build leaves the request standing for the next solve
             self._refreshNext = False
@@ -2484,7 +2494,10 @@ class BlockAMGSolver(LinearSolver):
 
         # (4) Hierarchies: one per field, rebuilt or reused (see mustRefresh above)
         if mustRefresh:
-            self._buildHierarchies(system, fieldBlocks, scaling, A, condensing)
+            remainingNodesOfField = (
+                {block.name: condensation.remainingNodes(block) for block in blocks} if condensing else None
+            )
+            self._buildHierarchies(system, fieldBlocks, scaling, A, remainingNodesOfField)
             self._hierarchyCondensedDofs = condensedDofs
             self._condensedSystem = system if condensing else None
 
