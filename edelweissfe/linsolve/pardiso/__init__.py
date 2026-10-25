@@ -53,6 +53,9 @@ class PardisoLinearSolver(LinearSolver):
     contracts, not just the ``LinearSolver`` one.
     """
 
+    #: See :attr:`~edelweissfe.linsolve.base.LinearSolver.factorizesForSeveralRightHandSides`.
+    factorizesForSeveralRightHandSides = True
+
     def __init__(self, delegate):
         self._delegate = delegate
 

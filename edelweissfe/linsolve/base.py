@@ -160,6 +160,12 @@ class LinearSolver:
     #: An explicit ``true``/``false`` in the input file always overrides this.
     needsStableSparsityPattern = False
 
+    #: Whether this solver factorizes once for several right-hand sides: whether it implements :meth:`factorize` and
+    #: :meth:`solveFactorized`. ``False`` here, inherited by every solver without that phase split. A caller that
+    #: needs it (the condensed block of ``blockamg``'s Schur complement condensation) asks this attribute -- a
+    #: wrapper answers for its delegate -- rather than comparing methods.
+    factorizesForSeveralRightHandSides = False
+
     def setJournal(self, journal) -> None:
         """Receive the shared :class:`~edelweissfe.journal.journal.Journal` instance.
 
@@ -296,7 +302,8 @@ class LinearSolver:
         (singular) raises :class:`numpy.linalg.LinAlgError`. Declared here rather than only on
         the solvers that implement it so that a wrapper (e.g.
         :class:`~edelweissfe.linsolve.matrixdump.matrixdump.MatrixDumpSolver`) can forward it
-        polymorphically, without an out-of-band capability check.
+        polymorphically, without an out-of-band capability check; a solver that implements it says so in
+        :attr:`factorizesForSeveralRightHandSides`.
 
         Default raises: most solvers have no phase split, and a caller reaching this has asked a
         solver for something it cannot do, which should say so rather than fail obscurely later.

@@ -178,19 +178,17 @@ def _isReal(value) -> bool:
 
 def _directSolverRejection(directSolver: Mapping) -> "str | None":
     """Why the ``directSolver`` of ``schurComplement`` cannot be used, or ``None``: it must be a registered linear
-    solver that factorizes once for several right-hand sides, i.e. whose class overrides both
-    :meth:`~edelweissfe.linsolve.base.LinearSolver.factorize` and
-    :meth:`~edelweissfe.linsolve.base.LinearSolver.solveFactorized` of the base class, which only raise."""
+    solver that factorizes once for several right-hand sides
+    (:attr:`~edelweissfe.linsolve.base.LinearSolver.factorizesForSeveralRightHandSides`). The registry creates solvers
+    by name, not classes, so this creates one to ask."""
     from edelweissfe.config.linsolve import getLinSolverByName
-    from edelweissfe.linsolve.base import LinearSolver
 
     name = directSolver["linsolver"]
     try:
         solver = getLinSolverByName(name, dict(directSolver.get("options", {})))
     except (ImportError, LookupError, ValueError, TypeError) as error:
         return "'directSolver' {!r} cannot be created: {:}".format(name, error)
-    solverClass = type(solver)
-    if solverClass.factorize is LinearSolver.factorize or solverClass.solveFactorized is LinearSolver.solveFactorized:
+    if not solver.factorizesForSeveralRightHandSides:
         return (
             "'directSolver' {!r} does not factorize once for several right-hand sides (factorize and solveFactorized), "
             "which the condensed block needs: use superlu or pardiso".format(name)

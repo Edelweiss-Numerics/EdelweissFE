@@ -253,6 +253,17 @@ def test_options_of_the_wrong_type_or_an_unsuitable_direct_solver_are_rejected_u
         createSolver({"schurComplement": options})
 
 
+def test_a_wrapper_factorizes_for_several_right_hand_sides_exactly_if_its_delegate_does(tmp_path):
+    # the capability is declared, not inferred from the methods a class overrides: the matrix dump wrapper forwards
+    # factorize/solveFactorized whatever its delegate is, so it answers for the delegate
+    from edelweissfe.linsolve.matrixdump.matrixdump import MatrixDumpSolver
+
+    for delegate, factorizes in ((SuperLUSolver(), True), (createSolver({"verbosity": "silent"}), False)):
+        assert delegate.factorizesForSeveralRightHandSides is factorizes
+        wrapper = MatrixDumpSolver(str(tmp_path), delegate, dumpAt=[], skipFirst=0, maxDumps=0, instances=[])
+        assert wrapper.factorizesForSeveralRightHandSides is factorizes
+
+
 class _FailingFromTheSecondFactorization(SuperLUSolver):
     """SuperLU whose factorizations fail from the second one on."""
 

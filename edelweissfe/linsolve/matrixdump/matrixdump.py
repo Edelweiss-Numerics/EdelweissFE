@@ -152,6 +152,13 @@ class MatrixDumpSolver(LinearSolver):
         delegate's question (see :attr:`~edelweissfe.linsolve.base.LinearSolver.needsStableSparsityPattern`)."""
         return self._delegate.needsStableSparsityPattern
 
+    @property
+    def factorizesForSeveralRightHandSides(self) -> bool:
+        """The delegate's own answer: this wrapper forwards :meth:`factorize` and :meth:`solveFactorized`, so it has
+        the phase split exactly if the delegate has (see
+        :attr:`~edelweissfe.linsolve.base.LinearSolver.factorizesForSeveralRightHandSides`)."""
+        return self._delegate.factorizesForSeveralRightHandSides
+
     def factorize(self, A: csr_matrix) -> None:
         """Dump ``A``, then forward the factorization to the delegate.
 

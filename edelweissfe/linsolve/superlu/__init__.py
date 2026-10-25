@@ -47,6 +47,9 @@ class SuperLUSolver(LinearSolver):
     complement.
     """
 
+    #: See :attr:`~edelweissfe.linsolve.base.LinearSolver.factorizesForSeveralRightHandSides`.
+    factorizesForSeveralRightHandSides = True
+
     def __init__(self):
         # the factorization of the last factorize(), for solveFactorized()
         self._factorization = None
