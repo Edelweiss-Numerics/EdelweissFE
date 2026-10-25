@@ -91,6 +91,7 @@ can be condensed, and always all fields of a node together.
 """
 
 from collections.abc import Callable
+from typing import NamedTuple
 
 import numpy as np
 import scipy.sparse as sp
@@ -125,6 +126,18 @@ EXACT_CORRECTION_BATCH = 256
 #: ... at most, and fewer when the zones are so large that a batch would exceed this many entries.
 EXACT_CORRECTION_MAX_ENTRIES = 2**25
 
+#: The correction of every window, and of every batch of a zone, is thinned against the diagonal of :math:`A_{kk}` at
+#: this fraction of the drop tolerance before the parts are summed, which bounds their memory; the final drop is
+#: against the diagonal of :math:`\tilde S` itself. A fraction well below 1 keeps what the final drop keeps, also an
+#: entry to which several parts contribute.
+THINNING_FRACTION = 0.1
+
+#: A window's block is solved in LAPACK band storage while its band (lower + upper + 1) holds at most this fraction of
+#: its columns (:func:`_solveTransposed`): a window along a bar has a band of a few dofs, so the banded solve costs a
+#: small fraction of the dense one, while for a short window, whose band reaches across it, the band storage no longer
+#: pays.
+BAND_STORAGE_MAX_FRACTION = 0.25
+
 
 class SchurComplementCondensation:
     """The condensed dofs :math:`b`, the factorization of :math:`A_{bb}`, the approximate Schur complement
@@ -149,7 +162,7 @@ class SchurComplementCondensation:
     dropTolerance
         The relative size :math:`\\tau` below which entries of :math:`\\tilde S` are dropped.
     windowNodes, haloNodes
-        The nodes of a window's core along a chain, and of its halo on either side.
+        The nodes of a window's core along a chain, and of its halo on either side (``None``: as many as the core).
     blockFactors
         The block factors of :math:`A` the preconditioner inverts: ``"U"``, the block upper triangular one (one solve
         with :math:`A_{bb}`), or ``"LU"``, both (two solves), see the module documentation.
@@ -162,7 +175,7 @@ class SchurComplementCondensation:
         approximation: str = "local",
         dropTolerance: float = 1e-4,
         windowNodes: int = 50,
-        haloNodes: int = 50,
+        haloNodes: "int | None" = None,
         blockFactors: str = "U",
     ):
         self._markers = markers
@@ -171,7 +184,7 @@ class SchurComplementCondensation:
         self._approximation = approximation
         self._dropTolerance = dropTolerance
         self._windowNodes = windowNodes
-        self._haloNodes = haloNodes
+        self._haloNodes = windowNodes if haloNodes is None else haloNodes
         self._blockFactors = blockFactors
 
         # the model, its elements as the candidates of the markers (with the elements at each node), and the dofs of
@@ -196,8 +209,6 @@ class SchurComplementCondensation:
         self.A_bb = self.A_bk = self.A_kb = None
         # A_kb by columns, for cutting out the columns of the windows, see approximateSchurComplement
         self._A_kb_byColumns = None
-        # per field: which of its nodes remain (are not condensed), see remainingFieldBlocks
-        self._remainingNodes = {}
         # the last selection of the condensed dofs, and the markers' stamps it was made with, see
         # _selectCondensedDofs
         self._selection = self._selectionStamp = None
@@ -301,17 +312,17 @@ class SchurComplementCondensation:
             isCondensed = np.zeros(A.shape[0], dtype=bool)
             isCondensed[dofs] = True
             remainingDofs, splitCache = np.flatnonzero(~isCondensed), None
-        blocks = (None, None, None)
+        A_bb = A_bk = A_kb = None
         if dofs.size > 0:
             with performancetiming.timeit("schur split"):
                 splitCache = _splitCacheFor(A, splitCache)
-                blocks = _split(A, ("bb", "bk", "kb"), dofs, remainingDofs, splitCache)
+                A_bb, A_bk, A_kb = _split(A, ("bb", "bk", "kb"), dofs, remainingDofs, splitCache)
             with performancetiming.timeit("schur factorization"):
-                self._directSolver.factorize(blocks[0])
+                self._directSolver.factorize(A_bb)
         self.selectedAllDofs = selectedAllDofs
         self.condensedDofs, self._nodeOfCondensedDof, self.remainingDofs = dofs, nodeOfDof, remainingDofs
         self._splitCache = splitCache
-        self.A_bb, self.A_bk, self.A_kb = blocks
+        self.A_bb, self.A_bk, self.A_kb = A_bb, A_bk, A_kb
 
     @property
     def blockFactors(self) -> str:
@@ -328,27 +339,23 @@ class SchurComplementCondensation:
     def remainingFieldBlocks(self, blocks: list) -> list:
         """The field blocks of the remaining dofs: every field without its condensed dofs, in the same order (and
         contiguous, as the remaining dofs keep their order). A field whose dofs are all condensed (e.g. the rotations
-        of embedded beams) has no block. Also records which nodes of every field remain, see
-        :meth:`remainingNodes`."""
+        of embedded beams) has no block."""
         remainingBlocks, start = [], 0
-        self._remainingNodes = {}
         for block in blocks:
-            inBlock = self.condensedDofs[(self.condensedDofs >= block.start) & (self.condensedDofs < block.stop)]
-            n = (block.stop - block.start) - inBlock.size
+            n = int(np.count_nonzero(self.remainingNodes(block))) * block.dimension
             if n == 0:
                 continue
             remainingBlocks.append(FieldBlock(block.name, start, start + n, block.dimension))
             start += n
-            # condensation takes whole nodes, and a field's dofs are node-major
-            remains = np.ones((block.stop - block.start) // block.dimension, dtype=bool)
-            remains[(inBlock - block.start) // block.dimension] = False
-            self._remainingNodes[block.name] = remains
         return remainingBlocks
 
-    def remainingNodes(self, fieldName: str) -> "np.ndarray | None":
-        """Which nodes of the field ``fieldName`` remain, as a boolean mask over the field's nodes (in the field's
-        dof order), or ``None`` if no block of that name remains."""
-        return self._remainingNodes.get(fieldName)
+    def remainingNodes(self, block: FieldBlock) -> np.ndarray:
+        """Which nodes of the field block ``block`` (of the whole system) remain, are not condensed: a boolean mask
+        over the field's nodes, in its dof order. Condensation takes whole nodes, and a field's dofs are node-major."""
+        inBlock = self.condensedDofs[(self.condensedDofs >= block.start) & (self.condensedDofs < block.stop)]
+        remains = np.ones((block.stop - block.start) // block.dimension, dtype=bool)
+        remains[(inBlock - block.start) // block.dimension] = False
+        return remains
 
     # ----- the approximate Schur complement -----
 
@@ -374,9 +381,7 @@ class SchurComplementCondensation:
         """:math:`A_{kk}` minus the corrections of the windows and of the zones, with small entries dropped."""
         tau = self._dropTolerance
         sqrtAbsDiagonalOfA_kk = np.sqrt(np.abs(A_kk.diagonal()))
-        # The correction of every window or batch is thinned against A_kk's diagonal at a tenth of the drop tolerance
-        # before the parts are summed, which bounds the memory; the final drop is against the diagonal of S~ itself.
-        thinningTolerance = 0.1 * tau
+        thinningTolerance = THINNING_FRACTION * tau
 
         windows, zoneDofs = self._windowsAndZones()
         self._A_kb_byColumns = self.A_kb.tocsc()
@@ -400,52 +405,35 @@ class SchurComplementCondensation:
             return _dropSmallEntries(S, tau)
 
     def _windowsAndZones(self) -> tuple:
-        """The windows along the chains of :math:`A_{bb}`, and the dofs of its zones.
-
-        Each connected component of :math:`A_{bb}` is ordered by the reverse Cuthill-McKee ordering (along the bar,
-        for a bar). A banded component (see :data:`CHAIN_BANDWIDTH_DIVISOR`) is a chain: it is cut into cores of
-        ``windowNodes`` nodes, each with a halo of ``haloNodes`` nodes on either side; one no longer than a core with
-        both halos is a single, exact window. Any other component is a zone (of a 2D or 3D mesh), corrected exactly,
-        see :meth:`_exactCorrection`.
+        """The windows along the chains of :math:`A_{bb}`, and the dofs of its zones: of every connected component of
+        :math:`A_{bb}`, in the reverse Cuthill-McKee order (along the bar, for a bar, see
+        :func:`_componentsInBandOrder`), a banded one (see :data:`CHAIN_BANDWIDTH_DIVISOR`) is a chain, cut into
+        overlapping windows (:func:`_cutIntoWindows`), and any other is a zone (of a 2D or 3D mesh), corrected exactly
+        (see :meth:`_exactCorrection`).
 
         Returns
         -------
         tuple
-            ``(windows, zoneDofs)``: ``(dofs of the window, positions of its core in the window)`` for every window
-            (the cores partition the dofs of the chains), and the dofs of the zones (positions in b).
+            ``(windows, zoneDofs)``: the :class:`Window` s (the cores partition the dofs of the chains), and the dofs of
+            the zones (positions in b).
         """
-        A_bb = self.A_bb
-        order = reverse_cuthill_mckee(A_bb, symmetric_mode=True)
-        nComponents, componentOf = connected_components(A_bb, directed=False)
-        # the dofs component by component, each component in the reverse Cuthill-McKee order
-        alongComponents = order[np.argsort(componentOf[order], kind="stable")]
-        componentSizes = np.bincount(componentOf, minlength=nComponents)
-        # the bandwidth of each component in that order
-        rank = np.empty_like(order)
-        rank[order] = np.arange(order.size)
-        coo = A_bb.tocoo()
-        bandwidth = np.zeros(nComponents, dtype=np.int64)
-        np.maximum.at(bandwidth, componentOf[coo.row], np.abs(rank[coo.row] - rank[coo.col]))
-
-        windows, zoneDofs = [], []
-        for component, dofs in enumerate(np.split(alongComponents, np.cumsum(componentSizes)[:-1])):
-            # windows count nodes; all nodes of a chain carry the same dofs
-            dofsPerNode = max(1, round(dofs.size / np.unique(self._nodeOfCondensedDof[dofs]).size))
-            core, halo = self._windowNodes * dofsPerNode, self._haloNodes * dofsPerNode
-            n = dofs.size
-            if bandwidth[component] > core // CHAIN_BANDWIDTH_DIVISOR:
-                zoneDofs.append(dofs)
-            elif n <= core + 2 * halo:
-                windows.append((dofs, np.arange(n)))
+        windows, zones = [], []
+        for dofs, bandwidth in _componentsInBandOrder(self.A_bb):
+            core, halo = self._coreAndHalo(dofs)
+            if bandwidth > core // CHAIN_BANDWIDTH_DIVISOR:
+                zones.append(dofs)
             else:
-                for start in range(0, n, core):
-                    stop = min(start + core, n)
-                    low, high = max(0, start - halo), min(n, stop + halo)
-                    windows.append((dofs[low:high], np.arange(start - low, stop - low)))
-        zoneDofs = np.sort(np.concatenate(zoneDofs)) if zoneDofs else np.empty(0, dtype=np.int64)
+                windows += _cutIntoWindows(dofs, core, halo)
+        zoneDofs = np.sort(np.concatenate(zones)) if zones else np.empty(0, dtype=np.int64)
         return windows, zoneDofs
 
-    def _windowCorrection(self, window: tuple, sqrtAbsDiagonalOfA_kk: np.ndarray, thinningTolerance: float):
+    def _coreAndHalo(self, dofs: np.ndarray) -> tuple:
+        """The core and the halo of the windows along the chain of the dofs ``dofs``, in dofs: ``windowNodes`` and
+        ``haloNodes`` nodes (all nodes of a chain carry the same dofs)."""
+        dofsPerNode = max(1, round(dofs.size / np.unique(self._nodeOfCondensedDof[dofs]).size))
+        return self._windowNodes * dofsPerNode, self._haloNodes * dofsPerNode
+
+    def _windowCorrection(self, window: "Window", sqrtAbsDiagonalOfA_kk: np.ndarray, thinningTolerance: float):
         """The correction :math:`A_{kb} A_{bb}^{-1} A_{bk}` of one window's core, in which :math:`A_{bb}^{-1}` is
         replaced by the inverse of the window's block :math:`A_{ww}`. Only the core rows of that inverse are needed,
         :math:`(A_{ww}^{-1})_{core,:}`, far fewer right-hand sides than there are remaining dofs coupled to the window:
@@ -461,20 +449,16 @@ class SchurComplementCondensation:
         tuple | None
             ``(rows, cols, values)`` of the significant entries, as positions in k, or ``None``.
         """
-        dofs, core = window
-        A_bk_window = self.A_bk[dofs]
+        A_bk_window = self.A_bk[window.dofs]
         coupledToWindow = np.unique(A_bk_window.indices)
-        A_kb_core = self._A_kb_byColumns[:, dofs[core]]
+        A_kb_core = self._A_kb_byColumns[:, window.dofs[window.core]]
         coupledToCore = np.unique(A_kb_core.indices)
         if len(coupledToWindow) == 0 or len(coupledToCore) == 0:
             return None
-        # the core rows of A_ww^-1 = the transposed solution of A_ww^T X = I[:, core]
-        unitColumns = np.zeros((len(dofs), len(core)))
-        unitColumns[core, np.arange(len(core))] = 1.0
-        inverseRowsOfCore = _solveTransposed(self.A_bb[dofs][:, dofs].tocoo(), unitColumns).T
-        # the product above; transposed only because SciPy's sparse factor (A_bk) must multiply from the left
-        coreTimesInverse = A_kb_core[coupledToCore] @ inverseRowsOfCore
-        correction = (A_bk_window[:, coupledToWindow].T @ coreTimesInverse.T).T
+        A_ww = self.A_bb[window.dofs][:, window.dofs]
+        # (A_ww^-1)_{core,:}: the transposed solution of A_ww^T X = I[:, core], the core columns of the identity
+        inverseOfA_ww_coreRows = _solveTransposed(A_ww.tocoo(), np.eye(len(window.dofs))[:, window.core]).T
+        correction = A_kb_core[coupledToCore] @ inverseOfA_ww_coreRows @ A_bk_window[:, coupledToWindow]
         return _significantEntries(correction, coupledToCore, coupledToWindow, sqrtAbsDiagonalOfA_kk, thinningTolerance)
 
     def _exactCorrection(
@@ -509,6 +493,45 @@ class SchurComplementCondensation:
                 _significantEntries(correction, coupledRows, columns, sqrtAbsDiagonalOfA_kk, thinningTolerance)
             )
         return parts
+
+
+class Window(NamedTuple):
+    """A window along a chain of :math:`A_{bb}`, see :meth:`SchurComplementCondensation._windowsAndZones`."""
+
+    #: The dofs of the window, positions in b: its core and the halos on either side, in order along the chain.
+    dofs: np.ndarray
+    #: The positions of its core within ``dofs``.
+    core: np.ndarray
+
+
+def _componentsInBandOrder(A_bb: sp.csr_matrix) -> list:
+    """The connected components of :math:`A_{bb}`: per component, its dofs (positions in b) in the reverse
+    Cuthill-McKee order -- along the bar, for a bar -- and its bandwidth in that order."""
+    order = reverse_cuthill_mckee(A_bb, symmetric_mode=True)
+    nComponents, componentOf = connected_components(A_bb, directed=False)
+    # the dofs component by component, each component in the reverse Cuthill-McKee order
+    alongComponents = order[np.argsort(componentOf[order], kind="stable")]
+    componentSizes = np.bincount(componentOf, minlength=nComponents)
+    rank = np.empty_like(order)
+    rank[order] = np.arange(order.size)
+    coo = A_bb.tocoo()
+    bandwidth = np.zeros(nComponents, dtype=np.int64)
+    np.maximum.at(bandwidth, componentOf[coo.row], np.abs(rank[coo.row] - rank[coo.col]))
+    return list(zip(np.split(alongComponents, np.cumsum(componentSizes)[:-1]), bandwidth))
+
+
+def _cutIntoWindows(dofs: np.ndarray, core: int, halo: int) -> list:
+    """The windows along a chain of the dofs ``dofs`` (in order along it): cores of ``core`` dofs, each with a halo of
+    ``halo`` dofs on either side; a chain no longer than one core with both halos is a single, exact window."""
+    n = dofs.size
+    if n <= core + 2 * halo:
+        return [Window(dofs, np.arange(n))]
+    windows = []
+    for start in range(0, n, core):
+        stop = min(start + core, n)
+        low, high = max(0, start - halo), min(n, stop + halo)
+        windows.append(Window(dofs[low:high], np.arange(start - low, stop - low)))
+    return windows
 
 
 def _splitCacheFor(A: sp.csr_matrix, cache: "dict | None") -> dict:
@@ -584,14 +607,11 @@ def _dropSmallEntries(S: sp.csr_matrix, tau: float) -> sp.csr_matrix:
 
 def _solveTransposed(A: sp.coo_matrix, B: np.ndarray) -> np.ndarray:
     """:math:`A^{-T} B` for a square sparse ``A``: by a banded LU factorization if ``A`` is banded (a window along
-    a bar), else by a dense one.
-
-    A window along a bar has a bandwidth of a few dofs, so the banded solve costs a small fraction of the dense one. If
-    the band holds more than a quarter of the columns (a short window), the band storage no longer pays."""
+    a bar), else by a dense one (see :data:`BAND_STORAGE_MAX_FRACTION`)."""
     n = A.shape[0]
     lower = int(max(0, (A.row - A.col).max(initial=0)))
     upper = int(max(0, (A.col - A.row).max(initial=0)))
-    if lower + upper + 1 > n // 4:
+    if lower + upper + 1 > int(BAND_STORAGE_MAX_FRACTION * n):
         return np.linalg.solve(A.toarray().T, B)
     # A^T in LAPACK band storage: (A^T)_ij = A_ji at [upper(A^T) + i - j, j], and upper(A^T) = lower(A)
     banded = np.zeros((lower + upper + 1, n))
@@ -725,7 +745,7 @@ class SchurComplement(Preconditioner):
                 approximation=approximation,
                 dropTolerance=dropTolerance,
                 windowNodes=windowNodes,
-                haloNodes=windowNodes if haloNodes is None else haloNodes,
+                haloNodes=haloNodes,
                 blockFactors=blockFactors,
             )
         )
@@ -803,9 +823,8 @@ class SchurComplement(Preconditioner):
         else:
             remainingFields = condensation.remainingFieldBlocks(list(context.fields))
             childMatrix = self.S_tilde
-            childContext = context.restrictedTo(
-                remainingFields, condensation.remainingDofs, nodesOf=condensation.remainingNodes
-            )
+            remainingNodes = {block.name: condensation.remainingNodes(block) for block in context.fields}
+            childContext = context.restrictedTo(remainingFields, condensation.remainingDofs, nodesOf=remainingNodes.get)
         self._builtForDofs = dofs
         if change is None:
             self.preconditionS.setUp(childMatrix, childContext)
