@@ -44,7 +44,9 @@ with :math:`A_c^{-1}` approximated by an AMG hierarchy. The coarse space decides
 The cycle runs in C++ (:mod:`~edelweissfe.linsolve.blockamg.rigidbodycoarselevel`,
 :mod:`~edelweissfe.linsolve.blockamg.ptwogrid`). Its steps, written out in Python, are
 ``Multiplicative([smoother, CoarseCorrection(P, coarse), smoother])``
-(:mod:`~edelweissfe.linsolve.composition.combinators`).
+(:mod:`~edelweissfe.linsolve.composition.combinators`). Both ways are kept on purpose: this one is fast (about half the
+cost per application), the spelled-out one shows the steps and takes any smoother or coarse space. Why, and what would
+end the exception: the "two-grid cycle: two ways" section of ``doc/source/documentation/composedlinsolvers.rst``.
 """
 
 import edelweissfe.utils.performancetiming as performancetiming

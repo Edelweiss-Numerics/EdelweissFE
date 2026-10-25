@@ -9,7 +9,8 @@ Composed linear solvers
 A composed linear solver is a **tree of small objects**, built with plain constructors in a Python script next to the
 input file. Each object is one textbook component -- a Krylov solver, a diagonal scaling, a correction on one field, a
 multiplicative combination of corrections, an AMG hierarchy, a Schur complement -- and its ``__call__`` is the formula
-of the textbook. There is one way to build each method, and it is the fast one.
+of the textbook. There is one way to build each method, and it is the fast one -- with one documented exception, the
+two-grid cycle (see :ref:`composed-two-grid-two-ways`).
 
 A solver script
 ---------------
@@ -97,14 +98,46 @@ Components
     * - ``CoarseCorrection(P, coarse)``, ``Jacobi(omega)``
       - :math:`P A_c^{-1} P^T` with :math:`A_c = P^T A P`, and :math:`\omega \operatorname{diag}(A)^{-1}`: the pieces
         of a two-grid cycle spelled out, ``Multiplicative([Jacobi(), CoarseCorrection(P, coarse), Jacobi()])``
+        (slow, for learning and new coarse spaces; see :ref:`composed-two-grid-two-ways`)
 
 The combinators show that methods which look unrelated share one structure. Block Gauss--Seidel over the fields *is*
 ``Multiplicative([OnField("displacement", M_u), OnField("nonlocal damage", M_d)])``, and a two-grid cycle *is*
 ``Multiplicative([smoother, CoarseCorrection(P, coarse), smoother])``. They are also fast: a combination asks each
 correction which field it acts on, and forms the residual of a correction on field :math:`i` only on that field's
 rows, :math:`r_i - \sum_{j: z_j \neq 0} A_{ij} z_j`, from the field blocks of the matrix (formed once, in one
-threaded pass, for all corrections). ``TwoGrid`` is the one exception still standing: its cycle runs in C++, on the
-smoother's own (float, node-block) copy of the field block, and the spelled-out composition is not yet as fast.
+threaded pass, for all corrections).
+
+.. _composed-two-grid-two-ways:
+
+The two-grid cycle: two ways, on purpose
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+A two-grid cycle can be written in two ways, and both are kept deliberately:
+
+.. code-block:: python
+
+    TwoGrid(coarseSpace=RigidBodyModes())                                  # the fast way
+    Multiplicative([Jacobi(), CoarseCorrection(P, AMG()), Jacobi()])       # the spelled-out way
+
+``TwoGrid`` is a leaf, like ``AMG``: pre-smoothing (Chebyshev), the coarse correction
+:math:`P A_c^{-1} P^T (r - A z)` with :math:`A_c = P^T A P`, and post-smoothing run as one cycle in C++. Use it for
+production runs; ``blockAMG()`` uses it for 3D displacement fields.
+
+The spelled-out way builds the same cycle from general components, each of which can be replaced -- another smoother,
+a coarse space of your own (any :math:`P`), a direct coarse solve. Use it to learn how a two-grid cycle works and to
+try a new coarse space or smoother. It is correct, but slow: on a 631k-dof displacement block it costs about twice as
+much per application as ``TwoGrid`` (101 ms plus about 98 ms). The difference is where the work runs:
+
+* ``TwoGrid`` keeps one compact copy of the field block (single precision, 3x3 node blocks) for the smoother and its
+  residuals; the spelled-out components work on the general double-precision matrix and so read about twice the bytes
+  per product;
+* ``TwoGrid`` forms :math:`P x`, :math:`P^T r` and :math:`P^T A P` threaded in C++; ``CoarseCorrection`` uses SciPy;
+* ``Multiplicative`` forms the residual :math:`r - A z` between its steps; ``TwoGrid`` takes it from the smoother.
+
+There is no native Chebyshev component yet, so the spelled-out way cannot reproduce ``TwoGrid`` exactly. The exception
+goes away once these three pieces exist natively: the compact field-block copy kept by the system matrix, a Chebyshev
+smoother component, and threaded products with :math:`P` in ``CoarseCorrection`` (with ``RigidBodyModes`` and
+``P1Interpolation`` building :math:`P`). Then ``TwoGrid`` is replaced by its spelled-out form.
 
 Wrong compositions fail as early as possible: at construction when the tree alone shows it (a child that is not a
 component, an empty combination, LGMRES around a Krylov solve, a Schur complement with nothing to condense), at the

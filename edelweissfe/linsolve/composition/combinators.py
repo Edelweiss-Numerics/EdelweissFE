@@ -367,6 +367,11 @@ class CoarseCorrection(Preconditioner):
     :math:`A_c = P^T A P`. With an exact coarse solve, :math:`P A_c^{-1} P^T A` is the :math:`A`-orthogonal projection
     onto the range of :math:`P`.
 
+    With smoothers around it, ``Multiplicative([smoother, CoarseCorrection(P, coarse), smoother])`` is a two-grid cycle
+    spelled out: any :math:`P`, any coarse solve, but in SciPy and about twice as costly per application as the C++
+    cycle :class:`~edelweissfe.linsolve.composition.twogrid.TwoGrid`, which is kept beside it on purpose (see the
+    "two-grid cycle: two ways" section of ``doc/source/documentation/composedlinsolvers.rst``).
+
     Parameters
     ----------
     prolongation
