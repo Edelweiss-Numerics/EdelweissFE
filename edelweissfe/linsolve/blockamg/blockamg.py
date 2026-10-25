@@ -446,6 +446,59 @@ class _OperatorOfPattern(NamedTuple):
     pattern: SparsityPattern
 
 
+class _RefreshDecision(NamedTuple):
+    """Whether a solve refreshes the per-field hierarchies or reuses the standing ones, and for which field blocks
+    and condensed dofs (see :meth:`BlockAMGSolver._refreshDecision`)."""
+
+    #: The field blocks of the solve: those of the remaining dofs of a condensed solve.
+    fieldBlocks: list
+    #: Why the hierarchies are rebuilt -- ``"first"``, ``"condensed dofs"``, ``"amr"``, ``"pattern"``,
+    #: ``"increment"``, ``"stale"`` or ``"always"`` -- or ``None`` to reuse them.
+    reason: "str | None"
+    #: The condensed dofs the hierarchies are built for, ``None`` without condensation.
+    condensedDofs: "np.ndarray | None"
+    #: Whether they differ from those of the standing hierarchies.
+    condensedDofsChanged: bool
+
+    @property
+    def mustRefresh(self) -> bool:
+        """Whether the hierarchies are rebuilt."""
+        return self.reason is not None
+
+
+class _CondensedSolve:
+    """A solve with the Schur complement condensation (:mod:`~edelweissfe.linsolve.blockamg.schurcomplement`): what
+    it changes in the solve, in one place. The field split is built for the remaining dofs -- their field blocks, the
+    remaining nodes of every field -- on the approximate Schur complement :math:`\\tilde S` of :math:`A_{bb}`, and the
+    outer solve runs on :math:`A` itself, preconditioned by the block LU factorization around the field-split sweep.
+
+    Parameters
+    ----------
+    condensation
+        The condensation, updated for this solve's matrix (with condensed dofs).
+    blocks
+        The field blocks of the whole system.
+    """
+
+    def __init__(self, condensation, blocks: list):
+        self._condensation = condensation
+        #: The condensed dofs b.
+        self.condensedDofs = condensation.condensedDofs
+        #: The field blocks of the remaining dofs.
+        self.fieldBlocks = condensation.remainingFieldBlocks(blocks)
+        #: The remaining nodes of every field, by name, see
+        #: :meth:`~edelweissfe.linsolve.blockamg.schurcomplement.SchurComplementCondensation.remainingNodes`.
+        self.remainingNodesOfField = {block.name: condensation.remainingNodes(block) for block in blocks}
+        #: :math:`\\tilde S`, which the field split is built on, formed when the hierarchies are rebuilt (see
+        #: :meth:`BlockAMGSolver._formApproximateSchurComplement`); ``None`` while they are reused.
+        self.fieldSplitMatrix = None
+
+    def precondition(self, r: np.ndarray, fieldSplitPreconditioner) -> np.ndarray:
+        """The preconditioner of the outer solve: the block LU factorization around ``fieldSplitPreconditioner``,
+        :math:`M_{\\tilde S}^{-1}`."""
+        return self._condensation.precondition(r, fieldSplitPreconditioner)
+
+
 def _sameCondensedDofs(dofs, otherDofs) -> bool:
     """Whether two choices of Schur complement condensed dofs are the same; ``None`` is no condensation."""
     if dofs is None or otherDofs is None:
@@ -2287,6 +2340,96 @@ class BlockAMGSolver(LinearSolver):
             self._n = A.shape[0]
             self._lastNnz = A.nnz
 
+    def _condensedSolveOf(self, A: sp.csr_matrix, blocks: list) -> "_CondensedSolve | None":
+        """(1b) The solve of ``A`` with the Schur complement condensation (``schurComplement``): the condensed dofs b
+        selected, the blocks of ``A`` cut and :math:`A_{bb}` factorized. ``None`` for a plain solve: without a
+        condensation, with nothing condensed, or when :math:`A_{bb}` cannot be factorized (logged), e.g. a softening
+        zone or a bond that lost all stiffness -- the condensed dofs come from the last converged increment, so a
+        cutback would meet the same block again: this solve does without."""
+        condensation = self._condensation
+        if condensation is None:
+            return None
+        condensedSolve = None
+        try:
+            condensation.update(A)
+            if condensation.hasCondensedDofs():
+                condensedSolve = _CondensedSolve(condensation, blocks)
+        except np.linalg.LinAlgError as error:
+            self._log(
+                "warning",
+                "⚠ solve #{:}: the condensed block A_bb cannot be factorized ({:}); solved without the Schur "
+                "complement condensation".format(self._solveCount, error),
+            )
+        if condensation.selectedAllDofs:
+            self._logOnce("warning", "⚠ blockamg: the schurComplement markers select every dof; nothing is condensed")
+        elif condensedSolve is not None and condensedSolve.condensedDofs.size > A.shape[0] // 2:
+            self._logOnce(
+                "warning",
+                "⚠ blockamg: the schurComplement markers select more than half of the dofs: the solve is mostly a "
+                "direct one, with the cost of AMG on top",
+            )
+        return condensedSolve
+
+    def _refreshDecision(
+        self, condensedSolve: "_CondensedSolve | None", n: int, blocks: list, patternChanged: bool, newIncrement: bool
+    ) -> _RefreshDecision:
+        """Whether this solve refreshes the per-field AMG hierarchies (rather than reuse the standing ones), and why:
+        when there is nothing to reuse yet, the condensed dofs changed, the field-block layout changed (e.g. an AMR event
+        resized the DOF vector), the sparsity pattern changed, a residual jump marks a new increment, or the previous
+        solve asked for it -- its outer count drifted too far from that of the solve the hierarchies were built for, or
+        it hit the cap (:meth:`_hierarchyIsStale`), or the model or the settings changed. With ``reuseHierarchy`` off,
+        every solve refreshes them. The reason is the first that applies, in this order, captured now: by the end of
+        the solve, ``self._refreshNext`` describes the *next* one."""
+        condensedDofs = None if condensedSolve is None else condensedSolve.condensedDofs
+        condensedDofsChanged = not _sameCondensedDofs(condensedDofs, self._hierarchyCondensedDofs)
+        fieldBlocks = blocks if condensedSolve is None else condensedSolve.fieldBlocks
+        if self._preconditioners is None:
+            reason = "first"
+        elif condensedDofsChanged:
+            reason = "condensed dofs"
+        elif fieldBlocks != self._blocks or n != self._n:
+            reason = "amr"
+        elif patternChanged:
+            reason = "pattern"
+        elif newIncrement and self._refreshOnNewIncrement:
+            reason = "increment"
+        elif self._refreshNext:
+            reason = "stale"
+        elif not self._reuseHierarchy:
+            reason = "always"
+        else:
+            reason = None
+        return _RefreshDecision(fieldBlocks, reason, condensedDofs, condensedDofsChanged)
+
+    def _formApproximateSchurComplement(self, condensedSolve: _CondensedSolve, A: sp.csr_matrix) -> bool:
+        """Form :math:`\\tilde S` of a condensed solve whose hierarchies are rebuilt; ``False`` if it cannot be formed
+        (logged), e.g. for a singular window block of an :math:`A_{bb}` that factorizes as a whole."""
+        condensation = self._condensation
+        try:
+            with performancetiming.timeit("schur complement"):
+                condensedSolve.fieldSplitMatrix = condensation.approximateSchurComplement(A)
+        except np.linalg.LinAlgError as error:
+            self._log(
+                "warning",
+                "⚠ solve #{:}: the approximate Schur complement cannot be formed ({:}); solved without the Schur "
+                "complement condensation".format(self._solveCount, error),
+            )
+            return False
+        n, nCondensed = A.shape[0], condensedSolve.condensedDofs.size
+        self._log(
+            "info",
+            "blockamg: {:} dofs condensed; the approximate Schur complement of the {:} remaining dofs has {:} "
+            "nonzeros".format(nCondensed, n - nCondensed, condensedSolve.fieldSplitMatrix.nnz),
+        )
+        if condensation.nonPositiveDiagonalEntries:
+            self._log(
+                "warning",
+                "⚠ solve #{:}: the approximate Schur complement has {:} non-positive diagonal entries: the "
+                "condensed dofs do not hold all of the softening, and AMG on the remaining dofs may "
+                "struggle".format(self._solveCount, condensation.nonPositiveDiagonalEntries),
+            )
+        return True
+
     def _condensedOuterOperatorFor(self, A: sp.csr_matrix):
         """The operator of the outer solve of a condensed solve: ``A`` itself, without the equilibration. Kept per
         sparsity pattern of ``A``: the next solve of the same pattern only refreshes its values, in place. Built anew
@@ -2362,111 +2505,37 @@ class BlockAMGSolver(LinearSolver):
         # (1b) Schur complement condensation (schurComplement): select the condensed dofs b, cut the blocks of A and
         #      factorize A_bb. The field split below is then built for the remaining dofs k, on the approximate Schur
         #      complement S~ of A_bb instead of on A.
-        condensation = self._condensation
-        condensing = False
-        if condensation is not None:
-            try:
-                condensation.update(A)
-                condensing = condensation.hasCondensedDofs()
-            except np.linalg.LinAlgError as error:
-                # e.g. a softening zone or a bond that lost all stiffness. The condensed dofs come from the last
-                # converged increment, so a cutback would meet the same block again: this solve does without.
-                self._log(
-                    "warning",
-                    "⚠ solve #{:}: the condensed block A_bb cannot be factorized ({:}); solved without the Schur "
-                    "complement condensation".format(self._solveCount, error),
-                )
-            if condensation.selectedAllDofs:
-                self._logOnce(
-                    "warning", "⚠ blockamg: the schurComplement markers select every dof; nothing is condensed"
-                )
-            elif condensing and condensation.condensedDofs.size > n // 2:
-                self._logOnce(
-                    "warning",
-                    "⚠ blockamg: the schurComplement markers select more than half of the dofs: the solve is mostly a "
-                    "direct one, with the cost of AMG on top",
-                )
+        condensedSolve = self._condensedSolveOf(A, blocks)
 
         # A hierarchy built for another sparsity pattern can be a far worse preconditioner (measured to need far more
         # outer iterations than a fresh one). nnz is an O(1) proxy for a pattern change; it errs on the safe side.
         patternChanged = self._lastNnz is not None and A.nnz != self._lastNnz
-
-        def refreshDecision(condensing: bool) -> tuple:
-            """The field blocks of this solve, whether the hierarchies must be refreshed and why, and the condensed
-            dofs they are built for (None without condensation)."""
-            condensedDofs = condensation.condensedDofs if condensing else None
-            condensedDofsChanged = not _sameCondensedDofs(condensedDofs, self._hierarchyCondensedDofs)
-            fieldBlocks = condensation.remainingFieldBlocks(blocks) if condensing else blocks
-            # Refresh the per-field AMG hierarchies (rather than reuse the standing ones) when there is nothing to
-            # reuse yet, the field-block layout changed (e.g. an AMR event resized the DOF vector), the sparsity
-            # pattern changed, a residual jump marks a new increment, or the previous solve asked for it: its outer
-            # count drifted too far from that of the solve the hierarchies were built for, or it hit the cap
-            # (_hierarchyIsStale), or the model or the settings changed. With reuseHierarchy off, every solve
-            # refreshes them. The reason is captured now, in the priority order of the conditions: by the time the
-            # debug detail is built at the end of this call, self._refreshNext describes the *next* call.
-            if self._preconditioners is None:
-                rebuildReason = "first"
-            elif condensedDofsChanged:
-                rebuildReason = "condensed dofs"
-            elif fieldBlocks != self._blocks or n != self._n:
-                rebuildReason = "amr"
-            elif patternChanged:
-                rebuildReason = "pattern"
-            elif newIncrement and self._refreshOnNewIncrement:
-                rebuildReason = "increment"
-            elif self._refreshNext:
-                rebuildReason = "stale"
-            elif not self._reuseHierarchy:
-                rebuildReason = "always"
-            else:
-                rebuildReason = None
-            return fieldBlocks, rebuildReason is not None, rebuildReason, condensedDofs, condensedDofsChanged
-
-        fieldBlocks, mustRefresh, rebuildReason, condensedDofs, condensedDofsChanged = refreshDecision(condensing)
+        refresh = self._refreshDecision(condensedSolve, n, blocks, patternChanged, newIncrement)
+        if (
+            condensedSolve is not None
+            and refresh.mustRefresh
+            and not self._formApproximateSchurComplement(condensedSolve, A)
+        ):
+            # like a failed factorization of A_bb, this solve does without the condensation
+            condensedSolve = None
+            refresh = self._refreshDecision(None, n, blocks, patternChanged, newIncrement)
+        if condensedSolve is not None and refresh.condensedDofsChanged:
+            # built for the old remaining dofs
+            self._fineSpectralRadiusCache.clear()
+        if refresh.condensedDofsChanged:
+            # the outer operator of a condensed solve is kept per sparsity pattern of A; dropped here too, so that it
+            # is rebuilt whenever the condensation changes, whatever the pattern
+            self._condensedOuterOperator = None
 
         # (2) Equilibration: build the field preconditioners from A_scaled = D A D, D = diag(scaling)
         #     with scaling = 1 / sqrt|a_ii| (b_scaled = D b in the code). With
         #     krylovOnScaledSystem = True the outer solve also runs on this substitution, solving
         #     A x = b as (D A D) z = D b, x = D z; with the default False it solves A x = b directly,
-        #     right-preconditioned by the same equilibrated blocks (see __call__ below).
-        fieldSplitMatrix = A
-        if condensing and mustRefresh:
-            try:
-                with performancetiming.timeit("schur complement"):
-                    fieldSplitMatrix = condensation.approximateSchurComplement(A)
-            except np.linalg.LinAlgError as error:
-                # e.g. a singular window block of A_bb, which factorizes as a whole: like a failed factorization,
-                # this solve does without the condensation
-                self._log(
-                    "warning",
-                    "⚠ solve #{:}: the approximate Schur complement cannot be formed ({:}); solved without the Schur "
-                    "complement condensation".format(self._solveCount, error),
-                )
-                condensing = False
-                fieldBlocks, mustRefresh, rebuildReason, condensedDofs, condensedDofsChanged = refreshDecision(False)
-        if condensing and mustRefresh:
-            if condensedDofsChanged:
-                # built for the old remaining dofs
-                self._fineSpectralRadiusCache.clear()
-            self._log(
-                "info",
-                "blockamg: {:} dofs condensed; the approximate Schur complement of the {:} remaining dofs has {:} "
-                "nonzeros".format(condensedDofs.size, n - condensedDofs.size, fieldSplitMatrix.nnz),
-            )
-            if condensation.nonPositiveDiagonalEntries:
-                self._log(
-                    "warning",
-                    "⚠ solve #{:}: the approximate Schur complement has {:} non-positive diagonal entries: the "
-                    "condensed dofs do not hold all of the softening, and AMG on the remaining dofs may "
-                    "struggle".format(self._solveCount, condensation.nonPositiveDiagonalEntries),
-                )
-        if condensedDofsChanged:
-            # the outer operator of a condensed solve is kept per sparsity pattern of A; dropped here too, so that it
-            # is rebuilt whenever the condensation changes, whatever the pattern
-            self._condensedOuterOperator = None
-
+        #     right-preconditioned by the same equilibrated blocks (see below). A condensed solve builds them from
+        #     D S~ D.
+        fieldSplitMatrix = A if condensedSolve is None or not refresh.mustRefresh else condensedSolve.fieldSplitMatrix
         with performancetiming.timeit("equilibration"):
-            if mustRefresh:
+            if refresh.mustRefresh:
                 scaling, reason = self._equilibration(fieldSplitMatrix)
                 if scaling is None:
                     return self._notSolved(n, reason)
@@ -2480,63 +2549,61 @@ class BlockAMGSolver(LinearSolver):
         # (3) Field split: A_scaled and its blocks A_scaled_ij in one threaded pass over A -- the outer Krylov
         #     operator, the couplings the sweep needs on every solve, and on a rebuild the diagonal blocks the
         #     hierarchies are built from.
-        fieldBounds = [(block.start, block.stop) for block in fieldBlocks]
+        fieldBounds = [(block.start, block.stop) for block in refresh.fieldBlocks]
         # stored: the operator of the outer solve, A_scaled or A itself (krylovOnScaledSystem); the blocks are
         # those of A_scaled either way. A condensed solve has an outer operator of its own (A, below): its field split
         # of S~ only provides the blocks, and is the same as long as the hierarchies are, so it is kept with them.
-        storedUnscaled = not self._krylovOnScaledSystem and not condensing
+        storedUnscaled = not self._krylovOnScaledSystem and condensedSolve is None
         with performancetiming.timeit("equilibrated system"):
-            if condensing and not mustRefresh and self._condensedSystem is not None:
+            if condensedSolve is not None and not refresh.mustRefresh and self._condensedSystem is not None:
                 system = self._condensedSystem
             else:
                 system = PyAMGCLEquilibratedSystem()
                 system.build(fieldSplitMatrix, scaling, fieldBounds, unscaled=storedUnscaled)
 
-        # (4) Hierarchies: one per field, rebuilt or reused (see mustRefresh above)
-        if mustRefresh:
-            remainingNodesOfField = (
-                {block.name: condensation.remainingNodes(block) for block in blocks} if condensing else None
-            )
-            self._buildHierarchies(system, fieldBlocks, scaling, A, remainingNodesOfField)
-            self._hierarchyCondensedDofs = condensedDofs
-            self._condensedSystem = system if condensing else None
+        # (4) Hierarchies: one per field, rebuilt or reused (see _refreshDecision)
+        if refresh.mustRefresh:
+            remainingNodesOfField = None if condensedSolve is None else condensedSolve.remainingNodesOfField
+            self._buildHierarchies(system, refresh.fieldBlocks, scaling, A, remainingNodesOfField)
+            self._hierarchyCondensedDofs = refresh.condensedDofs
+            self._condensedSystem = None if condensedSolve is None else system
 
         # The outer solve runs on the system the settings in force ask for, read once for this solve: a hot reload
         # rolled back above may have changed krylovOnScaledSystem since the system was built. (Never with a
         # condensation, which krylovOnScaledSystem cannot be combined with.)
-        onScaledSystem = self._krylovOnScaledSystem and not condensing
-        if not condensing and onScaledSystem == storedUnscaled:
+        onScaledSystem = self._krylovOnScaledSystem and condensedSolve is None
+        if condensedSolve is None and onScaledSystem == storedUnscaled:
             with performancetiming.timeit("equilibrated system"):
                 system.build(fieldSplitMatrix, scaling, fieldBounds, unscaled=not onScaledSystem)
 
         def blockGaussSeidel(residual):
             return self._blockGaussSeidel(system, residual)
 
-        # krylovOnScaledSystem = False: the outer solve runs on A itself, preconditioned by x = D M^-1 (D r) --
-        # M built on D A D as always -- so that the residual it converges is the true one the solve is accepted
-        # on.
-        # With condensation the outer solve runs on A itself (a one-field system of A, not equilibrated), preconditioned
-        # by the block LU factorization around the sweep on S~ (see schurcomplement).
-        operator = system
-        if condensing:
+        def fieldSplitPreconditioner(residual):
+            # D M^-1 D: the field-split sweep M, built on D A D (on D S~ D when condensing), for the unequilibrated
+            # operator
+            return scaling * blockGaussSeidel(scaling * residual)
+
+        # (5a) The outer operator, its preconditioner and its right-hand side. With krylovOnScaledSystem = False the
+        #      outer solve runs on A itself, preconditioned by D M^-1 D, so that the residual it converges is the true
+        #      one the solve is accepted on. A condensed solve runs on A itself too (a one-field system of A, not
+        #      equilibrated), preconditioned by the block LU factorization around D M^-1 D on S~ (see
+        #      schurcomplement).
+        if condensedSolve is not None:
             with performancetiming.timeit("equilibrated system"):
                 operator = self._condensedOuterOperatorFor(A)
 
             def outerPreconditioner(residual):
-                return condensation.precondition(
-                    residual, lambda remainingResidual: scaling * blockGaussSeidel(scaling * remainingResidual)
-                )
+                return condensedSolve.precondition(residual, fieldSplitPreconditioner)
 
             outerRightHandSide = b
         elif onScaledSystem:
+            operator = system
             b_scaled = scaling * b
             outerRightHandSide, outerPreconditioner = b_scaled, blockGaussSeidel
         else:
-
-            def outerPreconditioner(residual):
-                return scaling * blockGaussSeidel(scaling * residual)
-
-            outerRightHandSide = b
+            operator = system
+            outerRightHandSide, outerPreconditioner = b, fieldSplitPreconditioner
 
         if self._outerTol is not None:
             eta = self._outerTol
@@ -2638,7 +2705,7 @@ class BlockAMGSolver(LinearSolver):
 
         # (7) Bookkeeping for the next solve: residual norm, tolerance, nnz, outer iterations, staleness
         previousOuterIters = self._lastOuterIters
-        if self._hierarchyIsStale(outerIters, mustRefresh, capHit):
+        if self._hierarchyIsStale(outerIters, refresh.mustRefresh, capHit):
             self._refreshNext = True
         self._lastOuterIters = outerIters
         self._lastContinuations = continuations
@@ -2652,7 +2719,7 @@ class BlockAMGSolver(LinearSolver):
         # gate here beyond detailLines, which is genuinely wasted work at anything below "debug".
         detailLines = ()
         if self._verbosityIndex >= _VERBOSITY_LEVELS.index("debug"):
-            precondWord = "rebuilt({:})".format(rebuildReason) if mustRefresh else "reused"
+            precondWord = "rebuilt({:})".format(refresh.reason) if refresh.mustRefresh else "reused"
             detailLines = (
                 precondWord,
                 "η={:.1e} · {:.1f}s".format(eta, solveElapsedTime),
@@ -2683,7 +2750,7 @@ class BlockAMGSolver(LinearSolver):
             "eta": eta,
             "continuations": continuations,
             "info": info,
-            "mustRefresh": mustRefresh,
+            "mustRefresh": refresh.mustRefresh,
             "patternChanged": patternChanged,
             "newIncrement": newIncrement,
             "previousOuterIters": previousOuterIters,
@@ -2698,7 +2765,7 @@ class BlockAMGSolver(LinearSolver):
             and (outerIters > self._degradationThreshold() or (capHit and not converged))
             and BlockAMGSolver._degradationDumpsWritten < self._dumpOnDegradationMaxDumps
         ):
-            self._dumpDegradedSystem(A, b, blocks, solveState, condensedDofs)
+            self._dumpDegradedSystem(A, b, blocks, solveState, refresh.condensedDofs)
         # Recorded *after* the dump above, so a trigger's own context window (from
         # _recentSolveHistory) never includes itself -- only solves strictly preceding it. Guarded on
         # dumpOnDegradationContextSolves so a run with the feature off never holds onto extra matrices.
@@ -2714,7 +2781,7 @@ class BlockAMGSolver(LinearSolver):
                     "b": np.array(b, copy=True),
                     "blocks": blocks,
                     "state": solveState,
-                    "condensedDofs": condensedDofs,
+                    "condensedDofs": refresh.condensedDofs,
                 }
             )
         if not converged and capHit:
