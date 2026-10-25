@@ -61,6 +61,7 @@ class DirectSolver(Preconditioner):
     """
 
     def __init__(self, backend: str = "superlu", **options):
+        super().__init__()
         self.backend = backend
         self.options = options
         self._backendClass, _ = registry.lookup("directsolver", backend)
@@ -77,11 +78,11 @@ class DirectSolver(Preconditioner):
             return self.solver
         return self._backendClass(**self.options)
 
-    def setUp(self, A, context: SetUpContext) -> None:
+    def _setUp(self, A, context: SetUpContext) -> None:
         self.solver.factorize(A.matrix())
         self.statistics.sizes["rows"] = A.shape[0]
 
-    def __call__(self, r: np.ndarray) -> np.ndarray:
+    def _apply(self, r: np.ndarray) -> np.ndarray:
         return self.solver.solveFactorized(r)
 
     def describe(self) -> Description:

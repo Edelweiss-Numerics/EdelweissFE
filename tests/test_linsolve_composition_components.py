@@ -308,6 +308,30 @@ def test_every_component_records_its_calls():
     assert displacement.statistics.sizes["rows"] == fields[0].stop
 
 
+def test_one_call_is_counted_once_also_through_a_hook_of_the_same_component():
+    """A Krylov solver's set-up is its update for a first matrix, and a combination's first update sets up its
+    corrections: each is still one call of the component."""
+    A, b, fields = displacementDamageSystem(n=10, coupling="symmetric")
+    blockGaussSeidel = Multiplicative([OnField(field.name, AMG()) for field in fields])
+    root = LGMRES(DiagonalScaling(blockGaussSeidel), tolerance=FixedTolerance(1e-8))
+    root.setUp(SystemMatrix(A), _context(fields))
+    assert (root.statistics.setUps, root.statistics.updates) == (1, 0)
+    assert (blockGaussSeidel.statistics.setUps, blockGaussSeidel.statistics.updates) == (0, 1)
+    onField = blockGaussSeidel.corrections[0]
+    assert (onField.statistics.setUps, onField.statistics.updates) == (1, 0)
+
+    # driven by the adapter, which only updates the root: two solves are two updates of every combination
+    blockGaussSeidel = Multiplicative(lambda context: [OnField(field.name, AMG()) for field in context.fields])
+    root = LGMRES(DiagonalScaling(blockGaussSeidel), tolerance=FixedTolerance(1e-8))
+    _, composed = _solved(A, b, root, fields)
+    composed(A, b)
+    assert (root.statistics.setUps, root.statistics.updates, root.statistics.applications) == (0, 2, 2)
+    assert (blockGaussSeidel.statistics.setUps, blockGaussSeidel.statistics.updates) == (0, 2)
+    for _, onField in blockGaussSeidel.children():
+        assert (onField.statistics.setUps, onField.statistics.updates) == (1, 1)
+        assert onField.inner.statistics.setUps == 1
+
+
 # ----- a variable preconditioner: FGMRES -----
 
 

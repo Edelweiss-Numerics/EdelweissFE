@@ -123,14 +123,15 @@ class DiagonalScaling(Preconditioner):
 
     def __init__(self, inner: Preconditioner):
         requirePreconditioner("DiagonalScaling", "inner", inner)
+        super().__init__()
         self.inner = inner
         self.D = None
 
-    def setUp(self, A, context: SetUpContext) -> None:
+    def _setUp(self, A, context: SetUpContext) -> None:
         self._findScaling(A)
         self.inner.setUp(A.scaled(self.D), context.scaledBy(self.D))
 
-    def update(self, A, change) -> None:
+    def _update(self, A, change) -> None:
         # D is rebuilt with what the child rebuilds, also for reasons the child adds itself (a Krylov solve below)
         change = self.inner.withRebuildReasons(change)
         if self.D is None:
@@ -147,8 +148,11 @@ class DiagonalScaling(Preconditioner):
             raise FloatingPointError("DiagonalScaling: " + reason)
         self.D = D
 
-    def __call__(self, r: np.ndarray) -> np.ndarray:
+    def _apply(self, r: np.ndarray) -> np.ndarray:
         return self.D * self.inner(self.D * r)
+
+    def children(self) -> tuple:
+        return (("inner", self.inner),)
 
     def describe(self) -> Description:
         return Description(
@@ -156,6 +160,5 @@ class DiagonalScaling(Preconditioner):
             formula="D · {inner} · D",
             latex="D \\, {inner} \\, D",
             parameters={"D": "diag(1/√|aᵢᵢ|)"},
-            children=(("inner", self.inner),),
             steps=(Step("r̂ = D r"), Step("ẑ = M̂⁻¹ r̂", "inner"), Step("z = D ẑ")),
         )

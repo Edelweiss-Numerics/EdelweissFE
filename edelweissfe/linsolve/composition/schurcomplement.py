@@ -719,6 +719,7 @@ class SchurComplement(Preconditioner):
         blockFactors: str = "U",
         condensation: SchurComplementCondensation = None,
     ):
+        super().__init__()
         if preconditionS is None:
             raise ValueError("SchurComplement: preconditionS, the preconditioner of the Schur complement, is needed")
         requirePreconditioner("SchurComplement", "preconditionS", preconditionS)
@@ -763,10 +764,10 @@ class SchurComplement(Preconditioner):
         self._messagesShown = set()
         super().setModel(model, dofManager)
 
-    def setUp(self, A, context: SetUpContext) -> None:
+    def _setUp(self, A, context: SetUpContext) -> None:
         self._condense(A, context, rebuild=True, change=None)
 
-    def update(self, A, change) -> None:
+    def _update(self, A, change) -> None:
         self._condense(A, change.context, rebuild=change.requiresRebuild, change=change)
 
     def _condense(self, A, context: SetUpContext, rebuild: bool, change) -> None:
@@ -866,10 +867,13 @@ class SchurComplement(Preconditioner):
     def condensedDofs(self) -> "np.ndarray | None":
         return self.condensation.condensedDofs if self.condensing else None
 
-    def __call__(self, r: np.ndarray) -> np.ndarray:
+    def _apply(self, r: np.ndarray) -> np.ndarray:
         if not self.condensing:
             return self.preconditionS(r)
         return blockLU(r, self.condensation, self.preconditionS, self.solveA_bb)
+
+    def children(self) -> tuple:
+        return (("solveA_bb", self.solveA_bb), ("preconditionS", self.preconditionS))
 
     def describe(self) -> Description:
         if self.blockFactors == "LU":
@@ -888,6 +892,5 @@ class SchurComplement(Preconditioner):
             formula="BlockLU[{solveA_bb}, {preconditionS}]",
             latex="\\mathrm{BlockLU}\\left[{solveA_bb},\\, {preconditionS}\\right]",
             parameters={"blockFactors": self.blockFactors, "S̃": "A_kk − A_kb A_bb⁻¹ A_bk, local"},
-            children=(("solveA_bb", self.solveA_bb), ("preconditionS", self.preconditionS)),
             steps=steps,
         )

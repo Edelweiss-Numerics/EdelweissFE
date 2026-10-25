@@ -251,6 +251,7 @@ class TwoLevel(Preconditioner):
     def __init__(self, coarseSpace, tree: dict = None, dropTolerance: float = 0.0, lumpDroppedEntries: bool = False):
         if not dropTolerance >= 0.0:
             raise ValueError("TwoLevel: dropTolerance must not be negative, got {!r}".format(dropTolerance))
+        super().__init__()
         self.dropTolerance = dropTolerance
         self.lumpDroppedEntries = lumpDroppedEntries
         if not isinstance(coarseSpace, (RigidBodyModes, P1Interpolation)):
@@ -268,7 +269,7 @@ class TwoLevel(Preconditioner):
         self._fineSpectralRadius = (None, None)
         super().setModel(model, dofManager)
 
-    def setUp(self, A, context: SetUpContext) -> None:
+    def _setUp(self, A, context: SetUpContext) -> None:
         field = context.onlyField("TwoLevel")
         tree = checkedFieldTree("TwoLevel", self.tree, field)
         self.coarseSpace.check(field, tree, context)
@@ -285,11 +286,11 @@ class TwoLevel(Preconditioner):
             self._fineSpectralRadius = (self.cycle.fineSpectralRadius, self.cycle.fineDominantVector)
         self.statistics.sizes.update(rows=A.shape[0], **self.coarseSpace.sizesOf(self.cycle))
 
-    def update(self, A, change) -> None:
+    def _update(self, A, change) -> None:
         if change.requiresRebuild or self.cycle is None:
-            self.setUp(A, change.context)
+            self._setUp(A, change.context)
 
-    def __call__(self, r):
+    def _apply(self, r):
         return self.cycle.applyPreconditioner(r)
 
     def _parameters(self) -> dict:

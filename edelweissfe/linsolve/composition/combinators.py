@@ -138,6 +138,7 @@ class _Combination(Preconditioner):
     of the context that makes them once the fields are known (e.g. one correction per field, whatever the model)."""
 
     def __init__(self, corrections: "list | Callable"):
+        super().__init__()
         name = type(self).__name__
         if callable(corrections) and not isinstance(corrections, Preconditioner):
             self._makeCorrections = corrections
@@ -176,30 +177,29 @@ class _Combination(Preconditioner):
         self.corrections, self._madeFor = corrections, names
         return True
 
-    def setUp(self, A, context: SetUpContext) -> None:
+    def _setUp(self, A, context: SetUpContext) -> None:
         self._makeFor(context)
         self.bounds = [(field.start, field.stop) for field in context.fields]
         for correction in self._distinct():
             correction.setUp(A, context)
 
-    def update(self, A, change) -> None:
+    def _update(self, A, change) -> None:
         if self._makeFor(change.context) or not self.bounds:
-            self.setUp(A, change.context)
+            self._setUp(A, change.context)
             return
         self.bounds = [(field.start, field.stop) for field in change.context.fields]
         for correction in self._distinct():
             correction.update(A, change)
 
-    def _roles(self) -> tuple:
-        """``(role, correction)`` per distinct correction, and the role of each correction in order."""
-        distinct = self._distinct()
-        roles = [self._roleOf(correction, k) for k, correction in enumerate(distinct)]
-        order = [roles[next(k for k, other in enumerate(distinct) if other is c)] for c in self.corrections]
-        return tuple(zip(roles, distinct)), order
+    def children(self) -> tuple:
+        """``("M1", correction)``, ``("M2", ...)``: each distinct correction once, in the order of first use (none
+        while the corrections are still to be made per field)."""
+        return tuple(("M" + str(k + 1), correction) for k, correction in enumerate(self._distinct()))
 
-    @staticmethod
-    def _roleOf(correction, k: int) -> str:
-        return "M" + str(k + 1)
+    def _rolesInOrder(self) -> list:
+        """The role (see :meth:`children`) of each correction, in the order they are applied."""
+        children = self.children()
+        return [next(role for role, child in children if child is correction) for correction in self.corrections]
 
 
 class Multiplicative(_Combination):
@@ -222,16 +222,16 @@ class Multiplicative(_Combination):
         super().__init__(corrections)
         self.blocks = None
 
-    def setUp(self, A, context: SetUpContext) -> None:
-        super().setUp(A, context)
+    def _setUp(self, A, context: SetUpContext) -> None:
+        super()._setUp(A, context)
         self.blocks = A.fieldSplit(self.bounds)
 
-    def update(self, A, change) -> None:
-        super().update(A, change)
+    def _update(self, A, change) -> None:
+        super()._update(A, change)
         # the residuals always come from the current matrix
         self.blocks = A.fieldSplit(self.bounds)
 
-    def __call__(self, r: np.ndarray) -> np.ndarray:
+    def _apply(self, r: np.ndarray) -> np.ndarray:
         return multiplicativeCorrections(self.blocks, [(c.fieldIndex, c.applyRestricted) for c in self.corrections], r)
 
     def finishSolve(self) -> None:
@@ -242,12 +242,11 @@ class Multiplicative(_Combination):
     def describe(self) -> Description:
         if not self.corrections:
             return Description(name="Multiplicative", formula="Multiplicative(made per field)", latex="")
-        children, order = self._roles()
+        order = self._rolesInOrder()
         return Description(
             name="Multiplicative",
             formula="(" + " ∘ ".join("{" + role + "}" for role in reversed(order)) + ")",
             latex="\\left(" + " \\circ ".join("{" + role + "}" for role in reversed(order)) + "\\right)",
-            children=children,
             steps=(Step("z = {0}⁻¹ r".format(order[0]), order[0]),)
             + tuple(Step("z += {0}⁻¹ (r − A z)".format(role), role) for role in order[1:]),
         )
@@ -264,7 +263,7 @@ class Additive(_Combination):
         makes them at the first set-up.
     """
 
-    def __call__(self, r: np.ndarray) -> np.ndarray:
+    def _apply(self, r: np.ndarray) -> np.ndarray:
         fields = [slice(start, stop) for start, stop in self.bounds]
         z = [None] * len(fields)
         for correction in self.corrections:
@@ -281,12 +280,11 @@ class Additive(_Combination):
     def describe(self) -> Description:
         if not self.corrections:
             return Description(name="Additive", formula="Additive(made per field)", latex="")
-        children, order = self._roles()
+        order = self._rolesInOrder()
         return Description(
             name="Additive",
             formula="(" + " + ".join("{" + role + "}" for role in order) + ")",
             latex="\\left(" + " + ".join("{" + role + "}" for role in order) + "\\right)",
-            children=children,
             steps=tuple(Step("z += {0}⁻¹ r".format(role), role) for role in order),
         )
 
@@ -311,6 +309,7 @@ class OnField(Preconditioner):
         if not isinstance(fieldName, str):
             raise TypeError("OnField: the field is given by its name, got {!r}".format(fieldName))
         requirePreconditioner("OnField('{:}')".format(fieldName), "inner", inner)
+        super().__init__()
         self.fieldName = fieldName
         self.inner = inner
         self.dofs = None
@@ -334,21 +333,24 @@ class OnField(Preconditioner):
         bounds = [(f.start, f.stop) for f in context.fields]
         return FieldBlockMatrix(lambda: A.fieldSplit(bounds), i), context.restrictedToField(field)
 
-    def setUp(self, A, context: SetUpContext) -> None:
+    def _setUp(self, A, context: SetUpContext) -> None:
         block, fieldContext = self._restricted(A, context)
         self.inner.setUp(block, fieldContext)
 
-    def update(self, A, change) -> None:
+    def _update(self, A, change) -> None:
         block, fieldContext = self._restricted(A, change.context)
         self.inner.update(block, change.withContext(fieldContext))
 
-    def applyRestricted(self, r_f: np.ndarray) -> np.ndarray:
+    def _applyRestricted(self, r_f: np.ndarray) -> np.ndarray:
         return self.inner(r_f)
 
-    def __call__(self, r: np.ndarray) -> np.ndarray:
+    def _apply(self, r: np.ndarray) -> np.ndarray:
         z = np.zeros_like(r)
         z[self.dofs] = self.inner(r[self.dofs])
         return z
+
+    def children(self) -> tuple:
+        return (("inner", self.inner),)
 
     def describe(self) -> Description:
         return Description(
@@ -356,7 +358,6 @@ class OnField(Preconditioner):
             formula="Rᵀ {inner} R",
             latex="R^T {inner} R",
             parameters={"field": self.fieldName},
-            children=(("inner", self.inner),),
             steps=(Step("z_f = M⁻¹ r_f   (f = " + self.fieldName + ")", "inner"),),
         )
 
@@ -382,11 +383,12 @@ class CoarseCorrection(Preconditioner):
 
     def __init__(self, prolongation, coarse: Preconditioner):
         requirePreconditioner("CoarseCorrection", "coarse", coarse)
+        super().__init__()
         self.prolongation = prolongation
         self.coarse = coarse
         self.P = None
 
-    def setUp(self, A, context: SetUpContext) -> None:
+    def _setUp(self, A, context: SetUpContext) -> None:
         P = self.prolongation(A, context) if callable(self.prolongation) else self.prolongation
         self.P = sp.csr_matrix(P)
         if self.P.shape[0] != A.shape[0]:
@@ -396,15 +398,17 @@ class CoarseCorrection(Preconditioner):
         self.coarse.setUp(SystemMatrix(A_c), coarseContext)
         self.statistics.sizes["coarse dofs"] = A_c.shape[0]
 
-    def __call__(self, r: np.ndarray) -> np.ndarray:
+    def _apply(self, r: np.ndarray) -> np.ndarray:
         return self.P @ self.coarse(self.P.T @ r)
+
+    def children(self) -> tuple:
+        return (("coarse", self.coarse),)
 
     def describe(self) -> Description:
         return Description(
             name="CoarseCorrection",
             formula="P {coarse} Pᵀ",
             latex="P \\, {coarse} \\, P^T",
-            children=(("coarse", self.coarse),),
             steps=(Step("r_c = Pᵀ r"), Step("z_c = A_c⁻¹ r_c,  A_c = Pᵀ A P", "coarse"), Step("z = P z_c")),
         )
 
@@ -419,10 +423,11 @@ class Jacobi(Preconditioner):
     """
 
     def __init__(self, omega: float = 2.0 / 3.0):
+        super().__init__()
         self.omega = omega
         self.inverseDiagonal = None
 
-    def setUp(self, A, context: SetUpContext) -> None:
+    def _setUp(self, A, context: SetUpContext) -> None:
         diagonal = A.matrix().diagonal()
         if np.any(diagonal == 0.0):
             raise ValueError(
@@ -430,7 +435,7 @@ class Jacobi(Preconditioner):
             )
         self.inverseDiagonal = 1.0 / diagonal
 
-    def __call__(self, r: np.ndarray) -> np.ndarray:
+    def _apply(self, r: np.ndarray) -> np.ndarray:
         return self.omega * self.inverseDiagonal * r
 
     def describe(self) -> Description:

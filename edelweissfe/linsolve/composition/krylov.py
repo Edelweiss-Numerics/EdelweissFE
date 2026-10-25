@@ -334,6 +334,7 @@ class KrylovSolver(Preconditioner):
     ):
         name = type(self).__name__
         requirePreconditioner(name, "preconditioner", preconditioner)
+        super().__init__()
         if maxIterations < 1:
             raise ValueError("{:}: maxIterations must be at least 1, got {:}".format(name, maxIterations))
         if continuations < 0:
@@ -377,13 +378,13 @@ class KrylovSolver(Preconditioner):
         """AMGCL's parameters of the method (its restart length, ...)."""
         raise NotImplementedError
 
-    def setUp(self, A, context: SetUpContext) -> None:
-        self.update(A, MatrixChange(context, rebuildReason="first"))
+    def _setUp(self, A, context: SetUpContext) -> None:
+        self._update(A, MatrixChange(context, rebuildReason="first"))
 
     def withRebuildReasons(self, change: MatrixChange) -> MatrixChange:
         return super().withRebuildReasons(self.rebuild.decide(change, self._stale))
 
-    def update(self, A, change: MatrixChange) -> None:
+    def _update(self, A, change: MatrixChange) -> None:
         change = self.rebuild.decide(change, self._stale)
         self.A = A
         self._context = change.context
@@ -407,7 +408,7 @@ class KrylovSolver(Preconditioner):
             self._krylov = PyAMGCLKrylovSolver(n, self.method, self._parameters())
         return self._krylov
 
-    def __call__(self, b: np.ndarray) -> np.ndarray:
+    def _apply(self, b: np.ndarray) -> np.ndarray:
         """The solve: a first pass, and on a diagonally scaled matrix the continuations while the true residual misses
         :math:`\\eta` (see ``continuations``)."""
         # on D A D (DiagonalScaling(LGMRES(...))): the method converges the scaled residual, not the true one
@@ -502,6 +503,9 @@ class KrylovSolver(Preconditioner):
             )
         self._stale = drifted or self.lastCapHit
 
+    def children(self) -> tuple:
+        return (("preconditioner", self.preconditioner),)
+
     def solveRecord(self) -> SolveRecord:
         return SolveRecord(
             iterations=self.lastIterations,
@@ -520,7 +524,6 @@ class KrylovSolver(Preconditioner):
             formula=name + "(A, {preconditioner})⁻¹",
             latex="\\mathrm{" + name + "}\\left(A,\\, {preconditioner}\\right)^{-1}",
             parameters=self._describedParameters(),
-            children=(("preconditioner", self.preconditioner),),
             steps=self._steps(),
         )
 

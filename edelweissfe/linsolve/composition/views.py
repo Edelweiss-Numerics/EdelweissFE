@@ -26,7 +26,7 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 """Views of a composed solver, all drawn from the components' :meth:`~edelweissfe.linsolve.composition.base.
-Preconditioner.describe`:
+Preconditioner.describe` and the tree of their :meth:`~edelweissfe.linsolve.composition.base.Preconditioner.children`:
 
 - :func:`structure`: the tree as text, for the terminal and the journal (also ``print(solver)``);
 - :func:`formula`: the composed approximate inverse, in unicode or LaTeX;
@@ -40,10 +40,6 @@ import html as htmlEscaping
 
 #: The format of the parameters of a component in the structure view.
 _PARAMETER_FORMAT = "{:}={:}"
-
-
-def _children(component) -> tuple:
-    return component.describe().children
 
 
 def _parameters(description) -> str:
@@ -63,7 +59,7 @@ def _tree(component, label, lines: list, prefix: str, isLast: bool, isRoot: bool
     else:
         lines.append(prefix + ("└─ " if isLast else "├─ ") + text)
         childPrefix = prefix + ("   " if isLast else "│  ")
-    children = description.children
+    children = component.children()
     for index, (role, child) in enumerate(children):
         # a role that only says "the child" is no label worth printing
         childLabel = "" if len(children) == 1 and role in ("inner", "preconditioner") else role
@@ -91,7 +87,7 @@ def structure(component) -> str:
 def _formula(component, latex: bool) -> str:
     description = component.describe()
     text = description.latex if latex and description.latex else description.formula
-    for role, child in description.children:
+    for role, child in component.children():
         text = text.replace("{" + role + "}", _formula(child, latex))
     return text
 
@@ -133,11 +129,11 @@ def _dataFlowNodes(component, path: str, lines: list) -> tuple:
     cluster = "cluster_" + path
     lines.append('  subgraph "{:}" {{'.format(cluster))
     lines.append('    label="{:}"; style=rounded; color=gray50; fontname="Helvetica";'.format(description.name))
-    childOf = dict(description.children)
+    childOf = dict(component.children())
     steps = description.steps or ()
     previous, entry = None, None
     edges = []
-    if not steps and not description.children:
+    if not steps and not childOf:
         node = path + "_leaf"
         lines.append(
             '    "{:}" [label="{:}", shape=box, style=filled, fillcolor=gray95];'.format(
@@ -186,7 +182,7 @@ def dataFlow(component, svg: bool = False) -> str:
 def _builtMatrices(component, label: str, found: list) -> None:
     """Collect ``(label, scipy matrix)`` of what the components were built on and kept."""
     found += [(label + name, matrix) for name, matrix in component.builtMatrices()]
-    for role, child in _children(component):
+    for role, child in component.children():
         _builtMatrices(child, label + role + " / ", found)
 
 

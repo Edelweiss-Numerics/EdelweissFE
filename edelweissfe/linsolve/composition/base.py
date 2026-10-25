@@ -35,20 +35,21 @@ the condensed dofs exactly and hands the remaining ones to its child, a diagonal
 :math:`D` before and after its child. A Krylov solver is itself a preconditioner -- an approximate inverse of
 :math:`A` -- so solvers nest like any other component.
 
-Every component implements four methods:
+A component implements what makes it what it is, in protected hooks:
 
-- :meth:`Preconditioner.setUp` builds it for a matrix (and its children for their sub-problems);
-- :meth:`Preconditioner.update` takes a changed matrix and decides what to keep (by default: set up again);
-- :meth:`Preconditioner.__call__` applies it, :math:`z = M^{-1} r` -- the formula of the textbook;
+- :meth:`Preconditioner._setUp` builds it for a matrix (and its children for their sub-problems);
+- :meth:`Preconditioner._update` takes a changed matrix and decides what to keep (by default: set up again);
+- :meth:`Preconditioner._apply` applies it, :math:`z = M^{-1} r` -- the formula of the textbook;
+- :meth:`Preconditioner.children` names its children, if it has any (the tree is walked through it);
 - :meth:`Preconditioner.describe` says what it is, for the views (:mod:`~edelweissfe.linsolve.composition.views`).
 
-The time spent in :meth:`~Preconditioner.setUp`, :meth:`~Preconditioner.update` and
-:meth:`~Preconditioner.__call__` is recorded per component in its :class:`Statistics`, without any code in the
-components: :meth:`Preconditioner.__init_subclass__` wraps the three methods of every subclass once, when the
-class is defined. So a component's ``__call__`` holds nothing but its formula.
+It is used through the public methods of the base class, :meth:`~Preconditioner.setUp`,
+:meth:`~Preconditioner.update` and :meth:`~Preconditioner.__call__` (a template method each): they record the call
+and its time in the component's :class:`Statistics` and call the hook. So a component's ``_apply`` holds nothing but
+its formula, and a hook that calls another hook of its own component (a Krylov solver's ``_setUp`` is its ``_update``
+for a first matrix) counts as one call.
 """
 
-import functools
 import time
 from dataclasses import dataclass, field, replace
 
@@ -100,14 +101,14 @@ class Statistics:
 
 @dataclass(frozen=True)
 class Step:
-    """One step of a component's ``__call__``, for the data-flow view.
+    """One step of a component's application (:meth:`Preconditioner._apply`), for the data-flow view.
 
     Attributes
     ----------
     operation
         What the step computes, in the symbols of the component's formula, e.g. ``"y_b = A_bb⁻¹ r_b"``.
     child
-        The role of the child the step delegates to (a key of :attr:`Description.children`), or ``None`` for a
+        The role of the child the step delegates to (a role of :meth:`Preconditioner.children`), or ``None`` for a
         step the component does itself.
     """
 
@@ -125,14 +126,12 @@ class Description:
     name
         The component's name, e.g. ``"SchurComplement"``.
     formula
-        Its approximate inverse in unicode, with ``{role}`` for each child's own formula, e.g.
-        ``"D · {inner} · D"``.
+        Its approximate inverse in unicode, with ``{role}`` for the formula of each of its
+        :meth:`~Preconditioner.children`, e.g. ``"D · {inner} · D"``.
     latex
         The same in LaTeX, with ``{role}`` placeholders.
     parameters
-        The settings that make it what it is, e.g. ``{"restart": 30}``.
-    children
-        ``(role, child)`` pairs, in the order the child is used, e.g. ``[("preconditionS", fieldSplit)]``.
+        The settings that make it what it is, e.g. ``{"restart": 50}``.
     steps
         The steps of one application, in order.
     """
@@ -141,7 +140,6 @@ class Description:
     formula: str
     latex: str = ""
     parameters: dict = field(default_factory=dict)
-    children: tuple = ()
     steps: tuple = ()
 
 
@@ -305,45 +303,71 @@ class Preconditioner:
     """An approximate inverse :math:`M^{-1}` of a matrix :math:`A`: built by :meth:`setUp`, applied as
     :math:`z = M^{-1} r`.
 
-    See the module documentation. Every subclass gets its :attr:`statistics` recorded: the methods
-    :meth:`setUp`, :meth:`update` and :meth:`__call__` it defines are wrapped once, when the class is defined
-    (:meth:`__init_subclass__`).
+    See the module documentation. A subclass implements the hooks :meth:`_setUp`, :meth:`_apply` and, to reuse what
+    it built, :meth:`_update`, and calls ``super().__init__()`` in its constructor (which creates its
+    :attr:`statistics`).
     """
 
-    #: What this component recorded while it ran, see :class:`Statistics`.
-    statistics: Statistics
+    def __init__(self):
+        #: What this component recorded while it ran, see :class:`Statistics`.
+        self.statistics = Statistics()
 
-    def __new__(cls, *args, **kwargs):
-        # every component gets its statistics here, so that a subclass's constructor need not call super().__init__
-        component = super().__new__(cls)
-        component.statistics = Statistics()
-        return component
-
-    def __init_subclass__(cls, **kwargs):
-        super().__init_subclass__(**kwargs)
-        if "setUp" in cls.__dict__:
-            cls.setUp = _recorded(cls.__dict__["setUp"], "setUp")
-        if "update" in cls.__dict__:
-            cls.update = _recorded(cls.__dict__["update"], "update")
-        if "__call__" in cls.__dict__:
-            cls.__call__ = _recorded(cls.__dict__["__call__"], "apply")
-        if "applyRestricted" in cls.__dict__:
-            cls.applyRestricted = _recorded(cls.__dict__["applyRestricted"], "apply")
+    # ----- the public methods: record the call, then call the hook -----
 
     def setUp(self, A, context: SetUpContext) -> None:
         """Build this component for the matrix ``A`` (a
         :class:`~edelweissfe.linsolve.composition.systemmatrix.SystemMatrix`), and its children for their
-        sub-problems."""
-        raise NotImplementedError
+        sub-problems: :meth:`_setUp`, recorded."""
+        self._recorded("setUp", self._setUp, A, context)
 
     def update(self, A, change: MatrixChange) -> None:
-        """Take the changed matrix ``A``. By default, build anew; a component that can reuse what it built
-        overrides this and rebuilds only if ``change.requiresRebuild``."""
-        self.setUp(A, change.context)
+        """Take the changed matrix ``A``: :meth:`_update`, recorded."""
+        self._recorded("update", self._update, A, change)
 
     def __call__(self, r: np.ndarray) -> np.ndarray:
-        """Apply this component: :math:`z = M^{-1} r`."""
+        """Apply this component, :math:`z = M^{-1} r`: :meth:`_apply`, recorded."""
+        return self._recorded("apply", self._apply, r)
+
+    def applyRestricted(self, r_f: np.ndarray) -> np.ndarray:
+        """:math:`M^{-1} r_f` on the dofs of :attr:`fieldIndex` alone: :meth:`_applyRestricted`, recorded as an
+        application."""
+        return self._recorded("apply", self._applyRestricted, r_f)
+
+    def _recorded(self, kind: str, hook, *arguments):
+        """Call ``hook(*arguments)`` and count the call and its time in :attr:`statistics` as ``kind``."""
+        start = time.perf_counter()
+        try:
+            return hook(*arguments)
+        finally:
+            self.statistics.record(kind, time.perf_counter() - start)
+
+    # ----- the hooks a component implements -----
+
+    def _setUp(self, A, context: SetUpContext) -> None:
+        """Build this component for the matrix ``A``, and its children (through their public :meth:`setUp`)."""
         raise NotImplementedError
+
+    def _update(self, A, change: MatrixChange) -> None:
+        """Take the changed matrix ``A``. By default, build anew; a component that can reuse what it built
+        overrides this and rebuilds only if ``change.requiresRebuild``."""
+        self._setUp(A, change.context)
+
+    def _apply(self, r: np.ndarray) -> np.ndarray:
+        """:math:`z = M^{-1} r`."""
+        raise NotImplementedError
+
+    def _applyRestricted(self, r_f: np.ndarray) -> np.ndarray:
+        """:math:`M^{-1} r_f` on the dofs of :attr:`fieldIndex` alone (all dofs: the same as :meth:`_apply`)."""
+        return self._apply(r_f)
+
+    def children(self) -> tuple:
+        """The ``(role, child)`` pairs of this component, in the order the children are used (empty for a leaf). A
+        component with children overrides this: the tree is walked through it (:meth:`setModel`,
+        :meth:`finishSolve`, :attr:`isFixedLinearOperator`, ..., and the views), and the role is the placeholder of
+        the child in the component's formula (:attr:`Description.formula`)."""
+        return ()
+
+    # ----- what the tree is asked as a whole -----
 
     def withRebuildReasons(self, change: MatrixChange) -> MatrixChange:
         """``change``, with the reasons for a rebuild that this component and its children add on their own (a Krylov
@@ -362,10 +386,6 @@ class Preconditioner:
         (:mod:`~edelweissfe.linsolve.composition.combinators`) then forms the residual of that field alone and calls
         :meth:`applyRestricted`."""
         return None
-
-    def applyRestricted(self, r_f: np.ndarray) -> np.ndarray:
-        """:math:`M^{-1} r_f` on the dofs of :attr:`fieldIndex` alone (all dofs: the same as calling it)."""
-        return self(r_f)
 
     @property
     def isFixedLinearOperator(self) -> bool:
@@ -424,10 +444,6 @@ class Preconditioner:
         """What this component is, for the views."""
         return Description(name=type(self).__name__, formula=type(self).__name__ + "⁻¹")
 
-    def children(self) -> tuple:
-        """The ``(role, child)`` pairs of this component (empty for a leaf)."""
-        return self.describe().children
-
     def __str__(self) -> str:
         from edelweissfe.linsolve.composition.views import structure
 
@@ -448,17 +464,3 @@ def requirePreconditioner(owner: str, role: str, child) -> None:
                 owner, role, child
             )
         )
-
-
-def _recorded(method, kind: str):
-    """``method``, with its calls counted and timed in the component's :class:`Statistics` as ``kind``."""
-
-    @functools.wraps(method)
-    def recordedMethod(self, *args, **kwargs):
-        start = time.perf_counter()
-        try:
-            return method(self, *args, **kwargs)
-        finally:
-            self.statistics.record(kind, time.perf_counter() - start)
-
-    return recordedMethod

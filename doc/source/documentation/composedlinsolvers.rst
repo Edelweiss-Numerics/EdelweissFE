@@ -194,9 +194,13 @@ component, an empty combination, LGMRES around a Krylov solve, a Schur complemen
 first set-up otherwise, with a message that names the cause (a field the system does not have, a one-field component
 such as ``AMG`` on several fields, rigid-body modes on a scalar field or without node coordinates).
 
-A component of your own subclasses ``Preconditioner`` -- in the script itself, if you like -- and implements
-``setUp(A, context)``, ``__call__(r)`` and, to reuse what it built, ``update(A, change)``. It then composes with every
-other component.
+A component of your own subclasses ``Preconditioner`` -- in the script itself, if you like --, calls
+``super().__init__()`` in its constructor and implements the hooks ``_setUp(A, context)``, ``_apply(r)`` and, to reuse
+what it built, ``_update(A, change)``; a component with children also implements ``children()``, the ``(role, child)``
+pairs through which the tree is walked (the model, the end of a solve, whether it holds a Krylov solve, the views). It
+then composes with every other component. The public ``setUp``, ``update`` and ``__call__`` of the base class record
+each call and its time in the component's statistics and call the hook; a component calls its children through those
+public methods.
 
 Presets
 -------
@@ -219,7 +223,7 @@ Views
 -----
 
 Every component describes itself (``describe()``); the views in :mod:`edelweissfe.linsolve.composition.views` draw
-the description. For the ``blockAMG()`` preset on a displacement / nonlocal damage system, after two solves:
+the descriptions along the tree of ``children()``. For the ``blockAMG()`` preset on a displacement / nonlocal damage system, after two solves:
 
 ``print(solver)`` -- the structure::
 
@@ -239,11 +243,14 @@ the description. For the ``blockAMG()`` preset on a displacement / nonlocal dama
 
     LGMRES(...)   updated 2× 0.07s · applied 2× 0.05s
     └─ DiagonalScaling(...)   updated 2× 0.07s · applied 18× 0.04s
-       └─ Multiplicative   set up 1× 0.06s · updated 1× 0.00s · applied 18× 0.04s
-          ├─ M1: OnField(...)   set up 1× 0.06s · ... · applied 18× 0.03s
+       └─ Multiplicative   updated 2× 0.06s · applied 18× 0.04s
+          ├─ M1: OnField(...)   set up 1× 0.06s · updated 1× 0.00s · applied 18× 0.03s
           │  └─ TwoLevel(...)   set up 1× 0.06s · ... · applied 18× 0.03s · rows 9555 · aggregates 198 · coarse dofs 1188
-          └─ M2: OnField(...)   set up 1× 0.00s · ... · applied 18× 0.00s
+          └─ M2: OnField(...)   set up 1× 0.00s · updated 1× 0.00s · applied 18× 0.00s
              └─ AMG(...)   set up 1× 0.00s · ... · applied 18× 0.00s · rows 3185
+
+The adapter only ever updates the root; a combination whose corrections are made per field sets them up at its first
+update, and reuses them at the next.
 
 ``views.dataFlow(solver)`` -- one application as a graphviz graph (DOT, or SVG with the ``graphviz`` package): each
 component a box around its steps, a step that delegates leading into its child's box. ``views.spy(solver, A)`` draws

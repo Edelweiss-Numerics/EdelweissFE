@@ -377,6 +377,7 @@ class AMG(Preconditioner):
     ):
         if not dropTolerance >= 0.0:
             raise ValueError("AMG: dropTolerance must not be negative, got {!r}".format(dropTolerance))
+        super().__init__()
         self.tree = tree
         self.rigidBodyNullspace = rigidBodyNullspace
         self.dropTolerance = dropTolerance
@@ -384,7 +385,7 @@ class AMG(Preconditioner):
         self.hierarchy = None
         self._field = None
 
-    def setUp(self, A, context: SetUpContext) -> None:
+    def _setUp(self, A, context: SetUpContext) -> None:
         field = context.onlyField("AMG")
         self._field = field
         tree = checkedFieldTree("AMG", self.tree, field)
@@ -403,11 +404,11 @@ class AMG(Preconditioner):
         )
         self.statistics.sizes["rows"] = A.shape[0]
 
-    def update(self, A, change) -> None:
+    def _update(self, A, change) -> None:
         if change.requiresRebuild or self.hierarchy is None:
-            self.setUp(A, change.context)
+            self._setUp(A, change.context)
 
-    def __call__(self, r):
+    def _apply(self, r):
         return self.hierarchy.applyPreconditioner(r)
 
     def describe(self) -> Description:
