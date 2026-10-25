@@ -1,0 +1,370 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+#  ---------------------------------------------------------------------
+#
+#  _____    _      _              _         _____ _____
+# | ____|__| | ___| |_      _____(_)___ ___|  ___| ____|
+# |  _| / _` |/ _ \ \ \ /\ / / _ \ / __/ __| |_  |  _|
+# | |__| (_| |  __/ |\ V  V /  __/ \__ \__ \  _| | |___
+# |_____\__,_|\___|_| \_/\_/ \___|_|___/___/_|   |_____|
+#
+#
+#  Unit of Strength of Materials and Structural Analysis
+#  University of Innsbruck,
+#  2017 - today
+#
+#  Matthias Neuner matthias.neuner@uibk.ac.at
+#
+#  This file is part of EdelweissFE.
+#
+#  This library is free software; you can redistribute it and/or
+#  modify it under the terms of the GNU Lesser General Public
+#  License as published by the Free Software Foundation; either
+#  version 2.1 of the License, or (at your option) any later version.
+#
+#  The full text of the license can be found in the file LICENSE.md at
+#  the top level directory of EdelweissFE.
+#  ---------------------------------------------------------------------
+"""The building block of a composed linear solver: :class:`Preconditioner`, an approximate inverse :math:`M^{-1}`
+of a matrix :math:`A`, and what is handed to it -- the :class:`SetUpContext` of its (sub-)problem and the
+:class:`MatrixChange` since its last set-up.
+
+A composed solver is a tree of preconditioners. Each one solves its part of the problem and hands a smaller
+problem to its children: a Krylov solver calls its preconditioner once per iteration, a Schur complement solves
+the condensed dofs exactly and hands the remaining ones to its child, a diagonal scaling multiplies by
+:math:`D` before and after its child. A Krylov solver is itself a preconditioner -- an approximate inverse of
+:math:`A` -- so solvers nest like any other component.
+
+Every component implements four methods:
+
+- :meth:`Preconditioner.setUp` builds it for a matrix (and its children for their sub-problems);
+- :meth:`Preconditioner.update` takes a changed matrix and decides what to keep (by default: set up again);
+- :meth:`Preconditioner.__call__` applies it, :math:`z = M^{-1} r` -- the formula of the textbook;
+- :meth:`Preconditioner.describe` says what it is, for the views (:mod:`~edelweissfe.linsolve.composition.views`).
+
+The time spent in :meth:`~Preconditioner.setUp`, :meth:`~Preconditioner.update` and
+:meth:`~Preconditioner.__call__` is recorded per component in its :class:`Statistics`, without any code in the
+components: :meth:`Preconditioner.__init_subclass__` wraps the three methods of every subclass once, when the
+class is defined. So a component's ``__call__`` holds nothing but its formula.
+"""
+
+import functools
+import time
+from dataclasses import dataclass, field, replace
+
+import numpy as np
+
+from edelweissfe.linsolve.base import FieldBlock
+
+
+@dataclass
+class Statistics:
+    """What a component recorded while it ran: filled at run time, shown by the run-statistics view.
+
+    The times are inclusive: a component's apply time contains its children's.
+
+    Attributes
+    ----------
+    setUps
+        How often it was built from scratch (:meth:`Preconditioner.setUp`).
+    updates
+        How often it took a changed matrix (:meth:`Preconditioner.update`), whether it rebuilt or not.
+    applications
+        How often it was applied (:meth:`Preconditioner.__call__`).
+    setUpSeconds, updateSeconds, applySeconds
+        The wall time spent in each.
+    sizes
+        What the component wants to report about what it built, e.g. ``{"rows": 841260, "levels": 4}``.
+    """
+
+    setUps: int = 0
+    updates: int = 0
+    applications: int = 0
+    setUpSeconds: float = 0.0
+    updateSeconds: float = 0.0
+    applySeconds: float = 0.0
+    sizes: dict = field(default_factory=dict)
+
+    def record(self, kind: str, seconds: float) -> None:
+        """Count one call of ``kind`` (``"setUp"``, ``"update"`` or ``"apply"``) that took ``seconds``."""
+        if kind == "setUp":
+            self.setUps += 1
+            self.setUpSeconds += seconds
+        elif kind == "update":
+            self.updates += 1
+            self.updateSeconds += seconds
+        else:
+            self.applications += 1
+            self.applySeconds += seconds
+
+
+@dataclass(frozen=True)
+class Step:
+    """One step of a component's ``__call__``, for the data-flow view.
+
+    Attributes
+    ----------
+    operation
+        What the step computes, in the symbols of the component's formula, e.g. ``"y_b = A_bb⁻¹ r_b"``.
+    child
+        The role of the child the step delegates to (a key of :attr:`Description.children`), or ``None`` for a
+        step the component does itself.
+    """
+
+    operation: str
+    child: "str | None" = None
+
+
+@dataclass(frozen=True)
+class Description:
+    """What a component is, independent of how it is shown: the views
+    (:mod:`~edelweissfe.linsolve.composition.views`) draw it.
+
+    Attributes
+    ----------
+    name
+        The component's name, e.g. ``"SchurComplement"``.
+    formula
+        Its approximate inverse in unicode, with ``{role}`` for each child's own formula, e.g.
+        ``"D · {inner} · D"``.
+    latex
+        The same in LaTeX, with ``{role}`` placeholders.
+    parameters
+        The settings that make it what it is, e.g. ``{"restart": 30}``.
+    children
+        ``(role, child)`` pairs, in the order the child is used, e.g. ``[("preconditionS", fieldSplit)]``.
+    steps
+        The steps of one application, in order.
+    """
+
+    name: str
+    formula: str
+    latex: str = ""
+    parameters: dict = field(default_factory=dict)
+    children: tuple = ()
+    steps: tuple = ()
+
+
+@dataclass(frozen=True)
+class SetUpContext:
+    """What a component may need besides its matrix: the fields of its (sub-)problem and where their nodes are.
+
+    Attributes
+    ----------
+    fields
+        The field blocks of the dofs of this (sub-)problem, contiguous and in dof order.
+    scaling
+        The diagonal scaling between the physical dofs and the variables of this (sub-)problem: the matrix a
+        component gets is :math:`D A D` of the physical one, ``None`` for :math:`D = I`. A near null-space,
+        physical by nature (the rigid-body modes of a displacement field), is :math:`D^{-1}` times its physical
+        modes in these variables.
+    coordinatesOf
+        ``fieldName -> (nNodes, dimension)`` node coordinates of the field, in its dof order, or ``None`` if
+        unknown (an offline replay without a model).
+    p1MapOf
+        ``fieldName -> (isCorner, edgeEndpoints)``, the corner/midside topology of a quadratic field, or ``None``.
+    model
+        The model, if there is one (markers read it), else ``None``.
+    journal
+        The journal, if there is one, else ``None``.
+    """
+
+    fields: tuple
+    scaling: "np.ndarray | None" = None
+    coordinatesOf: object = None
+    p1MapOf: object = None
+    model: object = None
+    journal: object = None
+
+    @property
+    def size(self) -> int:
+        """The number of dofs of this (sub-)problem."""
+        return self.fields[-1].stop if self.fields else 0
+
+    def coordinates(self, fieldName: str) -> "np.ndarray | None":
+        """The node coordinates of a field, or ``None``."""
+        return None if self.coordinatesOf is None else self.coordinatesOf(fieldName)
+
+    def p1Map(self, fieldName: str):
+        """The P1 corner/midside map of a field, or ``None``."""
+        return None if self.p1MapOf is None else self.p1MapOf(fieldName)
+
+    def scalingOf(self, dofs: "slice | np.ndarray") -> np.ndarray:
+        """The scaling of some dofs (ones without a scaling)."""
+        if self.scaling is None:
+            return np.ones(self.size)[dofs]
+        return self.scaling[dofs]
+
+    def scaledBy(self, D: np.ndarray) -> "SetUpContext":
+        """The context of :math:`D \\hat A D`, for a child that gets this problem scaled once more by ``D``."""
+        return replace(self, scaling=D if self.scaling is None else self.scaling * D)
+
+    def restrictedToField(self, block: FieldBlock) -> "SetUpContext":
+        """The context of one field block of this problem: its dofs renumbered from zero."""
+        return replace(
+            self,
+            fields=(FieldBlock(block.name, 0, block.stop - block.start, block.dimension),),
+            scaling=None if self.scaling is None else self.scaling[block.start : block.stop],
+        )
+
+    def restrictedTo(self, fields: tuple, dofs: np.ndarray, nodesOf=None) -> "SetUpContext":
+        """The context of a subset ``dofs`` of this problem's dofs, whose fields are ``fields`` (as the Schur
+        complement leaves them). ``nodesOf``: ``fieldName -> boolean mask`` of the nodes of the field that remain,
+        to restrict the coordinates and P1 maps."""
+        from edelweissfe.linsolve.blockamg.schurcomplement import restrictP1Map
+
+        def coordinatesOf(fieldName):
+            coordinates = self.coordinates(fieldName)
+            mask = None if nodesOf is None else nodesOf(fieldName)
+            return coordinates if coordinates is None or mask is None else coordinates[mask]
+
+        def p1MapOf(fieldName):
+            p1Map = self.p1Map(fieldName)
+            mask = None if nodesOf is None else nodesOf(fieldName)
+            return p1Map if p1Map is None or mask is None else restrictP1Map(*p1Map, mask)
+
+        return replace(
+            self,
+            fields=tuple(fields),
+            scaling=None if self.scaling is None else self.scaling[dofs],
+            coordinatesOf=coordinatesOf,
+            p1MapOf=p1MapOf,
+        )
+
+
+@dataclass(frozen=True)
+class MatrixChange:
+    """What changed since a component's last set-up, and whether what it built must be built again.
+
+    The facts about the matrix (a new pattern, a resized system) are found by the composed solver
+    (:class:`~edelweissfe.linsolve.composition.solver.ComposedLinearSolver`); a Krylov solver adds its own
+    reasons (an increment, a stale preconditioner, see
+    :class:`~edelweissfe.linsolve.composition.krylov.RebuildPolicy`); a Schur complement adds its own when its
+    condensed dofs change. Each component then decides in :meth:`Preconditioner.update` what to keep.
+
+    Attributes
+    ----------
+    context
+        The context of the changed matrix.
+    rebuildReason
+        Why what was built must be built again (``"first"``, ``"model"``, ``"amr"``, ``"pattern"``,
+        ``"increment"``, ``"stale"``, ``"always"``, ``"condensed dofs"``), or ``None``: only the values changed,
+        and what was built for the previous matrix is reused.
+    newIncrement
+        Whether the right-hand side jumped, which marks a new increment of the nonlinear solver.
+    residualNorm
+        :math:`\\lVert b \\rVert` of this solve.
+    previousResidualNorm
+        :math:`\\lVert b \\rVert` of the previous solve, ``None`` before the first one (or after a change of the
+        model).
+    """
+
+    context: SetUpContext
+    rebuildReason: "str | None" = None
+    newIncrement: bool = False
+    residualNorm: float = 0.0
+    previousResidualNorm: "float | None" = None
+
+    @property
+    def requiresRebuild(self) -> bool:
+        """Whether what was built must be built again."""
+        return self.rebuildReason is not None
+
+    def withRebuild(self, reason: str) -> "MatrixChange":
+        """This change, asking for a rebuild for ``reason`` -- unless it asks for one already, whose reason stays."""
+        return self if self.requiresRebuild else replace(self, rebuildReason=reason)
+
+    def withContext(self, context: SetUpContext) -> "MatrixChange":
+        """This change, for a child with its own context."""
+        return replace(self, context=context)
+
+
+class Preconditioner:
+    """An approximate inverse :math:`M^{-1}` of a matrix :math:`A`: built by :meth:`setUp`, applied as
+    :math:`z = M^{-1} r`.
+
+    See the module documentation. Every subclass gets its :attr:`statistics` recorded: the methods
+    :meth:`setUp`, :meth:`update` and :meth:`__call__` it defines are wrapped once, when the class is defined
+    (:meth:`__init_subclass__`).
+    """
+
+    #: What this component recorded while it ran, see :class:`Statistics`.
+    statistics: Statistics
+
+    def __new__(cls, *args, **kwargs):
+        # every component gets its statistics here, so that a subclass's constructor need not call super().__init__
+        component = super().__new__(cls)
+        component.statistics = Statistics()
+        return component
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        if "setUp" in cls.__dict__:
+            cls.setUp = _recorded(cls.__dict__["setUp"], "setUp")
+        if "update" in cls.__dict__:
+            cls.update = _recorded(cls.__dict__["update"], "update")
+        if "__call__" in cls.__dict__:
+            cls.__call__ = _recorded(cls.__dict__["__call__"], "apply")
+
+    def setUp(self, A, context: SetUpContext) -> None:
+        """Build this component for the matrix ``A`` (a
+        :class:`~edelweissfe.linsolve.composition.systemmatrix.SystemMatrix`), and its children for their
+        sub-problems."""
+        raise NotImplementedError
+
+    def update(self, A, change: MatrixChange) -> None:
+        """Take the changed matrix ``A``. By default, build anew; a component that can reuse what it built
+        overrides this and rebuilds only if ``change.requiresRebuild``."""
+        self.setUp(A, change.context)
+
+    def __call__(self, r: np.ndarray) -> np.ndarray:
+        """Apply this component: :math:`z = M^{-1} r`."""
+        raise NotImplementedError
+
+    def setModel(self, model, dofManager) -> None:
+        """Take a new model (the first, or one after a change of the mesh), and hand it to the children. A component
+        that derives something from the model (e.g. which dofs a marker selects) overrides this."""
+        for _, child in self.children():
+            child.setModel(model, dofManager)
+
+    def builtMatrices(self) -> tuple:
+        """``(name, scipy matrix)`` pairs of the matrices this component formed and keeps (for the matrix view);
+        empty for most."""
+        return ()
+
+    def solveSummary(self):
+        """The diagnostics of the last solve as a :class:`~edelweissfe.linsolve.base.LinearSolveSummary`, for a
+        component that is a solve of its own (a Krylov solver); ``None`` for others."""
+        return None
+
+    def describe(self) -> Description:
+        """What this component is, for the views."""
+        return Description(name=type(self).__name__, formula=type(self).__name__ + "⁻¹")
+
+    def children(self) -> tuple:
+        """The ``(role, child)`` pairs of this component (empty for a leaf)."""
+        return self.describe().children
+
+    def __str__(self) -> str:
+        from edelweissfe.linsolve.composition.views import structure
+
+        return structure(self)
+
+    def _repr_html_(self) -> str:
+        from edelweissfe.linsolve.composition.views import html
+
+        return html(self, standalone=False)
+
+
+def _recorded(method, kind: str):
+    """``method``, with its calls counted and timed in the component's :class:`Statistics` as ``kind``."""
+
+    @functools.wraps(method)
+    def recordedMethod(self, *args, **kwargs):
+        start = time.perf_counter()
+        try:
+            return method(self, *args, **kwargs)
+        finally:
+            self.statistics.record(kind, time.perf_counter() - start)
+
+    return recordedMethod

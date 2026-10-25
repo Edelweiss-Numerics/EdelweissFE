@@ -105,9 +105,21 @@ import scipy.sparse as sp
 
 import edelweissfe.utils.performancetiming as performancetiming
 from edelweissfe.config.phenomena import phenomena
-from edelweissfe.linsolve.base import FieldBlock, LinearSolver, LinearSolveSummary
+from edelweissfe.linsolve.base import LinearSolver, LinearSolveSummary
 from edelweissfe.linsolve.blockamg import rigidbodycoarselevel, schurcomplement
-from edelweissfe.linsolve.nullspace import rigidBodyNullspace, translationNullspace
+from edelweissfe.linsolve.composition.amg import buildFieldHierarchy
+from edelweissfe.linsolve.composition.diagonalscaling import diagonalScalingOf
+from edelweissfe.linsolve.composition.fieldsplit import blockGaussSeidel
+from edelweissfe.linsolve.composition.krylov import (
+    STALENESS_MIN_EXCESS,
+    eisenstatWalkerTolerance,
+    outerIterationsDrifted,
+)
+from edelweissfe.linsolve.composition.solver import tileFieldBlocks
+from edelweissfe.linsolve.composition.systemmatrix import (
+    FieldSplitBlocks,
+    canonicalMatrix,
+)
 
 # Ordered low-to-high; index comparison decides whether a message at a given level should print.
 # "warning": only abnormal conditions (excessive outer iterations, unmet true-residual tolerance,
@@ -252,7 +264,7 @@ def _takesBlockTranslations(fieldTree: dict) -> bool:
 
 #: The least excess over the reference outer iteration count that makes reused hierarchies stale, on top of
 #: ``hierarchyStalenessFactor`` -- see :meth:`BlockAMGSolver._hierarchyIsStale`.
-_STALENESS_MIN_EXCESS = 15
+_STALENESS_MIN_EXCESS = STALENESS_MIN_EXCESS
 
 
 #: The deprecated LGMRES recycling keys and the one value each that is still accepted -- the behaviour that
@@ -1121,8 +1133,7 @@ class BlockAMGSolver(LinearSolver):
             self._stalenessReferenceIters = outerIters
             drifted = False
         else:
-            reference = self._stalenessReferenceIters
-            drifted = outerIters > max(self._hierarchyStalenessFactor * reference, reference + _STALENESS_MIN_EXCESS)
+            drifted = outerIterationsDrifted(outerIters, self._stalenessReferenceIters, self._hierarchyStalenessFactor)
         return drifted or capHit
 
     def _lgmresCapHit(self, iterations: int, tolerance: float) -> int:
@@ -1193,20 +1204,16 @@ class BlockAMGSolver(LinearSolver):
         against (the first solve, or the one right after a new-increment jump -- the ratio
         across that jump does not reflect Newton convergence and is not meaningful).
         """
-        if self._lastResidualNorm is None or newIncrement or self._lastResidualNorm == 0.0:
-            # A previous residual of exactly zero (typically an already-converged, e.g.
-            # linear-elastic, prior iterate) makes the ratio undefined rather than just
-            # uninformative -- fall back the same way as the no-history case.
-            return self._etaMax
-
-        ratio = residualNorm / self._lastResidualNorm
-        eta = self._ewGamma * ratio**self._ewAlpha
-
-        safeguard = self._ewGamma * self._lastEta**self._ewAlpha
-        if safeguard > 0.1:
-            eta = max(eta, safeguard)
-
-        return min(self._etaMax, max(self._etaMin, eta))
+        return eisenstatWalkerTolerance(
+            residualNorm,
+            self._lastResidualNorm,
+            self._lastEta,
+            newIncrement,
+            self._etaMin,
+            self._etaMax,
+            self._ewGamma,
+            self._ewAlpha,
+        )
 
     def setModel(self, model, dofManager) -> None:
         """Take the live model/DOF layout, and drop any P1 topology map derived from the previous one.
@@ -1301,27 +1308,7 @@ class BlockAMGSolver(LinearSolver):
         """The field blocks tiling ``[0, n)``, in DOF order, with any trailing DOFs not covered by a
         node field (e.g. scalar variables) folded into a final scalar block."""
 
-        if self._fieldStructure is None:
-            raise RuntimeError(
-                "blockamg: field structure not set. It is derived from setModel() (or, at the lower "
-                "level, setFieldStructure()); this solver must be driven by a caller that calls one of "
-                "those."
-            )
-        blocks = sorted(self._fieldStructure, key=lambda field: field.start)
-        cursor = 0
-        for block in blocks:
-            if block.start != cursor:
-                raise ValueError(
-                    "blockamg: field '{:}' starts at {:}, expected {:} -- fields must tile the DOF "
-                    "vector contiguously".format(block.name, block.start, cursor)
-                )
-            cursor = block.stop
-        if cursor < n:
-            # DOFs past the last node field: scalar variables. One scalar block.
-            blocks = blocks + [FieldBlock("scalar variables", cursor, n, 1)]
-        elif cursor != n:
-            raise ValueError("blockamg: field blocks cover {:} dofs, but the matrix is {:}x{:}".format(cursor, n, n))
-        return blocks
+        return tileFieldBlocks(self._fieldStructure, n, "blockamg")
 
     # translationNullspace/rigidBodyNullspace live in edelweissfe.linsolve.nullspace --
     # pure functions of a field's block layout, equilibration scaling, and (for the richer basis) node
@@ -1887,37 +1874,9 @@ class BlockAMGSolver(LinearSolver):
             self._keepFineSpectralRadius(block.name, preconditioner, self._p1FineSpectralRadiusReuse)
             return preconditioner
 
-        from edelweissfe.linsolve.amgcl.amgcl import PyAMGCLSolver
-
-        precondParams = _amgclTree(fieldTree)
-        backendPrecision = fieldTree.get("backendPrecision", "double")
-        backendBlockSize = fieldTree.get("backendBlockSize", 1)
-        blockTranslations = _takesBlockTranslations(fieldTree)
-        # The hierarchy is only ever applied as a preconditioner: "preonly" keeps AMGCL from allocating the
-        # work vectors of an iterative solver (BiCGStab by default) that would never run.
-        preconditioner = PyAMGCLSolver(
-            {
-                "precond": precondParams,
-                "solver": {"type": "preonly"},
-                "backendPrecision": backendPrecision,
-                "backendBlockSize": backendBlockSize,
-            }
-        )
         # The near null-space -- the error components a Chebyshev smoother does not reduce, which the coarse
         # levels must represent -- of A_scaled_ii, the block the hierarchy is built on: D^-1 times that of A_ii.
-        # A scalar backend gets the rigid-body modes. A block backend takes the translations alone (coords is
-        # None for it) with blockTranslationNullspace, the default; without it, AMGCL's constant blocks.
-        if isVectorField and (backendBlockSize == 1 or blockTranslations):
-            with performancetiming.timeit("nullspace construction"):
-                if coords is not None:
-                    nullspace = rigidBodyNullspace(block, coords, scaling)
-                else:
-                    nullspace = translationNullspace(block, scaling)
-            preconditioner.set_nullspace(nullspace)
-        diagonalBlock = self._diagonalBlock(system, index)
-        with performancetiming.timeit("{:} AMG build".format(block.name)):
-            preconditioner.build(diagonalBlock)
-        return preconditioner
+        return buildFieldHierarchy(block, fieldTree, scaling, coords, lambda: self._diagonalBlock(system, index))
 
     def _rigidBodyCoarseLevelOptions(self, block, isP1Field: bool) -> "dict | None":
         """The options of the field's rigid-body coarse level, or ``None`` if it has none.
@@ -2164,11 +2123,7 @@ class BlockAMGSolver(LinearSolver):
         """``A`` as CSR with sorted columns and no duplicate entries: AMGCL's block backends read the columns as
         sorted, and no backend sums duplicate entries. A canonical copy if needed, leaving the caller's matrix as it
         is."""
-        A = A.tocsr()
-        if not A.has_canonical_format:
-            A = A.copy()
-            A.sum_duplicates()
-        return A
+        return canonicalMatrix(A)
 
     @staticmethod
     def _equilibration(A: sp.csr_matrix) -> tuple:
@@ -2196,24 +2151,7 @@ class BlockAMGSolver(LinearSolver):
         """
         from edelweissfe.linsolve.amgcl.amgcl import PyAMGCLEquilibratedSystem
 
-        diagonal = PyAMGCLEquilibratedSystem.absoluteDiagonal(A)
-        zeroDiagonal = np.nonzero(diagonal == 0.0)[0]
-        if zeroDiagonal.size:
-            raise ValueError(
-                "blockamg: {:} dof(s) have a zero diagonal entry (first at index {:}) and "
-                "cannot be diagonally equilibrated. This is characteristic of a saddle-point "
-                "system -- a Lagrange-multiplier constraint, for instance, couples the "
-                "multiplier without ever writing its own diagonal -- which this field-split "
-                "AMG scheme does not support. Use a direct solver for such a model.".format(
-                    zeroDiagonal.size, int(zeroDiagonal[0])
-                )
-            )
-        nonFiniteDiagonal = np.nonzero(~np.isfinite(diagonal))[0]
-        if nonFiniteDiagonal.size:
-            return None, "the diagonal is not finite at {:} dof(s) (first at index {:})".format(
-                nonFiniteDiagonal.size, int(nonFiniteDiagonal[0])
-            )
-        return 1.0 / np.sqrt(diagonal), None
+        return diagonalScalingOf(PyAMGCLEquilibratedSystem.absoluteDiagonal(A), "blockamg")
 
     def _buildHierarchies(
         self, system, blocks: list, scaling: np.ndarray, A: sp.csr_matrix, condensing: bool = False
@@ -2258,35 +2196,9 @@ class BlockAMGSolver(LinearSolver):
         """The preconditioner ``v = M^-1 r`` on the equilibrated system: block Gauss-Seidel sweeps over the fields,
         ``M^-1 = (B + L)^-1`` for one forward sweep, ``B = blockdiag(M_i)``, ``M_i`` one AMG cycle on
         ``A_scaled_ii`` of the standing hierarchies; ``system`` provides the blocks ``A_scaled_ij``."""
-        slices = [slice(block.start, block.stop) for block in self._blocks]
-        nFields = len(slices)
-        preconditioners = self._preconditioners
-
-        def sweepOnce(order, v, visited):
-            # Residual-correction form, v_i += M_i^-1 (r_i - sum_j A_scaled_ij v_j): a revisit of a field (sweeps > 1,
-            # or the symmetric reverse sweep) improves its v_i. On a first visit v_i = 0, and only the fields
-            # already visited contribute to the sum.
-            for i in order:
-                localResidual = residual[slices[i]].copy()
-                for j in range(nFields):
-                    if j != i and visited[j]:
-                        localResidual -= system.couplingMatvec(i, j, v[j])
-                if visited[i]:
-                    localResidual -= system.diagonalBlockMatvec(i, v[i])
-                    v[i] = v[i] + preconditioners[i].applyPreconditioner(localResidual)
-                else:
-                    v[i] = preconditioners[i].applyPreconditioner(localResidual)
-                    visited[i] = True
-
-        v = [np.zeros(s.stop - s.start) for s in slices]
-        visited = [False] * nFields
-        for _ in range(self._sweeps):
-            sweepOnce(range(nFields), v, visited)
-            if self._symmetric:
-                # the last field was just updated with everything else current: start one before it (with an
-                # AMG cycle it still has a residual left, but a cycle on it is saved)
-                sweepOnce(range(nFields - 2, -1, -1), v, visited)
-        return np.concatenate(v)
+        blocks = FieldSplitBlocks(system, [(block.start, block.stop) for block in self._blocks])
+        fieldPreconditioners = [preconditioner.applyPreconditioner for preconditioner in self._preconditioners]
+        return blockGaussSeidel(blocks, fieldPreconditioners, residual, self._sweeps, self._symmetric)
 
     def __call__(self, A, b):
         solveStartTime = time.time()
