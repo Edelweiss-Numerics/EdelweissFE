@@ -31,8 +31,11 @@
 #include <vector>
 
 /// The interface PyAMGCLSolver drives, whatever the backend (scalar or BxB blocks, double or float):
-/// one pointer on the Cython side instead of one per backend. The matrix always arrives as a plain
-/// scalar double CSR and rhs/x are always double; each backend converts internally.
+/// one pointer on the Cython side instead of one per backend. An AMGCL hierarchy, built once by build() and applied
+/// as a preconditioner, one cycle per applyPreconditioner() (the AMG component of the composition,
+/// edelweissfe/linsolve/composition/amg.py; the Krylov solve around it is LGMRES or FGMRES of composition/krylov.py).
+/// The matrix always arrives as a plain scalar double CSR and rhs/x are always double; each backend converts
+/// internally.
 class AMGCLSolverInterface {
 public:
   virtual ~AMGCLSolverInterface() {}
@@ -49,19 +52,8 @@ public:
   /// @brief x <- M^-1 rhs: one cycle of the hierarchy built by build().
   virtual void applyPreconditioner( int n, const double* rhs, double* x ) = 0;
 
-  /// @brief Human-readable hierarchy report of the last build() or solve().
+  /// @brief Human-readable hierarchy report of the last build().
   virtual std::string report() const = 0;
-
-  /// @brief Build a hierarchy for (ptr, col, val) and solve with the configured Krylov solver.
-  /// @param iters, error the iteration count and relative residual the solver reports.
-  virtual void solve( int           n,
-                      const int*    ptr,
-                      const int*    col,
-                      const double* val,
-                      const double* rhs,
-                      double*       x,
-                      int&          iters,
-                      double&       error ) = 0;
 };
 
 /// @brief A JSON parameter tree as a boost property tree (empty for an empty string).
@@ -83,15 +75,15 @@ inline boost::property_tree::ptree childOrEmpty( const boost::property_tree::ptr
   return child ? *child : boost::property_tree::ptree();
 }
 
-/// @brief The human-readable report of an AMGCL solver (levels, operator complexity, coarse size).
-template < typename Solver >
-std::string hierarchyReport( const std::unique_ptr< Solver >& solver )
+/// @brief The human-readable report of an AMGCL hierarchy (levels, operator complexity, coarse size).
+template < typename Hierarchy >
+std::string hierarchyReport( const std::unique_ptr< Hierarchy >& hierarchy )
 {
-  if ( !solver ) {
-    throw std::runtime_error( "report(): no hierarchy built yet -- call build() or solve() first" );
+  if ( !hierarchy ) {
+    throw std::runtime_error( "report(): no hierarchy built yet -- call build() first" );
   }
   std::ostringstream report;
-  report << *solver;
+  report << *hierarchy;
   return report.str();
 }
 
@@ -109,24 +101,23 @@ inline const float* valuesAs( const double* val, int nnz, std::vector< float >& 
   return storage.data();
 }
 
-// Templated on the AMGCL backend's value type, so the same wrapper serves both the default
-// double-precision hierarchy and a float32 one (half the memory traffic in the smoother apply, the
-// dominant cost on large coupled solves). The outer
-// Krylov solve (blockamg's GMRES) always stays double; only the preconditioner's own storage and
-// arithmetic narrow. The matrix values and rhs/x at the build()/applyPreconditioner()/solve()
-// boundary are always double -- the value-type-dependent conversion happens inside this class, not at
-// the Cython/Python boundary.
+/// The hierarchy of the scalar backend, templated on the AMGCL backend's value type, so the same wrapper serves both
+/// the default double-precision hierarchy and a float32 one (half the memory traffic in the smoother apply). The outer
+/// Krylov solve always stays double; only the preconditioner's own storage and arithmetic narrow. The matrix values
+/// and rhs/x at the build()/applyPreconditioner() boundary are always double -- the value-type-dependent conversion
+/// happens inside this class, not at the Cython/Python boundary.
 template < typename ValueType, typename BackendType = amgcl::backend::builtin< ValueType > >
 class LinearSolverT : public AMGCLSolverInterface {
 public:
   typedef BackendType Backend;
-  typedef amgcl::make_solver< amgcl::runtime::preconditioner< Backend >, amgcl::runtime::solver::wrapper< Backend > >
-    Solver;
+  /// @brief AMGCL's runtime-configured hierarchy (precond.class, precond.coarsening.type, precond.relax.type).
+  typedef amgcl::runtime::preconditioner< Backend > Hierarchy;
 
+  /// @brief The parameter tree; the hierarchy reads its "precond" subtree.
   boost::property_tree::ptree prm;
 
-  // Cached solver and matrix structure information
-  std::unique_ptr< Solver > solver_;
+  /// @brief The hierarchy of the last build().
+  std::unique_ptr< Hierarchy > hierarchy_;
 
   // Near null-space vectors, kept alive here because the property tree only stores a raw pointer to
   // them (AMGCL copies from it when the hierarchy is built). Must outlive every solver construction.
@@ -136,14 +127,13 @@ public:
   // at hierarchy build time, not in the per-iteration smoother apply this backend split targets.
   std::vector< double > nullspace_;
 
-  // Constructor: Just stores the parameters
-  LinearSolverT( const char* json_params ) : prm( parseJsonParameters( json_params ) ), solver_() {}
+  /// @brief Store the parameters; the hierarchy is built by build().
+  LinearSolverT( const char* json_params ) : prm( parseJsonParameters( json_params ) ), hierarchy_() {}
 
-  // Supply near null-space vectors for smoothed-aggregation coarsening. B is a rows-by-cols matrix in
-  // row-major order (column j is the j-th near null-space vector). AMGCL takes these as a raw pointer
-  // in its property tree -- they cannot travel through the JSON parameter string -- so this is a
-  // separate entry point. Must be called before the first solve(); the pointer is read when the AMG
-  // hierarchy is constructed. Passing cols == 0 clears any previously set null-space.
+  /// @brief Supply near null-space vectors for smoothed-aggregation coarsening. AMGCL takes them as a raw pointer in
+  /// its property tree -- they cannot travel through the JSON parameter string -- so this is a separate entry point,
+  /// called before build(), which reads the pointer.
+  /// @param B rows x cols, row-major (column j is the j-th near null-space vector); cols == 0 clears it
   void set_nullspace( const double* B, int rows, int cols ) override
   {
     if ( cols <= 0 ) {
@@ -160,12 +150,8 @@ public:
     prm.put( "precond.coarsening.nullspace.B", nullspace_.data() );
   }
 
-  // Build the solver (and thus the AMG hierarchy) once for A, so it can be applied repeatedly as a
-  // preconditioner without rebuilding. This is the build-once / apply-many split that :meth:`solve`
-  // fuses: :meth:`solve` reconstructs the hierarchy on every call, which is fine for a one-shot solve
-  // but ruinous for an inner block preconditioner applied on every outer Krylov iteration. Uses the
-  // current property tree (including any near null-space set via set_nullspace). A float backend
-  // rounds the values first.
+  /// @brief Build the AMG hierarchy once for A, to be applied repeatedly as a preconditioner, with the current
+  /// property tree (including any near null-space set via set_nullspace()). A float backend rounds the values first.
   void build( int n, const int* ptr, const int* col, const double* val ) override
   {
     int                      nnz = ptr[n];
@@ -175,63 +161,23 @@ public:
                               amgcl::make_iterator_range( ptr, ptr + n + 1 ),
                               amgcl::make_iterator_range( col, col + nnz ),
                               amgcl::make_iterator_range( values, values + nnz ) );
-    solver_.reset( new Solver( A, prm ) );
+    hierarchy_.reset( new Hierarchy( A, childOrEmpty( prm, "precond" ) ) );
   }
 
-  // Apply one preconditioner (AMG) cycle to rhs: x <- M^-1 rhs, where M is the hierarchy built by
-  // :meth:`build`. This is the operation a block Gauss-Seidel / field-split preconditioner performs on
-  // each field per outer iteration. Cheap relative to the build. rhs/x are double regardless of
-  // ValueType -- for the float backend this narrows on the way in and widens on the way out; for the
-  // (default) double backend the extra copy is a no-op-equivalent memcpy, not a behaviour change.
+  /// @brief x <- M^-1 rhs: one cycle of the hierarchy of build(). rhs/x are double regardless of ValueType -- for
+  /// the float backend this narrows on the way in and widens on the way out.
   void applyPreconditioner( int n, const double* rhs, double* x ) override
   {
     std::vector< ValueType > rhs_v( rhs, rhs + n );
     std::vector< ValueType > x_v( n, ValueType( 0 ) );
     auto                     rhs_rng = amgcl::make_iterator_range( rhs_v.data(), rhs_v.data() + n );
     auto                     x_rng   = amgcl::make_iterator_range( x_v.data(), x_v.data() + n );
-    solver_->precond().apply( rhs_rng, x_rng );
+    hierarchy_->apply( rhs_rng, x_rng );
     std::copy( x_v.begin(), x_v.end(), x );
   }
 
-  // Human-readable hierarchy report (levels, operator complexity, coarse size) for the AMG built by
-  // build() or solve(). Streams AMGCL's own operator<< for the preconditioner + solver. Must be
-  // called after a successful build()/solve() -- throws otherwise.
-  std::string report() const override { return hierarchyReport( solver_ ); }
-
-  void solve( int           n,
-              const int*    ptr,
-              const int*    col,
-              const double* val,
-              const double* rhs,
-              double*       x,
-              int&          iters,
-              double&       error ) override
-  {
-
-    int                      nnz = ptr[n];
-    std::vector< ValueType > rounded;
-    const ValueType*         values = valuesAs( val, nnz, rounded );
-
-    auto ptr_rng = amgcl::make_iterator_range( ptr, ptr + n + 1 );
-    auto col_rng = amgcl::make_iterator_range( col, col + nnz );
-    auto val_rng = amgcl::make_iterator_range( values, values + nnz );
-
-    auto A = std::make_tuple( n, ptr_rng, col_rng, val_rng );
-
-    // Rebuilt unconditionally, and the sparsity pattern is deliberately not consulted: amgcl's
-    // make_solver binds the matrix *values* at construction and ( *solver_ )( rhs, x ) takes no
-    // matrix, so a solver kept across calls would solve the system it was built for. Values change
-    // on every Newton iteration even when the pattern does not, so an unchanged pattern buys nothing
-    // here -- reusing on that basis would silently return the previous iteration's answer. (Callers
-    // that do want to control refresh timing use build()/apply() instead of solve().)
-    solver_.reset( new Solver( A, prm ) );
-
-    std::vector< ValueType > rhs_v( rhs, rhs + n );
-    std::vector< ValueType > x_v( n, ValueType( 0 ) );
-    std::tie( iters, error ) = ( *solver_ )( amgcl::make_iterator_range( rhs_v.data(), rhs_v.data() + n ),
-                                             amgcl::make_iterator_range( x_v.data(), x_v.data() + n ) );
-    std::copy( x_v.begin(), x_v.end(), x );
-  }
+  /// @brief AMGCL's report of the hierarchy of the last build() (levels, operator complexity, coarse size).
+  std::string report() const override { return hierarchyReport( hierarchy_ ); }
 };
 
 // --- float-stored blocks, double hierarchy setup ------------------------------------------------
@@ -360,13 +306,13 @@ namespace amgcl {
 // conversion) rather than element-cast like the float backend's std::vector<ValueType> narrowing.
 // LinearSolverT stays untouched to keep the validated scalar/float paths at zero regression risk.
 //
-// The near null-space. Without one, the hierarchy is AMGCL's runtime-configured one (Solver), whose
+// The near null-space. Without one, the hierarchy is AMGCL's runtime-configured one (Hierarchy), whose
 // near null-space for a block value type is the identity block: constants per component of the
-// variables it is built on -- for blockamg's equilibrated blocks D A D, D-weighted translations, not
+// variables it is built on -- for the diagonally scaled field blocks D A D, D-weighted translations, not
 // the translations D^-1 t of D A D. set_nullspace() takes exactly those B translations instead, one
 // diagonal B×B block per node (edelweissfe/linsolve/nullspace.py's translationNullspace), and the
 // next build() then builds smoothed aggregation with a tentative prolongation from them
-// (TranslationSolver, see amgcl-block-translations.hpp). Any other near null-space -- the rotations
+// (TranslationHierarchy, see amgcl-block-translations.hpp). Any other near null-space -- the rotations
 // in particular -- is refused: that hierarchy only knows diagonal blocks of translation weights, and
 // the rotations are carried by the scalar backend, or by the rigid-body coarse level
 // (amgcl-rigid-body-coarse-level.hpp). (AMGCL's runtime coarsening, given a near null-space on a block
@@ -375,40 +321,37 @@ namespace amgcl {
 // The TODO in amgcl/coarsening/tentative_prolongation.hpp -- "this is
 // just a workaround to make non-scalar value types compile. Most probably this won't actually work."
 // -- concerns the compile-time smoothed_aggregation<BlockBackend> path, whose tentative prolongation
-// TranslationSolver replaces.)
+// TranslationHierarchy replaces.)
 template < typename BlockType, typename BackendType = amgcl::backend::builtin< BlockType > >
 class LinearSolverBlockT : public AMGCLSolverInterface {
 public:
-  typedef BackendType                                Backend;
-  typedef amgcl::runtime::solver::wrapper< Backend > KrylovSolver;
+  typedef BackendType Backend;
   /// @brief AMGCL's runtime-configured hierarchy: precond.class, precond.coarsening.type and
   /// precond.relax.type are chosen by the parameter tree; the near null-space is the identity block.
-  typedef amgcl::make_solver< amgcl::runtime::preconditioner< Backend >, KrylovSolver > Solver;
+  typedef amgcl::runtime::preconditioner< Backend > Hierarchy;
   /// @brief Smoothed aggregation whose tentative prolongation is built from the translations given to
   /// set_nullspace(); only precond.relax.type stays a runtime choice.
-  typedef amgcl::make_solver< amgcl::amg< Backend,
-                                          amgcl::coarsening::smoothed_aggregation_with_translations,
-                                          amgcl::runtime::relaxation::wrapper >,
-                              KrylovSolver >
-    TranslationSolver;
+  typedef amgcl::
+    amg< Backend, amgcl::coarsening::smoothed_aggregation_with_translations, amgcl::runtime::relaxation::wrapper >
+      TranslationHierarchy;
 
   static const int BlockSize = amgcl::math::static_rows< BlockType >::value;
 
   boost::property_tree::ptree prm;
-  /// @brief The hierarchy of the last build() or solve() without translations, else null.
-  std::unique_ptr< Solver > solver_;
-  /// @brief The hierarchy of the last build() or solve() with translations, else null.
-  std::unique_ptr< TranslationSolver > translationSolver_;
+  /// @brief The hierarchy of the last build() without translations, else null.
+  std::unique_ptr< Hierarchy > hierarchy_;
+  /// @brief The hierarchy of the last build() with translations, else null.
+  std::unique_ptr< TranslationHierarchy > translationHierarchy_;
   /// @brief The translations given to set_nullspace(), n x BlockSize row-major; empty for the identity blocks.
-  /// Kept alive here: the parameter tree of TranslationSolver only holds a pointer to them.
+  /// Kept alive here: the parameter tree of TranslationHierarchy only holds a pointer to them.
   std::vector< double > translations_;
 
   LinearSolverBlockT( const char* json_params )
-    : prm( parseJsonParameters( json_params ) ), solver_(), translationSolver_()
+    : prm( parseJsonParameters( json_params ) ), hierarchy_(), translationHierarchy_()
   {
   }
 
-  /// @brief Set the near null-space of the next build()/solve(): the BlockSize translations of the block, or
+  /// @brief Set the near null-space of the next build(): the BlockSize translations of the block, or
   /// (cols == 0) none, i.e. AMGCL's identity blocks.
   /// @param B rows x cols, row-major: per node a diagonal BlockSize x BlockSize block of positive weights
   /// @param rows, cols the shape of B: rows = n, cols = BlockSize, or cols = 0
@@ -443,7 +386,7 @@ public:
     translations_.assign( B, B + static_cast< size_t >( rows ) * cols );
   }
 
-  /// @brief The parameters of TranslationSolver for an n-row matrix: prm without the runtime selectors
+  /// @brief The parameters of TranslationHierarchy for an n-row matrix: prm without the runtime selectors
   /// precond.class and precond.coarsening.type (fixed at compile time), with the translations as
   /// precond.coarsening.nullspace.
   /// @throws std::runtime_error if the translations were set for another number of rows
@@ -470,18 +413,19 @@ public:
     return parameters;
   }
 
-  /// @brief Build the hierarchy for the block matrix A: TranslationSolver if set_nullspace() gave the
-  /// translations, Solver otherwise. The other one is released; a build that throws leaves both as they were.
+  /// @brief Build the hierarchy for the block matrix A: TranslationHierarchy if set_nullspace() gave the
+  /// translations, Hierarchy otherwise. The other one is released; a build that throws leaves both as they were.
   template < class BlockMatrix >
   void buildHierarchy( const BlockMatrix& A, int n )
   {
     if ( translations_.empty() ) {
-      solver_.reset( new Solver( A, prm ) );
-      translationSolver_.reset();
+      hierarchy_.reset( new Hierarchy( A, childOrEmpty( prm, "precond" ) ) );
+      translationHierarchy_.reset();
     }
     else {
-      translationSolver_.reset( new TranslationSolver( A, translationParameters( n ) ) );
-      solver_.reset();
+      const typename TranslationHierarchy::params parameters( childOrEmpty( translationParameters( n ), "precond" ) );
+      translationHierarchy_.reset( new TranslationHierarchy( A, parameters ) );
+      hierarchy_.reset();
     }
   }
 
@@ -516,49 +460,16 @@ public:
     std::vector< double > x_v( x, x + n );
     auto                  rhs_rng = amgcl::backend::reinterpret_as_rhs< BlockType >( rhs_v );
     auto                  x_rng   = amgcl::backend::reinterpret_as_rhs< BlockType >( x_v );
-    if ( translationSolver_ )
-      translationSolver_->precond().apply( rhs_rng, x_rng );
+    if ( translationHierarchy_ )
+      translationHierarchy_->apply( rhs_rng, x_rng );
     else
-      solver_->precond().apply( rhs_rng, x_rng );
+      hierarchy_->apply( rhs_rng, x_rng );
     std::copy( x_v.begin(), x_v.end(), x );
   }
 
   std::string report() const override
   {
-    return translationSolver_ ? hierarchyReport( translationSolver_ ) : hierarchyReport( solver_ );
-  }
-
-  void solve( int           n,
-              const int*    ptr,
-              const int*    col,
-              const double* val,
-              const double* rhs,
-              double*       x,
-              int&          iters,
-              double&       error ) override
-  {
-    checkBlockDivisible( n );
-    int  nnz = ptr[n];
-    auto A   = std::make_tuple( n,
-                              amgcl::make_iterator_range( ptr, ptr + n + 1 ),
-                              amgcl::make_iterator_range( col, col + nnz ),
-                              amgcl::make_iterator_range( val, val + nnz ) );
-
-    // Rebuilt unconditionally, and the sparsity pattern is deliberately not consulted: amgcl's
-    // make_solver binds the matrix *values* at construction and ( *solver_ )( rhs, x ) takes no
-    // matrix, so a solver kept across calls would solve the system it was built for. Values change
-    // on every Newton iteration even when the pattern does not, so an unchanged pattern buys nothing
-    // here -- reusing on that basis would silently return the previous iteration's answer. (Callers
-    // that do want to control refresh timing use build()/apply() instead of solve().)
-    buildHierarchy( amgcl::adapter::block_matrix< BlockType >( A ), n );
-
-    std::vector< double > rhs_v( rhs, rhs + n );
-    std::vector< double > x_v( n, 0.0 );
-    auto                  rhs_rng = amgcl::backend::reinterpret_as_rhs< BlockType >( rhs_v );
-    auto                  x_rng   = amgcl::backend::reinterpret_as_rhs< BlockType >( x_v );
-    std::tie( iters, error )      = translationSolver_ ? ( *translationSolver_ )( rhs_rng, x_rng )
-                                                       : ( *solver_ )( rhs_rng, x_rng );
-    std::copy( x_v.begin(), x_v.end(), x );
+    return translationHierarchy_ ? hierarchyReport( translationHierarchy_ ) : hierarchyReport( hierarchy_ );
   }
 };
 
@@ -573,12 +484,12 @@ inline double rowDiagonal( const int* ptr, const int* col, const double* val, pt
   return diagonal;
 }
 
-/// The equilibrated, field-split system of blockamg.py's outer solve, built in one OpenMP-threaded
-/// pass over A's CSR arrays instead of a chain of serial SciPy copies and slices.
+/// The diagonally scaled, field-split system of a composed solve (composition/systemmatrix.py), built in one
+/// OpenMP-threaded pass over A's CSR arrays instead of a chain of serial SciPy copies and slices.
 ///
-/// blockamg solves A x = b as (D A D)(D^-1 x) = D b, D = diag(scaling), and its block Gauss-Seidel
-/// sweep needs every field's equilibrated diagonal block (for the per-field preconditioners, on a
-/// hierarchy rebuild) and the equilibrated coupling blocks between fields (on every solve). This
+/// A DiagonalScaling solves A x = b as (D A D)(D^-1 x) = D b, D = diag(scaling), and a block Gauss-Seidel sweep
+/// (Multiplicative over OnField corrections) needs every field's scaled diagonal block (for the per-field
+/// preconditioners, on a rebuild) and the scaled coupling blocks between fields (on every application). This
 /// class holds
 ///
 ///   * the outer Krylov operator: matvec(), residual(), and the operator OuterKrylovSolverT::solve()
@@ -647,8 +558,8 @@ public:
 
   /// @brief Keep A itself, as given (its stored zeros too), as the operator of an outer Krylov solve on the unscaled
   /// system, without fields or blocks: what matrix( true ), matvec() and residual() with unscaled, and
-  /// OuterKrylovSolverT::solve() read (blockamg's condensed solves). Kept with A's own sparsity pattern, its values
-  /// can be replaced in place for the next matrix of that pattern, see refreshOperatorValues().
+  /// OuterKrylovSolverT::solve() read (a Krylov solve of composition/krylov.py on a matrix without a diagonal
+  /// scaling, e.g. the remaining dofs of a Schur complement).
   /// @param n, ptr, col, val A, square CSR
   void buildOperator( int n, const int* ptr, const int* col, const double* val )
   {
@@ -664,26 +575,6 @@ public:
     built.scaling_.assign( n, 1.0 );
     built.n_ = n;
     *this    = std::move( built );
-  }
-
-  /// @brief Replace the values of the operator kept by buildOperator() by those of a matrix of the same sparsity
-  /// pattern, in place: one pass over the values, without an allocation. The caller guarantees the pattern; only the
-  /// number of values is checked here.
-  /// @param nnz, val the values of the matrix, in the order of the kept pattern
-  void refreshOperatorValues( int nnz, const double* val )
-  {
-    checkBuilt();
-    if ( nFields_ != 0 || !unscaled_ ) {
-      throw std::runtime_error( "EquilibratedSystemT::refreshOperatorValues(): only for an operator kept by "
-                                "buildOperator()" );
-    }
-    if ( static_cast< ptrdiff_t >( nnz ) != static_cast< ptrdiff_t >( operator_->ptr[n_] ) ) {
-      throw std::runtime_error( "EquilibratedSystemT::refreshOperatorValues(): " + std::to_string( nnz ) +
-                                " values for an operator of " + std::to_string( operator_->ptr[n_] ) + " entries" );
-    }
-#pragma omp parallel for
-    for ( ptrdiff_t j = 0; j < static_cast< ptrdiff_t >( nnz ); ++j )
-      operator_->val[j] = val[j];
   }
 
   /// @brief The work of build(), on this (fresh) object.
@@ -941,15 +832,12 @@ public:
 };
 
 // Bridges AMGCL's own native amgcl::solver::lgmres (an outer Krylov solve running entirely on
-// the OpenMP-threaded builtin backend) to blockamg.py's Python-level block Gauss-Seidel preconditioner
-// (the same closure the shipped scipy.sparse.linalg.gmres path already uses), via a plain C
-// function-pointer callback + opaque context set from Cython.
+// the OpenMP-threaded builtin backend) to a preconditioner in Python -- the component tree under LGMRES or FGMRES
+// (composition/krylov.py) -- via a plain C function-pointer callback + opaque context set from Cython.
 //
-// Motivation: with the outer operator SpMV already threaded (EquilibratedSystemT above), the single
-// largest remaining bucket in the shipped arm's own solve wall (measured as a substantial share of total
-// wall-clock on a real reference model) is scipy's *own* GMRES orchestration -- Arnoldi/Gram-Schmidt/
-// restart bookkeeping -- which is unavoidably serial CPython regardless of any matvec/preconditioner
-// threading, and scales with the square of the restart length.
+// Why AMGCL's Krylov solve: with the operator SpMV threaded (EquilibratedSystemT above), a Krylov solve in Python
+// (scipy.sparse.linalg.gmres) spends a substantial share of the solve in its own serial orchestration --
+// Arnoldi/Gram-Schmidt/restart bookkeeping -- which scales with the square of the restart length.
 //
 // Why a C function pointer + void* context, not a Cython-overridden C++ virtual method: lgmres's
 // Precond parameter (see amgcl/solver/lgmres.hpp's operator()) is a compile-time template argument,
@@ -958,11 +846,10 @@ public:
 // a vtable/RTTI and an extra indirection for no benefit. A bare function pointer needs neither and
 // keeps this header entirely free of any Python/Cython dependency, matching every other class here.
 
-// Callback signature: one preconditioner application, x <- M^-1 rhs, where M is whatever
-// blockamg.py's own block Gauss-Seidel closure computes for this solve. `ctx` is an opaque pointer to
-// whatever Cython-side state the callback needs (the calling PyAMGCLLGMRESSolver instance, in
-// practice) -- this header never interprets it as anything other than a pass-through argument. `n` is
-// duplicated here (also known to the caller) purely so the callback does not need to reach back into
+// Callback signature: one preconditioner application, x <- M^-1 rhs, where M is the preconditioner (a component
+// tree) of the Krylov solve. `ctx` is an opaque pointer to whatever Cython-side state the callback needs (the calling
+// PyAMGCLKrylovSolver instance, in practice) -- this header never interprets it as anything other than a pass-through
+// argument. `n` is duplicated here (also known to the caller) purely so the callback does not need to reach back into
 // any C++-side state to learn it. It returns 0 on success and anything else if it failed (a Python
 // exception, which the caller keeps and re-raises).
 typedef int ( *PyPrecondApplyFn )( void* ctx, int n, const double* rhs, double* x );
@@ -998,22 +885,6 @@ private:
   int              n_;
 };
 
-/// Wraps amgcl::solver::lgmres<builtin<double>> (or fgmres) as blockamg.py's outer Krylov solve, in place of
-/// scipy.sparse.linalg.gmres, at both of that path's call sites (the main solve and the true-residual
-/// continuation retry -- see blockamg.py's __call__).
-///
-/// One instance lives as long as the system size does: lgmres preallocates every scratch vector
-/// (Arnoldi basis, augmentation vectors) for a fixed n in its own constructor, so a size change (AMR)
-/// needs a fresh instance, and blockamg.py rebuilds it then -- and when its own settings change. Every
-/// call starts from an empty augmentation subspace (lgmres's always_reset, forced here): carrying the
-/// augmentation vectors across calls ("recycling") was measured to buy nothing on a set of
-/// representative captured systems and, on a live trajectory, to compound a struggling solve's subspace into much more
-/// expensive and once NaN subsequent ones, so it is not offered. The intra-call restart-cycle
-/// augmentation (K) is unaffected.
-///
-/// tol/maxiter are set on every call on the solver's own public prm member -- blockamg's forcing and
-/// continuation tolerances change per call -- and every call iterates on the EquilibratedSystemT it is
-/// given, built fresh for that solve.
 /// The outer Krylov solve of either method, as Cython holds it (see makeOuterKrylovSolver()).
 class OuterKrylovSolver {
 public:
@@ -1034,8 +905,8 @@ public:
 
 /// @brief The parameters LGMRES is always run with, whatever the caller's tree says: always_reset (see the class
 /// comment) and right preconditioning -- lgmres's own convergence test is then on the residual of the operator it
-/// iterates on, which blockamg relies on (see its cap-hit and true-residual logic); left preconditioning would test
-/// the preconditioned residual instead.
+/// iterates on, which the Krylov component relies on (its cap-hit test and true residual); left preconditioning would
+/// test the preconditioned residual instead.
 inline void forceOuterKrylovParameters( boost::property_tree::ptree& prm,
                                         const amgcl::solver::lgmres< amgcl::backend::builtin< double > >* )
 {
@@ -1050,6 +921,20 @@ inline void forceOuterKrylovParameters( boost::property_tree::ptree&,
 {
 }
 
+/// The outer Krylov solve of LGMRES and FGMRES (composition/krylov.py): amgcl::solver::lgmres<builtin<double>> or
+/// fgmres, right-preconditioned by a callback into the component tree, on the operator of an EquilibratedSystemT.
+///
+/// One instance lives as long as the system size does: lgmres preallocates every scratch vector (Arnoldi basis,
+/// augmentation vectors) for a fixed n in its own constructor, so a size change (AMR) needs a fresh instance, which
+/// the Krylov component creates then. Every call starts from an empty augmentation subspace (lgmres's always_reset,
+/// forced here): carrying the augmentation vectors across calls ("recycling") was measured to buy nothing on a set of
+/// representative captured systems and, on a live trajectory, to compound a struggling solve's subspace into much
+/// more expensive and once NaN subsequent ones, so it is not offered. The intra-call restart-cycle augmentation (K,
+/// the component's augmentationVectors) is unaffected.
+///
+/// tol/maxiter are set on every call on the solver's own public prm member -- the forcing tolerance and the
+/// tolerances of the continuations change per call -- and every call iterates on the EquilibratedSystemT it is
+/// given.
 template < class SolverType >
 class OuterKrylovSolverT : public OuterKrylovSolver {
 public:
@@ -1071,7 +956,7 @@ public:
   }
 
   /// @brief x <- A^-1 rhs, right-preconditioned by the callback (applyFn/ctx). x holds the initial
-  /// guess on input (blockamg's warm-started continuation retry pre-fills it) and the solution on
+  /// guess on input (a continuation of the Krylov component pre-fills it) and the solution on
   /// output; iters/error return lgmres's iteration count and its own relative residual -- of the
   /// equilibrated system As, or, onUnscaledOperator, of A itself (the right preconditioner then has
   /// to map an A-residual to an A-correction).
@@ -1137,9 +1022,8 @@ inline OuterKrylovSolver* makeOuterKrylovSolver( const std::string& method, int 
 // count). The multi-point-constraint condensation fills its slave rows and columns with the identity
 // as well (the slaves are recovered from their masters after the solve); such a row is the same row
 // to the cycle, so "Dirichlet" below means either.
-// The former path extracted the free submatrix A_FF (Dirichlet rows *and* columns removed) and
-// smoothed on that. The cycle keeps the full block layout instead and makes the Dirichlet DOFs
-// decouple exactly:
+// The cycle does not extract the free submatrix A_FF (Dirichlet rows *and* columns removed) to smooth on; it keeps the
+// full block layout and makes the Dirichlet DOFs decouple exactly:
 //
 //   * the fine right-hand side and the fine iterate are zero on Dirichlet DOFs, and a Dirichlet row
 //     carries nothing but its diagonal, so every residual r_D = 0 - a_DD * 0 = 0, hence every
@@ -1239,7 +1123,7 @@ public:
   }
 
   /// @brief The same level with the operator's entries rounded to float (same structure, same
-  /// polynomial, same double inverse diagonal), in one parallel pass.
+  /// polynomial), in one parallel pass.
   template < typename FloatValueType >
   std::unique_ptr< TwoLevelFineLevelT< ValueType, FloatValueType > > makeFloatCopy() const
   {
@@ -1990,7 +1874,7 @@ protected:
     return trivial_;
   }
 
-  /// @brief Every free row needs a nonzero diagonal (blockamg's equilibration makes it 1): without one -- a zero block
+  /// @brief Every free row needs a nonzero diagonal (a DiagonalScaling makes it 1): without one -- a zero block
   /// -- the coarse operator is singular and the Chebyshev bounds, relative to the fine spectral radius, divide by
   /// zero. Checked before anything is built.
   /// @throws std::runtime_error naming a free row without a nonzero diagonal entry
@@ -2057,7 +1941,7 @@ protected:
     fineSpectralRadius_ = chooseFineSpectralRadius( *level, suppliedRadius, dominantVector, dominantVectorSize );
     if ( !( fineSpectralRadius_ > 0.0 ) || !std::isfinite( fineSpectralRadius_ ) ) {
       // the Chebyshev bounds are relative to it: a zero (or non-finite) radius -- a zero block, which
-      // blockamg's equilibration already refuses -- would divide by zero in the polynomial
+      // a DiagonalScaling already refuses -- would divide by zero in the polynomial
       throw std::runtime_error( name_ + ": the fine operator has no positive, finite spectral radius (got " +
                                 std::to_string( fineSpectralRadius_ ) + ") -- is the field's block zero?" );
     }
@@ -2416,9 +2300,9 @@ private:
   }
 };
 
-/// The rigid-body coarse level preconditioner of one vector field's equilibrated diagonal block (blockamg's key
-/// rigidBodyCoarseLevel, edelweissfe/linsolve/composition/rigidbodycoarselevel.py): the two-level cycle
-/// of TwoLevelPreconditioner whose coarse level is a smoothed aggregation spanned, on every aggregate, by a near
+/// The rigid-body coarse level preconditioner of one vector field's equilibrated diagonal block
+/// (TwoLevel(coarseSpace=RigidBodyModes()), edelweissfe/linsolve/composition/rigidbodycoarselevel.py): the two-level
+/// cycle of TwoLevelPreconditioner whose coarse level is a smoothed aggregation spanned, on every aggregate, by a near
 /// null-space of M vectors per node (amgcl-rigid-body-coarse-level.hpp), below which an AMGCL hierarchy continues the
 /// field's own. The interface Cython drives, whatever the number of components per node
 /// (RigidBodyCoarseLevelPreconditionerT).
@@ -2429,10 +2313,11 @@ private:
 /// tests and measurements, which differs from the rigid-body coarse level in the rotations alone (a test checks that it
 /// reproduces AMGCL's first coarse level to rounding).
 ///
-/// The parameters are those of the field's tree as blockamg configures it: backendBlockSize (2 or 3, the components
-/// per node), backendPrecision (the storage of the fine level and of P and P^T: double, or float with 3x3 blocks),
-/// prolongation ("smoothed" or "tentative"), coarseHierarchyPrecision (double or float), and the field's AMGCL tree
-/// under "amgcl", which means what it means to AMGCL's own hierarchy (with AMGCL's defaults for what it leaves out):
+/// The parameters are those of the cycle (TwoLevelCycleParameters::fromTree(), the spelling of the p-two-grid too):
+/// backendBlockSize (2 or 3, the components per node), backendPrecision (the storage of the fine level and of P and
+/// P^T: double, or float with 3x3 blocks), coarseHierarchyPrecision (double or float) and the field's AMGCL tree
+/// under "amgcl"; and prolongation ("smoothed" or "tentative"). The tree means what it means to AMGCL's own hierarchy
+/// (with AMGCL's defaults for what it leaves out):
 ///   * relax, npre, npost: the fine smoother, a Chebyshev polynomial (relax.type chebyshev, relax.scale false, at least
 ///     one power iteration) with npre sweeps before and npost after the coarse correction;
 ///   * coarsening: smoothed aggregation, its aggr.eps_strong the strength threshold of the aggregates and its relax,
@@ -2856,7 +2741,7 @@ inline AMGCLSolverInterface* makeAMGCLSolver( const char* json_params, int block
                             ( isFloat ? " in float" : " in double" ) );
 }
 
-// blockamg's equilibrated, field-split system, see EquilibratedSystemT above.
+// The diagonally scaled, field-split system of a composed solve, see EquilibratedSystemT above.
 typedef EquilibratedSystemT EquilibratedSystem;
 
 // AMGCL's own native outer Krylov solves (lgmres, fgmres) are created by makeOuterKrylovSolver(), see above.

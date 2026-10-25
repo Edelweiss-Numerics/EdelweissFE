@@ -1,9 +1,9 @@
 /*
- * The rigid-body coarse level of a vector field on a block backend (EdelweissFE blockamg, key rigidBodyCoarseLevel):
- * the building blocks of a smoothed-aggregation coarse level whose coarse space is spanned, on every aggregate, by a
- * near null-space of M vectors -- the rigid-body modes, translations and rotations -- under a fine level stored in
- * node-wise B x B blocks. RigidBodyCoarseLevelPreconditionerT (amgcl-wrapper.hpp) assembles them into a two-level
- * cycle.
+ * The rigid-body coarse level of a vector field on a block backend (EdelweissFE,
+ * TwoLevel(coarseSpace=RigidBodyModes())): the building blocks of a smoothed-aggregation coarse level whose coarse
+ * space is spanned, on every aggregate, by a near null-space of M vectors -- the rigid-body modes, translations and
+ * rotations -- under a fine level stored in node-wise B x B blocks. RigidBodyCoarseLevelPreconditionerT
+ * (amgcl-wrapper.hpp) assembles them into a two-level cycle.
  *
  * Why. The near null-space of linear elasticity -- the displacements of (almost) no strain energy -- are the rigid-body
  * modes: B translations and B (B - 1) / 2 rotations. A smoothed-aggregation coarse level represents a smooth error

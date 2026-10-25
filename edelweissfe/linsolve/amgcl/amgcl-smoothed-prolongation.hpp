@@ -1,6 +1,6 @@
 /*
  * The prolongation smoothing of AMGCL's smoothed aggregation, for a tentative prolongation of any block shape
- * (EdelweissFE blockamg): shared by the translations of a block backend (amgcl-block-translations.hpp) and the
+ * (EdelweissFE): shared by the translations of a block backend (amgcl-block-translations.hpp) and the
  * rigid-body coarse level (amgcl-rigid-body-coarse-level.hpp).
  *
  * prolongation_smoothing_weight() and smoothed_prolongation() are the prolongation smoothing of
@@ -76,8 +76,8 @@ namespace amgcl {
 
     /// @brief The smoothed prolongation P = (I - omega diag_B(A_F)^-1 A_F) P_tent of smoothed aggregation: one damped
     /// block-Jacobi step applied to every column of the tentative prolongation, diag_B(A_F) the node-wise B x B
-    /// diagonal blocks of A_F. (A is the level's operator: the equilibrated \hat A = D A D on the first level of
-    /// blockamg.)
+    /// diagonal blocks of A_F. (A is the level's operator: the diagonally scaled \hat A = D A D on the first level of
+    /// a field's hierarchy.)
     ///
     /// A column of P_tent is a near-null-space vector cut off at the boundary of its aggregate, so it jumps there, and
     /// its energy is large. The Jacobi step smooths the jump away and widens the column by one layer of nodes, so that

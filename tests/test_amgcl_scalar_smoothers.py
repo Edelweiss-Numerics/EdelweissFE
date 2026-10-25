@@ -25,8 +25,8 @@
 #  ---------------------------------------------------------------------
 """Regression guard for the scalar double AMGCL backend (``PyAMGCLSolver`` with the default
 ``backendBlockSize = 1``, ``backendPrecision = "double"``): ``relax.type = "gauss_seidel"`` and
-``"ilu0"`` must build and apply, which was briefly broken for every ``PyAMGCLSolver`` user (the registered
-``linsolver = amgcl`` included) while level matrices were stored with
+``"ilu0"`` must build and apply, which was briefly broken for every ``PyAMGCLSolver`` user while level matrices were
+stored with
 AMGCL's ``builtin_stored_matrices`` instead of plain ``builtin<double>``: that derived backend makes AMGCL
 reject ``gauss_seidel`` outright (``relaxation_is_supported`` keys off ``provides_row_iterator``) and
 silently falls back ILU0 to its generic, approximate triangular solve instead of the exact one plain
@@ -73,16 +73,24 @@ def test_scalar_backend_builds_and_applies(system, relaxationType):
 
 
 @pytest.mark.parametrize("relaxationType", ["gauss_seidel", "ilu0"])
-def test_scalar_backend_solves(system, relaxationType):
-    A, b = system
-    solver = PyAMGCLSolver(
-        {
-            "solver": {"type": "bicgstab", "tol": 1e-8},
-            "precond": {"coarsening": {"type": "smoothed_aggregation"}, "relax": {"type": relaxationType}},
-        }
+def test_scalar_backend_preconditions_a_krylov_solve(system, relaxationType):
+    from edelweissfe.linsolve.base import FieldBlock
+    from edelweissfe.linsolve.composition import (
+        AMG,
+        LGMRES,
+        ComposedLinearSolver,
+        FixedTolerance,
     )
-    x = solver.solve(A, b)
-    assert solver.lastError < 1.0001e-8
+
+    A, b = system
+    tree = {"coarsening": {"type": "smoothed_aggregation"}, "relax": {"type": relaxationType}}
+    solver = ComposedLinearSolver(
+        LGMRES(AMG(tree=tree, backendBlockSize=1), tolerance=FixedTolerance(1e-8), maxIterations=300),
+        verbosity="silent",
+    )
+    solver.setFieldStructure([FieldBlock("u", 0, A.shape[0], 1)])
+    x = solver(A, b)
+    assert solver.lastSolveSummary is None or solver.lastSolveSummary.residualMet
     assert np.linalg.norm(b - A @ x) < 1e-6 * np.linalg.norm(b)
 
 

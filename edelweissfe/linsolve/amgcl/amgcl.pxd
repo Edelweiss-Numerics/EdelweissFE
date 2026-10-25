@@ -36,14 +36,6 @@ cdef extern from "amgcl-wrapper.hpp":
     # internally -- see AMGCLSolverInterface. On a block backend set_nullspace() takes the translations
     # only, one diagonal block per node (see amgcl-block-translations.hpp).
     cdef cppclass AMGCLSolverInterface:
-        void solve(int n,
-                   const int* ptr,
-                   const int* col,
-                   const double* val,
-                   const double* rhs,
-                   double* x,
-                   int& iters,
-                   double& error) except +
         void set_nullspace(const double* B, int rows, int cols) except +
         void build(int n, const int* ptr, const int* col, const double* val) except +
         void applyPreconditioner(int n, const double* rhs, double* x) except +
@@ -53,7 +45,7 @@ cdef extern from "amgcl-wrapper.hpp":
     # 3x3 blocks set up in double and stored in float), owned by the caller.
     AMGCLSolverInterface* makeAMGCLSolver(const char* json_params, int blockSize, bint isFloat) except +
 
-    # blockamg's equilibrated, field-split system As = D A D: the outer Krylov operator, the
+    # The diagonally scaled, field-split system As = D A D of a composed solve: the outer Krylov operator, the
     # coupling blocks between fields and, on demand, the diagonal blocks -- built in one threaded
     # pass, see EquilibratedSystemT's own comment.
     cdef cppclass EquilibratedSystem:
@@ -64,7 +56,6 @@ cdef extern from "amgcl-wrapper.hpp":
         void build(int n, const int* ptr, const int* col, const double* val, const double* scaling,
                    int nFields, const int* fieldBounds, bint unscaled) except +
         void buildOperator(int n, const int* ptr, const int* col, const double* val) except +
-        void refreshOperatorValues(int nnz, const double* val) except +
         int diagonalBlockSize(int f) except +
         int diagonalBlockNnz(int f) except +
         void fillDiagonalBlock(int f, int* ptr, int* col, double* val) except +

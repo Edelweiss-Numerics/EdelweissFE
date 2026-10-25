@@ -99,10 +99,6 @@ cdef class PyAMGCLSolver:
     3x3 blocks set up in double but stored in float (``LinearSolverBlock3Float``) for block size 3."""
     cdef readonly int blockSize
     """1 (scalar, default), 2, or 3 -- the AMGCL backend's block size."""
-    cdef readonly int lastIterations
-    """The iteration count AMGCL reported for the most recent solve, -1 before the first."""
-    cdef readonly double lastError
-    """The relative residual AMGCL reported for the most recent solve, NaN before the first."""
     cdef readonly int n
     """The size of the matrix of the last :meth:`build`, -1 before the first."""
 
@@ -137,21 +133,13 @@ cdef class PyAMGCLSolver:
         On a block backend :meth:`set_nullspace` takes the B translations only (the rotations are carried by the
         scalar backend), see there.
 
-        Example params:
-        {
-            "solver": {"type": "bicgstab", "tol": 1e-6},
-            "precond": {"coarsening": {"type": "smoothed_aggregation"}, "relax": {"type": "ilu0"}}
-        }
+        The hierarchy is AMGCL's preconditioner of the parameters under ``"precond"``, e.g.
+        {"precond": {"coarsening": {"type": "smoothed_aggregation"}, "relax": {"type": "chebyshev"}}};
+        it is only ever applied as a preconditioner (the Krylov solve around it is the composition's LGMRES or
+        FGMRES).
         """
         if params is None:
-            # Default to Robust Blackbox (BiCGStab + ILU0)
-            params = {
-                "solver": {"type": "bicgstab", "tol": 1e-6},
-                "precond": {
-                    "coarsening": {"type": "smoothed_aggregation"},
-                    "relax": {"type": "ilu0"}
-                }
-            }
+            params = {"precond": {"coarsening": {"type": "smoothed_aggregation"}, "relax": {"type": "chebyshev"}}}
         else:
             params = dict(params)
 
@@ -169,8 +157,6 @@ cdef class PyAMGCLSolver:
                 "backendBlockSize 2 combined with backendPrecision='float' is not implemented."
             )
 
-        self.lastIterations = -1
-        self.lastError = float("nan")
         self.n = -1
 
         # Convert dict to JSON string for C++
@@ -192,7 +178,7 @@ cdef class PyAMGCLSolver:
         JSON parameter string like every other option; this is the separate entry point for them.
 
         B: an (n, cols) array-like; column j is the j-th near null-space vector (float64). Copied into
-        the C++ solver, so the array need not be kept alive. Must be called before the first solve().
+        the C++ solver, so the array need not be kept alive. Must be called before :meth:`build`.
         Passing an (n, 0) array clears any previously set null-space. Always double, regardless of
         ``backendPrecision`` -- see the class docstring.
 
@@ -217,7 +203,7 @@ cdef class PyAMGCLSolver:
     def build(self, object A):
         """
         Build the AMG hierarchy for A once, for repeated preconditioner application via
-        :meth:`applyPreconditioner` -- the build-once / apply-many split :meth:`solve` fuses.
+        :meth:`applyPreconditioner`.
 
         A: scipy.sparse.csr_matrix, passed as double; a float backend rounds its values inside the C++
         wrapper (build() runs once per solve, not once per outer Krylov iteration), and a block
@@ -243,38 +229,16 @@ cdef class PyAMGCLSolver:
     def report(self):
         """
         Human-readable AMGCL hierarchy report (levels, operator complexity, coarse size) for the most
-        recently built() or solve()'d hierarchy.
+        recently built hierarchy.
 
         Raises RuntimeError if nothing has been built yet.
         """
         return self.solver.report().decode("utf-8")
 
-    def solve(self, object A, object rhs):
-        """
-        A: scipy.sparse.csr_matrix
-        rhs: array-like, will be converted to 1D float64 (C-contiguous)
-        """
-        A, indptr, indices, data = _csrArrays(A)
-        cdef int n = A.shape[0]
-        rhsArray = _vector(rhs, n, "rhs")
-        cdef np.ndarray[np.float64_t, ndim=1, mode="c"] x = np.zeros(n, dtype=np.float64)
-        cdef int iters = 0
-        cdef double error = 0.0
-        self.solver.solve(n, _intData(indptr), _intData(indices), _constDoubleData(data), _constDoubleData(rhsArray),
-                          _doubleData(x), iters, error)
-
-        # AMGCL reports these by reference and they were being dropped on the floor, which left an
-        # unconverged solve indistinguishable from a converged one: an iterative solver that hits
-        # maxiter still returns a finite x, so the nonlinear solvers' NaN check does not catch it and
-        # the Newton loop silently consumes a wrong correction. Surfaced here so callers can check.
-        self.lastIterations = iters
-        self.lastError = error
-
-        return x
-
 
 cdef class PyAMGCLEquilibratedSystem:
-    """blockamg's equilibrated, field-split system ``As = D A D`` (``D = diag(scaling)``), built in one
+    """The diagonally scaled, field-split system ``As = D A D`` (``D = diag(scaling)``) of a composed solve
+    (:mod:`~edelweissfe.linsolve.composition.systemmatrix`), built in one
     OpenMP-threaded pass over ``A``: the outer Krylov operator (:meth:`matvec`, :meth:`residual`, and
     the operator :meth:`PyAMGCLKrylovSolver.solve` iterates on), the coupling blocks between fields
     (:meth:`couplingMatvec`) and, on demand, a field's diagonal block (:meth:`diagonalBlock`).
@@ -328,18 +292,12 @@ cdef class PyAMGCLEquilibratedSystem:
     def buildOperator(self, object A):
         """Keep ``A`` itself (scipy.sparse csr_matrix, square, its stored zeros too) as the operator of an outer solve
         on the unscaled system, without fields or blocks: for :meth:`matvec`/:meth:`residual` with ``unscaled`` and the
-        outer LGMRES. :meth:`refreshOperatorValues` then takes the values of a matrix of the same sparsity pattern."""
+        outer LGMRES."""
         if A.shape[0] != A.shape[1]:
             raise ValueError("A must be square, got shape {:}".format(A.shape))
         A, indptr, indices, data = _csrArrays(A)
         self.system.buildOperator(A.shape[0], _intData(indptr), _intData(indices), _constDoubleData(data))
         self.n = A.shape[0]
-
-    def refreshOperatorValues(self, object values):
-        """Replace the values of the operator kept by :meth:`buildOperator` by ``values``, those of a matrix of the
-        same sparsity pattern (in the order of its ``data``), in place. The caller guarantees the pattern."""
-        valuesArray = np.ascontiguousarray(values, dtype=np.float64).reshape(-1)
-        self.system.refreshOperatorValues(valuesArray.shape[0], _constDoubleData(valuesArray))
 
     def diagonalBlock(self, int field):
         """``As[field, field]`` as a new scipy.sparse csr_matrix (sorted columns if ``A``'s were), whichever
@@ -534,10 +492,10 @@ cdef class PyAMGCLKrylovSolver:
         tol, maxiter
             This call's relative residual tolerance and maximum total Arnoldi iterations (across every
             internal restart -- AMGCL's own ``maxiter`` semantics differ from scipy's restart x maxiter,
-            see blockamg.py's call site), set on the underlying ``amgcl::solver::lgmres`` object's own
+            the ``maxIterations`` of the Krylov component), set on the underlying ``amgcl::solver::lgmres`` object's own
             ``prm`` for this call.
         x0
-            Optional initial guess (warm start), e.g. blockamg.py's true-residual continuation retry.
+            Optional initial guess (warm start), e.g. a true-residual continuation of the Krylov component.
             Defaults to zero.
 
         AMGCL's lgmres returns ``x = 0`` at once for ``||rhs|| < 2 eps`` (about 4.4e-16), whatever the units of
