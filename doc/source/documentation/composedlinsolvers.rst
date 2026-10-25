@@ -133,11 +133,17 @@ Components
         over ``OnField`` corrections, block Gauss--Seidel and block Jacobi. ``gaussSeidelOrder(corrections, sweeps,
         symmetric)`` gives the order of several or symmetric sweeps. The corrections may also be a function of the
         context, made at the first set-up (one per field, whatever the model)
-    * - ``AMG(tree, rigidBodyNullspace, dropTolerance, lumpDroppedEntries)``
-      - one AMGCL hierarchy on a field, one cycle per application; with ``dropTolerance`` built on the filtered block
-        (:ref:`composed-drop-tolerance`)
-    * - ``TwoLevel(coarseSpace=RigidBodyModes() | P1Interpolation(), tree, dropTolerance, lumpDroppedEntries)``
-      - a two-level cycle with a coarse space of its own: all rigid-body modes per aggregate, or the P1 interpolant
+    * - ``AMG(tree, backendBlockSize, backendPrecision, blockTranslationNullspace, rigidBodyNullspace, dropTolerance,
+        lumpDroppedEntries)``
+      - one AMGCL hierarchy on a field, one cycle per application. ``tree`` holds AMGCL's parameters only, forwarded
+        verbatim; the backend (scalar entries or node-wise blocks, double or float, the block translations) is chosen
+        by the keywords, the field's default for those not given (:ref:`composed-amg-backend`); with
+        ``dropTolerance`` built on the filtered block (:ref:`composed-drop-tolerance`)
+    * - ``TwoLevel(coarseSpace, tree, backendBlockSize, backendPrecision, coarseHierarchyPrecision,
+        fineSpectralRadiusReuse, dropTolerance, lumpDroppedEntries)``
+      - a two-level cycle with a coarse space of its own (a ``CoarseSpace``): all rigid-body modes per aggregate,
+        ``RigidBodyModes(prolongation)``, or the P1 interpolant, ``P1Interpolation(coarsePrecond,
+        useCoarseNullspace)``. Both read the fine Chebyshev smoother from the tree's ``relax``, ``npre`` and ``npost``
     * - ``SchurComplement(condense, preconditionS, solveA_bb, blockFactors)``
       - block LU: :math:`z_k = M_{\tilde S}^{-1}(r_k - A_{kb} A_{bb}^{-1} r_b)`,
         :math:`z_b = A_{bb}^{-1}(r_b - A_{bk} z_k)`
@@ -149,6 +155,36 @@ Components
       - :math:`P A_c^{-1} P^T` with :math:`A_c = P^T A P`, and :math:`\omega \operatorname{diag}(A)^{-1}`: the pieces
         of a two-level cycle spelled out, ``Multiplicative([Jacobi(), CoarseCorrection(P, coarse), Jacobi()])``
         (slow, for learning and new coarse spaces; see :ref:`composed-two-level-two-ways`)
+
+.. _composed-amg-backend:
+
+The AMGCL backend of a field
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+``AMG`` and ``TwoLevel`` take the AMGCL tree and the backend apart: the tree is what AMGCL reads, the backend how
+EdelweissFE stores the field's matrix for it. The defaults are chosen in one place,
+:func:`~edelweissfe.linsolve.composition.amg.backendOf`, from the field:
+
+.. list-table::
+    :header-rows: 1
+    :widths: 30 70
+
+    * - Keyword
+      - Default
+    * - ``backendBlockSize``
+      - the field's dimension for a 2D or 3D field (node-wise blocks: less index and value traffic per product), else
+        1 (scalar entries)
+    * - ``backendPrecision``
+      - ``"float"`` on 3x3 blocks (set up in double, only the matrices the cycle reads stored in float), else
+        ``"double"``
+    * - ``blockTranslationNullspace`` (``AMG`` only)
+      - on a block backend, smoothed aggregation from the translations :math:`D^{-1} t` of the scaled block instead of
+        AMGCL's constant blocks
+
+So ``AMG(backendBlockSize=1)`` puts a 3D displacement field on the scalar backend, in double, where its hierarchy
+takes all rigid-body modes as its near null-space. Rotations belong to the near null-space of a displacement field
+only (by its phenomenon, :func:`~edelweissfe.linsolve.nullspace.carriesRigidBodyModes`): the rotation field of a
+micropolar model gets its translations.
 
 The combinators show that methods which look unrelated share one structure. Block Gauss--Seidel over the fields *is*
 ``Multiplicative([OnField("displacement", M_u), OnField("nonlocal damage", M_d)])``, and a two-level cycle *is*

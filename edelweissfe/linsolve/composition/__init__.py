@@ -89,6 +89,7 @@ from edelweissfe.linsolve.composition.solver import (
 )
 from edelweissfe.linsolve.composition.systemmatrix import SystemMatrix
 from edelweissfe.linsolve.composition.twolevel import (
+    CoarseSpace,
     P1Interpolation,
     RigidBodyModes,
     TwoLevel,
@@ -98,6 +99,7 @@ __all__ = [
     "AMG",
     "Additive",
     "CoarseCorrection",
+    "CoarseSpace",
     "ComposedLinearSolver",
     "Description",
     "DiagonalScaling",

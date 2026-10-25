@@ -38,7 +38,7 @@ import numpy as np
 import pytest
 import scipy.sparse as sp
 from _linsolvesystems import DirichletStub
-from _p1lattice import dirichletDofs, lattice, latticeSystem
+from _p1lattice import dirichletDofs, fineChebyshevTree, lattice, latticeSystem
 
 pytest.importorskip("edelweissfe.linsolve.amgcl.amgcl")
 
@@ -122,6 +122,13 @@ def _referenceCycle(As, dinv, coords, isCorner, edgeEndpoints, spectralRadius, n
     return x
 
 
+def _ptwogrid(isCorner, edgeEndpoints, fineTree=None, **options):
+    """The p-two-grid with the fine smoother ``fineTree`` (default :func:`fineChebyshevTree`)."""
+    return PTwoGridPreconditioner(
+        isCorner, edgeEndpoints, fineTree if fineTree is not None else fineChebyshevTree(), **options
+    )
+
+
 def _relativeDifference(x, y):
     return np.linalg.norm(x - y) / np.linalg.norm(y)
 
@@ -129,7 +136,7 @@ def _relativeDifference(x, y):
 @pytest.mark.parametrize("nuPre, nuPost, degree", [(1, 1, 5), (2, 2, 8), (0, 1, 16), (1, 0, 8), (0, 2, 4)])
 def test_the_scalar_cycle_matches_the_free_submatrix_reference(problem, nuPre, nuPost, degree):
     As, dinv, coords, isCorner, edgeEndpoints, r = problem
-    preconditioner = PTwoGridPreconditioner(isCorner, edgeEndpoints, nuPre=nuPre, nuPost=nuPost, fineDegree=degree)
+    preconditioner = _ptwogrid(isCorner, edgeEndpoints, fineChebyshevTree(nuPre, nuPost, degree))
     preconditioner.build(As, dinv, coordinates=coords)
     x = preconditioner.applyPreconditioner(r)
     reference = _referenceCycle(
@@ -140,7 +147,7 @@ def test_the_scalar_cycle_matches_the_free_submatrix_reference(problem, nuPre, n
 
 def test_the_spectral_radius_estimate_is_the_free_submatrix_one(problem):
     As, dinv, coords, isCorner, edgeEndpoints, r = problem
-    preconditioner = PTwoGridPreconditioner(isCorner, edgeEndpoints, finePowerIters=2000)
+    preconditioner = _ptwogrid(isCorner, edgeEndpoints, fineChebyshevTree(powerIters=2000))
     preconditioner.build(As, dinv, coordinates=coords)
     free = np.nonzero(np.diff(As.indptr) != 1)[0]
     A_free = As[free, :][:, free].toarray()
@@ -150,7 +157,7 @@ def test_the_spectral_radius_estimate_is_the_free_submatrix_one(problem):
 
 def test_dirichlet_rows_pass_through(problem):
     As, dinv, coords, isCorner, edgeEndpoints, r = problem
-    preconditioner = PTwoGridPreconditioner(isCorner, edgeEndpoints)
+    preconditioner = _ptwogrid(isCorner, edgeEndpoints)
     preconditioner.build(As, dinv, coordinates=coords)
     x = preconditioner.applyPreconditioner(r)
     isDirichlet = np.diff(As.indptr) == 1
@@ -159,9 +166,9 @@ def test_dirichlet_rows_pass_through(problem):
 
 def test_block3_storage_matches_scalar_storage(problem):
     As, dinv, coords, isCorner, edgeEndpoints, r = problem
-    scalar = PTwoGridPreconditioner(isCorner, edgeEndpoints, nu=2, fineDegree=8)
+    scalar = _ptwogrid(isCorner, edgeEndpoints, fineChebyshevTree(2, 2, 8))
     scalar.build(As, dinv, coordinates=coords)
-    block3 = PTwoGridPreconditioner(isCorner, edgeEndpoints, nu=2, fineDegree=8, fineBlockSize=3)
+    block3 = _ptwogrid(isCorner, edgeEndpoints, fineChebyshevTree(2, 2, 8), backendBlockSize=3)
     block3.build(As, dinv, coordinates=coords)
     assert abs(block3.fineSpectralRadius - scalar.fineSpectralRadius) < 1e-12 * scalar.fineSpectralRadius
     assert _relativeDifference(block3.applyPreconditioner(r), scalar.applyPreconditioner(r)) < 1e-12
@@ -169,14 +176,14 @@ def test_block3_storage_matches_scalar_storage(problem):
 
 def test_a_reused_spectral_radius_reproduces_the_estimated_one(problem):
     As, dinv, coords, isCorner, edgeEndpoints, r = problem
-    estimated = PTwoGridPreconditioner(isCorner, edgeEndpoints)
+    estimated = _ptwogrid(isCorner, edgeEndpoints)
     estimated.build(As, dinv, coordinates=coords)
-    again = PTwoGridPreconditioner(isCorner, edgeEndpoints)
+    again = _ptwogrid(isCorner, edgeEndpoints)
     again.build(As, dinv, coordinates=coords)
     # deterministic: the same matrix gives the same estimate, bit for bit, whatever the thread count
     assert again.fineSpectralRadius == estimated.fineSpectralRadius
 
-    reused = PTwoGridPreconditioner(isCorner, edgeEndpoints, fineSpectralRadius=estimated.fineSpectralRadius)
+    reused = _ptwogrid(isCorner, edgeEndpoints, fineSpectralRadius=estimated.fineSpectralRadius)
     reused.build(As, dinv, coordinates=coords)
     assert reused.fineSpectralRadius == estimated.fineSpectralRadius
     # the coarse AMGCL hierarchy is rebuilt, with its own (thread-order dependent) power iteration
@@ -184,7 +191,7 @@ def test_a_reused_spectral_radius_reproduces_the_estimated_one(problem):
 
 
 def _reusing(estimated, isCorner, edgeEndpoints):
-    return PTwoGridPreconditioner(
+    return _ptwogrid(
         isCorner,
         edgeEndpoints,
         fineSpectralRadius=estimated.fineSpectralRadius,
@@ -194,7 +201,7 @@ def _reusing(estimated, isCorner, edgeEndpoints):
 
 def test_the_recheck_keeps_a_reused_spectral_radius_on_an_unchanged_operator(problem):
     As, dinv, coords, isCorner, edgeEndpoints, r = problem
-    estimated = PTwoGridPreconditioner(isCorner, edgeEndpoints)
+    estimated = _ptwogrid(isCorner, edgeEndpoints)
     estimated.build(As, dinv, coordinates=coords)
     assert estimated.fineSpectralRadiusSource == "estimated"
     reused = _reusing(estimated, isCorner, edgeEndpoints)
@@ -207,7 +214,7 @@ def test_the_recheck_keeps_a_reused_spectral_radius_on_an_unchanged_operator(pro
 
 def test_the_recheck_raises_a_reused_spectral_radius_within_the_margin(problem):
     As, dinv, coords, isCorner, edgeEndpoints, r = problem
-    estimated = PTwoGridPreconditioner(isCorner, edgeEndpoints)
+    estimated = _ptwogrid(isCorner, edgeEndpoints)
     estimated.build(As, dinv, coordinates=coords)
     reused = _reusing(estimated, isCorner, edgeEndpoints)
     reused.build((1.05 * As).tocsr(), dinv, coordinates=coords)
@@ -217,10 +224,10 @@ def test_the_recheck_raises_a_reused_spectral_radius_within_the_margin(problem):
 
 def test_the_recheck_re_estimates_a_stiffened_operator_in_full(problem):
     As, dinv, coords, isCorner, edgeEndpoints, r = problem
-    estimated = PTwoGridPreconditioner(isCorner, edgeEndpoints)
+    estimated = _ptwogrid(isCorner, edgeEndpoints)
     estimated.build(As, dinv, coordinates=coords)
     stiffened = (1.5 * As).tocsr()
-    fresh = PTwoGridPreconditioner(isCorner, edgeEndpoints)
+    fresh = _ptwogrid(isCorner, edgeEndpoints)
     fresh.build(stiffened, dinv, coordinates=coords)
     reused = _reusing(estimated, isCorner, edgeEndpoints)
     reused.build(stiffened, dinv, coordinates=coords)
@@ -232,7 +239,7 @@ def test_the_preconditioner_accelerates_gmres(problem):
     As, dinv, coords, isCorner, edgeEndpoints, r = problem
     from scipy.sparse.linalg import LinearOperator, gmres
 
-    preconditioner = PTwoGridPreconditioner(isCorner, edgeEndpoints, fineBlockSize=3)
+    preconditioner = _ptwogrid(isCorner, edgeEndpoints, backendBlockSize=3)
     preconditioner.build(As, dinv, coordinates=coords)
     M = LinearOperator(As.shape, matvec=preconditioner.applyPreconditioner)
     counts = {"preconditioned": 0, "plain": 0}
@@ -249,10 +256,10 @@ def test_the_preconditioner_accelerates_gmres(problem):
 @pytest.mark.parametrize("fineBlockSize", [1, 3])
 def test_a_float_fine_operator_stays_close_to_the_double_one(problem, fineBlockSize):
     As, dinv, coords, isCorner, edgeEndpoints, r = problem
-    double = PTwoGridPreconditioner(isCorner, edgeEndpoints, nu=2, fineDegree=8, fineBlockSize=fineBlockSize)
+    double = _ptwogrid(isCorner, edgeEndpoints, fineChebyshevTree(2, 2, 8), backendBlockSize=fineBlockSize)
     double.build(As, dinv, coordinates=coords)
-    single = PTwoGridPreconditioner(
-        isCorner, edgeEndpoints, nu=2, fineDegree=8, fineBlockSize=fineBlockSize, fineValueType="float"
+    single = _ptwogrid(
+        isCorner, edgeEndpoints, fineChebyshevTree(2, 2, 8), backendBlockSize=fineBlockSize, backendPrecision="float"
     )
     single.build(As, dinv, coordinates=coords)
     # the spectral radius comes from the double operator in both
@@ -269,7 +276,7 @@ def test_a_float_fine_operator_still_accelerates_gmres(problem):
 
     counts = {}
     for valueType in ("double", "float"):
-        preconditioner = PTwoGridPreconditioner(isCorner, edgeEndpoints, fineBlockSize=3, fineValueType=valueType)
+        preconditioner = _ptwogrid(isCorner, edgeEndpoints, backendBlockSize=3, backendPrecision=valueType)
         preconditioner.build(As, dinv, coordinates=coords)
         M = LinearOperator(As.shape, matvec=preconditioner.applyPreconditioner)
         history = []
@@ -281,9 +288,9 @@ def test_a_float_fine_operator_still_accelerates_gmres(problem):
 
 def test_a_float_coarse_level_stays_close_to_the_double_one(problem):
     As, dinv, coords, isCorner, edgeEndpoints, r = problem
-    double = PTwoGridPreconditioner(isCorner, edgeEndpoints, fineBlockSize=3)
+    double = _ptwogrid(isCorner, edgeEndpoints, backendBlockSize=3)
     double.build(As, dinv, coordinates=coords)
-    single = PTwoGridPreconditioner(isCorner, edgeEndpoints, fineBlockSize=3, coarseValueType="float")
+    single = _ptwogrid(isCorner, edgeEndpoints, backendBlockSize=3, coarseHierarchyPrecision="float")
     single.build(As, dinv, coordinates=coords)
     # the coarse hierarchy itself is built in float, its own smoother's spectral radius included
     assert _relativeDifference(single.applyPreconditioner(r), double.applyPreconditioner(r)) < 1e-3
@@ -319,7 +326,7 @@ def test_dirichlet_rows_with_stored_zeros_are_recognized():
     r = np.random.default_rng(2).standard_normal(withZeros.shape[0])
     results = []
     for A in (withZeros, withoutZeros):
-        preconditioner = PTwoGridPreconditioner(isCorner, edgeEndpoints, fineBlockSize=3)
+        preconditioner = _ptwogrid(isCorner, edgeEndpoints, backendBlockSize=3)
         preconditioner.build(A, dinv, coordinates=coords)
         results.append(preconditioner.applyPreconditioner(r))
     assert np.array_equal(results[0][dofs], r[dofs])
@@ -334,7 +341,7 @@ def test_an_orphan_midside_raises():
     clampedCorners = edgeEndpoints[orphan]
     dofs = np.sort((3 * clampedCorners[:, None] + np.arange(3)).ravel())
     As, dinv = latticeSystem(coords, dofs)
-    preconditioner = PTwoGridPreconditioner(isCorner, edgeEndpoints)
+    preconditioner = _ptwogrid(isCorner, edgeEndpoints)
     with pytest.raises(RuntimeError, match="orphan"):
         preconditioner.build(As, dinv, coordinates=coords)
 
@@ -342,39 +349,43 @@ def test_an_orphan_midside_raises():
 def test_an_unsupported_block_size_or_value_type_raises():
     coords, isCorner, edgeEndpoints = lattice(3)
     with pytest.raises(ValueError):
-        PTwoGridPreconditioner(isCorner, edgeEndpoints, fineBlockSize=2)
+        _ptwogrid(isCorner, edgeEndpoints, backendBlockSize=4)
     with pytest.raises(ValueError):
-        PTwoGridPreconditioner(isCorner, edgeEndpoints, fineValueType="half")
+        _ptwogrid(isCorner, edgeEndpoints, backendBlockSize=2, backendPrecision="float")
     with pytest.raises(ValueError):
-        PTwoGridPreconditioner(isCorner, edgeEndpoints, coarseValueType="half")
+        _ptwogrid(isCorner, edgeEndpoints, backendPrecision="half")
+    with pytest.raises(ValueError):
+        _ptwogrid(isCorner, edgeEndpoints, coarseHierarchyPrecision="half")
 
 
-def test_an_invalid_sweep_count_or_degree_raises_before_any_build():
+def test_an_invalid_smoother_raises_before_any_build():
     coords, isCorner, edgeEndpoints = lattice(3)
-    with pytest.raises(ValueError):
-        PTwoGridPreconditioner(isCorner, edgeEndpoints, fineDegree=0)
-    with pytest.raises(ValueError):
-        PTwoGridPreconditioner(isCorner, edgeEndpoints, nuPre=-1)
-    # the C++ class checks them itself, in its constructor
+    with pytest.raises(ValueError, match="relax.degree"):
+        _ptwogrid(isCorner, edgeEndpoints, fineChebyshevTree(degree=0))
+    with pytest.raises(ValueError, match="npre and npost"):
+        _ptwogrid(isCorner, edgeEndpoints, fineChebyshevTree(npre=-1))
+    with pytest.raises(ValueError, match="relax.type must be chebyshev"):
+        _ptwogrid(isCorner, edgeEndpoints, {"relax": {"type": "spai0"}})
+    # the C++ class checks them itself, in its constructor, in the spelling of the rigid-body coarse level
     from edelweissfe.linsolve.amgcl.amgcl import PyAMGCLPTwoGrid
 
-    for params in (
-        {"fineDegree": 0},
-        {"nuPost": -1},
-        {"fineBlockSize": 2},
-        {"coarseValueType": "half"},
-        {"finePowerIters": 0},
-        {"fineHigher": 0.9},
-        {"fineLower": 0.0},
+    for amgclTree, parameters in (
+        (fineChebyshevTree(degree=0), {}),
+        (fineChebyshevTree(npost=-1), {}),
+        (fineChebyshevTree(powerIters=0), {}),
+        (fineChebyshevTree() | {"relax": fineChebyshevTree()["relax"] | {"higher": 0.9}}, {}),
+        (fineChebyshevTree() | {"relax": fineChebyshevTree()["relax"] | {"lower": 0.0}}, {}),
+        (fineChebyshevTree(), {"backendBlockSize": 4}),
+        (fineChebyshevTree(), {"coarseHierarchyPrecision": "half"}),
     ):
         with pytest.raises(RuntimeError):
-            PyAMGCLPTwoGrid(params)
+            PyAMGCLPTwoGrid({"amgcl": amgclTree, **parameters})
 
 
 def test_a_fully_constrained_field_is_the_identity():
     coords, isCorner, edgeEndpoints = lattice(3)
     n = 3 * len(coords)
-    preconditioner = PTwoGridPreconditioner(isCorner, edgeEndpoints)
+    preconditioner = _ptwogrid(isCorner, edgeEndpoints)
     preconditioner.build(sp.identity(n, format="csr"), np.ones(n), coordinates=coords)
     r = np.random.default_rng(4).standard_normal(n)
     assert np.array_equal(preconditioner.applyPreconditioner(r), r)
@@ -382,7 +393,7 @@ def test_a_fully_constrained_field_is_the_identity():
 
 
 def test_an_empty_field_builds_and_applies():
-    preconditioner = PTwoGridPreconditioner(np.zeros(0, dtype=bool), np.zeros((0, 2), dtype=int))
+    preconditioner = _ptwogrid(np.zeros(0, dtype=bool), np.zeros((0, 2), dtype=int))
     preconditioner.build(sp.csr_matrix((0, 0)), np.zeros(0), None)
     assert preconditioner.applyPreconditioner(np.zeros(0)).shape == (0,)
 
@@ -390,7 +401,7 @@ def test_an_empty_field_builds_and_applies():
 def test_a_zero_block_raises_instead_of_dividing_by_zero():
     coords, isCorner, edgeEndpoints = lattice(3)
     n = 3 * len(coords)
-    preconditioner = PTwoGridPreconditioner(isCorner, edgeEndpoints, useCoarseNullspace=False)
+    preconditioner = _ptwogrid(isCorner, edgeEndpoints, useCoarseNullspace=False)
     with pytest.raises(RuntimeError, match="no nonzero diagonal"):
         preconditioner.build(sp.csr_matrix((n, n)), np.ones(n), None)
 
@@ -400,7 +411,7 @@ def test_a_failed_build_leaves_nothing_to_apply():
     As, dinv = latticeSystem(coords, dirichletDofs(coords))
     # the fine spectral radius is checked after the prolongation, the Galerkin product and the coarse
     # hierarchy are built: a supplied infinite one fails the build that late
-    preconditioner = PTwoGridPreconditioner(isCorner, edgeEndpoints, fineSpectralRadius=np.inf)
+    preconditioner = _ptwogrid(isCorner, edgeEndpoints, fineSpectralRadius=np.inf)
     with pytest.raises(RuntimeError, match="spectral radius"):
         preconditioner.build(As, dinv, coordinates=coords)
     with pytest.raises(RuntimeError, match="no preconditioner built"):
@@ -412,6 +423,6 @@ def test_dirichlet_rows_are_solved_exactly_whatever_their_diagonal(problem):
     dofs = dirichletDofs(coords)
     scaled = As.tolil()
     scaled[dofs, dofs] = 2.0
-    preconditioner = PTwoGridPreconditioner(isCorner, edgeEndpoints)
+    preconditioner = _ptwogrid(isCorner, edgeEndpoints)
     preconditioner.build(scaled.tocsr(), dinv, coordinates=coords)
     assert np.array_equal(preconditioner.applyPreconditioner(r)[dofs], r[dofs] / 2.0)

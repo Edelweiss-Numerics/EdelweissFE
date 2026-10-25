@@ -803,19 +803,15 @@ what you need. The table in :doc:`composedlinsolvers` maps every former key to i
 Default field trees
 ~~~~~~~~~~~~~~~~~~~
 
-``AMG(tree=...)`` and ``TwoLevel(..., tree=...)`` take a field's AMGCL parameter tree, plus ``backendPrecision``,
-``backendBlockSize`` and ``blockTranslationNullspace``, which select how the hierarchy is built. A tree given replaces
-the default outright, so start from the one that applies
-and change only what is intended. The defaults are, by the field's nodal dimension
-(:func:`~edelweissfe.linsolve.composition.amg.defaultFieldTree` in the code):
+``AMG(tree=...)`` and ``TwoLevel(..., tree=...)`` take a field's AMGCL parameter tree, forwarded to AMGCL verbatim. A
+tree given replaces the default outright, so start from the one that applies and change only what is intended. The
+defaults are, by the field's nodal dimension (:func:`~edelweissfe.linsolve.composition.amg.defaultFieldTree` in the
+code):
 
 .. code-block:: json
 
     {
         "3D vector field (e.g. displacement)": {
-            "backendPrecision": "float",
-            "backendBlockSize": 3,
-            "blockTranslationNullspace": true,
             "coarsening": {
                 "type": "smoothed_aggregation",
                 "aggr": {"eps_strong": 0.01},
@@ -827,9 +823,6 @@ and change only what is intended. The defaults are, by the field's nodal dimensi
             "npost": 1
         },
         "2D vector field": {
-            "backendPrecision": "double",
-            "backendBlockSize": 2,
-            "blockTranslationNullspace": true,
             "coarsening": {
                 "type": "smoothed_aggregation",
                 "aggr": {"eps_strong": 0.01},
@@ -841,8 +834,6 @@ and change only what is intended. The defaults are, by the field's nodal dimensi
             "npost": 1
         },
         "vector field of a dimension other than 2 or 3": {
-            "backendPrecision": "double",
-            "backendBlockSize": 1,
             "coarsening": {
                 "type": "smoothed_aggregation",
                 "aggr": {"eps_strong": 0.01},
@@ -854,28 +845,28 @@ and change only what is intended. The defaults are, by the field's nodal dimensi
             "npost": 1
         },
         "scalar field (e.g. nonlocal damage)": {
-            "backendPrecision": "double",
-            "backendBlockSize": 1,
             "coarsening": {"type": "smoothed_aggregation"},
             "relax": {"type": "chebyshev"}
         }
     }
 
+The backend the tree is built on is chosen apart from it, by the keywords ``backendBlockSize``, ``backendPrecision``
+and (``AMG`` only) ``blockTranslationNullspace``, with defaults from the field
+(:func:`~edelweissfe.linsolve.composition.amg.backendOf`): node-wise 3x3 blocks stored in float for a 3D field, 2x2
+blocks in double for a 2D one (this wrapper has no float 2x2 backend), the scalar backend in double otherwise, and on
+a block backend the translations :math:`D^{-1} t` as the near null-space. A vector field of a dimension this solver
+has never been tuned for (anything but 2 or 3, e.g. a 4-DOF-per-node formulation) gets the same coarsening and
+relaxation as the 2D and 3D fields, on the scalar backend. ``AMG(backendBlockSize=1)`` puts a 2D or 3D displacement
+field on the scalar backend, the only one that takes the rotations (see above); a tree with another coarsening than
+smoothed aggregation on a block backend needs ``blockTranslationNullspace=False``, which is checked.
+
 The 3D displacement field of the ``blockamg`` preset gets the rigid-body coarse level
-(``TwoLevel(coarseSpace=RigidBodyModes())``), configured by the same tree: its ``relax`` and ``npre``/``npost`` are the fine smoother of
-the rigid-body coarse level, its ``coarsening`` the aggregation of that level, and the whole tree the AMGCL hierarchy
-below it. The 2D tree differs
-from the 3D one only in ``backendPrecision``/``backendBlockSize``: this wrapper has no float 2x2 backend. A vector field of a dimension this solver has never been tuned for (anything but
-2 or 3, e.g. a 4-DOF-per-node formulation) gets the same coarsening/relaxation recipe as the 2D and 3D
-trees, but on the plain scalar backend (``backendBlockSize`` 1) rather than an untested block size --
-the scalar backend is also the only one of the four that takes the rotations (see above), so
-this fallback keeps the rigid-body path available. A 2D or 3D tree with ``backendBlockSize`` 1 set on top
-stays valid as it is, since ``blockTranslationNullspace`` changes nothing there; one switched to another
-coarsening than smoothed aggregation needs
-``blockTranslationNullspace`` set to ``false``, which is checked. Only a genuinely scalar field (nodal dimension 1)
-gets the plain, unembellished scalar tree, which predates the vector recipe above and was never
-re-tuned against it. Note that AMGCL silently ignores parameter keys it does not recognise (warning
-only on stderr), so check its stderr if an override appears to do nothing.
+(``TwoLevel(coarseSpace=RigidBodyModes())``), configured by the same tree: its ``relax`` and ``npre``/``npost`` are the
+fine smoother of the rigid-body coarse level, its ``coarsening`` the aggregation of that level, and the whole tree the
+AMGCL hierarchy below it. ``TwoLevel(coarseSpace=P1Interpolation())`` reads its fine smoother from the tree in the same
+spelling. Only a genuinely scalar field (nodal dimension 1) gets the plain scalar tree, which predates the vector
+recipe and was never re-tuned against it. Note that AMGCL silently ignores parameter keys it does not recognise
+(warning only on stderr), so check its stderr if an override appears to do nothing.
 
 Verbosity levels
 ~~~~~~~~~~~~~~~~

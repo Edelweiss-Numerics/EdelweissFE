@@ -37,7 +37,7 @@ from _linsolvesystems import (
     barOnFoundation,
     displacementDamageSystem,
 )
-from _p1lattice import dirichletDofs, lattice, latticeSystem
+from _p1lattice import dirichletDofs, fineChebyshevTree, lattice, latticeSystem
 
 pytest.importorskip("edelweissfe.linsolve.amgcl.amgcl")
 
@@ -62,10 +62,7 @@ from edelweissfe.linsolve.composition import (  # noqa: E402
     TwoLevel,
     gaussSeidelOrder,
 )
-from edelweissfe.linsolve.composition.amg import (  # noqa: E402
-    amgclTreeOf,
-    defaultFieldTree,
-)
+from edelweissfe.linsolve.composition.amg import defaultFieldTree  # noqa: E402
 from edelweissfe.linsolve.composition.rigidbodycoarselevel import (  # noqa: E402
     RigidBodyCoarseLevelPreconditioner,
 )
@@ -198,7 +195,7 @@ def test_a_two_grid_cycle_spelled_out_by_combinators_beats_its_smoother_alone():
     D = 1.0 / np.sqrt(K.diagonal())
     K_scaled = (sp.diags(D) @ K @ sp.diags(D)).tocsr()
     K_scaled.sort_indices()
-    rigidBody = RigidBodyCoarseLevelPreconditioner(amgclTreeOf(defaultFieldTree(3)), 3, "double")
+    rigidBody = RigidBodyCoarseLevelPreconditioner(defaultFieldTree(3), 3, "double")
     rigidBody.build(K_scaled, D, coordinates)
 
     def prolongation(A, context):
@@ -226,8 +223,10 @@ def test_the_p1_two_grid_has_blockamgs_numbers():
     b[constrained] = 0.0
     fields = [FieldBlock("displacement", 0, 3 * len(isCorner), 3)]
     p1Maps = {"displacement": (isCorner, edgeEndpoints)}
+    # the smoother and the backend the numbers were recorded with, stated: the defaults are now the field's
+    p1TwoGrid = TwoLevel(P1Interpolation(), tree=fineChebyshevTree(), backendBlockSize=1, backendPrecision="double")
     root = LGMRES(
-        DiagonalScaling(TwoLevel(P1Interpolation())),
+        DiagonalScaling(p1TwoGrid),
         tolerance=FixedTolerance(1e-8),
         maxIterations=300,
     )
@@ -407,7 +406,7 @@ def test_rigid_body_modes_need_a_vector_field_with_coordinates():
     damage = fields[1]
     block = SystemMatrix(A[damage.start : damage.stop, damage.start : damage.stop])
     context = _context([FieldBlock(damage.name, 0, damage.stop - damage.start, 1)])
-    with pytest.raises(ValueError, match="2D or 3D vector field"):
+    with pytest.raises(ValueError, match="2D or 3D displacement field"):
         TwoLevel(RigidBodyModes()).setUp(block, context)
     with pytest.raises(ValueError, match="prolongation"):
         RigidBodyModes(prolongation="smooth")

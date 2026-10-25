@@ -661,7 +661,7 @@ cdef class _PyAMGCLTwoLevel:
         """How the last build arrived at its fine spectral radius: ``"estimated"`` in full,
         ``"supplied"`` and kept, ``"raised"`` by the re-check, or ``"re-estimated"`` in full because
         the re-check found the operator stiffened beyond the smoother's margin."""
-        return ("estimated", "supplied", "raised", "re-estimated")[self.twoLevel.fineSpectralRadiusSource()]
+        return self.twoLevel.fineSpectralRadiusSource().decode("utf-8")
 
     @property
     def nCoarse(self):
@@ -707,12 +707,10 @@ cdef class PyAMGCLPTwoGrid(_PyAMGCLTwoLevel):
 
     def __cinit__(self, dict params):
         """
-        params: the flat parameter tree, e.g.
-        {"nuPre": 1, "nuPost": 1, "fineDegree": 5, "fineLower": 0.01, "fineHigher": 1.1, "finePowerIters": 300,
-        "fineRecheckIters": 15, "fineBlockSize": 1, "fineValueType": "double", "coarseValueType": "double",
-        "coarse": {<AMGCL preconditioner tree>}}
-        (``nu`` sets both sweep counts). The sweep counts, ``fineDegree`` (at least 1), the block size
-        and the value types are validated here, before any build.
+        params: {"amgcl": {<the field's AMGCL tree: relax (Chebyshev), npre, npost>}, "backendBlockSize": 1,
+        "backendPrecision": "double", "coarseHierarchyPrecision": "double", "coarse": {<the coarse level's AMGCL
+        tree>}}, the spelling of the rigid-body coarse level too (``TwoLevelCycleParameters`` in
+        ``amgcl-wrapper.hpp``). Validated here, before any build.
         """
         cdef bytes json_bytes = json.dumps(params).encode("utf-8")
         cdef const char* c_json = json_bytes

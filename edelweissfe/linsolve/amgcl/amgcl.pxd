@@ -107,7 +107,7 @@ cdef extern from "amgcl-wrapper.hpp":
     cdef cppclass TwoLevelPreconditioner:
         void apply(int n, const double* r, double* x) except +
         double fineSpectralRadius()
-        int fineSpectralRadiusSource()
+        string fineSpectralRadiusSource()
         const vector[double]& fineDominantVector()
         int nCoarse()
         ScalarCsr prolongationCsr() except +

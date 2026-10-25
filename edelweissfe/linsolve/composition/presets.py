@@ -31,7 +31,6 @@ A preset is nothing but a function returning a tree, so there is no preset machi
 builds, copy it into a solver script to change it.
 """
 
-from edelweissfe.config.phenomena import phenomena
 from edelweissfe.linsolve.composition.amg import AMG
 from edelweissfe.linsolve.composition.base import Preconditioner
 from edelweissfe.linsolve.composition.combinators import (
@@ -46,6 +45,7 @@ from edelweissfe.linsolve.composition.krylov import (
     RebuildPolicy,
 )
 from edelweissfe.linsolve.composition.twolevel import RigidBodyModes, TwoLevel
+from edelweissfe.linsolve.nullspace import carriesRigidBodyModes
 
 
 def blockAMGFieldPreconditioner(
@@ -53,7 +53,7 @@ def blockAMGFieldPreconditioner(
 ):
     """The preconditioner of a field in the ``blockamg`` preset: a two-level cycle on the rigid-body modes
     for a 3D displacement field (with node coordinates), one AMG hierarchy otherwise."""
-    isDisplacement3D = field.dimension == 3 and phenomena.get(field.name) == "vector"
+    isDisplacement3D = field.dimension == 3 and carriesRigidBodyModes(field)
     if rigidBodyCoarseLevel and isDisplacement3D and context.coordinates(field.name) is None:
         context.message(
             "info",

@@ -136,6 +136,9 @@ def test_the_continuations_on_the_scaled_system_are_logged_at_debug():
         lambda: LGMRES(AMG(), restart=0),
         lambda: LGMRES(AMG(), continuations=-1),
         lambda: AMG(dropTolerance=-1.0),
+        lambda: AMG(backendPrecision="half"),
+        lambda: AMG(backendBlockSize=2, backendPrecision="float"),
+        lambda: TwoLevel(RigidBodyModes(), coarseHierarchyPrecision="half"),
         lambda: SolveDumps("unused", maxDumps=-1),
         lambda: ComposedLinearSolver(blockAMG(), verbosity="loud"),
         lambda: ComposedLinearSolver(blockAMG(), residualGrowthFactor=1.0),
@@ -146,22 +149,18 @@ def test_a_setting_out_of_range_is_refused_at_construction(construct):
         construct()
 
 
-def test_p1_interpolation_options_are_checked_at_construction():
-    with pytest.raises(ValueError, match="P1Interpolation"):
-        P1Interpolation(fineValueType="half")
-
-
 @pytest.mark.parametrize(
     "component, message",
     [
-        (AMG(tree={"backendPrecision": "half"}), "backendPrecision must be"),
-        (AMG(tree={"backendBlockSize": 2}), "does not match the field's dimension 3"),
-        (TwoLevel(RigidBodyModes(), tree={"backendBlockSize": 1}), "is on the scalar backend"),
-        (TwoLevel(P1Interpolation(fineBlockSize=3)), None),
+        (AMG(backendBlockSize=2), "does not match the field's dimension 3"),
+        (AMG(tree={"coarsening": {"type": "ruge_stuben"}}), "blockTranslationNullspace=False"),
+        (TwoLevel(RigidBodyModes(), backendBlockSize=1), "is on the scalar backend"),
+        (TwoLevel(RigidBodyModes(), tree={"relax": {"type": "spai0"}}), "relax.type must be chebyshev"),
+        (TwoLevel(P1Interpolation(), backendBlockSize=3), "needs its P1 map"),
     ],
 )
 def test_a_field_tree_that_cannot_be_built_fails_at_the_set_up(component, message):
-    """blockamg's checks of fieldPreconds and rigidBodyCoarseLevel, made by the components when they meet the field."""
+    """The checks the components make when they meet the field."""
     A, b, fields = displacementDamageSystem(n=4, coupling="symmetric")
     nNodes = fields[0].stop // 3
     coordinates = np.random.default_rng(0).random((nNodes, 3))
@@ -170,12 +169,12 @@ def test_a_field_tree_that_cannot_be_built_fails_at_the_set_up(component, messag
         OnField("displacement", component).setUp(SystemMatrix(A), context)
 
 
-def test_node_wise_fine_blocks_of_the_p1_interpolation_need_a_3d_field():
+def test_node_wise_fine_blocks_of_the_p1_interpolation_need_a_field_of_as_many_components():
     A, _, _ = displacementDamageSystem(n=4, coupling="symmetric")
     n = A.shape[0] // 2 * 2
     context = SetUpContext(fields=(FieldBlock("displacement", 0, n, 2),))
-    with pytest.raises(ValueError, match="fineBlockSize 3 needs a 3D field"):
-        TwoLevel(P1Interpolation(fineBlockSize=3)).setUp(SystemMatrix(A[:n, :n]), context)
+    with pytest.raises(ValueError, match="backendBlockSize 3 does not match the field's dimension 2"):
+        TwoLevel(P1Interpolation(), backendBlockSize=3).setUp(SystemMatrix(A[:n, :n]), context)
 
 
 # ----- type=custom, hotReload=true: the solver script is run again -----

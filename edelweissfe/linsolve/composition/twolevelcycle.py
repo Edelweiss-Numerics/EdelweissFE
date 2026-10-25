@@ -72,6 +72,34 @@ class TwoLevelPreconditioner:
         except RuntimeError as error:
             raise ValueError(str(error)) from error
 
+    @staticmethod
+    def cycleParameters(amgclTree: dict, backendBlockSize: int, backendPrecision: str, coarseHierarchyPrecision: str):
+        """The parameters of the cycle, in the one spelling both C++ classes read (``TwoLevelCycleParameters`` in
+        ``amgcl-wrapper.hpp``).
+
+        Parameters
+        ----------
+        amgclTree
+            The field's AMGCL tree. Its ``relax`` (a Chebyshev polynomial, without Jacobi scaling), ``npre`` and
+            ``npost`` are the fine smoother, with AMGCL's defaults for what it leaves out; the default trees, the one
+            place of EdelweissFE's defaults, are :func:`~edelweissfe.linsolve.composition.amg.defaultFieldTree`.
+        backendBlockSize
+            The storage of the fine operator: ``1`` (scalar entries), or ``2``/``3`` (node-wise blocks of the field's
+            components: less memory traffic per product, the same cycle up to the order of summation).
+        backendPrecision
+            The value type of the stored fine operator and of :math:`P`, :math:`P^T`: ``"double"``, or ``"float"``
+            (not for 2x2 blocks) for half the bytes per entry; vectors and sums stay double, and the spectral radius
+            is estimated on the double operator.
+        coarseHierarchyPrecision
+            The value type of the AMGCL hierarchy of the coarse level (its whole setup): ``"double"`` or ``"float"``.
+        """
+        return {
+            "amgcl": amgclTree,
+            "backendBlockSize": backendBlockSize,
+            "backendPrecision": backendPrecision,
+            "coarseHierarchyPrecision": coarseHierarchyPrecision,
+        }
+
     @classmethod
     def parameterRejection(cls, *args, **kwargs) -> "str | None":
         """Why these constructor arguments cannot be used, or ``None``. The C++ class checks its parameters as it is

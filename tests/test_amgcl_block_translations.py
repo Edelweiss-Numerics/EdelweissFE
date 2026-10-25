@@ -179,11 +179,7 @@ def test_unit_translation_weights_give_amgcls_constant_blocks(dimension, precisi
     # vector-field default tree. An (n, 0) near null-space clears the translations again.
     scaled, _ = equilibrated(_scaledVectorLaplacian(dimension, n)[0])
     block = FieldBlock("displacement", 0, scaled.shape[0], dimension)
-    precond = {
-        key: value
-        for key, value in defaultFieldTree(dimension).items()
-        if key not in ("backendPrecision", "backendBlockSize")
-    }
+    precond = defaultFieldTree(dimension)
     constantBlocks = _hierarchy(scaled, dimension, precision, precond)
     unitWeights = _hierarchy(
         scaled, dimension, precision, precond, translationNullspace(block, np.ones(scaled.shape[0]))

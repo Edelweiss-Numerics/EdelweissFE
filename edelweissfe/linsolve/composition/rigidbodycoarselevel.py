@@ -97,24 +97,17 @@ class RigidBodyCoarseLevelPreconditioner(TwoLevelPreconditioner):
 
     Parameters
     ----------
-    amgclTree
-        The field's AMGCL tree: its field tree without the keys that select the backend
-        (:func:`~edelweissfe.linsolve.composition.amg.amgclTreeOf`). It means what it
-        means to AMGCL's own hierarchy, with AMGCL's defaults for what it leaves out: ``relax``, ``npre`` and ``npost``
-        the fine smoother (a Chebyshev polynomial: ``relax.type`` ``chebyshev``, at least one ``relax.power_iters``);
-        ``coarsening`` (smoothed aggregation) the aggregation and the prolongation smoothing of the rigid-body coarse
-        level; and the whole tree the AMGCL hierarchy below it, with the strong-connection threshold halved, as AMGCL
-        halves it from one level to the next.
-    blockSize
-        The components per node, the field's ``backendBlockSize``: 3 (6 rigid-body modes per aggregate) or 2 (3).
-    backendPrecision
-        The storage of the fine level and of the prolongation and restriction the cycle reads: ``"double"``, or
-        ``"float"`` (3D only) for half the bytes; the setup is in double either way.
+    amgclTree, backendBlockSize, backendPrecision, coarseHierarchyPrecision
+        The parameters of the cycle, see :meth:`~edelweissfe.linsolve.composition.twolevelcycle.TwoLevelPreconditioner.
+        cycleParameters`; ``backendBlockSize`` is the field's components per node, 3 (6 rigid-body modes per
+        aggregate) or 2 (3). The AMGCL tree means what it means to AMGCL's own hierarchy, with AMGCL's defaults for
+        what it leaves out: ``relax``, ``npre`` and ``npost`` the fine smoother; ``coarsening`` (smoothed aggregation)
+        the aggregation and the prolongation smoothing of the rigid-body coarse level; and the whole tree the AMGCL
+        hierarchy below it, with the strong-connection threshold halved, as AMGCL halves it from one level to the
+        next.
     prolongation
         ``"smoothed"`` (default) or ``"tentative"``: the tentative prolongation alone, a cheaper setup and a sparser
         coarse operator at the price of more outer iterations.
-    coarseHierarchyPrecision
-        The value type of the AMGCL hierarchy below the rigid-body coarse level: ``"double"`` (default) or ``"float"``.
     fineSpectralRadius, fineDominantVector
         A previous build's fine spectral radius and dominant vector to start from (``fineSpectralRadiusReuse``), or
         ``None`` to estimate the radius in full, see :class:`~edelweissfe.linsolve.composition.twolevelcycle.TwoLevelPreconditioner`.
@@ -128,24 +121,21 @@ class RigidBodyCoarseLevelPreconditioner(TwoLevelPreconditioner):
     def __init__(
         self,
         amgclTree: dict,
-        blockSize: int,
+        backendBlockSize: int,
         backendPrecision: str = "double",
-        prolongation: str = "smoothed",
         coarseHierarchyPrecision: str = "double",
+        prolongation: str = "smoothed",
         fineSpectralRadius: float = None,
         fineDominantVector=None,
     ):
         from edelweissfe.linsolve.amgcl.amgcl import PyAMGCLRigidBodyCoarseLevel
 
-        self._blockSize = blockSize
+        self._blockSize = backendBlockSize
         super().__init__(
             PyAMGCLRigidBodyCoarseLevel,
             {
-                "backendBlockSize": blockSize,
-                "backendPrecision": backendPrecision,
+                **self.cycleParameters(amgclTree, backendBlockSize, backendPrecision, coarseHierarchyPrecision),
                 "prolongation": prolongation,
-                "coarseHierarchyPrecision": coarseHierarchyPrecision,
-                "amgcl": amgclTree,
             },
             fineSpectralRadius,
             fineDominantVector,

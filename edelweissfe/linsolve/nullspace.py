@@ -31,7 +31,8 @@ richer basis) its node coordinates -- no solver-instance state. Any algebraic-mu
 preconditioner needing an elasticity near-null-space can use them; today
 :class:`~edelweissfe.linsolve.composition.amg.AMG` and the p-two-grid cycle do, to
 seed AMGCL's smoothed-aggregation coarsening. A block backend takes :func:`translationNullspace` alone
-(``blockTranslationNullspace``): its node-major layout gives every node a diagonal block of weights.
+(``blockTranslationNullspace``): its node-major layout gives every node a diagonal block of weights. Which fields
+have rotations among their modes is :func:`carriesRigidBodyModes`.
 
 :func:`rigidBodyNullspace` (translations *and* rotations) is preferred whenever node coordinates are
 available: measured fewer isolated per-field outer iterations than :func:`translationNullspace`
@@ -43,7 +44,18 @@ negligible against the AMG hierarchy build it feeds.
 
 import numpy as np
 
+from edelweissfe.config.phenomena import phenomena
 from edelweissfe.linsolve.base import FieldBlock
+
+
+def carriesRigidBodyModes(field: FieldBlock) -> bool:
+    """Whether the field's near null-space holds the rigid-body modes, rotations included: a 2D or 3D displacement
+    field, by its phenomenon (``"vector"`` in :data:`~edelweissfe.config.phenomena.phenomena`). Rotating the values of
+    another vector field -- the ``rotation`` or ``micro rotation`` of a Cosserat or micropolar model -- costs energy, so
+    its near null-space is its translations (constants per component) alone. The one test of it, for
+    :class:`~edelweissfe.linsolve.composition.amg.AMG`, the rigid-body coarse level of
+    :class:`~edelweissfe.linsolve.composition.twolevel.TwoLevel` and the ``blockAMG()`` preset."""
+    return field.dimension in (2, 3) and phenomena.get(field.name) == "vector"
 
 
 def translationNullspace(block: FieldBlock, blockScaling: np.ndarray) -> np.ndarray:

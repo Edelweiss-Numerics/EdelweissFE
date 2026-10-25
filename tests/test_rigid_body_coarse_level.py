@@ -54,10 +54,7 @@ pytest.importorskip("edelweissfe.linsolve.amgcl.amgcl")
 
 from edelweissfe.linsolve.amgcl.amgcl import PyAMGCLSolver  # noqa: E402
 from edelweissfe.linsolve.base import FieldBlock  # noqa: E402
-from edelweissfe.linsolve.composition.amg import (  # noqa: E402
-    amgclTreeOf,
-    defaultFieldTree,
-)
+from edelweissfe.linsolve.composition.amg import defaultFieldTree  # noqa: E402
 from edelweissfe.linsolve.composition.rigidbodycoarselevel import (  # noqa: E402
     RigidBodyCoarseLevelPreconditioner,
 )
@@ -89,7 +86,7 @@ def _preconditioner(
 ) -> RigidBodyCoarseLevelPreconditioner:
     """The rigid-body coarse level (or its control, ``kind``) of the default tree of a field of this dimension, stored in
     backendPrecision."""
-    return kind(amgclTreeOf(defaultFieldTree(dimension)), dimension, backendPrecision, **options)
+    return kind(defaultFieldTree(dimension), dimension, backendPrecision, **options)
 
 
 def _relativeDifference(x, y) -> float:
@@ -281,7 +278,7 @@ def test_the_translations_alone_are_amgcls_own_first_coarse_level():
 
     amgcl = PyAMGCLSolver(
         {
-            "precond": amgclTreeOf(tree),
+            "precond": tree,
             "solver": {"type": "preonly"},
             "backendBlockSize": 3,
             "backendPrecision": "double",
@@ -291,9 +288,9 @@ def test_the_translations_alone_are_amgcls_own_first_coarse_level():
     amgcl.build(As)
     assert hierarchyLevels(amgcl) == 2
 
-    translations = _TranslationsOnly(amgclTreeOf(tree), 3, "double")
+    translations = _TranslationsOnly(tree, 3, "double")
     translations.build(As, scaling, coordinates)
-    rigidBody = RigidBodyCoarseLevelPreconditioner(amgclTreeOf(tree), 3, "double")
+    rigidBody = RigidBodyCoarseLevelPreconditioner(tree, 3, "double")
     rigidBody.build(As, scaling, coordinates)
     assert translations.coarseNullspace().shape[1] == 3 and translations.droppedModes == 0
 
@@ -322,7 +319,7 @@ def test_the_hierarchy_below_takes_the_modes_of_an_aggregate_as_one_point_on_eve
     # Checked on three levels below against AMGCL's own hierarchy of the same coarse operator.
     As, scaling, coordinates = _scaledGrid(12)
     tree = defaultFieldTree(3) | {"coarse_enough": 20}
-    preconditioner = kind(amgclTreeOf(tree), 3, "double")
+    preconditioner = kind(tree, 3, "double")
     preconditioner.build(As, scaling, coordinates)
     assert preconditioner.nCoarse == modes * preconditioner.nAggregates
 
@@ -330,7 +327,7 @@ def test_the_hierarchy_below_takes_the_modes_of_an_aggregate_as_one_point_on_eve
     coarsening["aggr"]["block_size"] = modes
     reference = PyAMGCLSolver(
         {
-            "precond": amgclTreeOf(tree) | {"coarsening": coarsening},
+            "precond": tree | {"coarsening": coarsening},
             "solver": {"type": "preonly"},
             "backendBlockSize": 1,
             "backendPrecision": "double",
@@ -355,14 +352,14 @@ import numpy as np
 sys.path.insert(0, sys.argv[1])
 from _elasticbeam import slenderBeam
 from _linsolvesystems import equilibrated, gmresIterations
-from edelweissfe.linsolve.composition.amg import amgclTreeOf, defaultFieldTree
+from edelweissfe.linsolve.composition.amg import defaultFieldTree
 from edelweissfe.linsolve.composition.rigidbodycoarselevel import RigidBodyCoarseLevelPreconditioner
 
 K, coordinates, _ = slenderBeam(3)
 As, scaling = equilibrated(K)
 tree = defaultFieldTree(3)
 tree["coarsening"]["estimate_spectral_radius"] = sys.argv[3] == "estimate"
-preconditioner = RigidBodyCoarseLevelPreconditioner(amgclTreeOf(tree), 3, "double")
+preconditioner = RigidBodyCoarseLevelPreconditioner(tree, 3, "double")
 preconditioner.build(As, scaling, coordinates)
 iterations = gmresIterations(As, preconditioner)
 Ac, P = preconditioner.coarseOperator(), preconditioner.prolongationMatrix()
@@ -492,12 +489,12 @@ def test_coordinates_of_other_nodes_and_a_near_null_space_it_cannot_take_are_ref
     ids=["relax", "scale", "power_iters", "coarsening", "scalar", "2D float", "prolongation", "precision"],
 )
 def test_settings_it_cannot_use_raise_before_any_build(tree, blockSize, backendPrecision, options, reason):
-    fullTree = {key: value for key, value in amgclTreeOf(defaultFieldTree(3)).items() if key not in tree} | tree
+    fullTree = {key: value for key, value in defaultFieldTree(3).items() if key not in tree} | tree
     with pytest.raises(ValueError, match=reason):
         RigidBodyCoarseLevelPreconditioner(fullTree, blockSize, backendPrecision, **options)
 
 
 def test_a_tree_without_a_smoother_is_told_that_amgcls_default_is_not_chebyshev():
-    tree = {key: value for key, value in amgclTreeOf(defaultFieldTree(3)).items() if key != "relax"}
+    tree = {key: value for key, value in defaultFieldTree(3).items() if key != "relax"}
     with pytest.raises(ValueError, match=r"relax.type must be chebyshev, got spai0 \(AMGCL's default\)"):
         RigidBodyCoarseLevelPreconditioner(tree, 3, "double")

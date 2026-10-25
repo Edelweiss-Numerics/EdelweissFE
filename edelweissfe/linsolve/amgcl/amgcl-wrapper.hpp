@@ -1600,63 +1600,118 @@ private:
   std::vector< Real > rhs_, x_;
 };
 
-/// @brief The parameters of the two-level cycle (TwoLevelPreconditioner) with their defaults, and how the parameter
-/// tree of a preconditioner spells them: the two preconditioners spell the same parameters differently (the p-two-grid
-/// its own keys, the rigid-body coarse level AMGCL's), and the messages use the spelling of the tree. A derived class
-/// reads them from its tree; the base class checks them, once, as it is created.
-struct TwoLevelCycleParameters {
-  /// @brief The fine Chebyshev sweeps before and after the coarse correction.
-  int nuPre = 1, nuPost = 1;
-  /// @brief The fine Chebyshev degree.
-  int fineDegree = 5;
-  /// @brief The fine Chebyshev interval relative to the spectral radius, as AMGCL's chebyshev float parameters.
-  float fineLower = 0.01f, fineHigher = 1.1f;
-  /// @brief The power iterations of the full estimate of the fine spectral radius and of the re-check of a supplied
-  /// one.
-  int finePowerIters = 300, fineRecheckIters = 15;
-  /// @brief The relative rise of the fine spectral radius the re-check tolerates.
-  double fineRecheckTolerance = 0.01;
-  /// @brief The value types of the fine level (and of P and P^T) and of the coarse hierarchy: "double" or "float".
-  std::string fineValueType = "double", coarseValueType = "double";
+/// @brief How the fine spectral radius of a two-level cycle was arrived at, see
+/// TwoLevelPreconditioner::chooseFineSpectralRadius().
+enum class FineSpectralRadiusSource {
+  /// @brief Estimated in full by power iteration.
+  Estimated,
+  /// @brief Supplied, and kept by the re-check.
+  Supplied,
+  /// @brief Supplied, but raised to the re-check's estimate.
+  Raised,
+  /// @brief Supplied, but the re-check found the operator stiffened beyond the smoother's margin: estimated in full.
+  ReEstimated
+};
 
-  /// @brief The keys of the parameters in the tree of the preconditioner, for the messages.
-  struct Keys {
-    std::string nuPre = "nuPre", nuPost = "nuPost", fineDegree = "fineDegree", fineLower = "fineLower",
-                fineHigher = "fineHigher", finePowerIters = "finePowerIters", fineValueType = "fineValueType",
-                coarseValueType = "coarseValueType";
-  } keys;
+/// @brief The name of a FineSpectralRadiusSource, as Python reports it.
+inline std::string fineSpectralRadiusSourceName( FineSpectralRadiusSource source )
+{
+  switch ( source ) {
+  case FineSpectralRadiusSource::Estimated: return "estimated";
+  case FineSpectralRadiusSource::Supplied: return "supplied";
+  case FineSpectralRadiusSource::Raised: return "raised";
+  case FineSpectralRadiusSource::ReEstimated: return "re-estimated";
+  }
+  return "unknown";
+}
+
+/// @brief The parameters of the two-level cycle (TwoLevelPreconditioner), read from the parameter tree of both
+/// two-level preconditioners in one spelling, AMGCL's (fromTree()): the fine smoother is the Chebyshev relaxation of
+/// the field's AMGCL tree, with AMGCL's own defaults for what the tree leaves out, so the defaults of EdelweissFE live
+/// in one place, the default trees in Python (composition/amg.py's defaultFieldTree).
+struct TwoLevelCycleParameters {
+  /// @brief The fine Chebyshev sweeps before and after the coarse correction: npre and npost.
+  int nuPre, nuPost;
+  /// @brief The fine Chebyshev degree: relax.degree.
+  int fineDegree;
+  /// @brief The fine Chebyshev interval relative to the spectral radius: relax.lower and relax.higher.
+  float fineLower, fineHigher;
+  /// @brief The power iterations of the full estimate of the fine spectral radius (relax.power_iters) and of the
+  /// re-check of a supplied one (fineRecheckIters).
+  int finePowerIters, fineRecheckIters;
+  /// @brief The relative rise of the fine spectral radius the re-check tolerates (fineRecheckTolerance).
+  double fineRecheckTolerance;
+  /// @brief The value types of the fine level (and of P and P^T), backendPrecision, and of the coarse hierarchy,
+  /// coarseHierarchyPrecision: "double" or "float".
+  std::string fineValueType, coarseValueType;
+
+  /// @brief The parameters of a two-level preconditioner's tree: backendPrecision, coarseHierarchyPrecision,
+  /// fineRecheckIters and fineRecheckTolerance at its top, and the field's AMGCL tree under "amgcl", whose relax (a
+  /// Chebyshev polynomial without Jacobi scaling), npre and npost are the fine smoother.
+  /// @param name the preconditioner's name in the messages
+  /// @throws std::runtime_error for a smoother that is not an unscaled Chebyshev polynomial, or parameters that cannot
+  /// be used (check())
+  static TwoLevelCycleParameters fromTree( const boost::property_tree::ptree& prm, const std::string& name )
+  {
+    const boost::property_tree::ptree tree  = childOrEmpty( prm, "amgcl" );
+    boost::property_tree::ptree       relax = childOrEmpty( tree, "relax" );
+    if ( relax.get( "type", std::string( "spai0" ) ) != "chebyshev" ) {
+      const boost::optional< std::string > relaxType = relax.get_optional< std::string >( "type" );
+      throw std::runtime_error( name + ": smooths with a Chebyshev polynomial, relax.type must be chebyshev, got " +
+                                ( relaxType ? *relaxType : std::string( "spai0 (AMGCL's default)" ) ) );
+    }
+    relax.erase( "type" );
+    const amgcl::relaxation::chebyshev< amgcl::backend::builtin< double > >::params chebyshev( relax );
+    if ( chebyshev.scale ) {
+      throw std::runtime_error( name +
+                                ": the fine Chebyshev smoother has no Jacobi scaling, relax.scale must be false" );
+    }
+    TwoLevelCycleParameters cycle;
+    // AMGCL's defaults of amg::params for the sweeps
+    cycle.nuPre                = tree.get( "npre", 1 );
+    cycle.nuPost               = tree.get( "npost", 1 );
+    cycle.fineDegree           = static_cast< int >( chebyshev.degree );
+    cycle.fineLower            = chebyshev.lower;
+    cycle.fineHigher           = chebyshev.higher;
+    cycle.finePowerIters       = chebyshev.power_iters;
+    cycle.fineRecheckIters     = prm.get( "fineRecheckIters", 15 );
+    cycle.fineRecheckTolerance = prm.get( "fineRecheckTolerance", 0.01 );
+    cycle.fineValueType        = prm.get( "backendPrecision", std::string( "double" ) );
+    cycle.coarseValueType      = prm.get( "coarseHierarchyPrecision", std::string( "double" ) );
+    cycle.check( name );
+    return cycle;
+  }
 
   /// @brief Check the parameters, so that a bad value fails before a build has spent anything.
   /// @param name the preconditioner's name in the messages
-  /// @throws std::runtime_error naming the parameter as `keys` spell it
+  /// @throws std::runtime_error naming the parameter as the tree spells it
   void check( const std::string& name ) const
   {
     if ( nuPre < 0 || nuPost < 0 ) {
-      throw std::runtime_error( name + ": " + keys.nuPre + " and " + keys.nuPost + " must not be negative, got " +
-                                std::to_string( nuPre ) + " and " + std::to_string( nuPost ) );
+      throw std::runtime_error( name + ": npre and npost must not be negative, got " + std::to_string( nuPre ) +
+                                " and " + std::to_string( nuPost ) );
     }
     if ( fineDegree < 1 ) {
-      throw std::runtime_error( name + ": " + keys.fineDegree + " must be at least 1, got " +
-                                std::to_string( fineDegree ) );
+      throw std::runtime_error( name + ": relax.degree must be at least 1, got " + std::to_string( fineDegree ) );
     }
     if ( fineValueType != "double" && fineValueType != "float" ) {
-      throw std::runtime_error( name + ": " + keys.fineValueType + " must be double or float, got " + fineValueType );
+      throw std::runtime_error( name + ": backendPrecision must be double or float, got " + fineValueType );
     }
     if ( coarseValueType != "double" && coarseValueType != "float" ) {
-      throw std::runtime_error( name + ": " + keys.coarseValueType + " must be double or float, got " +
-                                coarseValueType );
+      throw std::runtime_error( name + ": coarseHierarchyPrecision must be double or float, got " + coarseValueType );
     }
-    // the Chebyshev interval is [fineLower, fineHigher] times the spectral radius: it must start above zero and reach
-    // at least the radius itself, or the smoother amplifies the highest modes
+    // the Chebyshev interval is [lower, higher] times the spectral radius: it must start above zero and reach at least
+    // the radius itself, or the smoother amplifies the highest modes
     if ( !( fineLower > 0.0f && fineLower < 1.0f ) || !( fineHigher >= 1.0f ) ) {
-      throw std::runtime_error( name + ": needs 0 < " + keys.fineLower + " < 1 <= " + keys.fineHigher + ", got " +
+      throw std::runtime_error( name + ": needs 0 < relax.lower < 1 <= relax.higher, got " +
                                 std::to_string( fineLower ) + " and " + std::to_string( fineHigher ) );
     }
     if ( finePowerIters < 1 ) {
-      throw std::runtime_error( name + ": " + keys.finePowerIters +
-                                " must be at least 1 (the fine smoother estimates the spectral radius by power "
-                                "iteration), got " +
-                                std::to_string( finePowerIters ) );
+      throw std::runtime_error(
+        name +
+        ": relax.power_iters must be at least 1 (the fine smoother estimates the spectral radius "
+        "by power iteration), got " +
+        std::to_string( finePowerIters ) );
     }
     if ( fineRecheckIters < 0 || !( fineRecheckTolerance >= 0.0 ) ) {
       throw std::runtime_error( name + ": needs fineRecheckIters >= 0 and fineRecheckTolerance >= 0" );
@@ -1721,9 +1776,8 @@ public:
   /// @brief The last iterate of the power iteration: the estimate of the dominant eigenvector, the start of a later
   /// re-check (empty if the radius was used as supplied).
   std::vector< double > fineDominantVector_;
-  /// @brief How the last build arrived at its fine spectral radius: 0 estimated in full, 1 supplied and kept, 2
-  /// supplied but raised by the re-check, 3 supplied but re-estimated in full by the re-check.
-  int fineSpectralRadiusSource_ = 0;
+  /// @brief How the last build arrived at its fine spectral radius.
+  FineSpectralRadiusSource fineSpectralRadiusSource_ = FineSpectralRadiusSource::Estimated;
   /// @brief Work vectors of the cycle.
   std::vector< double > rhs_, res_, coarseRhs_, coarseX_;
 
@@ -1826,8 +1880,8 @@ public:
 
   /// @brief The fine spectral radius the Chebyshev smoother was built with (0 for a trivial field).
   double fineSpectralRadius() const { return fineSpectralRadius_; }
-  /// @brief How the last build arrived at it, see fineSpectralRadiusSource_.
-  int fineSpectralRadiusSource() const { return fineSpectralRadiusSource_; }
+  /// @brief How the last build arrived at it, by name (fineSpectralRadiusSourceName()).
+  std::string fineSpectralRadiusSource() const { return fineSpectralRadiusSourceName( fineSpectralRadiusSource_ ); }
   /// @brief The estimate of the fine operator's dominant eigenvector (empty if the radius was used as supplied).
   const std::vector< double >& fineDominantVector() const { return fineDominantVector_; }
   /// @brief The number of coarse DOFs, the size of the Galerkin operator.
@@ -1871,16 +1925,13 @@ protected:
   /// @brief The parameters of the cycle, checked as the preconditioner is created.
   const TwoLevelCycleParameters cycle_;
 
-  /// @param parameters the parameter tree, kept as prm for the derived class
+  /// @param parameters the parameter tree, kept as prm for the derived class; the parameters of the cycle are read from
+  /// it (TwoLevelCycleParameters::fromTree())
   /// @param name the preconditioner's name in messages
-  /// @param cycle the parameters of the cycle, as the derived class read them from its tree
   /// @throws std::runtime_error for cycle parameters that cannot be used
-  TwoLevelPreconditioner( const boost::property_tree::ptree& parameters,
-                          const std::string&                 name,
-                          const TwoLevelCycleParameters&     cycle )
-    : prm( parameters ), name_( name ), cycle_( cycle )
+  TwoLevelPreconditioner( const boost::property_tree::ptree& parameters, const std::string& name )
+    : prm( parameters ), name_( name ), cycle_( TwoLevelCycleParameters::fromTree( parameters, name ) )
   {
-    cycle_.check( name_ );
   }
 
   /// @brief Adds the wall time of its scope to the build stage `name` (setupSeconds_, appended if it is new): a stage
@@ -1931,7 +1982,7 @@ protected:
     coarseNullspaceColumns_ = 0;
     fine_.reset();
     fineSpectralRadius_       = 0.0;
-    fineSpectralRadiusSource_ = 0;
+    fineSpectralRadiusSource_ = FineSpectralRadiusSource::Estimated;
     fineDominantVector_.clear();
     nCoarse_ = 0;
     if ( trivial_ )
@@ -2082,12 +2133,12 @@ private:
                                    int           dominantVectorSize )
   {
     if ( suppliedRadius <= 0.0 ) {
-      fineSpectralRadiusSource_ = 0;
+      fineSpectralRadiusSource_ = FineSpectralRadiusSource::Estimated;
       return estimateFineSpectralRadiusInFull( level );
     }
     if ( dominantVector == nullptr || cycle_.fineRecheckIters <= 0 ) {
       fineDominantVector_.clear();
-      fineSpectralRadiusSource_ = 1;
+      fineSpectralRadiusSource_ = FineSpectralRadiusSource::Supplied;
       return suppliedRadius;
     }
     // a dominant vector of a different layout, or one living entirely on DOFs that are Dirichlet
@@ -2101,7 +2152,7 @@ private:
       }
     }
     if ( startNormSquared == 0.0 ) {
-      fineSpectralRadiusSource_ = 3;
+      fineSpectralRadiusSource_ = FineSpectralRadiusSource::ReEstimated;
       return estimateFineSpectralRadiusInFull( level );
     }
     const double recheck = level.estimateSpectralRadius( cycle_.fineRecheckIters, startVector, fineDominantVector_ );
@@ -2110,14 +2161,14 @@ private:
     // fineRecheckTolerance (1%, well inside the 10% margin of `higher`) keeps the supplied radius, so
     // that an unchanged operator gives the same smoother as before.
     if ( recheck <= suppliedRadius * ( 1.0 + cycle_.fineRecheckTolerance ) ) {
-      fineSpectralRadiusSource_ = 1;
+      fineSpectralRadiusSource_ = FineSpectralRadiusSource::Supplied;
       return suppliedRadius;
     }
     if ( recheck <= suppliedRadius * cycle_.fineHigher ) {
-      fineSpectralRadiusSource_ = 2;
+      fineSpectralRadiusSource_ = FineSpectralRadiusSource::Raised;
       return recheck;
     }
-    fineSpectralRadiusSource_ = 3;
+    fineSpectralRadiusSource_ = FineSpectralRadiusSource::ReEstimated;
     return estimateFineSpectralRadiusInFull( level );
   }
 };
@@ -2128,15 +2179,15 @@ private:
 /// per outer Krylov iteration.
 class PTwoGridPreconditionerT : public TwoLevelPreconditioner {
 public:
-  typedef amgcl::static_matrix< double, 3, 3 > Block3;
-
-  /// @brief The storage of the fine operator: 1 scalar entries, 3 node-wise 3x3 blocks.
+  /// @brief The storage of the fine operator, backendBlockSize: 1 scalar entries, 2 or 3 node-wise blocks of the
+  /// field's components.
   int fineBlockSize_ = 1;
 
-  /// @brief Parse the flat parameter tree: nuPre, nuPost (nu for both), fineDegree, fineLower, fineHigher,
-  /// finePowerIters, fineRecheckIters, fineRecheckTolerance, fineBlockSize, fineValueType, coarseValueType, and the
-  /// coarse level's AMGCL preconditioner tree under "coarse". The parameters are validated here, so that a bad value
-  /// fails before build() has spent anything on the prolongation, the Galerkin product or the coarse hierarchy.
+  /// @brief Parse the parameter tree: the cycle's parameters as TwoLevelCycleParameters::fromTree() reads them (the
+  /// field's AMGCL tree under "amgcl", backendPrecision, coarseHierarchyPrecision), backendBlockSize (the storage of
+  /// the fine operator), and the coarse level's AMGCL preconditioner tree under "coarse". The parameters are validated
+  /// here, so that a bad value fails before build() has spent anything on the prolongation, the Galerkin product or
+  /// the coarse hierarchy.
   PTwoGridPreconditionerT( const char* json_params ) : PTwoGridPreconditionerT( parseJsonParameters( json_params ) ) {}
 
   /// @brief Build everything apply() needs.
@@ -2169,8 +2220,9 @@ public:
                                 " -- the map does not match this field." );
     }
     const int nDim = nNodes > 0 ? n / nNodes : 0;
-    if ( fineBlockSize_ == 3 && n > 0 && nDim != 3 ) {
-      throw std::runtime_error( "ptwogrid: fineBlockSize 3 needs a 3-dimensional field, got " + std::to_string( nDim ) +
+    if ( fineBlockSize_ > 1 && n > 0 && nDim != fineBlockSize_ ) {
+      throw std::runtime_error( "ptwogrid: backendBlockSize " + std::to_string( fineBlockSize_ ) +
+                                " needs a field of as many components per node, got " + std::to_string( nDim ) +
                                 " DOFs per node." );
     }
     std::shared_ptr< ScalarMatrix > P, PT;
@@ -2185,7 +2237,15 @@ public:
     std::shared_ptr< ScalarMatrix > A = copiedFineOperator( n, ptr, col, val );
     buildCoarseLevel( *A, P, PT, nullspace, nullspaceRows, nullspaceCols );
     if ( fineBlockSize_ == 3 )
-      buildFineLevel< Block3 >( blockedFineOperator( A ), spectralRadius, dominantVector, dominantVectorSize );
+      buildFineLevel< amgcl::static_matrix< double, 3, 3 > >( blockedFineOperator< 3 >( A ),
+                                                              spectralRadius,
+                                                              dominantVector,
+                                                              dominantVectorSize );
+    else if ( fineBlockSize_ == 2 )
+      buildFineLevel< amgcl::static_matrix< double, 2, 2 > >( blockedFineOperator< 2 >( A ),
+                                                              spectralRadius,
+                                                              dominantVector,
+                                                              dominantVectorSize );
     else
       buildFineLevel< double >( A, spectralRadius, dominantVector, dominantVectorSize );
     finishBuild();
@@ -2194,29 +2254,16 @@ public:
 private:
   /// @brief See PTwoGridPreconditionerT(const char*).
   PTwoGridPreconditionerT( const boost::property_tree::ptree& parameters )
-    : TwoLevelPreconditioner( parameters, "ptwogrid", cycleParameters( parameters ) )
+    : TwoLevelPreconditioner( parameters, "ptwogrid" )
   {
-    fineBlockSize_ = prm.get( "fineBlockSize", 1 );
-    if ( fineBlockSize_ != 1 && fineBlockSize_ != 3 ) {
-      throw std::runtime_error( "ptwogrid: fineBlockSize must be 1 or 3, got " + std::to_string( fineBlockSize_ ) );
+    fineBlockSize_ = prm.get( "backendBlockSize", 1 );
+    if ( fineBlockSize_ < 1 || fineBlockSize_ > 3 ) {
+      throw std::runtime_error( "ptwogrid: backendBlockSize must be 1, 2 or 3, got " +
+                                std::to_string( fineBlockSize_ ) );
     }
-  }
-
-  /// @brief The parameters of the cycle, as the p-two-grid's flat tree spells them (its own keys).
-  static TwoLevelCycleParameters cycleParameters( const boost::property_tree::ptree& prm )
-  {
-    TwoLevelCycleParameters cycle;
-    cycle.nuPre                = prm.get( "nuPre", prm.get( "nu", 1 ) );
-    cycle.nuPost               = prm.get( "nuPost", prm.get( "nu", 1 ) );
-    cycle.fineDegree           = prm.get( "fineDegree", 5 );
-    cycle.fineLower            = prm.get( "fineLower", 0.01f );
-    cycle.fineHigher           = prm.get( "fineHigher", 1.1f );
-    cycle.fineValueType        = prm.get( "fineValueType", std::string( "double" ) );
-    cycle.coarseValueType      = prm.get( "coarseValueType", std::string( "double" ) );
-    cycle.finePowerIters       = prm.get( "finePowerIters", 300 );
-    cycle.fineRecheckIters     = prm.get( "fineRecheckIters", 15 );
-    cycle.fineRecheckTolerance = prm.get( "fineRecheckTolerance", 0.01 );
-    return cycle;
+    if ( cycle_.fineValueType == "float" && !storableInFloat( fineBlockSize_ ) ) {
+      throw std::runtime_error( "ptwogrid: 2x2 blocks are stored in double only, got backendPrecision float" );
+    }
   }
 
   /// @brief The fine operator, copied once with an OpenMP-parallel first touch (crs's own range constructor). The input
@@ -2235,12 +2282,15 @@ private:
                                              amgcl::make_iterator_range( val, val + nnz ) );
   }
 
-  /// @brief The fine operator in node-wise 3x3 blocks, for the fine level of fineBlockSize 3.
-  std::shared_ptr< TwoLevelFineLevelT< Block3 >::Matrix > blockedFineOperator( std::shared_ptr< ScalarMatrix >& A )
+  /// @brief The fine operator in node-wise B x B blocks, for the fine level of backendBlockSize B.
+  template < int B >
+  std::shared_ptr< typename TwoLevelFineLevelT< amgcl::static_matrix< double, B, B > >::Matrix > blockedFineOperator(
+    std::shared_ptr< ScalarMatrix >& A )
   {
-    SetupStage stage( *this, "fine operator" );
-    auto       blocked = std::make_shared< TwoLevelFineLevelT< Block3 >::Matrix >(
-      amgcl::adapter::block_matrix< Block3 >( *A ) );
+    typedef amgcl::static_matrix< double, B, B > Block;
+    SetupStage                                   stage( *this, "fine operator" );
+    auto blocked = std::make_shared< typename TwoLevelFineLevelT< Block >::Matrix >(
+      amgcl::adapter::block_matrix< Block >( *A ) );
     A.reset();
     return blocked;
   }
@@ -2485,7 +2535,7 @@ protected:
   /// @brief Parse and check the parameters (see the class comment), so that a bad value fails before build() has
   /// spent anything.
   RigidBodyCoarseLevelPreconditioner( const boost::property_tree::ptree& parameters )
-    : TwoLevelPreconditioner( parameters, "rigidBodyCoarseLevel", cycleParameters( parameters ) )
+    : TwoLevelPreconditioner( parameters, "rigidBodyCoarseLevel" )
   {
     blockSize_ = prm.get( "backendBlockSize", 3 );
     if ( blockSize_ != 2 && blockSize_ != 3 ) {
@@ -2562,47 +2612,6 @@ private:
                                 tree.get< std::string >( "class" ) );
     }
     return tree;
-  }
-
-  /// @brief The parameters of the cycle, as the field's AMGCL tree spells them: the fine smoother is AMGCL's Chebyshev
-  /// relaxation of the tree (its defaults for what the tree leaves out), npre and npost AMGCL's defaults 1 and 1
-  /// (amg::params); the value types are backendPrecision and coarseHierarchyPrecision.
-  static TwoLevelCycleParameters cycleParameters( const boost::property_tree::ptree& prm )
-  {
-    const boost::property_tree::ptree tree  = amgclTree( prm );
-    boost::property_tree::ptree       relax = childOrEmpty( tree, "relax" );
-    if ( relax.get( "type", std::string( "spai0" ) ) != "chebyshev" ) {
-      const boost::optional< std::string > relaxType = relax.get_optional< std::string >( "type" );
-      throw std::runtime_error( "rigidBodyCoarseLevel: smooths with a Chebyshev polynomial (the p-two-grid's fine "
-                                "smoother), relax.type must be chebyshev, got " +
-                                ( relaxType ? *relaxType : std::string( "spai0 (AMGCL's default)" ) ) );
-    }
-    relax.erase( "type" );
-    const amgcl::relaxation::chebyshev< amgcl::backend::builtin< double > >::params chebyshev( relax );
-    if ( chebyshev.scale ) {
-      throw std::runtime_error( "rigidBodyCoarseLevel: the fine Chebyshev smoother has no Jacobi scaling, relax.scale "
-                                "must be false" );
-    }
-    TwoLevelCycleParameters cycle;
-    cycle.nuPre                = tree.get( "npre", 1 );
-    cycle.nuPost               = tree.get( "npost", 1 );
-    cycle.fineDegree           = static_cast< int >( chebyshev.degree );
-    cycle.fineLower            = chebyshev.lower;
-    cycle.fineHigher           = chebyshev.higher;
-    cycle.finePowerIters       = chebyshev.power_iters;
-    cycle.fineRecheckIters     = prm.get( "fineRecheckIters", 15 );
-    cycle.fineRecheckTolerance = prm.get( "fineRecheckTolerance", 0.01 );
-    cycle.fineValueType        = prm.get( "backendPrecision", std::string( "double" ) );
-    cycle.coarseValueType      = prm.get( "coarseHierarchyPrecision", std::string( "double" ) );
-    cycle.keys.nuPre           = "npre";
-    cycle.keys.nuPost          = "npost";
-    cycle.keys.fineDegree      = "relax.degree";
-    cycle.keys.fineLower       = "relax.lower";
-    cycle.keys.fineHigher      = "relax.higher";
-    cycle.keys.finePowerIters  = "relax.power_iters";
-    cycle.keys.fineValueType   = "backendPrecision";
-    cycle.keys.coarseValueType = "coarseHierarchyPrecision";
-    return cycle;
   }
 };
 

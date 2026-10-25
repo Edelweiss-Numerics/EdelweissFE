@@ -61,8 +61,9 @@ end the exception: the "two-level cycle: two ways" section of ``doc/source/docum
 
 import edelweissfe.utils.performancetiming as performancetiming
 from edelweissfe.linsolve.composition.amg import (
-    amgclTreeOf,
-    checkedFieldTree,
+    backendOf,
+    checkBackend,
+    fieldTreeOf,
     preconditionerMatrix,
 )
 from edelweissfe.linsolve.composition.base import (
@@ -71,9 +72,60 @@ from edelweissfe.linsolve.composition.base import (
     SetUpContext,
     Step,
 )
+from edelweissfe.linsolve.nullspace import carriesRigidBodyModes
 
 
-class RigidBodyModes:
+class CoarseSpace:
+    """What spans the coarse level of a :class:`TwoLevel` cycle: it checks that it can be built for a field, and builds
+    the cycle on it. The cycle's own parameters (the fine smoother of the field's tree, the backend, the precision of the
+    coarse hierarchy) come from :class:`TwoLevel`, as ``cycle``, the keywords of
+    :meth:`~edelweissfe.linsolve.composition.twolevelcycle.TwoLevelPreconditioner.cycleParameters`.
+    """
+
+    #: The name of the coarse space in the views.
+    name = None
+
+    def check(self, field, context: SetUpContext, cycle: dict) -> None:
+        """Raise, naming the field, if the cycle cannot be built on this coarse space for the field: before anything is
+        built."""
+        raise NotImplementedError
+
+    def build(self, field, matrix, context: SetUpContext, cycle: dict, fineSpectralRadius, fineDominantVector):
+        """The two-level cycle on this coarse space for a field's matrix (SciPy CSR), built: a
+        :class:`~edelweissfe.linsolve.composition.twolevelcycle.TwoLevelPreconditioner`.
+
+        Parameters
+        ----------
+        field
+            The field.
+        matrix
+            Its (scaled) matrix.
+        context
+            Its context: the node coordinates, the P1 map, the scaling.
+        cycle
+            The cycle's parameters, see :meth:`~edelweissfe.linsolve.composition.twolevelcycle.TwoLevelPreconditioner.
+            cycleParameters`.
+        fineSpectralRadius, fineDominantVector
+            A previous build's fine spectral radius to start from, or ``None``.
+        """
+        raise NotImplementedError
+
+    def sizesOf(self, cycle) -> dict:
+        """What a built cycle reports about its coarse level (for the run statistics)."""
+        return {}
+
+    def describe(self) -> dict:
+        """The settings of the coarse space, for the views."""
+        return {"coarse space": self.name, "coarse solve": "AMG V-cycle"}
+
+
+def _rejected(field, reason: "str | None") -> None:
+    """Raise if the C++ cycle rejected the parameters: it names itself in the message; here the field does."""
+    if reason is not None:
+        raise ValueError("TwoLevel on the field '{:}': {:}".format(field.name, reason))
+
+
+class RigidBodyModes(CoarseSpace):
     """The coarse space of all rigid-body modes per aggregate of nodes: ``TwoLevel(coarseSpace=RigidBodyModes())``.
 
     Parameters
@@ -81,153 +133,121 @@ class RigidBodyModes:
     prolongation
         ``"smoothed"`` (:math:`P = (I - \\omega D_F^{-1} A_F) P_{\\mathrm{tent}}`) or ``"tentative"``
         (:math:`P_{\\mathrm{tent}}`, the modes orthonormalized per aggregate).
-    coarseHierarchyPrecision
-        ``"double"`` or ``"float"``: the precision of the AMG hierarchy below the coarse level.
-    fineSpectralRadiusReuse
-        Whether a rebuild re-checks the previous build's fine spectral radius instead of estimating it in full.
     """
 
     name = "rigid-body modes"
 
-    def __init__(
-        self, prolongation: str = "smoothed", coarseHierarchyPrecision: str = "double", fineSpectralRadiusReuse=False
-    ):
+    def __init__(self, prolongation: str = "smoothed"):
         if prolongation not in ("smoothed", "tentative"):
             raise ValueError(
                 "RigidBodyModes: prolongation must be 'smoothed' or 'tentative', got {!r}".format(prolongation)
             )
-        if coarseHierarchyPrecision not in ("double", "float"):
-            raise ValueError(
-                "RigidBodyModes: coarseHierarchyPrecision must be 'double' or 'float', got {!r}".format(
-                    coarseHierarchyPrecision
-                )
-            )
         self.prolongation = prolongation
-        self.coarseHierarchyPrecision = coarseHierarchyPrecision
-        self.fineSpectralRadiusReuse = fineSpectralRadiusReuse
 
-    def check(self, field, tree: dict, context: SetUpContext) -> None:
-        """Raise if this coarse space cannot be built for the field with its tree: rigid-body modes are those of a 2D or
-        3D displacement-like field with node coordinates, on a block backend (the scalar backend takes them as the near
-        null-space of its hierarchy itself, ``AMG()``), with a tree the coarse level can read."""
-        if field.dimension not in (2, 3):
+    def check(self, field, context: SetUpContext, cycle: dict) -> None:
+        """Rigid-body modes are those of a 2D or 3D displacement field (:func:`~edelweissfe.linsolve.nullspace.
+        carriesRigidBodyModes`) with node coordinates, on a block backend (the scalar backend takes them as the near
+        null-space of its hierarchy itself, ``AMG()``)."""
+        if not carriesRigidBodyModes(field):
             raise ValueError(
-                "TwoLevel: the rigid-body modes need a 2D or 3D vector field, but the field '{:}' has {:} component(s) "
-                "per node".format(field.name, field.dimension)
+                "TwoLevel: the rigid-body modes are those of a 2D or 3D displacement field, but the field '{:}' is "
+                "another field (or has {:} component(s) per node): its near null-space is its translations, which "
+                "AMG() takes".format(field.name, field.dimension)
             )
         if context.coordinates(field.name) is None:
             raise ValueError(
                 "TwoLevel: the rigid-body modes of the field '{:}' need its node coordinates".format(field.name)
             )
-        from edelweissfe.linsolve.composition.rigidbodycoarselevel import (
-            RigidBodyCoarseLevelPreconditioner,
-        )
-
-        blockSize = tree.get("backendBlockSize", 1)
-        if blockSize not in (2, 3):
+        if cycle["backendBlockSize"] == 1:
             raise ValueError(
-                "TwoLevel: the field '{:}' is on the scalar backend (backendBlockSize {:}), which takes the rigid-body "
+                "TwoLevel: the field '{:}' is on the scalar backend (backendBlockSize 1), which takes the rigid-body "
                 "modes as the near null-space of AMG() itself; the rigid-body coarse level is for the block backends, "
-                "backendBlockSize 2 or 3".format(field.name, blockSize)
+                "backendBlockSize 2 or 3".format(field.name)
             )
-        reason = RigidBodyCoarseLevelPreconditioner.parameterRejection(
-            amgclTreeOf(tree),
-            blockSize,
-            tree.get("backendPrecision", "double"),
-            self.prolongation,
-            self.coarseHierarchyPrecision,
-        )
-        if reason is not None:
-            # the C++ class names itself in the message; here the component and the field do
-            raise ValueError(
-                "TwoLevel on the field '{:}': {:}".format(field.name, reason.removeprefix("rigidBodyCoarseLevel: "))
-            )
-
-    def build(self, field, tree: dict, matrix, context: SetUpContext, fineSpectralRadius, fineDominantVector):
-        """The two-level cycle on this coarse space for a field's matrix (SciPy CSR)."""
         from edelweissfe.linsolve.composition.rigidbodycoarselevel import (
             RigidBodyCoarseLevelPreconditioner,
         )
 
-        cycle = RigidBodyCoarseLevelPreconditioner(
-            amgclTreeOf(tree),
-            tree.get("backendBlockSize", 1),
-            tree.get("backendPrecision", "double"),
+        _rejected(field, RigidBodyCoarseLevelPreconditioner.parameterRejection(prolongation=self.prolongation, **cycle))
+
+    def build(self, field, matrix, context: SetUpContext, cycle: dict, fineSpectralRadius, fineDominantVector):
+        from edelweissfe.linsolve.composition.rigidbodycoarselevel import (
+            RigidBodyCoarseLevelPreconditioner,
+        )
+
+        built = RigidBodyCoarseLevelPreconditioner(
             prolongation=self.prolongation,
-            coarseHierarchyPrecision=self.coarseHierarchyPrecision,
             fineSpectralRadius=fineSpectralRadius,
             fineDominantVector=fineDominantVector,
+            **cycle,
         )
         with performancetiming.timeit("{:} rigid-body coarse level build".format(field.name)):
-            cycle.build(matrix, context.scalingOf(slice(None)), context.coordinates(field.name))
-        return cycle
+            built.build(matrix, context.scalingOf(slice(None)), context.coordinates(field.name))
+        return built
 
     def sizesOf(self, cycle) -> dict:
-        """What a built cycle reports about its coarse level."""
         return {"aggregates": cycle.nAggregates, "coarse dofs": cycle.nCoarse, "dropped modes": cycle.droppedModes}
 
     def describe(self) -> dict:
         return {"coarse space": self.name, "prolongation": self.prolongation, "coarse solve": "AMG V-cycle"}
 
 
-class P1Interpolation:
+class P1Interpolation(CoarseSpace):
     """The coarse space of the linear (P1) interpolant of a quadratic field from its corner nodes:
     ``TwoLevel(coarseSpace=P1Interpolation())``. Needs the field's corner/midside topology.
 
     Parameters
     ----------
-    rigidBodyNullspace
-        Whether the AMG hierarchy of the coarse (P1) operator takes the rotations too (needs node coordinates).
-    fineSpectralRadiusReuse
-        Whether a rebuild re-checks the previous build's fine spectral radius instead of estimating it in full.
-    options
-        :class:`~edelweissfe.linsolve.composition.ptwogrid.PTwoGridPreconditioner` keywords (``nu``, ``fineDegree``,
-        ...).
+    coarsePrecond
+        The AMGCL tree of the coarse (P1) operator's hierarchy; ``None``: the default of
+        :class:`~edelweissfe.linsolve.composition.ptwogrid.PTwoGridPreconditioner`.
+    useCoarseNullspace
+        Whether that hierarchy takes a near null-space of the corner nodes: their rigid-body modes for a displacement
+        field with node coordinates (:func:`~edelweissfe.linsolve.nullspace.carriesRigidBodyModes`), else their
+        translations; else AMGCL's default.
     """
 
     name = "P1 interpolation"
 
-    def __init__(self, rigidBodyNullspace: bool = True, fineSpectralRadiusReuse: bool = False, **options):
-        from edelweissfe.linsolve.composition.ptwogrid import PTwoGridPreconditioner
+    def __init__(self, coarsePrecond: dict = None, useCoarseNullspace: bool = True):
+        self.coarsePrecond = coarsePrecond
+        self.useCoarseNullspace = useCoarseNullspace
 
-        reason = PTwoGridPreconditioner.parameterRejection(**options)
-        if reason is not None:
-            raise ValueError("P1Interpolation: " + reason)
-        self.rigidBodyNullspace = rigidBodyNullspace
-        self.fineSpectralRadiusReuse = fineSpectralRadiusReuse
-        self.options = options
-
-    def check(self, field, tree: dict, context: SetUpContext) -> None:
-        """Raise if this coarse space cannot be built for the field: it needs the field's P1 map, and node-wise 3x3
-        fine blocks need a 3D field."""
-        if self.options.get("fineBlockSize", 1) == 3 and field.dimension != 3:
-            raise ValueError(
-                "TwoLevel: fineBlockSize 3 needs a 3D field, but the field '{:}' has {:} component(s) per node".format(
-                    field.name, field.dimension
-                )
-            )
+    def check(self, field, context: SetUpContext, cycle: dict) -> None:
+        """It needs the field's P1 map, and parameters the C++ cycle can use."""
         if context.p1Map(field.name) is None:
             raise ValueError("TwoLevel: the P1 interpolation of the field '{:}' needs its P1 map".format(field.name))
-
-    def build(self, field, tree: dict, matrix, context: SetUpContext, fineSpectralRadius, fineDominantVector):
-        """The two-level cycle on this coarse space for a field's matrix (SciPy CSR)."""
         from edelweissfe.linsolve.composition.ptwogrid import PTwoGridPreconditioner
 
-        p1Map = context.p1Map(field.name)
-        cycle = PTwoGridPreconditioner(
-            *p1Map, fineSpectralRadius=fineSpectralRadius, fineDominantVector=fineDominantVector, **self.options
+        _rejected(
+            field,
+            PTwoGridPreconditioner.parameterRejection(
+                coarsePrecond=self.coarsePrecond, useCoarseNullspace=self.useCoarseNullspace, **cycle
+            ),
         )
-        coordinates = context.coordinates(field.name) if self.rigidBodyNullspace else None
-        with performancetiming.timeit("{:} p-two-grid build".format(field.name)):
-            cycle.build(matrix, context.scalingOf(slice(None)), coordinates)
-        return cycle
 
-    def sizesOf(self, cycle) -> dict:
-        """What a built cycle reports about its coarse level."""
-        return {}
+    def build(self, field, matrix, context: SetUpContext, cycle: dict, fineSpectralRadius, fineDominantVector):
+        from edelweissfe.linsolve.composition.ptwogrid import PTwoGridPreconditioner
+
+        built = PTwoGridPreconditioner(
+            *context.p1Map(field.name),
+            coarsePrecond=self.coarsePrecond,
+            useCoarseNullspace=self.useCoarseNullspace,
+            fineSpectralRadius=fineSpectralRadius,
+            fineDominantVector=fineDominantVector,
+            **cycle,
+        )
+        coordinates = context.coordinates(field.name) if carriesRigidBodyModes(field) else None
+        with performancetiming.timeit("{:} p-two-grid build".format(field.name)):
+            built.build(matrix, context.scalingOf(slice(None)), coordinates)
+        return built
 
     def describe(self) -> dict:
-        return {"coarse space": self.name, "coarse solve": "AMG V-cycle", **self.options}
+        return {
+            "coarse space": self.name,
+            "coarse solve": "AMG V-cycle",
+            "coarsePrecond": "default" if self.coarsePrecond is None else "given",
+        }
 
 
 class TwoLevel(Preconditioner):
@@ -238,28 +258,62 @@ class TwoLevel(Preconditioner):
     Parameters
     ----------
     coarseSpace
-        :class:`RigidBodyModes` or :class:`P1Interpolation`.
+        A :class:`CoarseSpace`: :class:`RigidBodyModes` or :class:`P1Interpolation`.
     tree
-        The field tree: the fine smoother and the AMG hierarchy below the coarse level read it as
-        :class:`~edelweissfe.linsolve.composition.amg.AMG` does. ``None``: the default tree of the field's dimension.
+        The field's AMGCL tree: its ``relax`` (a Chebyshev polynomial), ``npre`` and ``npost`` are the fine smoother;
+        with :class:`RigidBodyModes` its coarsening also builds the coarse level, and the whole tree the AMG hierarchy
+        below. ``None``: the default tree of the field's dimension
+        (:func:`~edelweissfe.linsolve.composition.amg.defaultFieldTree`).
+    backendBlockSize, backendPrecision
+        The storage of the fine operator and of :math:`P`, :math:`P^T`, as for
+        :class:`~edelweissfe.linsolve.composition.amg.AMG`; ``None``: the field's default
+        (:func:`~edelweissfe.linsolve.composition.amg.backendOf`).
+    coarseHierarchyPrecision
+        The value type of the AMG hierarchy of the coarse level: ``"double"`` or ``"float"``.
+    fineSpectralRadiusReuse
+        Whether a rebuild starts from the previous build's fine spectral radius, re-checked by a few power iterations,
+        instead of estimating it in full (see
+        :class:`~edelweissfe.linsolve.composition.twolevelcycle.TwoLevelPreconditioner`).
     dropTolerance, lumpDroppedEntries
         Build the cycle (its smoother, coarse level and hierarchy) on the filtered matrix, see
         :func:`~edelweissfe.linsolve.composition.amg.droppedSmallEntries`; ``0`` (the default) builds it on the
         matrix itself.
     """
 
-    def __init__(self, coarseSpace, tree: dict = None, dropTolerance: float = 0.0, lumpDroppedEntries: bool = False):
+    def __init__(
+        self,
+        coarseSpace: CoarseSpace,
+        tree: dict = None,
+        backendBlockSize: int = None,
+        backendPrecision: str = None,
+        coarseHierarchyPrecision: str = "double",
+        fineSpectralRadiusReuse: bool = False,
+        dropTolerance: float = 0.0,
+        lumpDroppedEntries: bool = False,
+    ):
+        if not isinstance(coarseSpace, CoarseSpace):
+            raise TypeError(
+                "TwoLevel: coarseSpace must be a CoarseSpace such as RigidBodyModes() or P1Interpolation(), got "
+                "{!r}".format(coarseSpace)
+            )
         if not dropTolerance >= 0.0:
             raise ValueError("TwoLevel: dropTolerance must not be negative, got {!r}".format(dropTolerance))
-        super().__init__()
-        self.dropTolerance = dropTolerance
-        self.lumpDroppedEntries = lumpDroppedEntries
-        if not isinstance(coarseSpace, (RigidBodyModes, P1Interpolation)):
-            raise TypeError(
-                "TwoLevel: coarseSpace must be RigidBodyModes() or P1Interpolation(), got {!r}".format(coarseSpace)
+        checkBackend("TwoLevel", backendBlockSize, backendPrecision)
+        if coarseHierarchyPrecision not in ("double", "float"):
+            raise ValueError(
+                "TwoLevel: coarseHierarchyPrecision must be 'double' or 'float', got {!r}".format(
+                    coarseHierarchyPrecision
+                )
             )
+        super().__init__()
         self.coarseSpace = coarseSpace
         self.tree = tree
+        self.backendBlockSize = backendBlockSize
+        self.backendPrecision = backendPrecision
+        self.coarseHierarchyPrecision = coarseHierarchyPrecision
+        self.fineSpectralRadiusReuse = fineSpectralRadiusReuse
+        self.dropTolerance = dropTolerance
+        self.lumpDroppedEntries = lumpDroppedEntries
         self.cycle = None
         self._field = None
         self._fineSpectralRadius = (None, None)
@@ -269,20 +323,36 @@ class TwoLevel(Preconditioner):
         self._fineSpectralRadius = (None, None)
         super().setModel(model, dofManager)
 
+    def _cycleParameters(self, field) -> dict:
+        """The cycle's parameters for the field (see :meth:`~edelweissfe.linsolve.composition.twolevelcycle.
+        TwoLevelPreconditioner.cycleParameters`): the tree and the backend, the field's defaults for what is not
+        given."""
+        tree = fieldTreeOf("TwoLevel", self.tree, field)
+        # the block translations belong to AMG's hierarchy on the block backend; a coarse space is its own
+        backendBlockSize, backendPrecision, _ = backendOf(
+            "TwoLevel", field, tree, self.backendBlockSize, self.backendPrecision, blockTranslationNullspace=False
+        )
+        return {
+            "amgclTree": tree,
+            "backendBlockSize": backendBlockSize,
+            "backendPrecision": backendPrecision,
+            "coarseHierarchyPrecision": self.coarseHierarchyPrecision,
+        }
+
     def _setUp(self, A, context: SetUpContext) -> None:
         field = context.onlyField("TwoLevel")
-        tree = checkedFieldTree("TwoLevel", self.tree, field)
-        self.coarseSpace.check(field, tree, context)
+        cycle = self._cycleParameters(field)
+        self.coarseSpace.check(field, context, cycle)
         self._field = field
         fineSpectralRadius, fineDominantVector = (
-            self._fineSpectralRadius if self.coarseSpace.fineSpectralRadiusReuse else (None, None)
+            self._fineSpectralRadius if self.fineSpectralRadiusReuse else (None, None)
         )
         if fineDominantVector is not None and len(fineDominantVector) != A.shape[0]:
             # built for other dofs (e.g. other condensed dofs of a Schur complement): no estimate for these
             fineSpectralRadius, fineDominantVector = None, None
         matrix = preconditionerMatrix(A, self.dropTolerance, self.lumpDroppedEntries, self.statistics)
-        self.cycle = self.coarseSpace.build(field, tree, matrix, context, fineSpectralRadius, fineDominantVector)
-        if self.coarseSpace.fineSpectralRadiusReuse:
+        self.cycle = self.coarseSpace.build(field, matrix, context, cycle, fineSpectralRadius, fineDominantVector)
+        if self.fineSpectralRadiusReuse:
             self._fineSpectralRadius = (self.cycle.fineSpectralRadius, self.cycle.fineDominantVector)
         self.statistics.sizes.update(rows=A.shape[0], **self.coarseSpace.sizesOf(self.cycle))
 
@@ -295,6 +365,12 @@ class TwoLevel(Preconditioner):
 
     def _parameters(self) -> dict:
         parameters = self.coarseSpace.describe()
+        backend = {"backendBlockSize": self.backendBlockSize, "backendPrecision": self.backendPrecision}
+        parameters.update({key: value for key, value in backend.items() if value is not None})
+        if self.coarseHierarchyPrecision != "double":
+            parameters["coarseHierarchyPrecision"] = self.coarseHierarchyPrecision
+        if self.fineSpectralRadiusReuse:
+            parameters["fineSpectralRadiusReuse"] = True
         if self.dropTolerance > 0.0:
             parameters.update(dropTolerance=self.dropTolerance, lumpDroppedEntries=self.lumpDroppedEntries)
         return parameters

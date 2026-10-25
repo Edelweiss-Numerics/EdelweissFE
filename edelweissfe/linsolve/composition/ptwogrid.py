@@ -78,40 +78,17 @@ from edelweissfe.linsolve.composition.twolevelcycle import TwoLevelPreconditione
 from edelweissfe.linsolve.nullspace import rigidBodyNullspace, translationNullspace
 from edelweissfe.utils import performancetiming
 
-#: Coarse-level Chebyshev degree/sweep-count configuration, from a config sweep across degree and
-#: npre/npost on a real coupled system: halving the Chebyshev degree (8 -> 4) at npre=2/npost=2
-#: matches a higher-degree hierarchy's outer-iteration count almost exactly while cutting the coarse
-#: apply's own cost -- npre=1/npost=1 variants were cheaper per call but pushed outer GMRES
-#: iterations up enough to be a wash or a regression (a weaker coarse correction is not free). A
-#: direct PARDISO factorization of A1 was also tried and rejected: exact (residual ~1e-14) but no
-#: cheaper per call -- A1 fills in heavily under a general (unsymmetric) LU at the problem sizes
-#: tested, so an exact triangular solve costs about as much as the approximate V-cycle here.
-#: power_iters=300 (was 50): the coarse solve uses the identical AMGCL Chebyshev relaxation code path
-#: as the single-level default, just on the coarse P1 operator instead of the full field
-#: block, and is subject to the identical thread-count-dependent spectral-radius-estimate issue (see
-#: the comment on ``power_iters`` in composition/amg.py for the mechanism) -- bumped for the same reason and
-#: by the same amount, not independently re-tuned at this exact value for the coarse operator's own
-#: (much smaller) size.
+#: The AMGCL tree of the coarse-level (P1) solve, the default of ``coarsePrecond``: from a sweep over the Chebyshev
+#: degree and the sweeps on a coupled system, degree 4 with two sweeps before and after matched a higher degree in
+#: outer iterations at a lower cost per application, while one sweep each raised the outer iterations. An exact
+#: PARDISO factorization of the P1 operator was no cheaper per application (it fills in heavily). ``power_iters`` as
+#: in the field trees (see :func:`~edelweissfe.linsolve.composition.amg.defaultFieldTree`).
 _DEFAULT_COARSE_PRECOND = {
     "coarsening": {"type": "smoothed_aggregation", "aggr": {"eps_strong": 0.01}},
     "relax": {"type": "chebyshev", "degree": 4, "power_iters": 300, "lower": 0.01},
     "npre": 2,
     "npost": 2,
 }
-#: The fine smoother's defaults, the best of a sweep over sweep counts and degrees on a coupled system: one sweep
-#: of a degree-5 Chebyshev polynomial.
-_DEFAULT_NU = 1
-_DEFAULT_FINE_DEGREE = 5
-#: The fine Chebyshev smoother's spectral bounds and power iteration: ``higher`` = 1.1 is a safety
-#: margin above the estimated spectral radius (AMGCL's own chebyshev defaults it to 1.0, which would
-#: silently retune the validated smoother); a short, badly under-converged power iteration can make
-#: Chebyshev smoothing diverge outright, hence 300 iterations.
-_DEFAULT_FINE_LOWER = 0.01
-_DEFAULT_FINE_HIGHER = 1.1
-_DEFAULT_FINE_POWER_ITERS = 300
-#: Power iterations of the re-check of a reused fine spectral radius, from the previous build's dominant
-#: vector -- a few sparse products instead of the full estimate's 300.
-_DEFAULT_FINE_RECHECK_ITERS = 15
 
 
 class PTwoGridPreconditioner(TwoLevelPreconditioner):
@@ -123,19 +100,14 @@ class PTwoGridPreconditioner(TwoLevelPreconditioner):
     isCorner, edgeEndpoints
         This field's P1 topology map (:func:`edelweissfe.numerics.p1topology.buildP1Map`), in the
         field's own node order.
-    nu
-        Fine Chebyshev sweeps before *and* after the coarse-grid correction.
-    nuPre, nuPost
-        Separate pre- and post-smoothing sweep counts, each ``None`` (default) for ``nu``. With
-        ``nuPre = 0`` the cycle starts with the coarse-grid correction of the right-hand side itself
-        (the residual of x = 0) and ends with ``nuPost`` sweeps: one smoother application fewer per
-        cycle than a symmetric one, at the price of a nonsymmetric preconditioner -- of no concern to
-        the right-preconditioned GMRES around it, which needs a fixed linear operator, not a symmetric
-        one. Ending on the smoother is the right way round for that one sweep: it damps the
-        high-frequency error the prolongated correction leaves on the fine level; starting with it
-        (``nuPre = 1, nuPost = 0``) leaves that error in the result.
-    fineDegree
-        Fine Chebyshev polynomial degree.
+    amgclTree, backendBlockSize, backendPrecision, coarseHierarchyPrecision
+        The parameters of the cycle, see :meth:`~edelweissfe.linsolve.composition.twolevelcycle.TwoLevelPreconditioner.
+        cycleParameters`: the fine Chebyshev smoother is the ``relax``, ``npre`` and ``npost`` of the field's
+        AMGCL tree. With ``npre`` 0 the cycle starts with the coarse-grid correction of the right-hand side itself
+        and ends with ``npost`` sweeps: one smoother application fewer per cycle than a symmetric one, at the price of
+        a nonsymmetric preconditioner -- of no concern to the right-preconditioned GMRES around it, which needs a fixed
+        linear operator, not a symmetric one. Ending on the smoother is the right way round for that one sweep: it
+        damps the high-frequency error the prolongated correction leaves on the fine level.
     coarsePrecond
         AMGCL parameter tree for the coarse-level (:math:`A_1`) solve.
     useCoarseNullspace
@@ -145,72 +117,39 @@ class PTwoGridPreconditioner(TwoLevelPreconditioner):
         rotations) when :meth:`build` is given node coordinates, translations alone otherwise --
         mirroring the near null-space of :class:`~edelweissfe.linsolve.composition.amg.AMG` on the full
         field, since this is the same construction restricted to the corner-node subset.
-    fineBlockSize
-        Storage of the fine operator for the smoother and residual sparse matrix-vector products:
-        ``1`` (scalar entries) or ``3`` (node-wise 3x3 blocks, a 3D field only) -- roughly half the
-        memory traffic per product, the dominant cost of the apply. Both give the same cycle up to
-        floating-point summation order.
     fineSpectralRadius, fineDominantVector
-        A previous build's fine spectral radius and dominant vector to start from
-        (``fineSpectralRadiusReuse`` of the coarse space), or ``None`` to estimate the radius in full by ``finePowerIters`` power
-        iterations; the re-check takes ``fineRecheckIters`` and the margin ``fineHigher``, see
+        A previous build's fine spectral radius and dominant vector to start from (``fineSpectralRadiusReuse`` of
+        :class:`~edelweissfe.linsolve.composition.twolevel.TwoLevel`), or ``None`` to estimate the radius in full, see
         :class:`~edelweissfe.linsolve.composition.twolevelcycle.TwoLevelPreconditioner`.
-    fineValueType
-        ``"double"`` (default) or ``"float"``: the value type the fine operator is stored in for the
-        smoother and the residual -- fine smoothing dominates an outer iteration's cost, which is
-        bound by the bytes per entry read. Vectors and every accumulation stay double (a float
-        matrix times a double vector, summed in double), and the spectral-radius estimate and its
-        re-check run on the double operator before it is rounded, so float only rounds the stored
-        entries (relative 6e-8).
-    coarseValueType
-        ``"double"`` (default) or ``"float"``: the value type of the whole coarse AMGCL hierarchy
-        (AMGCL's own single-precision backend, so its setup -- including its Chebyshev smoother's power
-        iteration -- runs in float too); the coarse right-hand side and correction are converted at
-        the boundary.
-    fineLower, fineHigher, finePowerIters, fineRecheckIters
-        The fine Chebyshev spectral bounds relative to the spectral radius, the power iteration
-        count of its full estimate, and that of the re-check of a reused one.
     """
 
     def __init__(
         self,
         isCorner: np.ndarray,
         edgeEndpoints: np.ndarray,
-        nu: int = _DEFAULT_NU,
-        nuPre: int = None,
-        nuPost: int = None,
-        fineDegree: int = _DEFAULT_FINE_DEGREE,
+        amgclTree: dict,
+        backendBlockSize: int = 1,
+        backendPrecision: str = "double",
+        coarseHierarchyPrecision: str = "double",
         coarsePrecond: dict = None,
         useCoarseNullspace: bool = True,
-        fineBlockSize: int = 1,
-        fineValueType: str = "double",
-        coarseValueType: str = "double",
         fineSpectralRadius: float = None,
         fineDominantVector: np.ndarray = None,
-        fineLower: float = _DEFAULT_FINE_LOWER,
-        fineHigher: float = _DEFAULT_FINE_HIGHER,
-        finePowerIters: int = _DEFAULT_FINE_POWER_ITERS,
-        fineRecheckIters: int = _DEFAULT_FINE_RECHECK_ITERS,
     ):
         self._isCorner = np.ascontiguousarray(isCorner, dtype=np.int8)
         self._edgeEndpoints = np.ascontiguousarray(edgeEndpoints, dtype=np.int32)
         self._useCoarseNullspace = useCoarseNullspace
-        self._params = {
-            "nuPre": int(nu if nuPre is None else nuPre),
-            "nuPost": int(nu if nuPost is None else nuPost),
-            "fineDegree": int(fineDegree),
-            "fineLower": float(fineLower),
-            "fineHigher": float(fineHigher),
-            "finePowerIters": int(finePowerIters),
-            "fineRecheckIters": int(fineRecheckIters),
-            "fineBlockSize": int(fineBlockSize),
-            "fineValueType": fineValueType,
-            "coarseValueType": coarseValueType,
-            "coarse": dict(coarsePrecond) if coarsePrecond is not None else dict(_DEFAULT_COARSE_PRECOND),
-        }
         from edelweissfe.linsolve.amgcl.amgcl import PyAMGCLPTwoGrid
 
-        super().__init__(PyAMGCLPTwoGrid, self._params, fineSpectralRadius, fineDominantVector)
+        super().__init__(
+            PyAMGCLPTwoGrid,
+            {
+                **self.cycleParameters(amgclTree, backendBlockSize, backendPrecision, coarseHierarchyPrecision),
+                "coarse": dict(coarsePrecond) if coarsePrecond is not None else dict(_DEFAULT_COARSE_PRECOND),
+            },
+            fineSpectralRadius,
+            fineDominantVector,
+        )
 
     @classmethod
     def parameterRejection(cls, **parameters) -> "str | None":
