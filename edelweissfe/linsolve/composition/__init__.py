@@ -27,20 +27,29 @@
 #  ---------------------------------------------------------------------
 """Composed linear solvers: a solver as a tree of small objects, built with plain constructors in a Python script.
 
-A solver script next to the input file::
+A solver script next to the input file holds only the math::
 
     from edelweissfe.linsolve.composition import (
-        AMG, LGMRES, ComposedLinearSolver, DiagonalScaling, Multiplicative, OnField, RigidBodyModes, TwoGrid,
+        AMG, LGMRES, DiagonalScaling, Multiplicative, OnField, RigidBodyModes, TwoGrid,
     )
 
     displacement = OnField("displacement", TwoGrid(coarseSpace=RigidBodyModes()))
     damage = OnField("nonlocal damage", AMG())
     blockGaussSeidel = Multiplicative([displacement, damage])
-    linearSolver = ComposedLinearSolver(LGMRES(DiagonalScaling(blockGaussSeidel)))
+    linearSolver = LGMRES(DiagonalScaling(blockGaussSeidel))
 
-and in the input file ``linsolver=script:solver.py:linearSolver``. ``print(linearSolver.root)`` shows the tree; see
-:mod:`~edelweissfe.linsolve.composition.views` for the other views, and
-:mod:`~edelweissfe.linsolve.composition.base` for how a component works.
+and the input file names it::
+
+    *linearSolver, name=mySolver, type=custom
+    script=solver.py
+
+    *solver, solver=NIST, name=theSolver
+    linsolver=mySolver
+
+``print(linearSolver)`` shows the tree; see :mod:`~edelweissfe.linsolve.composition.views` for the other views,
+:mod:`~edelweissfe.linsolve.composition.base` for how a component works, and :mod:`edelweissfe.linsolve.types` for the
+other types of linear solver, all of them trees behind the one adapter
+(:class:`~edelweissfe.linsolve.composition.solver.ComposedLinearSolver`).
 """
 
 from edelweissfe.linsolve.composition.amg import AMG

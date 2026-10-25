@@ -40,6 +40,8 @@ from dataclasses import dataclass
 
 from edelweissfe.linsolve.composition.base import Preconditioner
 from edelweissfe.linsolve.composition.direct import DirectSolver
+from edelweissfe.linsolve.composition.krylov import FixedTolerance, GapCompensation
+from edelweissfe.linsolve.composition.presets import blockAMG
 from edelweissfe.linsolve.composition.solvedumps import SolveDumps
 from edelweissfe.linsolve.composition.solver import ComposedLinearSolver
 from edelweissfe.utils.schema import (
@@ -205,3 +207,112 @@ class Mumps(DirectSolverType):
     """``mumps``: MUMPS, if its Python bindings are installed."""
 
     backend = "mumps"
+
+
+@dataclass(frozen=True)
+class CustomSchema(LinearSolverSchema):
+    """The data lines of ``custom``."""
+
+    script: str = schemaField(
+        description=(
+            "The solver script: a Python file that binds the composed solver, a tree of components, to its global "
+            "linearSolver (a path relative to the working directory)."
+        ),
+        dtype=str,
+        default=None,
+        required=True,
+    )
+    hotReload: bool = schemaField(
+        description="Build the solver again whenever the script changes on disk, before a solve.",
+        dtype=bool,
+        default=False,
+    )
+
+
+class Custom(LinearSolverType):
+    """``custom``: the composed solver of a solver script, defined by you (see
+    :func:`~edelweissfe.linsolve.composition.solver.loadSolverScript`)."""
+
+    schema = CustomSchema
+
+    @classmethod
+    def create(cls, configuration: CustomSchema) -> ComposedLinearSolver:
+        return ComposedLinearSolver.fromScript(
+            configuration.script,
+            hotReload=configuration.hotReload,
+            residualGrowthFactor=configuration.residualGrowthFactor,
+            verbosity=configuration.verbosity,
+            warnOuterIterations=configuration.warnOuterIterations,
+            dumps=solveDumpsOf(configuration),
+        )
+
+
+@dataclass(frozen=True)
+class BlockAMGSchema(LinearSolverSchema):
+    """The data lines of ``blockamg``: the arguments of the preset
+    :func:`~edelweissfe.linsolve.composition.presets.blockAMG`."""
+
+    rigidBodyCoarseLevel: bool = schemaField(
+        description=(
+            "A 3D displacement field gets the two-grid cycle on its rigid-body modes (else one AMG hierarchy, on the "
+            "translations)."
+        ),
+        dtype=bool,
+        default=True,
+    )
+    tolerance: float = schemaField(
+        description="A fixed relative tolerance per solve; unset: the Eisenstat-Walker forcing tolerance.",
+        dtype=float,
+        default=None,
+    )
+    maxIterations: int = schemaField(description="The outer iteration cap.", dtype=int, default=100)
+    sweeps: int = schemaField(description="The block Gauss-Seidel sweeps over the fields.", dtype=int, default=1)
+    symmetric: bool = schemaField(
+        description="A symmetric block Gauss-Seidel sweep (forward, then backward).", dtype=bool, default=False
+    )
+    krylovOnScaledSystem: bool = schemaField(
+        description="Run LGMRES on the diagonally scaled matrix, with true-residual continuations.",
+        dtype=bool,
+        default=False,
+    )
+    continuations: int = schemaField(
+        description="The true-residual continuations (only with krylovOnScaledSystem).", dtype=int, default=2
+    )
+    gapCompensation: bool = schemaField(
+        description=(
+            "Tighten the first pass by the learnt gap between the scaled and the true residual (only with "
+            "krylovOnScaledSystem)."
+        ),
+        dtype=bool,
+        default=False,
+    )
+    dropTolerance: float = schemaField(
+        description="Build every field's preconditioner on its block without the entries below this (relative).",
+        dtype=float,
+        default=0.0,
+    )
+    lumpDroppedEntries: bool = schemaField(
+        description="Add the dropped entries to the diagonal (keeps the row sums).", dtype=bool, default=False
+    )
+
+
+class BlockAMG(LinearSolverType):
+    """``blockamg``: the preset :func:`~edelweissfe.linsolve.composition.presets.blockAMG`, block Gauss--Seidel over
+    the fields of the diagonally scaled matrix, inside LGMRES."""
+
+    schema = BlockAMGSchema
+
+    @classmethod
+    def tree(cls, configuration: BlockAMGSchema) -> Preconditioner:
+        return blockAMG(
+            rigidBodyCoarseLevel=configuration.rigidBodyCoarseLevel,
+            tolerance=None if configuration.tolerance is None else FixedTolerance(configuration.tolerance),
+            maxIterations=configuration.maxIterations,
+            sweeps=configuration.sweeps,
+            symmetric=configuration.symmetric,
+            krylovOnScaledSystem=configuration.krylovOnScaledSystem,
+            continuations=configuration.continuations,
+            gapCompensation=GapCompensation() if configuration.gapCompensation else None,
+            dropTolerance=configuration.dropTolerance,
+            lumpDroppedEntries=configuration.lumpDroppedEntries,
+        )

@@ -387,9 +387,10 @@ for _linsolverName, _linsolverClass in {
     "klu": "KLU",
     "petsclu": "PetscLU",
     "mumps": "Mumps",
+    "blockamg": "BlockAMG",
+    "custom": "Custom",
 }.items():
     _BUILTINS[("linsolver", _linsolverName)] = f"edelweissfe.linsolve.types:{_linsolverClass}"
-_BUILTINS[("linsolver", "blockamg")] = "edelweissfe.linsolve.blockamg:BlockAMGType"
 
 # The directsolver category: the sparse direct solver libraries a DirectSolver leaf of a composed solver applies
 # (edelweissfe.linsolve.base.DirectSolverBackend), one linsolve/<name> subpackage each.
@@ -423,6 +424,7 @@ for _keywordName, _keywordDotted in {
     "fieldOutput": "edelweissfe.keywords.fieldoutput:FieldOutputKeyword",
     "analyticalField": "edelweissfe.keywords.analyticalfield:AnalyticalFieldKeyword",
     "solver": "edelweissfe.keywords.solver:SolverKeyword",
+    "linearSolver": "edelweissfe.keywords.linearsolver:LinearSolverKeyword",
     "step": "edelweissfe.keywords.step:StepKeyword",
     "output": "edelweissfe.keywords.output:OutputKeyword",
     "updateConfiguration": "edelweissfe.keywords.updateconfiguration:UpdateConfigurationKeyword",

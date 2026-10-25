@@ -121,26 +121,22 @@ def test_the_matrix_view_draws_the_given_matrix(tmp_path):
     assert len(figure.axes) == 1
 
 
-def test_a_solver_script_is_the_linear_solver_of_an_input_file(tmp_path):
+def test_a_solver_script_is_the_custom_linear_solver(tmp_path):
     script = tmp_path / "solver.py"
     script.write_text(
         textwrap.dedent(
             """
-            from edelweissfe.linsolve.composition import (
-                AMG, LGMRES, ComposedLinearSolver, DiagonalScaling, FixedTolerance, Multiplicative, OnField
-            )
+            from edelweissfe.linsolve.composition import AMG, LGMRES, DiagonalScaling, FixedTolerance, Multiplicative, OnField
 
             blockGaussSeidel = Multiplicative([OnField("displacement", AMG()), OnField("nonlocal damage", AMG())])
-            tolerance = FixedTolerance(options.get("eta", 1e-8))
-            linearSolver = ComposedLinearSolver(LGMRES(DiagonalScaling(blockGaussSeidel), tolerance=tolerance))
+            linearSolver = LGMRES(DiagonalScaling(blockGaussSeidel), tolerance=FixedTolerance(1e-9))
             """
         )
     )
     A, b, fields = displacementDamageSystem(n=10, coupling="symmetric")
     for solver in (
-        loadSolverScript(str(script), options={"eta": 1e-9}),
-        getLinSolverByName("script:{:}:linearSolver".format(script), {"eta": 1e-9}),
-        getLinSolverByName("script:{:}".format(script), {"eta": 1e-9}),
+        ComposedLinearSolver(loadSolverScript(str(script))),
+        getLinSolverByName("custom", {"script": str(script), "verbosity": "silent"}),
     ):
         solver.setFieldStructure(fields)
         x = solver(A, b)
@@ -151,14 +147,18 @@ def test_a_solver_script_is_the_linear_solver_of_an_input_file(tmp_path):
 def test_a_script_must_bind_a_composed_solver(tmp_path):
     script = tmp_path / "solver.py"
     script.write_text("linearSolver = 42\n")
-    with pytest.raises(TypeError, match="not a solver"):
+    with pytest.raises(TypeError, match="not a composed solver"):
         loadSolverScript(str(script))
-    with pytest.raises(ValueError, match="defines no 'other'"):
-        loadSolverScript(str(script), "other")
+    script.write_text("solver = 42\n")
+    with pytest.raises(ValueError, match="defines no 'linearSolver'"):
+        loadSolverScript(str(script))
 
 
-def test_a_script_that_binds_a_bare_tree_is_refused_with_the_fix(tmp_path):
+def test_a_script_holds_only_the_math(tmp_path):
     script = tmp_path / "solver.py"
-    script.write_text("from edelweissfe.linsolve.composition import blockAMG\nlinearSolver = blockAMG()\n")
-    with pytest.raises(TypeError, match=r"linearSolver = ComposedLinearSolver\(<your tree>\)"):
+    script.write_text(
+        "from edelweissfe.linsolve.composition import ComposedLinearSolver, blockAMG\n"
+        "linearSolver = ComposedLinearSolver(blockAMG())\n"
+    )
+    with pytest.raises(TypeError, match="holds only the math"):
         loadSolverScript(str(script))

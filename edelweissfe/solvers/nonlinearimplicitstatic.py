@@ -29,7 +29,6 @@
 
 # @author: Matthias Neuner
 
-import json
 from dataclasses import dataclass
 from time import perf_counter
 
@@ -37,7 +36,7 @@ import numpy as np
 from scipy.sparse import csr_matrix
 
 import edelweissfe.utils.performancetiming as performancetiming
-from edelweissfe.config.linsolve import getDefaultLinSolver, getLinSolverByName
+from edelweissfe.config.linsolve import createLinearSolver
 from edelweissfe.constraints.base.constraintbase import ConstraintBase
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.numerics.csrgeneratorv2 import CSRGenerator
@@ -111,9 +110,13 @@ class NISTSchema:
         dtype=bool,
         default=False,
     )
-    linsolver: str | None = schemaField(description="The linear solver to be used.", dtype=str, default="pardiso")
-    linsolverConfigFile: str | None = schemaField(
-        description="A JSON configuration file for the linear solver.", dtype=str, default=""
+    linsolver: str | None = schemaField(
+        description=(
+            "The linear solver: the name of a *linearSolver block, or a type of linear solver with its defaults (e.g. "
+            "pardiso, superlu, blockamg)."
+        ),
+        dtype=str,
+        default="pardiso",
     )
     pruneCondensedMatrixZeros: bool | None = schemaField(
         description=(
@@ -236,7 +239,6 @@ class NIST(NonlinearSolverBase):
         "extrapolateAfterModelChange": True,
         "equilibrateAfterModelChange": False,
         "linsolver": "",
-        "linsolverConfigFile": "",
         "pruneCondensedMatrixZeros": None,
         "useThreadedMPCCondensation": False,
         "report-performance-frequency": 0,
@@ -268,6 +270,8 @@ class NIST(NonlinearSolverBase):
         # the datalines of the *solver keyword belong exclusively to this solver, so unknown entries
         # are user typos and must not be swallowed
         self._updateOptions(kwargs, journal, strict=True)
+        #: The *linearSolver blocks of the input file by name, which linsolver= may name (none without an input file).
+        self.linearSolverDefinitions = jobInfo.get("linearSolvers", {})
 
         #: The last accepted increment, from which the predictor extrapolates (None: no extrapolation).
         self.prevTimeStep = None
@@ -300,13 +304,7 @@ class NIST(NonlinearSolverBase):
         # so far: applyOptionsOverride pushes an override the moment such a block is constructed or
         # re-declared (edelweissfe.stepactions.options.StepAction), and an override sticks until
         # changed again -- there is nothing to reset or re-fetch here.
-        linsolverOptions = self.options["linsolverConfigFile"]
-        linsolverOptionDict = json.load(open(linsolverOptions, "r")) if linsolverOptions else ""
-        self.linSolver = (
-            getLinSolverByName(self.options["linsolver"], linsolverOptionDict)
-            if self.options["linsolver"]
-            else getDefaultLinSolver()
-        )
+        self.linSolver = createLinearSolver(self.options["linsolver"], self.linearSolverDefinitions)
         # Every registered linsolver inherits LinearSolver's setJournal() (a safe no-op-ish default for
         # solvers that do not log), so this is unconditional -- no isinstance check needed.
         self.linSolver.setJournal(self.journal)

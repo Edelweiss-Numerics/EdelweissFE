@@ -34,12 +34,18 @@ import numpy as np
 import pytest
 import scipy.sparse as sp
 
-from edelweissfe.config.linsolve import getDefaultLinSolver, getLinSolverByName
+from edelweissfe.config.linsolve import (
+    createLinearSolver,
+    getDefaultLinSolver,
+    getLinSolverByName,
+    linearSolverDefinitionsFromInputFile,
+)
 from edelweissfe.linsolve.composition import (
     ComposedLinearSolver,
     DirectSolver,
     SolveDumps,
 )
+from edelweissfe.utils.inputfileparser import parseInputFile
 
 
 def _system(n: int = 50, seed: int = 0):
@@ -106,6 +112,53 @@ def test_the_dumps_of_a_direct_solver(tmp_path, monkeypatch, dumps, dumped):
 def test_a_wrong_dump_trigger_is_refused():
     with pytest.raises(ValueError, match="dumps="):
         getLinSolverByName("superlu", {"dumps": "sometimes"})
+
+
+# ----- *linearSolver, name=..., type=... -----
+
+
+def _definitions(tmp_path, text: str):
+    deck = tmp_path / "test.inp"
+    deck.write_text(text)
+    return linearSolverDefinitionsFromInputFile(parseInputFile(str(deck)))
+
+
+def test_linsolver_names_a_block_or_a_type_with_its_defaults(tmp_path):
+    definitions = _definitions(
+        tmp_path,
+        "*linearSolver, name=dumping, type=superlu\nverbosity=silent\ndumps=every\ndumpDirectory={:}\n".format(
+            tmp_path / "dumps"
+        ),
+    )
+    named = createLinearSolver("Dumping", definitions)
+    assert named.verbosity == "silent" and named.dumps.trigger == "every"
+    assert isinstance(named.root, DirectSolver) and named.root.backend == "superlu"
+    byType = createLinearSolver("superlu", definitions)
+    assert byType.dumps is None and byType.verbosity == "warning"
+    assert createLinearSolver("superlu", definitions) is not byType  # a new solver per step
+    assert isinstance(createLinearSolver("", definitions), ComposedLinearSolver)
+
+
+def test_a_block_named_like_a_type_is_refused(tmp_path):
+    with pytest.raises(ValueError, match="must not be named like a type"):
+        _definitions(tmp_path, "*linearSolver, name=pardiso, type=superlu\n")
+
+
+def test_an_unknown_data_line_is_refused(tmp_path):
+    with pytest.raises(ValueError, match="name=fast, type=blockamg"):
+        _definitions(tmp_path, "*linearSolver, name=fast, type=blockamg\nouterTol=1e-8\n")
+
+
+def test_a_custom_block_needs_its_script(tmp_path):
+    with pytest.raises(ValueError, match="script"):
+        _definitions(tmp_path, "*linearSolver, name=mine, type=custom\nverbosity=info\n")
+
+
+def test_an_unknown_linsolver_names_the_blocks_and_the_types(tmp_path):
+    definitions = _definitions(tmp_path, "*linearSolver, name=fast, type=blockamg\nrigidBodyCoarseLevel=false\n")
+    assert definitions["fast"].configuration.rigidBodyCoarseLevel is False
+    with pytest.raises(ValueError, match="fast.*blockamg"):
+        createLinearSolver("fats", definitions)
 
 
 def test_several_right_hand_sides_are_solved_column_by_column():

@@ -37,6 +37,7 @@ A ``*job`` definition consists of multiple ``*steps``, associated with that job.
 from time import time as getCurrentTime
 
 from edelweissfe.config.configurator import loadConfiguration, updateConfiguration
+from edelweissfe.config.linsolve import linearSolverDefinitionsFromInputFile
 from edelweissfe.config.phenomena import carriesLinearMomentum, domainMapping
 from edelweissfe.config.solvers import getSolverByName
 from edelweissfe.helpers.inputfilehelpers import (
@@ -202,6 +203,8 @@ def finiteElementSimulation(
     for outputManager in outputManagers:
         outputManager.initializeJob()
 
+    # the *linearSolver blocks, which a *solver's linsolver= may name; checked here, created per step by each solver
+    jobInfo["linearSolvers"] = linearSolverDefinitionsFromInputFile(inputfile)
     solvers = createSolversFromInputFile(inputfile, jobInfo, journal)
 
     if not solvers:

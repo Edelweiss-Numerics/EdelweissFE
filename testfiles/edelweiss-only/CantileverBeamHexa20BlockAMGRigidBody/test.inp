@@ -3,7 +3,7 @@
 ** structure, whose slowly converging error rotates every aggregate of nodes almost as a rigid body. Exercises the
 ** option end-to-end through the Newton loop: the node coordinates read from the model, the coarse level of all
 ** rigid-body modes built for the displacement field, the outer Krylov solve. With it, every linear solve reaches
-** outerTol (some 20 outer iterations), and Newton converges in 2 iterations on this linear problem. Without it, every
+** its tolerance (some 20 outer iterations), and Newton converges in 2 iterations on this linear problem. Without it, every
 ** solve stops at the iteration cap of 100 with a relative residual of about 1e-2, and Newton needs 5: maxIter=3 makes
 ** the deck fail if the rigid-body coarse level is not in effect. The reference solution is that of a direct solver
 ** (pardiso). Requires the optional amgcl extension; skipped where it is not built.
@@ -11,9 +11,12 @@
 30000.0, 0.2
 
 *job, name=c3d20job, domain=3d
+*linearSolver, name=rigidBodySolver, type=blockamg
+tolerance=1e-8
+rigidBodyCoarseLevel=true
+
 *solver, solver=NIST, name=theSolver
-linsolver=blockamg
-linsolverConfigFile=blockamg.json
+linsolver=rigidBodySolver
 
 *modelGenerator, generator=boxGen, name=gen
 nX=40

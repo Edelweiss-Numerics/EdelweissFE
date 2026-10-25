@@ -1,6 +1,6 @@
 **=================================================================================================
 ** Winkler L-panel, variant 2 of 3: field-split block-AMG (blockamg) on exactly the problem of variant 1.
-** The only difference to WinklerL_pardiso.inp are the two linsolver lines below, so both variants give
+** The only difference to WinklerL_pardiso.inp is the linear solver below, so both variants give
 ** the same load-displacement curve -- compare their run times. blockamg preconditions an iterative
 ** (Krylov) solve with one algebraic multigrid hierarchy per field (displacement, nonlocal damage).
 ** Units, geometry, boundary conditions and material: model.inp. How to run: README.md.
@@ -8,10 +8,12 @@
 *include, input=model.inp
 
 *job, name=WinklerL_blockamg, domain=3d
+** blockamg with the log verbosity info; every other setting is the default -- see README.md
+*linearSolver, name=blockAMGSolver, type=blockamg
+verbosity=info
+
 *solver, solver=NISTParallel, name=theSolver
-linsolver=blockamg
-** blockamg log verbosity only; every other setting is the default -- see README.md
-linsolverConfigFile=blockamg.json
+linsolver=blockAMGSolver
 
 *fieldOutput
 ** reaction force (sum) and displacement (mean) of the load line, y component, as histories, exported to CSV

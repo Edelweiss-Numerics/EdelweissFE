@@ -71,6 +71,7 @@ _DISPATCH_CATEGORY_BY_KEYWORD = {
     "modelmodifier": ("modelmodifier", "type"),
     "modelgenerator": ("generator", "generator"),
     "step": ("step", "type"),
+    "linearsolver": ("linsolver", "type"),
 }
 
 

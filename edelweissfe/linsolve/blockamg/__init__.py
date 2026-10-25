@@ -94,14 +94,3 @@ def createSolver(opts) -> Callable:
             "longer have an effect; drop them from the configuration.".format(", ".join(deprecated)),
         )
     return solver
-
-
-class BlockAMGType:
-    """``blockamg`` as a type of linear solver (registry category ``linsolver``): :class:`BlockAMGSolver` with the
-    options of a ``linsolverConfigFile``, see :func:`createSolver`."""
-
-    schema = None
-
-    @classmethod
-    def fromOptions(cls, options: dict) -> Callable:
-        return createSolver(options)

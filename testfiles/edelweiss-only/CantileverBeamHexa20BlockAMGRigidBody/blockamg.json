@@ -1,6 +1,0 @@
-{
-  "outerTol": 1e-8,
-  "rigidBodyCoarseLevel": [
-    "displacement"
-  ]
-}

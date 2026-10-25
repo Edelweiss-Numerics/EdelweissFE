@@ -11,10 +11,12 @@
 *include, input=model.inp
 
 *job, name=WinklerL_blockamg_amr, domain=3d
+** blockamg with the log verbosity info; every other setting is the default -- see README.md
+*linearSolver, name=blockAMGSolver, type=blockamg
+verbosity=info
+
 *solver, solver=NISTParallel, name=theSolver
-linsolver=blockamg
-** blockamg log verbosity only; every other setting is the default -- see README.md
-linsolverConfigFile=blockamg.json
+linsolver=blockAMGSolver
 ** condense the hanging-node constraints with the threaded kernel (faster; off by default)
 useThreadedMPCCondensation=True
 

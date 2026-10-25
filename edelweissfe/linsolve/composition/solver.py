@@ -25,30 +25,34 @@
 #  The full text of the license can be found in the file LICENSE.md at
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
-"""A composed solver as the linear solver of a nonlinear solver: :class:`ComposedLinearSolver`, and the solver
-script of an input file (:func:`loadSolverScript`).
+"""The one adapter between a nonlinear solver and a composed solver: :class:`ComposedLinearSolver`, and the solver
+script of ``*linearSolver, type=custom`` (:func:`loadSolverScript`).
 
 The nonlinear solver calls its linear solver as ``x = solver(A, b)`` once per Newton iteration.
 :class:`ComposedLinearSolver` turns that call into the life cycle of a composed solver: it finds what changed since
 the last call (a new pattern, a resized system, a jump of the right-hand side that marks a new increment),
 hands the changed matrix down the tree (:meth:`~edelweissfe.linsolve.composition.base.Preconditioner.update`), and
 applies the root to :math:`b`. It is also what reports on the solves: the journal, the warnings, the dumps
-(:mod:`~edelweissfe.linsolve.composition.solvedumps`), and the hot reload of its script.
+(:mod:`~edelweissfe.linsolve.composition.solvedumps`), and the hot reload of a solver script. Every type of linear
+solver is a tree behind this adapter (:mod:`edelweissfe.linsolve.types`); a direct solver is a tree of one leaf.
 
-In an input file, a solver script is named as the linear solver::
+In an input file, a solver script is the ``custom`` type::
+
+    *linearSolver, name=mySolver, type=custom
+    script=solver.py
 
     *solver, solver=NIST, name=theSolver
-    linsolver=script:solver.py:linearSolver
+    linsolver=mySolver
 
-``solver.py`` builds the tree with plain constructors and binds the driver around it to ``linearSolver``::
+``solver.py`` builds the tree with plain constructors and binds it to the global ``linearSolver``; it holds only the
+math, the adapter's settings (verbosity, dumps, hot reload) are data lines of the block::
 
-    linearSolver = ComposedLinearSolver(LGMRES(DiagonalScaling(...)))
+    linearSolver = LGMRES(DiagonalScaling(...))
 """
 
 import hashlib
 import runpy
 import time
-from dataclasses import dataclass, field
 
 import numpy as np
 
@@ -104,21 +108,6 @@ def tileFieldBlocks(fieldStructure: "list | None", n: int, owner: str) -> list:
     return blocks
 
 
-@dataclass(frozen=True)
-class _Settings:
-    """What a solver script decides about a :class:`ComposedLinearSolver`: its tree and the settings of the driver
-    (see its parameters). A hot reload replaces all of them at once."""
-
-    root: Preconditioner
-    residualGrowthFactor: float
-    verbosity: str
-    warnOuterIterations: int
-    dumps: "SolveDumps | None"
-    hotReload: bool
-    nodeCoordinates: dict = field(default_factory=dict)
-    p1Maps: dict = field(default_factory=dict)
-
-
 class ComposedLinearSolver(LinearSolver):
     """A composed solver (the ``root`` of a tree of preconditioners, usually a Krylov solver) as a
     :class:`~edelweissfe.linsolve.base.LinearSolver`, callable as ``x = solver(A, b)``: the driver of the tree.
@@ -148,9 +137,6 @@ class ComposedLinearSolver(LinearSolver):
     dumps
         A :class:`~edelweissfe.linsolve.composition.solvedumps.SolveDumps`: write the systems of chosen solves to disk,
         for an offline replay. ``None`` (default): none.
-    hotReload
-        Re-read the solver script whenever it changed on disk, before a solve, and continue with the solver it builds:
-        tree and settings (see :meth:`_hotReload`). Only for a solver built by a script (:func:`loadSolverScript`).
     nodeCoordinates
         ``{fieldName: (nNodes, dimension) array}``, coordinates to use instead of the model's (an offline replay).
     p1Maps
@@ -170,7 +156,6 @@ class ComposedLinearSolver(LinearSolver):
         verbosity: str = "warning",
         warnOuterIterations: int = 100,
         dumps: SolveDumps = None,
-        hotReload: bool = False,
         nodeCoordinates: dict = None,
         p1Maps: dict = None,
     ):
@@ -187,26 +172,23 @@ class ComposedLinearSolver(LinearSolver):
             raise ValueError("ComposedLinearSolver: residualGrowthFactor must be greater than 1")
         if warnOuterIterations < 0:
             raise ValueError("ComposedLinearSolver: warnOuterIterations must not be negative")
-        self._apply(
-            _Settings(
-                root,
-                residualGrowthFactor,
-                verbosity,
-                warnOuterIterations,
-                dumps,
-                hotReload,
-                {name: np.asarray(coordinates, dtype=float) for name, coordinates in (nodeCoordinates or {}).items()},
-                dict(p1Maps or {}),
-            )
-        )
-        #: The solver script this solver was built by, its options, and the contents it was last built from (see
-        #: :func:`loadSolverScript`); ``None`` for a solver built in Python.
+        self.root = root
+        self.residualGrowthFactor = residualGrowthFactor
+        self.verbosity = verbosity
+        self.warnOuterIterations = warnOuterIterations
+        self.dumps = dumps
+        self._givenCoordinates = {
+            name: np.asarray(coordinates, dtype=float) for name, coordinates in (nodeCoordinates or {}).items()
+        }
+        self._givenP1Maps = dict(p1Maps or {})
+        #: The solver script the tree was built by (see :meth:`fromScript`), ``None`` for a tree built in Python.
         self.script = None
-        self._scriptName = None
-        self._scriptOptions = {}
+        #: Whether the tree is built again whenever the solver script changes on disk (see :meth:`_hotReload`).
+        self.hotReload = False
+        # the contents of the script the tree was last built from
         self._scriptStamp = None
-        # the settings a hot reload replaced, until the new tree has been set up (see _hotReload)
-        self._settingsBeforeReload = None
+        # the tree a hot reload replaced, until the new tree has been set up (see _hotReload)
+        self._rootBeforeReload = None
         self._reloaded = False
         self._coordinateCache = {}
         self._p1MapCache = {}
@@ -222,29 +204,27 @@ class ComposedLinearSolver(LinearSolver):
         self._instanceOrdinal = ComposedLinearSolver._instancesCreated
         ComposedLinearSolver._instancesCreated += 1
 
-    # ----- the settings -----
+    @classmethod
+    def fromScript(cls, script: str, hotReload: bool = False, **settings) -> "ComposedLinearSolver":
+        """The composed solver of a solver script (see :func:`loadSolverScript`) behind the adapter.
 
-    def _settings(self) -> _Settings:
-        return _Settings(
-            self.root,
-            self.residualGrowthFactor,
-            self.verbosity,
-            self.warnOuterIterations,
-            self.dumps,
-            self.hotReload,
-            self._givenCoordinates,
-            self._givenP1Maps,
-        )
-
-    def _apply(self, settings: _Settings) -> None:
-        self.root = settings.root
-        self.residualGrowthFactor = settings.residualGrowthFactor
-        self.verbosity = settings.verbosity
-        self.warnOuterIterations = settings.warnOuterIterations
-        self.dumps = settings.dumps
-        self.hotReload = settings.hotReload
-        self._givenCoordinates = settings.nodeCoordinates
-        self._givenP1Maps = settings.p1Maps
+        Parameters
+        ----------
+        script
+            The solver script.
+        hotReload
+            Build the tree again whenever the script changed on disk, before a solve, and continue with it (see
+            :meth:`_hotReload`).
+        **settings
+            The settings of the adapter, see :class:`ComposedLinearSolver`.
+        """
+        with open(script, "rb") as scriptFile:
+            stamp = scriptFile.read()
+        solver = cls(loadSolverScript(script), **settings)
+        solver.script = script
+        solver.hotReload = hotReload
+        solver._scriptStamp = stamp
+        return solver
 
     # ----- what the nonlinear solver hands over -----
 
@@ -371,12 +351,12 @@ class ComposedLinearSolver(LinearSolver):
             # a non-finite scaling, a singular matrix: the nonlinear solver cuts the increment back
             return self._notSolved(b.shape, str(error))
         except Exception as error:
-            if self._settingsBeforeReload is None:
+            if self._rootBeforeReload is None:
                 raise
             self._rollBackHotReload(error)
             change = self._changeFor(A, fields, residualNorm)
             self.root.update(A, change)
-        self._settingsBeforeReload = None
+        self._rootBeforeReload = None
         if self._fields is None or self._reloaded:
             # after the first set-up: a combination made per field shows its corrections only then
             self._log("info", "composed linear solver:\n" + str(self.root) + self._scriptLine())
@@ -493,23 +473,18 @@ class ComposedLinearSolver(LinearSolver):
         return "\nfrom {:} (sha256 {:})".format(self.script, _digest(self._scriptStamp))
 
     def _hotReload(self) -> None:
-        """Before a solve: if the solver script changed on disk, run it again and continue with the solver it builds
-        -- its tree and its settings, all of them; what the run has learnt stays (the solve count, the residual
-        history, the numbering of the dumps, so that a reload never overwrites earlier dumps). The new tree
-        is set up on this solve (rebuild reason ``"reload"``).
+        """Before a solve: if the solver script changed on disk, run it again and continue with the tree it builds;
+        what the run has learnt stays (the solve count, the residual history, the numbering of the dumps, so that a
+        reload never overwrites earlier dumps), and so do the settings of the adapter (data lines of the input file).
+        The new tree is set up on this solve (rebuild reason ``"reload"``).
 
         Editing a file a running process reads is racy, so this fails safely, and nothing about a bad edit can end
         the run: a script that cannot be read or does not compile (e.g. half written by an editor) is retried on the
-        next solve; one that runs into an error, or builds no :class:`ComposedLinearSolver`, is reported and the solver
-        in force is kept, until the script changes again; a new tree whose set-up fails is rolled back to the solver
-        in force (:meth:`_rollBackHotReload`). The contents themselves are the stamp, not the modification time,
-        which coarse file timestamps can leave unchanged across two quick edits.
+        next solve; one that runs into an error, or defines no composed solver, is reported and the tree in force is
+        kept, until the script changes again; a new tree whose set-up fails is rolled back to the tree in force
+        (:meth:`_rollBackHotReload`). The contents themselves are the stamp, not the modification time, which coarse
+        file timestamps can leave unchanged across two quick edits.
         """
-        if self.script is None:
-            raise ValueError(
-                "ComposedLinearSolver: hotReload re-reads the solver script, but this solver was not built by one "
-                "(see loadSolverScript)"
-            )
         try:
             with open(self.script, "rb") as scriptFile:
                 stamp = scriptFile.read()
@@ -530,42 +505,30 @@ class ComposedLinearSolver(LinearSolver):
         self._scriptStamp = stamp
         header = "hot reload of {:} (sha256 {:}) at solve #{:}".format(self.script, _digest(stamp), self._solveCount)
         try:
-            fresh = _runSolverScript(self.script, self._scriptName, self._scriptOptions)
+            tree = loadSolverScript(self.script)
         except Exception as error:
             self._log(
                 "warning",
                 "{:}: REJECTED, {:}: {:}; the solver in force is kept".format(header, type(error).__name__, error),
             )
             return
-        self._settingsBeforeReload = self._settings()
-        self._apply(fresh._settings())
+        self._rootBeforeReload = self.root
+        self.root = tree
         if self._model is not None:
             self.root.setModel(self._model, self._dofManager)
         self._reloaded = True
-        self._log(
-            "warning",
-            "{:}: the whole solver is replaced, its settings included (verbosity {:}, residualGrowthFactor {:g}, "
-            "warnOuterIterations {:}, dumps {:}, hotReload {:}); it is set up on this solve:\n{:}".format(
-                header,
-                self.verbosity,
-                self.residualGrowthFactor,
-                self.warnOuterIterations,
-                "none" if self.dumps is None else self.dumps.directory,
-                self.hotReload,
-                self.root,
-            ),
-        )
+        self._log("warning", "{:}: the tree is replaced; it is set up on this solve:\n{:}".format(header, self.root))
 
     def _rollBackHotReload(self, error: Exception) -> None:
-        """Back to the solver in force before the last hot reload, whose tree failed to set up (e.g. an AMGCL tree
-        naming an unknown smoother, which only the build can judge). The script stays recorded as seen, so it is not
-        run again until it changes."""
-        self._apply(self._settingsBeforeReload)
-        self._settingsBeforeReload = None
+        """Back to the tree in force before the last hot reload, whose tree failed to set up (e.g. an AMGCL tree naming
+        an unknown smoother, which only the build can judge). The script stays recorded as seen, so it is not run again
+        until it changes."""
+        self.root = self._rootBeforeReload
+        self._rootBeforeReload = None
         self._reloaded = False
         self._log(
             "warning",
-            "hot reload of {:} at solve #{:} ROLLED BACK, the new solver failed to set up: {:}: {:}; the solver in force "
+            "hot reload of {:} at solve #{:} ROLLED BACK, the new tree failed to set up: {:}: {:}; the tree in force "
             "before it is kept".format(self.script, self._solveCount, type(error).__name__, error),
         )
 
@@ -575,47 +538,31 @@ def _digest(contents: bytes) -> str:
     return hashlib.sha256(contents).hexdigest()[:12]
 
 
-def _runSolverScript(path: str, name: str, options: dict) -> ComposedLinearSolver:
-    """Run a solver script and return the solver it binds to ``name``."""
-    namespace = runpy.run_path(path, init_globals={"options": options})
-    if name not in namespace:
-        raise ValueError("solver script {:} defines no '{:}'".format(path, name))
-    solver = namespace[name]
-    if isinstance(solver, Preconditioner):
-        raise TypeError(
-            "solver script {:}: '{:}' is a tree of components ({:}), not the solver: bind the driver around it, "
-            "{:} = ComposedLinearSolver(<your tree>)".format(path, name, solver.describe().name, name)
-        )
-    if not isinstance(solver, ComposedLinearSolver):
-        raise TypeError(
-            "solver script {:}: '{:}' is a {:}, not a solver: bind {:} = ComposedLinearSolver(<your tree>)".format(
-                path, name, type(solver).__name__, name
-            )
-        )
-    return solver
+def loadSolverScript(path: str) -> Preconditioner:
+    """The composed solver a solver script defines: the tree of components it binds to its global ``linearSolver``.
 
-
-def loadSolverScript(path: str, name: str = "linearSolver", options=None) -> ComposedLinearSolver:
-    """The composed solver a solver script builds: the :class:`ComposedLinearSolver` it binds to ``name``.
-
-    The script runs with the global ``options`` set to the parsed ``linsolverConfigFile`` of the solver (empty if it
-    has none), so one script can serve several configurations.
+    The script holds only the math, e.g. ``linearSolver = LGMRES(DiagonalScaling(...))``; the settings of the adapter
+    (verbosity, dumps, hot reload) are data lines of its ``*linearSolver, type=custom`` block.
 
     Parameters
     ----------
     path
         The script.
-    name
-        The global of the script that holds the solver.
-    options
-        The parsed ``linsolverConfigFile``.
     """
-    options = dict(options or {})
-    with open(path, "rb") as scriptFile:
-        stamp = scriptFile.read()
-    solver = _runSolverScript(path, name, options)
-    solver.script = path
-    solver._scriptName = name
-    solver._scriptOptions = options
-    solver._scriptStamp = stamp
-    return solver
+    namespace = runpy.run_path(path)
+    if "linearSolver" not in namespace:
+        raise ValueError("solver script {:} defines no 'linearSolver'".format(path))
+    tree = namespace["linearSolver"]
+    if isinstance(tree, LinearSolver):
+        raise TypeError(
+            "solver script {:}: 'linearSolver' is a {:}, but a script holds only the math: bind the tree itself, "
+            "linearSolver = LGMRES(...); verbosity, dumps and hotReload are data lines of *linearSolver".format(
+                path, type(tree).__name__
+            )
+        )
+    if not isinstance(tree, Preconditioner):
+        raise TypeError(
+            "solver script {:}: 'linearSolver' is a {:}, not a composed solver: bind a tree of components, e.g. "
+            "linearSolver = LGMRES(AMG())".format(path, type(tree).__name__)
+        )
+    return tree

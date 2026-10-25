@@ -31,8 +31,91 @@ Created on Sat Feb 10 10:27:25 2018
 @author: Matthias Neuner
 """
 
+from dataclasses import dataclass
+
 from edelweissfe.config import registry
 from edelweissfe.linsolve.base import LinearSolver
+from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
+from edelweissfe.utils.misc import parseDatalinesToArgsAndKwargs
+from edelweissfe.utils.schema import buildSchemaFromOptions
+
+
+@dataclass(frozen=True)
+class LinearSolverDefinition:
+    """A ``*linearSolver`` block: its type and the configuration its data lines give (checked when the input file is
+    read). A nonlinear solver creates a fresh linear solver from it for every step (:meth:`create`).
+
+    Attributes
+    ----------
+    solverType
+        The type (a :class:`~edelweissfe.linsolve.types.LinearSolverType`).
+    configuration
+        The type's schema, built from the data lines.
+    """
+
+    solverType: type
+    configuration: object
+
+    def create(self) -> LinearSolver:
+        """A new linear solver of this definition."""
+        return self.solverType.create(self.configuration)
+
+
+def linearSolverDefinitionsFromInputFile(inputfile: dict) -> CaseInsensitiveDict:
+    """The ``*linearSolver`` blocks of an input file, by name.
+
+    Raises
+    ------
+    ValueError
+        For a block named like a type (``linsolver=<type>`` means that type with its defaults), a name used twice, a
+        data line that is not ``key=value``, or an option the type does not have.
+    """
+    definitions = CaseInsensitiveDict()
+    for block in inputfile["linearSolver"]:
+        name, typeName = block["name"], block["type"]
+        if name.casefold() in (known.casefold() for known in registry.availableNames("linsolver")):
+            raise ValueError(
+                "*linearSolver, name={:}: a linear solver must not be named like a type, since linsolver={:} means "
+                "that type with its defaults".format(name, name)
+            )
+        if name in definitions:
+            raise ValueError("*linearSolver, name={:} is defined twice".format(name))
+        args, options = parseDatalinesToArgsAndKwargs(block["datalines"])
+        if args:
+            raise ValueError("*linearSolver, name={:}: data lines are key=value options, got {:}".format(name, args))
+        solverType, schema = registry.lookup("linsolver", typeName)
+        try:
+            configuration = buildSchemaFromOptions(schema, options)
+        except ValueError as error:
+            raise ValueError("*linearSolver, name={:}, type={:}: {:}".format(name, typeName, error)) from error
+        definitions[name] = LinearSolverDefinition(solverType, configuration)
+    return definitions
+
+
+def createLinearSolver(linsolver: str, definitions: dict) -> LinearSolver:
+    """The linear solver a nonlinear solver's ``linsolver=`` names: a ``*linearSolver`` block, else a type with its
+    defaults, else (empty) the default linear solver.
+
+    Parameters
+    ----------
+    linsolver
+        The name of a block of ``definitions``, or of a type; ``""`` for the default.
+    definitions
+        The ``*linearSolver`` blocks by name (:func:`linearSolverDefinitionsFromInputFile`).
+    """
+    if not linsolver:
+        return getDefaultLinSolver()
+    if linsolver in definitions:
+        return definitions[linsolver].create()
+    if linsolver.casefold() not in (known.casefold() for known in registry.availableNames("linsolver")):
+        raise ValueError(
+            "linsolver={:} names neither a *linearSolver block ({:}) nor a type of linear solver ({:})".format(
+                linsolver,
+                ", ".join(definitions) or "none defined",
+                ", ".join(sorted(registry.availableNames("linsolver"))),
+            )
+        )
+    return getLinSolverByName(linsolver, {})
 
 
 def getDefaultLinSolver() -> LinearSolver:
@@ -57,11 +140,11 @@ def getLinSolverByName(linsolverName: str, options: dict) -> LinearSolver:
     Parameters
     ----------
     linsolverName
-        The type of the linear solver, case-insensitively (e.g. ``"pardiso"``, ``"blockamg"``; registry category
-        ``linsolver``, see :mod:`edelweissfe.linsolve.types`), or a solver script, ``script:<file>.py`` or
-        ``script:<file>.py:<name>`` (a composed solver, see :mod:`edelweissfe.linsolve.composition`).
+        The type of the linear solver, case-insensitively (e.g. ``"pardiso"``, ``"blockamg"``, ``"custom"``; registry
+        category ``linsolver``, see :mod:`edelweissfe.linsolve.types`).
     options
-        The data lines of that type by name, e.g. ``{"reuseSymbolicFactorization": True}``; ``{}`` for its defaults.
+        The data lines of that type by name, e.g. ``{"reuseSymbolicFactorization": True}`` or
+        ``{"script": "solver.py"}``; ``{}`` for its defaults.
 
     Returns
     -------
@@ -79,18 +162,5 @@ def getLinSolverByName(linsolverName: str, options: dict) -> LinearSolver:
         :func:`getDefaultLinSolver`, which relies on it).
     """
 
-    options = dict(options or {})
-    if linsolverName.startswith("script:"):
-        return _solverFromScript(linsolverName.removeprefix("script:"), options)
-
     solverType, _ = registry.lookup("linsolver", linsolverName)
-    return solverType.fromOptions(options)
-
-
-def _solverFromScript(reference: str, opts) -> LinearSolver:
-    """The composed solver of a solver script, named ``<file>.py`` (its global ``linearSolver``) or
-    ``<file>.py:<name>``; see :mod:`edelweissfe.linsolve.composition.solver`."""
-    from edelweissfe.linsolve.composition.solver import loadSolverScript
-
-    path, name = (reference, "linearSolver") if reference.endswith(".py") else reference.rsplit(":", 1)
-    return loadSolverScript(path, name, opts)
+    return solverType.fromOptions(dict(options))

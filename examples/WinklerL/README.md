@@ -41,7 +41,6 @@ initial OpenMP thread confines all of them to a single core.
 | `model.inp` | the shared model: units, geometry, material, sections, field outputs (included by every variant) |
 | `mesh.inp` | 20-node hexahedral mesh: GC3D20R concrete (displacement + nonlocal damage), C3D20R steel |
 | `mesh_hex8.inp`, `hex8_to_hex20.py` | the linear source mesh and the script that generated `mesh.inp` from it |
-| `blockamg.json` | blockamg's log verbosity; every other setting is the default (see below) |
 
 To regenerate the mesh: `python hex8_to_hex20.py mesh_hex8.inp mesh.inp`.
 
@@ -96,23 +95,21 @@ mesh = reader.read()
 
 ## The blockamg settings
 
-`blockamg.json` sets only `verbosity` to `info` (one log line per linear solve, with its outer iteration
-count): every other setting is blockamg's own default. The table lists the main settings with their
-defaults; `doc/source/documentation/blockamgtheory.rst` explains why the defaults are what they are.
+The `*linearSolver, type=blockamg` block sets only `verbosity=info` (one log line per linear solve, with its outer
+iteration count): every other setting is the default of the `blockAMG()` preset. The table lists its data lines with
+their defaults; `doc/source/documentation/composedlinsolvers.rst` shows the tree they build and
+`doc/source/documentation/blockamgtheory.rst` explains why the defaults are what they are.
 
-| Setting | Default | Meaning |
+| Data line | Default | Meaning |
 |---|---|---|
-| `outerTol` | adaptive | the outer tolerance: Eisenstat-Walker forcing between `etaMin` and `etaMax`, or a fixed number |
-| `etaMin`, `etaMax` | 1e-4, 1e-3 | bounds of the adaptive tolerance |
-| `outerRestart` x `outerMaxiter` | 100 x 1 | the outer-iteration cap of one solve; a solve that reaches it rebuilds the hierarchies |
-| `lgmresM`, `lgmresK` | 50, 3 | AMGCL LGMRES: Krylov steps per restart cycle and augmentation vectors |
+| `tolerance` | adaptive | a fixed relative tolerance; unset: Eisenstat-Walker forcing between 1e-4 and 1e-3 |
+| `maxIterations` | 100 | the outer-iteration cap of one solve; a solve that reaches it rebuilds the preconditioner |
 | `krylovOnScaledSystem` | false | the outer solve runs on `A` itself, preconditioned by `D M^-1 D`, so its residual is the true one |
 | `sweeps`, `symmetric` | 1, false | one forward block Gauss-Seidel sweep over the fields per preconditioner application |
-| `fieldPreconds` | by field dimension | displacement (3D): smoothed aggregation from the translations of the equilibrated block, on node-wise 3x3 blocks stored in float, Chebyshev degree 16; nonlocal damage (scalar): smoothed aggregation, Chebyshev |
-| `hierarchyStalenessFactor` | 3 | rebuild the hierarchies when a solve needs 3 times (and 15 more than) the outer iterations of the solve they were built for |
-| `refreshOnNewIncrement` | true | rebuild the hierarchies when a residual jump marks a new increment (`residualGrowthFactor` 4) |
+| `rigidBodyCoarseLevel` | true | displacement (3D): a two-grid cycle on its rigid-body modes; else (and for the scalar nonlocal damage) one smoothed-aggregation AMG hierarchy |
+| `dropTolerance`, `lumpDroppedEntries` | 0, false | build the field preconditioners on filtered blocks |
 | `verbosity` | **info** (default `warning`) | `silent`, `warning`, `info` or `debug` |
 
-The remaining keys -- p-two-grid (`p1*`), the scaled-system keys (`trueResidualMaxContinuations`,
-`gapCompensatedTolerance`, ...), the degradation dumps and the hot reload -- are off or have no effect
-with these defaults; the theory page lists them all.
+The rebuild policy (rebuild when a solve needs 3 times the outer iterations of the solve the preconditioner was built
+for, and on a new increment) and the AMGCL settings of each field are those of the preset; to change them, write the
+tree in a `type=custom` solver script.

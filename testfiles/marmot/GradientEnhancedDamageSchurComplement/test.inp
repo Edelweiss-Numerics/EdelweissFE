@@ -1,5 +1,5 @@
-** blockamg with Schur complement condensation of a softening zone, chosen by a fieldOutput marker (see
-** schurComplement.json): a strip of GCPE8UL elements (finite-strain gradient-enhanced damage, Marmot's
+** A composed linear solver with the Schur complement condensation of a softening zone, chosen by a fieldOutput
+** marker (see solver.py): a strip of GCPE8UL elements (finite-strain gradient-enhanced damage, Marmot's
 ** GradientEnhancedCompressibleNeoHookeDamage) with a weaker centre is pulled to 2 % nominal strain. Damage localizes
 ** in the centre; the elements whose kappa exceeds 0.03, with one ring of neighbours, are condensed as soon as the
 ** first converged increment has a kappa to compare. The reference solution was computed with PARDISO.
@@ -30,9 +30,11 @@ centre
 *section, name=outer, thickness=1.0, material=strong, type=plane
 outer
 
+*linearSolver, name=schurComplement, type=custom
+script=solver.py
+
 *solver, solver=NIST, name=theSolver
-linsolver=blockamg
-linsolverConfigFile=schurComplement.json
+linsolver=schurComplement
 
 *fieldOutput
 >>perElement, name=kappa, elSet=gen_all, result=kappa, quadraturePoint=0:4, f(x)='np.max(x,axis=1)'

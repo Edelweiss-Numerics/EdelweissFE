@@ -53,7 +53,6 @@ from edelweissfe.linsolve.composition import (  # noqa: E402
     SystemMatrix,
     TwoGrid,
     blockAMG,
-    loadSolverScript,
 )
 
 
@@ -179,7 +178,7 @@ def test_node_wise_fine_blocks_of_the_p1_interpolation_need_a_3d_field():
         TwoGrid(P1Interpolation(fineBlockSize=3)).setUp(SystemMatrix(A[:n, :n]), context)
 
 
-# ----- hotReloadConfigFile -> ComposedLinearSolver(hotReload=True): the solver script is run again -----
+# ----- type=custom, hotReload=true: the solver script is run again -----
 
 
 def _script(path, body: str) -> None:
@@ -194,35 +193,27 @@ def _script(path, body: str) -> None:
     )
 
 
-def _scriptSolver(tmp_path, eta: float, extra: str = ""):
+def _scriptSolver(tmp_path, eta: float, **settings):
     script = tmp_path / "solver.py"
-    _script(
-        script,
-        "linearSolver = ComposedLinearSolver(blockAMG(tolerance=FixedTolerance({:g})), hotReload=True{:})\n".format(
-            eta, extra
-        ),
-    )
+    _script(script, "linearSolver = blockAMG(tolerance=FixedTolerance({:g}))\n".format(eta))
     A, b, fields = displacementDamageSystem(n=8, coupling="symmetric")
-    solver = loadSolverScript(str(script))
+    solver = ComposedLinearSolver.fromScript(str(script), hotReload=True, **settings)
     solver.setFieldStructure(fields)
     journal = _Journal()
     solver.setJournal(journal)
     return solver, journal, script, A, b
 
 
-def test_a_changed_script_replaces_the_whole_solver_and_says_so(tmp_path):
+def test_a_changed_script_replaces_the_tree_and_says_so(tmp_path):
     solver, journal, script, A, b = _scriptSolver(tmp_path, 1e-6)
     solver(A, b)
     assert "hot reload" not in journal.take()
 
-    _script(
-        script,
-        'linearSolver = ComposedLinearSolver(blockAMG(tolerance=FixedTolerance(1e-9)), hotReload=True, verbosity="info")\n',
-    )
+    _script(script, "linearSolver = blockAMG(tolerance=FixedTolerance(1e-9))\n")
     x = solver(A, b)
     text = journal.take()
-    assert "hot reload of {:} (sha256 ".format(script) in text and "the whole solver is replaced" in text
-    assert solver.verbosity == "info" and solver.root.tolerance.eta == 1e-9
+    assert "hot reload of {:} (sha256 ".format(script) in text and "the tree is replaced" in text
+    assert solver.root.tolerance.eta == 1e-9
     assert solver.root.lastRebuildReason == "reload"
     assert np.linalg.norm(b - A @ x) <= 1e-9 * np.linalg.norm(b) * (1 + 1e-9)
     # unchanged since: no reload, the new preconditioner is reused
@@ -233,12 +224,12 @@ def test_a_changed_script_replaces_the_whole_solver_and_says_so(tmp_path):
 def test_a_script_that_does_not_compile_is_retried_on_the_next_solve(tmp_path):
     solver, journal, script, A, b = _scriptSolver(tmp_path, 1e-6)
     solver(A, b)
-    script.write_text("linearSolver = ComposedLinearSolver(blockAMG(\n")
+    script.write_text("linearSolver = blockAMG(\n")
     solver(A, b)
     assert "does not compile" in journal.take() and solver.root.tolerance.eta == 1e-6
     solver(A, b)
     assert "does not compile" in journal.take()
-    _script(script, "linearSolver = ComposedLinearSolver(blockAMG(tolerance=FixedTolerance(1e-7)), hotReload=True)\n")
+    _script(script, "linearSolver = blockAMG(tolerance=FixedTolerance(1e-7))\n")
     solver(A, b)
     assert solver.root.tolerance.eta == 1e-7
 
@@ -254,14 +245,11 @@ def test_a_script_that_fails_is_reported_once_and_the_solver_kept(tmp_path):
     assert "hot reload" not in journal.take()
 
 
-def test_a_new_solver_that_fails_to_set_up_is_rolled_back(tmp_path):
+def test_a_new_tree_that_fails_to_set_up_is_rolled_back(tmp_path):
     solver, journal, script, A, b = _scriptSolver(tmp_path, 1e-6)
     solver(A, b)
     standing = solver.root
-    _script(
-        script,
-        'linearSolver = ComposedLinearSolver(LGMRES(Multiplicative([OnField("no such field", AMG())])), hotReload=True)\n',
-    )
+    _script(script, 'linearSolver = LGMRES(Multiplicative([OnField("no such field", AMG())]))\n')
     x = solver(A, b)
     assert "ROLLED BACK" in journal.take()
     assert solver.root is standing and solver.root.lastRebuildReason is None
@@ -270,23 +258,10 @@ def test_a_new_solver_that_fails_to_set_up_is_rolled_back(tmp_path):
 
 def test_the_dump_numbering_continues_across_a_reload(tmp_path, monkeypatch):
     monkeypatch.setattr(SolveDumps, "dumpsWritten", 0)
-    dumps = 'dumps=SolveDumps(r"{:}", threshold=0)'.format(tmp_path / "dumps")
-    solver, journal, script, A, b = _scriptSolver(tmp_path, 1e-6, ", " + dumps)
+    solver, journal, script, A, b = _scriptSolver(tmp_path, 1e-6, dumps=SolveDumps(str(tmp_path / "dumps"), "every"))
     solver(A, b)
-    _script(
-        script,
-        "linearSolver = ComposedLinearSolver(blockAMG(tolerance=FixedTolerance(1e-7)), hotReload=True, {:})\n".format(
-            dumps
-        ),
-    )
+    _script(script, "linearSolver = blockAMG(tolerance=FixedTolerance(1e-7))\n")
     solver(A, b)
     files = sorted(path.name for path in (tmp_path / "dumps").glob("A_*.npz"))
     stem = "{:02d}".format(solver._instanceOrdinal)
     assert files == ["A_{:}_00001.npz".format(stem), "A_{:}_00002.npz".format(stem)]
-
-
-def test_hot_reload_needs_a_solver_script():
-    A, b, fields = displacementDamageSystem(n=6, coupling="symmetric")
-    solver, _ = _driven(blockAMG(), fields, hotReload=True)
-    with pytest.raises(ValueError, match="not built by one"):
-        solver(A, b)
