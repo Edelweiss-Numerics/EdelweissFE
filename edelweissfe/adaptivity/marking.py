@@ -152,11 +152,17 @@ class RefineableElements:
         self._elementsAtNode = None
 
 
+#: The :meth:`~MarkerBase.selectionStamp` of a marker whose selection changes only with the model: its sets and
+#: surfaces, which a new model replaces. (``None``, by contrast, is the stamp of a marker that cannot tell.)
+STABLE_FOR_THE_MODEL = ()
+
+
 class MarkerBase(OptionSchemaProvider):
     """Base class for markers.
 
     A marker selects elements: those to refine for adaptive mesh refinement, or those whose interior nodes
-    a Schur complement condenses (:mod:`~edelweissfe.linsolve.composition.schurcomplement`). It is resolved by ``type`` through the L3 registry
+    a Schur complement condenses (:mod:`~edelweissfe.linsolve.composition.schurcomplement`). It is resolved by
+    ``type`` through the L3 registry
     (category ``marker``; see :mod:`edelweissfe.config.markerlibrary`) and constructed from its
     ``>>marker`` block options via :meth:`fromOptions`, so *any* adaptivity mechanism -- not only the
     HEX20 h-adaptivity model modifier -- can reuse the same marker library, and third-party packages
@@ -197,9 +203,10 @@ class MarkerBase(OptionSchemaProvider):
 
     def selectionStamp(self, model):
         """A value that changes whenever what :meth:`isReady` and :meth:`mark` read can change, other than the model
-        itself (its elements, sets and surfaces, which change only with a new model), or ``None`` if the marker
-        cannot tell. A caller may keep a selection while the stamp stays the same (the Schur complement of a
-        composed solver does); ``None``, the default, means: mark again.
+        itself (its elements, sets and surfaces, which change only with a new model): :data:`STABLE_FOR_THE_MODEL`
+        for a marker that reads nothing else, or ``None`` if the marker cannot tell. A caller may keep a selection
+        while the stamp stays the same (the Schur complement of a composed solver does); ``None``, the default,
+        means: mark again.
 
         Parameters
         ----------
@@ -395,7 +402,7 @@ class FieldOutputMarker(MarkerBase):
     def selectionStamp(self, model):
         # the fieldOutput's result, which changes when the fieldOutput is updated (after a converged increment)
         fieldOutput = _perElementFieldOutput(model, self.fieldOutputName)
-        return (id(fieldOutput), fieldOutput._version)
+        return (id(fieldOutput), fieldOutput.resultVersion)
 
     def mark(self, model, candidateElements, mesh):
         elements, values = _perElementFieldOutputResult(model, self.fieldOutputName)
@@ -421,30 +428,64 @@ class ElementSetMarkerSchema(MarkerOptionsBase):
     )
 
 
-class ElementSetMarker(MarkerBase):
-    schema = ElementSetMarkerSchema
+class ModelEntityMarker(MarkerBase):
+    """A marker of a named set or surface of the model, which changes only with the model: so its selection does,
+    and it can check up front that the model has the entity it names.
 
-    def __init__(self, elSetName, initialOnly=False):
+    Parameters
+    ----------
+    entityName
+        The name of the set or surface.
+    """
+
+    #: What the marker names, in messages: ``"element set"``, ``"node set"`` or ``"surface"``.
+    entityKind = None
+
+    def __init__(self, entityName, initialOnly=False):
         super().__init__(initialOnly)
-        self.elSetName = elSetName
+        self.entityName = entityName
+
+    def _entities(self, model):
+        """The model's entities of this kind, by name (e.g. ``model.elementSets``)."""
+        raise NotImplementedError()
+
+    def _markEntity(self, entity, candidateElements) -> set:
+        """The elements :meth:`mark` selects for the entity ``entity``."""
+        raise NotImplementedError()
+
+    def checkReferences(self, model):
+        if self.entityName not in self._entities(model):
+            raise KeyError(
+                f"marker references the {self.entityKind} {self.entityName!r}, which the model does not have"
+            )
+
+    def selectionStamp(self, model):
+        return STABLE_FOR_THE_MODEL
+
+    def mark(self, model, candidateElements, mesh):
+        entities = self._entities(model)
+        if self.entityName not in entities:
+            # adaptive refinement checks no references (checkReferences): a name the model lacks marks nothing
+            return set()
+        return self._markEntity(entities[self.entityName], candidateElements)
+
+
+class ElementSetMarker(ModelEntityMarker):
+    """Marks the elements of an element set."""
+
+    schema = ElementSetMarkerSchema
+    entityKind = "element set"
 
     @classmethod
     def fromOptions(cls, options):
         opts = buildSchemaFromOptions(cls.schema, options)
         return cls(opts.elSet, initialOnly=opts.initialOnly)
 
-    def checkReferences(self, model):
-        if self.elSetName not in model.elementSets:
-            raise KeyError(f"marker references the element set {self.elSetName!r}, which the model does not have")
+    def _entities(self, model):
+        return model.elementSets
 
-    def selectionStamp(self, model):
-        # an element set changes only with the model
-        return ()
-
-    def mark(self, model, candidateElements, mesh):
-        if self.elSetName not in model.elementSets:
-            return set()
-        return set(model.elementSets[self.elSetName])
+    def _markEntity(self, entity, candidateElements) -> set:
+        return set(entity)
 
 
 @dataclass(frozen=True)
@@ -459,30 +500,22 @@ class NodeSetMarkerSchema(MarkerOptionsBase):
     )
 
 
-class NodeSetMarker(MarkerBase):
-    schema = NodeSetMarkerSchema
+class NodeSetMarker(ModelEntityMarker):
+    """Marks the candidate elements that touch a node of a node set."""
 
-    def __init__(self, nSetName, initialOnly=False):
-        super().__init__(initialOnly)
-        self.nSetName = nSetName
+    schema = NodeSetMarkerSchema
+    entityKind = "node set"
 
     @classmethod
     def fromOptions(cls, options):
         opts = buildSchemaFromOptions(cls.schema, options)
         return cls(opts.nSet, initialOnly=opts.initialOnly)
 
-    def checkReferences(self, model):
-        if self.nSetName not in model.nodeSets:
-            raise KeyError(f"marker references the node set {self.nSetName!r}, which the model does not have")
+    def _entities(self, model):
+        return model.nodeSets
 
-    def selectionStamp(self, model):
-        # a node set changes only with the model
-        return ()
-
-    def mark(self, model, candidateElements, mesh):
-        if self.nSetName not in model.nodeSets:
-            return set()
-        ns_nodes = set(model.nodeSets[self.nSetName].nodes)
+    def _markEntity(self, entity, candidateElements) -> set:
+        ns_nodes = set(entity.nodes)
         marked = set()
         for el in candidateElements:
             if any(n in ns_nodes for n in el.nodes):
@@ -502,32 +535,24 @@ class SurfaceMarkerSchema(MarkerOptionsBase):
     )
 
 
-class SurfaceMarker(MarkerBase):
-    schema = SurfaceMarkerSchema
+class SurfaceMarker(ModelEntityMarker):
+    """Marks the elements of a surface."""
 
-    def __init__(self, surfaceName, initialOnly=False):
-        super().__init__(initialOnly)
-        self.surfaceName = surfaceName
+    schema = SurfaceMarkerSchema
+    entityKind = "surface"
 
     @classmethod
     def fromOptions(cls, options):
         opts = buildSchemaFromOptions(cls.schema, options)
         return cls(opts.surface, initialOnly=opts.initialOnly)
 
-    def checkReferences(self, model):
-        if self.surfaceName not in model.surfaces:
-            raise KeyError(f"marker references the surface {self.surfaceName!r}, which the model does not have")
+    def _entities(self, model):
+        return model.surfaces
 
-    def selectionStamp(self, model):
-        # a surface changes only with the model
-        return ()
-
-    def mark(self, model, candidateElements, mesh):
-        if self.surfaceName not in model.surfaces:
-            return set()
+    def _markEntity(self, entity, candidateElements) -> set:
         marked = set()
-        # model.surfaces[name] is a dict of faceID -> list of elements
-        for elements in model.surfaces[self.surfaceName].values():
+        # a surface is a dict of faceID -> list of elements
+        for elements in entity.values():
             for el in elements:
                 marked.add(el)
         return marked
