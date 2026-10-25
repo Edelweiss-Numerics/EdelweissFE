@@ -94,9 +94,9 @@ cdef extern from "amgcl-wrapper.hpp":
 
     OuterKrylovSolver* makeOuterKrylovSolver(const string& method, int n, const char* json_params) except +
 
-    # The two-grid cycle the p-two-grid and the rigid-body coarse level share: the cycle itself, the fine spectral
-    # radius, the timings and the report -- see TwoGridPreconditioner's own comment.
-    cdef cppclass TwoGridPreconditioner:
+    # The two-level cycle the p-two-grid and the rigid-body coarse level share: the cycle itself, the fine spectral
+    # radius, the timings and the report -- see TwoLevelPreconditioner's own comment.
+    cdef cppclass TwoLevelPreconditioner:
         void apply(int n, const double* r, double* x) except +
         double fineSpectralRadius()
         int fineSpectralRadiusSource()
@@ -110,7 +110,7 @@ cdef extern from "amgcl-wrapper.hpp":
 
     # The p-two-grid (P1) preconditioner of edelweissfe/linsolve/composition/ptwogrid.py, built and
     # applied entirely in C++ (OpenMP) -- see PTwoGridPreconditionerT's own comment.
-    cdef cppclass PTwoGridPreconditioner(TwoGridPreconditioner):
+    cdef cppclass PTwoGridPreconditioner(TwoLevelPreconditioner):
         PTwoGridPreconditioner(const char* json_params) except +
 
         @staticmethod
@@ -124,7 +124,7 @@ cdef extern from "amgcl-wrapper.hpp":
     # The rigid-body coarse level preconditioner of edelweissfe/linsolve/composition/rigidbodycoarselevel.py, built and
     # applied entirely in C++ (OpenMP) -- see RigidBodyCoarseLevelPreconditioner's own comment, and
     # amgcl-rigid-body-coarse-level.hpp for its steps.
-    cdef cppclass RigidBodyCoarseLevelPreconditioner(TwoGridPreconditioner):
+    cdef cppclass RigidBodyCoarseLevelPreconditioner(TwoLevelPreconditioner):
         void build(int n, const int* ptr, const int* col, const double* val,
                    const double* coordinates, int nNodes, const double* scaling,
                    double spectralRadius, const double* dominantVector, int dominantVectorSize) except +

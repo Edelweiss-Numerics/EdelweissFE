@@ -35,7 +35,7 @@ They are the vocabulary of Schwarz methods, and methods which look unrelated sha
 - block Gauss--Seidel over the fields is their multiplicative combination,
   ``Multiplicative([OnField("displacement", M_u), OnField("nonlocal damage", M_d)])``, and block Jacobi their additive
   one, ``Additive([...])``; a symmetric sweep visits the fields forward and back, see :func:`gaussSeidelOrder`;
-- a two-grid cycle is a multiplicative combination of a smoother, a coarse correction and the smoother again,
+- a two-level cycle is a multiplicative combination of a smoother, a coarse correction and the smoother again,
   ``Multiplicative([Jacobi(), CoarseCorrection(P, coarse), Jacobi()])``.
 
 This is also the fast way. A combination asks each correction which field it acts on (:attr:`~edelweissfe.linsolve.
@@ -366,10 +366,10 @@ class CoarseCorrection(Preconditioner):
     :math:`A_c = P^T A P`. With an exact coarse solve, :math:`P A_c^{-1} P^T A` is the :math:`A`-orthogonal projection
     onto the range of :math:`P`.
 
-    With smoothers around it, ``Multiplicative([smoother, CoarseCorrection(P, coarse), smoother])`` is a two-grid cycle
+    With smoothers around it, ``Multiplicative([smoother, CoarseCorrection(P, coarse), smoother])`` is a two-level cycle
     spelled out: any :math:`P`, any coarse solve, but in SciPy and about twice as costly per application as the C++
-    cycle :class:`~edelweissfe.linsolve.composition.twogrid.TwoGrid`, which is kept beside it on purpose (see the
-    "two-grid cycle: two ways" section of ``doc/source/documentation/composedlinsolvers.rst``).
+    cycle :class:`~edelweissfe.linsolve.composition.twolevel.TwoLevel`, which is kept beside it on purpose (see the
+    "two-level cycle: two ways" section of ``doc/source/documentation/composedlinsolvers.rst``).
 
     Parameters
     ----------

@@ -30,10 +30,10 @@
 A solver script next to the input file holds only the math::
 
     from edelweissfe.linsolve.composition import (
-        AMG, LGMRES, DiagonalScaling, Multiplicative, OnField, RigidBodyModes, TwoGrid,
+        AMG, LGMRES, DiagonalScaling, Multiplicative, OnField, RigidBodyModes, TwoLevel,
     )
 
-    displacement = OnField("displacement", TwoGrid(coarseSpace=RigidBodyModes()))
+    displacement = OnField("displacement", TwoLevel(coarseSpace=RigidBodyModes()))
     damage = OnField("nonlocal damage", AMG())
     blockGaussSeidel = Multiplicative([displacement, damage])
     linearSolver = LGMRES(DiagonalScaling(blockGaussSeidel))
@@ -88,10 +88,10 @@ from edelweissfe.linsolve.composition.solver import (
     loadSolverScript,
 )
 from edelweissfe.linsolve.composition.systemmatrix import SystemMatrix
-from edelweissfe.linsolve.composition.twogrid import (
+from edelweissfe.linsolve.composition.twolevel import (
     P1Interpolation,
     RigidBodyModes,
-    TwoGrid,
+    TwoLevel,
 )
 
 __all__ = [
@@ -122,7 +122,7 @@ __all__ = [
     "Statistics",
     "Step",
     "SystemMatrix",
-    "TwoGrid",
+    "TwoLevel",
     "blockAMG",
     "gaussSeidelOrder",
     "loadSolverScript",

@@ -23,13 +23,13 @@
 #  The full text of the license can be found in the file LICENSE.md at
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
-"""What the two-grid cycles of a vector field (:class:`~edelweissfe.linsolve.composition.twogrid.TwoGrid`) share: the p-two-grid (:mod:`~edelweissfe.linsolve.composition.ptwogrid`) and the rigid-body coarse level
+"""What the two-level cycles of a vector field (:class:`~edelweissfe.linsolve.composition.twolevel.TwoLevel`) share: the p-two-grid (:mod:`~edelweissfe.linsolve.composition.ptwogrid`) and the rigid-body coarse level
 (:mod:`~edelweissfe.linsolve.composition.rigidbodycoarselevel`).
 
-Both are one two-grid cycle -- fine Chebyshev sweeps on the field's equilibrated block, and the coarse-grid correction
+Both are one two-level cycle -- fine Chebyshev sweeps on the field's equilibrated block, and the coarse correction
 through an AMGCL hierarchy on the Galerkin coarse operator -- that differ in their coarse level alone, and both are built
-and applied in C++: the shared cycle is ``TwoGridPreconditioner`` in ``amgcl-wrapper.hpp``, wrapped as
-``_PyAMGCLTwoGrid`` in ``amgcl.pyx``. :class:`TwoGridPreconditioner` mirrors those bases here: it creates the C++ object,
+and applied in C++: the shared cycle is ``TwoLevelPreconditioner`` in ``amgcl-wrapper.hpp``, wrapped as
+``_PyAMGCLTwoLevel`` in ``amgcl.pyx``. :class:`TwoLevelPreconditioner` mirrors those bases here: it creates the C++ object,
 which validates every parameter, keeps the fine spectral radius a build may start from, and passes the cycle, the fine
 spectral radius a build ends with, the timings and the report through. A derived class chooses the parameters and builds
 its coarse level.
@@ -38,8 +38,8 @@ its coarse level.
 import numpy as np
 
 
-class TwoGridPreconditioner:
-    """A two-grid preconditioner of one vector field's equilibrated diagonal block, built once per hierarchy refresh and
+class TwoLevelPreconditioner:
+    """A two-level preconditioner of one vector field's equilibrated diagonal block, built once per hierarchy refresh and
     applied many times within the outer Krylov solve, with the ``build`` / ``applyPreconditioner`` life cycle of
     :class:`~edelweissfe.linsolve.amgcl.amgcl.PyAMGCLSolver`.
 
@@ -106,7 +106,7 @@ class TwoGridPreconditioner:
         return self._preconditioner.fineSpectralRadiusSource
 
     def applyPreconditioner(self, r: np.ndarray) -> np.ndarray:
-        """One two-grid cycle: fine Chebyshev sweeps and the coarse-grid correction on the free dofs; the Dirichlet rows
+        """One two-level cycle: fine Chebyshev sweeps and the coarse correction on the free dofs; the Dirichlet rows
         are solved exactly, ``x[i] = r[i] / A[i, i]``."""
         return self._preconditioner.applyPreconditioner(r)
 

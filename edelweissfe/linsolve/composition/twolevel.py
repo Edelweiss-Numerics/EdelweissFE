@@ -25,7 +25,7 @@
 #  The full text of the license can be found in the file LICENSE.md at
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
-"""A two-grid cycle with a coarse space of its own: :class:`TwoGrid`.
+"""A two-level cycle with a coarse space of its own: :class:`TwoLevel`.
 
 One cycle, for :math:`z \\approx A^{-1} r` with a prolongation :math:`P` from the coarse space:
 
@@ -41,12 +41,22 @@ with :math:`A_c^{-1}` approximated by an AMG hierarchy. The coarse space decides
   3D), where an AMG hierarchy on node-wise 3x3 blocks takes the translations alone;
 - :class:`P1Interpolation`: the linear (P1) interpolant of a quadratic field from its corner nodes.
 
+Why "two-level": the component is the fine level and one coarse correction, and its coarse problem is solved inexactly,
+by one V-cycle of an AMG hierarchy. The coarse space need not be a coarser mesh. With :class:`RigidBodyModes` it is
+spanned by aggregates of nodes, and the whole cycle is smoothed aggregation with all rigid-body modes on every level,
+the method Trilinos ML and MueLu use for elasticity (Vaněk, Mandel and Brezina, Computing 56, 1996). The first coarse
+level is built here, on the node-wise blocks of the fine level, with the modes scaled by the diagonal scaling and zero on
+the Dirichlet rows. The levels below are built by AMGCL, which takes the coefficients of the modes in the coarse space
+as its near null-space. ``prolongation="tentative"`` makes the first level plain aggregation. With
+:class:`P1Interpolation` the coarse level is a coarser grid, the corner nodes (p-multigrid), and its AMG hierarchy takes
+the rigid-body modes of the corner nodes as its near null-space.
+
 The cycle runs in C++ (:mod:`~edelweissfe.linsolve.composition.rigidbodycoarselevel`,
 :mod:`~edelweissfe.linsolve.composition.ptwogrid`). Its steps, written out in Python, are
 ``Multiplicative([smoother, CoarseCorrection(P, coarse), smoother])``
 (:mod:`~edelweissfe.linsolve.composition.combinators`). Both ways are kept on purpose: this one is fast (about half the
 cost per application), the spelled-out one shows the steps and takes any smoother or coarse space. Why, and what would
-end the exception: the "two-grid cycle: two ways" section of ``doc/source/documentation/composedlinsolvers.rst``.
+end the exception: the "two-level cycle: two ways" section of ``doc/source/documentation/composedlinsolvers.rst``.
 """
 
 import edelweissfe.utils.performancetiming as performancetiming
@@ -64,7 +74,7 @@ from edelweissfe.linsolve.composition.base import (
 
 
 class RigidBodyModes:
-    """The coarse space of all rigid-body modes per aggregate of nodes: ``TwoGrid(coarseSpace=RigidBodyModes())``.
+    """The coarse space of all rigid-body modes per aggregate of nodes: ``TwoLevel(coarseSpace=RigidBodyModes())``.
 
     Parameters
     ----------
@@ -102,12 +112,12 @@ class RigidBodyModes:
         null-space of its hierarchy itself, ``AMG()``), with a tree the coarse level can read."""
         if field.dimension not in (2, 3):
             raise ValueError(
-                "TwoGrid: the rigid-body modes need a 2D or 3D vector field, but the field '{:}' has {:} component(s) "
+                "TwoLevel: the rigid-body modes need a 2D or 3D vector field, but the field '{:}' has {:} component(s) "
                 "per node".format(field.name, field.dimension)
             )
         if context.coordinates(field.name) is None:
             raise ValueError(
-                "TwoGrid: the rigid-body modes of the field '{:}' need its node coordinates".format(field.name)
+                "TwoLevel: the rigid-body modes of the field '{:}' need its node coordinates".format(field.name)
             )
         from edelweissfe.linsolve.composition.rigidbodycoarselevel import (
             parameterRejection,
@@ -116,7 +126,7 @@ class RigidBodyModes:
         blockSize = tree.get("backendBlockSize", 1)
         if blockSize not in (2, 3):
             raise ValueError(
-                "TwoGrid: the field '{:}' is on the scalar backend (backendBlockSize {:}), which takes the rigid-body "
+                "TwoLevel: the field '{:}' is on the scalar backend (backendBlockSize {:}), which takes the rigid-body "
                 "modes as the near null-space of AMG() itself; the rigid-body coarse level is for the block backends, "
                 "backendBlockSize 2 or 3".format(field.name, blockSize)
             )
@@ -128,10 +138,10 @@ class RigidBodyModes:
             self.coarseHierarchyPrecision,
         )
         if reason is not None:
-            raise ValueError("TwoGrid on the field '{:}': {:}".format(field.name, reason))
+            raise ValueError("TwoLevel on the field '{:}': {:}".format(field.name, reason))
 
     def build(self, field, tree: dict, matrix, context: SetUpContext, fineSpectralRadius, fineDominantVector):
-        """The two-grid cycle on this coarse space for a field's matrix (SciPy CSR)."""
+        """The two-level cycle on this coarse space for a field's matrix (SciPy CSR)."""
         from edelweissfe.linsolve.composition.rigidbodycoarselevel import (
             RigidBodyCoarseLevelPreconditioner,
         )
@@ -155,12 +165,12 @@ class RigidBodyModes:
         return {"aggregates": cycle.nAggregates, "coarse dofs": cycle.nCoarse, "dropped modes": cycle.droppedModes}
 
     def describe(self) -> dict:
-        return {"coarse space": self.name, "prolongation": self.prolongation}
+        return {"coarse space": self.name, "prolongation": self.prolongation, "coarse solve": "AMG V-cycle"}
 
 
 class P1Interpolation:
     """The coarse space of the linear (P1) interpolant of a quadratic field from its corner nodes:
-    ``TwoGrid(coarseSpace=P1Interpolation())``. Needs the field's corner/midside topology.
+    ``TwoLevel(coarseSpace=P1Interpolation())``. Needs the field's corner/midside topology.
 
     Parameters
     ----------
@@ -190,15 +200,15 @@ class P1Interpolation:
         fine blocks need a 3D field."""
         if self.options.get("fineBlockSize", 1) == 3 and field.dimension != 3:
             raise ValueError(
-                "TwoGrid: fineBlockSize 3 needs a 3D field, but the field '{:}' has {:} component(s) per node".format(
+                "TwoLevel: fineBlockSize 3 needs a 3D field, but the field '{:}' has {:} component(s) per node".format(
                     field.name, field.dimension
                 )
             )
         if context.p1Map(field.name) is None:
-            raise ValueError("TwoGrid: the P1 interpolation of the field '{:}' needs its P1 map".format(field.name))
+            raise ValueError("TwoLevel: the P1 interpolation of the field '{:}' needs its P1 map".format(field.name))
 
     def build(self, field, tree: dict, matrix, context: SetUpContext, fineSpectralRadius, fineDominantVector):
-        """The two-grid cycle on this coarse space for a field's matrix (SciPy CSR)."""
+        """The two-level cycle on this coarse space for a field's matrix (SciPy CSR)."""
         from edelweissfe.linsolve.composition.ptwogrid import PTwoGridPreconditioner
 
         p1Map = context.p1Map(field.name)
@@ -215,11 +225,11 @@ class P1Interpolation:
         return {}
 
     def describe(self) -> dict:
-        return {"coarse space": self.name, **self.options}
+        return {"coarse space": self.name, "coarse solve": "AMG V-cycle", **self.options}
 
 
-class TwoGrid(Preconditioner):
-    """A two-grid cycle on a field's matrix with the coarse space ``coarseSpace``; see the module documentation.
+class TwoLevel(Preconditioner):
+    """A two-level cycle on a field's matrix with the coarse space ``coarseSpace``; see the module documentation.
 
     Reused while only the values of the matrix change, like :class:`~edelweissfe.linsolve.composition.amg.AMG`.
 
@@ -238,12 +248,12 @@ class TwoGrid(Preconditioner):
 
     def __init__(self, coarseSpace, tree: dict = None, dropTolerance: float = 0.0, lumpDroppedEntries: bool = False):
         if not dropTolerance >= 0.0:
-            raise ValueError("TwoGrid: dropTolerance must not be negative, got {!r}".format(dropTolerance))
+            raise ValueError("TwoLevel: dropTolerance must not be negative, got {!r}".format(dropTolerance))
         self.dropTolerance = dropTolerance
         self.lumpDroppedEntries = lumpDroppedEntries
         if not isinstance(coarseSpace, (RigidBodyModes, P1Interpolation)):
             raise TypeError(
-                "TwoGrid: coarseSpace must be RigidBodyModes() or P1Interpolation(), got {!r}".format(coarseSpace)
+                "TwoLevel: coarseSpace must be RigidBodyModes() or P1Interpolation(), got {!r}".format(coarseSpace)
             )
         self.coarseSpace = coarseSpace
         self.tree = tree
@@ -257,8 +267,8 @@ class TwoGrid(Preconditioner):
         super().setModel(model, dofManager)
 
     def setUp(self, A, context: SetUpContext) -> None:
-        field = context.onlyField("TwoGrid")
-        tree = checkedFieldTree("TwoGrid", self.tree, field)
+        field = context.onlyField("TwoLevel")
+        tree = checkedFieldTree("TwoLevel", self.tree, field)
         self.coarseSpace.check(field, tree, context)
         self._field = field
         fineSpectralRadius, fineDominantVector = (
@@ -289,13 +299,13 @@ class TwoGrid(Preconditioner):
     def describe(self) -> Description:
         name = self._field.name if self._field is not None else "A"
         return Description(
-            name="TwoGrid",
-            formula="TwoGrid(" + name + "; " + self.coarseSpace.name + ")⁻¹",
-            latex="\\mathrm{TG}(A_{\\text{" + name + "}})^{-1}",
+            name="TwoLevel",
+            formula="TwoLevel(" + name + "; " + self.coarseSpace.name + ")⁻¹",
+            latex="\\mathrm{TL}(A_{\\text{" + name + "}})^{-1}",
             parameters=self._parameters(),
             steps=(
                 Step("z = S(0, r)   (pre-smoothing)"),
-                Step("z += P A_c⁻¹ Pᵀ (r − A z),  A_c = Pᵀ A P"),
+                Step("z += P A_c⁻¹ Pᵀ (r − A z),  A_c = Pᵀ A P,  A_c⁻¹ ≈ one AMG V-cycle"),
                 Step("z = S(z, r)   (post-smoothing)"),
             ),
         )

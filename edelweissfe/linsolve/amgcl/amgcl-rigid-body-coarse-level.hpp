@@ -2,7 +2,7 @@
  * The rigid-body coarse level of a vector field on a block backend (EdelweissFE blockamg, key rigidBodyCoarseLevel):
  * the building blocks of a smoothed-aggregation coarse level whose coarse space is spanned by the rigid-body modes --
  * translations and rotations -- of every aggregate, under a fine level stored in node-wise B x B blocks.
- * RigidBodyCoarseLevelPreconditionerT (amgcl-wrapper.hpp) assembles them into a two-grid cycle.
+ * RigidBodyCoarseLevelPreconditionerT (amgcl-wrapper.hpp) assembles them into a two-level cycle.
  *
  * Why. The near null-space of linear elasticity -- the displacements of (almost) no strain energy -- are the rigid-body
  * modes: B translations and B (B - 1) / 2 rotations. A smoothed-aggregation coarse level represents a smooth error
@@ -453,7 +453,7 @@ std::shared_ptr< amgcl::backend::crs< CoarseBlock, ptrdiff_t, ptrdiff_t > > gale
 ///
 /// The coarse dof of a dropped mode has a zero column of P, hence a zero row and column in A_c. It gets the diagonal
 /// entry padding and nothing else, which keeps A_c regular (positive definite where A is) for the hierarchy below.
-/// For the two-grid cycle the padding is exact, whatever its value: P^T maps every residual to zero there, and the
+/// For the two-level cycle the padding is exact, whatever its value: P^T maps every residual to zero there, and the
 /// zero column of P never prolongates what the hierarchy below computes there. Within the hierarchy below the padded
 /// dof is not entirely inert: where an aggregate of the next level is rank-deficient (it holds dropped modes), AMGCL's
 /// QR completes the orthonormal basis of that aggregate with directions that may include padded dofs, which then take

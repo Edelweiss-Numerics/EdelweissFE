@@ -51,7 +51,7 @@ from edelweissfe.linsolve.composition import (  # noqa: E402
     SetUpContext,
     SolveDumps,
     SystemMatrix,
-    TwoGrid,
+    TwoLevel,
     blockAMG,
 )
 
@@ -156,8 +156,8 @@ def test_p1_interpolation_options_are_checked_at_construction():
     [
         (AMG(tree={"backendPrecision": "half"}), "backendPrecision must be"),
         (AMG(tree={"backendBlockSize": 2}), "does not match the field's dimension 3"),
-        (TwoGrid(RigidBodyModes(), tree={"backendBlockSize": 1}), "is on the scalar backend"),
-        (TwoGrid(P1Interpolation(fineBlockSize=3)), None),
+        (TwoLevel(RigidBodyModes(), tree={"backendBlockSize": 1}), "is on the scalar backend"),
+        (TwoLevel(P1Interpolation(fineBlockSize=3)), None),
     ],
 )
 def test_a_field_tree_that_cannot_be_built_fails_at_the_set_up(component, message):
@@ -175,7 +175,7 @@ def test_node_wise_fine_blocks_of_the_p1_interpolation_need_a_3d_field():
     n = A.shape[0] // 2 * 2
     context = SetUpContext(fields=(FieldBlock("displacement", 0, n, 2),))
     with pytest.raises(ValueError, match="fineBlockSize 3 needs a 3D field"):
-        TwoGrid(P1Interpolation(fineBlockSize=3)).setUp(SystemMatrix(A[:n, :n]), context)
+        TwoLevel(P1Interpolation(fineBlockSize=3)).setUp(SystemMatrix(A[:n, :n]), context)
 
 
 # ----- type=custom, hotReload=true: the solver script is run again -----

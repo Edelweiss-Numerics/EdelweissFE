@@ -30,6 +30,6 @@
 it needs the AMGCL headers at build time).
 
 Not a linear solver of its own: the composed solvers use it in their leaves and matrix operations
-(:class:`~edelweissfe.linsolve.composition.amg.AMG`, the two-grid cycles, the Krylov solvers, the threaded field split
+(:class:`~edelweissfe.linsolve.composition.amg.AMG`, the two-level cycles, the Krylov solvers, the threaded field split
 of :class:`~edelweissfe.linsolve.composition.systemmatrix.SystemMatrix`).
 """

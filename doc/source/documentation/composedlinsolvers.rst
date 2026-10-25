@@ -9,7 +9,7 @@ A composed linear solver is a **tree of small objects**, built with plain constr
 input file. Each object is one textbook component -- a Krylov solver, a diagonal scaling, a correction on one field, a
 multiplicative combination of corrections, an AMG hierarchy, a Schur complement -- and its ``__call__`` is the formula
 of the textbook. There is one way to build each method, and it is the fast one -- with one documented exception, the
-two-grid cycle (see :ref:`composed-two-grid-two-ways`).
+two-level cycle (see :ref:`composed-two-level-two-ways`).
 
 A solver script
 ---------------
@@ -18,11 +18,11 @@ A solver script
 
     # solver.py -- the linear solver of a displacement / nonlocal damage model
     from edelweissfe.linsolve.composition import (
-        AMG, LGMRES, DiagonalScaling, Multiplicative, OnField, RigidBodyModes, TwoGrid,
+        AMG, LGMRES, DiagonalScaling, Multiplicative, OnField, RigidBodyModes, TwoLevel,
     )
 
-    # the displacement field: a two-grid cycle on the rigid-body modes, AMG below the first coarse level
-    displacement = OnField("displacement", TwoGrid(coarseSpace=RigidBodyModes()))
+    # the displacement field: a two-level cycle on the rigid-body modes, AMG below the first coarse level
+    displacement = OnField("displacement", TwoLevel(coarseSpace=RigidBodyModes()))
     # the nonlocal damage field: one AMG hierarchy
     damage = OnField("nonlocal damage", AMG())
 
@@ -136,8 +136,8 @@ Components
     * - ``AMG(tree, rigidBodyNullspace, dropTolerance, lumpDroppedEntries)``
       - one AMGCL hierarchy on a field, one cycle per application; with ``dropTolerance`` built on the filtered block
         (:ref:`composed-drop-tolerance`)
-    * - ``TwoGrid(coarseSpace=RigidBodyModes() | P1Interpolation(), tree, dropTolerance, lumpDroppedEntries)``
-      - a two-grid cycle with a coarse space of its own: all rigid-body modes per aggregate, or the P1 interpolant
+    * - ``TwoLevel(coarseSpace=RigidBodyModes() | P1Interpolation(), tree, dropTolerance, lumpDroppedEntries)``
+      - a two-level cycle with a coarse space of its own: all rigid-body modes per aggregate, or the P1 interpolant
     * - ``SchurComplement(condense, preconditionS, solveA_bb, blockFactors)``
       - block LU: :math:`z_k = M_{\tilde S}^{-1}(r_k - A_{kb} A_{bb}^{-1} r_b)`,
         :math:`z_b = A_{bb}^{-1}(r_b - A_{bk} z_k)`
@@ -147,47 +147,47 @@ Components
         ``DirectSolver("pardiso", reuseSymbolicFactorization=...)`` alone
     * - ``CoarseCorrection(P, coarse)``, ``Jacobi(omega)``
       - :math:`P A_c^{-1} P^T` with :math:`A_c = P^T A P`, and :math:`\omega \operatorname{diag}(A)^{-1}`: the pieces
-        of a two-grid cycle spelled out, ``Multiplicative([Jacobi(), CoarseCorrection(P, coarse), Jacobi()])``
-        (slow, for learning and new coarse spaces; see :ref:`composed-two-grid-two-ways`)
+        of a two-level cycle spelled out, ``Multiplicative([Jacobi(), CoarseCorrection(P, coarse), Jacobi()])``
+        (slow, for learning and new coarse spaces; see :ref:`composed-two-level-two-ways`)
 
 The combinators show that methods which look unrelated share one structure. Block Gauss--Seidel over the fields *is*
-``Multiplicative([OnField("displacement", M_u), OnField("nonlocal damage", M_d)])``, and a two-grid cycle *is*
+``Multiplicative([OnField("displacement", M_u), OnField("nonlocal damage", M_d)])``, and a two-level cycle *is*
 ``Multiplicative([smoother, CoarseCorrection(P, coarse), smoother])``. They are also fast: a combination asks each
 correction which field it acts on, and forms the residual of a correction on field :math:`i` only on that field's
 rows, :math:`r_i - \sum_{j: z_j \neq 0} A_{ij} z_j`, from the field blocks of the matrix (formed once, in one
 threaded pass, for all corrections).
 
-.. _composed-two-grid-two-ways:
+.. _composed-two-level-two-ways:
 
-The two-grid cycle: two ways, on purpose
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+The two-level cycle: two ways, on purpose
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-A two-grid cycle can be written in two ways, and both are kept deliberately:
+A two-level cycle can be written in two ways, and both are kept deliberately:
 
 .. code-block:: python
 
-    TwoGrid(coarseSpace=RigidBodyModes())                                  # the fast way
+    TwoLevel(coarseSpace=RigidBodyModes())                                  # the fast way
     Multiplicative([Jacobi(), CoarseCorrection(P, AMG()), Jacobi()])       # the spelled-out way
 
-``TwoGrid`` is a leaf, like ``AMG``: pre-smoothing (Chebyshev), the coarse correction
+``TwoLevel`` is a leaf, like ``AMG``: pre-smoothing (Chebyshev), the coarse correction
 :math:`P A_c^{-1} P^T (r - A z)` with :math:`A_c = P^T A P`, and post-smoothing run as one cycle in C++. Use it for
 production runs; ``blockAMG()`` (``type=blockamg``) uses it for 3D displacement fields.
 
 The spelled-out way builds the same cycle from general components, each of which can be replaced -- another smoother,
-a coarse space of your own (any :math:`P`), a direct coarse solve. Use it to learn how a two-grid cycle works and to
+a coarse space of your own (any :math:`P`), a direct coarse solve. Use it to learn how a two-level cycle works and to
 try a new coarse space or smoother. It is correct, but slow: on a 631k-dof displacement block it costs about twice as
-much per application as ``TwoGrid`` (101 ms plus about 98 ms). The difference is where the work runs:
+much per application as ``TwoLevel`` (101 ms plus about 98 ms). The difference is where the work runs:
 
-* ``TwoGrid`` keeps one compact copy of the field block (single precision, 3x3 node blocks) for the smoother and its
+* ``TwoLevel`` keeps one compact copy of the field block (single precision, 3x3 node blocks) for the smoother and its
   residuals; the spelled-out components work on the general double-precision matrix and so read about twice the bytes
   per product;
-* ``TwoGrid`` forms :math:`P x`, :math:`P^T r` and :math:`P^T A P` threaded in C++; ``CoarseCorrection`` uses SciPy;
-* ``Multiplicative`` forms the residual :math:`r - A z` between its steps; ``TwoGrid`` takes it from the smoother.
+* ``TwoLevel`` forms :math:`P x`, :math:`P^T r` and :math:`P^T A P` threaded in C++; ``CoarseCorrection`` uses SciPy;
+* ``Multiplicative`` forms the residual :math:`r - A z` between its steps; ``TwoLevel`` takes it from the smoother.
 
-There is no native Chebyshev component yet, so the spelled-out way cannot reproduce ``TwoGrid`` exactly. The exception
+There is no native Chebyshev component yet, so the spelled-out way cannot reproduce ``TwoLevel`` exactly. The exception
 goes away once these three pieces exist natively: the compact field-block copy kept by the system matrix, a Chebyshev
 smoother component, and threaded products with :math:`P` in ``CoarseCorrection`` (with ``RigidBodyModes`` and
-``P1Interpolation`` building :math:`P`). Then ``TwoGrid`` is replaced by its spelled-out form.
+``P1Interpolation`` building :math:`P`). Then ``TwoLevel`` is replaced by its spelled-out form.
 
 Wrong compositions fail as early as possible: at construction when the tree alone shows it (a child that is not a
 component, an empty combination, LGMRES around a Krylov solve, a Schur complement with nothing to condense), at the
@@ -206,7 +206,7 @@ of that type (``*linearSolver, type=blockamg``), and in a script ``linearSolver 
 
     LGMRES(
         DiagonalScaling(
-            Multiplicative([OnField(f, M_f) for every field f])   # M_f: TwoGrid(RigidBodyModes()) for a
+            Multiplicative([OnField(f, M_f) for every field f])   # M_f: TwoLevel(RigidBodyModes()) for a
         )                                                         # 3D displacement field, else AMG()
     )
 
@@ -227,13 +227,13 @@ the description. For the ``blockAMG()`` preset on a displacement / nonlocal dama
     └─ DiagonalScaling(D=diag(1/√|aᵢᵢ|))
        └─ Multiplicative
           ├─ M1: OnField(field=displacement)
-          │  └─ TwoGrid(coarse space=rigid-body modes, prolongation=smoothed)
+          │  └─ TwoLevel(coarse space=rigid-body modes, prolongation=smoothed, coarse solve=AMG V-cycle)
           └─ M2: OnField(field=nonlocal damage)
              └─ AMG(tree=default)
 
 ``views.formula(solver)`` -- the composed approximate inverse (``latex=True`` for LaTeX)::
 
-    LGMRES(A, D · (Rᵀ AMG(nonlocal damage)⁻¹ R ∘ Rᵀ TwoGrid(displacement; rigid-body modes)⁻¹ R) · D)⁻¹
+    LGMRES(A, D · (Rᵀ AMG(nonlocal damage)⁻¹ R ∘ Rᵀ TwoLevel(displacement; rigid-body modes)⁻¹ R) · D)⁻¹
 
 ``views.runStatistics(solver)`` -- what each component recorded (inclusive times)::
 
@@ -241,7 +241,7 @@ the description. For the ``blockAMG()`` preset on a displacement / nonlocal dama
     └─ DiagonalScaling(...)   updated 2× 0.07s · applied 18× 0.04s
        └─ Multiplicative   set up 1× 0.06s · updated 1× 0.00s · applied 18× 0.04s
           ├─ M1: OnField(...)   set up 1× 0.06s · ... · applied 18× 0.03s
-          │  └─ TwoGrid(...)   set up 1× 0.06s · ... · applied 18× 0.03s · rows 9555 · aggregates 198 · coarse dofs 1188
+          │  └─ TwoLevel(...)   set up 1× 0.06s · ... · applied 18× 0.03s · rows 9555 · aggregates 198 · coarse dofs 1188
           └─ M2: OnField(...)   set up 1× 0.00s · ... · applied 18× 0.00s
              └─ AMG(...)   set up 1× 0.00s · ... · applied 18× 0.00s · rows 3185
 
@@ -294,7 +294,7 @@ continuations: a pass that misses :math:`\eta` has hit the iteration cap, which 
 A preconditioner on the filtered matrix
 ---------------------------------------
 
-``AMG(dropTolerance=τ)`` and ``TwoGrid(..., dropTolerance=τ)`` build on the filtered block :math:`\tilde A`: the
+``AMG(dropTolerance=τ)`` and ``TwoLevel(..., dropTolerance=τ)`` build on the filtered block :math:`\tilde A`: the
 off-diagonal entries with :math:`\lvert a_{ij} \rvert < \tau \sqrt{\lvert a_{ii} a_{jj} \rvert}` dropped, the
 diagonal always kept. For operators with many entries per row that are numerically far sparser than structurally (e.g.
 RKPM), smoothed aggregation then weighs only the entries that matter, and the Galerkin products carry fewer of them to
@@ -386,17 +386,17 @@ Every key it had, and where it lives now: a data line of ``*linearSolver, type=b
     * - ``sweeps``, ``symmetric``
       - data lines ``sweeps``, ``symmetric``; ``Multiplicative(gaussSeidelOrder([OnField(...), ...], sweeps, symmetric))``
     * - ``fieldPreconds``
-      - ``OnField(name, AMG(tree))`` or ``OnField(name, TwoGrid(coarseSpace, tree))``; checked when the component meets
+      - ``OnField(name, AMG(tree))`` or ``OnField(name, TwoLevel(coarseSpace, tree))``; checked when the component meets
         its field
     * - ``useRigidBodyNullspace``
       - ``AMG(rigidBodyNullspace=...)``
     * - ``rigidBodyCoarseLevel`` (unset, ``false``, names)
       - data line ``rigidBodyCoarseLevel`` (``true`` for the 3D displacement field, ``false`` for none); other fields:
-        ``OnField(name, TwoGrid(coarseSpace=RigidBodyModes()))``
+        ``OnField(name, TwoLevel(coarseSpace=RigidBodyModes()))``
     * - ``rigidBodyCoarseLevel`` options ``prolongation``, ``coarseHierarchyPrecision``, ``fineSpectralRadiusReuse``
       - ``RigidBodyModes(prolongation, coarseHierarchyPrecision, fineSpectralRadiusReuse)``
     * - ``p1FieldNames``
-      - ``OnField(name, TwoGrid(coarseSpace=P1Interpolation(...)))``
+      - ``OnField(name, TwoLevel(coarseSpace=P1Interpolation(...)))``
     * - ``p1Nu``, ``p1NuPre``, ``p1NuPost``, ``p1FineDegree``, ``p1FineBlockSize``, ``p1FineValueType``,
         ``p1CoarseValueType``, ``p1CoarsePrecond``
       - ``P1Interpolation(nu, nuPre, nuPost, fineDegree, fineBlockSize, fineValueType, coarseValueType,
@@ -407,7 +407,7 @@ Every key it had, and where it lives now: a data line of ``*linearSolver, type=b
       - ``ComposedLinearSolver(..., p1Maps, nodeCoordinates)`` (Python)
     * - ``hierarchyDropTol``, ``hierarchyDropLumping``
       - data lines ``dropTolerance``, ``lumpDroppedEntries``; ``AMG(dropTolerance, lumpDroppedEntries)``,
-        ``TwoGrid(..., dropTolerance, lumpDroppedEntries)``
+        ``TwoLevel(..., dropTolerance, lumpDroppedEntries)``
     * - ``residualGrowthFactor``
       - data line ``residualGrowthFactor`` (every type)
     * - ``hierarchyStalenessFactor``, ``refreshOnNewIncrement``, ``reuseHierarchy``
@@ -474,7 +474,7 @@ Python API of the components
 .. automodule:: edelweissfe.linsolve.composition.amg
     :members:
 
-.. automodule:: edelweissfe.linsolve.composition.twogrid
+.. automodule:: edelweissfe.linsolve.composition.twolevel
     :members:
 
 .. automodule:: edelweissfe.linsolve.composition.schurcomplement
@@ -501,7 +501,7 @@ Python API of the components
 .. automodule:: edelweissfe.linsolve.composition.solvedumps
     :members:
 
-.. automodule:: edelweissfe.linsolve.composition.twogridcycle
+.. automodule:: edelweissfe.linsolve.composition.twolevelcycle
     :members:
 
 .. automodule:: edelweissfe.linsolve.composition.rigidbodycoarselevel

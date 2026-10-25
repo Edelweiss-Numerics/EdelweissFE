@@ -25,7 +25,7 @@
 #  The full text of the license can be found in the file LICENSE.md at
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
-"""The rigid-body coarse level (``TwoGrid(coarseSpace=RigidBodyModes())``, the default of the ``blockamg`` preset for
+"""The rigid-body coarse level (``TwoLevel(coarseSpace=RigidBodyModes())``, the default of the ``blockamg`` preset for
 3D displacement fields, :mod:`edelweissfe.linsolve.composition.rigidbodycoarselevel`): the defining properties of its
 construction -- the tentative prolongation reproduces the rigid-body modes, the coarse operator is the Galerkin product,
 Dirichlet rows stay out of the coarse space, linearly dependent modes are dropped -- its control (with the translations
@@ -276,7 +276,7 @@ def test_the_translations_alone_are_amgcls_own_first_coarse_level():
     # its translations D^-1 t, as in AMGCL's hierarchy on the block backend with blockTranslationNullspace -- the same
     # aggregates, the same tentative prolongation (per component, normalized), the same smoothing and the same
     # Galerkin product. With both coarse levels solved directly, the two preconditioners then differ only by the
-    # spectral-radius estimate of the fine Chebyshev smoother (AMGCL's from per-thread random vectors, the two-grid
+    # spectral-radius estimate of the fine Chebyshev smoother (AMGCL's from per-thread random vectors, the two-level
     # cycle's from a deterministic one), which enough power iterations make negligible. Without Dirichlet rows:
     # AMGCL's translations are not zero there, those of the rigid-body coarse level are.
     As, scaling, coordinates = _scaledGrid(12)

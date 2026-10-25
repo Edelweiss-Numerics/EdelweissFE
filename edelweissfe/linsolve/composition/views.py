@@ -79,7 +79,7 @@ def structure(component) -> str:
         └─ DiagonalScaling(D=diag(1/√|aᵢᵢ|))
            └─ Multiplicative
               ├─ M1: OnField(field=displacement)
-              │  └─ TwoGrid(coarse space=rigid-body modes, prolongation=smoothed)
+              │  └─ TwoLevel(coarse space=rigid-body modes, prolongation=smoothed, coarse solve=AMG V-cycle)
               └─ M2: OnField(field=nonlocal damage)
                  └─ AMG(tree=default)
     """
@@ -98,7 +98,7 @@ def _formula(component, latex: bool) -> str:
 
 def formula(component, latex: bool = False) -> str:
     """The composed approximate inverse, each child's formula put in the place of its role, e.g.
-    ``LGMRES(A, D · (Rᵀ AMG(nonlocal damage)⁻¹ R ∘ Rᵀ TwoGrid(displacement; rigid-body modes)⁻¹ R) · D)⁻¹``."""
+    ``LGMRES(A, D · (Rᵀ AMG(nonlocal damage)⁻¹ R ∘ Rᵀ TwoLevel(displacement; rigid-body modes)⁻¹ R) · D)⁻¹``."""
     return _formula(component, latex)
 
 

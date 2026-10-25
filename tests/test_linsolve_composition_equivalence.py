@@ -230,7 +230,7 @@ def _newtonLikeSequence(A, b, fields, seed: int = 7):
     return sequence
 
 
-# ----- AMG/TwoGrid(dropTolerance, lumpDroppedEntries) -----
+# ----- AMG/TwoLevel(dropTolerance, lumpDroppedEntries) -----
 
 
 def test_the_filtered_matrix_keeps_the_diagonal_symmetry_and_with_lumping_the_row_sums():

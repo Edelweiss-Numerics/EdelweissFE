@@ -152,7 +152,7 @@ the `edelweissfe` CLI and `run_tests_edelweissfe`):
 
 #### Linear Solvers (`edelweissfe/linsolve/`)
 Every linear solver is a composed solver (`edelweissfe/linsolve/composition/`, a tree of components such as `LGMRES`,
-`DiagonalScaling`, `Multiplicative`/`OnField`, `AMG`, `TwoGrid`, `SchurComplement`, `DirectSolver`) behind one adapter,
+`DiagonalScaling`, `Multiplicative`/`OnField`, `AMG`, `TwoLevel`, `SchurComplement`, `DirectSolver`) behind one adapter,
 `ComposedLinearSolver`. Input: `*linearSolver, name=..., type=...` with the type's options as data lines (types in
 `edelweissfe/linsolve/types.py`, registry category `linsolver`), named by a `*solver`'s `linsolver=` (or a type name
 for its defaults); Python: `getLinSolverByName(type, options)`.

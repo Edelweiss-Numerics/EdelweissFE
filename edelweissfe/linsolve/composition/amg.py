@@ -35,7 +35,7 @@ modes (see :mod:`~edelweissfe.linsolve.nullspace`).
 
 AMGCL stores a 3D displacement field's hierarchy in node-wise 3x3 blocks by default -- faster per cycle, but a
 block hierarchy takes the 3 translations as its near null-space at most. The rotations then need a coarse level
-of their own, see :class:`~edelweissfe.linsolve.composition.twogrid.TwoGrid`.
+of their own, see :class:`~edelweissfe.linsolve.composition.twolevel.TwoLevel`.
 """
 
 import copy
@@ -181,7 +181,7 @@ def droppedSmallEntries(A: sp.csr_matrix, dropTolerance: float, lumpDroppedEntri
     """The *filtered* matrix :math:`\\tilde A` of ``A`` that a preconditioner is built on: the off-diagonal entries
     with :math:`\\lvert a_{ij} \\rvert < \\tau \\sqrt{\\lvert a_{ii} a_{jj} \\rvert}` dropped,
     :math:`\\tau` = ``dropTolerance``. The diagonal is always kept, so no row is emptied. Shared by :class:`AMG` and
-    :class:`~edelweissfe.linsolve.composition.twogrid.TwoGrid`.
+    :class:`~edelweissfe.linsolve.composition.twolevel.TwoLevel`.
 
     Why: some operators (e.g. of RKPM) store many entries per row whose median off-diagonal is orders of magnitude
     below the diagonal -- numerically far sparser than structurally. Smoothed aggregation then weighs every one of
@@ -214,7 +214,7 @@ def droppedSmallEntries(A: sp.csr_matrix, dropTolerance: float, lumpDroppedEntri
 
 
 def preconditionerMatrix(A, dropTolerance: float, lumpDroppedEntries: bool, statistics) -> sp.csr_matrix:
-    """The matrix a one-field preconditioner (:class:`AMG`, :class:`~edelweissfe.linsolve.composition.twogrid.TwoGrid`)
+    """The matrix a one-field preconditioner (:class:`AMG`, :class:`~edelweissfe.linsolve.composition.twolevel.TwoLevel`)
     is built on: :math:`A` itself, or with ``dropTolerance > 0`` its filtered copy (:func:`droppedSmallEntries`),
     with the stored entries before and after recorded in the component's ``statistics``."""
     matrix = A.matrix()
@@ -230,7 +230,7 @@ def fieldTreeRejection(tree, dimension: "int | None" = None) -> "str | None":
     """Why a field tree (an AMGCL tree plus ``backendPrecision``, ``backendBlockSize``, ``blockTranslationNullspace``)
     cannot build a hierarchy, or ``None``: what the build would otherwise fail on later, or (for a key AMGCL does not
     know) only warn about on stderr. ``dimension``: the field's nodal dimension, ``None`` if not known yet. Shared by
-    :class:`AMG` and :class:`~edelweissfe.linsolve.composition.twogrid.TwoGrid`."""
+    :class:`AMG` and :class:`~edelweissfe.linsolve.composition.twolevel.TwoLevel`."""
     if not isinstance(tree, dict):
         return "must be an AMGCL preconditioner tree (a JSON object)"
     precision = tree.get("backendPrecision", "double")

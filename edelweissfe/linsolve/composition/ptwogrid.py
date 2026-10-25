@@ -24,7 +24,7 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 """p-multigrid (Galerkin P1 corner-node) preconditioner for one field's diagonal block: the cycle of
-``TwoGrid(coarseSpace=P1Interpolation())`` (:class:`~edelweissfe.linsolve.composition.twogrid.TwoGrid`).
+``TwoLevel(coarseSpace=P1Interpolation())`` (:class:`~edelweissfe.linsolve.composition.twolevel.TwoLevel`).
 
 Precondition the quadratic serendipity operator through a low-order P1 operator: :math:`\\nu`
 Chebyshev sweeps on the field's own (equilibrated) block, restrict the residual through :math:`P^T`,
@@ -74,7 +74,7 @@ block storage of the fine operator (``fineBlockSize``) on partially constrained 
 import numpy as np
 
 from edelweissfe.linsolve.base import FieldBlock
-from edelweissfe.linsolve.composition.twogridcycle import TwoGridPreconditioner
+from edelweissfe.linsolve.composition.twolevelcycle import TwoLevelPreconditioner
 from edelweissfe.linsolve.nullspace import rigidBodyNullspace, translationNullspace
 from edelweissfe.utils import performancetiming
 
@@ -114,9 +114,9 @@ _DEFAULT_FINE_POWER_ITERS = 300
 _DEFAULT_FINE_RECHECK_ITERS = 15
 
 
-class PTwoGridPreconditioner(TwoGridPreconditioner):
-    """A p-two-grid preconditioner for one vector field's diagonal block, a two-grid preconditioner
-    (:class:`~edelweissfe.linsolve.composition.twogridcycle.TwoGridPreconditioner`) whose coarse level is the P1 corner nodes.
+class PTwoGridPreconditioner(TwoLevelPreconditioner):
+    """A p-two-grid preconditioner for one vector field's diagonal block, a two-level preconditioner
+    (:class:`~edelweissfe.linsolve.composition.twolevelcycle.TwoLevelPreconditioner`) whose coarse level is the P1 corner nodes.
 
     Parameters
     ----------
@@ -154,7 +154,7 @@ class PTwoGridPreconditioner(TwoGridPreconditioner):
         A previous build's fine spectral radius and dominant vector to start from
         (``fineSpectralRadiusReuse`` of the coarse space), or ``None`` to estimate the radius in full by ``finePowerIters`` power
         iterations; the re-check takes ``fineRecheckIters`` and the margin ``fineHigher``, see
-        :class:`~edelweissfe.linsolve.composition.twogridcycle.TwoGridPreconditioner`.
+        :class:`~edelweissfe.linsolve.composition.twolevelcycle.TwoLevelPreconditioner`.
     fineValueType
         ``"double"`` (default) or ``"float"``: the value type the fine operator is stored in for the
         smoother and the residual -- fine smoothing dominates an outer iteration's cost, which is

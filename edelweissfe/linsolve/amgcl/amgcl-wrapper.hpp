@@ -1120,10 +1120,10 @@ inline OuterKrylovSolver* makeOuterKrylovSolver( const std::string& method, int 
   throw std::runtime_error( "makeOuterKrylovSolver(): unknown method '" + method + "' (lgmres, fgmres)" );
 }
 
-// --- two-grid preconditioners: the p-two-grid (P1) and the rigid-body coarse level -------------------------------
+// --- two-level preconditioners: the p-two-grid (P1) and the rigid-body coarse level -------------------------------
 //
-// Two preconditioners of one vector field's diagonal block share the two-grid cycle of TwoGridPreconditioner, in
-// C++ throughout: the p-multigrid two-grid cycle of edelweissfe/linsolve/composition/ptwogrid.py
+// Two preconditioners of one vector field's diagonal block share the two-level cycle of TwoLevelPreconditioner, in
+// C++ throughout: the p-multigrid two-level cycle of edelweissfe/linsolve/composition/ptwogrid.py
 // (PTwoGridPreconditionerT, its coarse level the P1 corner nodes) and the rigid-body coarse level of
 // edelweissfe/linsolve/composition/rigidbodycoarselevel.py (RigidBodyCoarseLevelPreconditionerT, its coarse level a
 // smoothed aggregation spanned by the rigid-body modes of the aggregates). The cycle: nu fine Chebyshev sweeps, the
@@ -1168,12 +1168,12 @@ inline OuterKrylovSolver* makeOuterKrylovSolver( const std::string& method, int 
 // of the thread count and reproducible run to run. (AMGCL's Chebyshev default, power_iters = 0, does no power
 // iteration at all: it bounds the radius by Gershgorin's theorem.)
 
-/// The fine smoother as the two-grid cycle sees it, independent of the operator's storage format
+/// The fine smoother as the two-level cycle sees it, independent of the operator's storage format
 /// (scalar entries or node-wise B x B blocks) and value type (double or float). Vectors are always plain
 /// double arrays of the field's scalar size.
-class TwoGridFineSmoother {
+class TwoLevelFineSmoother {
 public:
-  virtual ~TwoGridFineSmoother() {}
+  virtual ~TwoLevelFineSmoother() {}
 
   /// @brief One Chebyshev sweep (degree steps) on A x = b, continuing from x -- or, with xIsZero, from
   /// x = 0 without reading x at all (its content is then irrelevant).
@@ -1190,10 +1190,10 @@ public:
 /// builtin_float_matrices above. A float operator therefore differs from the double one only by the
 /// rounding of its stored entries.
 template < typename MatrixValueType >
-inline void twoGridFineResidual( const amgcl::backend::crs< MatrixValueType, int, int >& A,
-                                 const double*                                           b,
-                                 const double*                                           x,
-                                 double*                                                 r )
+inline void twoLevelFineResidual( const amgcl::backend::crs< MatrixValueType, int, int >& A,
+                                  const double*                                           b,
+                                  const double*                                           x,
+                                  double*                                                 r )
 {
   const size_t n      = A.nrows * amgcl::math::static_rows< MatrixValueType >::value;
   auto         bRange = amgcl::make_iterator_range( b, b + n );
@@ -1209,7 +1209,7 @@ inline void twoGridFineResidual( const amgcl::backend::crs< MatrixValueType, int
 /// the cycle. The spectral-radius estimate only ever runs on a double operator: a float level is made
 /// from a double one (makeFloatCopy()), which has estimated or re-checked the radius before.
 template < typename ValueType, typename MatrixValueType = ValueType >
-class TwoGridFineLevelT : public TwoGridFineSmoother {
+class TwoLevelFineLevelT : public TwoLevelFineSmoother {
 public:
   /// @brief The fine operator's storage: CSR with 32-bit indices and MatrixValueType entries.
   typedef amgcl::backend::crs< MatrixValueType, int, int > Matrix;
@@ -1240,10 +1240,10 @@ public:
   /// @brief The same level with the operator's entries rounded to float (same structure, same
   /// polynomial, same double inverse diagonal), in one parallel pass.
   template < typename FloatValueType >
-  std::unique_ptr< TwoGridFineLevelT< ValueType, FloatValueType > > makeFloatCopy() const
+  std::unique_ptr< TwoLevelFineLevelT< ValueType, FloatValueType > > makeFloatCopy() const
   {
-    std::unique_ptr< TwoGridFineLevelT< ValueType, FloatValueType > > level(
-      new TwoGridFineLevelT< ValueType, FloatValueType >() );
+    std::unique_ptr< TwoLevelFineLevelT< ValueType, FloatValueType > > level(
+      new TwoLevelFineLevelT< ValueType, FloatValueType >() );
     level->A_      = convertedCopy< FloatValueType >( *A_ );
     level->degree_ = degree_;
     level->d_      = d_;
@@ -1348,7 +1348,7 @@ public:
       const bool    fromZero = xIsZero && k == 0;
       const double* residual = fromZero ? b : r_.data();
       if ( !fromZero )
-        twoGridFineResidual( *A_, b, x, r_.data() );
+        twoLevelFineResidual( *A_, b, x, r_.data() );
       if ( k == 0 ) {
         alpha = 1.0 / d_;
         beta  = 0.0;
@@ -1389,36 +1389,36 @@ public:
   /// @brief res <- b - A x
   void residual( const double* b, const double* x, double* res ) const override
   {
-    twoGridFineResidual( *A_, b, x, res );
+    twoLevelFineResidual( *A_, b, x, res );
   }
 };
 
 /// @brief The fine level stored in float, made from the double one with its polynomial
-/// (TwoGridFineLevelT::makeFloatCopy()): scalar entries and 3x3 blocks, whose float products accumulate in double (the
+/// (TwoLevelFineLevelT::makeFloatCopy()): scalar entries and 3x3 blocks, whose float products accumulate in double (the
 /// usual promotion of a float scalar times a double, and the mixed block product defined with builtin_float_matrices).
-inline std::unique_ptr< TwoGridFineSmoother > floatStoredCopy( const TwoGridFineLevelT< double >& level )
+inline std::unique_ptr< TwoLevelFineSmoother > floatStoredCopy( const TwoLevelFineLevelT< double >& level )
 {
   return level.makeFloatCopy< float >();
 }
 
-/// @copydoc floatStoredCopy(const TwoGridFineLevelT<double>&)
-inline std::unique_ptr< TwoGridFineSmoother > floatStoredCopy(
-  const TwoGridFineLevelT< amgcl::static_matrix< double, 3, 3 > >& level )
+/// @copydoc floatStoredCopy(const TwoLevelFineLevelT<double>&)
+inline std::unique_ptr< TwoLevelFineSmoother > floatStoredCopy(
+  const TwoLevelFineLevelT< amgcl::static_matrix< double, 3, 3 > >& level )
 {
   return level.makeFloatCopy< amgcl::static_matrix< float, 3, 3 > >();
 }
 
 /// @brief 2x2 blocks are stored in double only (like the AMGCL backends: LinearSolverBlock2 has no float variant).
 /// @throws std::runtime_error always
-inline std::unique_ptr< TwoGridFineSmoother > floatStoredCopy(
-  const TwoGridFineLevelT< amgcl::static_matrix< double, 2, 2 > >& )
+inline std::unique_ptr< TwoLevelFineSmoother > floatStoredCopy(
+  const TwoLevelFineLevelT< amgcl::static_matrix< double, 2, 2 > >& )
 {
-  throw std::runtime_error( "two-grid cycle: 2x2 blocks are stored in double only" );
+  throw std::runtime_error( "two-level cycle: 2x2 blocks are stored in double only" );
 }
 
-/// The two-grid cycle of one vector field's equilibrated diagonal block A, shared by the p-two-grid
+/// The two-level cycle of one vector field's equilibrated diagonal block A, shared by the p-two-grid
 /// (PTwoGridPreconditionerT) and the rigid-body coarse level (RigidBodyCoarseLevelPreconditionerT), see the comment
-/// block above: Chebyshev smoothing on A and the coarse-grid correction
+/// block above: Chebyshev smoothing on A and the coarse correction
 ///
 ///   x <- x + P A_c^-1 P^T (r - A x),   A_c = P^T A P, the Galerkin coarse operator,
 ///
@@ -1426,7 +1426,7 @@ inline std::unique_ptr< TwoGridFineSmoother > floatStoredCopy(
 /// builds the prolongation P, A_c and the near null-space of A_c, and applies P and P^T (prolongateCorrection(),
 /// restrictResidual()); this class does everything else: the Dirichlet rows, the fine level and its spectral radius,
 /// the coarse hierarchy and the cycle (apply()).
-class TwoGridPreconditioner {
+class TwoLevelPreconditioner {
 public:
   typedef amgcl::backend::builtin< double >                    CoarseBackend;
   typedef amgcl::runtime::preconditioner< CoarseBackend >      CoarseSolver;
@@ -1435,14 +1435,14 @@ public:
   typedef amgcl::backend::crs< double, int, int >              ScalarMatrix;
   typedef std::chrono::steady_clock                            Clock;
 
-  virtual ~TwoGridPreconditioner() {}
+  virtual ~TwoLevelPreconditioner() {}
 
   /// @brief The parameter tree given to the constructor, where the derived class reads its parameters from.
   boost::property_tree::ptree prm;
 
   /// @brief The fine level, stored as fineValueType_ asks; a float one is made from the double one, which only lives
   /// during the build (for the spectral radius).
-  std::unique_ptr< TwoGridFineSmoother > fine_;
+  std::unique_ptr< TwoLevelFineSmoother > fine_;
   /// @brief Per DOF, whether its row is a Dirichlet row (dirichletRowMask()).
   std::vector< char > isDirichlet_;
   /// @brief The Dirichlet rows.
@@ -1475,7 +1475,7 @@ public:
   /// using a half-built preconditioner.
   bool built_ = false;
 
-  /// @brief The fine Chebyshev sweeps before and after the coarse-grid correction.
+  /// @brief The fine Chebyshev sweeps before and after the coarse correction.
   int nuPre_ = 1, nuPost_ = 1;
   /// @brief The fine Chebyshev degree.
   unsigned fineDegree_ = 5;
@@ -1501,7 +1501,7 @@ public:
 
   /// @brief The wall time [s] of every stage of the last build(), in order, read by Python for the performance report.
   std::vector< std::pair< std::string, double > > setupSeconds_;
-  /// @brief The cumulative wall time [s] of apply(): fine smoothing (with the residual), and coarse-grid correction
+  /// @brief The cumulative wall time [s] of apply(): fine smoothing (with the residual), and coarse correction
   /// (with the restriction and the prolongation).
   double applyFineSeconds_ = 0.0, applyCoarseSeconds_ = 0.0;
 
@@ -1531,7 +1531,7 @@ public:
     }
   }
 
-  /// @brief x <- M^-1 r: one two-grid cycle on the free DOFs -- nuPre fine sweeps, coarse-grid
+  /// @brief x <- M^-1 r: one two-level cycle on the free DOFs -- nuPre fine sweeps, coarse-grid
   /// correction, nuPost fine sweeps; Dirichlet DOFs are solved exactly, x_i = r_i / a_ii. The cycle's fine iterate
   /// is x itself: written from x = 0 without reading it (by the first pre-sweep, or, with no
   /// pre-sweeps, by the prolongated coarse correction itself), it stays zero on Dirichlet DOFs (zero
@@ -1642,7 +1642,7 @@ protected:
 
   /// @param jsonParameters the parameters, kept as prm for the derived class
   /// @param name the preconditioner's name in messages
-  TwoGridPreconditioner( const char* jsonParameters, const std::string& name )
+  TwoLevelPreconditioner( const char* jsonParameters, const std::string& name )
     : prm( parseJsonParameters( jsonParameters ) ), name_( name )
   {
   }
@@ -1803,12 +1803,12 @@ protected:
   /// @brief Set up the fine level on the operator A, of ValueType entries (double, or a double B x B block), with the
   /// spectral radius of build()'s `spectralRadius` (see chooseFineSpectralRadius()), stored in fineValueType_.
   template < typename ValueType >
-  void buildFineLevel( std::shared_ptr< typename TwoGridFineLevelT< ValueType >::Matrix > A,
-                       double                                                             suppliedRadius,
-                       const double*                                                      dominantVector,
-                       int                                                                dominantVectorSize )
+  void buildFineLevel( std::shared_ptr< typename TwoLevelFineLevelT< ValueType >::Matrix > A,
+                       double                                                              suppliedRadius,
+                       const double*                                                       dominantVector,
+                       int                                                                 dominantVectorSize )
   {
-    std::unique_ptr< TwoGridFineLevelT< ValueType > > level( new TwoGridFineLevelT< ValueType >() );
+    std::unique_ptr< TwoLevelFineLevelT< ValueType > > level( new TwoLevelFineLevelT< ValueType >() );
     level->setOperator( A );
     fineSpectralRadius_ = chooseFineSpectralRadius( *level, suppliedRadius, dominantVector, dominantVectorSize );
     if ( !( fineSpectralRadius_ > 0.0 ) || !std::isfinite( fineSpectralRadius_ ) ) {
@@ -1928,11 +1928,11 @@ private:
   }
 };
 
-/// @brief The p-two-grid preconditioner for one vector field's diagonal block: the two-grid cycle of
-/// TwoGridPreconditioner with the P1 corner nodes as its coarse level -- P the identity on the corners and the
+/// @brief The p-two-grid preconditioner for one vector field's diagonal block: the two-level cycle of
+/// TwoLevelPreconditioner with the P1 corner nodes as its coarse level -- P the identity on the corners and the
 /// average of the two edge-endpoint corners on every midside node. build() once per hierarchy refresh, apply() once
 /// per outer Krylov iteration.
-class PTwoGridPreconditionerT : public TwoGridPreconditioner {
+class PTwoGridPreconditionerT : public TwoLevelPreconditioner {
 public:
   typedef amgcl::static_matrix< double, 3, 3 > Block3;
 
@@ -1945,7 +1945,7 @@ public:
   /// finePowerIters, fineRecheckIters, fineRecheckTolerance, fineBlockSize, fineValueType, coarseValueType, and the
   /// coarse level's AMGCL preconditioner tree under "coarse". The parameters are validated here, so that a bad value
   /// fails before build() has spent anything on the prolongation, the Galerkin product or the coarse hierarchy.
-  PTwoGridPreconditionerT( const char* json_params ) : TwoGridPreconditioner( json_params, "ptwogrid" )
+  PTwoGridPreconditionerT( const char* json_params ) : TwoLevelPreconditioner( json_params, "ptwogrid" )
   {
     nuPre_                = prm.get( "nuPre", prm.get( "nu", 1 ) );
     nuPost_               = prm.get( "nuPost", prm.get( "nu", 1 ) );
@@ -1981,7 +1981,7 @@ public:
   /// order (corner order, then DOF), row-major; nullspaceCols == 0 for none.
   /// @param spectralRadius > 0: start from this fine spectral radius (typically a previous build's)
   /// instead of estimating it from scratch, re-checked with a dominantVector (n entries, the previous build's
-  /// fineDominantVector()), see TwoGridPreconditioner::chooseFineSpectralRadius().
+  /// fineDominantVector()), see TwoLevelPreconditioner::chooseFineSpectralRadius().
   void build( int                n,
               const int*         ptr,
               const int*         col,
@@ -2050,7 +2050,7 @@ public:
     // fine level, in node-wise 3x3 blocks or in scalar entries
     if ( fineBlockSize_ == 3 ) {
       start       = Clock::now();
-      auto Ablock = std::make_shared< TwoGridFineLevelT< Block3 >::Matrix >(
+      auto Ablock = std::make_shared< TwoLevelFineLevelT< Block3 >::Matrix >(
         amgcl::adapter::block_matrix< Block3 >( *Afine ) );
       Afine.reset();
       addSetupSeconds( "fine operator", secondsSince( start ) );
@@ -2176,8 +2176,8 @@ protected:
 };
 
 /// The rigid-body coarse level preconditioner of one vector field's equilibrated diagonal block (blockamg's key
-/// rigidBodyCoarseLevel, edelweissfe/linsolve/composition/rigidbodycoarselevel.py): the two-grid cycle
-/// of TwoGridPreconditioner whose coarse level is a smoothed aggregation spanned by the rigid-body modes of the
+/// rigidBodyCoarseLevel, edelweissfe/linsolve/composition/rigidbodycoarselevel.py): the two-level cycle
+/// of TwoLevelPreconditioner whose coarse level is a smoothed aggregation spanned by the rigid-body modes of the
 /// field's aggregates (amgcl-rigid-body-coarse-level.hpp), below which an AMGCL hierarchy continues the field's own.
 /// The interface Cython drives, whatever the number of components per node (RigidBodyCoarseLevelPreconditionerT).
 ///
@@ -2186,7 +2186,7 @@ protected:
 /// prolongation ("smoothed" or "tentative"), coarseHierarchyPrecision (double or float), and the field's AMGCL tree
 /// under "amgcl", which means what it means to AMGCL's own hierarchy (with AMGCL's defaults for what it leaves out):
 ///   * relax, npre, npost: the fine smoother, a Chebyshev polynomial (relax.type chebyshev, relax.scale false, at least
-///     one power iteration) with npre sweeps before and npost after the coarse-grid correction;
+///     one power iteration) with npre sweeps before and npost after the coarse correction;
 ///   * coarsening: smoothed aggregation, its aggr.eps_strong the strength threshold of the aggregates and its relax,
 ///     estimate_spectral_radius and power_iters the damping weight of the prolongation smoothing;
 ///   * the whole tree, too, for the AMGCL hierarchy below, with eps_strong halved as AMGCL halves it from one level to
@@ -2196,7 +2196,7 @@ protected:
 /// backend, the control for tests and measurements. It reuses this construction rather than AMGCL's
 /// translation_tentative_prolongation (amgcl-block-translations.hpp), so that the control differs from the rigid-body
 /// coarse level in the rotations alone; a test checks that it reproduces AMGCL's first coarse level to rounding.
-class RigidBodyCoarseLevelPreconditioner : public TwoGridPreconditioner {
+class RigidBodyCoarseLevelPreconditioner : public TwoLevelPreconditioner {
 public:
   /// @brief Build everything apply() needs.
   /// @param n, ptr, col, val the field's equilibrated diagonal block (scalar CSR, sorted columns, node-major with B
@@ -2204,7 +2204,7 @@ public:
   /// @param coordinates, nNodes the node coordinates, nNodes x B, row-major (nNodes B = n)
   /// @param scaling the field's equilibration, n entries: the block is D K D with D = diag(scaling)
   /// @param spectralRadius, dominantVector, dominantVectorSize a supplied fine spectral radius (> 0) and the dominant
-  /// vector to re-check it from, see TwoGridPreconditioner::chooseFineSpectralRadius()
+  /// vector to re-check it from, see TwoLevelPreconditioner::chooseFineSpectralRadius()
   virtual void build( int           n,
                       const int*    ptr,
                       const int*    col,
@@ -2322,7 +2322,7 @@ protected:
   /// @brief Parse and check the parameters (see the class comment), so that a bad value fails before build() has
   /// spent anything.
   RigidBodyCoarseLevelPreconditioner( const char* json_params )
-    : TwoGridPreconditioner( json_params, "rigidBodyCoarseLevel" )
+    : TwoLevelPreconditioner( json_params, "rigidBodyCoarseLevel" )
   {
     blockSize_ = prm.get( "backendBlockSize", 3 );
     if ( blockSize_ != 2 && blockSize_ != 3 ) {
@@ -2440,7 +2440,7 @@ public:
   typedef amgcl::static_matrix< double, M, B > RestrictionBlock;
   typedef amgcl::static_matrix< double, M, M > CoarseBlock;
   /// @brief The fine operator, as the fine level stores it in double.
-  typedef typename TwoGridFineLevelT< FineBlock >::Matrix FineMatrix;
+  typedef typename TwoLevelFineLevelT< FineBlock >::Matrix FineMatrix;
 
   /// @brief See RigidBodyCoarseLevelPreconditioner.
   RigidBodyCoarseLevelPreconditionerT( const char* json_params ) : RigidBodyCoarseLevelPreconditioner( json_params ) {}

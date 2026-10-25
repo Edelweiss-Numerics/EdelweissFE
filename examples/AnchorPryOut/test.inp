@@ -10,13 +10,13 @@
 **
 **  - the defaults of the blockamg preset: the block only sets the log verbosity. The defaults (outer
 **    solve by AMGCL's LGMRES on the unscaled system, block Gauss-Seidel over the fields of the diagonally
-**    scaled matrix, a two-grid cycle on the rigid-body modes for the displacement field, adaptive
+**    scaled matrix, a two-level cycle on the rigid-body modes for the displacement field, adaptive
 **    Eisenstat-Walker tolerance between 1e-4 and 1e-3, an outer-iteration cap of 100) are explained in
 **    doc/source/documentation/composedlinsolvers.rst and blockamgtheory.rst.
 **  - `useThreadedMPCCondensation=True` (`>>options` on the loading step below): computes the multi-
 **    point-constraint condensation this model's 5 ties require (`T^T K T + C`, every solve) with
 **    the OpenMP-threaded kernel instead of single-threaded SciPy CSR routines.
-**  - Deliberately *not* enabled: p-two-grid (`TwoGrid(P1Interpolation())`) -- measured at parity with
+**  - Deliberately *not* enabled: p-two-grid (`TwoLevel(P1Interpolation())`) -- measured at parity with
 **    the single-level hierarchy on this model (not a real margin), not worth the added complexity here.
 **
 ** An earlier version of this file set a fixed, tight tolerance of 1e-8 on the theory that it was just an

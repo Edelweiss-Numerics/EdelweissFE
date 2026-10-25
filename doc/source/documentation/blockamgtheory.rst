@@ -13,7 +13,7 @@ M_f), ...])))``. Each step of the method below is one component of that tree:
 :class:`~edelweissfe.linsolve.composition.diagonalscaling.DiagonalScaling` (the equilibration),
 :class:`~edelweissfe.linsolve.composition.combinators.Multiplicative` over
 :class:`~edelweissfe.linsolve.composition.combinators.OnField` corrections (the block Gauss--Seidel sweep),
-:class:`~edelweissfe.linsolve.composition.amg.AMG` and :class:`~edelweissfe.linsolve.composition.twogrid.TwoGrid`
+:class:`~edelweissfe.linsolve.composition.amg.AMG` and :class:`~edelweissfe.linsolve.composition.twolevel.TwoLevel`
 (the per-field hierarchies, the rigid-body coarse level in
 :mod:`~edelweissfe.linsolve.composition.rigidbodycoarselevel`, the p-multigrid variant in
 :mod:`~edelweissfe.linsolve.composition.ptwogrid`), :class:`~edelweissfe.linsolve.composition.krylov.LGMRES` (the outer
@@ -803,7 +803,7 @@ what you need. The table in :doc:`composedlinsolvers` maps every former key to i
 Default field trees
 ~~~~~~~~~~~~~~~~~~~
 
-``AMG(tree=...)`` and ``TwoGrid(..., tree=...)`` take a field's AMGCL parameter tree, plus ``backendPrecision``,
+``AMG(tree=...)`` and ``TwoLevel(..., tree=...)`` take a field's AMGCL parameter tree, plus ``backendPrecision``,
 ``backendBlockSize`` and ``blockTranslationNullspace``, which select how the hierarchy is built. A tree given replaces
 the default outright, so start from the one that applies
 and change only what is intended. The defaults are, by the field's nodal dimension
@@ -862,7 +862,7 @@ and change only what is intended. The defaults are, by the field's nodal dimensi
     }
 
 The 3D displacement field of the ``blockamg`` preset gets the rigid-body coarse level
-(``TwoGrid(coarseSpace=RigidBodyModes())``), configured by the same tree: its ``relax`` and ``npre``/``npost`` are the fine smoother of
+(``TwoLevel(coarseSpace=RigidBodyModes())``), configured by the same tree: its ``relax`` and ``npre``/``npost`` are the fine smoother of
 the rigid-body coarse level, its ``coarsening`` the aggregation of that level, and the whole tree the AMGCL hierarchy
 below it. The 2D tree differs
 from the 3D one only in ``backendPrecision``/``backendBlockSize``: this wrapper has no float 2x2 backend. A vector field of a dimension this solver has never been tuned for (anything but
@@ -939,7 +939,7 @@ p-multigrid (opt-in)
 --------------------
 
 For a field discretized entirely with quadratic serendipity elements, ``blockamg`` can replace that
-field's single-level hierarchy with a genuine two-grid V-cycle
+field's single-level hierarchy with a genuine two-level V-cycle
 (:class:`~edelweissfe.linsolve.composition.ptwogrid.PTwoGridPreconditioner`): :math:`\nu` Chebyshev
 sweeps on the field's own equilibrated block, restriction of the residual through
 :math:`P^\mathsf{T}`, one AMGCL cycle on the Galerkin-projected coarse operator :math:`A_1 =
@@ -1096,7 +1096,7 @@ per step:
    configure its next level: the strong-connection threshold halved, the :math:`M` dofs of an aggregate one point
    (``aggr.block_size``).
 
-One application is the two-grid cycle the p-two-grid uses too: restriction :math:`P^\mathsf{T} r`, one V-cycle of the
+One application is the two-level cycle the p-two-grid uses too: restriction :math:`P^\mathsf{T} r`, one V-cycle of the
 hierarchy below, prolongation, and the fine Chebyshev sweeps of the tree (``npre`` before, ``npost`` after the
 coarse-grid correction: 0 and 1, degree 16, in the default trees), with the Dirichlet rows decoupled exactly.
 :math:`P` and :math:`P^\mathsf{T}` are stored like the fine level (in float with the 3D default tree), every sum in
@@ -1230,10 +1230,10 @@ Configuration
 
 The ``blockamg`` preset gives the 3D displacement field the rigid-body coarse level; ``rigidBodyCoarseLevel=false``
 switches it off. Any other 2D or 3D vector field gets it in a ``custom`` solver script,
-``OnField(name, TwoGrid(coarseSpace=RigidBodyModes(...)))``. The field must be on a block backend
+``OnField(name, TwoLevel(coarseSpace=RigidBodyModes(...)))``. The field must be on a block backend
 (``backendBlockSize`` 2 or 3, as in the default trees), and its tree must smooth with a Chebyshev polynomial
 (``relax.type`` ``chebyshev``, without ``relax.scale``, ``relax.power_iters`` at least 1) and coarsen by smoothed
-aggregation, as the default trees do; ``TwoGrid`` checks this when it meets its field, and the parameters of
+aggregation, as the default trees do; ``TwoLevel`` checks this when it meets its field, and the parameters of
 ``RigidBodyModes`` at construction. The options of ``RigidBodyModes``:
 
 ``prolongation`` (``"smoothed"``)
@@ -1518,7 +1518,7 @@ Practical guidance
   power-iteration setting of the vector-field default makes that difference large.
 * Reach for the knobs in roughly this order: the tree of a field whose hierarchy is clearly the weak one (a
   ``custom`` script), then ``sweeps``/``symmetric`` for the sweep itself, then the tolerance.
-  ``TwoGrid(coarseSpace=P1Interpolation())`` is an alternative per-field preconditioner, see above.
+  ``TwoLevel(coarseSpace=P1Interpolation())`` is an alternative per-field preconditioner, see above.
 * The rigid-body coarse level is on for the 3D displacement field by default: give a 2D displacement field the
   coarse level in a ``custom`` script, and switch it off (``rigidBodyCoarseLevel=false``) on a model whose solves
   converge in a few outer iterations without it, see above.

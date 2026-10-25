@@ -55,7 +55,7 @@ from edelweissfe.linsolve.composition import (  # noqa: E402
     SchurComplement,
     SetUpContext,
     SystemMatrix,
-    TwoGrid,
+    TwoLevel,
     gaussSeidelOrder,
 )
 from edelweissfe.linsolve.composition.amg import (  # noqa: E402
@@ -203,15 +203,15 @@ def test_a_two_grid_cycle_spelled_out_by_combinators_beats_its_smoother_alone():
     def prolongation(A, context):
         return rigidBody.prolongationMatrix()
 
-    twoGrid = Multiplicative([Jacobi(), CoarseCorrection(prolongation, DirectSolver()), Jacobi()])
+    twoLevel = Multiplicative([Jacobi(), CoarseCorrection(prolongation, DirectSolver()), Jacobi()])
     iterations = {}
-    for name, smoother in (("jacobi", Jacobi()), ("two-grid", twoGrid)):
+    for name, smoother in (("jacobi", Jacobi()), ("two-level", twoLevel)):
         root = LGMRES(DiagonalScaling(smoother), tolerance=FixedTolerance(1e-8), maxIterations=2000)
         x, _ = _solved(K, b, root, fields)
         iterations[name] = root.lastIterations
-    # Jacobi alone does not even converge within the cap; the two-grid cycle converges
+    # Jacobi alone does not even converge within the cap; the two-level cycle converges
     assert _relative(K @ x, b) < 1e-7
-    assert iterations["two-grid"] < iterations["jacobi"] / 5
+    assert iterations["two-level"] < iterations["jacobi"] / 5
 
 
 def test_the_p1_two_grid_has_blockamgs_numbers():
@@ -226,7 +226,7 @@ def test_the_p1_two_grid_has_blockamgs_numbers():
     fields = [FieldBlock("displacement", 0, 3 * len(isCorner), 3)]
     p1Maps = {"displacement": (isCorner, edgeEndpoints)}
     root = LGMRES(
-        DiagonalScaling(TwoGrid(P1Interpolation())),
+        DiagonalScaling(TwoLevel(P1Interpolation())),
         tolerance=FixedTolerance(1e-8),
         maxIterations=300,
     )
@@ -417,7 +417,7 @@ def test_rigid_body_modes_need_a_vector_field_with_coordinates():
     block = SystemMatrix(A[damage.start : damage.stop, damage.start : damage.stop])
     context = _context([FieldBlock(damage.name, 0, damage.stop - damage.start, 1)])
     with pytest.raises(ValueError, match="2D or 3D vector field"):
-        TwoGrid(RigidBodyModes()).setUp(block, context)
+        TwoLevel(RigidBodyModes()).setUp(block, context)
     with pytest.raises(ValueError, match="prolongation"):
         RigidBodyModes(prolongation="smooth")
 

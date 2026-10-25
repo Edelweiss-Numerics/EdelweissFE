@@ -26,7 +26,7 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 """The rigid-body coarse level of a vector field: the cycle of
-``TwoGrid(coarseSpace=RigidBodyModes())`` (:class:`~edelweissfe.linsolve.composition.twogrid.TwoGrid`).
+``TwoLevel(coarseSpace=RigidBodyModes())`` (:class:`~edelweissfe.linsolve.composition.twolevel.TwoLevel`).
 
 Why
 ---
@@ -61,7 +61,7 @@ from all rigid-body modes:
    hierarchy continues the field's tree, with the coefficients of the rigid-body modes in the coarse basis as its near
    null-space.
 
-One application is the two-grid cycle the p-two-grid (:mod:`~edelweissfe.linsolve.composition.ptwogrid`) uses too:
+One application is the two-level cycle the p-two-grid (:mod:`~edelweissfe.linsolve.composition.ptwogrid`) uses too:
 restriction of the residual, one V-cycle of the AMGCL hierarchy, prolongation, and the fine Chebyshev sweeps. Everything
 runs in C++: the steps in ``amgcl-rigid-body-coarse-level.hpp``, the cycle in ``amgcl-wrapper.hpp``
 (``RigidBodyCoarseLevelPreconditionerT``).
@@ -72,7 +72,7 @@ When
 It is the default of the ``blockAMG()`` preset for the 3D displacement field (of any element type), and pays most where the solves would need many outer iterations although the operator is (nearly) elastic: typically a
 bending-dominated structure. The rigid-body modes are the near null-space of elasticity on the displacement field; a
 rotation field, or any other vector field, has another, so a solver script gives it the coarse level only by name
-(``OnField("displacement", TwoGrid(coarseSpace=RigidBodyModes()))``, e.g. for a 2D displacement field). It needs the
+(``OnField("displacement", TwoLevel(coarseSpace=RigidBodyModes()))``, e.g. for a 2D displacement field). It needs the
 field's node coordinates (read from the model), and the field's tree configures its smoother, its aggregation and the
 AMGCL hierarchy below it. Its setup costs more than AMGCL's hierarchy on the translations (the
 Galerkin product with 6 coarse dofs per aggregate, the larger hierarchy below), so on a model where that converges in a
@@ -81,7 +81,7 @@ few iterations it gains little. The block-AMG theory page has the measurements.
 
 import numpy as np
 
-from edelweissfe.linsolve.composition.twogridcycle import TwoGridPreconditioner
+from edelweissfe.linsolve.composition.twolevelcycle import TwoLevelPreconditioner
 
 
 def parameterRejection(
@@ -95,9 +95,9 @@ def parameterRejection(
     return None if reason is None else reason.removeprefix("rigidBodyCoarseLevel: ")
 
 
-class RigidBodyCoarseLevelPreconditioner(TwoGridPreconditioner):
-    """The preconditioner of one vector field with a rigid-body coarse level (see the module docstring): a two-grid
-    preconditioner (:class:`~edelweissfe.linsolve.composition.twogridcycle.TwoGridPreconditioner`) whose coarse level is spanned
+class RigidBodyCoarseLevelPreconditioner(TwoLevelPreconditioner):
+    """The preconditioner of one vector field with a rigid-body coarse level (see the module docstring): a two-level
+    preconditioner (:class:`~edelweissfe.linsolve.composition.twolevelcycle.TwoLevelPreconditioner`) whose coarse level is spanned
     by the rigid-body modes of the aggregates.
 
     Parameters
@@ -122,7 +122,7 @@ class RigidBodyCoarseLevelPreconditioner(TwoGridPreconditioner):
         The value type of the AMGCL hierarchy below the rigid-body coarse level: ``"double"`` (default) or ``"float"``.
     fineSpectralRadius, fineDominantVector
         A previous build's fine spectral radius and dominant vector to start from (``fineSpectralRadiusReuse``), or
-        ``None`` to estimate the radius in full, see :class:`~edelweissfe.linsolve.composition.twogridcycle.TwoGridPreconditioner`.
+        ``None`` to estimate the radius in full, see :class:`~edelweissfe.linsolve.composition.twolevelcycle.TwoLevelPreconditioner`.
     rotations
         ``False`` leaves the rotations out of the coarse space, which then is AMGCL's own on the block backend (the
         translations): the control for tests and measurements, not a configuration option. It is this construction

@@ -58,7 +58,7 @@ A type name in ``linsolver=`` means that type with its defaults, so a block must
     * - ``blockamg``
       - ✗
       - the preset ``blockAMG()``: LGMRES around a block Gauss--Seidel sweep over the fields, with one AMG hierarchy
-        (or two-grid cycle) per field
+        (or two-level cycle) per field
     * - ``custom``
       - —
       - a composed solver defined by you, in a Python script (see :doc:`composedlinsolvers`)
@@ -161,8 +161,8 @@ The hierarchy of a 3D displacement field on node-wise blocks has a coarse space 
 aggregate of nodes, not their rotations. In a bending-dominated structure -- a slender beam, a tunnel lining, a plate --
 the slowly converging error is bending, under which every aggregate rotates almost as a rigid body: neither that coarse
 space nor the smoother reduces it, and the outer solve needs many iterations. So by default ``blockamg`` gives the 3D
-displacement field a two-grid cycle whose coarse level is built from all rigid-body modes, translations and rotations
-(``TwoGrid(coarseSpace=RigidBodyModes())``). The testfile deck
+displacement field a two-level cycle whose coarse level is built from all rigid-body modes, translations and rotations
+(``TwoLevel(coarseSpace=RigidBodyModes())``). The testfile deck
 ``testfiles/edelweiss-only/CantileverBeamHexa20BlockAMGRigidBody``, a slender cantilever, shows the effect: each linear
 solve converges in some 20 outer iterations; with the coarse level switched off, every solve stops at the iteration
 cap. On an elastic tunnel segment of quadratic hexahedra, it cut the outer iterations of the displacement block from 67
@@ -177,7 +177,7 @@ setup (on an edge breakout model 22 against 20 iterations, at about the same cos
     rigidBodyCoarseLevel=false
 
 A 2D displacement field, or any other vector field, gets the coarse level in a ``custom`` solver script,
-``OnField("displacement", TwoGrid(coarseSpace=RigidBodyModes()))``.
+``OnField("displacement", TwoLevel(coarseSpace=RigidBodyModes()))``.
 
 Schur complement condensation (``custom``)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
