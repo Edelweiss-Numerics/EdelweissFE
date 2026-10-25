@@ -84,6 +84,8 @@ Galerkin product with 6 coarse dofs per aggregate, the larger hierarchy below), 
 few iterations it gains little. The theory page of ``blockamg`` has the measurements.
 """
 
+from dataclasses import dataclass, field
+
 import numpy as np
 
 from edelweissfe.linsolve.base import FieldBlock
@@ -97,6 +99,48 @@ DEFAULT_OPTIONS = {
     "coarseHierarchyPrecision": "double",
     "fineSpectralRadiusReuse": False,
 }
+
+
+@dataclass(frozen=True, repr=False)
+class RigidBodyCoarseLevelSetting:
+    """The setting ``rigidBodyCoarseLevel`` of ``blockamg``, one of three, each explicit (``blockamg`` decodes the
+    configuration into it, once):
+
+    * :meth:`default`: the 3D displacement field has the rigid-body coarse level, with the default options, if it has
+      blockamg's default tree;
+    * :meth:`off`: no field has it;
+    * :meth:`named`: exactly the fields named, each with its options, added to its tree, default or explicit.
+    """
+
+    #: Whether the 3D displacement field with the default tree has the coarse level without being named.
+    byDefault: bool = True
+    #: The fields named, by name, each with its complete options (:func:`options`); empty unless named.
+    namedFields: dict = field(default_factory=dict)
+
+    @classmethod
+    def default(cls) -> "RigidBodyCoarseLevelSetting":
+        """The default: the 3D displacement field with blockamg's default tree."""
+        return cls(True, {})
+
+    @classmethod
+    def off(cls) -> "RigidBodyCoarseLevelSetting":
+        """No field."""
+        return cls(False, {})
+
+    @classmethod
+    def named(cls, namedFields: dict) -> "RigidBodyCoarseLevelSetting":
+        """Exactly the fields named, each with its complete options."""
+        return cls(False, dict(namedFields))
+
+    def isNamed(self, fieldName: str) -> bool:
+        """Whether the field is named."""
+        return fieldName in self.namedFields
+
+    def __repr__(self) -> str:
+        """The setting as the configuration spells it (in the log of a hot reload)."""
+        if self.namedFields:
+            return repr(self.namedFields)
+        return "null (the default)" if self.byDefault else "false"
 
 
 def options(value) -> dict:

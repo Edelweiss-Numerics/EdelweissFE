@@ -70,6 +70,7 @@ from edelweissfe.linsolve.blockamg.blockamg import (  # noqa: E402
 from edelweissfe.linsolve.blockamg.rigidbodycoarselevel import (  # noqa: E402
     DEFAULT_OPTIONS,
     RigidBodyCoarseLevelPreconditioner,
+    RigidBodyCoarseLevelSetting,
 )
 from edelweissfe.linsolve.nullspace import (  # noqa: E402
     rigidBodyNullspace,
@@ -638,20 +639,22 @@ def test_the_default_leaves_a_field_on_the_p_two_grid_to_it(capsys):
 @pytest.mark.parametrize(
     "value, expected",
     [
-        (None, None),
-        (False, False),
-        ("displacement", {"displacement": DEFAULT_OPTIONS}),
-        (["displacement"], {"displacement": DEFAULT_OPTIONS}),
-        ({"displacement": True}, {"displacement": DEFAULT_OPTIONS}),
+        (None, RigidBodyCoarseLevelSetting.default()),
+        (False, RigidBodyCoarseLevelSetting.off()),
+        ("displacement", RigidBodyCoarseLevelSetting.named({"displacement": DEFAULT_OPTIONS})),
+        (["displacement"], RigidBodyCoarseLevelSetting.named({"displacement": DEFAULT_OPTIONS})),
+        ({"displacement": True}, RigidBodyCoarseLevelSetting.named({"displacement": DEFAULT_OPTIONS})),
         (
             {"displacement": {"prolongation": "tentative"}},
-            {"displacement": DEFAULT_OPTIONS | {"prolongation": "tentative"}},
+            RigidBodyCoarseLevelSetting.named({"displacement": DEFAULT_OPTIONS | {"prolongation": "tentative"}}),
         ),
     ],
     ids=["null, the default", "false, off", "a name", "a list", "true", "options"],
 )
 def test_the_fields_are_named_as_for_the_p_two_grid_or_mapped_to_their_options(value, expected):
-    assert createSolver({"rigidBodyCoarseLevel": value})._rigidBodyCoarseLevel == expected
+    setting = createSolver({"rigidBodyCoarseLevel": value})._rigidBodyCoarseLevel
+    assert setting == expected
+    assert setting.isNamed("displacement") is (value not in (None, False))
 
 
 def test_the_tentative_prolongation_and_a_float_hierarchy_below_are_options():

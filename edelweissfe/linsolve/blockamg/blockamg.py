@@ -311,20 +311,28 @@ def _fieldNamesFromConfig(value) -> list | None:
     raise ValueError("expected a field name or a list of field names, got {!r}".format(value))
 
 
-def _rigidBodyCoarseLevelFromConfig(value) -> "dict | bool | None":
-    """The setting ``rigidBodyCoarseLevel``, one of three:
+def _rigidBodyCoarseLevelFromConfig(value) -> rigidbodycoarselevel.RigidBodyCoarseLevelSetting:
+    """The setting ``rigidBodyCoarseLevel``
+    (:class:`~edelweissfe.linsolve.blockamg.rigidbodycoarselevel.RigidBodyCoarseLevelSetting`), one of three:
 
     * ``None`` (unset, or ``null``): the default -- the 3D displacement field has the rigid-body coarse level, with
       the default options, if it has blockamg's default tree (see :meth:`BlockAMGSolver._rigidBodyCoarseLevelOptions`);
     * ``False`` (``false``): no field has it, the one way to switch it off for all fields;
-    * a mapping of field name to its complete options: exactly the fields named -- a field name or a list of them (as
-      ``p1FieldNames``), each with the default options, or a JSON object of field names to ``true`` (the default
-      options) or an object of options. Any other vector field (a 2D one, a rotation field) has it only if named.
+    * the fields named, each with its complete options: a field name or a list of them (as ``p1FieldNames``), each with
+      the default options, or a JSON object of field names to ``true`` (the default options) or an object of options.
+      Any other vector field (a 2D one, a rotation field) has it only if named.
 
     Other spellings are refused, so that the off switch has one spelling: ``true`` (the default is unset) and a name list
-    or object that names no field."""
-    if value is None or value is False:
+    or object that names no field. A setting already decoded is returned as it is: like every cast of
+    :data:`CONFIG_CASTS`, this one is idempotent (the factory casts the configuration, and the constructor its
+    arguments)."""
+    Setting = rigidbodycoarselevel.RigidBodyCoarseLevelSetting
+    if isinstance(value, Setting):
         return value
+    if value is None:
+        return Setting.default()
+    if value is False:
+        return Setting.off()
     if value is True:
         raise ValueError(
             "true is not a value: the rigid-body coarse level is the default for the 3D displacement field (leave the "
@@ -333,20 +341,14 @@ def _rigidBodyCoarseLevelFromConfig(value) -> "dict | bool | None":
     if value in ([], {}, ""):
         raise ValueError("names no field: false switches the rigid-body coarse level off for all fields")
     if not isinstance(value, dict):
-        return {name: rigidbodycoarselevel.options(True) for name in _fieldNamesFromConfig(value)}
+        return Setting.named({name: rigidbodycoarselevel.options(True) for name in _fieldNamesFromConfig(value)})
     fields = {}
     for name, fieldOptions in value.items():
         reason = rigidbodycoarselevel.optionsRejection(fieldOptions)
         if reason is not None:
             raise ValueError("field '{:}': {:}".format(name, reason))
         fields[name] = rigidbodycoarselevel.options(fieldOptions)
-    return fields
-
-
-def _namedRigidBodyFields(setting) -> dict:
-    """The fields the setting ``rigidBodyCoarseLevel`` names, with their options: none for the default (``None``) and for
-    ``False``."""
-    return setting if isinstance(setting, dict) else {}
+    return Setting.named(fields)
 
 
 def _mappingFromConfig(value) -> dict | None:
@@ -1016,8 +1018,8 @@ class BlockAMGSolver(LinearSolver):
         # Per-field node coordinates, derived from self._model; dropped in setModel(). Those given as nodeCoordinates
         # are never dropped: they were not derived from any model.
         self._nodeCoordinateCache = {}
-        # the rigid-body coarse level: None the default (the 3D displacement field with the default tree), False none,
-        # or the fields named, with their options (see _rigidBodyCoarseLevelFromConfig)
+        # the rigid-body coarse level: the default (the 3D displacement field with the default tree), off, or the fields
+        # named, with their options (a RigidBodyCoarseLevelSetting, see _rigidBodyCoarseLevelFromConfig)
         self._rigidBodyCoarseLevel = _rigidBodyCoarseLevelFromConfig(rigidBodyCoarseLevel)
         self._givenNodeCoordinates = {
             fieldName: np.asarray(coordinates, dtype=float)
@@ -1637,7 +1639,7 @@ class BlockAMGSolver(LinearSolver):
                 )
         # the fields named in rigidBodyCoarseLevel are checked here, loudly; under the default, a field the coarse level
         # does not fit is skipped when it is built (_rigidBodyCoarseLevelOptions)
-        rigidBodyFields = _namedRigidBodyFields(settings["rigidBodyCoarseLevel"])
+        rigidBodyFields = settings["rigidBodyCoarseLevel"].namedFields
         both = sorted(set(rigidBodyFields) & (set(settings["p1FieldNames"]) | set(self._p1Maps)))
         if both:
             reject(
@@ -1851,7 +1853,7 @@ class BlockAMGSolver(LinearSolver):
                     "blockamg: settings that do not fit the fields: "
                     + "; ".join("{:} {:}".format(name, reason) for name, reason in rejections.items())
                 )
-        unused = sorted(set(_namedRigidBodyFields(self._rigidBodyCoarseLevel)) - {block.name for block in blocks})
+        unused = sorted(set(self._rigidBodyCoarseLevel.namedFields) - {block.name for block in blocks})
         if unused:
             # a misspelt field name would otherwise switch the rigid-body coarse level off without a word
             self._logOnce(
@@ -1952,7 +1954,7 @@ class BlockAMGSolver(LinearSolver):
             # only offline, without a model: a field named in rigidBodyCoarseLevel is refused rather than built without
             # the rotations, which would switch off the coarse level the configuration asks for; one the default
             # selected keeps the hierarchy of its tree, on the translations
-            if block.name in _namedRigidBodyFields(self._rigidBodyCoarseLevel):
+            if self._rigidBodyCoarseLevel.isNamed(block.name):
                 raise ValueError(
                     "blockamg: field '{:}' is named in rigidBodyCoarseLevel, but its node coordinates are unavailable: "
                     "without a model (setModel), give them as nodeCoordinates".format(block.name)
@@ -2020,14 +2022,12 @@ class BlockAMGSolver(LinearSolver):
         of type ``vector`` in :data:`~edelweissfe.config.phenomena.phenomena`, whose near null-space the rigid-body
         modes are (a rotation field has another) -- with the default options and blockamg's default tree, which
         always fits. A displacement field with an explicit ``fieldPreconds`` tree keeps that tree as written, and one
-        on the p-two-grid (``p1FieldNames``, ``p1Maps``) keeps that; both logged once at ``info``. With ``False``, no
-        field has it."""
+        on the p-two-grid (``p1FieldNames``, ``p1Maps``) keeps that; both logged once at ``info``. Switched off, no field
+        has it."""
         setting = self._rigidBodyCoarseLevel
-        if setting is False:
-            return None
-        if setting is not None:
-            return setting.get(block.name)
-        if block.dimension != 3 or phenomena.get(block.name) != "vector":
+        if setting.isNamed(block.name):
+            return setting.namedFields[block.name]
+        if not setting.byDefault or block.dimension != 3 or phenomena.get(block.name) != "vector":
             return None
         if block.name in self._fieldPreconds:
             self._logOnce(
