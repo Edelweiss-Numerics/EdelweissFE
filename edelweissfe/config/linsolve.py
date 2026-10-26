@@ -43,7 +43,8 @@ from edelweissfe.utils.schema import buildSchemaFromOptions
 @dataclass(frozen=True)
 class LinearSolverDefinition:
     """A ``*linearSolver`` block: its type and the configuration its data lines give (checked when the input file is
-    read). A nonlinear solver creates a fresh linear solver from it for every step (:meth:`create`).
+    read). A nonlinear solver creates a linear solver from it (:meth:`create`) and keeps it for all the steps that
+    name it.
 
     Attributes
     ----------

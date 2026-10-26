@@ -272,11 +272,33 @@ class NIST(NonlinearSolverBase):
         self._updateOptions(kwargs, journal, strict=True)
         #: The ``*linearSolver`` blocks of the input file by name, which linsolver= may name (none without an input file).
         self.linearSolverDefinitions = jobInfo.get("linearSolvers", {})
+        #: The linear solver, and the ``linsolver`` it was made for (see :meth:`linearSolverForStep`).
+        self.linSolver = None
+        self.linSolverName = None
 
         #: The last accepted increment, from which the predictor extrapolates (None: no extrapolation).
         self.prevTimeStep = None
         #: The solution increment of the last accepted increment.
         self.dU = None
+
+    def linearSolverForStep(self) -> None:
+        """Make :attr:`linSolver` the linear solver the step about to begin names (``linsolver``): the one of the
+        previous step if it names the same, else a new one.
+
+        One linear solver serves all steps that name it. At a new step it builds everything anew (it gets the step's
+        equation system through ``setModel``), replacing what it built before, which is freed right then. A new
+        solver per step would instead leave the previous one, with all it built, to Python's cyclic garbage collector
+        whenever anything in its tree refers back to the tree -- e.g. a function in a solver script, whose globals
+        hold the script's tree -- and the matrices of the steps would pile up."""
+        if self.linSolver is not None and self.options["linsolver"] == self.linSolverName:
+            return
+        # the previous one goes before the new one is made
+        self.linSolver = None
+        self.linSolver = createLinearSolver(self.options["linsolver"], self.linearSolverDefinitions)
+        self.linSolverName = self.options["linsolver"]
+        # Every registered linsolver inherits LinearSolver's setJournal() (a safe no-op-ish default for
+        # solvers that do not log), so this is unconditional -- no isinstance check needed.
+        self.linSolver.setJournal(self.journal)
 
     def beginStep(
         self,
@@ -304,10 +326,7 @@ class NIST(NonlinearSolverBase):
         # so far: applyOptionsOverride pushes an override the moment such a block is constructed or
         # re-declared (edelweissfe.stepactions.options.StepAction), and an override sticks until
         # changed again -- there is nothing to reset or re-fetch here.
-        self.linSolver = createLinearSolver(self.options["linsolver"], self.linearSolverDefinitions)
-        # Every registered linsolver inherits LinearSolver's setJournal() (a safe no-op-ish default for
-        # solvers that do not log), so this is unconditional -- no isinstance check needed.
-        self.linSolver.setJournal(self.journal)
+        self.linearSolverForStep()
 
         convergenceCriterion = self.createConvergenceCriterion()
         convergenceCriterion.startStep(self.convergenceCriterion)

@@ -102,8 +102,8 @@ On disk:
 
 * ``A_<solver>_<solve>.npz`` (SciPy, uncompressed), ``b_<solver>_<solve>.npy``, and with a Schur complement the
   condensed dofs, ``schurDofs_<solver>_<solve>.npy``; ``<solver>`` is the ordinal of the linear solver in the process
-  (one per step), so the dumps of several solvers never overwrite each other, and the solve numbering continues
-  across a hot reload;
+  (one per nonlinear solver, made anew only when a step names another linear solver), so the dumps of several
+  solvers never overwrite each other, and the solve numbering continues across steps and a hot reload;
 * ``geometry_<solver>_<solve>.npz``: what a replay of the tree needs of the model, the node coordinates of every vector
   field (``<field>_coordinates``, for its rigid-body modes) and the P1 maps the tree used (``<field>_isCorner``,
   ``<field>_edgeEndpoints``);
