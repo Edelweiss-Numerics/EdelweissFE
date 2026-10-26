@@ -160,20 +160,13 @@ class MultiPointConstraintTransformation:
     useThreadedCondensation
         Condense the system matrix in place, with the OpenMP-threaded kernel of
         :class:`~edelweissfe.numerics.mpccondensation.MPCCondensation`, instead of with SciPy's
-        single-threaded CSR routines, which build a new matrix: the values of ``Tᵀ K T + C`` overwrite
-        those of ``K``, in ``K``'s own pattern, so the equation system is held once, not twice. Only
-        the rows that a constraint touches are computed, each one directly from the rows of ``K`` it
-        combines, with no intermediate matrix. The result does not depend on the number of threads.
-
-        ``K``'s pattern must hold the one of ``Tᵀ K T + C``: :meth:`condensedPatternFillIn` returns
-        the entries it lacks (where a master collects the couplings of its slaves), which the
-        caller adds once, as stored zeros -- the solvers add them to their CSR generator's pattern.
-        Entries of ``K`` that the condensed matrix does not have (the slave columns, and the slave
-        rows apart from their diagonal) become stored zeros. SciPy's products, in contrast, drop
-        exact zeros. **Not** pruned here: :meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.
-        applyDirichletToStiffness` prunes a copy, gated by the ``pruneCondensedMatrixZeros`` option
-        (default auto: pruned for PARDISO, kept for a linear solver that needs the pattern stable
-        across iterations, such as ``blockamg``).
+        single-threaded CSR routines, which build a second matrix. The values of ``Tᵀ K T + C``
+        overwrite those of ``K``, in ``K``'s own pattern, which must hold the condensed one (see
+        :meth:`condensedPatternFillIn`). Only the rows a constraint touches are computed; the result
+        does not depend on the number of threads. Entries of ``K`` outside the condensed pattern (the
+        slave columns, the slave rows apart from their diagonal) become stored zeros, which
+        :meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.applyDirichletToStiffness` prunes
+        from a copy if ``pruneCondensedMatrixZeros`` says so.
     """
 
     def __init__(

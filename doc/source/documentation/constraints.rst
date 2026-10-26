@@ -349,16 +349,14 @@ kinematic slaving -- the critical time step is untouched).
 The implicit solver's ``useThreadedMPCCondensation`` option (:doc:`solvers`, ``NIST``) computes
 :math:`T^T K T + I_s` in place, with an OpenMP-threaded kernel
 (:class:`~edelweissfe.numerics.mpccondensation.MPCCondensation`), instead of with SciPy's
-single-threaded CSR routines, which build a second matrix. The condensed values overwrite those of
-:math:`K` in its own CSR pattern, so the system matrix is held once, not twice. For this, the CSR
-pattern of :math:`K` gains, once per equation system, the entries where a master collects the
-couplings of its slaves
-(:meth:`~edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation.condensedPatternFillIn`),
-assembled as stored zeros; the slave columns of :math:`K` become stored zeros in turn. Only the rows
-that a constraint touches are computed, each by one thread directly from the rows of :math:`K` it
-combines, with no intermediate matrix; all other rows stay as they are. The sums are taken in a
-fixed order, so the result does not depend on the number of threads. Explicit zeros are kept; a
-copy is pruned afterwards according to ``pruneCondensedMatrixZeros``. It is off by default.
+single-threaded CSR routines, which build a second matrix: the system matrix is held once, not twice.
+For this, the CSR pattern of :math:`K` gains, once per equation system, the entries where a master
+collects the couplings of its slaves
+(:meth:`~edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation.condensedPatternFillIn`);
+the slave columns of :math:`K` become stored zeros in turn. Only the rows a constraint touches are
+computed, each by one thread from the rows of :math:`K` it combines, in a fixed order of summation, so
+the result does not depend on the number of threads. Explicit zeros are pruned from a copy according to
+``pruneCondensedMatrixZeros``. It is off by default.
 
 On matching interface meshes, tying is exactly equivalent to merging the interface nodes: the
 patch test passes to machine precision, and both the implicit and the explicit (central

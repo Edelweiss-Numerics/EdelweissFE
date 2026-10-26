@@ -314,13 +314,10 @@ public:
     gatherMapReleased = true;
   }
 
-  // Add entries to the pattern that no COO pair contributes to: they are assembled as stored zeros. The new
-  // entries, with sorted columns in each row and none already in the pattern, are given as a pattern of their own
-  // (extraPtr, nDof + 1 entries, and extraIdx). Each new entry gets an empty range of the gather map, so update()
-  // writes 0.0 there; gather_sources is unchanged.
-  //
-  // This is how a caller makes room in the pattern for values it writes itself, after the assembly: the
-  // multi-point-constraint condensation, which writes T^T K T + C into K's own pattern.
+  // Add entries that no COO pair contributes to, assembled as stored zeros: room for values that a caller writes
+  // after the assembly (the in-place multi-point-constraint condensation). They are given as a pattern of their own,
+  // extraPtr (nDof + 1 entries) and extraIdx, with sorted rows and none already in the pattern. Each gets an empty
+  // range of the gather map, so update() writes 0.0 there.
   void addEntries( const int64_t* extraPtr, const int32_t* extraIdx )
   {
     const bool hasGatherMap = !gatherMapReleased;

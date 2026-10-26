@@ -15,9 +15,9 @@
 //     Kt[i,:] = sum_a  Tt[i,a] * ( sum_b K[a,b] * T[b,:] )  +  C[i,:],        Tt = T^T,
 //
 // built by one thread with a sparse accumulator (Gustavson's row-by-row product). The pattern of K must hold the
-// structural pattern of Kt: fillInPattern() returns the entries it lacks, which the caller adds to K's pattern once,
-// as stored zeros, before the first condenseInPlace(). An entry of K's pattern that is not in the pattern of Kt
-// becomes a stored zero (the slave columns of the rows next to a slave, and the slave rows apart from their
+// structural pattern of Kt: countFillIn() and writeFillIn() give the entries it lacks, which the caller adds to K's
+// pattern once, as stored zeros, before the first condenseInPlace(). An entry of K's pattern that is not in the pattern
+// of Kt becomes a stored zero (the slave columns of the rows next to a slave, and the slave rows apart from their
 // diagonal).
 //
 // The sums are taken in a fixed order, that of evaluating T^T (K T) + C row by row: the inner sum over b in the
@@ -67,11 +67,9 @@ class MPCCondensationCore {
 
   RowWork rowWork( int64_t i, const int32_t* Kp, const int32_t* Ki ) const
   {
-    bool readsOther = false;
     for ( int64_t ja = Ttp[i]; ja < Ttp[i + 1]; ++ja )
-      readsOther = readsOther || Tti[ja] != i;
-    if ( readsOther )
-      return readsOtherRows;
+      if ( Tti[ja] != i )
+        return readsOtherRows;
     if ( !isSingleUnitRow( i ) || Cp[i + 1] != Cp[i] )
       return readsOwnRow;
     for ( int64_t jb = Kp[i]; jb < Kp[i + 1]; ++jb )

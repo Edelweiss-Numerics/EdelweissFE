@@ -143,14 +143,10 @@ class NISTSchema:
         description=(
             "Condense the multi-point-constraint system matrix, T^T K T + C, in place, with an "
             "OpenMP-threaded kernel, instead of with SciPy's single-threaded CSR routines, which build a "
-            "second matrix: the condensed values overwrite those of K in the CSR pattern of K, which "
-            "gains, once per equation system, the entries where a master collects the couplings of its "
-            "slaves. The system matrix is held once, not twice. Only the rows that a constraint touches "
-            "are computed, each one directly from the rows of K it combines; the result does not depend "
-            "on the number of threads. Explicit zeros are kept (the slave columns among them); "
-            "applyDirichletToStiffness prunes a copy, gated by pruneCondensedMatrixZeros (default auto: "
-            "pruned for PARDISO, kept for blockamg, whose hierarchy reuse needs a stable pattern). Off "
-            "by default."
+            "second matrix. The CSR pattern of K gains, once per equation system, the entries where a "
+            "master collects the couplings of its slaves; the result does not depend on the number of "
+            "threads. Explicit zeros (the slave columns among them) are pruned from a copy according to "
+            "pruneCondensedMatrixZeros. Off by default."
         ),
         dtype=bool,
         default=False,
@@ -958,24 +954,13 @@ class NIST(NonlinearSolverBase):
         :func:`edelweissfe.solvers.base.dirichlet.applyDirichletToStiffness`."""
         K = applyDirichletToStiffness(K, dirichlets, rhs)
 
-        # Compacting the just-zeroed entries out of K is a storage/performance concern, not part of
-        # applying the boundary condition, and it is only ever done with a multi-point-constraint
-        # condensation (see _shouldPruneCondensedMatrixZeros):
+        # Compacting the explicit zeros out of a condensed K (see _shouldPruneCondensedMatrixZeros): PARDISO's
+        # reordering of these poorly conditioned, path-dependent (contact/friction) systems is sensitive enough to
+        # the extra structural entries to drift from the reference path; but the pattern then changes from one
+        # Newton iteration to the next, so a solver like blockamg, which reuses its hierarchy, keeps them.
         #
-        # - Its explicit zeros are many (the threaded condensation keeps the slave columns as stored
-        #   zeros), and PARDISO's reordering on these more poorly conditioned, path-dependent
-        #   (contact/friction) condensed systems is sensitive enough to the extra structural entries to
-        #   visibly drift from the converged reference path if they are kept.
-        # - The pruning has a measured cost, though: it removes whichever entries happen to be exactly
-        #   zero on *this* iteration, so the pattern differs from one Newton iteration to the next and a
-        #   linear solver can never reuse its symbolic factorization or its hierarchy. Left unset in the
-        #   input file, it is therefore decided per self.linSolver: pruned for a solver like PARDISO that
-        #   needs it, skipped for one like blockamg that needs the pattern stable instead.
-        #
-        # K may be self.csrGenerator's own CSR matrix (no condensation, or the threaded one, which
-        # condenses in place). The generator scatters fresh values into that matrix's full-length
-        # buffer on every update via an assembly map fixed at construction, so it must never be
-        # compacted (it refuses to be, see AliasedCSRMatrix): a copy is pruned instead.
+        # The CSR generator's own matrix (the threaded condensation works in place on it) must never be compacted:
+        # the generator scatters every update into its full-length buffer via a fixed map. A copy is pruned instead.
         if self.mpcTransformation is not None and self._shouldPruneCondensedMatrixZeros():
             if K is self.csrGenerator.csrMatrix:
                 K = K.copy()
