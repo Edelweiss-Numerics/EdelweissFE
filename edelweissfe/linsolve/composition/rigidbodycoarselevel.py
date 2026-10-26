@@ -79,7 +79,7 @@ rotation field, or any other vector field, has another, so a solver script gives
 field's node coordinates (read from the model), and the field's tree configures its smoother, its aggregation and the
 AMGCL hierarchy below it. Its setup costs more than AMGCL's hierarchy on the translations (the
 Galerkin product with 6 coarse dofs per aggregate, the larger hierarchy below), so on a model where that converges in a
-few iterations it gains little. The block-AMG theory page has the measurements.
+few iterations it gains little. The measurements are in :ref:`measured-rigid-body-coarse-level`.
 """
 
 import numpy as np
