@@ -97,6 +97,14 @@ cdef class PanuaPardisoFactorization:
                 &self.rows, &self.data[0], &self.indptr[0], &self.indices[0], &idum, &nRhs,
                 self.iparm, &self.msglvl, b, x, error, self.dparm)
 
+    def release(self):
+        """Release PARDISO's internal memory and the matrix, the factorization (nothing to release before the
+        first)."""
+        self._releaseMemory()
+        self.data = None
+        self.indices = None
+        self.indptr = None
+
     def factorize(self, A):
         """Reorder and factorize the square sparse matrix ``A`` (CSR): phases 11 and 22.
 
@@ -108,7 +116,7 @@ cdef class PanuaPardisoFactorization:
         cdef int solver = 0  # use sparse direct solver
         cdef int error = 0
         cdef double ddum = 0
-        self._releaseMemory()
+        self.release()
         A = A.tocsr()
         self.rows = A.shape[0]
         # a copy: phase 33 reads the values again (iterative refinement), which must be those it factorized

@@ -77,6 +77,11 @@ cdef class KLUFactorization:
         if self.symbolic != NULL:
             klu_free_symbolic(&self.symbolic, &self.common)
 
+    def release(self):
+        """Free KLU's symbolic and numeric objects, the factorization (nothing to free before the first)."""
+        self._free()
+        self.n = 0
+
     def factorize(self, A):
         """Factorize the square sparse matrix ``A``: its ordering (``klu_analyze``) and its LU factors
         (``klu_factor``).
@@ -92,8 +97,7 @@ cdef class KLUFactorization:
         cdef int[::1] indices = np.ascontiguousarray(csc.indices, dtype=np.int32)
         cdef double[::1] data = np.ascontiguousarray(csc.data, dtype=np.float64)
         cdef int n = csc.shape[0]
-        self._free()
-        self.n = 0
+        self.release()
         if n == 0:
             return
         self.symbolic = klu_analyze(n, &indptr[0], &indices[0], &self.common)

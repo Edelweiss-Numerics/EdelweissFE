@@ -151,7 +151,10 @@ class _Combination(Preconditioner):
                 requirePreconditioner(name, "correction {:}".format(k + 1), correction)
             self._makeCorrections = None
             self.corrections = corrections
+        # the fields the corrections were made for: they are kept, with what they learnt, while the fields stay
         self._madeFor = None
+
+    def _forget(self) -> None:
         self.bounds = None
 
     def _distinct(self) -> list:
@@ -185,7 +188,7 @@ class _Combination(Preconditioner):
 
     def _update(self, A, change) -> None:
         if self._makeFor(change.context) or not self.bounds:
-            self._setUp(A, change.context)
+            self.setUp(A, change.context)
             return
         self.bounds = [(field.start, field.stop) for field in change.context.fields]
         for correction in self._distinct():
@@ -218,8 +221,8 @@ class Multiplicative(_Combination):
         up once). Or a function ``context -> list`` that makes them at the first set-up, when the fields are known.
     """
 
-    def __init__(self, corrections: "list | Callable"):
-        super().__init__(corrections)
+    def _forget(self) -> None:
+        super()._forget()
         self.blocks = None
 
     def _setUp(self, A, context: SetUpContext) -> None:
@@ -312,6 +315,8 @@ class OnField(Preconditioner):
         super().__init__()
         self.fieldName = fieldName
         self.inner = inner
+
+    def _forget(self) -> None:
         self.dofs = None
         self._fieldIndex = None
 
@@ -391,6 +396,8 @@ class CoarseCorrection(Preconditioner):
         super().__init__()
         self.prolongation = prolongation
         self.coarse = coarse
+
+    def _forget(self) -> None:
         self.P = None
 
     def _setUp(self, A, context: SetUpContext) -> None:
@@ -404,7 +411,7 @@ class CoarseCorrection(Preconditioner):
 
     def _update(self, A, change) -> None:
         if change.requiresRebuild or self.P is None:
-            self._setUp(A, change.context)
+            self.setUp(A, change.context)
             return
         # P stays; A_c follows the matrix, and the coarse solve decides what it keeps (an AMG its hierarchy)
         A_c, coarseContext = self._coarseSystem(A)
@@ -445,6 +452,8 @@ class Jacobi(Preconditioner):
     def __init__(self, omega: float = 2.0 / 3.0):
         super().__init__()
         self.omega = omega
+
+    def _forget(self) -> None:
         self.inverseDiagonal = None
 
     def _setUp(self, A, context: SetUpContext) -> None:

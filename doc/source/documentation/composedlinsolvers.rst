@@ -275,18 +275,27 @@ component. The matrix it is given, ``A``, is a :class:`~edelweissfe.linsolve.com
 not a SciPy matrix: ``A.matrix()`` gives the SciPy CSR matrix (the system matrix also forms the field blocks and the
 scaled matrix for the components that need them).
 
-Three hooks make a component:
+Four hooks make a component:
 
 ``_setUp(A, context)``
     Build what the application needs for the matrix ``A``, e.g. the inverse of its diagonal. ``context`` (a
     :class:`~edelweissfe.linsolve.composition.base.SetUpContext`) holds the fields of the sub-problem and their node
     coordinates.
+``_forget()``
+    Drop what ``_setUp`` built: set each of those attributes to its value before the first set-up
+    (``self.inverseDiagonal = None``). The constructor of the base class calls it, so this is where they are declared.
+    The public ``setUp`` calls ``forget()`` (this hook and those of the children) before ``_setUp``: the old
+    factorization or hierarchy is freed before the new one is built, never both at once, which on a large model is
+    gigabytes. What is reused on purpose (a symbolic factorization, an estimate carried from one build to the next)
+    is not forgotten.
 ``_apply(r)``
     Return :math:`z = M^{-1} r`.
 ``_update(A, change)``
-    Take the matrix of the next Newton iteration. By default it builds anew (it calls ``_setUp``); override it to
-    reuse what you built, rebuilding only if ``change.requiresRebuild`` (a new increment, a new sparsity pattern, a
-    stale preconditioner, as the ``MatrixChange`` and the Krylov solver above decide).
+    Take the matrix of the next Newton iteration. By default it builds anew (it calls ``self.setUp``); override it to
+    reuse what you built, rebuilding (again by ``self.setUp``) only if ``change.requiresRebuild`` (a new increment, a
+    new sparsity pattern, a stale preconditioner, as the ``MatrixChange`` and the Krylov solver above decide) or if
+    nothing is built -- after ``forget()``, which a Krylov solver calls on its preconditioner before it rebuilds it,
+    and the adapter on the whole tree when the model changes.
 
 Then ``describe()`` returns a :class:`~edelweissfe.linsolve.composition.base.Description` -- the name, the formula
 (unicode and LaTeX), the parameters and the steps of one application -- which the views show. The public
@@ -345,14 +354,14 @@ system, after two solves:
 
     LGMRES(...)   updated 2× 0.07s · applied 2× 0.05s
     └─ DiagonalScaling(...)   updated 2× 0.07s · applied 18× 0.04s
-       └─ Multiplicative   updated 2× 0.06s · applied 18× 0.04s
+       └─ Multiplicative   set up 1× 0.06s · updated 2× 0.06s · applied 18× 0.04s
           ├─ M1: OnField(...)   set up 1× 0.06s · updated 1× 0.00s · applied 18× 0.03s
           │  └─ TwoLevel(...)   set up 1× 0.06s · ... · applied 18× 0.03s · rows 9555 · aggregates 198 · coarse dofs 1188
           └─ M2: OnField(...)   set up 1× 0.00s · updated 1× 0.00s · applied 18× 0.00s
              └─ AMG(...)   set up 1× 0.00s · ... · applied 18× 0.00s · rows 3185
 
 The adapter only ever updates the root; a combination whose corrections are made per field sets them up at its first
-update, and reuses them at the next.
+update (a set-up within that update), and reuses them at the next.
 
 ``views.dataFlow(solver)`` -- one application as a graphviz graph (DOT, or SVG with the ``graphviz`` package): each
 component a box around its steps, a step that delegates leading into its child's box. ``views.spy(solver, A)`` draws

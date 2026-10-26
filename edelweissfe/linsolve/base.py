@@ -221,7 +221,8 @@ class DirectSolverBackend:
     solve, once per iteration -- and solves with the factorization of the last :meth:`factorize`, also when the
     assembly has since overwritten that matrix in place. A backend that keeps its symbolic factorization (the
     reordering) while only the values of the matrix change does so inside :meth:`factorize`: one backend instance
-    lives as long as its :class:`DirectSolver` leaf.
+    lives as long as its :class:`DirectSolver` leaf, which releases the numeric factorization
+    (:meth:`releaseFactorization`) before it factorizes anew.
     """
 
     def factorize(self, A) -> None:
@@ -232,4 +233,10 @@ class DirectSolverBackend:
     def solveFactorized(self, b):
         """Solve ``A x = b`` with the factorization of the last :meth:`factorize`, for one right-hand side (a vector)
         or several (the columns of a matrix), returned in the shape of ``b``."""
+        raise NotImplementedError
+
+    def releaseFactorization(self) -> None:
+        """Free the numeric factorization of the last :meth:`factorize` (nothing to free before the first), so that
+        it is gone before the next :meth:`factorize` computes another: never two at once. A symbolic factorization
+        the backend reuses stays."""
         raise NotImplementedError

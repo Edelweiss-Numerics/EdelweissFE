@@ -399,6 +399,24 @@ cdef class PardisoSolver:
 
         return np.reshape(x, b.shape)
 
+    def releaseFactorization(self):
+        """
+        Free the numeric factorization stored by :meth:`factorize`, before the next one is computed.
+
+        Without ``reuseSymbolicFactorization`` the next :meth:`factorize` analyzes anew, so all of PARDISO's internal
+        memory goes (phase -1), and the copies of the matrix's pattern with it. With it, the reordering and the
+        symbolic factorization are kept for the next matrix of the same pattern, which PARDISO factorizes into the
+        memory of the last one; only the values the factorization belonged to are dropped, and
+        :meth:`solveFactorized` raises until the next :meth:`factorize`.
+        """
+        if self.reuseSymbolicFactorization:
+            self.hasNumericFactorization = False
+            self.currentData = None
+        else:
+            self._releaseMemory()
+            self.indicesFortran = None
+            self.indptrFortran = None
+
     def invalidate(self):
         """
         Force a fresh reordering and symbolic factorization (PARDISO phase 11) on the

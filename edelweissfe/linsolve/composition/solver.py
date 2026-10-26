@@ -229,7 +229,10 @@ class ComposedLinearSolver(LinearSolver):
     # ----- what the nonlinear solver hands over -----
 
     def setModel(self, model, dofManager) -> None:
-        """Take the model: the field layout (base class), and for the tree what is derived from it."""
+        """Take the model: the field layout (base class), and for the tree what is derived from it. What the tree built
+        for the previous model is forgotten right away: the tree is built anew at the next solve, and the nonlinear
+        solver builds the new equation system before that."""
+        self.root.forget()
         super().setModel(model, dofManager)
         self._coordinateCache.clear()
         self._p1MapCache.clear()
@@ -489,7 +492,8 @@ class ComposedLinearSolver(LinearSolver):
         """Before a solve: if the solver script changed on disk, run it again and continue with the tree it builds;
         what the run has learnt stays (the solve count, the residual history, the numbering of the dumps, so that a
         reload never overwrites earlier dumps), and so do the settings of the adapter (data lines of the input file).
-        The new tree is set up on this solve (rebuild reason ``"reload"``).
+        The new tree is set up on this solve (rebuild reason ``"reload"``), after the tree in force has forgotten what
+        it built (it is kept only to roll back to).
 
         Editing a file a running process reads is racy, so this fails safely, and nothing about a bad edit can end
         the run: a script that cannot be read or does not compile (e.g. half written by an editor) is retried on the
@@ -525,6 +529,8 @@ class ComposedLinearSolver(LinearSolver):
                 "{:}: REJECTED, {:}: {:}; the solver in force is kept".format(header, type(error).__name__, error),
             )
             return
+        # the tree in force is kept to roll back to, but not what it built: never two built trees at once
+        self.root.forget()
         self._rootBeforeReload = self.root
         self.root = tree
         if self._model is not None:
@@ -535,10 +541,11 @@ class ComposedLinearSolver(LinearSolver):
     def _rollBackHotReload(self, error: Exception) -> None:
         """Back to the tree in force before the last hot reload, whose tree failed to set up (e.g. an AMGCL tree naming
         an unknown smoother, which only the build can judge). The script stays recorded as seen, so it is not run again
-        until it changes."""
+        until it changes. That tree forgot what it built at the reload, and is set up again on this solve (rebuild
+        reason ``"reload"``)."""
+        self.root.forget()
         self.root = self._rootBeforeReload
         self._rootBeforeReload = None
-        self._reloaded = False
         self._log(
             "warning",
             "hot reload of {:} at solve #{:} ROLLED BACK, the new tree failed to set up: {:}: {:}; the tree in force "

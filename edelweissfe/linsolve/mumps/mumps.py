@@ -43,13 +43,15 @@ class MumpsFactorization:
         # the matrix the factorization belongs to: MUMPS keeps pointers to its arrays
         self._A = None
 
-    def _destroy(self) -> None:
+    def release(self) -> None:
+        """Destroy the MUMPS instance, and with it the factorization (nothing to destroy before the first)."""
         if self._context is not None:
             self._context.destroy()
             self._context = None
+        self._A = None
 
     def __del__(self):
-        self._destroy()
+        self.release()
 
     def factorize(self, A) -> None:
         """Analyse and factorize the square sparse matrix ``A``.
@@ -60,7 +62,7 @@ class MumpsFactorization:
             If MUMPS reports an error (e.g. a singular matrix): the bindings raise it as a ``RuntimeError`` with
             MUMPS's error code.
         """
-        self._destroy()
+        self.release()
         self._A = A.tocsr(copy=True)
         context = DMumpsContext()
         context.set_silent()

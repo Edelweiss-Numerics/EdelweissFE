@@ -38,6 +38,7 @@ the condensed dofs exactly and hands the remaining ones to its child, a diagonal
 A component implements what makes it what it is, in protected hooks:
 
 - :meth:`Preconditioner._setUp` builds it for a matrix (and its children for their sub-problems);
+- :meth:`Preconditioner._forget` drops what it built, and so declares what that is (the constructor calls it);
 - :meth:`Preconditioner._update` takes a changed matrix and decides what to keep (by default: set up again);
 - :meth:`Preconditioner._apply` applies it, :math:`z = M^{-1} r` -- the formula of the textbook;
 - :meth:`Preconditioner.children` names its children, if it has any (the tree is walked through it);
@@ -48,6 +49,16 @@ It is used through the public methods of the base class, :meth:`~Preconditioner.
 and its time in the component's :class:`Statistics` and call the hook. So a component's ``_apply`` holds nothing but
 its formula, and a hook that calls another hook of its own component (a Krylov solver's ``_setUp`` is its ``_update``
 for a first matrix) counts as one call.
+
+A component builds anew only through :meth:`~Preconditioner.setUp`, also when an update decides to rebuild (it calls
+``self.setUp``, which records a set-up within that update). :meth:`~Preconditioner.setUp` first forgets what was built
+before (:meth:`~Preconditioner.forget`: the component's :meth:`~Preconditioner._forget` and those of its children):
+the old hierarchies, factorizations and matrices, gigabytes for a large model, are freed before the new ones are
+built, and never held at the same time. What a component reuses on purpose is not built state and is not forgotten:
+an AMG hierarchy kept while only the values change (an update that does not rebuild never calls
+:meth:`~Preconditioner.setUp`), a fine spectral radius carried from one build to the next, the selection of a Schur
+complement's condensed dofs, a direct solver's symbolic factorization, the statistics. A component that has nothing
+built builds at its next update, whatever the update says.
 """
 
 import time
@@ -303,22 +314,32 @@ class Preconditioner:
     """An approximate inverse :math:`M^{-1}` of a matrix :math:`A`: built by :meth:`setUp`, applied as
     :math:`z = M^{-1} r`.
 
-    See the module documentation. A subclass implements the hooks :meth:`_setUp`, :meth:`_apply` and, to reuse what
-    it built, :meth:`_update`, and calls ``super().__init__()`` in its constructor (which creates its
-    :attr:`statistics`).
+    See the module documentation. A subclass implements the hooks :meth:`_setUp`, :meth:`_apply`, :meth:`_forget` if
+    it builds anything, and, to reuse what it built, :meth:`_update`, and calls ``super().__init__()`` in its
+    constructor (which creates its :attr:`statistics` and declares what it builds, by :meth:`_forget`).
     """
 
     def __init__(self):
         #: What this component recorded while it ran, see :class:`Statistics`.
         self.statistics = Statistics()
+        # nothing is built yet
+        self._forget()
 
     # ----- the public methods: record the call, then call the hook -----
 
     def setUp(self, A, context: SetUpContext) -> None:
         """Build this component for the matrix ``A`` (a
         :class:`~edelweissfe.linsolve.composition.systemmatrix.SystemMatrix`), and its children for their
-        sub-problems: :meth:`_setUp`, recorded."""
+        sub-problems: :meth:`forget` what was built before, then :meth:`_setUp`, recorded."""
+        self.forget()
         self._recorded("setUp", self._setUp, A, context)
+
+    def forget(self) -> None:
+        """Drop what this component and its children built (:meth:`_forget`), so that nothing is held twice while it
+        is built again. What they reuse on purpose stays (see the module documentation)."""
+        self._forget()
+        for _, child in self.children():
+            child.forget()
 
     def update(self, A, change: MatrixChange) -> None:
         """Take the changed matrix ``A``: :meth:`_update`, recorded."""
@@ -347,10 +368,17 @@ class Preconditioner:
         """Build this component for the matrix ``A``, and its children (through their public :meth:`setUp`)."""
         raise NotImplementedError
 
+    def _forget(self) -> None:
+        """Drop what this component built: set each attribute that :meth:`_setUp` builds to its value before the first
+        set-up (``self.hierarchy = None``). The constructor calls it, so this is where those attributes are declared;
+        a component that builds nothing of its own (its children are forgotten by :meth:`forget`) keeps this
+        default."""
+
     def _update(self, A, change: MatrixChange) -> None:
         """Take the changed matrix ``A``. By default, build anew; a component that can reuse what it built
-        overrides this and rebuilds only if ``change.requiresRebuild``."""
-        self._setUp(A, change.context)
+        overrides this and rebuilds (through :meth:`setUp`) only if ``change.requiresRebuild`` or nothing is
+        built."""
+        self.setUp(A, change.context)
 
     def _apply(self, r: np.ndarray) -> np.ndarray:
         """:math:`z = M^{-1} r`."""
