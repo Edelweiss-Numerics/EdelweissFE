@@ -212,6 +212,34 @@ def test_a_two_grid_cycle_spelled_out_by_combinators_beats_its_smoother_alone():
     assert iterations["two-level"] < iterations["jacobi"] / 5
 
 
+def test_a_reused_coarse_correction_keeps_its_prolongation_and_its_coarse_hierarchy():
+    """Between rebuilds, P stays and the coarse AMG takes A_c as an update, keeping its hierarchy, as in TwoLevel."""
+    K, coordinates, _ = cantilever((16, 2, 2), (8.0, 1.0, 1.0))
+    fields = [FieldBlock("displacement", 0, K.shape[0], 3)]
+    b = np.random.default_rng(3).standard_normal(K.shape[0])
+    # piecewise constant translations on aggregates of 8 nodes
+    nodes = K.shape[0] // 3
+    aggregates = sp.csr_matrix((np.ones(nodes), (np.arange(nodes), np.arange(nodes) // 8)))
+    P = sp.kron(aggregates, sp.identity(3)).tocsr()
+    prolongations = []
+
+    def prolongation(A, context):
+        prolongations.append(A.shape)
+        return P
+
+    coarse = AMG()
+    root = LGMRES(
+        DiagonalScaling(Multiplicative([Jacobi(), CoarseCorrection(prolongation, coarse), Jacobi()])),
+        tolerance=FixedTolerance(1e-8),
+        maxIterations=2000,
+    )
+    _, composed = _solved(K, b, root, fields)
+    x = composed((1.0001 * K).tocsr(), b)
+    assert root.lastRebuildReason is None and _relative(1.0001 * (K @ x), b) < 1e-7
+    assert len(prolongations) == 1
+    assert (coarse.statistics.setUps, coarse.statistics.updates) == (1, 1)
+
+
 def test_the_p1_two_grid_has_blockamgs_numbers():
     """The outer iterations and ||x|| of BlockAMGSolver (deleted; recorded at ffe4b681, see
     test_linsolve_composition_equivalence)."""

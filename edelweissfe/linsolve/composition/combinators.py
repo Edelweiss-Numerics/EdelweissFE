@@ -367,6 +367,11 @@ class CoarseCorrection(Preconditioner):
     :math:`A_c = P^T A P`. With an exact coarse solve, :math:`P A_c^{-1} P^T A` is the :math:`A`-orthogonal projection
     onto the range of :math:`P`.
 
+    :math:`P` is built at a set-up and kept until the next rebuild (see
+    :attr:`~edelweissfe.linsolve.composition.base.MatrixChange.requiresRebuild`); in between, the coarse solve takes
+    the new :math:`A_c` as an update, and keeps what it can (an :class:`~edelweissfe.linsolve.composition.amg.AMG` its
+    hierarchy, as :class:`~edelweissfe.linsolve.composition.twolevel.TwoLevel` does).
+
     With smoothers around it, ``Multiplicative([smoother, CoarseCorrection(P, coarse), smoother])`` is a two-level cycle
     spelled out: any :math:`P`, any coarse solve, but in SciPy and about twice as costly per application as the C++
     cycle :class:`~edelweissfe.linsolve.composition.twolevel.TwoLevel`, which is kept beside it on purpose (see the
@@ -393,10 +398,22 @@ class CoarseCorrection(Preconditioner):
         self.P = sp.csr_matrix(P)
         if self.P.shape[0] != A.shape[0]:
             raise ValueError("CoarseCorrection: P has {:} rows, but the matrix {:}".format(self.P.shape[0], A.shape[0]))
-        A_c = (self.P.T @ A.matrix() @ self.P).tocsr()
-        coarseContext = SetUpContext(fields=(FieldBlock("coarse", 0, A_c.shape[0], 1),))
-        self.coarse.setUp(SystemMatrix(A_c), coarseContext)
+        A_c, coarseContext = self._coarseSystem(A)
+        self.coarse.setUp(A_c, coarseContext)
         self.statistics.sizes["coarse dofs"] = A_c.shape[0]
+
+    def _update(self, A, change) -> None:
+        if change.requiresRebuild or self.P is None:
+            self._setUp(A, change.context)
+            return
+        # P stays; A_c follows the matrix, and the coarse solve decides what it keeps (an AMG its hierarchy)
+        A_c, coarseContext = self._coarseSystem(A)
+        self.coarse.update(A_c, change.withContext(coarseContext))
+
+    def _coarseSystem(self, A) -> tuple:
+        """:math:`A_c = P^T A P` and its context, one field of scalar dofs."""
+        A_c = (self.P.T @ A.matrix() @ self.P).tocsr()
+        return SystemMatrix(A_c), SetUpContext(fields=(FieldBlock("coarse", 0, A_c.shape[0], 1),))
 
     def _apply(self, r: np.ndarray) -> np.ndarray:
         return self.P @ self.coarse(self.P.T @ r)
