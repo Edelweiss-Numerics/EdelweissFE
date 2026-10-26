@@ -232,7 +232,7 @@ class NEST(NIST):
         self._updateOptions(kwargs, journal, strict=True)
         #: The ``*linearSolver`` blocks of the input file by name, which linsolver= may name (none without an input file).
         self.linearSolverDefinitions = jobInfo.get("linearSolvers", {})
-        #: The linear solver, and the ``linsolver`` it was made for (see :meth:`linearSolverForStep`).
+        #: The linear solver, and the ``linsolver`` it was made for (see :meth:`selectLinearSolverForStep`).
         self.linSolver = None
         self.linSolverName = None
 
@@ -272,6 +272,7 @@ class NEST(NIST):
                 )
 
         self.journal.message("Creating monolithic equation system", self.identification, 0)
+        self.forgetEquationSystem()
         self.theDofManager = DofManager(
             model.nodeFields.values(),
             model.scalarVariables.values(),
@@ -299,7 +300,7 @@ class NEST(NIST):
 
         self.tol = self.options.get("runge-kutta-error-tolerance", 1e-3)
 
-        self.linearSolverForStep()
+        self.selectLinearSolverForStep()
         # NEST solves a linear system per Runge-Kutta stage (see solveIncrement, via the inherited
         # linearSolve()), so its linear solver needs the setModel NIST gives its own: for solvers that
         # derive anything beyond the plain (A, b) call -- a field-split solver such as blockamg raises
@@ -311,8 +312,6 @@ class NEST(NIST):
         P = self.theDofManager.constructDofVector()
         dU = self.theDofManager.constructDofVector()
         K = self.theDofManager.constructVIJSystemMatrix()
-        # the generator of the previous step goes before the new one is built
-        self.csrGenerator = None
         self.csrGenerator = CSRGenerator(K)
 
         for fieldName, field in model.nodeFields.items():

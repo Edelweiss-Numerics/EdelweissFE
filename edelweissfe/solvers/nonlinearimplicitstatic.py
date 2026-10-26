@@ -272,7 +272,7 @@ class NIST(NonlinearSolverBase):
         self._updateOptions(kwargs, journal, strict=True)
         #: The ``*linearSolver`` blocks of the input file by name, which linsolver= may name (none without an input file).
         self.linearSolverDefinitions = jobInfo.get("linearSolvers", {})
-        #: The linear solver, and the ``linsolver`` it was made for (see :meth:`linearSolverForStep`).
+        #: The linear solver, and the ``linsolver`` it was made for (see :meth:`selectLinearSolverForStep`).
         self.linSolver = None
         self.linSolverName = None
 
@@ -281,24 +281,30 @@ class NIST(NonlinearSolverBase):
         #: The solution increment of the last accepted increment.
         self.dU = None
 
-    def linearSolverForStep(self) -> None:
+    def selectLinearSolverForStep(self) -> None:
         """Make :attr:`linSolver` the linear solver the step about to begin names (``linsolver``): the one of the
         previous step if it names the same, else a new one.
 
-        One linear solver serves all steps that name it. At a new step it builds everything anew (it gets the step's
-        equation system through ``setModel``), replacing what it built before, which is freed right then. A new
-        solver per step would instead leave the previous one, with all it built, to Python's cyclic garbage collector
-        whenever anything in its tree refers back to the tree -- e.g. a function in a solver script, whose globals
-        hold the script's tree -- and the matrices of the steps would pile up."""
+        A kept solver builds anew for the step's equation system (``setModel``) and frees what it built before. A new
+        solver per step would leave the previous one to Python's cyclic garbage collector whenever its tree refers
+        back to itself (a function in a solver script, whose globals hold the tree), and the steps' matrices would
+        pile up."""
         if self.linSolver is not None and self.options["linsolver"] == self.linSolverName:
             return
         # the previous one goes before the new one is made
         self.linSolver = None
         self.linSolver = createLinearSolver(self.options["linsolver"], self.linearSolverDefinitions)
         self.linSolverName = self.options["linsolver"]
-        # Every registered linsolver inherits LinearSolver's setJournal() (a safe no-op-ish default for
-        # solvers that do not log), so this is unconditional -- no isinstance check needed.
         self.linSolver.setJournal(self.journal)
+
+    def forgetEquationSystem(self) -> None:
+        """Drop the equation system of the last build -- the DOF manager, the system matrix and its CSR generator,
+        the multi-point-constraint condensation, the DOF vectors -- so that it is gone before the next one is built,
+        never both at once."""
+        self.theDofManager = None
+        self.csrGenerator = None
+        self.mpcTransformation = None
+        self._U = self._dU = self._P = self._K = None
 
     def beginStep(
         self,
@@ -326,7 +332,7 @@ class NIST(NonlinearSolverBase):
         # so far: applyOptionsOverride pushes an override the moment such a block is constructed or
         # re-declared (edelweissfe.stepactions.options.StepAction), and an override sticks until
         # changed again -- there is nothing to reset or re-fetch here.
-        self.linearSolverForStep()
+        self.selectLinearSolverForStep()
 
         convergenceCriterion = self.createConvergenceCriterion()
         convergenceCriterion.startStep(self.convergenceCriterion)
@@ -336,9 +342,7 @@ class NIST(NonlinearSolverBase):
         # start of whichever increment first needs it -- either the very first one, or any later
         # one where the topology update reports a change of the mesh or of a constraint's DOF
         # footprint (e.g. a dynamic contact candidate list).
-        self.theDofManager = None
-        self.mpcTransformation = None
-        self._U = self._dU = self._P = self._K = None
+        self.forgetEquationSystem()
 
         # The predictor's state between increments: the last accepted increment and its dU. A step
         # starts without; a resumed step then takes over the checkpointed ones.
@@ -411,7 +415,6 @@ class NIST(NonlinearSolverBase):
         cutbackFactor = step.cutbackFactor
         modelHasChanged = self._modelHasChanged
         connectivityHasChanged = self._connectivityHasChanged
-        U, dU, P, K = self._U, self._dU, self._P, self._K
 
         # The header of this increment's block (opened by the separator in prepareIncrement). Everything
         # about the solution -- an equation-system rebuild if one is needed, the MPC/Dirichlet
@@ -437,6 +440,7 @@ class NIST(NonlinearSolverBase):
 
         if modelHasChanged or connectivityHasChanged or self.theDofManager is None:
             with performancetiming.timeit("equation system rebuild"):
+                self.forgetEquationSystem()
                 with performancetiming.timeit("dof manager"):
                     self.theDofManager = DofManager(
                         model.nodeFields.values(),
@@ -488,8 +492,6 @@ class NIST(NonlinearSolverBase):
 
                 with performancetiming.timeit("system matrix pattern"):
                     K = self.theDofManager.constructVIJSystemMatrix()
-                    # the generator of the previous equation system goes before the new one is built
-                    self.csrGenerator = None
                     self.csrGenerator = CSRGenerator(K)
 
                 U = self.theDofManager.constructDofVector()
@@ -516,6 +518,8 @@ class NIST(NonlinearSolverBase):
                 elif self.dU is not None:
                     dU[:] = self.dU
                 self._U, self._dU, self._P, self._K = U, dU, P, K
+        # the equation system of this increment, just built or kept from the last one
+        U, dU, P, K = self._U, self._dU, self._P, self._K
 
         self.incrementStatus = {
             "step": step.number,

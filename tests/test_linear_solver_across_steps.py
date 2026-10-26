@@ -41,6 +41,7 @@ import pytest
 import edelweissfe.solvers.nonlinearimplicitstatic as nonlinearimplicitstatic
 from edelweissfe.drivers.inputfiledrivensimulation import finiteElementSimulation
 from edelweissfe.linsolve.composition import AMG
+from edelweissfe.numerics.csrgeneratorv2 import CSRGenerator
 from edelweissfe.utils.inputfileparser import parseInputFile
 
 pytest.importorskip("edelweissfe.linsolve.amgcl.amgcl")
@@ -136,6 +137,19 @@ def test_the_steps_that_name_a_linear_solver_share_it_and_leave_no_tree_behind(t
     # one field, displacement: the one tree has one AMG
     assert aliveAMGs == 1
     assert len(created) == 1
+
+
+def test_a_new_step_drops_the_last_equation_system_before_it_builds_the_next(tmp_path, monkeypatch):
+    generatorsAtBuild = []
+    original = nonlinearimplicitstatic.DofManager
+
+    def dofManager(*args):
+        generatorsAtBuild.append(sum(isinstance(obj, CSRGenerator) for obj in gc.get_objects()))
+        return original(*args)
+
+    monkeypatch.setattr(nonlinearimplicitstatic, "DofManager", dofManager)
+    _simulate(tmp_path, monkeypatch, ["", ""])
+    assert len(generatorsAtBuild) == 2 and generatorsAtBuild[1] == generatorsAtBuild[0]
 
 
 def test_a_step_that_names_another_linear_solver_gets_a_new_one(tmp_path, monkeypatch):
