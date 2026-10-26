@@ -43,6 +43,10 @@ and in the input file:
     *solver, solver=NIST, name=theSolver
     linsolver=mySolver
 
+``script`` is a path relative to the working directory, like the output files of the run (only ``*include`` is
+relative to the including input file): ``script=solver.py`` finds a script next to the input file when the simulation
+is started in the directory of the input file, as ``run_tests_edelweissfe`` does.
+
 The script defines the global ``linearSolver`` and holds only the math: the tree. What the adapter does around it --
 the verbosity, the dumps, the hot reload -- are data lines of the block (a ``ComposedLinearSolver`` bound in the script
 is refused). The journal logs the structure of the solver and a hash of the script at the first solve (with
