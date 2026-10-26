@@ -59,8 +59,8 @@ def test_the_algorithm_step_by_step():
     # rigid-body modes.
     A, b, fieldBlocks = displacementDamageSystem(15, coupling="symmetric", rowScaling=True)
     fields = [slice(block.start, block.stop) for block in fieldBlocks]
-    # The steps are numbered as on the theory page and in BlockAMGSolver.__call__. Steps (1) and (7) carry state from
-    # one Newton iteration to the next and have no part in a single solve.
+    # The steps are numbered as in "The solve pipeline" of the theory page. Steps (1) and (7) carry state from one
+    # Newton iteration to the next and have no part in a single solve.
 
     # (2) Equilibrate: solve (D A D) z = D b with D = diag(scaling), scaling = 1 / sqrt|a_ii|, then x = D z.
     scaling = 1.0 / np.sqrt(np.abs(A.diagonal()))

@@ -126,39 +126,53 @@ every registered linear solver it is called as ``(A, b) -> x``. Both of its stat
 (adaptive tolerance and hierarchy reuse) therefore *reconstruct* the loop state from
 :math:`\lVert b \rVert` and from the matrix's own bookkeeping across calls.
 
-The symbols of this page and their names in the code (the components, and the worked example below):
+The symbols of this page, their variables in the worked example (:ref:`blockamg-worked-example`), and the
+components that hold them:
 
 .. list-table:: Notation
-    :widths: 30 35 35
+    :widths: 18 30 26 26
     :header-rows: 1
 
     * - Symbol
       - Meaning
-      - Code
+      - Worked example
+      - Component
     * - :math:`A, b, x`
       - the system as the nonlinear solver hands it over, and its solution
       - ``A``, ``b``, ``x``
+      - the adapter's call ``x = solver(A, b)`` (``ComposedLinearSolver``)
     * - :math:`i = 1 \dots n`
       - the fields (DOF ranges, in DOF order)
-      - ``FieldBlock``, ``blocks``
+      - ``fieldBlocks`` (``FieldBlock``), ``fields`` (their slices)
+      - ``OnField(name, M)``, one per field
     * - :math:`D`
       - the diagonal scaling, entries :math:`\lvert a_{ii} \rvert^{-1/2}`
-      - ``scaling`` (its diagonal)
+      - ``scaling`` (its diagonal), ``D``
+      - ``DiagonalScaling``
     * - :math:`\hat A = D A D,\ \hat b = D b`
       - the scaled (equilibrated) system, :math:`x = D z`
-      - ``system`` (``PyAMGCLEquilibratedSystem``), ``b_scaled``; ``A_scaled`` in the example
+      - ``A_scaled``, ``b_scaled``
+      - formed for the components below a ``DiagonalScaling`` (``SystemMatrix``)
     * - :math:`\hat A_{ij}`
       - its field blocks
-      - ``system.diagonalBlock``, ``system.couplingMatvec``
+      - ``A_blocks[i][j]``
+      - the field blocks of the ``SystemMatrix``, read by ``OnField`` and ``Multiplicative``
     * - :math:`M_i^{-1}`
       - one AMG cycle on :math:`\hat A_{ii}`
-      - ``preconditioners[i].applyPreconditioner``
+      - ``fieldAMG[i].applyPreconditioner``
+      - ``AMG()`` (or ``TwoLevel(...)``) inside ``OnField``
     * - :math:`M^{-1}`
       - the block Gauss--Seidel sweep, :math:`v = M^{-1} r`
       - ``blockGaussSeidel``
+      - ``Multiplicative([OnField(...), ...])``
+    * - :math:`\hat A M^{-1} y = \hat b`
+      - the outer Krylov solve, right-preconditioned
+      - ``gmres(A_scaled_Minv, b_scaled, ...)``
+      - ``LGMRES``
     * - :math:`\eta`
       - the requested relative tolerance of one solve
-      - ``eta`` (``FixedTolerance(eta)`` when fixed)
+      - ``rtol`` of ``gmres``
+      - ``ForcingTolerance`` (the default of ``LGMRES``), or ``FixedTolerance(eta)``
 
 .. code-block:: text
 
@@ -1115,6 +1129,8 @@ The condensation is a ``custom`` solver script, ``LGMRES(SchurComplement(condens
 complete one is :ref:`composed-schur-complement-recipe`, the arguments of
 :class:`~edelweissfe.linsolve.composition.schurcomplement.SchurComplement` are listed in
 :ref:`composed-schur-complement-arguments`.
+
+.. _blockamg-worked-example:
 
 A worked example
 ----------------

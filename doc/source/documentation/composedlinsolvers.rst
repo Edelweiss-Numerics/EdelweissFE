@@ -47,6 +47,11 @@ and in the input file:
     *solver, solver=NIST, name=theSolver
     linsolver=mySolver
 
+``LGMRES``'s defaults are the production ones: an Eisenstat--Walker tolerance per solve (``ForcingTolerance``), a
+``RebuildPolicy`` that reuses the preconditioner across Newton iterations, and the detection of a new increment
+through the adapter's ``residualGrowthFactor``; for a plain solve to a fixed tolerance, write
+``LGMRES(..., tolerance=FixedTolerance(1e-8))``.
+
 ``script`` is a path relative to the working directory, like the output files of the run (only ``*include`` is
 relative to the including input file): ``script=solver.py`` finds a script next to the input file when the simulation
 is started in the directory of the input file, as ``run_tests_edelweissfe`` does.
@@ -165,6 +170,8 @@ much per application as ``TwoLevel`` (101 ms plus about 98 ms). The difference i
 * ``TwoLevel`` forms :math:`P x`, :math:`P^T r` and :math:`P^T A P` threaded in C++; ``CoarseCorrection`` uses SciPy;
 * ``Multiplicative`` forms the residual :math:`r - A z` between its steps; ``TwoLevel`` takes it from the smoother.
 
+The testfile deck ``testfiles/edelweiss-only/TwoLevelSpelledOut`` runs the spelled-out cycle in a simulation.
+
 There is no native Chebyshev component yet, so the spelled-out way cannot reproduce ``TwoLevel`` exactly; a
 ``Chebyshev`` component is issue #237 (https://github.com/Edelweiss-Numerics/EdelweissFE/issues/237). The exception
 goes away once these three pieces exist natively: the compact field-block copy kept by the system matrix, a Chebyshev
@@ -252,6 +259,62 @@ The corrections here are a function of the context: they are made at the first s
 dofs, with the preconditioner the preset would give that field. A ``fieldOutput`` marker condenses, e.g., a softening
 zone instead (testfile ``GradientEnhancedDamageSchurComplement``). The other arguments of ``SchurComplement`` are
 listed in :ref:`composed-schur-complement-arguments`.
+
+.. _composed-own-component:
+
+Writing your own component
+--------------------------
+
+A component of your own subclasses :class:`~edelweissfe.linsolve.composition.base.Preconditioner` -- in the solver
+script itself, if you like -- and calls ``super().__init__()`` in its constructor. It then composes with every other
+component. The matrix it is given, ``A``, is a :class:`~edelweissfe.linsolve.composition.systemmatrix.SystemMatrix`,
+not a SciPy matrix: ``A.matrix()`` gives the SciPy CSR matrix (the system matrix also forms the field blocks and the
+scaled matrix for the components that need them).
+
+Three hooks make a component:
+
+``_setUp(A, context)``
+    Build what the application needs for the matrix ``A``, e.g. the inverse of its diagonal. ``context`` (a
+    :class:`~edelweissfe.linsolve.composition.base.SetUpContext`) holds the fields of the sub-problem and their node
+    coordinates.
+``_apply(r)``
+    Return :math:`z = M^{-1} r`.
+``_update(A, change)``
+    Take the matrix of the next Newton iteration. By default it builds anew (it calls ``_setUp``); override it to
+    reuse what you built, rebuilding only if ``change.requiresRebuild`` (a new increment, a new sparsity pattern, a
+    stale preconditioner, as the ``MatrixChange`` and the Krylov solver above decide).
+
+Then ``describe()`` returns a :class:`~edelweissfe.linsolve.composition.base.Description` -- the name, the formula
+(unicode and LaTeX), the parameters and the steps of one application -- which the views show. The public
+``setUp``, ``update`` and ``__call__`` of the base class record each call and its time in the component's statistics
+and call the hook; a component calls its children through those public methods.
+
+A complete component, run as a deck of the test suite (``testfiles/edelweiss-only/OwnComponentSolverScript``):
+
+.. literalinclude:: ../../../testfiles/edelweiss-only/OwnComponentSolverScript/solver.py
+   :language: python
+
+The rest of the protocol of :class:`~edelweissfe.linsolve.composition.base.Preconditioner` has defaults that fit a
+leaf; override a method only in the case named:
+
+* ``children()``: a component with children returns its ``(role, child)`` pairs, in the order it uses them. The tree
+  is walked through it (the model, the end of a solve, the questions below, the views), and the role is the
+  placeholder of the child in the component's formula.
+* ``fieldIndex`` and ``_applyRestricted(r_f)``: a component that acts on one field returns its index in the context;
+  a combination then forms the residual of that field alone and calls ``applyRestricted`` with it.
+* ``withRebuildReasons(change)``: a component that adds reasons for a rebuild of its own (a Krylov solver's
+  ``RebuildPolicy``), or keeps something built for the matrix above such a child (the :math:`D` of a
+  ``DiagonalScaling`` around a Krylov solve), so that it rebuilds together with the child.
+* ``setModel(model, dofManager)``: a component that derives something from the model, e.g. which dofs a marker
+  selects.
+* ``finishSolve()``: a component that holds something only one solve needs (e.g. the field blocks of its matrix)
+  releases it here, so that no copy of the last matrix is kept while the nonlinear solver assembles the next one.
+* ``isFixedLinearOperator``: false for a component whose :math:`M^{-1} r` is not one fixed linear operator between two
+  set-ups (a Krylov solve inside); ``LGMRES`` refuses such a preconditioner, ``FGMRES`` takes it.
+* ``containsKrylovSolver``: true for a Krylov solver (the nonlinear solver then keeps the sparsity pattern stable,
+  and the solve is recorded in the "linear solve" column).
+* ``builtMatrices()``, ``solveRecord()``, ``condensedDofs()``: the matrices a component formed (for ``views.spy``),
+  what its last Krylov solve did, and the dofs a Schur complement condensed (for the dumps).
 
 Views
 -----
