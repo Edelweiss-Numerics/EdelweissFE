@@ -137,6 +137,13 @@ THINNING_FRACTION = 0.1
 #: pays.
 BAND_STORAGE_MAX_FRACTION = 0.25
 
+#: The work on the entries of the large matrices (the split of :math:`A` into its blocks, the drop of the small entries
+#: of :math:`\tilde S`) is done for blocks of about this many entries in parallel threads: enough to keep the threads
+#: busy, few enough that the temporaries of each block stay small. The threads write their results into arrays of the
+#: calling thread: in the free-threaded interpreter, an array made by a worker thread and dropped by another is freed
+#: only when that worker runs again.
+PARALLEL_BLOCK_ENTRIES = 2**20
+
 
 class SchurComplementCondensation:
     """The condensed dofs :math:`b`, the factorization of :math:`A_{bb}`, the approximate Schur complement
@@ -201,8 +208,6 @@ class SchurComplementCondensation:
         # see _split
         self._splitCache = None
         self.A_bb = self.A_bk = self.A_kb = None
-        # A_kb by columns, for cutting out the columns of the windows, see approximateSchurComplement
-        self._A_kb_byColumns = None
         # the last selection of the condensed dofs, and the markers' stamps it was made with, see
         # _selectCondensedDofs
         self._selection = self._selectionStamp = None
@@ -347,40 +352,50 @@ class SchurComplementCondensation:
         A
             The system matrix of the last :meth:`update`.
         """
-        (A_kk,) = _split(A, ("kk",), self.condensedDofs, self.remainingDofs, self._splitCache)
         if self._approximation == "none":
-            S = A_kk
+            (S,) = _split(A, ("kk",), self.condensedDofs, self.remainingDofs, self._splitCache)
         else:
-            S = self._localSchurComplement(A_kk)
+            S = self._localSchurComplement(A)
         self.nonPositiveDiagonalEntries = int(np.count_nonzero(S.diagonal() <= 0.0))
         return S
 
-    def _localSchurComplement(self, A_kk: sp.csr_matrix) -> sp.csr_matrix:
-        """:math:`A_{kk}` minus the corrections of the windows and of the zones, with small entries dropped."""
-        tau = self._dropTolerance
-        sqrtAbsDiagonalOfA_kk = np.sqrt(np.abs(A_kk.diagonal()))
-        thinningTolerance = THINNING_FRACTION * tau
+    def _localSchurComplement(self, A: sp.csr_matrix) -> sp.csr_matrix:
+        """:math:`A_{kk}` minus the corrections of the windows and of the zones, with small entries dropped.
 
+        Each large matrix is formed only once the one before it is no longer needed: the sum :math:`C` of the
+        corrections (thinned against the diagonal of :math:`A_{kk}`, which is that of :math:`A` at k), then
+        :math:`A_{kk} - C`, then :math:`\\tilde S` by the drop of its small entries."""
+        tau = self._dropTolerance
+        sqrtAbsDiagonalOfA_kk = np.sqrt(np.abs(A.diagonal()[self.remainingDofs]))
+        corrections = self._corrections(sqrtAbsDiagonalOfA_kk, THINNING_FRACTION * tau)
+        with performancetiming.timeit("schur assembly"):
+            (A_kk,) = _split(A, ("kk",), self.condensedDofs, self.remainingDofs, self._splitCache)
+            S = A_kk - corrections
+            del A_kk, corrections  # before the drop, which forms S~ beside S
+            return _dropSmallEntries(S, tau)
+
+    def _corrections(self, sqrtAbsDiagonalOfA_kk: np.ndarray, thinningTolerance: float) -> sp.csr_matrix:
+        """The sum :math:`C` of the corrections of all windows and zones, each thinned (see
+        :data:`THINNING_FRACTION`), as a sparse matrix over the remaining dofs k."""
         windows, zoneDofs = self._windowsAndZones()
-        self._A_kb_byColumns = self.A_kb.tocsc()
+        A_kb_byColumns = self.A_kb.tocsc()
         parts = []
         with performancetiming.timeit("schur windows"):
             pool = getThreadPool(getNumberOfThreads())
             for part in pool.map(
-                lambda window: self._windowCorrection(window, sqrtAbsDiagonalOfA_kk, thinningTolerance), windows
+                lambda window: self._windowCorrection(window, A_kb_byColumns, sqrtAbsDiagonalOfA_kk, thinningTolerance),
+                windows,
             ):
                 if part is not None:
                     parts.append(part)
         with performancetiming.timeit("schur exact correction"):
             parts += self._exactCorrection(zoneDofs, sqrtAbsDiagonalOfA_kk, thinningTolerance)
-
-        with performancetiming.timeit("schur assembly"):
-            if parts:
-                rows, cols, values = (np.concatenate(v) for v in zip(*parts))
-                S = (A_kk - sp.csr_matrix((values, (rows, cols)), shape=A_kk.shape)).tocsr()
-            else:
-                S = A_kk.copy()
-            return _dropSmallEntries(S, tau)
+        n = self.remainingDofs.size
+        with performancetiming.timeit("schur sum of corrections"):
+            if not parts:
+                return sp.csr_matrix((n, n))
+            rows, cols, values = (np.concatenate(v) for v in zip(*parts))
+            return sp.csr_matrix((values, (rows, cols)), shape=(n, n))
 
     def _windowsAndZones(self) -> tuple:
         """The windows along the chains of :math:`A_{bb}`, and the dofs of its zones: of every connected component of
@@ -411,7 +426,13 @@ class SchurComplementCondensation:
         dofsPerNode = max(1, round(dofs.size / np.unique(self._nodeOfCondensedDof[dofs]).size))
         return self._windowNodes * dofsPerNode, self._haloNodes * dofsPerNode
 
-    def _windowCorrection(self, window: "Window", sqrtAbsDiagonalOfA_kk: np.ndarray, thinningTolerance: float):
+    def _windowCorrection(
+        self,
+        window: "Window",
+        A_kb_byColumns: sp.csc_matrix,
+        sqrtAbsDiagonalOfA_kk: np.ndarray,
+        thinningTolerance: float,
+    ):
         """The correction :math:`A_{kb} A_{bb}^{-1} A_{bk}` of one window's core, in which :math:`A_{bb}^{-1}` is
         replaced by the inverse of the window's block :math:`A_{ww}`. Only the core rows of that inverse are needed,
         :math:`(A_{ww}^{-1})_{core,:}`, far fewer right-hand sides than there are remaining dofs coupled to the window:
@@ -420,7 +441,8 @@ class SchurComplementCondensation:
 
             \\text{correction}_{ij} = (A_{kb})_{i,core} \\, (A_{ww}^{-1})_{core,:} \\, (A_{bk})_{window,j}
 
-        for the remaining dofs i coupled to the core and j coupled to the window.
+        for the remaining dofs i coupled to the core and j coupled to the window. ``A_kb_byColumns`` is
+        :math:`A_{kb}` in CSC format, from which the columns of the core are cut.
 
         Returns
         -------
@@ -429,7 +451,7 @@ class SchurComplementCondensation:
         """
         A_bk_window = self.A_bk[window.dofs]
         coupledToWindow = np.unique(A_bk_window.indices)
-        A_kb_core = self._A_kb_byColumns[:, window.dofs[window.core]]
+        A_kb_core = A_kb_byColumns[:, window.dofs[window.core]]
         coupledToCore = np.unique(A_kb_core.indices)
         if len(coupledToWindow) == 0 or len(coupledToCore) == 0:
             return None
@@ -527,23 +549,57 @@ def _split(A: sp.csr_matrix, which: tuple, condensedDofs: np.ndarray, remainingD
 
     The simple way is fancy indexing, ``A[b][:, k]``, which copies and searches the large matrix on every solve.
     But the sparsity pattern of ``A`` stays the same over many solves, so this finds once per pattern (and choice of
-    b), for every entry of a block, the index of that entry in ``A.data``: it slices a matrix with ``A``'s pattern
-    whose values are those indices, and keeps them in ``cache`` (see :func:`_splitCacheFor`). Every solve then only
-    gathers ``A.data`` at these indices."""
+    b) where the entries of a block are in ``A.data`` (:func:`_entriesOfBlock`), and keeps that in ``cache`` (see
+    :func:`_splitCacheFor`). Every solve then only gathers the values and the column indices of these entries, for
+    blocks of them in parallel threads (:func:`_gatheredInParallel`)."""
     dofsOf = {"b": condensedDofs, "k": remainingDofs}
     blocks = []
     for name in which:
         if name not in cache["blocks"]:
-            # index + 1: a zero value could be dropped by the slicing
-            entryIndexInData = sp.csr_matrix(
-                (np.arange(1, A.nnz + 1, dtype=np.float64), A.indices, A.indptr), shape=A.shape
-            )
-            block = entryIndexInData[dofsOf[name[0]]][:, dofsOf[name[1]]].tocsr()
-            block.sort_indices()
-            cache["blocks"][name] = (block.data.astype(np.int64) - 1, block.indices, block.indptr, block.shape)
-        indexInData, indices, indptr, shape = cache["blocks"][name]
-        blocks.append(sp.csr_matrix((A.data[indexInData], indices, indptr), shape=shape))
+            cache["blocks"][name] = _entriesOfBlock(A, dofsOf[name[0]], dofsOf[name[1]])
+        indexInData, positionInCols, indptr, shape = cache["blocks"][name]
+        data = _gatheredInParallel(lambda index: A.data[index], indexInData, A.data.dtype)
+        indices = _gatheredInParallel(lambda index: positionInCols[A.indices[index]], indexInData, indptr.dtype)
+        blocks.append(sp.csr_matrix((data, indices, indptr), shape=shape))
     return blocks
+
+
+def _entriesOfBlock(A: sp.csr_matrix, rows: np.ndarray, cols: np.ndarray) -> tuple:
+    """Where the entries of the block ``A[rows][:, cols]`` are in ``A.data``, for sorted ``rows`` and ``cols`` and a
+    canonical ``A``: the entries of the rows ``rows`` in the columns ``cols``, which keep their order in ``A.data``.
+
+    Returns
+    -------
+    tuple
+        ``(indexInData, positionInCols, indptr, shape)``: the index in ``A.data`` of every entry of the block, in the
+        order of the block's CSR format, the position of every column of ``A`` in ``cols`` (the block's column index
+        of an entry in that column), and the block's row pointers and shape. The indices are int32 while ``A`` has
+        fewer than 2^31 entries.
+    """
+    n, indexType = A.shape[0], (np.int32 if A.nnz <= np.iinfo(np.int32).max else np.int64)
+    isRow, isCol = np.zeros(n, dtype=bool), np.zeros(n, dtype=bool)
+    isRow[rows], isCol[cols] = True, True
+    inBlock = np.repeat(isRow, np.diff(A.indptr))
+    inBlock &= isCol[A.indices]
+    indexInData = np.flatnonzero(inBlock).astype(indexType)
+    # the entries of the block up to its row r are those before the end of A's row r
+    indptr = np.concatenate([[0], np.searchsorted(indexInData, A.indptr[rows + 1])]).astype(indexType)
+    positionInCols = np.full(n, -1, dtype=indexType)
+    positionInCols[cols] = np.arange(cols.size)
+    return indexInData, positionInCols, indptr, (rows.size, cols.size)
+
+
+def _gatheredInParallel(gather, index: np.ndarray, dtype) -> np.ndarray:
+    """``gather(index)``, an array of ``index``'s size, computed for blocks of :data:`PARALLEL_BLOCK_ENTRIES` entries
+    of ``index`` in parallel threads. Blocks also keep the temporaries small: numpy indexes with an int32 index by
+    an int64 copy of it."""
+    gathered = np.empty(index.size, dtype=dtype)
+
+    def gatherBlock(start):
+        gathered[start : start + PARALLEL_BLOCK_ENTRIES] = gather(index[start : start + PARALLEL_BLOCK_ENTRIES])
+
+    list(getThreadPool(getNumberOfThreads()).map(gatherBlock, range(0, index.size, PARALLEL_BLOCK_ENTRIES)))
+    return gathered
 
 
 def _significantEntries(
@@ -561,27 +617,39 @@ def _dropSmallEntries(S: sp.csr_matrix, tau: float) -> sp.csr_matrix:
     """``S`` without the entries that fail the relative drop test :math:`|S_{ij}| \\geq \\tau \\sqrt{|S_{ii} S_{jj}|}`
     (:func:`~edelweissfe.linsolve.composition.amg.isSignificant`) and without stored zeros.
 
-    The simple form is ``S.data[~significant] = 0; S.eliminate_zeros()``. For the tens of millions of entries of a large
-    model, this computes it for blocks of rows in parallel threads instead."""
+    The simple form is ``S.data[~significant] = 0; S.eliminate_zeros()``. For the hundreds of millions of entries of a
+    large model, this computes it for blocks of rows (of about :data:`PARALLEL_BLOCK_ENTRIES` entries) in parallel
+    threads instead, in two passes: the first marks the kept entries (one byte per entry) and counts them per row, the
+    second copies them into the result, allocated once their number is known."""
     sqrtAbsDiagonal = np.sqrt(np.abs(S.diagonal()))
+    nBlocks = max(1, -(-S.nnz // PARALLEL_BLOCK_ENTRIES))
+    firstRows = np.searchsorted(S.indptr, np.linspace(0, S.nnz, nBlocks + 1)[1:-1])
+    bounds = np.unique(np.concatenate([[0], firstRows, [S.shape[0]]]))
+    rowBlocks = list(zip(bounds[:-1], bounds[1:]))
+    keep, keptPerRow = np.empty(S.nnz, dtype=bool), np.empty(S.shape[0], dtype=np.int64)
 
-    def keptEntries(rowRange):
-        low, high = rowRange
+    def markKeptEntries(rowBlock):
+        low, high = rowBlock
         entries = slice(S.indptr[low], S.indptr[high])
         rowOfEntry = np.repeat(np.arange(low, high), np.diff(S.indptr[low : high + 1]))
-        keep = isSignificant(S.data[entries], rowOfEntry, S.indices[entries], sqrtAbsDiagonal, tau)
-        keep &= S.data[entries] != 0.0
-        return (
-            S.data[entries][keep],
-            S.indices[entries][keep],
-            np.bincount(rowOfEntry[keep] - low, minlength=high - low),
-        )
+        keepHere = isSignificant(S.data[entries], rowOfEntry, S.indices[entries], sqrtAbsDiagonal, tau)
+        keepHere &= S.data[entries] != 0.0
+        keep[entries] = keepHere
+        keptPerRow[low:high] = np.bincount(rowOfEntry[keepHere] - low, minlength=high - low)
 
-    nThreads = getNumberOfThreads()
-    bounds = np.linspace(0, S.shape[0], nThreads + 1).astype(np.int64)
-    parts = list(getThreadPool(nThreads).map(keptEntries, zip(bounds[:-1], bounds[1:])))
-    data, indices, keptPerRow = (np.concatenate(v) for v in zip(*parts))
-    return sp.csr_matrix((data, indices, np.concatenate([[0], np.cumsum(keptPerRow)])), shape=S.shape)
+    pool = getThreadPool(getNumberOfThreads())
+    list(pool.map(markKeptEntries, rowBlocks))
+    indptr = np.concatenate([[0], np.cumsum(keptPerRow)])
+    data, indices = np.empty(indptr[-1], dtype=S.data.dtype), np.empty(indptr[-1], dtype=S.indices.dtype)
+
+    def copyKeptEntries(rowBlock):
+        low, high = rowBlock
+        entries, kept = slice(S.indptr[low], S.indptr[high]), slice(indptr[low], indptr[high])
+        np.compress(keep[entries], S.data[entries], out=data[kept])
+        np.compress(keep[entries], S.indices[entries], out=indices[kept])
+
+    list(pool.map(copyKeptEntries, rowBlocks))
+    return sp.csr_matrix((data, indices, indptr), shape=S.shape)
 
 
 def _solveTransposed(A: sp.coo_matrix, B: np.ndarray) -> np.ndarray:
