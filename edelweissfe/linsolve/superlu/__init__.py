@@ -48,10 +48,12 @@ class SuperLUBackend(DirectSolverBackend):
     def factorize(self, A) -> None:
         from scipy.sparse.linalg import splu
 
+        # A is CSR, i.e. the CSC arrays of A^T: factorize A^T and solve transposed, as scipy's spsolve does for CSR,
+        # which also gives bitwise its results (factorizing A.tocsc() instead differs in the round-off)
         try:
-            self._factorization = splu(A.tocsc())
+            self._factorization = splu(A.T)
         except RuntimeError as error:  # SuperLU's "Factor is exactly singular"
             raise np.linalg.LinAlgError(str(error)) from error
 
     def solveFactorized(self, b):
-        return self._factorization.solve(b)
+        return self._factorization.solve(b, trans="T")
