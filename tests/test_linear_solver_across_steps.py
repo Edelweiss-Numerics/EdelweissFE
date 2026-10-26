@@ -102,7 +102,8 @@ nY=4
 
 def _simulate(tmp_path, monkeypatch, steps: list) -> list:
     """Run the deck with the given steps (their options lines) and the garbage collector off; the linear solvers the
-    nonlinear solver created, and the AMG components alive at the end."""
+    nonlinear solver created, and the AMG components this simulation left alive. The AMG components that other
+    tests left alive in the process are not this simulation's, so they are not counted."""
     (tmp_path / "solver.py").write_text(SCRIPT)
     deck = tmp_path / "test.inp"
     deck.write_text(DECK + "".join(_step(i, options) for i, options in enumerate(steps)))
@@ -120,8 +121,11 @@ def _simulate(tmp_path, monkeypatch, steps: list) -> list:
     gc.collect()
     gc.disable()
     try:
+        # held, so that none of them is freed and its id taken by an AMG of this simulation
+        aliveBefore = [obj for obj in gc.get_objects() if isinstance(obj, AMG)]
+        idsAliveBefore = {id(amg) for amg in aliveBefore}
         finiteElementSimulation(parseInputFile(str(deck)), verbose=False, suppressPlots=True)
-        aliveAMGs = sum(isinstance(obj, AMG) for obj in gc.get_objects())
+        aliveAMGs = sum(isinstance(obj, AMG) and id(obj) not in idsAliveBefore for obj in gc.get_objects())
     finally:
         gc.enable()
     return created, aliveAMGs
