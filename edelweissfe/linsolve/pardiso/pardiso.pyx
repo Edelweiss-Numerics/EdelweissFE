@@ -141,7 +141,7 @@ cdef class PardisoSolver:
         self._releaseMemory()
 
     cdef void _releaseMemory(self):
-        """Release all internal PARDISO memory (phase -1)."""
+        """Release all internal PARDISO memory (phase -1), and the pattern it was analyzed for."""
         cdef int phase = -1
         cdef int error = 0
         cdef int nRhs = 1
@@ -161,6 +161,8 @@ cdef class PardisoSolver:
         self.currentIndices = None
         self.currentIndptr = None
         self.currentData = None
+        self.indicesFortran = None
+        self.indptrFortran = None
 
     cdef bint _hasSamePattern(self, A):
         """Check if the sparsity pattern of A matches the analyzed one."""
@@ -414,8 +416,6 @@ cdef class PardisoSolver:
             self.currentData = None
         else:
             self._releaseMemory()
-            self.indicesFortran = None
-            self.indptrFortran = None
 
     def invalidate(self):
         """
@@ -425,10 +425,7 @@ cdef class PardisoSolver:
 
         Call this whenever the caller knows the sparsity pattern may have changed
         through a channel the automatic detection might not reliably catch — e.g. a
-        solver that rebuilds its CSR generator whenever the active domain changes,
-        which can happen more often than once per analysis step (unlike EdelweissFE's
-        own static-mesh usage, where a fresh instance is constructed once per step and
-        the pattern is never actually re-checked against a real change).
+        solver that rebuilds its CSR generator whenever the active domain changes.
 
         No-op when ``reuseSymbolicFactorization`` is False, since every solve already
         re-analyzes unconditionally in that case.

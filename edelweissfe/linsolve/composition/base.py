@@ -50,15 +50,13 @@ and its time in the component's :class:`Statistics` and call the hook. So a comp
 its formula, and a hook that calls another hook of its own component (a Krylov solver's ``_setUp`` is its ``_update``
 for a first matrix) counts as one call.
 
-A component builds anew only through :meth:`~Preconditioner.setUp`, also when an update decides to rebuild (it calls
-``self.setUp``, which records a set-up within that update). :meth:`~Preconditioner.setUp` first forgets what was built
-before (:meth:`~Preconditioner.forget`: the component's :meth:`~Preconditioner._forget` and those of its children):
-the old hierarchies, factorizations and matrices, gigabytes for a large model, are freed before the new ones are
-built, and never held at the same time. What a component reuses on purpose is not built state and is not forgotten:
-an AMG hierarchy kept while only the values change (an update that does not rebuild never calls
-:meth:`~Preconditioner.setUp`), a fine spectral radius carried from one build to the next, the selection of a Schur
-complement's condensed dofs, a direct solver's symbolic factorization, the statistics. A component that has nothing
-built builds at its next update, whatever the update says.
+A component builds only through :meth:`~Preconditioner.setUp`, also when an update decides to rebuild (it calls
+``self.setUp``). :meth:`~Preconditioner.setUp` first forgets what was built before (:meth:`~Preconditioner.forget`:
+the :meth:`~Preconditioner._forget` of the component and of its children), so that the old and the new hierarchies,
+factorizations and matrices, gigabytes for a large model, are never held at once. An update that does not rebuild
+keeps what was built, and what is reused on purpose is never forgotten: a fine spectral radius carried to the next
+build, the selection of a Schur complement's condensed dofs, a symbolic factorization, the statistics. A component
+with nothing built builds at its next update, whatever the update says.
 """
 
 import time
