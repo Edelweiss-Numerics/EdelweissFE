@@ -265,6 +265,18 @@ def test_non_csr_matrices_are_rejected(matrixFormat):
         mpccondensation.MPCCondensation(mpc._T.tocsc(), mpc._T.T.tocsr(), mpc._C)
 
 
+def test_64_bit_indices_are_rejected():
+    """K is condensed through its own arrays, so they are checked, not converted."""
+    n = 50
+    mpc = MultiPointConstraintTransformation([(5, [(0, 0.5), (1, 0.5)])], n, useThreadedCondensation=True)
+    K = mpc.withCondensedPattern(_randomSparseK(n, seed=13))
+    K.indptr, K.indices = K.indptr.astype(np.int64), K.indices.astype(np.int64)
+    with pytest.raises(TypeError, match="32-bit indices"):
+        mpc.condensedPatternFillIn(K)
+    with pytest.raises(TypeError, match="32-bit indices"):
+        mpc.transformSystemMatrix(K)
+
+
 def test_explicit_zeros_are_kept():
     """The pattern is the structural one: an exactly cancelling entry stays stored (pruning is the solver's
     decision, see pruneCondensedMatrixZeros)."""

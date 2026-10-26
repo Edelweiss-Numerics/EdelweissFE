@@ -118,11 +118,16 @@ cdef class MPCCondensation:
             &Cp[0], &Ci[0] if Ci.shape[0] else &emptyIdx, &Cv[0] if Cv.shape[0] else &emptyVal,
         )
 
-    def _checkShape(self, K):
+    def _checkMatrix(self, K):
+        """K is read and written through its own arrays, never a converted copy: their types must fit."""
         if K.format != "csr":
             raise TypeError("MPC condensation: K must be CSR, not {:}.".format(K.format))
         if K.shape != (self.n, self.n):
             raise ValueError("MPC condensation: K has shape {:}, expected {:}.".format(K.shape, (self.n, self.n)))
+        if K.indptr.dtype != np.int32 or K.indices.dtype != np.int32:
+            raise TypeError("MPC condensation: K must have 32-bit indices, not {:}.".format(K.indices.dtype))
+        if K.data.dtype != np.float64 or not K.data.flags.c_contiguous:
+            raise TypeError("MPC condensation: K must have contiguous float64 values, not {:}.".format(K.data.dtype))
 
     def condensedPatternFillIn(self, K, int numThreads=0) -> csr_matrix:
         """The entries of the structural pattern of :math:`T^T K T + C` that the pattern of :math:`K` lacks.
@@ -139,7 +144,7 @@ cdef class MPCCondensation:
         csr_matrix
             The missing entries, as stored zeros, with sorted column indices.
         """
-        self._checkShape(K)
+        self._checkMatrix(K)
         cdef int32_t[::1] Kp = K.indptr, Ki = K.indices
         cdef int32_t emptyIdx = 0
         cdef const int32_t* KiPtr = &Ki[0] if Ki.shape[0] else &emptyIdx
@@ -175,7 +180,7 @@ cdef class MPCCondensation:
         numThreads
             The number of OpenMP threads; 0 for the OpenMP default (``OMP_NUM_THREADS``).
         """
-        self._checkShape(K)
+        self._checkMatrix(K)
         cdef int32_t[::1] Kp = K.indptr, Ki = K.indices
         cdef double[::1] Kv = K.data
         cdef int32_t emptyIdx = 0
