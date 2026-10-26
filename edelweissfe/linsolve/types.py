@@ -83,7 +83,9 @@ class LinearSolverSchema:
         default="none",
     )
     dumpDirectory: str = schemaField(description="Where the dumps go.", dtype=str, default="linsolveDumps")
-    maxDumps: int = schemaField(description="The most systems dumped in the run (a disk guard).", dtype=int, default=10)
+    maxDumps: int = schemaField(
+        description="The most systems dumped to dumpDirectory in the run (a disk guard).", dtype=int, default=10
+    )
     dumpContextSolves: int = schemaField(
         description="How many of the solves preceding a dumped one are dumped with it.", dtype=int, default=0
     )

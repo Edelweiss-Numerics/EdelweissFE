@@ -385,8 +385,8 @@ On disk:
 
 ``dumpContextSolves`` also writes the solves *before* a dumped one, kept in memory as copies: one snapshot cannot tell
 a hard operator from a solve made slow by a stale preconditioner, but a replay of the sequence through one persistent
-solver can. ``maxDumps`` (default 10) bounds the systems written in the process, by all solvers, context solves
-included. A sequence of every solve is ``dumps=every`` (or solve numbers).
+solver can. ``maxDumps`` (default 10) bounds the systems written to one directory in the process, by all solvers that dump
+there, context solves included. A sequence of every solve is ``dumps=every`` (or solve numbers).
 
 .. _composed-hot-reload:
 

@@ -333,10 +333,9 @@ _MANIFEST_KEYS = {
 }
 
 
-def test_the_degradation_dumps_are_blockamgs_on_disk(tmp_path, monkeypatch):
+def test_the_degradation_dumps_are_blockamgs_on_disk(tmp_path):
     """The files and manifest lines blockamg wrote, for every solve of a sequence (threshold 0: all dumped)."""
     A, b, fields, coordinates = _beamWithDamage()
-    monkeypatch.setattr(SolveDumps, "dumpsWritten", 0)
     composed = ComposedLinearSolver(
         blockAMG(),
         nodeCoordinates={"displacement": coordinates},
@@ -375,10 +374,9 @@ def test_the_degradation_dumps_are_blockamgs_on_disk(tmp_path, monkeypatch):
         assert np.array_equal(np.load(tmp_path / record["rhsFile"]), b_k)
 
 
-def test_a_dump_of_a_condensed_solve_holds_its_condensed_dofs(tmp_path, monkeypatch):
+def test_a_dump_of_a_condensed_solve_holds_its_condensed_dofs(tmp_path):
     from _linsolvesystems import barOnFoundation, condensingGivenDofs
 
-    monkeypatch.setattr(SolveDumps, "dumpsWritten", 0)
     A, b, barDofs = barOnFoundation(n=8)
     fields = [FieldBlock("u", 0, A.shape[0], 1)]
     root = LGMRES(
@@ -395,8 +393,7 @@ def test_a_dump_of_a_condensed_solve_holds_its_condensed_dofs(tmp_path, monkeypa
     assert np.array_equal(np.load(tmp_path / record["condensedDofsFile"]), barDofs)
 
 
-def test_a_dump_holds_the_context_solves_before_its_trigger(tmp_path, monkeypatch):
-    monkeypatch.setattr(SolveDumps, "dumpsWritten", 0)
+def test_a_dump_holds_the_context_solves_before_its_trigger(tmp_path):
     A, b, fields, _ = _beamWithDamage()
     dumps = SolveDumps(str(tmp_path), maxDumps=10, contextSolves=2)
     for solveCount, degraded in ((1, False), (2, False), (3, False), (4, True)):

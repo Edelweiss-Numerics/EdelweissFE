@@ -117,8 +117,7 @@ def test_an_unknown_option_is_refused():
 
 
 @pytest.mark.parametrize("dumps, dumped", [("every", [1, 2, 3]), ("2 3", [2, 3])])
-def test_the_dumps_of_a_direct_solver(tmp_path, monkeypatch, dumps, dumped):
-    monkeypatch.setattr(SolveDumps, "dumpsWritten", 0)
+def test_the_dumps_of_a_direct_solver(tmp_path, dumps, dumped):
     A, b = _system()
     solver = getLinSolverByName("superlu", {"dumps": dumps, "dumpDirectory": str(tmp_path), "verbosity": "silent"})
     for k in range(3):
@@ -129,6 +128,18 @@ def test_the_dumps_of_a_direct_solver(tmp_path, monkeypatch, dumps, dumped):
     for record in records:
         assert np.array_equal(np.load(tmp_path / record["rhsFile"]), record["solveCount"] * b)
         assert abs(sp.load_npz(tmp_path / record["matrixFile"]) - A).max() == 0.0
+
+
+def test_maxdumps_bounds_each_dump_directory_alone(tmp_path):
+    # the solvers of two steps: the one that dumps to a second directory starts with its own budget
+    A, b = _system()
+    written = {}
+    for directory in ("step1", "step1", "step2"):
+        dumps = SolveDumps(str(tmp_path / directory), "every", maxDumps=2)
+        for solveCount in (1, 2):
+            dumps.afterSolve(0, solveCount, A, b, [], {}, None, {}, False, lambda level, message: None)
+        written[directory] = dumps.dumpsWritten
+    assert written == {"step1": 2, "step2": 2}
 
 
 def test_a_wrong_dump_trigger_is_refused():

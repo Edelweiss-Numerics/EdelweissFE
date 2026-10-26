@@ -255,8 +255,7 @@ def test_a_new_tree_that_fails_to_set_up_is_rolled_back(tmp_path):
     assert np.linalg.norm(b - A @ x) <= 1e-6 * np.linalg.norm(b) * (1 + 1e-9)
 
 
-def test_the_dump_numbering_continues_across_a_reload(tmp_path, monkeypatch):
-    monkeypatch.setattr(SolveDumps, "dumpsWritten", 0)
+def test_the_dump_numbering_continues_across_a_reload(tmp_path):
     solver, journal, script, A, b = _scriptSolver(tmp_path, 1e-6, dumps=SolveDumps(str(tmp_path / "dumps"), "every"))
     solver(A, b)
     _script(script, "linearSolver = blockAMG(tolerance=FixedTolerance(1e-7))\n")

@@ -81,7 +81,7 @@ does therefore works the same for every type, with the same data lines (:class:`
 * ``dumps``: which solves are written to disk for an offline replay -- ``none`` (default), ``slow`` (above
   ``warnOuterIterations``, or stopped at the iteration cap short of the tolerance), ``every``, or the numbers of the
   solves separated by spaces, e.g. ``dumps=12 13 14``; with ``dumpDirectory`` (default ``linsolveDumps``), ``maxDumps``
-  (default 10, a disk guard for the whole run) and ``dumpContextSolves`` (the solves before a dumped one, dumped with
+  (default 10, a disk guard for the whole run, per directory) and ``dumpContextSolves`` (the solves before a dumped one, dumped with
   it). The format is described in :ref:`composed-solve-dumps`; ``scripts/benchmark_linsolve.py`` replays a dumped
   sequence through direct solver variants.
 

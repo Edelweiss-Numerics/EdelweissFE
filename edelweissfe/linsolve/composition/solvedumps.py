@@ -48,7 +48,8 @@ preconditioner): a fresh solver replaying the matrix alone may converge in a fra
 dump can also hold the solves that *preceded* a dumped one (``contextSolves``), for a replay through one persistent
 solver in the same order; and every dumped solve records why it was (not) rebuilt.
 
-``maxDumps`` caps the systems written in a process: a coupled 3D system of a million dofs takes gigabytes on disk.
+``maxDumps`` caps the systems written to one directory in a process: a coupled 3D system of a million dofs takes
+gigabytes on disk. The solvers of all analysis steps that dump to the same directory share that cap.
 
 On disk, in ``directory``: ``A_<instance>_<solve>.npz`` (SciPy, uncompressed), ``b_<instance>_<solve>.npy``,
 ``schurDofs_<instance>_<solve>.npy`` (the condensed dofs of a Schur complement, if any),
@@ -83,15 +84,16 @@ class SolveDumps:
         (``warnOuterIterations``), so that a dump and its warning fire on the same solves. A solve that stops at the
         iteration cap short of its tolerance is dumped whatever the threshold.
     maxDumps
-        The most systems written in this process, across all solvers (e.g. one per analysis step), context solves
-        included: a disk-space guard for a run that degrades on every remaining solve.
+        The most systems written to ``directory`` in this process, across all solvers that dump there (e.g. one per
+        analysis step), context solves included: a disk-space guard for a run that degrades on every remaining solve.
     contextSolves
         How many of the solves preceding a dumped one are dumped with it (``0``: only the slow solve itself). They are
         kept in memory, as copies, only while this is positive.
     """
 
-    #: The systems written in this process, by every solver: what ``maxDumps`` bounds.
-    dumpsWritten = 0
+    #: The systems written to each directory (by absolute path) in this process, by every solver: what ``maxDumps``
+    #: bounds.
+    dumpsWrittenTo: dict = {}
 
     def __init__(
         self, directory: str, trigger="slow", threshold: int = None, maxDumps: int = 10, contextSolves: int = 0
@@ -117,6 +119,11 @@ class SolveDumps:
         self.dumpedSolves = set()
         self.directory = None
         self.moveTo(directory)
+
+    @property
+    def dumpsWritten(self) -> int:
+        """The systems written to :attr:`directory` in this process, by every solver that dumps there."""
+        return SolveDumps.dumpsWrittenTo.get(os.path.abspath(self.directory), 0)
 
     @property
     def contextSolves(self) -> int:
@@ -182,13 +189,13 @@ class SolveDumps:
         """
         if self.directory is None:
             return
-        if self.selects(solveCount, slow) and SolveDumps.dumpsWritten < self.maxDumps:
+        if self.selects(solveCount, slow) and self.dumpsWritten < self.maxDumps:
             if solveCount not in self.dumpedSolves:
                 self._write(
                     instance, solveCount, A, b, blocks, "trigger", solveCount, state, condensedDofs, geometry, log
                 )
             for entry in self.history:
-                if SolveDumps.dumpsWritten >= self.maxDumps:
+                if self.dumpsWritten >= self.maxDumps:
                     break
                 if entry["solveCount"] in self.dumpedSolves:
                     continue
@@ -254,10 +261,10 @@ class SolveDumps:
         with open(os.path.join(self.directory, "manifest.jsonl"), "a") as manifestFile:
             manifestFile.write(json.dumps(record) + "\n")
         self.dumpedSolves.add(solveCount)
-        SolveDumps.dumpsWritten += 1
+        SolveDumps.dumpsWrittenTo[os.path.abspath(self.directory)] = self.dumpsWritten + 1
         log(
             "warning",
             "dumped {:} solve #{:} (of trigger #{:}) to {:}; {:} of {:} dumps used".format(
-                role, solveCount, triggerSolveCount, matrixFile, SolveDumps.dumpsWritten, self.maxDumps
+                role, solveCount, triggerSolveCount, matrixFile, self.dumpsWritten, self.maxDumps
             ),
         )
