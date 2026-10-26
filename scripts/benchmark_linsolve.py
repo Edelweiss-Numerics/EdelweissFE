@@ -456,56 +456,6 @@ def commandLagged(args):
         )
 
 
-#: AMGCL configurations to try, in rough order of how plausible they are for this system. All run on
-#: AMGCL's OpenMP `builtin` backend, so unlike the SciPy path the matvec, the smoother and the
-#: orthogonalization are all threaded.
-#:
-#: The system is a poor fit for classical AMG and it is worth being explicit about why, so that a
-#: failure here is not mistaken for a configuration mistake: it is non-symmetric with 52% of its
-#: entries structurally asymmetric, it couples two fields with no constant nodal block size (nonlocal
-#: damage lives on corner nodes only, so point-block smoothing does not apply), penalty contact and
-#: the MPC/Dirichlet row replacements give it a ~1e8 dynamic range, and rows replaced by constraint
-#: equations are not an elliptic operator at all. Single-level ILU0 is included precisely because it
-#: makes none of AMG's smoothness assumptions.
-_AMGCL_CONFIGURATIONS = [
-    (
-        "bicgstab + AMG(SA, ilu0)  [wrapper default]",
-        {
-            "solver": {"type": "bicgstab", "tol": 1e-8, "maxiter": 500},
-            "precond": {"coarsening": {"type": "smoothed_aggregation"}, "relax": {"type": "ilu0"}},
-        },
-    ),
-    (
-        "gmres(100) + AMG(SA, ilu0)",
-        {
-            "solver": {"type": "gmres", "M": 100, "tol": 1e-8, "maxiter": 500},
-            "precond": {"coarsening": {"type": "smoothed_aggregation"}, "relax": {"type": "ilu0"}},
-        },
-    ),
-    (
-        "gmres(100) + ILU0 only (no AMG)",
-        {
-            "solver": {"type": "gmres", "M": 100, "tol": 1e-8, "maxiter": 500},
-            "precond": {"class": "relaxation", "type": "ilu0"},
-        },
-    ),
-    (
-        "fgmres(100) + AMG(SA, spai0)",
-        {
-            "solver": {"type": "fgmres", "M": 100, "tol": 1e-8, "maxiter": 500},
-            "precond": {"coarsening": {"type": "smoothed_aggregation"}, "relax": {"type": "spai0"}},
-        },
-    ),
-    (
-        "idrs(4) + ILU0 only",
-        {
-            "solver": {"type": "idrs", "s": 4, "tol": 1e-8, "maxiter": 500},
-            "precond": {"class": "relaxation", "type": "ilu0"},
-        },
-    ),
-]
-
-
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     subparsers = parser.add_subparsers(dest="command", required=True)

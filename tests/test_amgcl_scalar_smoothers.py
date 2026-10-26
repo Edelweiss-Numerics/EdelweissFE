@@ -102,7 +102,7 @@ def test_ilu0_is_an_exact_triangular_solve():
     n = 1000
     A = sp.diags([-np.ones(n - 1), 4.0 * np.ones(n), -np.ones(n - 1)], [-1, 0, 1], format="csr")
     b = np.random.default_rng(12).standard_normal(n)
-    solver = PyAMGCLSolver({"precond": {"class": "relaxation", "type": "ilu0"}, "solver": {"type": "preonly"}})
+    solver = PyAMGCLSolver({"precond": {"class": "relaxation", "type": "ilu0"}})
     solver.build(A)
     x = solver.applyPreconditioner(b)
     assert np.linalg.norm(b - A @ x) < 1e-12 * np.linalg.norm(b)

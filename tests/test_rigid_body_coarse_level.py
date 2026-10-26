@@ -279,7 +279,6 @@ def test_the_translations_alone_are_amgcls_own_first_coarse_level():
     amgcl = PyAMGCLSolver(
         {
             "precond": tree,
-            "solver": {"type": "preonly"},
             "backendBlockSize": 3,
             "backendPrecision": "double",
         }
@@ -328,7 +327,6 @@ def test_the_hierarchy_below_takes_the_modes_of_an_aggregate_as_one_point_on_eve
     reference = PyAMGCLSolver(
         {
             "precond": tree | {"coarsening": coarsening},
-            "solver": {"type": "preonly"},
             "backendBlockSize": 1,
             "backendPrecision": "double",
         }

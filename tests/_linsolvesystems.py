@@ -67,24 +67,6 @@ def gridLaplacian(n: int, dimension: int = 3) -> sp.csr_matrix:
     return laplacian.tocsr()
 
 
-def variableCoefficientLaplacian(n: int, dimension: int = 3, decades: float = 2.0, seed: int = 0) -> sp.csr_matrix:
-    """The Laplacian of a node grid of n nodes per direction whose edge stiffnesses are random over ``decades``
-    orders of magnitude: sum over the edges e = (i, j) of k_e (e_i - e_j)(e_i - e_j)^T. Like a finite element
-    stiffness of a heterogeneous material, its diagonal varies from node to node, while the constants stay its exact
-    null-space (no boundary condition)."""
-    line = sp.diags([-1.0, 1.0], [0, 1], shape=(n - 1, n))
-    identity = sp.identity(n)
-    rng = np.random.default_rng(seed)
-    laplacian = sp.csr_matrix((n**dimension, n**dimension))
-    for direction in range(dimension):
-        edges = line if direction == 0 else identity
-        for other in range(1, dimension):
-            edges = sp.kron(edges, line if other == direction else identity)
-        stiffnesses = sp.diags(10.0 ** rng.uniform(0.0, decades, edges.shape[0]))
-        laplacian = laplacian + edges.T @ stiffnesses @ edges
-    return laplacian.tocsr()
-
-
 def displacementDamageSystem(n: int = 12, coupling: str = "none", rowScaling: bool = False):
     """A displacement / nonlocal damage system on an n^3 node grid, with a random right-hand side.
 

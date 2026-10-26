@@ -37,16 +37,13 @@ import pytest
 import scipy.sparse as sp
 from _linsolvesystems import (
     NODAL_COUPLING,
-    displacementDamageSystem,
     equilibrated,
     gridLaplacian,
     hierarchyLevels,
-    variableCoefficientLaplacian,
 )
 
 pytest.importorskip("edelweissfe.linsolve.amgcl.amgcl")
 
-import edelweissfe.linsolve.amgcl.amgcl as amgclModule  # noqa: E402
 from edelweissfe.linsolve.amgcl.amgcl import PyAMGCLSolver  # noqa: E402
 from edelweissfe.linsolve.base import FieldBlock  # noqa: E402
 from edelweissfe.linsolve.composition.amg import defaultFieldTree  # noqa: E402
@@ -83,26 +80,11 @@ def _scaledVectorLaplacian(dimension: int, n: int, coupled: bool = True):
     return A, FieldBlock("displacement", 0, dimension * nodes, dimension)
 
 
-def _heterogeneousVectorField(dimension: int, n: int):
-    """A vector field kron(K + 0.01 I, C) on a grid of n nodes per direction, K the variable-coefficient Laplacian
-    of edge stiffnesses spanning two orders of magnitude, C the nodal coupling of ``dimension`` components. Unlike
-    :func:`_scaledVectorLaplacian`, its near-null-space is the translations t, as for a finite element stiffness of a
-    heterogeneous material, while its diagonal varies from node to node: the constant blocks of its equilibrated
-    block D A D are D-weighted translations, and D^-1 t is the right coarse space. Returns the matrix (CSR, sorted
-    columns) and its field block."""
-    nodes = n**dimension
-    stiffness = variableCoefficientLaplacian(n, dimension) + 0.01 * sp.identity(nodes)
-    A = sp.kron(stiffness, NODAL_COUPLING[:dimension, :dimension]).tocsr()
-    A.sort_indices()
-    return A, FieldBlock("displacement", 0, dimension * nodes, dimension)
-
-
 def _hierarchy(A, dimension: int, precision: str, precond: dict, nullspace=None):
     """An AMGCL hierarchy for A on the block backend, with the near null-space ``nullspace`` if given."""
     hierarchy = PyAMGCLSolver(
         {
             "precond": copy.deepcopy(precond),
-            "solver": {"type": "preonly"},
             "backendBlockSize": dimension,
             "backendPrecision": precision,
         }
@@ -189,7 +171,6 @@ def test_unit_translation_weights_give_amgcls_constant_blocks(dimension, precisi
     cleared = PyAMGCLSolver(
         {
             "precond": precond,
-            "solver": {"type": "preonly"},
             "backendBlockSize": dimension,
             "backendPrecision": precision,
         }
@@ -237,37 +218,12 @@ def test_unit_translation_weights_aggregate_the_first_coarse_level_as_amgcl_does
     assert _levelSizes(unitWeights)[:3] == _levelSizes(constantBlocks)[:3]
 
 
-def _recordNullspaces(monkeypatch) -> list:
-    """Record every near null-space blockamg hands to an AMGCL hierarchy, as (block size, array)."""
-    recorded = []
-
-    class RecordingSolver(PyAMGCLSolver):
-        def set_nullspace(self, B):
-            recorded.append((self.blockSize, np.array(B)))
-            super().set_nullspace(B)
-
-    monkeypatch.setattr(amgclModule, "PyAMGCLSolver", RecordingSolver)
-    return recorded
-
-
-def _displacementSystem(dimension: int):
-    """A system with a displacement field of ``dimension`` components, as (A, b, field blocks): in 3D the
-    displacement / damage system of the suite, the displacement rows scaled over two orders of magnitude; in 2D a
-    heterogeneous vector field alone (:func:`_heterogeneousVectorField`), whose near-null-space the translations
-    are, so they must not cost iterations there."""
-    if dimension == 3:
-        return displacementDamageSystem(12, coupling="symmetric", rowScaling=True)
-    A, displacement = _heterogeneousVectorField(2, 40)
-    return A, np.random.default_rng(8).standard_normal(A.shape[0]), [displacement]
-
-
 def test_a_block_backend_takes_no_near_null_space_but_the_translations():
     A, block = _scaledVectorLaplacian(3, 4)
     scaled, scaling = equilibrated(A)
     translations = translationNullspace(block, scaling)
     params = {
         "precond": {"coarsening": {"type": "smoothed_aggregation"}},
-        "solver": {"type": "preonly"},
         "backendBlockSize": 3,
     }
     # more modes than the translations: the rotations are supported on the scalar backend

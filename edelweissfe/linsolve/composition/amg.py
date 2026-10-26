@@ -273,12 +273,9 @@ def buildFieldHierarchy(block, tree: dict, backend: tuple, scaling, coords, diag
     from edelweissfe.linsolve.amgcl.amgcl import PyAMGCLSolver
 
     backendBlockSize, backendPrecision, blockTranslationNullspace = backend
-    # The hierarchy is only ever applied as a preconditioner: "preonly" keeps AMGCL from allocating the work vectors
-    # of an iterative solver that would never run.
     hierarchy = PyAMGCLSolver(
         {
             "precond": tree,
-            "solver": {"type": "preonly"},
             "backendPrecision": backendPrecision,
             "backendBlockSize": backendBlockSize,
         }
