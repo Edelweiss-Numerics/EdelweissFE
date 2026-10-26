@@ -7,6 +7,9 @@ defaults; the theory page explains the method without them. Most were taken on t
 damage cylinder through its damage onset and a contact anchor model with many multi-point-constraint slaves, offline on
 captured systems (dumped with ``dumps``, :ref:`composed-solve-dumps`) and live.
 
+Many of them were taken before the composition existed, when the method was one monolithic solver; the composition
+reproduces that solver's outer iterations, rebuild decisions and solutions, and replaced it.
+
 
 .. _measured-rigid-body-nullspace:
 
