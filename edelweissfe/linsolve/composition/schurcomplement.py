@@ -799,7 +799,6 @@ class SchurComplement(Preconditioner):
             childMatrix = self.S_tilde
             remainingNodes = {block.name: condensation.remainingNodes(block) for block in context.fields}
             childContext = context.restrictedTo(remainingFields, condensation.remainingDofs, nodesOf=remainingNodes.get)
-        self._builtForDofs = dofs
         if change is None:
             self.preconditionS.setUp(childMatrix, childContext)
         else:
@@ -807,6 +806,7 @@ class SchurComplement(Preconditioner):
             if dofsChanged:
                 childChange = childChange.withRebuild("condensed dofs")
             self.preconditionS.update(childMatrix, childChange)
+        self._builtForDofs = dofs
 
     def _condensedDofsOf(self, condensing: bool) -> tuple:
         """The condensed dofs of this solve (``None`` without condensation), and whether they differ from those the child

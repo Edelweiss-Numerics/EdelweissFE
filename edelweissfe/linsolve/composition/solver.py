@@ -351,7 +351,9 @@ class ComposedLinearSolver(LinearSolver):
         try:
             self.root.update(A, change)
         except (FloatingPointError, np.linalg.LinAlgError) as error:
-            # a non-finite scaling, a singular matrix: the nonlinear solver cuts the increment back
+            # a non-finite scaling, a singular matrix: the nonlinear solver cuts the increment back, and what the
+            # tree formed from A goes before the next matrix is assembled
+            self.root.finishSolve()
             return self._notSolved(b.shape, str(error))
         except Exception as error:
             if self._rootBeforeReload is None:

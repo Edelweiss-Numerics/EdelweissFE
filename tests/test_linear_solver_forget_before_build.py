@@ -54,6 +54,7 @@ from edelweissfe.linsolve.composition import (  # noqa: E402
     FixedTolerance,
     Multiplicative,
     OnField,
+    Preconditioner,
     SchurComplement,
 )
 from edelweissfe.linsolve.composition.schurcomplement import (  # noqa: E402
@@ -170,6 +171,22 @@ def test_a_new_model_forgets_the_tree_at_once_and_keeps_what_is_reused_on_purpos
     x = solver(A, b)
     assert amg.hierarchy is not None and root.lastRebuildReason == "model"
     assert np.linalg.norm(A @ x - b) < 1e-7 * np.linalg.norm(b)
+
+
+class _Singular(Preconditioner):
+    """A preconditioner whose set-up meets a singular matrix."""
+
+    def _setUp(self, A, context):
+        raise np.linalg.LinAlgError("singular")
+
+
+def test_a_failed_update_releases_the_matrix_of_the_solve():
+    A, b, fields = displacementDamageSystem(n=6, coupling="symmetric")
+    root = LGMRES(_Singular(), FixedTolerance(1e-8))
+    x = _composed(root, fields)(A, b)
+    assert np.all(np.isnan(x))
+    # the increment is cut back: the tree must not hold this matrix while the next one is assembled
+    assert root.A is None
 
 
 def test_a_csr_generator_and_its_matrix_form_no_reference_cycle():
