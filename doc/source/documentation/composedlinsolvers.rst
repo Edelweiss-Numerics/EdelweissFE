@@ -1,5 +1,5 @@
-Composed linear solvers
-=======================
+Composing a linear solver
+=========================
 
 Every linear solver of EdelweissFE is a composed solver behind one adapter (:doc:`linsolvers`): ``type=blockamg`` is
 the ``blockAMG()`` preset below, ``type=pardiso`` the one leaf ``DirectSolver("pardiso")``, and ``type=custom`` the
@@ -10,6 +10,10 @@ input file. Each object is one textbook component -- a Krylov solver, a diagonal
 multiplicative combination of corrections, an AMG hierarchy, a Schur complement -- and its ``__call__`` is the formula
 of the textbook. There is one way to build each method, and it is the fast one -- with one documented exception, the
 two-level cycle (see :ref:`composed-two-level-two-ways`).
+
+This page teaches how to build a tree. The arguments and data lines of every component and of the adapter are on
+:doc:`composedlinsolversreference`, the method of the field-split preconditioner on :doc:`blockamgtheory`, and the
+Python API on :doc:`linsolveapi`.
 
 A solver script
 ---------------
@@ -49,59 +53,15 @@ is started in the directory of the input file, as ``run_tests_edelweissfe`` does
 
 The script defines the global ``linearSolver`` and holds only the math: the tree. What the adapter does around it --
 the verbosity, the dumps, the hot reload -- are data lines of the block (a ``ComposedLinearSolver`` bound in the script
-is refused). The journal logs the structure of the solver and a hash of the script at the first solve (with
-``verbosity=info``).
-
-.. _composed-adapter:
-
-The adapter
------------
-
-:class:`~edelweissfe.linsolve.composition.solver.ComposedLinearSolver` is what the nonlinear solver calls,
-``x = solver(A, b)``, once per Newton iteration, for every type of linear solver. It finds what changed since the last
-call (the first solve, a new model, a resized system, a new sparsity pattern, a jump of the right-hand side that marks
-a new increment), hands the matrix down the tree, applies the root (to each column of ``b``, if it has several), and
-reports on the solve. Its settings are the data lines every type has (see :doc:`linsolvers`):
-
-.. code-block:: edelweiss
-
-    *linearSolver, name=mySolver, type=custom
-    script=solver.py
-    ** silent, warning (default), info, debug
-    verbosity=info
-    ** a solve with more outer iterations gets a warning (default 100)
-    warnOuterIterations=60
-    ** a right-hand side this many times the last one is a new increment (default 4)
-    residualGrowthFactor=4.0
-    ** none (default), slow, every, or the numbers of the solves: 12 13 14
-    dumps=slow
-    dumpDirectory=slowSolves
-    maxDumps=10
-    dumpContextSolves=2
-    ** custom only: run the script again whenever it changes, during the run
-    hotReload=true
-
-* ``verbosity``: ``warning`` says nothing on a normal solve and warns about a slow one (more outer iterations than
-  ``warnOuterIterations``) and one that missed its tolerance (stopped at the iteration cap, or on a scaled system with
-  the scaled residual met but not the true one); ``info`` adds one line per solve, the structure of the solver at
-  the first solve and the "linear solve" column of the nonlinear solver's table; ``debug`` adds each continuation of
-  a Krylov solve on a scaled system, and in that column why the preconditioner was rebuilt (``rebuilt(stale)``) or
-  ``reused``, with the tolerance and the time of the solve.
-* ``dumps``: see :ref:`composed-solve-dumps`.
-* ``hotReload``: see :ref:`composed-hot-reload`.
-
-In Python, the same adapter is ``ComposedLinearSolver(tree, verbosity=..., warnOuterIterations=...,
-residualGrowthFactor=..., dumps=SolveDumps(directory, trigger, maxDumps=..., contextSolves=...))``, or
-``ComposedLinearSolver.fromScript("solver.py", hotReload=True, ...)``; ``nodeCoordinates`` and ``p1Maps`` give node
-coordinates and P1 maps per field instead of those of the model (an offline replay without a model).
+is refused; see :ref:`composed-adapter`). The journal logs the structure of the solver and a hash of the script at the
+first solve (with ``verbosity=info``).
 
 How to read the nesting
 -----------------------
 
 The script defines the components **bottom-up**, with named variables: first the basic method (the block Gauss--Seidel
-sweep over the fields), then
-what is wrapped around it, and the Krylov solver last -- the textbook order "build a basic iteration, then accelerate
-it".
+sweep over the fields), then what is wrapped around it, and the Krylov solver last -- the textbook order "build a basic
+iteration, then accelerate it".
 
 At run time the nesting means **delegation**: the outer component calls its children, many times, before and after its
 own steps. LGMRES calls its preconditioner once per iteration; the diagonal scaling multiplies by :math:`D` before
@@ -166,36 +126,6 @@ Components
         of a two-level cycle spelled out, ``Multiplicative([Jacobi(), CoarseCorrection(P, coarse), Jacobi()])``
         (slow, for learning and new coarse spaces; see :ref:`composed-two-level-two-ways`)
 
-.. _composed-amg-backend:
-
-The AMGCL backend of a field
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-``AMG`` and ``TwoLevel`` take the AMGCL tree and the backend apart: the tree is what AMGCL reads, the backend how
-EdelweissFE stores the field's matrix for it. The defaults are chosen in one place,
-:func:`~edelweissfe.linsolve.composition.amg.backendOf`, from the field:
-
-.. list-table::
-    :header-rows: 1
-    :widths: 30 70
-
-    * - Keyword
-      - Default
-    * - ``backendBlockSize``
-      - the field's dimension for a 2D or 3D field (node-wise blocks: less index and value traffic per product), else
-        1 (scalar entries)
-    * - ``backendPrecision``
-      - ``"float"`` on 3x3 blocks (set up in double, only the matrices the cycle reads stored in float), else
-        ``"double"``
-    * - ``blockTranslationNullspace`` (``AMG`` only)
-      - on a block backend, smoothed aggregation from the translations :math:`D^{-1} t` of the scaled block instead of
-        AMGCL's constant blocks
-
-So ``AMG(backendBlockSize=1)`` puts a 3D displacement field on the scalar backend, in double, where its hierarchy
-takes all rigid-body modes as its near null-space. Rotations belong to the near null-space of a displacement field
-only (by its phenomenon, :func:`~edelweissfe.linsolve.nullspace.carriesRigidBodyModes`): the rotation field of a
-micropolar model gets its translations.
-
 The combinators show that methods which look unrelated share one structure. Block Gauss--Seidel over the fields *is*
 ``Multiplicative([OnField("displacement", M_u), OnField("nonlocal damage", M_d)])``, and a two-level cycle *is*
 ``Multiplicative([smoother, CoarseCorrection(P, coarse), smoother])``. They are also fast: a combination asks each
@@ -203,10 +133,15 @@ correction which field it acts on, and forms the residual of a correction on fie
 rows, :math:`r_i - \sum_{j: z_j \neq 0} A_{ij} z_j`, from the field blocks of the matrix (formed once, in one
 threaded pass, for all corrections).
 
+Wrong compositions fail as early as possible: at construction when the tree alone shows it (a child that is not a
+component, an empty combination, LGMRES around a Krylov solve, a Schur complement with nothing to condense), at the
+first set-up otherwise, with a message that names the cause (a field the system does not have, a one-field component
+such as ``AMG`` on several fields, rigid-body modes on a scalar field or without node coordinates).
+
 .. _composed-two-level-two-ways:
 
 The two-level cycle: two ways, on purpose
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+-----------------------------------------
 
 A two-level cycle can be written in two ways, and both are kept deliberately:
 
@@ -230,23 +165,11 @@ much per application as ``TwoLevel`` (101 ms plus about 98 ms). The difference i
 * ``TwoLevel`` forms :math:`P x`, :math:`P^T r` and :math:`P^T A P` threaded in C++; ``CoarseCorrection`` uses SciPy;
 * ``Multiplicative`` forms the residual :math:`r - A z` between its steps; ``TwoLevel`` takes it from the smoother.
 
-There is no native Chebyshev component yet, so the spelled-out way cannot reproduce ``TwoLevel`` exactly. The exception
+There is no native Chebyshev component yet, so the spelled-out way cannot reproduce ``TwoLevel`` exactly; a
+``Chebyshev`` component is issue #237 (https://github.com/Edelweiss-Numerics/EdelweissFE/issues/237). The exception
 goes away once these three pieces exist natively: the compact field-block copy kept by the system matrix, a Chebyshev
 smoother component, and threaded products with :math:`P` in ``CoarseCorrection`` (with ``RigidBodyModes`` and
 ``P1Interpolation`` building :math:`P`). Then ``TwoLevel`` is replaced by its spelled-out form.
-
-Wrong compositions fail as early as possible: at construction when the tree alone shows it (a child that is not a
-component, an empty combination, LGMRES around a Krylov solve, a Schur complement with nothing to condense), at the
-first set-up otherwise, with a message that names the cause (a field the system does not have, a one-field component
-such as ``AMG`` on several fields, rigid-body modes on a scalar field or without node coordinates).
-
-A component of your own subclasses ``Preconditioner`` -- in the script itself, if you like --, calls
-``super().__init__()`` in its constructor and implements the hooks ``_setUp(A, context)``, ``_apply(r)`` and, to reuse
-what it built, ``_update(A, change)``; a component with children also implements ``children()``, the ``(role, child)``
-pairs through which the tree is walked (the model, the end of a solve, whether it holds a Krylov solve, the views). It
-then composes with every other component. The public ``setUp``, ``update`` and ``__call__`` of the base class record
-each call and its time in the component's statistics and call the hook; a component calls its children through those
-public methods.
 
 .. _composed-presets:
 
@@ -267,16 +190,75 @@ with ``gaussSeidelOrder``. ``blockAMG(krylovOnScaledSystem=True)`` puts the scal
 (:ref:`composed-scaled-krylov`), ``continuations`` and ``gapCompensation`` go to LGMRES, and ``dropTolerance`` and
 ``lumpDroppedEntries`` to every field (:ref:`composed-drop-tolerance`).
 
+The 3D displacement field gets the rigid-body coarse level, ``TwoLevel(coarseSpace=RigidBodyModes())``: a first coarse
+level built from all rigid-body modes, rotations included, which a bending-dominated structure needs
+(:ref:`blockamg-rigid-body-coarse-level`). Switch it off where the solves converge in a few outer iterations without
+it -- there it saves little, for a larger setup:
+
+.. code-block:: edelweiss
+
+    *linearSolver, name=translationsOnly, type=blockamg
+    rigidBodyCoarseLevel=false
+
+A 2D displacement field, or any other vector field, gets the coarse level in a ``custom`` solver script,
+``OnField("displacement", TwoLevel(coarseSpace=RigidBodyModes()))``.
+
 Everything else -- another tree for a field, the rebuild policy, the parameters of the forcing tolerance or of LGMRES,
 the options of the rigid-body coarse level, the p-multigrid variant, a Schur complement -- is a ``custom`` solver
 script: copy the preset (:mod:`edelweissfe.linsolve.composition.presets`, a plain function) into the script and change
 what you need.
 
+.. _composed-schur-complement-recipe:
+
+A Schur complement
+------------------
+
+Some dofs make the field-split AMG stall: the dofs of embedded bars with **bond-slip**, for instance, tied to the
+nodes of their host elements by stiff bond springs. A ``SchurComplement`` condenses such dofs exactly and builds its
+child on the approximate Schur complement of all other dofs (the method: :ref:`blockamg-schur-complement`). The
+condensed dofs are chosen with the **markers** of adaptive mesh refinement: the dofs of the interior nodes of the
+marked elements -- the nodes all of whose elements are marked. For embedded bars, mark the bar and the bond elements:
+
+.. code-block:: python
+
+    # solver.py
+    from edelweissfe.config.markerlibrary import getMarkerClass
+    from edelweissfe.linsolve.composition import (
+        LGMRES, DiagonalScaling, Multiplicative, OnField, SchurComplement, gaussSeidelOrder,
+    )
+    from edelweissfe.linsolve.composition.presets import blockAMGFieldPreconditioner
+
+    bars = getMarkerClass("elementSet").fromOptions({"elSet": "bars"})
+    bonds = getMarkerClass("elementSet").fromOptions({"elSet": "bondElements"})
+
+
+    def fieldCorrections(context):
+        corrections = [OnField(f.name, blockAMGFieldPreconditioner(f, context)) for f in context.fields]
+        return gaussSeidelOrder(corrections, sweeps=2)
+
+
+    blockGaussSeidel = Multiplicative(fieldCorrections)
+    linearSolver = LGMRES(SchurComplement(condense=[bars, bonds], preconditionS=DiagonalScaling(blockGaussSeidel)))
+
+.. code-block:: edelweiss
+
+    *linearSolver, name=barSchur, type=custom
+    script=solver.py
+
+    *solver, solver=NISTParallel, name=theSolver
+    linsolver=barSchur
+
+The corrections here are a function of the context: they are made at the first set-up, one per field of the remaining
+dofs, with the preconditioner the preset would give that field. A ``fieldOutput`` marker condenses, e.g., a softening
+zone instead (testfile ``GradientEnhancedDamageSchurComplement``). The other arguments of ``SchurComplement`` are
+listed in :ref:`composed-schur-complement-arguments`.
+
 Views
 -----
 
 Every component describes itself (``describe()``); the views in :mod:`edelweissfe.linsolve.composition.views` draw
-the descriptions along the tree of ``children()``. For the ``blockAMG()`` preset on a displacement / nonlocal damage system, after two solves:
+the descriptions along the tree of ``children()``. For the ``blockAMG()`` preset on a displacement / nonlocal damage
+system, after two solves:
 
 ``print(solver)`` -- the structure::
 
@@ -309,163 +291,3 @@ update, and reuses them at the next.
 component a box around its steps, a step that delegates leading into its child's box. ``views.spy(solver, A)`` draws
 the sparsity patterns of the matrices the components were built on, ``views.writeHtml(solver, "solver.html")`` writes
 all views into one page, and in Jupyter a solver shows itself as that page.
-
-Reuse and tolerance
--------------------
-
-:class:`~edelweissfe.linsolve.composition.solver.ComposedLinearSolver` finds what changed since the last solve (the
-first solve, a new model, a resized system, a new sparsity pattern, a jump of the right-hand side that marks a new
-increment) and hands it down the tree as a ``MatrixChange``. ``LGMRES`` adds its own reasons -- a new increment, a
-stale preconditioner (too many more iterations than the solve it was built for, or a cap hit), or ``reuse=False`` --
-and every component decides in ``update`` what to keep: an ``AMG`` hierarchy is kept unless a rebuild is asked for,
-a ``DiagonalScaling`` keeps its :math:`D`, a ``Multiplicative`` always takes the new couplings.
-
-A ``DiagonalScaling`` rebuilds its :math:`D` together with what is below it, also for the reasons a Krylov solver below
-it adds itself (``Preconditioner.withRebuildReasons``), so that ``DiagonalScaling(LGMRES(...))`` rebuilds as
-``LGMRES(DiagonalScaling(...))`` does.
-
-Performance: a diagonal scaling does not form :math:`D A D`; the first component below it that needs a block forms
-:math:`\hat A` and all field blocks in one threaded native pass, kept with the matrix for all others, which also keeps :math:`A` as the operator of the outer Krylov solve
-(:class:`~edelweissfe.linsolve.composition.systemmatrix.SystemMatrix`).
-
-.. _composed-scaled-krylov:
-
-A Krylov solve on the scaled system
------------------------------------
-
-Where the diagonal scaling sits says what the Krylov solve converges. ``LGMRES(DiagonalScaling(M))`` (the default of
-``blockAMG()``) solves :math:`A x = b`, preconditioned by :math:`D \hat M^{-1} D`: its residual is the true one,
-:math:`\lVert b - A x \rVert / \lVert b \rVert`. ``DiagonalScaling(LGMRES(M))`` (``blockAMG(krylovOnScaledSystem=True)``)
-solves :math:`\hat A \hat x = D b` with :math:`\hat A = D A D`, :math:`x = D \hat x`, and converges the scaled
-residual :math:`\lVert D (b - A x) \rVert`, which weighs every row by its own diagonal -- a field with small residual
-entries is resolved as well as the others -- but which can be smaller than the true one, on which the solve is accepted.
-
-So a Krylov solver on a scaled matrix checks the true residual after its pass (in the physical variables of its
-problem: :math:`b - A x = D^{-1} (\hat b - \hat A \hat x)`) and, while it misses :math:`\eta`, continues from its
-iterate with a tighter tolerance, 0.01 times the last, at most ``continuations`` times (default 2). With
-``gapCompensation=GapCompensation(safetyFactor=0.3, maxFactor=1e3)`` the first pass asks for
-:math:`s \, \eta / g` instead, with :math:`g` the ratio of the true to the scaled residual learnt from the previous
-solves, and a continuation tightens by the measured ratio; measured to save continuations per increment, but the
-uncompensated scaled solve over-solves, which Newton relies on -- so it is opt-in. On an unscaled matrix there are no
-continuations: a pass that misses :math:`\eta` has hit the iteration cap, which a warm restart would only extend.
-
-.. _composed-drop-tolerance:
-
-A preconditioner on the filtered matrix
----------------------------------------
-
-``AMG(dropTolerance=τ)`` and ``TwoLevel(..., dropTolerance=τ)`` build on the filtered block :math:`\tilde A`: the
-off-diagonal entries with :math:`\lvert a_{ij} \rvert < \tau \sqrt{\lvert a_{ii} a_{jj} \rvert}` dropped, the
-diagonal always kept. For operators with many entries per row that are numerically far sparser than structurally (e.g.
-RKPM), smoothed aggregation then weighs only the entries that matter, and the Galerkin products carry fewer of them to
-the coarse levels. Only the preconditioner sees :math:`\tilde A`; the Krylov solve applies :math:`A`, so the solution
-is that of :math:`A`. ``lumpDroppedEntries=True`` adds the dropped entries of each row onto its diagonal, which keeps
-the row sums (the "filtered matrix" of the AMG literature); for elasticity, whose off-diagonals are mostly negative,
-this weakens the diagonal dominance. The run statistics record the stored entries before and after (``nnz``, ``nnz
-kept``). ``blockAMG(dropTolerance=τ, lumpDroppedEntries=...)`` passes them to every field.
-
-.. _composed-solve-dumps:
-
-Dumps of the solves
--------------------
-
-The data line ``dumps`` (in Python ``SolveDumps(directory, trigger, maxDumps, contextSolves)``) writes the raw systems
-of chosen solves to ``dumpDirectory``, for an offline replay (``scripts/benchmark_linsolve.py``, or a
-``ComposedLinearSolver`` driven by hand with ``setFieldStructure`` and the dumped geometry as ``nodeCoordinates`` and
-``p1Maps``). It works for every type, direct solvers included, and is the one way to capture a solve. The trigger:
-
-* ``slow``: a solve with more outer iterations than ``warnOuterIterations`` (so that a dump and its warning fire
-  together), or one stopped at the iteration cap short of its tolerance. A preconditioner that degrades typically shows
-  only tens of hours into a run, at a solve nobody can name in advance; this trigger decides by the outcome;
-* ``every``: every solve, a sequence (whether a factorization or a preconditioner can be reused is a question about a
-  sequence, not a single matrix);
-* solve numbers, e.g. ``dumps=12 13 14``: these solves of each linear solver (counted from 1).
-
-On disk:
-
-* ``A_<solver>_<solve>.npz`` (SciPy, uncompressed), ``b_<solver>_<solve>.npy``, and with a Schur complement the
-  condensed dofs, ``schurDofs_<solver>_<solve>.npy``; ``<solver>`` is the ordinal of the linear solver in the process
-  (one per step), so the dumps of several solvers never overwrite each other, and the solve numbering continues
-  across a hot reload;
-* ``geometry_<solver>_<solve>.npz``: what a replay of the tree needs of the model, the node coordinates of every vector
-  field (``<field>_coordinates``, for its rigid-body modes) and the P1 maps the tree used (``<field>_isCorner``,
-  ``<field>_edgeEndpoints``);
-* one line per dumped system in ``manifest.jsonl``: ``solveCount``, ``role`` (``"trigger"`` or ``"context"``),
-  ``triggerSolveCount``, ``contextOffset``, ``rows``, ``nnz``, ``matrixFile``, ``rhsFile``, ``geometryFile``, the field
-  ``blocks`` (name, start, stop, dimension), ``patternChanged``, ``newIncrement``, and for a Krylov solve its
-  ``SolveRecord`` -- ``iterations``, ``residual`` (the true relative residual), ``eta``, ``capHit``, ``continuations``,
-  ``rebuildReason`` (``null``: the preconditioner was reused), ``scaledSystem`` -- and ``previousIterations``.
-
-``dumpContextSolves`` also writes the solves *before* a dumped one, kept in memory as copies: one snapshot cannot tell
-a hard operator from a solve made slow by a stale preconditioner, but a replay of the sequence through one persistent
-solver can. ``maxDumps`` (default 10) bounds the systems written to one directory in the process, by all solvers that dump
-there, context solves included. A sequence of every solve is ``dumps=every`` (or solve numbers).
-
-.. _composed-hot-reload:
-
-Hot reload of the solver script
--------------------------------
-
-With ``hotReload=true`` (``type=custom``), the adapter reads the script before every solve and, if it changed, runs
-it again and continues with the tree it builds, set up on that solve (rebuild reason ``reload``). The settings of the
-adapter stay those of the input file, and what the run has learnt stays too: the solve count, the residual history,
-the numbering of the dumps. The journal says so at ``warning``, with the sha256 of the script and the new tree, so
-that a reader of the log knows which solver was in force from which solve onwards. This makes solver settings
-testable on a *live* run, at the state that was expensive to reach.
-
-A bad edit can never end the run: a script that cannot be read or does not compile (e.g. half written by an editor) is
-retried on the next solve; one that raises, or defines no composed solver, is reported (``REJECTED``) and the tree in
-force kept until the script changes again; a new tree whose set-up fails (e.g. an AMGCL tree naming an unknown
-smoother) is ``ROLLED BACK`` to the one in force. The contents themselves are the stamp, not the modification time,
-which coarse file timestamps can leave unchanged across two quick edits.
-
-Python API of the components
-----------------------------
-
-.. automodule:: edelweissfe.linsolve.composition.base
-    :members:
-
-.. automodule:: edelweissfe.linsolve.composition.krylov
-    :members:
-
-.. automodule:: edelweissfe.linsolve.composition.diagonalscaling
-    :members:
-
-.. automodule:: edelweissfe.linsolve.composition.amg
-    :members:
-
-.. automodule:: edelweissfe.linsolve.composition.twolevel
-    :members:
-
-.. automodule:: edelweissfe.linsolve.composition.schurcomplement
-    :members:
-
-.. automodule:: edelweissfe.linsolve.composition.direct
-    :members:
-
-.. automodule:: edelweissfe.linsolve.composition.combinators
-    :members:
-
-.. automodule:: edelweissfe.linsolve.composition.presets
-    :members:
-
-.. automodule:: edelweissfe.linsolve.composition.views
-    :members:
-
-.. automodule:: edelweissfe.linsolve.composition.systemmatrix
-    :members:
-
-.. automodule:: edelweissfe.linsolve.composition.solver
-    :members:
-
-.. automodule:: edelweissfe.linsolve.composition.solvedumps
-    :members:
-
-.. automodule:: edelweissfe.linsolve.composition.twolevelcycle
-    :members:
-
-.. automodule:: edelweissfe.linsolve.composition.rigidbodycoarselevel
-    :members:
-
-.. automodule:: edelweissfe.linsolve.composition.ptwogrid
-    :members:

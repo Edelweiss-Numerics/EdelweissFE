@@ -283,6 +283,8 @@ the wall-clock. They are rebuilt on every call, because the values of :math:`A` 
 of :math:`D A D` -- change on every Newton iteration; a stable sparsity pattern would only save the
 counting pass.
 
+.. _blockamg-per-field-amg:
+
 Per-field AMG hierarchies: ``AMG``
 ----------------------------------
 
@@ -606,6 +608,8 @@ enforced on the *true* residual, which is the subject of the next section: witho
 a loosened request combined with an imperfect preconditioner can quietly let the true residual run
 looser still, which does change the Newton path.
 
+
+.. _blockamg-true-residual:
 
 True-residual enforcement: ``LGMRES`` on the scaled system
 ----------------------------------------------------------
