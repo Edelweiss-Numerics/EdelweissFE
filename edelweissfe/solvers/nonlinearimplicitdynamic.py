@@ -1468,7 +1468,8 @@ class NonlinearImplicitDynamic(NIST):
 
         if self.mpcTransformation is not None:
             R[:] = self.mpcTransformation.transformResidual(R, dU0)
-            MEff = self.mpcTransformation.transformSystemMatrix(MEff)
+            # MEff is a matrix of its own, not the CSR generator's, whose pattern holds the condensed one
+            MEff = self.mpcTransformation.transformSystemMatrix(self.mpcTransformation.withCondensedPattern(MEff))
 
         for dirichlet in dirichlets:
             R[dirichlet.constrainedDofIndices] = 0.0

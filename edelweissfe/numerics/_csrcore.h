@@ -314,6 +314,62 @@ public:
     gatherMapReleased = true;
   }
 
+  // Add entries to the pattern that no COO pair contributes to: they are assembled as stored zeros. The new
+  // entries, with sorted columns in each row and none already in the pattern, are given as a pattern of their own
+  // (extraPtr, nDof + 1 entries, and extraIdx). Each new entry gets an empty range of the gather map, so update()
+  // writes 0.0 there; gather_sources is unchanged.
+  //
+  // This is how a caller makes room in the pattern for values it writes itself, after the assembly: the
+  // multi-point-constraint condensation, which writes T^T K T + C into K's own pattern.
+  void addEntries( const int64_t* extraPtr, const int32_t* extraIdx )
+  {
+    const bool hasGatherMap = !gatherMapReleased;
+    if ( hasGatherMap && assembly_ptr.empty() )
+      assembly_ptr.assign( 1, 0 ); // an empty pattern: just the sentinel
+
+    std::vector< int > newIndptr( nDof + 1 );
+    newIndptr[0] = 0;
+    for ( int r = 0; r < nDof; ++r ) {
+      const int64_t length = static_cast< int64_t >( indptr[r + 1] - indptr[r] ) + extraPtr[r + 1] - extraPtr[r];
+      if ( newIndptr[r] + length > std::numeric_limits< int >::max() )
+        throw std::overflow_error( "CSRCore::addEntries: the pattern would exceed 2^31 - 1 entries." );
+      newIndptr[r + 1] = static_cast< int >( newIndptr[r] + length );
+    }
+    const int newNnz = newIndptr[nDof];
+
+    std::vector< int >     newIndices( newNnz );
+    std::vector< int32_t > newAssemblyPtr( hasGatherMap ? newNnz + 1 : 0 );
+    int                    alreadyThere = 0;
+
+#pragma omp parallel for schedule( dynamic, 1024 ) reduction( + : alreadyThere )
+    for ( int r = 0; r < nDof; ++r ) {
+      int64_t k = indptr[r], e = extraPtr[r];
+      int     w = newIndptr[r];
+      // merge the two sorted rows; a new entry's gather range is the empty one where the next old entry's starts
+      while ( k < indptr[r + 1] || e < extraPtr[r + 1] ) {
+        const bool takeOld = e == extraPtr[r + 1] || ( k < indptr[r + 1] && indices[k] < extraIdx[e] );
+        if ( !takeOld && k < indptr[r + 1] && indices[k] == extraIdx[e] )
+          ++alreadyThere;
+        newIndices[w] = takeOld ? indices[k] : extraIdx[e];
+        if ( hasGatherMap )
+          newAssemblyPtr[w] = assembly_ptr[k];
+        ++w;
+        takeOld ? ++k : ++e;
+      }
+    }
+
+    if ( alreadyThere )
+      throw std::invalid_argument( "CSRCore::addEntries: an entry to add is already in the pattern." );
+
+    if ( hasGatherMap ) {
+      newAssemblyPtr[newNnz] = assembly_ptr[nnz];
+      assembly_ptr.swap( newAssemblyPtr );
+    }
+    indptr.swap( newIndptr );
+    indices.swap( newIndices );
+    nnz = newNnz;
+  }
+
   void update( const double* V_data, double* csr_data ) const
   {
     if ( nnz == 0 )

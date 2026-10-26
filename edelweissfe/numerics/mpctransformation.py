@@ -29,7 +29,7 @@
 import os
 
 import numpy as np
-from scipy.sparse import csr_matrix
+from scipy.sparse import coo_matrix, csr_matrix
 
 from edelweissfe.utils import performancetiming
 
@@ -158,18 +158,22 @@ class MultiPointConstraintTransformation:
     nDof
         The total size of the equation system.
     useThreadedCondensation
-        Compute ``transformSystemMatrix`` with the OpenMP-threaded kernel of
-        :class:`~edelweissfe.numerics.mpccondensation.MPCCondensation` instead of SciPy's
-        single-threaded CSR routines: every row of ``Tᵀ K T + C`` is computed directly from the rows
-        of ``K`` it combines, with no intermediate matrix, and rows of ``K`` that no constraint
-        touches are copied unchanged. The result does not depend on the number of threads.
+        Condense the system matrix in place, with the OpenMP-threaded kernel of
+        :class:`~edelweissfe.numerics.mpccondensation.MPCCondensation`, instead of with SciPy's
+        single-threaded CSR routines, which build a new matrix: the values of ``Tᵀ K T + C`` overwrite
+        those of ``K``, in ``K``'s own pattern, so the equation system is held once, not twice. Only
+        the rows that a constraint touches are computed, each one directly from the rows of ``K`` it
+        combines, with no intermediate matrix. The result does not depend on the number of threads.
 
-        Explicit zeros are kept (the pattern is the structural pattern of ``Tᵀ K T + C``), unlike
-        SciPy's products, which drop exact-cancellation zeros, so this leaves more raw nnz than the
-        plain expression. **Not** pruned here: :meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.
-        applyDirichletToStiffness` calls ``eliminate_zeros()`` immediately after this, gated by the
-        ``pruneCondensedMatrixZeros`` option (default auto: pruned for PARDISO, kept for
-        ``blockamg``, whose hierarchy reuse needs a pattern that is stable across iterations).
+        ``K``'s pattern must hold the one of ``Tᵀ K T + C``: :meth:`condensedPatternFillIn` returns
+        the entries it lacks (where a master collects the couplings of its slaves), which the
+        caller adds once, as stored zeros -- the solvers add them to their CSR generator's pattern.
+        Entries of ``K`` that the condensed matrix does not have (the slave columns, and the slave
+        rows apart from their diagonal) become stored zeros. SciPy's products, in contrast, drop
+        exact zeros. **Not** pruned here: :meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.
+        applyDirichletToStiffness` prunes a copy, gated by the ``pruneCondensedMatrixZeros`` option
+        (default auto: pruned for PARDISO, kept for a linear solver that needs the pattern stable
+        across iterations, such as ``blockamg``).
     """
 
     def __init__(
@@ -228,8 +232,8 @@ class MultiPointConstraintTransformation:
         self._C = csr_matrix((np.ones(nSlaves), (self.slaveDofIndices, self.slaveDofIndices)), shape=(nDof, nDof))
 
         self._useThreadedCondensation = useThreadedCondensation
-        # Built by _transformSystemMatrixThreaded on first use, from T, T^T and C, which are fixed for the
-        # lifetime of this object.
+        # Built by _condensation() on first use, from T, T^T and C, which are fixed for the lifetime of this
+        # object.
         self._threadedCondensation = None
 
     @property
@@ -266,11 +270,10 @@ class MultiPointConstraintTransformation:
         Kt.sort_indices()
         return Kt
 
-    def _assertExact(self, K: csr_matrix, result: csr_matrix) -> None:
+    def _assertExact(self, result: csr_matrix, legacy: csr_matrix) -> None:
         """:envvar:`EDELWEISS_MPC_ASSERT_EXACT` cross-check: the threaded result must match
-        the plain ``T^T K T + C`` expression to within a matrix-norm-relative tolerance
+        the plain ``T^T K T + C`` expression, ``legacy``, to within a matrix-norm-relative tolerance
         (entry-relative fails on cancellation-tiny entries)."""
-        legacy = self._transformSystemMatrixLegacy(K)
         diff = (result - legacy).tocsr()
         maxDiff = np.max(np.abs(diff.data)) if diff.nnz else 0.0
         scale = max(
@@ -313,31 +316,82 @@ class MultiPointConstraintTransformation:
         the slave DOFs. The slave DOFs of the solution must be completed with
         :meth:`recoverSlaveSolution` after the linear solve.
 
-        Dispatches to the threaded kernel (``useThreadedCondensation``) or the plain SciPy
-        expression (default) -- see the constructor's ``useThreadedCondensation`` docstring.
+        With ``useThreadedCondensation``, ``K`` is condensed in place and returned; its pattern must
+        hold the condensed one (see :meth:`condensedPatternFillIn`). Otherwise (the default), the
+        plain SciPy expression builds a new matrix -- see the constructor's
+        ``useThreadedCondensation`` docstring.
         """
         self._dumpForOfflineProbe(K)
         if self._useThreadedCondensation:
-            result = self._transformSystemMatrixThreaded(K)
-            if os.environ.get(_ASSERT_EXACT_ENV_VAR):
-                self._assertExact(K, result)
-            return result
+            reference = self._transformSystemMatrixLegacy(K) if os.environ.get(_ASSERT_EXACT_ENV_VAR) else None
+            self._condenseInPlace(K)
+            if reference is not None:
+                self._assertExact(K, reference)
+            return K
         return self._transformSystemMatrixLegacy(K)
 
-    @performancetiming.timeit("mpc transform system matrix")
-    def _transformSystemMatrixThreaded(self, K: csr_matrix) -> csr_matrix:
-        """Condense the system matrix, :math:`T^T K \\, T + C`, with the OpenMP-threaded kernel of
-        :class:`~edelweissfe.numerics.mpccondensation.MPCCondensation` -- see the constructor's
-        ``useThreadedCondensation`` docstring. The result has sorted column indices and keeps explicit
-        zeros; :meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.applyDirichletToStiffness` prunes them
-        if ``pruneCondensedMatrixZeros`` says so.
+    def condensedPatternFillIn(self, K: csr_matrix) -> csr_matrix:
+        """The entries that ``K``'s pattern must gain to hold the condensed matrix: with
+        ``useThreadedCondensation``, the entries of the structural pattern of :math:`T^T K T + C`
+        that ``K`` lacks (where a master collects the couplings of its slaves); none for the plain
+        SciPy expression, which builds a matrix of its own.
+
+        Parameters
+        ----------
+        K
+            The system matrix (CSR); only its pattern is read.
+
+        Returns
+        -------
+        csr_matrix
+            The missing entries, as stored zeros, with sorted column indices.
         """
+        if self._useThreadedCondensation:
+            return self._condensation().condensedPatternFillIn(K)
+        return csr_matrix(K.shape)
+
+    def withCondensedPattern(self, K: csr_matrix) -> csr_matrix:
+        """``K`` with the entries of :meth:`condensedPatternFillIn` added as stored zeros, for a
+        matrix that does not come from a CSR generator that holds them already.
+
+        Parameters
+        ----------
+        K
+            The system matrix (CSR, sorted rows).
+
+        Returns
+        -------
+        csr_matrix
+            ``K`` itself if nothing is missing, otherwise a new matrix.
+        """
+        fillIn = self.condensedPatternFillIn(K)
+        if fillIn.nnz == 0:
+            return K
+        # SciPy's sum would drop the stored zeros; the COO conversion keeps them, and sorts the rows
+        rows = np.concatenate([np.repeat(np.arange(self.nDof), np.diff(K.indptr)), fillIn.tocoo().row])
+        columns = np.concatenate([K.indices, fillIn.indices])
+        values = np.concatenate([K.data, fillIn.data])
+        withFillIn = coo_matrix((values, (rows, columns)), shape=K.shape).tocsr()
+        withFillIn.sort_indices()
+        return withFillIn
+
+    def _condensation(self):
+        """The threaded kernel, built on first use."""
         if self._threadedCondensation is None:
             from edelweissfe.numerics.mpccondensation import MPCCondensation
 
             self._threadedCondensation = MPCCondensation(self._T, self._T.T.tocsr(), self._C)
+        return self._threadedCondensation
 
-        return self._threadedCondensation.condense(K)
+    @performancetiming.timeit("mpc transform system matrix")
+    def _condenseInPlace(self, K: csr_matrix):
+        """Condense the system matrix in place, :math:`K \\leftarrow T^T K \\, T + C`, with the
+        OpenMP-threaded kernel of :class:`~edelweissfe.numerics.mpccondensation.MPCCondensation` --
+        see the constructor's ``useThreadedCondensation`` docstring. Explicit zeros are kept;
+        :meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.applyDirichletToStiffness` prunes a copy
+        if ``pruneCondensedMatrixZeros`` says so.
+        """
+        self._condensation().condenseInPlace(K)
 
     @performancetiming.timeit("mpc transform residual")
     def transformResidual(self, R: np.ndarray, dU: np.ndarray) -> np.ndarray:

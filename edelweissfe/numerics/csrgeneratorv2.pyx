@@ -28,7 +28,7 @@ import numpy as np
 from scipy.sparse import csr_matrix
 
 cimport numpy as np
-from libc.stdint cimport int64_t
+from libc.stdint cimport int32_t, int64_t
 from libcpp.vector cimport vector
 
 
@@ -114,6 +114,7 @@ cdef extern from "_csrcore.h":
 
         void update(const double* V_data, double* csr_data) nogil
         void releaseGatherMap()
+        void addEntries(const int64_t* extraPtr, const int32_t* extraIdx) except +
         bint gatherMapReleased
         int64_t memoryBytes()
 
@@ -173,16 +174,21 @@ cdef class CSRGenerator:
         with nogil:
             self.core = new CSRCore(&I[0], &J[0], self.nCooPairs, nDof, patternOnly)
 
+        self._wrapPattern()
+
+    cdef _wrapPattern(self):
+        """(Re)create :attr:`csrMatrix` as a view of the core's pattern, with a zeroed data array."""
+        cdef int nDof = self.core.nDof
+        cdef int nnz = self.core.nnz
+
         cdef int* ptr_indptr = self.core.indptr.data()
         cdef int* ptr_indices = self.core.indices.data()
 
-        cdef int nnz = self.core.nnz
-
         cdef int[::1] view_indptr = <int[:nDof+1]> ptr_indptr
-        cdef int[::1] view_indices = <int[:nnz]> ptr_indices
+        # an empty pattern has no first element to point to
+        cdef np.ndarray nd_indices = np.asarray(<int[:nnz]> ptr_indices) if nnz else np.empty(0, dtype=np.intc)
 
         cdef np.ndarray nd_indptr = np.asarray(view_indptr)
-        cdef np.ndarray nd_indices = np.asarray(view_indices)
 
         cdef np.ndarray[double, ndim=1] data = np.zeros(nnz, dtype=np.double)
         self.csrMatrix = AliasedCSRMatrix((data, nd_indices, nd_indptr), shape=(nDof, nDof))
@@ -199,6 +205,35 @@ cdef class CSRGenerator:
         # from here on, structural mutation of this specific matrix is unsafe -- see
         # AliasedCSRMatrix's docstring.
         self.csrMatrix._locked = True
+
+    def addToPattern(self, entries):
+        """Add entries to the CSR pattern that no COO pair contributes to; they are assembled as stored zeros.
+
+        Makes room for values written into :attr:`csrMatrix` after the assembly, such as the
+        multi-point-constraint condensation's (see
+        :meth:`~edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation.condensedPatternFillIn`).
+
+        :attr:`csrMatrix` is replaced by a new matrix with the extended pattern (and zero values): a matrix obtained
+        from this generator before, or a :class:`DirectCSRAssembler` built on its pattern, must not be used
+        afterwards.
+
+        Parameters
+        ----------
+        entries
+            The entries to add (CSR, ``nDof x nDof``), with sorted rows and none of them already in the pattern; only
+            the pattern is read.
+        """
+        cdef int64_t[::1] extraPtr
+        cdef int32_t[::1] extraIdx
+        if entries.shape != self.csrMatrix.shape:
+            raise ValueError("CSRGenerator.addToPattern: shape {:} differs from {:}.".format(
+                entries.shape, self.csrMatrix.shape))
+        if entries.nnz == 0:
+            return
+        extraPtr = np.ascontiguousarray(entries.indptr, dtype=np.int64)
+        extraIdx = np.ascontiguousarray(entries.indices, dtype=np.int32)
+        self.core.addEntries(&extraPtr[0], &extraIdx[0])
+        self._wrapPattern()
 
     @property
     def memoryBytes(self):
