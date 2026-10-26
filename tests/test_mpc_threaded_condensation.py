@@ -201,6 +201,21 @@ def test_fill_in_added_to_the_csr_generator_pattern():
         generator.addToPattern(fillIn)
 
 
+def test_a_matrix_obtained_before_add_to_pattern_keeps_its_pattern():
+    from types import SimpleNamespace
+
+    csrgeneratorv2 = pytest.importorskip("edelweissfe.numerics.csrgeneratorv2")
+    n = 150
+    K = _randomSparseK(n, density=0.05, seed=10).tocoo()
+    generator = csrgeneratorv2.CSRGenerator(SimpleNamespace(I=K.row.astype(np.intc), J=K.col.astype(np.intc), nDof=n))
+    old = generator.updateInPlace(K.data)
+    reference = old.copy()
+    mpc = MultiPointConstraintTransformation(_randomRecords(n, 30, 10), n, useThreadedCondensation=True)
+    generator.addToPattern(mpc.condensedPatternFillIn(old))
+    del generator
+    _assertIdentical(old, reference)
+
+
 def test_threaded_matches_plain_expression():
     n = 200
     records = [

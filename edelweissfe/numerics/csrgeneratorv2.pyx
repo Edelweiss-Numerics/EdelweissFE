@@ -114,7 +114,8 @@ cdef extern from "_csrcore.h":
 
         void update(const double* V_data, double* csr_data) nogil
         void releaseGatherMap()
-        void addEntries(const int64_t* extraPtr, const int32_t* extraIdx) except +
+        void addEntries(const int64_t* extraPtr, const int32_t* extraIdx, vector[int]& retiredIndptr,
+                        vector[int]& retiredIndices) except +
         bint gatherMapReleased
         int64_t memoryBytes()
 
@@ -130,6 +131,13 @@ cdef extern from "_csrcore.h":
         void setNumBuffers(int n) except +
         int64_t memoryBytes()
         int nBuffers
+
+cdef class _RetiredPattern:
+    """The pattern of a matrix that :meth:`CSRGenerator.addToPattern` replaced, kept as long as that matrix."""
+
+    cdef vector[int] indptr
+    cdef vector[int] indices
+
 
 cdef class CSRGenerator:
     """
@@ -213,9 +221,8 @@ cdef class CSRGenerator:
         multi-point-constraint condensation's (see
         :meth:`~edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation.condensedPatternFillIn`).
 
-        :attr:`csrMatrix` is replaced by a new matrix with the extended pattern (and zero values): a matrix obtained
-        from this generator before, or a :class:`DirectCSRAssembler` built on its pattern, must not be used
-        afterwards.
+        :attr:`csrMatrix` is replaced by a new matrix with the extended pattern (and zero values). A matrix obtained
+        before keeps the old pattern and stays valid, but the generator no longer updates it.
 
         Parameters
         ----------
@@ -232,7 +239,10 @@ cdef class CSRGenerator:
             return
         extraPtr = np.ascontiguousarray(entries.indptr, dtype=np.int64)
         extraIdx = np.ascontiguousarray(entries.indices, dtype=np.int32)
-        self.core.addEntries(&extraPtr[0], &extraIdx[0])
+        cdef _RetiredPattern retired = _RetiredPattern()
+        self.core.addEntries(&extraPtr[0], &extraIdx[0], retired.indptr, retired.indices)
+        # the old matrix points into the old pattern, no longer into the generator
+        self.csrMatrix._parent = retired
         self._wrapPattern()
 
     @property

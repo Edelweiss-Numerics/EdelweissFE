@@ -8,6 +8,7 @@
 #include <omp.h>
 #include <stdexcept>
 #include <type_traits>
+#include <utility>
 #include <vector>
 
 struct PackedEdge {
@@ -317,8 +318,12 @@ public:
   // Add entries that no COO pair contributes to, assembled as stored zeros: room for values that a caller writes
   // after the assembly (the in-place multi-point-constraint condensation). They are given as a pattern of their own,
   // extraPtr (nDof + 1 entries) and extraIdx, with sorted rows and none already in the pattern. Each gets an empty
-  // range of the gather map, so update() writes 0.0 there.
-  void addEntries( const int64_t* extraPtr, const int32_t* extraIdx )
+  // range of the gather map, so update() writes 0.0 there. The old pattern is moved into retiredIndptr and
+  // retiredIndices, not freed: a matrix handed out before may still point into it.
+  void addEntries( const int64_t*      extraPtr,
+                   const int32_t*      extraIdx,
+                   std::vector< int >& retiredIndptr,
+                   std::vector< int >& retiredIndices )
   {
     const bool hasGatherMap = !gatherMapReleased;
     if ( hasGatherMap && assembly_ptr.empty() )
@@ -362,9 +367,9 @@ public:
       newAssemblyPtr[newNnz] = assembly_ptr[nnz];
       assembly_ptr.swap( newAssemblyPtr );
     }
-    indptr.swap( newIndptr );
-    indices.swap( newIndices );
-    nnz = newNnz;
+    retiredIndptr  = std::exchange( indptr, std::move( newIndptr ) );
+    retiredIndices = std::exchange( indices, std::move( newIndices ) );
+    nnz            = newNnz;
   }
 
   void update( const double* V_data, double* csr_data ) const
