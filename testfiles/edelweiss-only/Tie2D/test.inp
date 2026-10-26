@@ -10,7 +10,8 @@
 ** tying and moment transfer. RFShear = -71.40705 here; a merged planeRectQuad (nX=2, nY=4, h=2)
 ** column gives -71.41660, the difference being that distorted snapped row. (Before 2026-10-02 the
 ** elements kept their pre-snap geometry while the nodes moved, which made the tied 1+1 column
-** coincide with the merged mesh; see the tie's adjust option.)
+** coincide with the merged mesh; see the tie's adjust option.) Step 2 condenses the tie with the
+** threaded, in-place kernel (useThreadedMPCCondensation), step 1 with the plain SciPy expression.
 *material, name=LinearElastic, id=linearelastic, provider=edelweiss
 1.8e4, 0.0
 
@@ -78,6 +79,6 @@ maxInc=0.5, minInc=1e-6, maxNumInc=100, maxIter=25, stepLength=1
 ** step 2: shear the tied column
 *step, solver=theSolver
 maxInc=0.5, minInc=1e-6, maxNumInc=100, maxIter=25, stepLength=1
->>options, name=theSolver, extrapolation=off
+>>options, name=theSolver, extrapolation=off, useThreadedMPCCondensation=True
 >>dirichlet, name=fixBottom, nSet=lower_bottom, field=displacement, 1=0.0, 2=0.0
 >>dirichlet, name=pushTop, nSet=upper_top, field=displacement, 1=0.05, 2=0.0
