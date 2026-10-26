@@ -1,0 +1,30 @@
+** A two-level cycle spelled out in the solver script (see solver.py): damped Jacobi, a coarse correction on the
+** linear (P1) interpolant of the quadratic mesh -- its prolongation P built in the script from the corner/midside
+** map of the displacement field -- with one AMG cycle on the coarse problem, and damped Jacobi again, accelerated by
+** LGMRES. The model is a linear-elastic plane-strain cantilever of quadratic elements (CPE8, 1138 displacement dofs).
+** Requires the optional amgcl extension; skipped where it is not built.
+*material, name=linearelastic, id=linearelastic, provider=edelweiss
+210000.0, 0.15
+
+*section, name=section1, thickness=40.0, material=linearelastic, type=plane
+all
+
+*job, name=cpe8job, domain=2d
+*linearSolver, name=twoLevel, type=custom
+script=solver.py
+
+*solver, solver=NIST, name=theSolver
+linsolver=twoLevel
+
+*modelGenerator, generator=planeRectQuad, name=gen
+x0=0, l=2000
+y0=0, h=100
+elType=CPE8
+elProvider=edelweiss
+nX=40
+nY=4
+
+*step, solver=theSolver
+maxInc=1, minInc=1e-8, maxNumInc=10, maxIter=25, stepLength=1
+>>dirichlet, name=left, nSet=gen_left, field=displacement, 1=0, 2=0
+>>nodeforces, name=cloadTop, nSet=gen_rightTop, components='0,-1000', field=displacement
