@@ -137,10 +137,10 @@ cdef class _CSRCoreOwner:
     """Owns the C++ core of a :class:`CSRGenerator`, its CSR pattern and its gather map, and frees it when it goes.
 
     The generator holds it, and so do the pattern arrays (``indptr``, ``indices``) of the generator's matrix, which
-    point into the core: their base object is this owner (see :func:`_intArrayOwnedBy`). So the core lives as long as
-    the generator or the matrix, whichever goes last, and neither of the two refers to the other -- a reference
-    cycle between them would leave both, with the gather map, to the cyclic garbage collector, which does not see the
-    size of the core.
+    point into the core: their base object is this owner (see :func:`_intArrayOwnedBy`). So the pattern lives as long
+    as the generator or the matrix, whichever goes last, the gather map only as long as the generator. Neither of the
+    two refers to the other: a reference cycle would leave both to the cyclic garbage collector, which does not see
+    the size of the core.
     """
 
     cdef CSRCore* core
@@ -188,6 +188,12 @@ cdef class CSRGenerator:
     cdef public object csrMatrix
     cdef double[:] data_view
     cdef int64_t nCooPairs
+
+    def __dealloc__(self):
+        # Only this generator gathers: its gather map goes with it, also while the matrix keeps the pattern alive.
+        # A cyclic collection may have cleared coreOwner (to None) first, and freed the core with it.
+        if self.coreOwner is not None:
+            self.coreOwner.core.releaseGatherMap()
 
     def __init__(self, systemMatrix, bint patternOnly=False):
         # Ensure int32 dtype regardless of the source array's dtype.
