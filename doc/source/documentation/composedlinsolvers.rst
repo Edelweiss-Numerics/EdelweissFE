@@ -52,6 +52,8 @@ the verbosity, the dumps, the hot reload -- are data lines of the block (a ``Com
 is refused). The journal logs the structure of the solver and a hash of the script at the first solve (with
 ``verbosity=info``).
 
+.. _composed-adapter:
+
 The adapter
 -----------
 
@@ -246,6 +248,8 @@ then composes with every other component. The public ``setUp``, ``update`` and `
 each call and its time in the component's statistics and call the hook; a component calls its children through those
 public methods.
 
+.. _composed-presets:
+
 Presets
 -------
 
@@ -262,6 +266,11 @@ The corrections are made at the first set-up, for the fields of the model; ``swe
 with ``gaussSeidelOrder``. ``blockAMG(krylovOnScaledSystem=True)`` puts the scaling around LGMRES instead
 (:ref:`composed-scaled-krylov`), ``continuations`` and ``gapCompensation`` go to LGMRES, and ``dropTolerance`` and
 ``lumpDroppedEntries`` to every field (:ref:`composed-drop-tolerance`).
+
+Everything else -- another tree for a field, the rebuild policy, the parameters of the forcing tolerance or of LGMRES,
+the options of the rigid-body coarse level, the p-multigrid variant, a Schur complement -- is a ``custom`` solver
+script: copy the preset (:mod:`edelweissfe.linsolve.composition.presets`, a plain function) into the script and change
+what you need.
 
 Views
 -----

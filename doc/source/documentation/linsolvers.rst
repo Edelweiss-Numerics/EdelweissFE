@@ -151,7 +151,9 @@ coarse level and the Schur complement condensation are explained in detail on :d
    :maxdepth: 1
 
    composedlinsolvers
+   composedlinsolversreference
    blockamgtheory
+   fieldsplitmeasurements
 
 Rigid-body coarse level (``blockamg``)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -177,6 +179,8 @@ setup (on an edge breakout model 22 against 20 iterations, at about the same cos
 
 A 2D displacement field, or any other vector field, gets the coarse level in a ``custom`` solver script,
 ``OnField("displacement", TwoLevel(coarseSpace=RigidBodyModes()))``.
+
+.. _composed-schur-complement-recipe:
 
 Schur complement condensation (``custom``)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -220,8 +224,7 @@ of whose elements are marked. It is a ``custom`` solver script; for embedded bar
     linsolver=barSchur
 
 A ``fieldOutput`` marker condenses, e.g., a softening zone instead (testfile
-``GradientEnhancedDamageSchurComplement``). The method and the caveats are on the :doc:`blockamgtheory` page (section
-"Schur complement condensation").
+``GradientEnhancedDamageSchurComplement``). The method and the caveats are in :ref:`blockamg-schur-complement`.
 
 Python API of the linear solvers
 --------------------------------
