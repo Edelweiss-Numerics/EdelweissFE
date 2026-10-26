@@ -311,6 +311,8 @@ class NEST(NIST):
         P = self.theDofManager.constructDofVector()
         dU = self.theDofManager.constructDofVector()
         K = self.theDofManager.constructVIJSystemMatrix()
+        # the generator of the previous step goes before the new one is built
+        self.csrGenerator = None
         self.csrGenerator = CSRGenerator(K)
 
         for fieldName, field in model.nodeFields.items():

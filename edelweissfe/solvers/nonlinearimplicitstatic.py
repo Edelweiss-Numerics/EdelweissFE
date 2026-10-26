@@ -488,6 +488,8 @@ class NIST(NonlinearSolverBase):
 
                 with performancetiming.timeit("system matrix pattern"):
                     K = self.theDofManager.constructVIJSystemMatrix()
+                    # the generator of the previous equation system goes before the new one is built
+                    self.csrGenerator = None
                     self.csrGenerator = CSRGenerator(K)
 
                 U = self.theDofManager.constructDofVector()
