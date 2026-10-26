@@ -436,7 +436,10 @@ class Jacobi(Preconditioner):
     Parameters
     ----------
     omega
-        The damping.
+        The damping. Damped Jacobi damps the fast error modes only for
+        :math:`0 < \\omega < 2 / \\lambda_{max}`, :math:`\\lambda_{max}` the largest eigenvalue of
+        :math:`\\operatorname{diag}(A)^{-1} A`. The default 2/3 is the textbook value for the Laplacian; quadratic
+        elements have a larger :math:`\\lambda_{max}` and need a smaller damping (testfile ``TwoLevelSpelledOut``).
     """
 
     def __init__(self, omega: float = 2.0 / 3.0):

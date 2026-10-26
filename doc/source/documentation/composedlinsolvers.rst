@@ -170,7 +170,11 @@ much per application as ``TwoLevel`` (101 ms plus about 98 ms). The difference i
 * ``TwoLevel`` forms :math:`P x`, :math:`P^T r` and :math:`P^T A P` threaded in C++; ``CoarseCorrection`` uses SciPy;
 * ``Multiplicative`` forms the residual :math:`r - A z` between its steps; ``TwoLevel`` takes it from the smoother.
 
-The testfile deck ``testfiles/edelweiss-only/TwoLevelSpelledOut`` runs the spelled-out cycle in a simulation.
+The testfile deck ``testfiles/edelweiss-only/TwoLevelSpelledOut`` runs the spelled-out cycle in a simulation, on
+quadratic elements with the P1 interpolant as the coarse space. Its smoother is ``Jacobi(omega=0.4)``: damped Jacobi
+damps the fast error modes only for :math:`\omega < 2 / \lambda_{max}(\operatorname{diag}(A)^{-1} A)`, and on
+quadratic elements :math:`\lambda_{max}` is larger than for the Laplacian the default :math:`\omega = 2/3` is made
+for (about 3.7 there), so the default amplifies them and the cycle stalls.
 
 There is no native Chebyshev component yet, so the spelled-out way cannot reproduce ``TwoLevel`` exactly; a
 ``Chebyshev`` component is issue #237 (https://github.com/Edelweiss-Numerics/EdelweissFE/issues/237). The exception
