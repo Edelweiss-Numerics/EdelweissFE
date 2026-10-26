@@ -96,6 +96,8 @@ def test_a_krylov_rebuild_forgets_every_hierarchy_before_it_builds_one(monkeypat
     assert root.lastRebuildReason == "pattern"
     # the first build of the rebuild finds no old hierarchy, the second only the one just built
     assert heldAtBuild == [0, 1]
+    # the combination hands the rebuild on to its corrections as an update, with what changed
+    assert [c.statistics.setUps for c in root.preconditioner.corrections] == [1, 1]
 
     # only new values: the hierarchies are reused, not forgotten
     heldAtBuild.clear()

@@ -153,8 +153,7 @@ class _Combination(Preconditioner):
             self.corrections = corrections
         # the fields the corrections were made for: they are kept, with what they learnt, while the fields stay
         self._madeFor = None
-
-    def _forget(self) -> None:
+        # the dof ranges of the fields, taken from every matrix (None: never set up)
         self.bounds = None
 
     def _distinct(self) -> list:
@@ -187,7 +186,8 @@ class _Combination(Preconditioner):
             correction.setUp(A, context)
 
     def _update(self, A, change) -> None:
-        if self._makeFor(change.context) or not self.bounds:
+        # set up only with nothing to update (new corrections, or the first matrix); a rebuild is the corrections' own
+        if self._makeFor(change.context) or self.bounds is None:
             self.setUp(A, change.context)
             return
         self.bounds = [(field.start, field.stop) for field in change.context.fields]
@@ -222,7 +222,6 @@ class Multiplicative(_Combination):
     """
 
     def _forget(self) -> None:
-        super()._forget()
         self.blocks = None
 
     def _setUp(self, A, context: SetUpContext) -> None:
