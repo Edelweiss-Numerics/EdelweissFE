@@ -137,11 +137,10 @@ THINNING_FRACTION = 0.1
 #: pays.
 BAND_STORAGE_MAX_FRACTION = 0.25
 
-#: The work on the entries of the large matrices (the split of :math:`A` into its blocks, the drop of the small entries
-#: of :math:`\tilde S`) is done for blocks of about this many entries in parallel threads: enough to keep the threads
-#: busy, few enough that the temporaries of each block stay small. The threads write their results into arrays of the
-#: calling thread: in the free-threaded interpreter, an array made by a worker thread and dropped by another is freed
-#: only when that worker runs again.
+#: The split of :math:`A` into its blocks and the drop of the small entries of :math:`\tilde S` work on blocks of about
+#: this many entries in parallel threads, so that the temporaries of each block stay small. The threads write into
+#: arrays of the calling thread: in the free-threaded interpreter, an array made by a worker thread and dropped by
+#: another is freed only when that worker runs again.
 PARALLEL_BLOCK_ENTRIES = 2**20
 
 
@@ -576,14 +575,16 @@ def _entriesOfBlock(A: sp.csr_matrix, rows: np.ndarray, cols: np.ndarray) -> tup
         of an entry in that column), and the block's row pointers and shape. The indices are int32 while ``A`` has
         fewer than 2^31 entries.
     """
-    n, indexType = A.shape[0], (np.int32 if A.nnz <= np.iinfo(np.int32).max else np.int64)
+    n = A.shape[0]
+    indexType = np.int32 if A.nnz <= np.iinfo(np.int32).max else np.int64
     isRow, isCol = np.zeros(n, dtype=bool), np.zeros(n, dtype=bool)
     isRow[rows], isCol[cols] = True, True
     inBlock = np.repeat(isRow, np.diff(A.indptr))
     inBlock &= isCol[A.indices]
     indexInData = np.flatnonzero(inBlock).astype(indexType)
     # the entries of the block up to its row r are those before the end of A's row r
-    indptr = np.concatenate([[0], np.searchsorted(indexInData, A.indptr[rows + 1])]).astype(indexType)
+    rowEnds = A.indptr[rows + 1].astype(indexType)  # else searchsorted converts indexInData to their type
+    indptr = np.concatenate([[0], np.searchsorted(indexInData, rowEnds)]).astype(indexType)
     positionInCols = np.full(n, -1, dtype=indexType)
     positionInCols[cols] = np.arange(cols.size)
     return indexInData, positionInCols, indptr, (rows.size, cols.size)
@@ -622,11 +623,9 @@ def _dropSmallEntries(S: sp.csr_matrix, tau: float) -> sp.csr_matrix:
     threads instead, in two passes: the first marks the kept entries (one byte per entry) and counts them per row, the
     second copies them into the result, allocated once their number is known."""
     sqrtAbsDiagonal = np.sqrt(np.abs(S.diagonal()))
-    nBlocks = max(1, -(-S.nnz // PARALLEL_BLOCK_ENTRIES))
-    firstRows = np.searchsorted(S.indptr, np.linspace(0, S.nnz, nBlocks + 1)[1:-1])
-    bounds = np.unique(np.concatenate([[0], firstRows, [S.shape[0]]]))
-    rowBlocks = list(zip(bounds[:-1], bounds[1:]))
-    keep, keptPerRow = np.empty(S.nnz, dtype=bool), np.empty(S.shape[0], dtype=np.int64)
+    rowBlocks = _rowBlocks(S)
+    indexType = S.indices.dtype  # also of the result's indptr, else scipy converts it
+    keep, keptPerRow = np.empty(S.nnz, dtype=bool), np.empty(S.shape[0], dtype=indexType)
 
     def markKeptEntries(rowBlock):
         low, high = rowBlock
@@ -639,8 +638,9 @@ def _dropSmallEntries(S: sp.csr_matrix, tau: float) -> sp.csr_matrix:
 
     pool = getThreadPool(getNumberOfThreads())
     list(pool.map(markKeptEntries, rowBlocks))
-    indptr = np.concatenate([[0], np.cumsum(keptPerRow)])
-    data, indices = np.empty(indptr[-1], dtype=S.data.dtype), np.empty(indptr[-1], dtype=S.indices.dtype)
+    indptr = np.zeros(S.shape[0] + 1, dtype=indexType)
+    np.cumsum(keptPerRow, out=indptr[1:])
+    data, indices = np.empty(indptr[-1], dtype=S.data.dtype), np.empty(indptr[-1], dtype=indexType)
 
     def copyKeptEntries(rowBlock):
         low, high = rowBlock
@@ -650,6 +650,15 @@ def _dropSmallEntries(S: sp.csr_matrix, tau: float) -> sp.csr_matrix:
 
     list(pool.map(copyKeptEntries, rowBlocks))
     return sp.csr_matrix((data, indices, indptr), shape=S.shape)
+
+
+def _rowBlocks(S: sp.csr_matrix) -> list:
+    """Consecutive ranges ``(low, high)`` of the rows of ``S`` that cover all of them, each with about
+    :data:`PARALLEL_BLOCK_ENTRIES` entries."""
+    nBlocks = max(1, int(np.ceil(S.nnz / PARALLEL_BLOCK_ENTRIES)))
+    firstRows = np.searchsorted(S.indptr, np.linspace(0, S.nnz, nBlocks + 1)[1:-1])
+    bounds = np.unique(np.concatenate([[0], firstRows, [S.shape[0]]]))
+    return list(zip(bounds[:-1], bounds[1:]))
 
 
 def _solveTransposed(A: sp.coo_matrix, B: np.ndarray) -> np.ndarray:

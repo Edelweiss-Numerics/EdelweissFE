@@ -46,6 +46,7 @@ from _linsolvesystems import (
 )
 
 import edelweissfe.adaptivity.marking as marking
+import edelweissfe.linsolve.composition.schurcomplement as schurcomplement
 from edelweissfe.adaptivity.marking import (
     STABLE_FOR_THE_MODEL,
     ElementSetMarker,
@@ -59,10 +60,14 @@ from edelweissfe.linsolve.composition import (
     SetUpContext,
     SystemMatrix,
 )
+from edelweissfe.linsolve.composition.amg import isSignificant
 from edelweissfe.linsolve.composition.schurcomplement import (
     SchurComplementCondensation,
     _cutIntoWindows,
+    _dropSmallEntries,
     _solveTransposed,
+    _split,
+    _splitCacheFor,
     blockLU,
 )
 from edelweissfe.linsolve.superlu import SuperLUBackend
@@ -135,6 +140,47 @@ def test_a_chain_is_cut_into_windows_whose_cores_partition_it():
     # a chain no longer than one core with both halos is one window, an exact correction
     (window,) = _cutIntoWindows(chain, core=4, halo=3)
     assert np.array_equal(window.dofs, chain) and np.array_equal(window.core, np.arange(10))
+
+
+def test_the_blocks_of_the_split_are_those_of_fancy_indexing(monkeypatch):
+    """With blocks of a few entries for the parallel gathers, and int64 row pointers in ``A``."""
+    monkeypatch.setattr(schurcomplement, "PARALLEL_BLOCK_ENTRIES", 17)
+    A = sp.random(60, 60, density=0.2, format="csr", random_state=0) + sp.identity(60, format="csr")
+    A.indptr, A.indices = A.indptr.astype(np.int64), A.indices.astype(np.int64)
+    b = np.sort(np.random.default_rng(0).choice(60, 20, replace=False))
+    k = np.setdiff1d(np.arange(60), b)
+    blocks = _split(A, ("bb", "bk", "kb", "kk"), b, k, _splitCacheFor(A, None))
+    for block, (rows, cols) in zip(blocks, ((b, b), (b, k), (k, b), (k, k))):
+        expected = A[rows][:, cols].tocsr()
+        expected.sort_indices()
+        for name in ("data", "indices", "indptr"):
+            assert np.array_equal(getattr(block, name), getattr(expected, name))
+
+
+def test_the_drop_of_small_entries_is_the_simple_form(monkeypatch):
+    """With row blocks of a few entries for the two passes, and stored zeros."""
+    monkeypatch.setattr(schurcomplement, "PARALLEL_BLOCK_ENTRIES", 17)
+    S = sp.random(60, 60, density=0.2, format="csr", random_state=1) + sp.identity(60, format="csr")
+    S.data[::7] = 0.0
+    sqrtAbsDiagonal = np.sqrt(np.abs(S.diagonal()))
+    rowOfEntry = np.repeat(np.arange(60), np.diff(S.indptr))
+    expected = S.copy()
+    expected.data[~isSignificant(S.data, rowOfEntry, S.indices, sqrtAbsDiagonal, 0.3)] = 0.0
+    expected.eliminate_zeros()
+    dropped = _dropSmallEntries(S, 0.3)
+    assert 0 < dropped.nnz < np.count_nonzero(S.data)
+    for name in ("data", "indices", "indptr"):
+        assert np.array_equal(getattr(dropped, name), getattr(expected, name))
+
+
+def test_a_condensed_block_without_coupling_leaves_a_kk():
+    """No window couples to the remaining dofs: no corrections, S~ is A_kk."""
+    A = sp.block_diag([barOnFoundation(n=6)[0], 2.0 * sp.identity(5)], format="csr")
+    b = np.arange(A.shape[0] - 5, A.shape[0])
+    condensation = FixedCondensation(b, dropTolerance=0.0)
+    condensation.update(A)
+    S = condensation.approximateSchurComplement(A)
+    assert abs(S - A[: b[0]][:, : b[0]]).max() == 0.0
 
 
 class _Node:
