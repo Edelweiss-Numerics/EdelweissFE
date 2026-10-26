@@ -297,11 +297,11 @@ public:
 #pragma omp parallel num_threads( nThreads )
     {
 #pragma omp for schedule( dynamic, 1 )
-      for ( int64_t k = 0; k < static_cast< int64_t >( otherRows.size() ); ++k )
+      for ( int64_t k = 0; k < static_cast< int64_t >( otherRows.size() ); ++k ) {
         if ( !computeRow( otherRows[k], Kp, Ki, Kv, otherRowValues.data() + bufferStart[k], buffers ) )
           patternMismatch = true;
-
-          // (the implicit barrier: every row that reads other rows has read them)
+      }
+      // (the implicit barrier: every row that reads other rows has read them)
 
 #pragma omp for schedule( dynamic, 64 )
       for ( int64_t k = 0; k < static_cast< int64_t >( ownRows.size() ); ++k ) {
