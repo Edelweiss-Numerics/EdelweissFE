@@ -114,8 +114,10 @@ Components
     * - ``TwoLevel(coarseSpace, tree, backendBlockSize, backendPrecision, coarseHierarchyPrecision,
         fineSpectralRadiusReuse, dropTolerance, lumpDroppedEntries)``
       - a two-level cycle with a coarse space of its own (a ``CoarseSpace``): all rigid-body modes per aggregate,
-        ``RigidBodyModes(prolongation)``, or the P1 interpolant, ``P1Interpolation(coarsePrecond,
-        useCoarseNullspace)``. Both read the fine Chebyshev smoother from the tree's ``relax``, ``npre`` and ``npost``
+        ``RigidBodyModes(prolongation)``, or the P1 interpolant of the scaled variables, ``P1Interpolation(coarse)``,
+        whose coarse solve is a component on the corner-node field (default
+        ``DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModes()))``, :ref:`blockamg-p-multigrid`). Both read the fine
+        Chebyshev smoother from the tree's ``relax``, ``npre`` and ``npost``
     * - ``SchurComplement(condense, preconditionS, solveA_bb, approximation, dropTolerance, windowNodes, haloNodes,
         blockFactors)``
       - block LU: :math:`z_k = M_{\tilde S}^{-1}(r_k - A_{kb} A_{bb}^{-1} r_b)`,

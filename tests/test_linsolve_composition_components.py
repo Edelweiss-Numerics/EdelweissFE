@@ -37,7 +37,7 @@ from _linsolvesystems import (
     condensingGivenDofs,
     displacementDamageSystem,
 )
-from _p1lattice import dirichletDofs, fineChebyshevTree, lattice, latticeSystem
+from _p1lattice import dirichletDofs, lattice, latticeSystem
 
 pytest.importorskip("edelweissfe.linsolve.amgcl.amgcl")
 
@@ -240,28 +240,132 @@ def test_a_reused_coarse_correction_keeps_its_prolongation_and_its_coarse_hierar
     assert (coarse.statistics.setUps, coarse.statistics.updates) == (1, 1)
 
 
-def test_the_p1_two_grid_has_blockamgs_numbers():
-    """The outer iterations and ||x|| of BlockAMGSolver (deleted; recorded at ffe4b681, see
-    test_linsolve_composition_equivalence)."""
-    coords, isCorner, edgeEndpoints = lattice(6)
+def _p1System(nCornersPerAxis=6):
+    """The lattice block as an unscaled system with a right-hand side zero on the Dirichlet dofs, its field and its
+    node coordinates and P1 map."""
+    coords, isCorner, edgeEndpoints = lattice(nCornersPerAxis)
     constrained = dirichletDofs(coords)
-    As, dinv = latticeSystem(coords, constrained)
-    A = (As.multiply(1.0 / dinv[:, None]).multiply(1.0 / dinv[None, :])).tocsr()
+    As, scaling = latticeSystem(coords, constrained)
+    A = (As.multiply(1.0 / scaling[:, None]).multiply(1.0 / scaling[None, :])).tocsr()
     b = np.random.default_rng(3).standard_normal(A.shape[0])
     b[constrained] = 0.0
     fields = [FieldBlock("displacement", 0, 3 * len(isCorner), 3)]
-    p1Maps = {"displacement": (isCorner, edgeEndpoints)}
-    # the smoother and the backend the numbers were recorded with, stated: the defaults are now the field's
-    p1TwoGrid = TwoLevel(P1Interpolation(), tree=fineChebyshevTree(), backendBlockSize=1, backendPrecision="double")
-    root = LGMRES(
-        DiagonalScaling(p1TwoGrid),
-        tolerance=FixedTolerance(1e-8),
-        maxIterations=300,
+    return A, b, fields, coords, isCorner, edgeEndpoints, constrained
+
+
+class _RecordingExactSolve(DirectSolver):
+    """An exact solve that keeps the matrix and the context of its set-up."""
+
+    def _setUp(self, A, context):
+        self.recorded = (A.matrix().copy(), context)
+        super()._setUp(A, context)
+
+
+def test_the_p1_coarse_problem_is_the_corner_node_field():
+    """The coarse component gets the corner-node field: the field's name and dimension, the corners' coordinates in
+    their node order, the scaling of the corner dofs, and an identity row for each Dirichlet corner dof."""
+    A, b, fields, coords, isCorner, edgeEndpoints, constrained = _p1System()
+    coarse = _RecordingExactSolve()
+    twoLevel = TwoLevel(P1Interpolation(coarse=coarse))
+    scaling = DiagonalScaling(twoLevel)
+    scaling.setUp(
+        SystemMatrix(A),
+        SetUpContext(
+            fields=tuple(fields),
+            coordinatesOf={"displacement": coords}.get,
+            p1MapOf={"displacement": (isCorner, edgeEndpoints)}.get,
+        ),
     )
-    x, composed = _solved(A, b, root, fields, p1Maps=p1Maps)
-    assert composed.lastSolveSummary.iters == 10
-    assert np.linalg.norm(x) == pytest.approx(6.006723593302372, rel=1e-8)
+    A_c, context = coarse.recorded
+    cornerNodes = np.nonzero(isCorner)[0]
+    cornerDofs = (3 * cornerNodes[:, None] + np.arange(3)).ravel()
+    assert context.fields == (FieldBlock("displacement", 0, len(cornerDofs), 3),)
+    assert np.array_equal(context.coordinates("displacement"), coords[cornerNodes])
+    assert np.array_equal(context.scaling, scaling.D[cornerDofs])
+    assert context.p1Map("displacement") is None and context.model is None
+    coarseDirichlet = np.isin(cornerDofs, constrained)
+    assert coarseDirichlet.any()
+    identityRows = np.diff(A_c.indptr) == 1
+    assert np.array_equal(identityRows, coarseDirichlet)
+    assert np.all(A_c.diagonal()[coarseDirichlet] == 1.0)
+    # the coarse dofs are the corners' dofs, and the coarse component is a child of the cycle
+    assert twoLevel.cycle.nCoarse == len(cornerDofs)
+    assert twoLevel.children() == (("coarse", coarse),)
+
+
+def test_the_p1_two_grid_with_its_default_coarse_solve_converges():
+    """The default coarse solve, DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModes())), runs on the corner-node field:
+    three levels, quadratic -> linear -> rigid-body modes of aggregates."""
+    A, b, fields, coords, isCorner, edgeEndpoints, constrained = _p1System()
+    p1TwoGrid = TwoLevel(P1Interpolation())
+    root = LGMRES(DiagonalScaling(p1TwoGrid), tolerance=FixedTolerance(1e-8), maxIterations=300)
+    x, composed = _solved(
+        A,
+        b,
+        root,
+        fields,
+        nodeCoordinates={"displacement": coords},
+        p1Maps={"displacement": (isCorner, edgeEndpoints)},
+    )
     assert _relative(A @ x, b) < 1e-8
+    coarse = p1TwoGrid.coarseSpace.coarse
+    assert isinstance(coarse, DiagonalScaling) and isinstance(coarse.inner, TwoLevel)
+    assert coarse.statistics.setUps == 1
+    assert coarse.statistics.applications == p1TwoGrid.statistics.applications
+    assert composed.lastSolveSummary.iters <= 12
+
+
+def test_the_p1_coarse_solve_with_an_exact_solve_beats_the_default_in_iterations_only():
+    """An exact coarse solve bounds what the coarse level can do: the two-grid with it needs no more iterations than
+    with the default (inexact) coarse solve."""
+    A, b, fields, coords, isCorner, edgeEndpoints, constrained = _p1System()
+    iterations = {}
+    for name, coarse in (("exact", DirectSolver()), ("default", None)):
+        root = LGMRES(DiagonalScaling(TwoLevel(P1Interpolation(coarse))), tolerance=FixedTolerance(1e-8))
+        x, composed = _solved(
+            A,
+            b,
+            root,
+            fields,
+            nodeCoordinates={"displacement": coords},
+            p1Maps={"displacement": (isCorner, edgeEndpoints)},
+        )
+        assert _relative(A @ x, b) < 1e-8
+        iterations[name] = composed.lastSolveSummary.iters
+    assert iterations["exact"] <= iterations["default"]
+
+
+def test_the_p1_two_grid_reuses_its_coarse_solve_while_only_the_values_change():
+    A, b, fields, coords, isCorner, edgeEndpoints, constrained = _p1System()
+    p1TwoGrid = TwoLevel(P1Interpolation())
+    root = LGMRES(DiagonalScaling(p1TwoGrid), tolerance=FixedTolerance(1e-8), maxIterations=300)
+    _, composed = _solved(
+        A, b, root, fields, nodeCoordinates={"displacement": coords}, p1Maps={"displacement": (isCorner, edgeEndpoints)}
+    )
+    x = composed((1.0001 * A).tocsr(), b)
+    assert _relative(1.0001 * (A @ x), b) < 1e-7
+    coarse = p1TwoGrid.coarseSpace.coarse
+    assert (p1TwoGrid.statistics.setUps, coarse.statistics.setUps, coarse.inner.statistics.setUps) == (1, 1, 1)
+    assert coarse.statistics.applications == p1TwoGrid.statistics.applications
+
+
+def test_the_p1_coarse_solve_takes_any_component_and_shows_in_the_views():
+    A, b, fields, coords, isCorner, edgeEndpoints, constrained = _p1System()
+    p1TwoGrid = TwoLevel(P1Interpolation(coarse=AMG(backendBlockSize=1)))
+    root = LGMRES(DiagonalScaling(p1TwoGrid), tolerance=FixedTolerance(1e-8), maxIterations=300)
+    x, _ = _solved(
+        A, b, root, fields, nodeCoordinates={"displacement": coords}, p1Maps={"displacement": (isCorner, edgeEndpoints)}
+    )
+    assert _relative(A @ x, b) < 1e-8
+    from edelweissfe.linsolve.composition.views import formula
+
+    assert "AMG" in formula(root) and "P1 interpolation" in formula(root)
+    assert "AMG" in str(root)
+
+
+def test_the_p1_coarse_solve_must_be_a_component():
+    with pytest.raises(TypeError, match="P1Interpolation"):
+        P1Interpolation(coarse=AMG)
 
 
 # ----- the Schur complement -----

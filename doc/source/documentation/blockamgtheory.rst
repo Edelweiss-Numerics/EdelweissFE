@@ -750,45 +750,74 @@ solver script builds a new ``LGMRES``, and with it a new instance.)
 
 .. _blockamg-p-multigrid:
 
-p-multigrid: ``TwoLevel(coarseSpace=P1Interpolation())`` (opt-in)
------------------------------------------------------------------
+p-multigrid: ``TwoLevel(coarseSpace=P1Interpolation(coarse))`` (opt-in)
+------------------------------------------------------------------------
 
-For a field discretized entirely with quadratic serendipity elements, a ``custom`` solver script can replace that
-field's single-level hierarchy with a genuine two-level V-cycle, ``OnField(name,
-TwoLevel(coarseSpace=P1Interpolation()))``
-(:class:`~edelweissfe.linsolve.composition.ptwogrid.PTwoGridPreconditioner`): ``npre`` Chebyshev
-sweeps on the field's own equilibrated block, restriction of the residual through
-:math:`P^\mathsf{T}`, one AMGCL cycle on the Galerkin-projected coarse operator :math:`A_1 =
-P^\mathsf{T} A P`, prolongation through :math:`P`, and ``npost`` more Chebyshev sweeps. The
-coarse space is purely topological -- the mesh's corner nodes -- so no re-discretization is involved:
-:math:`P` is the identity on corner nodes and the average of the two edge-endpoint corners on each
-midside node. The coarse solve always runs on the plain scalar backend, so it is given the same
-rigid-body near-null-space treatment the single-level default gives a scalar-backend field,
-restricted to the corner-node subset (``P1Interpolation(useCoarseNullspace=True)``, the default) -- independent of
-the backend the field's fine level is stored on (a block backend, the default for 2D/3D fields, takes the translations
-at most; see ``backendBlockSize`` above).
+For a field discretized entirely with quadratic elements, a ``custom`` solver script can replace that field's
+single-level hierarchy with a two-level cycle whose coarse level is the field's linear part, ``OnField(name,
+TwoLevel(coarseSpace=P1Interpolation()))`` (:class:`~edelweissfe.linsolve.composition.ptwogrid.PTwoGridPreconditioner`):
+``npre`` Chebyshev sweeps on the field's own scaled block :math:`\hat A = D A D`, restriction of the residual through
+:math:`P^\mathsf{T}`, the coarse solve on the Galerkin-projected coarse operator :math:`A_c = P^\mathsf{T} \hat A P`,
+prolongation through :math:`P`, and ``npost`` more Chebyshev sweeps. The coarse space is purely topological -- the
+mesh's corner nodes -- so no re-discretization is involved. Written out, the default is three levels built from
+components:
 
-Its preconditioner is rebuilt exactly when the single-level hierarchies are (see the reuse rules
-above), and its coarse solve gets a near-null-space while the fine-level Chebyshev smoother, having
-no coarsening step of its own, needs none. Measured against the default single-level
-configuration with the same outer settings (fine operator in float, ``npre = 0``,
-``npost = 1``, Chebyshev degree 16, the same coarse ``estimate_spectral_radius``), it was
-slower on a cylinder sequence and level within noise on a contact sequence, with the cheaper
-rebuild -- an alternative worth measuring on a model with expensive rebuilds, not the default.
-Enable it per field with ``OnField(name, TwoLevel(coarseSpace=P1Interpolation(coarsePrecond, useCoarseNullspace),
-tree=...))``; the topology map is computed lazily from the model and
-recomputed whenever the model changes (``setModel``, e.g. after adaptive refinement). There is no
-fallback to the single-level default: on linear elements every node is a corner, so the coarse
-operator is the field's block itself and the cycle gains nothing, and an element topology the map
-does not know raises. A node that two elements classify inconsistently (seen at non-conforming
-refinement interfaces) is made a corner, with a warning.
+.. code-block:: python
+
+    coarse = DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModes()))
+    displacement = OnField("displacement", TwoLevel(coarseSpace=P1Interpolation(coarse=coarse)))
+
+**The prolongation interpolates the scaled variables.** The P1 interpolant :math:`P_{geo}` keeps a corner node's
+displacement and gives a midside node the mean of its two edge-endpoint corners. But the cycle works on
+:math:`\hat A = D A D`, whose variables are :math:`\hat u = D^{-1} u`, not :math:`u`. Interpolating :math:`\hat u` with
+the weights :math:`\tfrac12, \tfrac12` is interpolating something else than the displacement: a scaled translation
+:math:`D^{-1} t` -- the smoothest error there is, which the coarse level exists to remove -- is reproduced at a midside
+node only where its diagonal equals its corners'. Measured on captured systems, the error of the plain weights at the
+free midside dofs is 10--15 % in the median and 22--35 % at the 95th percentile, and on the edge breakout up to a
+factor of 2000. The interpolation of :math:`u`, written in the scaled variables, is
+
+.. math::
+
+    P = D^{-1} P_{geo} D_c: \qquad P_{cc} = 1, \qquad
+    P_{ma} = \frac{1}{2} \frac{s_a}{s_m}, \quad P_{mb} = \frac{1}{2} \frac{s_b}{s_m}
+
+for a midside dof :math:`m` on the edge :math:`(a, b)`, :math:`s` the diagonal of :math:`D` and :math:`D_c` its
+restriction to the corners. It reproduces :math:`D^{-1} t` to rounding, and the coarse operator
+:math:`A_c = P^\mathsf{T} \hat A P = D_c P_{geo}^\mathsf{T} A P_{geo} D_c` is the P1 operator of the physical problem,
+in the corners' scaled variables. There is one way to do it, so there is no switch back to the plain weights; without
+a scaling above the cycle (:math:`D = I`), :math:`P = P_{geo}`. On the tunnel lining, the former plain weights needed
+253--279 outer iterations, the scaled ones 14--21 (:ref:`measured-scaled-p1`).
+
+**The coarse problem is a field of its own.** :math:`A_c` is handed to the component ``coarse`` with the context of the
+corner-node field (:meth:`~edelweissfe.linsolve.composition.base.SetUpContext.ofCornerNodes`): the same field name and
+dimension on the corner nodes, their coordinates, :math:`D_c` as its scaling, and an identity row for each Dirichlet
+corner dof (a zero column of :math:`P`). So every component works on it unchanged: ``RigidBodyModes`` builds the
+rigid-body modes of the corners, ``AMG(backendBlockSize=1)`` takes them as its near null-space, ``DirectSolver()``
+solves exactly. It is called back from the C++ cycle once per application.
+
+**Why the default scales the coarse operator once more.** Where a midside diagonal is tiny against its corners' --
+on the edge breakout some differ by a factor of :math:`10^6` -- the weights :math:`s_a / s_m` reach about 1000, and
+:math:`A_c` inherits entries of their square. A two-level cycle on it then smooths with a spectral
+radius of :math:`1.8 \cdot 10^5` instead of about 5. ``DiagonalScaling`` around the coarse solve rescales :math:`A_c`
+to a unit diagonal, :math:`D_2 A_c D_2` with :math:`D_2 = |\operatorname{diag} A_c|^{-1/2}`: without it, the edge
+breakout's solves needed twice the iterations and 40--50 % more time. The default coarse solve is the measured fastest,
+``DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModes()))``; an AMG hierarchy with the rigid-body modes of the corners
+(``coarse=DiagonalScaling(AMG(backendBlockSize=1))``) took 25--60 % more time (:ref:`measured-scaled-p1`).
+
+Its preconditioner is rebuilt exactly when the single-level hierarchies are (see the reuse rules above): while only
+the values change, the cycle and its coarse solve are both kept. Enable it per field with ``OnField(name,
+TwoLevel(coarseSpace=P1Interpolation(coarse), tree=...))``; the topology map is computed lazily from the model and
+recomputed whenever the model changes (``setModel``, e.g. after adaptive refinement). There is no fallback to the
+single-level default: on linear elements every node is a corner, so the coarse operator is the field's block itself and
+the cycle gains nothing, and an element topology the map does not know raises. A node that two elements classify
+inconsistently (seen at non-conforming refinement interfaces) is made a corner, with a warning.
 
 The whole cycle, and every stage of its build, runs in C++ and is OpenMP-threaded. The Dirichlet
 DOFs of the field's block -- rows whose only nonzero is the diagonal, which includes the identity
 slave rows of the multi-point-constraint condensation -- are decoupled exactly rather than removed:
 the fine right-hand side and iterate are kept zero on them, which a Dirichlet row
-preserves under every residual and every smoothing step, and :math:`P` has no rows or columns for
-them. This is the free-submatrix cycle up to floating-point summation order, without extracting the
+preserves under every residual and every smoothing step, and :math:`P` has no rows for them and zero columns
+for the Dirichlet corner dofs, which are identity rows of :math:`A_c`. This is the free-submatrix cycle up to floating-point summation order, without extracting the
 free submatrix, and it allows ``TwoLevel(..., backendBlockSize=3)``: the fine operator is stored in node-wise
 :math:`3\times 3` blocks even where a node is only partially constrained, which roughly halves the
 memory traffic of the fine smoother and residual -- the dominant cost of the apply.
@@ -1161,7 +1190,7 @@ Practical guidance
   power-iteration setting of the vector-field default makes that difference large.
 * Reach for the knobs in roughly this order: the tree of a field whose hierarchy is clearly the weak one (a
   ``custom`` script), then ``sweeps``/``symmetric`` for the sweep itself, then the tolerance.
-  ``TwoLevel(coarseSpace=P1Interpolation())`` is an alternative per-field preconditioner, see
+  ``TwoLevel(coarseSpace=P1Interpolation())`` is an alternative per-field preconditioner for quadratic elements, see
   :ref:`blockamg-p-multigrid`.
 * The rigid-body coarse level is on for the 3D displacement field by default: give a 2D displacement field the
   coarse level in a ``custom`` script, and switch it off (``rigidBodyCoarseLevel=false``) on a model whose solves

@@ -260,6 +260,21 @@ class SetUpContext:
             p1MapOf=p1MapOf,
         )
 
+    def ofCornerNodes(self, field: FieldBlock, isCorner: np.ndarray) -> "SetUpContext":
+        """The context of the coarse problem of a P1 interpolation of this problem's one field ``field``: the same field
+        on its corner nodes alone (``isCorner``, per node of the field), its dofs numbered corner by corner. The corners
+        keep their coordinates and their scaling :math:`D_c`; the corner-node field is linear, so it has no P1 map, and
+        it is no field of the model."""
+        isCorner = np.asarray(isCorner, dtype=bool)
+        cornerNodes = np.nonzero(isCorner)[0]
+        cornerDofs = (cornerNodes[:, None] * field.dimension + np.arange(field.dimension)).ravel()
+        corners = self.restrictedTo(
+            (FieldBlock(field.name, 0, len(cornerDofs), field.dimension),),
+            field.start + cornerDofs,
+            nodesOf=lambda fieldName: isCorner,
+        )
+        return replace(corners, p1MapOf=None, model=None)
+
 
 @dataclass(frozen=True)
 class MatrixChange:

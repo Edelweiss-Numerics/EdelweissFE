@@ -97,7 +97,7 @@ class RigidBodyCoarseLevelPreconditioner(TwoLevelPreconditioner):
 
     Parameters
     ----------
-    amgclTree, backendBlockSize, backendPrecision, coarseHierarchyPrecision
+    amgclTree, backendBlockSize, backendPrecision
         The parameters of the cycle, see
         :meth:`~edelweissfe.linsolve.composition.twolevelcycle.TwoLevelPreconditioner.cycleParameters`;
         ``backendBlockSize`` is the field's components per node, 3 (6 rigid-body modes per aggregate) or 2 (3). The
@@ -105,6 +105,9 @@ class RigidBodyCoarseLevelPreconditioner(TwoLevelPreconditioner):
         ``relax``, ``npre`` and ``npost`` the fine smoother; ``coarsening`` (smoothed aggregation) the aggregation and
         the prolongation smoothing of the rigid-body coarse level; and the whole tree the AMGCL hierarchy below it, with
         the strong-connection threshold halved, as AMGCL halves it from one level to the next.
+    coarseHierarchyPrecision
+        The value type of the AMGCL hierarchy below the rigid-body coarse level (its whole setup): ``"double"`` or
+        ``"float"``.
     prolongation
         ``"smoothed"`` (default) or ``"tentative"``: the tentative prolongation alone, a cheaper setup and a sparser
         coarse operator at the price of more outer iterations.
@@ -134,7 +137,8 @@ class RigidBodyCoarseLevelPreconditioner(TwoLevelPreconditioner):
         super().__init__(
             PyAMGCLRigidBodyCoarseLevel,
             {
-                **self.cycleParameters(amgclTree, backendBlockSize, backendPrecision, coarseHierarchyPrecision),
+                **self.cycleParameters(amgclTree, backendBlockSize, backendPrecision),
+                "coarseHierarchyPrecision": coarseHierarchyPrecision,
                 "prolongation": prolongation,
             },
             fineSpectralRadius,

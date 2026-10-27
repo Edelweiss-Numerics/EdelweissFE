@@ -108,17 +108,17 @@ cdef extern from "amgcl-wrapper.hpp":
         double applyFineSeconds_
         double applyCoarseSeconds_
 
-    # The p-two-grid (P1) preconditioner of edelweissfe/linsolve/composition/ptwogrid.py, built and
-    # applied entirely in C++ (OpenMP) -- see PTwoGridPreconditionerT's own comment.
+    # The p-two-grid (P1) preconditioner of edelweissfe/linsolve/composition/ptwogrid.py: the cycle in C++ (OpenMP), its
+    # coarse solve a callback into a component of the composed solver -- see PTwoGridPreconditionerT's own comment.
     cdef cppclass PTwoGridPreconditioner(TwoLevelPreconditioner):
         PTwoGridPreconditioner(const char* json_params) except +
 
         @staticmethod
         void dirichletRowMask(int n, const int* ptr, const int* col, const double* val, char* isDirichlet) except +
-        void build(int n, const int* ptr, const int* col, const double* val,
-                   int nNodes, const signed char* isCorner, const int* edgeEndpoints,
-                   const double* nullspace, int nullspaceRows, int nullspaceCols,
-                   double spectralRadius, const double* dominantVector, int dominantVectorSize) except +
+        void setCoarseSolve(PyPrecondApplyFn applyFn, void* ctx)
+        ScalarCsr build(int n, const int* ptr, const int* col, const double* val, const double* scaling,
+                        int nNodes, const signed char* isCorner, const int* edgeEndpoints,
+                        double spectralRadius, const double* dominantVector, int dominantVectorSize) except +
 
     # The rigid-body coarse level preconditioner of edelweissfe/linsolve/composition/rigidbodycoarselevel.py, built and
     # applied entirely in C++ (OpenMP) on the near null-space Python hands it -- see

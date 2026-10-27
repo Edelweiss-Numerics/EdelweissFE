@@ -16,7 +16,9 @@ from edelweissfe.linsolve.composition import (
 
 def p1Interpolation(A, context):
     """P, the prolongation from the corner nodes to all nodes: a corner node keeps its own displacement, a midside node
-    takes the mean of the two corner nodes of its edge."""
+    takes the mean of the two corner nodes of its edge. The matrix here is not scaled (no DiagonalScaling above), so
+    its variables are the displacements themselves; on a scaled matrix D A D, P would interpolate D⁻¹ u and take the
+    weights of D, as P1Interpolation does."""
     field = context.onlyField("p1Interpolation")
     isCorner, edgeEndpoints = context.p1Map(field.name)
     cornerNumber = np.cumsum(isCorner) - 1  # the number of a corner node among the corner nodes

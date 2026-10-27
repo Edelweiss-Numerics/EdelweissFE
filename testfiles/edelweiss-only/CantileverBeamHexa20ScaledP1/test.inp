@@ -1,0 +1,40 @@
+** Regression test for the p-two-grid with a composed coarse solve (see solver.py): a slender 3D linear-elastic
+** cantilever of quadratic hexahedra (C3D20, 3663 displacement dofs), preconditioned by
+** TwoLevel(coarseSpace=P1Interpolation(coarse=DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModes())))): the P1
+** interpolation of the scaled variables to the corner nodes, and on the corner-node field the rigid-body coarse level.
+** Exercises end-to-end through the Newton loop: the P1 map and the node coordinates read from the model, the coarse
+** context of the corner-node field (its coordinates, its scaling, its Dirichlet rows), the callback of the coarse
+** solve, the outer Krylov solve. Newton converges in 2 iterations on this linear problem (maxIter=3). The reference
+** solution is that of a direct solver (pardiso, copied from CantileverBeamHexa20BlockAMGRigidBody).
+** Requires the optional amgcl extension; skipped where it is not built.
+*material, name=linearelastic, id=linearelastic, provider=edelweiss
+30000.0, 0.2
+
+*job, name=c3d20job, domain=3d
+*linearSolver, name=scaledP1, type=custom
+script=solver.py
+
+*solver, solver=NIST, name=theSolver
+linsolver=scaledP1
+
+*modelGenerator, generator=boxGen, name=gen
+nX=40
+nY=2
+nZ=2
+lX=2000
+lY=100
+lZ=100
+elProvider=edelweiss
+elType=C3D20
+
+*section, name=section1, material=linearelastic, type=solid
+all
+
+*fieldOutput
+>>perNode, elSet=all, field=displacement, result=U, name=displacement
+
+*step, solver=theSolver
+maxInc=1, minInc=1e-8, maxNumInc=10, maxIter=3, stepLength=1
+>>options, name=theSolver, extrapolation=off
+>>dirichlet, name=left, nSet=gen_left, field=displacement, 1=0, 2=0, 3=0
+>>nodeforces, name=tip, nSet=gen_right, components='0,-10,0', field=displacement
