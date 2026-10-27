@@ -599,23 +599,9 @@ cdef class _PyAMGCLTwoLevel:
 
     @property
     def fineSpectralRadius(self):
-        """The fine operator's spectral radius the Chebyshev smoother was built with -- estimated, or
-        the one handed to ``build``."""
+        """The estimate of the fine operator's spectral radius the Chebyshev smoother was built with
+        (``amgcl-spectral-radius.hpp``)."""
         return self.twoLevel.fineSpectralRadius()
-
-    @property
-    def fineDominantVector(self):
-        """The power iteration's last iterate, the estimate of the fine operator's dominant
-        eigenvector -- hand it back to the next ``build`` with :attr:`fineSpectralRadius`. Empty
-        if the radius was used as supplied, without a re-check."""
-        return _copied(self.twoLevel.fineDominantVector())
-
-    @property
-    def fineSpectralRadiusSource(self):
-        """How the last build arrived at its fine spectral radius: ``"estimated"`` in full,
-        ``"supplied"`` and kept, ``"raised"`` by the re-check, or ``"re-estimated"`` in full because
-        the re-check found the operator stiffened beyond the smoother's margin."""
-        return self.twoLevel.fineSpectralRadiusSource().decode("utf-8")
 
     @property
     def nCoarse(self):
@@ -707,8 +693,7 @@ cdef class PyAMGCLPTwoGrid(_PyAMGCLTwoLevel):
                                                 _writableByteData(mask))
         return mask.astype(bool)
 
-    def build(self, object A, object scaling, object isCorner, object edgeEndpoints, double spectralRadius=0.0,
-              object dominantVector=None):
+    def build(self, object A, object scaling, object isCorner, object edgeEndpoints):
         """
         Build the preconditioner for A (scipy.sparse csr_matrix, the field's scaled diagonal block D A D with its
         Dirichlet identity rows) but its coarse solve, and return the coarse operator A_c for it (scipy.sparse
@@ -717,10 +702,6 @@ cdef class PyAMGCLPTwoGrid(_PyAMGCLTwoLevel):
 
         scaling: (n,) float64, the diagonal of D: the weights of the prolongation.
         isCorner: (nNodes,) bool/int8; edgeEndpoints: (nNodes, 2) int, read for midside nodes only.
-        spectralRadius: > 0 to start from this fine spectral radius instead of estimating it in full.
-        dominantVector: with spectralRadius, the previous build's :attr:`fineDominantVector`; the
-        radius is then re-checked by a few power iterations from it (``fineRecheckIters``) and
-        raised, or re-estimated in full, if the operator has stiffened.
         """
         if self.coarseSolve is None:
             raise ValueError("PyAMGCLPTwoGrid: set the coarse solve (setCoarseSolve) before the build")
@@ -733,11 +714,9 @@ cdef class PyAMGCLPTwoGrid(_PyAMGCLTwoLevel):
         cdef int nNodes = corner.shape[0]
         if endpoints.shape[0] != 2 * nNodes or (nNodes > 0 and np.ndim(edgeEndpoints) != 2):
             raise ValueError("edgeEndpoints must have shape (nNodes, 2)")
-        dominant = np.zeros(0) if dominantVector is None else np.ascontiguousarray(dominantVector, dtype=np.float64)
         cdef ScalarCsr coarseOperator = self.preconditioner.build(
             A.shape[0], _intData(indptr), _intData(indices), _constDoubleData(data), _constDoubleData(s),
-            nNodes, _byteData(corner), _intData(endpoints),
-            spectralRadius, _constDoubleData(dominant), dominant.shape[0]
+            nNodes, _byteData(corner), _intData(endpoints)
         )
         return _scipyCsr(coarseOperator, coarseOperator.ptr.size() - 1)
 
@@ -762,7 +741,7 @@ cdef class PyAMGCLRigidBodyCoarseLevel(_PyAMGCLTwoLevel):
         self.preconditioner = makeRigidBodyCoarseLevelPreconditioner(c_json)
         self.twoLevel = self.preconditioner
 
-    def build(self, object A, object nullspace, double spectralRadius=0.0, object dominantVector=None):
+    def build(self, object A, object nullspace):
         """
         Build the preconditioner for A (scipy.sparse csr_matrix, the field's equilibrated diagonal block D A D with
         its Dirichlet identity rows, node-major with ``backendBlockSize`` DOFs per node).
@@ -770,18 +749,14 @@ cdef class PyAMGCLRigidBodyCoarseLevel(_PyAMGCLTwoLevel):
         nullspace: (n, M) float64, the near null-space of A whose vectors span the coarse space of every aggregate,
         already divided by the equilibration D: M = ``backendBlockSize`` (the translations) or ``backendBlockSize *
         (backendBlockSize + 1) / 2`` (all rigid-body modes).
-        spectralRadius: > 0 to start from this fine spectral radius instead of estimating it in full.
-        dominantVector: with spectralRadius, the previous build's :attr:`fineDominantVector`, to re-check it from.
         """
         A, indptr, indices, data = _csrArrays(A, sortIndices=True)
         B = np.ascontiguousarray(nullspace, dtype=np.float64)
         if B.ndim != 2:
             raise ValueError("the near null-space must be an (n, M) array, got the shape {:}".format(B.shape))
-        dominant = np.zeros(0) if dominantVector is None else np.ascontiguousarray(dominantVector, dtype=np.float64)
         # the C++ build checks the shape of the near null-space against the block
         self.preconditioner.build(A.shape[0], _intData(indptr), _intData(indices), _constDoubleData(data),
-                                  _constDoubleData(B.reshape(-1)), B.shape[0], B.shape[1],
-                                  spectralRadius, _constDoubleData(dominant), dominant.shape[0])
+                                  _constDoubleData(B.reshape(-1)), B.shape[0], B.shape[1])
 
     @property
     def nAggregates(self):

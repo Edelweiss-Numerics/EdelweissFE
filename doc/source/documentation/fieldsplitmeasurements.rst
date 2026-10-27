@@ -25,17 +25,93 @@ backend's hierarchy takes the translations only (see ``backendBlockSize``).
 
 .. _measured-power-iterations:
 
-Power iterations of the Chebyshev smoother
-------------------------------------------
+The spectral radius estimate of the Chebyshev smoother
+------------------------------------------------------
 
 See :ref:`blockamg-chebyshev`.
 
-With the former setting of 50 power iterations, one captured solve needed far more outer
-iterations than the identical matrix solved again with nothing differing but ``OMP_NUM_THREADS``
-(the true spectral radius, checked independently, barely moves between Newton iterations there) --
-a sign of under-convergence at some thread counts. 300 iterations removed that sensitivity and were
-faster in aggregate over a set of captured degraded systems, with no observed downside on systems
-that were already fine.
+**Why it changed.** AMGCL estimated the spectral radius by power iteration from a start vector seeded per OpenMP
+thread. With 50 iterations one captured solve needed 1460 outer iterations at 16 threads and 43 at 4, nothing else
+differing; the true spectral radius (ARPACK) barely moved between the solves of that run. 300 iterations removed the
+sensitivity, at 1.5 to 4 s of setup per hierarchy on the systems below.
+
+**The estimate against ARPACK.** Arnoldi and Lanczos from the same row-seeded start vector, on the scaled
+displacement block :math:`D K D` and the re-scaled P1 coarse operator of seven captured systems (asymmetry
+:math:`\lVert A - A^T \rVert_F / \lVert A \rVert_F` of the free rows up to 0.21), agree to three digits: Arnoldi is
+kept, since it holds for nonsymmetric matrices. Its estimate :math:`\theta + r`, relative to the spectral radius:
+
+.. list-table::
+    :width: 100%
+    :header-rows: 1
+
+    * - steps
+      - 5
+      - 8
+      - 10
+      - 15
+      - 20
+      - adaptive, tolerance 0.05
+    * - :math:`(\theta + r) / \rho`, 14 operators
+      - 0.92 -- 1.05
+      - 1.00 -- 1.04
+      - 1.005 -- 1.043
+      - 1.001 -- 1.015
+      - 0.993 -- 1.013
+      - 1.003 -- 1.039, after 8 -- 11 steps
+
+The adaptive estimate stops when :math:`r < 0.05\, \theta`, after at least 8 steps; it took 9.1 steps on average
+here, a tolerance of 0.03 11.4 and of 0.02 14.2, without a better estimate; 0.1 stopped after 6 -- 8 steps, once at
+:math:`0.975\,\rho`. The minimum of 8 steps: after 5, :math:`\theta + r` was down to :math:`0.92\,\rho` above, and
+on the small coarse levels of a 2D beam of the test suite (650 unknowns) the rigid-body coarse level then diverged (301
+GMRES iterations against 6 with 8 or more steps).
+
+**Outer iterations, setup and wall time** (s, mean over 8, 16 and 32 threads, xeon) to 1e-6 on the displacement
+block alone, the 14 systems of :ref:`measured-scaled-p1` and two post-onset cylinder solves (21, 27), for the default
+AMG tree (``AMG()``), the rigid-body coarse level and the scaled P1 interpolation; the sums over the systems:
+
+.. list-table::
+    :width: 100%
+    :header-rows: 1
+
+    * - estimate
+      - ``AMG()``: its / setup / wall
+      - ``RigidBodyModes``: its / setup / wall
+      - ``P1Interpolation``: its / setup / wall
+      - largest spread of the its over the thread counts
+    * - power iteration, 300 (the former default)
+      - 596 / 73.8 / 202
+      - 455 / 82.7 / 177
+      - 284 / 79.9 / 138
+      - 1
+    * - power iteration, 50
+      - 593 / 25.3 / 154
+      - 452 / 33.5 / 130
+      - 284 / 28.1 / 87
+      - 1
+    * - power iteration, 50, start vector seeded per row
+      - 591 / 24.6 / 152
+      - 452 / 32.9 / 127
+      - 285 / 28.2 / 87
+      - 0
+    * - Arnoldi, 10 steps
+      - 600 / 16.4 / 144
+      - 458 / 22.9 / 117
+      - 286 / 20.0 / 79
+      - 0
+    * - Arnoldi, adaptive, tolerance 0.05 (the default)
+      - 600 / 16.1 / 149
+      - 458 / 23.2 / 120
+      - 286 / 19.9 / 80
+      - 0
+
+Against the former default: 0.7 % more outer iterations (the estimate :math:`\theta + r` lies slightly above the
+radius, which shifts the smoother's interval upwards), 22 -- 28 % of the setup, 26 -- 42 % less wall time, and
+no thread-count dependence at all -- the estimate is the same, bit for bit, at any thread count. A fixed number of 10
+steps and the adaptive estimate are equal here; the adaptive one is the default because it adapts to an operator
+whose estimate converges more slowly, and because for a symmetric operator its tolerance below the smoother's margin
+makes the margin provably sufficient. Not measured: the 10 AnchorPryOut systems behind the 300 iterations (the dumps no
+longer exist). Scratch scripts and logs: xeon ``~/scratch_sr_2026-10-27`` (``sr_bench.py``, ``arnoldi_bench.py``,
+``krylov_quality.py``, ``krylov_traj.py``).
 
 .. _measured-block-translations:
 
@@ -190,7 +266,8 @@ alone, one cycle per outer iteration, LGMRES (restart 50), 32 threads on a two-s
 former p-two-grid with the plain weights :math:`\tfrac12, \tfrac12` and an AMG coarse solve fused into its C++
 cycle (measured on the same machine with the code before the change); ``TwoLevel(coarseSpace=P1Interpolation())`` with its default coarse solve,
 ``DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModes()))``, every fine spectral radius from 50 power iterations
-(as the first two columns); and the same with the default trees (300 power iterations).
+(as the first two columns); and the same with the default trees of the time (300 power iterations; the estimate is
+now :ref:`measured-power-iterations`).
 
 .. list-table::
     :width: 100%

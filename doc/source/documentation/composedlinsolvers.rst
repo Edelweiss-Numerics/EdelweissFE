@@ -111,8 +111,8 @@ Components
         verbatim; the backend (scalar entries or node-wise blocks, double or float, the block translations) is chosen
         by the keywords, the field's default for those not given (:ref:`composed-amg-backend`); with
         ``dropTolerance`` built on the filtered block (:ref:`composed-drop-tolerance`)
-    * - ``TwoLevel(coarseSpace, tree, backendBlockSize, backendPrecision, coarseHierarchyPrecision,
-        fineSpectralRadiusReuse, dropTolerance, lumpDroppedEntries)``
+    * - ``TwoLevel(coarseSpace, tree, backendBlockSize, backendPrecision, coarseHierarchyPrecision, dropTolerance,
+        lumpDroppedEntries)``
       - a two-level cycle with a coarse space of its own (a ``CoarseSpace``): all rigid-body modes per aggregate,
         ``RigidBodyModes(prolongation)``, or the P1 interpolant of the scaled variables, ``P1Interpolation(coarse)``,
         whose coarse solve is a component on the corner-node field (default

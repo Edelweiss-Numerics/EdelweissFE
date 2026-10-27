@@ -123,10 +123,6 @@ class PTwoGridPreconditioner(TwoLevelPreconditioner):
         no concern to the right-preconditioned GMRES around it, which needs a fixed linear operator, not a symmetric
         one. Ending on the smoother is the right way round for that one sweep: it damps the high-frequency error the
         prolongated correction leaves on the fine level.
-    fineSpectralRadius, fineDominantVector
-        A previous build's fine spectral radius and dominant vector to start from (``fineSpectralRadiusReuse`` of
-        :class:`~edelweissfe.linsolve.composition.twolevel.TwoLevel`), or ``None`` to estimate the radius in full, see
-        :class:`~edelweissfe.linsolve.composition.twolevelcycle.TwoLevelPreconditioner`.
     """
 
     def __init__(
@@ -137,8 +133,6 @@ class PTwoGridPreconditioner(TwoLevelPreconditioner):
         amgclTree: dict,
         backendBlockSize: int = 1,
         backendPrecision: str = "double",
-        fineSpectralRadius: float = None,
-        fineDominantVector: np.ndarray = None,
     ):
         self._isCorner = np.ascontiguousarray(isCorner, dtype=np.int8)
         self._edgeEndpoints = np.ascontiguousarray(edgeEndpoints, dtype=np.int32)
@@ -147,8 +141,6 @@ class PTwoGridPreconditioner(TwoLevelPreconditioner):
         super().__init__(
             PyAMGCLPTwoGrid,
             self.cycleParameters(amgclTree, backendBlockSize, backendPrecision),
-            fineSpectralRadius,
-            fineDominantVector,
         )
         self._preconditioner.setCoarseSolve(coarseSolve)
 
@@ -192,8 +184,6 @@ class PTwoGridPreconditioner(TwoLevelPreconditioner):
                 scaling,
                 self._isCorner,
                 self._edgeEndpoints,
-                self._suppliedFineSpectralRadius(),
-                self._fineDominantVector,
             )
 
     @property

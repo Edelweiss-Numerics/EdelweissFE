@@ -475,7 +475,8 @@ def test_block_lu_with_the_exact_schur_complement_and_exact_solves_is_the_invers
 
 def test_the_schur_complement_tree_has_blockamgs_numbers_with_condensation():
     """The outer iterations and ||x|| of BlockAMGSolver with its Schur complement condensation (deleted; recorded at
-    ffe4b681, see test_linsolve_composition_equivalence)."""
+    ffe4b681), recorded again with the Arnoldi estimate of the spectral radius, see
+    test_linsolve_composition_equivalence."""
     A, b, barDofs = barOnFoundation(n=18)
     fields = [FieldBlock("u", 0, A.shape[0], 1)]
     root = LGMRES(
@@ -489,8 +490,8 @@ def test_the_schur_complement_tree_has_blockamgs_numbers_with_condensation():
         tolerance=FixedTolerance(1e-8),
     )
     x, composed = _solved(A, b, root, fields)
-    assert composed.lastSolveSummary.iters == 18
-    assert np.linalg.norm(x) == pytest.approx(24.215507033772518, rel=1e-8)
+    assert composed.lastSolveSummary.iters == 15
+    assert np.linalg.norm(x) == pytest.approx(24.21550705729059, rel=1e-8)
     assert _relative(A @ x, b) < 1e-8
 
 

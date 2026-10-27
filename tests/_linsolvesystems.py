@@ -139,12 +139,14 @@ GMRES_CAP = 300
 
 
 def gmresIterations(A, preconditioner) -> int:
-    """The iterations of (left-preconditioned, unrestarted) GMRES to a preconditioned relative residual of 1e-8, or
-    ``GMRES_CAP + 1`` if it does not reach a true relative residual of 1e-5 within ``GMRES_CAP``."""
+    """The iterations of (left-preconditioned, unrestarted) GMRES to a preconditioned relative residual of 1e-10, or
+    ``GMRES_CAP + 1`` if it does not reach a true relative residual of 1e-5 within ``GMRES_CAP``. The preconditioned
+    residual of left preconditioning can lie far below the true one where the preconditioner amplifies some error (the
+    bending of a slender beam: 1e-8 preconditioned was 3e-5 true there), so it is driven well below the true target."""
     b = np.random.default_rng(7).standard_normal(A.shape[0])
     M = LinearOperator(A.shape, matvec=preconditioner.applyPreconditioner)
     history = []
-    x, _ = gmres(A, b, M=M, rtol=1e-8, restart=GMRES_CAP, maxiter=1, callback=history.append, callback_type="pr_norm")
+    x, _ = gmres(A, b, M=M, rtol=1e-10, restart=GMRES_CAP, maxiter=1, callback=history.append, callback_type="pr_norm")
     converged = np.linalg.norm(b - A @ x) <= 1e-5 * np.linalg.norm(b)
     return len(history) if converged and len(history) <= GMRES_CAP else GMRES_CAP + 1
 

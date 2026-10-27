@@ -41,7 +41,7 @@ from edelweissfe.linsolve.amgcl.amgcl import PyAMGCLSolver  # noqa: E402
 
 _PRECOND = {
     "coarsening": {"type": "smoothed_aggregation", "aggr": {"eps_strong": 0.01}, "estimate_spectral_radius": True},
-    "relax": {"type": "chebyshev", "degree": 8, "power_iters": 50, "lower": 0.01, "higher": 1.1},
+    "relax": {"type": "chebyshev", "degree": 8, "lower": 0.01, "higher": 1.1},
     "npre": 0,
     "npost": 1,
 }

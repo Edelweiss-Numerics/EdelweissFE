@@ -111,9 +111,6 @@ class RigidBodyCoarseLevelPreconditioner(TwoLevelPreconditioner):
     prolongation
         ``"smoothed"`` (default) or ``"tentative"``: the tentative prolongation alone, a cheaper setup and a sparser
         coarse operator at the price of more outer iterations.
-    fineSpectralRadius, fineDominantVector
-        A previous build's fine spectral radius and dominant vector to start from (``fineSpectralRadiusReuse``), or
-        ``None`` to estimate the radius in full, see :class:`~edelweissfe.linsolve.composition.twolevelcycle.TwoLevelPreconditioner`.
 
     Raises
     ------
@@ -128,8 +125,6 @@ class RigidBodyCoarseLevelPreconditioner(TwoLevelPreconditioner):
         backendPrecision: str = "double",
         coarseHierarchyPrecision: str = "double",
         prolongation: str = "smoothed",
-        fineSpectralRadius: float = None,
-        fineDominantVector=None,
     ):
         from edelweissfe.linsolve.amgcl.amgcl import PyAMGCLRigidBodyCoarseLevel
 
@@ -141,8 +136,6 @@ class RigidBodyCoarseLevelPreconditioner(TwoLevelPreconditioner):
                 "coarseHierarchyPrecision": coarseHierarchyPrecision,
                 "prolongation": prolongation,
             },
-            fineSpectralRadius,
-            fineDominantVector,
         )
 
     @staticmethod
@@ -174,8 +167,6 @@ class RigidBodyCoarseLevelPreconditioner(TwoLevelPreconditioner):
         self._preconditioner.build(
             A,
             self.nearNullspace(block, coordinates, scaling),
-            self._suppliedFineSpectralRadius(),
-            self._fineDominantVector,
         )
 
     @property

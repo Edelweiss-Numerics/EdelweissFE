@@ -268,13 +268,12 @@ def test_the_translations_alone_are_amgcls_own_first_coarse_level():
     # The control of the construction: on the translations alone, the coarse space of every aggregate is spanned by its
     # translations D^-1 t, as in AMGCL's hierarchy on the block backend with blockTranslationNullspace -- the same
     # aggregates, the same tentative prolongation (per component, normalized), the same smoothing and the same
-    # Galerkin product. With both coarse levels solved directly, the two preconditioners then differ only by the
-    # spectral-radius estimate of the fine Chebyshev smoother (AMGCL's from per-thread random vectors, the two-level
-    # cycle's from a deterministic one), which enough power iterations make negligible. Without Dirichlet rows:
-    # AMGCL's translations are not zero there, those of the rigid-body coarse level are.
+    # Galerkin product, and the same spectral radius estimate of the fine Chebyshev smoother (amgcl-spectral-radius.hpp,
+    # from the same start vector: there are no Dirichlet rows, where the two-level cycle's start vector is zero).
+    # Without Dirichlet rows also because AMGCL's translations are not zero there, those of the rigid-body coarse level
+    # are.
     As, scaling, coordinates = _scaledGrid(12)
     tree = defaultFieldTree(3)
-    tree["relax"]["power_iters"] = 3000
 
     amgcl = PyAMGCLSolver(
         {
@@ -419,21 +418,6 @@ def test_float_storage_rounds_only_the_stored_entries():
     assert _relativeDifference(single.prolongationMatrix().data, double.prolongationMatrix().data) < 1e-7
 
 
-def test_a_supplied_spectral_radius_is_rechecked_and_kept_on_the_same_operator():
-    As, scaling, coordinates, _ = _equilibratedBeam(3)
-    first = _preconditioner(3)
-    first.build(As, scaling, coordinates)
-    assert first.fineSpectralRadiusSource == "estimated"
-    again = _preconditioner(3, fineSpectralRadius=first.fineSpectralRadius, fineDominantVector=first.fineDominantVector)
-    again.build(As, scaling, coordinates)
-    assert again.fineSpectralRadiusSource == "supplied" and again.fineSpectralRadius == first.fineSpectralRadius
-    # the same smoother; the coarse level is rebuilt, and AMGCL's power iterations in it (the prolongation smoothing
-    # weight, the coarse smoother's spectral radius) sum their per-thread parts in arrival order, which differs from
-    # run to run in the last bits
-    r = np.random.default_rng(8).standard_normal(As.shape[0])
-    assert _relativeDifference(again.applyPreconditioner(r), first.applyPreconditioner(r)) < 1e-9
-
-
 def test_without_a_strong_connection_there_is_no_coarse_level():
     # nodes that are not coupled at all: no aggregate, and the cycle is the smoother alone (as AMGCL ends its own
     # hierarchy at an empty level)
@@ -476,15 +460,16 @@ def test_coordinates_of_other_nodes_and_a_near_null_space_it_cannot_take_are_ref
     "tree, blockSize, backendPrecision, options, reason",
     [
         ({"relax": {"type": "spai0"}}, 3, "double", {}, "relax.type must be chebyshev"),
-        ({"relax": {"type": "chebyshev", "scale": True, "power_iters": 10}}, 3, "double", {}, "relax.scale"),
-        ({"relax": {"type": "chebyshev"}}, 3, "double", {}, "relax.power_iters must be at least 1"),
+        ({"relax": {"type": "chebyshev", "scale": True}}, 3, "double", {}, "relax.scale"),
+        ({"relax": {"type": "chebyshev", "spectralRadiusSteps": 0}}, 3, "double", {}, "spectralRadiusSteps must be"),
+        ({"relax": {"type": "chebyshev", "power_iters": 50}}, 3, "double", {}, "relax.power_iters"),
         ({"coarsening": {"type": "ruge_stuben"}}, 3, "double", {}, "coarsening.type must be smoothed_aggregation"),
         ({}, 1, "double", {}, "backendBlockSize 2 or 3"),
         ({}, 2, "float", {}, "2x2 blocks are stored in double only"),
         ({}, 3, "double", {"prolongation": "galerkin"}, "prolongation must be smoothed or tentative"),
         ({}, 3, "double", {"coarseHierarchyPrecision": "half"}, "coarseHierarchyPrecision must be double or float"),
     ],
-    ids=["relax", "scale", "power_iters", "coarsening", "scalar", "2D float", "prolongation", "precision"],
+    ids=["relax", "scale", "steps", "power_iters", "coarsening", "scalar", "2D float", "prolongation", "precision"],
 )
 def test_settings_it_cannot_use_raise_before_any_build(tree, blockSize, backendPrecision, options, reason):
     fullTree = {key: value for key, value in defaultFieldTree(3).items() if key not in tree} | tree

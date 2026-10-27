@@ -29,14 +29,15 @@
 
 ``BlockAMGSolver`` was deleted once the composition matched it (outer iterations, rebuild decisions, solutions and
 degradation dumps, on these systems and on the workbench dumps). Its numbers on the systems below were recorded before
-the deletion (xeon, branch ``feat/linsolve-composition`` at ``ffe4b681``, ``OMP_NUM_THREADS`` 16 and 1) and are frozen
-here: the outer iterations of every solve, whether the preconditioner was rebuilt, the true-residual continuations,
-whether the tolerance was met, and ``||x||``.
+the deletion (xeon, branch ``feat/linsolve-composition`` at ``ffe4b681``) and frozen here. When the spectral radius
+estimate changed from AMGCL's power iteration to Arnoldi steps (``amgcl-spectral-radius.hpp``), the numbers were
+recorded again, with the composed solver (xeon, ``OMP_NUM_THREADS`` 16 and 1: the same iterations, which no longer
+depend on the thread count); the rebuild decisions stayed BlockAMGSolver's. Per solve: the outer iterations, whether
+the preconditioner was rebuilt, the true-residual continuations, whether the tolerance was met, and ``||x||``.
 
 ``||x||`` is compared to 1e-8 for a solve to ``1e-8``; a solve to the forcing tolerance (eta about 1e-3) leaves an
-error that depends on AMGCL's threaded reductions, so its ``||x||`` is compared to 1e-4, and its true residual is
-checked against the tolerance instead. One outer iteration count (marked) depends on the thread count: 63 with 16
-threads, 64 with one."""
+error that depends on the order of threaded reductions, so its ``||x||`` is compared to 1e-4, and its true residual is
+checked against the tolerance instead."""
 
 import json
 
@@ -63,46 +64,46 @@ from edelweissfe.linsolve.composition import (  # noqa: E402
 )
 from edelweissfe.linsolve.composition.amg import droppedSmallEntries  # noqa: E402
 
-#: The numbers of BlockAMGSolver, per solve: (outer iterations, continuations, tolerance met, ||x||).
+#: The numbers of the composed solver, per solve: (outer iterations, continuations, tolerance met, ||x||).
 _TIGHT = {
-    "rigidBodyCoarseLevel": [(13, 0, True, 418.5446467044291)],
-    "translations": [(39, 0, True, 418.5446466721881)],
-    "sweeps2": [(26, 0, True, 418.5446466695883)],
-    "symmetric": [(29, 0, True, 418.5446465899491)],
-    "sweeps2symmetric": [(19, 0, True, 418.5446466862166)],
-    "drop rigidBodyCoarseLevel": [(25, 0, True, 418.54464674509273)],
-    "drop rigidBodyCoarseLevel lumped": [(25, 0, True, 418.5446467835993)],
-    "drop translations": [(42, 0, True, 418.54464669479614)],
-    "drop translations lumped": [(41, 0, True, 418.54464665267045)],
+    "rigidBodyCoarseLevel": [(13, 0, True, 418.5446467277637)],
+    "translations": [(40, 0, True, 418.54464669974334)],
+    "sweeps2": [(27, 0, True, 418.5446467063656)],
+    "symmetric": [(30, 0, True, 418.54464668461577)],
+    "sweeps2symmetric": [(20, 0, True, 418.5446466924004)],
+    "drop rigidBodyCoarseLevel": [(25, 0, True, 418.544646737811)],
+    "drop rigidBodyCoarseLevel lumped": [(25, 0, True, 418.54464678598043)],
+    "drop translations": [(42, 0, True, 418.5446466911115)],
+    "drop translations lumped": [(42, 0, True, 418.54464671999494)],
 }
 _SEQUENCE = {
     "rigidBodyCoarseLevel": [
-        (8, 0, True, 418.5460793742515),
-        (50, 0, True, 41.3224365881195),
-        (16, 0, True, 5.624813634654173),
-        (8, 0, True, 4185.460793746807),
-        (8, 0, True, 418.5460795175808),
+        (8, 0, True, 418.5461736107896),
+        (50, 0, True, 41.322416861998185),
+        (16, 0, True, 5.624814025269175),
+        (8, 0, True, 4185.461735827846),
+        (8, 0, True, 418.54617375299125),
     ],
     "translations": [
-        (26, 0, True, 418.5395109747016),
-        (53, 0, True, 41.322848129873705),
-        (64, 0, True, 5.625257367997439),
-        (26, 0, True, 4185.395109746933),
-        (26, 0, True, 418.53951112875166),
+        (27, 0, True, 418.53893762427634),
+        (59, 0, True, 41.32246342691914),
+        (63, 0, True, 5.625210179044017),
+        (27, 0, True, 4185.3893762428515),
+        (27, 0, True, 418.53893777880495),
     ],
     "scaled": [
-        (36, 1, True, 418.5374924207296),
-        (83, 1, True, 41.321731206753476),
-        (83, 1, True, 5.624729652555343),
-        (36, 1, True, 4185.374924207208),
-        (36, 1, True, 418.5374925770052),
+        (37, 1, True, 418.53790859042755),
+        (84, 1, True, 41.32191827309676),
+        (84, 1, True, 5.624715386607642),
+        (37, 1, True, 4185.379085904007),
+        (37, 1, True, 418.5379087469865),
     ],
     "scaled gapCompensated": [
-        (31, 1, True, 418.53677415477324),
-        ((63, 64), 0, True, 41.322413324377614),  # 63 with 16 threads, 64 with one
-        (68, 0, True, 5.625298919575432),
-        (29, 0, True, 4185.4561870793505),
-        (29, 0, True, 418.545618863419),
+        (32, 1, True, 418.53485189225796),
+        (65, 0, True, 41.32220769731741),
+        (68, 0, True, 5.625253322627664),
+        (30, 0, True, 4185.440664714049),
+        (30, 0, True, 418.5440666271127),
     ],
 }
 #: Whether BlockAMGSolver rebuilt its preconditioner, per solve of the sequence (its dumps' ``mustRefresh``).
@@ -110,8 +111,8 @@ _REBUILT = {
     "rigidBodyCoarseLevel": [True, False, True, True, True],
     "translations": [True, False, False, True, True],
 }
-#: BlockAMGSolver's learnt gap between the scaled and the true residual after the sequence.
-_GAP = {"scaled": 19.24, "scaled gapCompensated": 19.58}
+#: The learnt gap between the scaled and the true residual after the sequence.
+_GAP = {"scaled": 19.24, "scaled gapCompensated": 19.26}
 
 
 def _beamWithDamage(seed: int = 0, couplingStrength: float = 1e-2):
@@ -289,7 +290,7 @@ def test_a_krylov_solve_on_the_scaled_system_has_blockamgs_numbers_along_a_seque
 def test_no_continuations_on_the_scaled_system_has_blockamgs_numbers():
     A, b, fields, coordinates = _beamWithDamage()
     composed = _composed(coordinates, fields, krylovOnScaledSystem=True, continuations=0, rigidBodyCoarseLevel=False)
-    _assertSolve(composed, A, b, (19, 0, False, 418.3551421303781), tight=False)
+    _assertSolve(composed, A, b, (19, 0, False, 418.31469977207706), tight=False)
 
 
 # ----- the degradation dumps -----

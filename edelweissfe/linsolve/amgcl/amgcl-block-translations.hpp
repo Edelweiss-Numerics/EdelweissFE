@@ -31,6 +31,7 @@
  */
 #pragma once
 
+#include "amgcl-chebyshev.hpp"
 #include "amgcl-smoothed-prolongation.hpp"
 #include <amgcl/backend/builtin.hpp>
 #include <amgcl/coarsening/smoothed_aggregation.hpp>
@@ -180,12 +181,16 @@ namespace amgcl {
     struct smoothed_aggregation_with_translations : public smoothed_aggregation< Backend > {
       /// @brief AMGCL's smoothed aggregation: the parameters, the aggregates and the coarse operator.
       typedef smoothed_aggregation< Backend > Base;
+      /// @brief smoothed_aggregation's parameters, with the spectral radius estimate for power_iters
+      /// (amgcl-chebyshev.hpp).
+      typedef smoothed_aggregation_estimate_params< Backend > params;
+
+      /// @brief The parameters, with the steps of the spectral radius estimate.
+      params estimatePrm;
 
       /// @brief Construct with smoothed_aggregation's parameters.
       /// @param prm the parameters; prm.nullspace must hold the translations of the finest level
-      smoothed_aggregation_with_translations( const typename Base::params& prm = typename Base::params() ) : Base( prm )
-      {
-      }
+      smoothed_aggregation_with_translations( const params& prm = params() ) : Base( prm ), estimatePrm( prm ) {}
 
       /// @brief The prolongation P = (I - omega diag_B(A_F)^-1 A_F) P_tent and the restriction R = P^T, formed as
       /// smoothed_aggregation::transfer_operators() forms them, with the tentative prolongation P_tent from the
@@ -216,7 +221,7 @@ namespace amgcl {
         const scalar_type omega = prolongation_smoothing_weight( A,
                                                                  this->prm.relax,
                                                                  this->prm.estimate_spectral_radius,
-                                                                 this->prm.power_iters );
+                                                                 estimatePrm.spectralRadius );
         auto              P     = smoothed_prolongation( A, aggr.strong_connection, *P_tent, omega );
 
         return std::make_tuple( P, transpose( *P ) );

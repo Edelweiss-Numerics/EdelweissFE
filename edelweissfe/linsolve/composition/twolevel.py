@@ -96,7 +96,7 @@ class CoarseSpace:
         built."""
         raise NotImplementedError
 
-    def build(self, field, matrix, context: SetUpContext, cycle: dict, fineSpectralRadius, fineDominantVector):
+    def build(self, field, matrix, context: SetUpContext, cycle: dict):
         """The two-level cycle on this coarse space for a field's matrix (SciPy CSR), built: a
         :class:`~edelweissfe.linsolve.composition.twolevelcycle.TwoLevelPreconditioner`.
 
@@ -111,8 +111,6 @@ class CoarseSpace:
         cycle
             The cycle's parameters, see
             :meth:`~edelweissfe.linsolve.composition.twolevelcycle.TwoLevelPreconditioner.cycleParameters`.
-        fineSpectralRadius, fineDominantVector
-            A previous build's fine spectral radius to start from, or ``None``.
         """
         raise NotImplementedError
 
@@ -185,15 +183,13 @@ class RigidBodyModes(CoarseSpace):
 
         _rejected(field, RigidBodyCoarseLevelPreconditioner.parameterRejection(prolongation=self.prolongation, **cycle))
 
-    def build(self, field, matrix, context: SetUpContext, cycle: dict, fineSpectralRadius, fineDominantVector):
+    def build(self, field, matrix, context: SetUpContext, cycle: dict):
         from edelweissfe.linsolve.composition.rigidbodycoarselevel import (
             RigidBodyCoarseLevelPreconditioner,
         )
 
         built = RigidBodyCoarseLevelPreconditioner(
             prolongation=self.prolongation,
-            fineSpectralRadius=fineSpectralRadius,
-            fineDominantVector=fineDominantVector,
             **cycle,
         )
         with performancetiming.timeit("{:} rigid-body coarse level build".format(field.name)):
@@ -251,7 +247,7 @@ class P1Interpolation(CoarseSpace):
 
         _rejected(field, PTwoGridPreconditioner.parameterRejection(**_withoutCoarseHierarchy(cycle)))
 
-    def build(self, field, matrix, context: SetUpContext, cycle: dict, fineSpectralRadius, fineDominantVector):
+    def build(self, field, matrix, context: SetUpContext, cycle: dict):
         """Build the cycle in C++, which returns :math:`A_c`, and set up the coarse component on it."""
         from edelweissfe.linsolve.composition.ptwogrid import PTwoGridPreconditioner
 
@@ -260,8 +256,6 @@ class P1Interpolation(CoarseSpace):
             isCorner,
             edgeEndpoints,
             self.coarse,
-            fineSpectralRadius=fineSpectralRadius,
-            fineDominantVector=fineDominantVector,
             **_withoutCoarseHierarchy(cycle),
         )
         with performancetiming.timeit("{:} p-two-grid build".format(field.name)):
@@ -309,10 +303,6 @@ class TwoLevel(Preconditioner):
     coarseHierarchyPrecision
         The value type of the AMG hierarchy of the coarse level of :class:`RigidBodyModes`: ``"double"`` or
         ``"float"`` (the coarse component of :class:`P1Interpolation` has its own).
-    fineSpectralRadiusReuse
-        Whether a rebuild starts from the previous build's fine spectral radius, re-checked by a few power iterations,
-        instead of estimating it in full (see
-        :class:`~edelweissfe.linsolve.composition.twolevelcycle.TwoLevelPreconditioner`).
     dropTolerance, lumpDroppedEntries
         Build the cycle (its smoother, coarse level and hierarchy) on the filtered matrix, see
         :func:`~edelweissfe.linsolve.composition.amg.droppedSmallEntries`; ``0`` (the default) builds it on the
@@ -326,7 +316,6 @@ class TwoLevel(Preconditioner):
         backendBlockSize: int = None,
         backendPrecision: str = None,
         coarseHierarchyPrecision: str = "double",
-        fineSpectralRadiusReuse: bool = False,
         dropTolerance: float = 0.0,
         lumpDroppedEntries: bool = False,
     ):
@@ -350,21 +339,12 @@ class TwoLevel(Preconditioner):
         self.backendBlockSize = backendBlockSize
         self.backendPrecision = backendPrecision
         self.coarseHierarchyPrecision = coarseHierarchyPrecision
-        self.fineSpectralRadiusReuse = fineSpectralRadiusReuse
         self.dropTolerance = dropTolerance
         self.lumpDroppedEntries = lumpDroppedEntries
-        # the fine spectral radius and dominant vector of the last build, which the next one may start from
-        # (fineSpectralRadiusReuse): kept on purpose when the cycle is forgotten
-        self._fineSpectralRadius = (None, None)
 
     def _forget(self) -> None:
         self.cycle = None
         self._field = None
-
-    def setModel(self, model, dofManager) -> None:
-        # the fine spectral radius of another mesh is no estimate for this one
-        self._fineSpectralRadius = (None, None)
-        super().setModel(model, dofManager)
 
     def _cycleParameters(self, field) -> dict:
         """The cycle's parameters for the field: the tree and the backend, the field's defaults for what is not given
@@ -386,16 +366,8 @@ class TwoLevel(Preconditioner):
         cycle = self._cycleParameters(field)
         self.coarseSpace.check(field, context, cycle)
         self._field = field
-        fineSpectralRadius, fineDominantVector = (
-            self._fineSpectralRadius if self.fineSpectralRadiusReuse else (None, None)
-        )
-        if fineDominantVector is not None and len(fineDominantVector) != A.shape[0]:
-            # built for other dofs (e.g. other condensed dofs of a Schur complement): no estimate for these
-            fineSpectralRadius, fineDominantVector = None, None
         matrix = preconditionerMatrix(A, self.dropTolerance, self.lumpDroppedEntries, self.statistics)
-        self.cycle = self.coarseSpace.build(field, matrix, context, cycle, fineSpectralRadius, fineDominantVector)
-        if self.fineSpectralRadiusReuse:
-            self._fineSpectralRadius = (self.cycle.fineSpectralRadius, self.cycle.fineDominantVector)
+        self.cycle = self.coarseSpace.build(field, matrix, context, cycle)
         self.statistics.sizes.update(rows=A.shape[0], **self.coarseSpace.sizesOf(self.cycle))
 
     def _update(self, A, change) -> None:
@@ -415,8 +387,6 @@ class TwoLevel(Preconditioner):
         parameters.update({key: value for key, value in backend.items() if value is not None})
         if self.coarseHierarchyPrecision != "double":
             parameters["coarseHierarchyPrecision"] = self.coarseHierarchyPrecision
-        if self.fineSpectralRadiusReuse:
-            parameters["fineSpectralRadiusReuse"] = True
         if self.dropTolerance > 0.0:
             parameters.update(dropTolerance=self.dropTolerance, lumpDroppedEntries=self.lumpDroppedEntries)
         return parameters

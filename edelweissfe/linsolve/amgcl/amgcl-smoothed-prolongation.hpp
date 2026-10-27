@@ -32,6 +32,7 @@
  */
 #pragma once
 
+#include "amgcl-spectral-radius.hpp"
 #include <amgcl/backend/builtin.hpp>
 #include <amgcl/util.hpp>
 #include <memory>
@@ -50,23 +51,23 @@ namespace amgcl {
     /// @tparam Matrix the block CSR type of the operator
     /// @param A the operator of the level
     /// @param relax a factor on omega (AMGCL's coarsening parameter relax, 1 by default)
-    /// @param estimateSpectralRadius estimate rho(D^-1 A) by power iteration (AMGCL's estimate_spectral_radius), with
-    /// D the diagonal blocks of A; else take omega = relax * 2/3
-    /// @param powerIters the power iterations of the estimate (AMGCL's power_iters; 0 bounds rho by Gershgorin's
-    /// theorem instead)
+    /// @param estimateSpectralRadius estimate rho(D^-1 A) (AMGCL's estimate_spectral_radius), with D the diagonal
+    /// blocks of A, by the Arnoldi steps of amgcl-spectral-radius.hpp; else take omega = relax * 2/3
+    /// @param spectralRadius how the estimate is made
     /// @return omega
     template < class Matrix >
     typename math::scalar_of< typename backend::value_type< Matrix >::type >::type prolongation_smoothing_weight(
-      const Matrix& A,
-      float         relax,
-      bool          estimateSpectralRadius,
-      int           powerIters )
+      const Matrix&                   A,
+      float                           relax,
+      bool                            estimateSpectralRadius,
+      const spectral_radius_estimate& spectralRadius )
     {
       typedef typename math::scalar_of< typename backend::value_type< Matrix >::type >::type scalar_type;
 
       scalar_type omega = relax;
       if ( estimateSpectralRadius ) {
-        omega *= static_cast< scalar_type >( 4.0 / 3 ) / backend::spectral_radius< true >( A, powerIters );
+        omega *= static_cast< scalar_type >( 4.0 / 3 ) /
+                 static_cast< scalar_type >( backend::estimated_spectral_radius( A, spectralRadius, true ) );
       }
       else {
         omega *= static_cast< scalar_type >( 2.0 / 3 );

@@ -216,12 +216,16 @@ def test_the_coarse_operator_is_the_scaled_p1_operator(problem):
 
 
 def test_the_spectral_radius_estimate_is_the_free_submatrix_one(problem):
+    """Enough Arnoldi steps from a start vector that is zero on the Dirichlet rows estimate the spectral radius of the
+    free submatrix; the default 10 steps come within a few percent, the margin of the smoother's upper bound."""
     As, scaling, coords, isCorner, edgeEndpoints, r = problem
-    preconditioner, _, _ = _built(As, scaling, isCorner, edgeEndpoints, fineChebyshevTree(powerIters=2000))
     free = np.nonzero(np.diff(As.indptr) != 1)[0]
     A_free = As[free, :][:, free].toarray()
     exact = np.max(np.abs(np.linalg.eigvals(A_free)))
-    assert abs(preconditioner.fineSpectralRadius - exact) < 1e-3 * exact
+    converged, _, _ = _built(As, scaling, isCorner, edgeEndpoints, fineChebyshevTree(spectralRadiusSteps=80))
+    assert abs(converged.fineSpectralRadius - exact) < 2e-3 * exact
+    default, _, _ = _built(As, scaling, isCorner, edgeEndpoints)
+    assert 0.95 * exact < default.fineSpectralRadius < 1.05 * exact
 
 
 def test_dirichlet_rows_pass_through(problem):
@@ -251,57 +255,29 @@ def test_block2_storage_of_a_two_component_field_matches_scalar_storage():
     assert _relativeDifference(block2.applyPreconditioner(r), scalar.applyPreconditioner(r)) < 1e-12
 
 
-def test_a_reused_spectral_radius_reproduces_the_estimated_one(problem):
+def test_an_adaptive_and_a_fixed_estimate_come_within_the_smoothers_margin(problem):
+    """The default estimate stops once the residual norm of its largest Ritz pair is below 5 % of the Ritz value; a fixed
+    number of steps is the other way. Both come within the margin of the smoother's interval (higher = 1.1)."""
+    As, scaling, coords, isCorner, edgeEndpoints, r = problem
+    free = np.nonzero(np.diff(As.indptr) != 1)[0]
+    exact = np.max(np.abs(np.linalg.eigvals(As[free, :][:, free].toarray())))
+    for tree in (
+        fineChebyshevTree(),
+        fineChebyshevTree(spectralRadiusSteps=10),
+        fineChebyshevTree() | {"relax": dict(fineChebyshevTree()["relax"], spectralRadiusTolerance=0.01)},
+    ):
+        preconditioner, _, _ = _built(As, scaling, isCorner, edgeEndpoints, tree)
+        assert exact / 1.1 < preconditioner.fineSpectralRadius < 1.1 * exact
+
+
+def test_the_spectral_radius_estimate_is_reproducible_bit_for_bit(problem):
+    """The start vector is seeded per row and the inner products sum over a fixed partition of the rows: the same
+    matrix gives the same estimate, bit for bit, whatever the thread count."""
     As, scaling, coords, isCorner, edgeEndpoints, r = problem
     estimated, _, _ = _built(As, scaling, isCorner, edgeEndpoints)
     again, _, _ = _built(As, scaling, isCorner, edgeEndpoints)
-    # deterministic: the same matrix gives the same estimate, bit for bit, whatever the thread count
     assert again.fineSpectralRadius == estimated.fineSpectralRadius
-
-    reused, _, _ = _built(As, scaling, isCorner, edgeEndpoints, fineSpectralRadius=estimated.fineSpectralRadius)
-    assert reused.fineSpectralRadius == estimated.fineSpectralRadius
-    assert _relativeDifference(reused.applyPreconditioner(r), estimated.applyPreconditioner(r)) < 1e-12
-
-
-def _reusing(estimated, As, scaling, isCorner, edgeEndpoints):
-    reused, _, _ = _built(
-        As,
-        scaling,
-        isCorner,
-        edgeEndpoints,
-        fineSpectralRadius=estimated.fineSpectralRadius,
-        fineDominantVector=estimated.fineDominantVector,
-    )
-    return reused
-
-
-def test_the_recheck_keeps_a_reused_spectral_radius_on_an_unchanged_operator(problem):
-    As, scaling, coords, isCorner, edgeEndpoints, r = problem
-    estimated, _, _ = _built(As, scaling, isCorner, edgeEndpoints)
-    assert estimated.fineSpectralRadiusSource == "estimated"
-    reused = _reusing(estimated, As, scaling, isCorner, edgeEndpoints)
-    # the continued power iteration still creeps up a little, below the re-check's 1% tolerance
-    assert reused.fineSpectralRadiusSource == "supplied"
-    assert reused.fineSpectralRadius == estimated.fineSpectralRadius
-    assert _relativeDifference(reused.applyPreconditioner(r), estimated.applyPreconditioner(r)) < 1e-12
-
-
-def test_the_recheck_raises_a_reused_spectral_radius_within_the_margin(problem):
-    As, scaling, coords, isCorner, edgeEndpoints, r = problem
-    estimated, _, _ = _built(As, scaling, isCorner, edgeEndpoints)
-    reused = _reusing(estimated, (1.05 * As).tocsr(), scaling, isCorner, edgeEndpoints)
-    assert reused.fineSpectralRadiusSource == "raised"
-    assert abs(reused.fineSpectralRadius - 1.05 * estimated.fineSpectralRadius) < 1e-4 * estimated.fineSpectralRadius
-
-
-def test_the_recheck_re_estimates_a_stiffened_operator_in_full(problem):
-    As, scaling, coords, isCorner, edgeEndpoints, r = problem
-    estimated, _, _ = _built(As, scaling, isCorner, edgeEndpoints)
-    stiffened = (1.5 * As).tocsr()
-    fresh, _, _ = _built(stiffened, scaling, isCorner, edgeEndpoints)
-    reused = _reusing(estimated, stiffened, scaling, isCorner, edgeEndpoints)
-    assert reused.fineSpectralRadiusSource == "re-estimated"
-    assert reused.fineSpectralRadius == fresh.fineSpectralRadius
+    assert np.array_equal(again.applyPreconditioner(r), estimated.applyPreconditioner(r))
 
 
 def _gmresIterations(As, r, applyPreconditioner):
@@ -470,7 +446,12 @@ def test_an_invalid_smoother_raises_before_any_build():
     for amgclTree, parameters in (
         (fineChebyshevTree(degree=0), {}),
         (fineChebyshevTree(npost=-1), {}),
-        (fineChebyshevTree(powerIters=0), {}),
+        (fineChebyshevTree(spectralRadiusSteps=0), {}),
+        # the power iteration is gone: one estimate, fixed or adaptive, not both
+        ({"relax": dict(fineChebyshevTree()["relax"], power_iters=50)}, {}),
+        ({"relax": dict(fineChebyshevTree(spectralRadiusSteps=10)["relax"], spectralRadiusTolerance=0.05)}, {}),
+        ({"relax": dict(fineChebyshevTree()["relax"], spectralRadiusTolerance=0.0)}, {}),
+        ({"relax": dict(fineChebyshevTree()["relax"], spectralRadiusMaxSteps=2)}, {}),
         (fineChebyshevTree() | {"relax": fineChebyshevTree()["relax"] | {"higher": 0.9}}, {}),
         (fineChebyshevTree() | {"relax": fineChebyshevTree()["relax"] | {"lower": 0.0}}, {}),
         (fineChebyshevTree(), {"backendBlockSize": 4}),
@@ -518,11 +499,13 @@ def test_a_zero_block_raises_instead_of_dividing_by_zero():
 def test_a_failed_build_leaves_nothing_to_apply():
     coords, isCorner, edgeEndpoints = lattice(3)
     As, scaling = latticeSystem(coords, dirichletDofs(coords))
-    # the fine spectral radius is checked after the prolongation and the Galerkin product are built: a supplied
-    # infinite one fails the build that late
-    preconditioner = _unbuilt(isCorner, edgeEndpoints, fineSpectralRadius=np.inf)
+    # the fine spectral radius is checked after the prolongation and the Galerkin product are built: a matrix with a
+    # non-finite entry fails the build that late
+    broken = As.copy()
+    broken.data[np.flatnonzero(broken.data != broken.data.max())[0]] = np.nan
+    preconditioner = _unbuilt(isCorner, edgeEndpoints)
     with pytest.raises(RuntimeError, match="spectral radius"):
-        preconditioner.build(As, scaling)
+        preconditioner.build(broken, scaling)
     with pytest.raises(RuntimeError, match="no preconditioner built"):
         preconditioner.applyPreconditioner(np.ones(As.shape[0]))
 
