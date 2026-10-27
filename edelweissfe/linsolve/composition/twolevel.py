@@ -41,8 +41,10 @@ with :math:`A_c^{-1}` approximated. The coarse space decides what the cycle can 
   3D), where an AMG hierarchy on node-wise 3x3 blocks takes the translations alone; :math:`A_c^{-1}` is one V-cycle of
   an AMG hierarchy;
 - :class:`P1Interpolation`: the linear (P1) interpolant of a quadratic field from its corner nodes; :math:`A_c^{-1}` is
-  a component of its own, by default ``DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModes()))`` on the corner-node
-  field -- three levels: quadratic, linear, rigid-body modes of aggregates.
+  a component of its own, by default ``DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModes(), tree=...))`` on the
+  corner-node field -- three levels: quadratic, linear, rigid-body modes of aggregates. Both of its levels smooth with
+  the smoother of the p-two-grid, a Chebyshev polynomial of degree 8 instead of 16
+  (:func:`~edelweissfe.linsolve.composition.amg.defaultPTwoGridTree`).
 
 Why "two-level": the component is the fine level and one coarse correction, and its coarse problem is solved inexactly.
 The coarse space need not be a coarser mesh. With :class:`RigidBodyModes` it is
@@ -67,6 +69,8 @@ import edelweissfe.utils.performancetiming as performancetiming
 from edelweissfe.linsolve.composition.amg import (
     backendOf,
     checkBackend,
+    defaultFieldTree,
+    defaultPTwoGridTree,
     fieldTreeOf,
     preconditionerMatrix,
 )
@@ -90,6 +94,11 @@ class CoarseSpace:
 
     #: The name of the coarse space in the views.
     name = None
+
+    def defaultTree(self, field) -> dict:
+        """The AMGCL tree of a :class:`TwoLevel` cycle on this coarse space that is given none: the default tree of the
+        field's dimension (:func:`~edelweissfe.linsolve.composition.amg.defaultFieldTree`)."""
+        return defaultFieldTree(field.dimension)
 
     def check(self, field, context: SetUpContext, cycle: dict) -> None:
         """Raise, naming the field, if the cycle cannot be built on this coarse space for the field: before anything is
@@ -219,9 +228,14 @@ class P1Interpolation(CoarseSpace):
     ----------
     coarse
         The coarse solve :math:`A_c^{-1}`, a component built on :math:`A_c` and applied once per cycle; ``None``:
-        ``DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModes()))``, measured fastest (see
-        :ref:`measured-scaled-p1`). ``AMG(...)`` is the plain AMG hierarchy on it, ``AMG(backendBlockSize=1)`` one with
-        the rigid-body modes of the corners as its near null-space.
+        ``DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModes(), tree=defaultPTwoGridTree()))``, measured fastest (see
+        :ref:`measured-scaled-p1` and :ref:`measured-p-two-grid-smoother`). ``AMG(...)`` is the plain AMG hierarchy on
+        it, ``AMG(backendBlockSize=1)`` one with the rigid-body modes of the corners as its near null-space.
+
+    The p-two-grid smooths with a weaker Chebyshev polynomial than an AMG hierarchy: a :class:`TwoLevel` on this coarse
+    space that is given no tree, and the rigid-body coarse level of the default coarse solve, take
+    :func:`~edelweissfe.linsolve.composition.amg.defaultPTwoGridTree` (degree 8 instead of 16). A tree given to either
+    replaces it.
     """
 
     name = "P1 interpolation"
@@ -230,9 +244,14 @@ class P1Interpolation(CoarseSpace):
         if coarse is None:
             from edelweissfe.linsolve.composition.diagonalscaling import DiagonalScaling
 
-            coarse = DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModes()))
+            coarse = DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModes(), tree=defaultPTwoGridTree()))
         requirePreconditioner("P1Interpolation", "coarse", coarse)
         self.coarse = coarse
+
+    def defaultTree(self, field) -> dict:
+        """The smoother of the p-two-grid (:func:`~edelweissfe.linsolve.composition.amg.defaultPTwoGridTree`), for a
+        field of any dimension."""
+        return defaultPTwoGridTree()
 
     def check(self, field, context: SetUpContext, cycle: dict) -> None:
         """It needs the field's P1 map, and parameters the C++ cycle can use."""
@@ -294,8 +313,10 @@ class TwoLevel(Preconditioner):
     tree
         The field's AMGCL tree: its ``relax`` (a Chebyshev polynomial), ``npre`` and ``npost`` are the fine smoother;
         with :class:`RigidBodyModes` its coarsening also builds the coarse level, and the whole tree the AMG hierarchy
-        below. ``None``: the default tree of the field's dimension
-        (:func:`~edelweissfe.linsolve.composition.amg.defaultFieldTree`).
+        below. ``None``: the coarse space's default (:meth:`CoarseSpace.defaultTree`), the default tree of the field's
+        dimension (:func:`~edelweissfe.linsolve.composition.amg.defaultFieldTree`) for :class:`RigidBodyModes`, the
+        smoother of the p-two-grid (:func:`~edelweissfe.linsolve.composition.amg.defaultPTwoGridTree`) for
+        :class:`P1Interpolation`.
     backendBlockSize, backendPrecision
         The storage of the fine operator and of :math:`P`, :math:`P^T`, as for
         :class:`~edelweissfe.linsolve.composition.amg.AMG`; ``None``: the field's default
@@ -347,9 +368,9 @@ class TwoLevel(Preconditioner):
         self._field = None
 
     def _cycleParameters(self, field) -> dict:
-        """The cycle's parameters for the field: the tree and the backend, the field's defaults for what is not given
+        """The cycle's parameters for the field: the tree and the backend, the defaults for what is not given
         (see :meth:`~edelweissfe.linsolve.composition.twolevelcycle.TwoLevelPreconditioner.cycleParameters`)."""
-        tree = fieldTreeOf("TwoLevel", self.tree, field)
+        tree = fieldTreeOf("TwoLevel", self.tree, field, self.coarseSpace.defaultTree(field))
         # the block translations belong to AMG's hierarchy on the block backend; a coarse space is its own
         backendBlockSize, backendPrecision, _ = backendOf(
             "TwoLevel", field, tree, self.backendBlockSize, self.backendPrecision, blockTranslationNullspace=False

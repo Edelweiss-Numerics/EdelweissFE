@@ -786,8 +786,18 @@ components:
 
 .. code-block:: python
 
-    coarse = DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModes()))
-    displacement = OnField("displacement", TwoLevel(coarseSpace=P1Interpolation(coarse=coarse)))
+    tree = defaultPTwoGridTree()  # the smoother of the p-two-grid: Chebyshev of degree 8
+    coarse = DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModes(), tree=tree))
+    displacement = OnField("displacement", TwoLevel(coarseSpace=P1Interpolation(coarse=coarse), tree=tree))
+
+**The p-two-grid smooths with a weaker polynomial.** Both of its smoothed levels, the quadratic field and the
+rigid-body coarse level of the corner-node field, take a Chebyshev polynomial of degree 8 on the interval from 0.03 to
+1.1 times the spectral radius (:func:`~edelweissfe.linsolve.composition.amg.defaultPTwoGridTree`), not the degree 16
+on 0.01 to 1.1 of the default field trees. A sweep of degree 8 costs half the matrix products of one of degree 16;
+the p-two-grid then needs more outer iterations (27 instead of 21 on the tunnel lining), but fewer than twice as many,
+so it is faster: about 10 % less time on 14 captured systems, the same or less on every one. ``AMG()`` and the
+rigid-body coarse level alone gained nothing from degree 8 -- their iterations grew about as much as each one got
+cheaper -- and keep degree 16 (:ref:`measured-p-two-grid-smoother`).
 
 **The prolongation interpolates the scaled variables.** The P1 interpolant :math:`P_{geo}` keeps a corner node's
 displacement and gives a midside node the mean of its two edge-endpoint corners. But the cycle works on

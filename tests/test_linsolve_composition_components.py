@@ -458,6 +458,27 @@ def test_the_p1_coarse_solve_must_be_a_component():
         P1Interpolation(coarse=AMG)
 
 
+def test_the_p1_two_grid_smooths_both_of_its_levels_with_its_own_smoother():
+    """TwoLevel(P1Interpolation()) and the rigid-body coarse level of its default coarse solve take the tree of the
+    p-two-grid (Chebyshev of degree 8); TwoLevel(RigidBodyModes()) alone keeps the default tree of its field, and a tree
+    given wins over both."""
+    from edelweissfe.linsolve.composition.amg import defaultPTwoGridTree
+
+    field = FieldBlock("displacement", 0, 30, 3)
+    p1TwoGrid = TwoLevel(P1Interpolation())
+    assert p1TwoGrid._cycleParameters(field)["amgclTree"] == defaultPTwoGridTree()
+    assert defaultPTwoGridTree()["relax"] == {"type": "chebyshev", "degree": 8, "lower": 0.03, "higher": 1.1}
+    assert {key: value for key, value in defaultPTwoGridTree().items() if key != "relax"} == {
+        key: value for key, value in defaultFieldTree(3).items() if key != "relax"
+    }
+    coarse = p1TwoGrid.coarseSpace.coarse
+    assert isinstance(coarse, DiagonalScaling) and isinstance(coarse.inner.coarseSpace, RigidBodyModes)
+    assert coarse.inner._cycleParameters(field)["amgclTree"] == defaultPTwoGridTree()
+    assert TwoLevel(RigidBodyModes())._cycleParameters(field)["amgclTree"] == defaultFieldTree(3)
+    given = defaultFieldTree(3)
+    assert TwoLevel(P1Interpolation(), tree=given)._cycleParameters(field)["amgclTree"] is given
+
+
 # ----- the Schur complement -----
 
 
@@ -673,7 +694,7 @@ def test_the_default_trees_on_the_reference_page_are_the_code_defaults():
     import json
     import pathlib
 
-    from edelweissfe.linsolve.composition.amg import defaultFieldTree
+    from edelweissfe.linsolve.composition.amg import defaultPTwoGridTree
 
     page = (pathlib.Path(__file__).parents[1] / "doc/source/documentation/composedlinsolversreference.rst").read_text()
     block = page.split("and change only what is intended. The defaults are", 1)[1].split(".. code-block:: json", 1)[1]
@@ -684,3 +705,5 @@ def test_the_default_trees_on_the_reference_page_are_the_code_defaults():
         "vector field of a dimension other than 2 or 3": defaultFieldTree(4),
         "scalar field (e.g. nonlocal damage)": defaultFieldTree(1),
     }
+    p1Block = page.split("The p-two-grid's default tree", 1)[1].split(".. code-block:: json", 1)[1]
+    assert json.JSONDecoder().raw_decode(p1Block.strip())[0] == defaultPTwoGridTree()

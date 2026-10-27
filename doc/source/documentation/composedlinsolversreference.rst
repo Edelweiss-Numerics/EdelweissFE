@@ -301,10 +301,37 @@ smoothed aggregation on a block backend needs ``blockTranslationNullspace=False`
 The 3D displacement field of the ``blockAMG()`` preset gets the rigid-body coarse level
 (``TwoLevel(coarseSpace=RigidBodyModes())``), configured by the same tree: its ``relax`` and ``npre``/``npost`` are the
 fine smoother of the rigid-body coarse level, its ``coarsening`` the aggregation of that level, and the whole tree the
-AMGCL hierarchy below it. ``TwoLevel(coarseSpace=P1Interpolation())`` reads its fine smoother from the tree in the same
-spelling; its coarse solve is a component of its own, ``P1Interpolation(coarse=...)``, with its own tree. Only a genuinely scalar field (nodal dimension 1) gets the plain scalar tree, which predates the vector
-recipe and was never re-tuned against it. Note that AMGCL silently ignores parameter keys it does not recognise
-(warning only on stderr), so check its stderr if an override appears to do nothing.
+AMGCL hierarchy below it. Only a genuinely scalar field (nodal dimension 1) gets the plain scalar tree, which predates
+the vector recipe and was never re-tuned against it. Note that AMGCL silently ignores parameter keys it does not
+recognise (warning only on stderr), so check its stderr if an override appears to do nothing.
+
+The p-two-grid's default tree is another: ``TwoLevel(coarseSpace=P1Interpolation())`` reads its fine smoother from the
+tree in the same spelling (``relax``, ``npre``, ``npost``; it has no coarsening of its own), and its coarse solve is a
+component of its own, ``P1Interpolation(coarse=...)``. For the p-two-grid, degree 16 is stronger than it pays: degree
+8 costs half the products per sweep for fewer than twice the outer iterations (:ref:`measured-p-two-grid-smoother`).
+So a ``TwoLevel`` on ``P1Interpolation`` that is given no tree, and the
+rigid-body coarse level of the default coarse solve,
+``DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModes(), tree=defaultPTwoGridTree()))``, take the vector field's tree
+with a Chebyshev polynomial of degree 8 on the interval from 0.03 to 1.1 times the spectral radius
+(:func:`~edelweissfe.linsolve.composition.amg.defaultPTwoGridTree`), for a field of any dimension:
+
+.. code-block:: json
+
+    {
+        "coarsening": {
+            "type": "smoothed_aggregation",
+            "aggr": {"eps_strong": 0.01},
+            "estimate_spectral_radius": true
+        },
+        "relax": {"type": "chebyshev", "degree": 8, "lower": 0.03, "higher": 1.1},
+        "npre": 0,
+        "npost": 1
+    }
+
+``AMG()`` and ``TwoLevel(coarseSpace=RigidBodyModes())`` alone keep degree 16: there, degree 8 gained nothing. A tree
+given to the p-two-grid (``TwoLevel(coarseSpace=P1Interpolation(), tree=...)``) is its fine smoother only; one for its
+coarse level is given with the coarse solve,
+``P1Interpolation(coarse=DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModes(), tree=...)))``.
 
 Every spectral radius in these trees -- of the Chebyshev smoother (``relax``) and of the prolongation smoothing
 (``coarsening`` with ``estimate_spectral_radius``) -- is estimated by ``spectralRadiusSteps`` Arnoldi steps (default

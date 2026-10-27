@@ -82,6 +82,14 @@ _SCALAR_FIELD_TREE = {
     "coarsening": {"type": "smoothed_aggregation"},
     "relax": {"type": "chebyshev"},
 }
+#: The smoother of the p-two-grid, ``TwoLevel(coarseSpace=P1Interpolation())``: Chebyshev of degree 8 on the interval
+#: from 0.03 to 1.1 times the spectral radius, on the quadratic field and on the rigid-body coarse level of its default
+#: coarse solve (:func:`defaultPTwoGridTree`). A sweep of degree 8 costs half the matrix products of one of degree 16,
+#: and the p-two-grid needs fewer than twice the outer iterations with it. Measured ("The smoother of the p-two-grid" in
+#: ``doc/source/documentation/fieldsplitmeasurements.rst``): about 10 % less time on 14 captured systems, the same or
+#: less on every one. ``AMG()`` and the rigid-body coarse level alone keep degree 16 (:data:`_VECTOR_FIELD_TREE`):
+#: there, degree 8 gained nothing.
+_P_TWO_GRID_SMOOTHER = {"type": "chebyshev", "degree": 8, "lower": 0.03, "higher": 1.1}
 
 
 def defaultFieldTree(dimension: int) -> dict:
@@ -90,6 +98,17 @@ def defaultFieldTree(dimension: int) -> dict:
     ``nonlocal damage``). A copy: the trees are nested, and a caller may adapt the one it gets. The backend the tree is
     built on (block size, precision) is chosen apart from it, see :func:`backendOf`."""
     return copy.deepcopy(_VECTOR_FIELD_TREE if dimension > 1 else _SCALAR_FIELD_TREE)
+
+
+def defaultPTwoGridTree() -> dict:
+    """The default AMGCL tree of the p-two-grid, ``TwoLevel(coarseSpace=P1Interpolation())``, and of the rigid-body
+    coarse level of its default coarse solve: the default tree of a vector field (:data:`_VECTOR_FIELD_TREE`) with the
+    smoother of the p-two-grid (:data:`_P_TWO_GRID_SMOOTHER`). The p-two-grid reads only the smoother of its tree
+    (``relax``, ``npre``, ``npost``), the rigid-body coarse level the whole tree. A copy, as :func:`defaultFieldTree`.
+    """
+    tree = copy.deepcopy(_VECTOR_FIELD_TREE)
+    tree["relax"] = dict(_P_TWO_GRID_SMOOTHER)
+    return tree
 
 
 def checkBackend(owner: str, backendBlockSize, backendPrecision, blockTranslationNullspace=None) -> None:
@@ -229,11 +248,12 @@ def preconditionerMatrix(A, dropTolerance: float, lumpDroppedEntries: bool, stat
     return filtered
 
 
-def fieldTreeOf(owner: str, tree: "dict | None", field) -> dict:
-    """The AMGCL tree a one-field component builds on: ``tree``, or the default tree of the field's dimension
-    (:func:`defaultFieldTree`); raises, naming ``owner`` and the field, if ``tree`` is not a tree."""
+def fieldTreeOf(owner: str, tree: "dict | None", field, defaultTree: dict) -> dict:
+    """The AMGCL tree a one-field component builds on: ``tree``, or the component's ``defaultTree`` for the field
+    (:func:`defaultFieldTree`, :func:`defaultPTwoGridTree`); raises, naming ``owner`` and the field, if ``tree`` is not
+    a tree."""
     if tree is None:
-        return defaultFieldTree(field.dimension)
+        return defaultTree
     if not isinstance(tree, dict):
         raise ValueError(
             "{:} on the field '{:}': its tree must be an AMGCL preconditioner tree (a dict), got {!r}".format(
@@ -346,7 +366,7 @@ class AMG(Preconditioner):
     def _setUp(self, A, context: SetUpContext) -> None:
         field = context.onlyField("AMG")
         self._field = field
-        tree = fieldTreeOf("AMG", self.tree, field)
+        tree = fieldTreeOf("AMG", self.tree, field, defaultFieldTree(field.dimension))
         backend = backendOf(
             "AMG", field, tree, self.backendBlockSize, self.backendPrecision, self.blockTranslationNullspace
         )
