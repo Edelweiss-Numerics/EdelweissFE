@@ -224,6 +224,11 @@ class P1Interpolation(CoarseSpace):
     scaling, an identity row for each Dirichlet coarse dof
     (:meth:`~edelweissfe.linsolve.composition.base.SetUpContext.ofCoarseNodes`).
 
+    The p-two-grid smooths with a weaker Chebyshev polynomial than an AMG hierarchy: a :class:`TwoLevel` on this coarse
+    space that is given no tree, and the rigid-body coarse level of the default coarse solve, take
+    :func:`~edelweissfe.linsolve.composition.amg.defaultPTwoGridTree` (degree 8 instead of 16). A tree given to either
+    replaces it.
+
     Parameters
     ----------
     coarse
@@ -231,11 +236,6 @@ class P1Interpolation(CoarseSpace):
         ``DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModes(), tree=defaultPTwoGridTree()))``, measured fastest (see
         :ref:`measured-scaled-p1` and :ref:`measured-p-two-grid-smoother`). ``AMG(...)`` is the plain AMG hierarchy on
         it, ``AMG(backendBlockSize=1)`` one with the rigid-body modes of the corners as its near null-space.
-
-    The p-two-grid smooths with a weaker Chebyshev polynomial than an AMG hierarchy: a :class:`TwoLevel` on this coarse
-    space that is given no tree, and the rigid-body coarse level of the default coarse solve, take
-    :func:`~edelweissfe.linsolve.composition.amg.defaultPTwoGridTree` (degree 8 instead of 16). A tree given to either
-    replaces it.
     """
 
     name = "P1 interpolation"
