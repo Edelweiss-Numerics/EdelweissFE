@@ -52,6 +52,32 @@ Formatting and static checks are enforced by pre-commit hooks (`autoflake`, `bla
 
 See [CONTRIBUTING.md](CONTRIBUTING.md#pre-commit-hooks) for hook installation and tool flags, and [CONTRIBUTING.md](CONTRIBUTING.md#conventional-commits) for commit message types and subsystem scopes.
 
+## Git Workflow for Agents
+
+All development happens on a personal fork, never by pushing directly to the main
+[Edelweiss-Numerics/EdelweissFE](https://github.com/Edelweiss-Numerics/EdelweissFE) repository. Push branches only to
+the user's own fork remote (e.g. `origin`), open the pull request from there, and never push to a `main`/upstream
+remote pointing at the Edelweiss-Numerics organization — even for a maintainer, direct pushes bypass the
+fork → branch → PR → review → merge flow described in [CONTRIBUTING.md](CONTRIBUTING.md#pull-requests). Before
+pushing, check `git remote -v` if unsure which remote is the fork.
+
+## Coding Style for Agents
+
+- **No `getattr`/`hasattr`, ever**: never probe for an attribute's existence or fall back with a default via
+  `getattr()`/`hasattr()`. If an attribute is genuinely optional, model that explicitly instead — a `None` default
+  assigned in `__init__`, an `Optional[...]` type hint, a dedicated constructor argument, or a base-class method
+  that subclasses override — so the attribute's presence is a property of the code a reader can see, not something
+  discovered by probing at runtime. Reaching for `getattr`/`hasattr` is usually a sign that a class hierarchy or
+  interface needs fixing rather than working around.
+- **Write teaching-oriented code**: EdelweissFE is read and extended by students and researchers building their own
+  simulations, not only by its maintainers. Prefer clear, spelled-out steps over clever one-liners so a newcomer can
+  follow the underlying physics/numerics by reading the code, and add a short comment whenever a non-obvious
+  numerical or architectural choice needs explaining.
+- **Function and module names must always be descriptive**: no abbreviations, single-letter names, or placeholders
+  such as `foo`/`tmp`/`helper` (short mathematical index variables like `i`, `j`, `qp` inside tight numeric loops are
+  the accepted exception). A name like `computeElementStiffnessMatrix` or a module like `dirichlet.py` should answer
+  a reader's "what does this do" before they open the file.
+
 ## Workspace Skills (`.agents/skills/`)
 
 Specialized runbooks and checklists for development workflows are available under `.agents/skills/`. Agents should activate and follow the corresponding `SKILL.md` when tasked with:
