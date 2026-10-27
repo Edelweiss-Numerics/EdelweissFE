@@ -422,6 +422,13 @@ def test_a_missing_field_fails_at_the_set_up_and_names_the_fields():
         OnField("temperature", AMG()).setUp(SystemMatrix(A), _context(fields))
 
 
+@pytest.mark.parametrize("Combination", [Multiplicative, Additive])
+def test_a_combination_that_leaves_a_field_uncorrected_fails_at_the_set_up(Combination):
+    A, b, fields = displacementDamageSystem(n=6, coupling="symmetric")
+    with pytest.raises(ValueError, match="no correction acts on the field\\(s\\) nonlocal damage"):
+        Combination([OnField("displacement", AMG())]).setUp(SystemMatrix(A), _context(fields))
+
+
 def test_a_one_field_component_on_several_fields_fails_at_the_set_up():
     A, b, fields = displacementDamageSystem(n=6, coupling="symmetric")
     with pytest.raises(ValueError, match="AMG is built on the matrix of one field.*OnField"):

@@ -184,6 +184,7 @@ class _Combination(Preconditioner):
         self.bounds = [(field.start, field.stop) for field in context.fields]
         for correction in self._distinct():
             correction.setUp(A, context)
+        self._requireEveryFieldCorrected(context)
 
     def _update(self, A, change) -> None:
         # set up only with nothing to update (new corrections, or the first matrix); a rebuild is the corrections' own
@@ -193,6 +194,21 @@ class _Combination(Preconditioner):
         self.bounds = [(field.start, field.stop) for field in change.context.fields]
         for correction in self._distinct():
             correction.update(A, change)
+        self._requireEveryFieldCorrected(change.context)
+
+    def _requireEveryFieldCorrected(self, context: SetUpContext) -> None:
+        """Raise for a field (with dofs) that no correction acts on: z would stay zero there, a singular
+        preconditioner."""
+        corrected = {correction.fieldIndex for correction in self._distinct()}
+        if None in corrected:
+            return
+        missing = [f.name for i, f in enumerate(context.fields) if i not in corrected and f.stop > f.start]
+        if missing:
+            raise ValueError(
+                "{:}: no correction acts on the field(s) {:}; add one (e.g. OnField(name, AMG())) for each".format(
+                    type(self).__name__, ", ".join(missing)
+                )
+            )
 
     def children(self) -> tuple:
         """``("M1", correction)``, ``("M2", ...)``: each distinct correction once, in the order of first use (none

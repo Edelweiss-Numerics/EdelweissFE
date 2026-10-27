@@ -103,7 +103,8 @@ Components
       - successive corrections :math:`z \leftarrow z + M_k^{-1}(r - A z)`, or summed ones :math:`\sum_k M_k^{-1} r`;
         over ``OnField`` corrections, block Gauss--Seidel and block Jacobi. ``gaussSeidelOrder(corrections, sweeps,
         symmetric)`` gives the order of several or symmetric sweeps. The corrections may also be a function of the
-        context, made at the first set-up (one per field, whatever the model)
+        context, made at the first set-up (one per field, whatever the model). Every field must get a correction
+        (else :math:`z = 0` there): the set-up raises for a field none acts on
     * - ``AMG(tree, backendBlockSize, backendPrecision, blockTranslationNullspace, rigidBodyNullspace, dropTolerance,
         lumpDroppedEntries)``
       - one AMGCL hierarchy on a field, one cycle per application. ``tree`` holds AMGCL's parameters only, forwarded
