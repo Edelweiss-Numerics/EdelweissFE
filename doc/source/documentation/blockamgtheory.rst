@@ -304,12 +304,12 @@ Per-field AMG hierarchies: ``AMG``
 
 Each diagonal block gets its own AMGCL hierarchy, applied on every visit of the sweep to its field
 (once per outer Krylov iteration with ``symmetric = false``; with ``symmetric = true`` the reverse sweep
-revisits all fields but the last) and reused across Newton iterations while it still fits the Jacobian
+revisits all fields but the last) and, with ``RebuildPolicy(reuse=True)``, reused across Newton iterations while it still fits the Jacobian
 (see the reuse rules below). The defaults differ by nodal dimension (:func:`~edelweissfe.linsolve.composition.amg.defaultFieldTree` in
 the code): a **3D vector** field (e.g. displacement) is stored in :math:`3\times3` nodal blocks in
 float, coarsened by smoothed aggregation with a strong-connection threshold of 0.01 and
 ``estimate_spectral_radius`` (20 power iterations) from the translations of its equilibrated block (see
-:ref:`below <blockamg-block-nullspace>`), and smoothed by a degree-16 Chebyshev polynomial
+:ref:`below <blockamg-block-nullspace>`), and smoothed by a degree-8 Chebyshev polynomial
 (one post-smoothing sweep, no pre-smoothing) -- and its hierarchy starts with the rigid-body coarse level, a first
 coarse level of all its rigid-body modes, rotations included (see :ref:`below <blockamg-rigid-body-coarse-level>`);
 a **2D vector** field gets the same coarsening and
@@ -696,8 +696,9 @@ Reuse across Newton iterations: ``RebuildPolicy``
 -------------------------------------------------
 
 Building the per-field hierarchies is a large fraction of a solve, and it is avoidable when the
-Jacobian has barely moved since the last one. ``LGMRES`` therefore keeps the hierarchies below it (and the
-equilibration they were built for) standing across solves by default; when they are rebuilt is the outer solve's
+Jacobian has barely moved since the last one. ``LGMRES`` can therefore keep the hierarchies below it (and the
+equilibration they were built for) standing across solves with ``RebuildPolicy(reuse=True)``; by default it
+does not (``reuse=False``: every solve builds its own, and none of the triggers below matters). When they are rebuilt is the outer solve's
 :class:`~edelweissfe.linsolve.composition.krylov.RebuildPolicy`,
 ``LGMRES(..., rebuild=RebuildPolicy(stalenessFactor, rebuildOnNewIncrement, reuse))``.
 
@@ -739,7 +740,7 @@ hierarchies are rebuilt. How often that happens depends on the model: the multi-
 would otherwise drop exact zeros (``pruneCondensedMatrixZeros``, a nonlinear-solver option), which
 changes the count on almost every Newton iteration even when the constraint set does not; left unset,
 that option's "auto" default already leaves pruning off here, because a solver with a Krylov solve reports
-:attr:`~edelweissfe.linsolve.base.LinearSolver.needsStableSparsityPattern`, so reuse pays on such
+:attr:`~edelweissfe.linsolve.base.LinearSolver.needsStableSparsityPattern`, so reuse (``RebuildPolicy(reuse=True)``) pays on such
 models without any extra configuration (on a contact model with many multi-point constraint slaves,
 a configuration relying on it ran noticeably faster than with pruning on).
 
@@ -772,7 +773,7 @@ Its preconditioner is rebuilt exactly when the single-level hierarchies are (see
 above), and its coarse solve gets a near-null-space while the fine-level Chebyshev smoother, having
 no coarsening step of its own, needs none. Measured against the default single-level
 configuration with the same outer settings (fine operator in float, ``npre = 0``,
-``npost = 1``, Chebyshev degree 16, the same coarse ``estimate_spectral_radius``), it was
+``npost = 1``, Chebyshev degree 8, the same coarse ``estimate_spectral_radius``), it was
 slower on a cylinder sequence and level within noise on a contact sequence, with the cheaper
 rebuild -- an alternative worth measuring on a model with expensive rebuilds, not the default.
 Enable it per field with ``OnField(name, TwoLevel(coarseSpace=P1Interpolation(coarsePrecond, useCoarseNullspace),
@@ -932,7 +933,7 @@ And AMGCL's sparse products take one block type, where the Galerkin product chai
 
 One application is the two-level cycle the p-two-grid uses too: restriction :math:`P^\mathsf{T} r`, one V-cycle of the
 hierarchy below, prolongation, and the fine Chebyshev sweeps of the tree (``npre`` before, ``npost`` after the
-coarse-grid correction: 0 and 1, degree 16, in the default trees), with the Dirichlet rows decoupled exactly.
+coarse-grid correction: 0 and 1, degree 8, in the default trees), with the Dirichlet rows decoupled exactly.
 :math:`P` and :math:`P^\mathsf{T}` are stored like the fine level (in float with the 3D default tree), every sum in
 double. With the translations alone in place of all modes, the construction *is* AMGCL's first level on the block
 backend -- the same aggregates, tentative prolongation, smoothing and Galerkin product, :math:`M = B` -- except on the

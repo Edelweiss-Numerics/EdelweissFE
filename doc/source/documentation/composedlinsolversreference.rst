@@ -259,7 +259,7 @@ and change only what is intended. The defaults are, by the field's nodal dimensi
                 "estimate_spectral_radius": true,
                 "power_iters": 20
             },
-            "relax": {"type": "chebyshev", "degree": 16, "power_iters": 300, "lower": 0.01, "higher": 1.1},
+            "relax": {"type": "chebyshev", "degree": 8, "power_iters": 300, "lower": 0.01, "higher": 1.1},
             "npre": 0,
             "npost": 1
         },
@@ -270,7 +270,7 @@ and change only what is intended. The defaults are, by the field's nodal dimensi
                 "estimate_spectral_radius": true,
                 "power_iters": 20
             },
-            "relax": {"type": "chebyshev", "degree": 16, "power_iters": 300, "lower": 0.01, "higher": 1.1},
+            "relax": {"type": "chebyshev", "degree": 8, "power_iters": 300, "lower": 0.01, "higher": 1.1},
             "npre": 0,
             "npost": 1
         },
@@ -281,7 +281,7 @@ and change only what is intended. The defaults are, by the field's nodal dimensi
                 "estimate_spectral_radius": true,
                 "power_iters": 20
             },
-            "relax": {"type": "chebyshev", "degree": 16, "power_iters": 300, "lower": 0.01, "higher": 1.1},
+            "relax": {"type": "chebyshev", "degree": 8, "power_iters": 300, "lower": 0.01, "higher": 1.1},
             "npre": 0,
             "npost": 1
         },

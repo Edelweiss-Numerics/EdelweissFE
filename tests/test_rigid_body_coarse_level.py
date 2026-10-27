@@ -444,7 +444,7 @@ def test_without_a_strong_connection_there_is_no_coarse_level():
     assert preconditioner.nAggregates == 0 and preconditioner.nCoarse == 0
     assert "the smoother alone" in preconditioner.report()
     r = np.random.default_rng(10).standard_normal(As.shape[0])
-    # one Chebyshev sweep of degree 16 on the nodal blocks reduces the residual
+    # one Chebyshev sweep of degree 8 on the nodal blocks reduces the residual
     assert _relativeDifference(As @ preconditioner.applyPreconditioner(r), r) < 0.5
 
 

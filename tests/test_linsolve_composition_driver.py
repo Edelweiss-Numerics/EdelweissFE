@@ -54,6 +54,7 @@ from edelweissfe.linsolve.composition import (  # noqa: E402
     TwoLevel,
     blockAMG,
 )
+from edelweissfe.linsolve.composition.amg import defaultFieldTree  # noqa: E402
 
 
 class _Journal:
@@ -105,9 +106,15 @@ def test_a_solve_stopped_at_the_cap_is_warned_about_and_rebuilds_the_preconditio
     assert solver.root.lastRebuildReason == "stale"
 
 
+def test_the_defaults_build_every_preconditioner_anew_and_smooth_with_chebyshev_degree_8():
+    assert RebuildPolicy().reuse is False
+    for dimension in (2, 3):
+        assert defaultFieldTree(dimension)["relax"]["degree"] == 8
+
+
 def test_the_debug_column_says_why_the_preconditioner_was_rebuilt():
     A, b, fields = displacementDamageSystem(n=8, coupling="symmetric")
-    solver, journal = _driven(blockAMG(), fields, verbosity="debug")
+    solver, journal = _driven(blockAMG(rebuild=RebuildPolicy(reuse=True)), fields, verbosity="debug")
     solver(A, b)
     assert solver.reportsSolveSummary
     assert solver.lastSolveSummary.detailLines[0] == "rebuilt(first)"
@@ -208,7 +215,10 @@ def _script(path, body: str) -> None:
 
 def _scriptSolver(tmp_path, eta: float, **settings):
     script = tmp_path / "solver.py"
-    _script(script, "linearSolver = blockAMG(tolerance=FixedTolerance({:g}))\n".format(eta))
+    _script(
+        script,
+        "linearSolver = blockAMG(tolerance=FixedTolerance({:g}), rebuild=RebuildPolicy(reuse=True))\n".format(eta),
+    )
     A, b, fields = displacementDamageSystem(n=8, coupling="symmetric")
     solver = ComposedLinearSolver.fromScript(str(script), hotReload=True, **settings)
     solver.setFieldStructure(fields)
@@ -222,7 +232,7 @@ def test_a_changed_script_replaces_the_tree_and_says_so(tmp_path):
     solver(A, b)
     assert "hot reload" not in journal.take()
 
-    _script(script, "linearSolver = blockAMG(tolerance=FixedTolerance(1e-9))\n")
+    _script(script, "linearSolver = blockAMG(tolerance=FixedTolerance(1e-9), rebuild=RebuildPolicy(reuse=True))\n")
     x = solver(A, b)
     text = journal.take()
     assert "hot reload of {:} (sha256 ".format(script) in text and "the tree is replaced" in text

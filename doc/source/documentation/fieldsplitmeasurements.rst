@@ -190,8 +190,9 @@ contact anchor model with many multi-point-constraint slaves):
 
 * **3x3 blocks stored in float** (set up in double, see ``backendPrecision``) cut the cost per outer
   iteration.
-* **One high-degree post-smoothing sweep** (``npre = 0``, ``npost = 1``, Chebyshev degree 16, instead
-  of a symmetric V(1,1) cycle at degree 5) and **smoothed aggregation's own spectral-radius estimate**
+* **One high-degree post-smoothing sweep** (``npre = 0``, ``npost = 1``, Chebyshev degree 8 -- 16 when these
+  comparisons were made, lowered to 8 afterwards: about 15 % less solve time on the pry-out model, at the price of
+  twice as many solves stopping at the iteration cap -- instead of a symmetric V(1,1) cycle at degree 5) and **smoothed aggregation's own spectral-radius estimate**
   for its prolongation smoother (``estimate_spectral_radius``, 20 power iterations) cut outer
   iterations for the same number of preconditioner applications.
 * **The translations of the equilibrated block** as a block hierarchy's near-null-space
@@ -211,7 +212,7 @@ contact anchor model with many multi-point-constraint slaves):
 * ``LGMRES(restart=50)`` matches the outer-iteration cap (``maxIterations = 100``), so
   LGMRES restarts at most once within it; ``augmentationVectors`` only allocates its augmentation vectors without
   ever exhausting them before the cap.
-* ``RebuildPolicy(stalenessFactor=3)`` reuses hierarchies longer than the former factor of 1.5, which fired on
+* ``RebuildPolicy(stalenessFactor=3)``, with ``reuse=True``, reuses hierarchies longer than the former factor of 1.5, which fired on
   noise at small iteration counts; with the cap of 100 it can fire only while the solve the
   hierarchies were built for took fewer than about 34 iterations -- beyond that, only a cap hit (or a
   new increment, a pattern change) rebuilds them.
@@ -224,7 +225,7 @@ contact anchor model with many multi-point-constraint slaves):
   inert, defaults.
 * ``pruneCondensedMatrixZeros`` (a nonlinear-solver option, not a component's) now defaults to
   "off for a solver that needs the pattern stable", and a solver with a Krylov solve reports exactly that -- so on a
-  model with multi-point constraints the hierarchies are now reused automatically; the former setup
+  model with multi-point constraints the hierarchies are reused automatically once ``RebuildPolicy(reuse=True)`` is set; the former setup
   needed this set by hand (see the reuse rules on :doc:`blockamgtheory`).
 
 Measured live, from the same checkpoints, the defaults against the former defaults (no per-model settings in

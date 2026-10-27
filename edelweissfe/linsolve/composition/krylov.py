@@ -181,12 +181,14 @@ class RebuildPolicy:
     rebuildOnNewIncrement
         Whether a new increment of the nonlinear solver rebuilds it.
     reuse
-        Whether it is reused at all: ``False`` rebuilds it for every solve.
+        Whether it is reused across solves at all (default ``False``: every solve builds its own, which was measured
+        faster on the models the defaults were chosen on); ``True`` keeps it standing until one of the other
+        triggers asks for a rebuild.
     """
 
     stalenessFactor: float = 3.0
     rebuildOnNewIncrement: bool = True
-    reuse: bool = True
+    reuse: bool = False
 
     def __post_init__(self):
         if not self.stalenessFactor >= 1.0:

@@ -61,7 +61,7 @@ from edelweissfe.linsolve.nullspace import (
 #:
 #: - ``estimate_spectral_radius`` with 20 power iterations: a sharper weight of the prolongation smoother of smoothed
 #:   aggregation than the Gershgorin bound;
-#: - Chebyshev of degree 16 after the coarse correction only (``npre`` 0, ``npost`` 1): for the same number of
+#: - Chebyshev of degree 8 after the coarse correction only (``npre`` 0, ``npost`` 1): for the same number of
 #:   preconditioner applications, one high-degree post-smoothing sweep beat a symmetric V(1,1) cycle of low degree;
 #: - its spectral radius from 300 power iterations: AMGCL's default (0) is the pessimistic Gershgorin bound, and a
 #:   power iteration starts from a vector seeded per OpenMP thread, so a short one leaves the bound dependent on the
@@ -73,7 +73,7 @@ _VECTOR_FIELD_TREE = {
         "estimate_spectral_radius": True,
         "power_iters": 20,
     },
-    "relax": {"type": "chebyshev", "degree": 16, "power_iters": 300, "lower": 0.01, "higher": 1.1},
+    "relax": {"type": "chebyshev", "degree": 8, "power_iters": 300, "lower": 0.01, "higher": 1.1},
     "npre": 0,
     "npost": 1,
 }
