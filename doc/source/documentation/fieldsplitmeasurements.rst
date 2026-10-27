@@ -191,8 +191,7 @@ contact anchor model with many multi-point-constraint slaves):
 * **3x3 blocks stored in float** (set up in double, see ``backendPrecision``) cut the cost per outer
   iteration.
 * **One high-degree post-smoothing sweep** (``npre = 0``, ``npost = 1``, Chebyshev degree 8 -- 16 when these
-  comparisons were made, lowered to 8 afterwards: about 15 % less solve time on the pry-out model, at the price of
-  twice as many solves stopping at the iteration cap -- instead of a symmetric V(1,1) cycle at degree 5) and **smoothed aggregation's own spectral-radius estimate**
+  comparisons were made, lowered to 8 afterwards -- instead of a symmetric V(1,1) cycle at degree 5) and **smoothed aggregation's own spectral-radius estimate**
   for its prolongation smoother (``estimate_spectral_radius``, 20 power iterations) cut outer
   iterations for the same number of preconditioner applications.
 * **The translations of the equilibrated block** as a block hierarchy's near-null-space

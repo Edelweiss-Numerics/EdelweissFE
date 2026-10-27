@@ -181,9 +181,8 @@ class RebuildPolicy:
     rebuildOnNewIncrement
         Whether a new increment of the nonlinear solver rebuilds it.
     reuse
-        Whether it is reused across solves at all (default ``False``: every solve builds its own, which was measured
-        faster on the models the defaults were chosen on); ``True`` keeps it standing until one of the other
-        triggers asks for a rebuild.
+        Whether it is reused across solves at all (default ``False``: every solve builds its own); ``True`` keeps it
+        standing until one of the other triggers asks for a rebuild.
     """
 
     stalenessFactor: float = 3.0
