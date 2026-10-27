@@ -491,7 +491,7 @@ def test_the_schur_complement_tree_has_blockamgs_numbers_with_condensation():
     )
     x, composed = _solved(A, b, root, fields)
     assert composed.lastSolveSummary.iters == 15
-    assert np.linalg.norm(x) == pytest.approx(24.21550705729059, rel=1e-8)
+    assert np.linalg.norm(x) == pytest.approx(24.215507056460062, rel=1e-8)
     assert _relative(A @ x, b) < 1e-8
 
 

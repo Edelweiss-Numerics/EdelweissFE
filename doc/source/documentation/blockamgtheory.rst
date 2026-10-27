@@ -454,11 +454,14 @@ the prolongation smoothing -- is estimated one way (``edelweissfe/linsolve/amgcl
   nonsymmetric matrix :math:`(\theta, x)` is an exact eigenpair of a matrix within :math:`r` of :math:`A`, which bounds
   the error only together with the conditioning of the eigenvectors: :math:`r` is an indicator there, not a bound, and
   the smoother keeps its own margin (``higher`` 1.1).
-* **Adaptive by default.** The steps stop when :math:`r < \tau\, \theta` (``spectralRadiusTolerance``, default 0.05,
-  half the margin of ``higher``), after at least 8 and at most ``spectralRadiusMaxSteps`` (default 30) steps. A tree can
-  ask for a fixed number of steps instead, ``spectralRadiusSteps``; one or the other, not both. On 14 operators of
-  captured systems the default stopped after 8 to 11 steps, at :math:`1.003` to :math:`1.039\,\rho`
-  (:ref:`measured-power-iterations`).
+* **A fixed number of steps, or an adaptive one.** By default 10 steps (``spectralRadiusSteps``); on 14 operators of
+  captured systems they gave :math:`1.005` to :math:`1.043\,\rho`. Instead, a tree can ask for an adaptive estimate:
+  the steps stop when :math:`r < \tau\, \theta` (``spectralRadiusTolerance``, e.g. 0.05, half the margin of
+  ``higher``), after at least 8 and at most ``spectralRadiusMaxSteps`` (default 30) steps -- one or the other, not
+  both. For a symmetric operator a tolerance below the margin makes the margin provably sufficient; for a nonsymmetric
+  one :math:`r` is only an indicator. Measured, the adaptive estimate (0.05) stopped after 8 to 11 steps on those
+  operators and needed the same outer iterations as 10 fixed steps, but more setup on the small coarse AMG levels,
+  where it takes more steps; so the fixed number is the default (:ref:`measured-power-iterations`).
 
 The parameters sit where AMGCL's ``power_iters`` sat: in a tree's ``relax`` for the smoother, in its ``coarsening`` for
 the prolongation smoothing (with ``estimate_spectral_radius``). A tree that sets ``power_iters`` is refused. The

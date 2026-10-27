@@ -93,23 +93,23 @@ AMG tree (``AMG()``), the rigid-body coarse level and the scaled P1 interpolatio
       - 452 / 32.9 / 127
       - 285 / 28.2 / 87
       - 0
-    * - Arnoldi, 10 steps
+    * - Arnoldi, 10 steps (the default)
       - 600 / 16.4 / 144
       - 458 / 22.9 / 117
       - 286 / 20.0 / 79
       - 0
-    * - Arnoldi, adaptive, tolerance 0.05 (the default)
-      - 600 / 16.1 / 149
-      - 458 / 23.2 / 120
+    * - Arnoldi, adaptive, tolerance 0.05, 8 to 30 steps
+      - 600 / 19.4 / 151
+      - 458 / 23.0 / 118
       - 286 / 19.9 / 80
       - 0
 
-Against the former default: 0.7 % more outer iterations (the estimate :math:`\theta + r` lies slightly above the
-radius, which shifts the smoother's interval upwards), 22 -- 28 % of the setup, 26 -- 42 % less wall time, and
-no thread-count dependence at all -- the estimate is the same, bit for bit, at any thread count. A fixed number of 10
-steps and the adaptive estimate are equal here; the adaptive one is the default because it adapts to an operator
-whose estimate converges more slowly, and because for a symmetric operator its tolerance below the smoother's margin
-makes the margin provably sufficient. Not measured: the 10 AnchorPryOut systems behind the 300 iterations (the dumps no
+Against the former default, 10 Arnoldi steps need 0.7 % more outer iterations (the estimate :math:`\theta + r` lies slightly above the
+radius, which shifts the smoother's interval upwards), 22 -- 28 % of the setup, 29 -- 43 % less wall time, and
+show no thread-count dependence at all -- the estimate is the same, bit for bit, at any thread count. The adaptive
+estimate needs the same outer iterations, but more setup with ``AMG()``, whose small coarse levels take more steps to
+the tolerance: so 10 fixed steps are the default, and the adaptive estimate is an option, for an operator whose
+estimate converges more slowly, or where the guarantee for symmetric operators matters. Not measured: the 10 AnchorPryOut systems behind the 300 iterations (the dumps no
 longer exist). Scratch scripts and logs: xeon ``~/scratch_sr_2026-10-27`` (``sr_bench.py``, ``arnoldi_bench.py``,
 ``krylov_quality.py``, ``krylov_traj.py``).
 

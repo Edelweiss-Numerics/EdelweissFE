@@ -66,44 +66,44 @@ from edelweissfe.linsolve.composition.amg import droppedSmallEntries  # noqa: E4
 
 #: The numbers of the composed solver, per solve: (outer iterations, continuations, tolerance met, ||x||).
 _TIGHT = {
-    "rigidBodyCoarseLevel": [(13, 0, True, 418.5446467277637)],
-    "translations": [(40, 0, True, 418.54464669974334)],
-    "sweeps2": [(27, 0, True, 418.5446467063656)],
-    "symmetric": [(30, 0, True, 418.54464668461577)],
-    "sweeps2symmetric": [(20, 0, True, 418.5446466924004)],
-    "drop rigidBodyCoarseLevel": [(25, 0, True, 418.544646737811)],
-    "drop rigidBodyCoarseLevel lumped": [(25, 0, True, 418.54464678598043)],
-    "drop translations": [(42, 0, True, 418.5446466911115)],
-    "drop translations lumped": [(42, 0, True, 418.54464671999494)],
+    "rigidBodyCoarseLevel": [(13, 0, True, 418.5446467174296)],
+    "translations": [(40, 0, True, 418.54464670055614)],
+    "sweeps2": [(26, 0, True, 418.54464656671)],
+    "symmetric": [(30, 0, True, 418.5446466851319)],
+    "sweeps2symmetric": [(20, 0, True, 418.54464669228247)],
+    "drop rigidBodyCoarseLevel": [(25, 0, True, 418.54464673746827)],
+    "drop rigidBodyCoarseLevel lumped": [(25, 0, True, 418.54464678508566)],
+    "drop translations": [(42, 0, True, 418.5446466908262)],
+    "drop translations lumped": [(42, 0, True, 418.5446467190722)],
 }
 _SEQUENCE = {
     "rigidBodyCoarseLevel": [
-        (8, 0, True, 418.5461736107896),
-        (50, 0, True, 41.322416861998185),
-        (16, 0, True, 5.624814025269175),
-        (8, 0, True, 4185.461735827846),
-        (8, 0, True, 418.54617375299125),
+        (8, 0, True, 418.54618977034244),
+        (50, 0, True, 41.32241300015936),
+        (16, 0, True, 5.624814130343251),
+        (8, 0, True, 4185.461897520253),
+        (8, 0, True, 418.54618990569605),
     ],
     "translations": [
-        (27, 0, True, 418.53893762427634),
-        (59, 0, True, 41.32246342691914),
-        (63, 0, True, 5.625210179044017),
-        (27, 0, True, 4185.3893762428515),
-        (27, 0, True, 418.53893777880495),
+        (27, 0, True, 418.53900395601215),
+        (59, 0, True, 41.32246698054644),
+        (63, 0, True, 5.625213216680407),
+        (27, 0, True, 4185.3900395600285),
+        (27, 0, True, 418.5390041105333),
     ],
     "scaled": [
-        (37, 1, True, 418.53790859042755),
-        (84, 1, True, 41.32191827309676),
-        (84, 1, True, 5.624715386607642),
-        (37, 1, True, 4185.379085904007),
-        (37, 1, True, 418.5379087469865),
+        (37, 1, True, 418.5379846987327),
+        (84, 1, True, 41.32191911886246),
+        (84, 1, True, 5.624716436920195),
+        (37, 1, True, 4185.379846987914),
+        (37, 1, True, 418.53798485533997),
     ],
     "scaled gapCompensated": [
-        (32, 1, True, 418.53485189225796),
-        (65, 0, True, 41.32220769731741),
-        (68, 0, True, 5.625253322627664),
-        (30, 0, True, 4185.440664714049),
-        (30, 0, True, 418.5440666271127),
+        (32, 1, True, 418.53492930097934),
+        (65, 0, True, 41.322211355387054),
+        (68, 0, True, 5.625254935072965),
+        (30, 0, True, 4185.440747574256),
+        (30, 0, True, 418.5440749131303),
     ],
 }
 #: Whether BlockAMGSolver rebuilt its preconditioner, per solve of the sequence (its dumps' ``mustRefresh``).
@@ -290,7 +290,7 @@ def test_a_krylov_solve_on_the_scaled_system_has_blockamgs_numbers_along_a_seque
 def test_no_continuations_on_the_scaled_system_has_blockamgs_numbers():
     A, b, fields, coordinates = _beamWithDamage()
     composed = _composed(coordinates, fields, krylovOnScaledSystem=True, continuations=0, rigidBodyCoarseLevel=False)
-    _assertSolve(composed, A, b, (19, 0, False, 418.31469977207706), tight=False)
+    _assertSolve(composed, A, b, (19, 0, False, 418.3153141552291), tight=False)
 
 
 # ----- the degradation dumps -----

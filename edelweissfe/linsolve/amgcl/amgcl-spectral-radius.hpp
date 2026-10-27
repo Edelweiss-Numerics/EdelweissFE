@@ -84,15 +84,20 @@ namespace amgcl {
     /// the cycle of a 2D beam of the test suite diverged; after 8 it was at least rho on all of them.
     static const int minimumSteps = 8;
 
-    /// @brief The estimate of a tree that says nothing about it: adaptive, to a tolerance of 0.05 -- half the margin of
-    /// the default Chebyshev interval (higher = 1.1) -- in at most 30 steps. On 14 operators of captured systems it
-    /// stopped after 8 to 11 steps, at 1.003 to 1.039 times the spectral radius (fieldsplitmeasurements.rst, "The
-    /// spectral radius estimate").
+    /// @brief The tolerance of an adaptive estimate that does not give one: half the margin of the default Chebyshev
+    /// interval (higher = 1.1).
+    static double adaptiveTolerance() { return 0.05; }
+    /// @brief The most steps of an adaptive estimate that does not give them.
+    static int adaptiveMaxSteps() { return 30; }
+
+    /// @brief The estimate of a tree that says nothing about it: 10 steps. On 14 operators of captured systems they
+    /// gave 1.005 to 1.043 times the spectral radius; the adaptive estimate (tolerance 0.05) the same outer iterations,
+    /// but more setup on the coarse AMG levels (fieldsplitmeasurements.rst, "The spectral radius estimate of the
+    /// Chebyshev smoother").
     static spectral_radius_estimate byDefault()
     {
       spectral_radius_estimate how;
-      how.tolerance = 0.05;
-      how.maxSteps  = 30;
+      how.steps = 10;
       return how;
     }
 
@@ -129,10 +134,9 @@ namespace amgcl {
                                        std::to_string( how.steps ) );
       }
       if ( adaptive ) {
-        const spectral_radius_estimate defaults = byDefault();
-        how                                     = spectral_radius_estimate();
-        how.tolerance                           = p.get( "spectralRadiusTolerance", defaults.tolerance );
-        how.maxSteps                            = p.get( "spectralRadiusMaxSteps", defaults.maxSteps );
+        how           = spectral_radius_estimate();
+        how.tolerance = p.get( "spectralRadiusTolerance", adaptiveTolerance() );
+        how.maxSteps  = p.get( "spectralRadiusMaxSteps", adaptiveMaxSteps() );
         if ( !( how.tolerance > 0.0 ) || how.maxSteps < minimumSteps ) {
           throw std::invalid_argument( where + ": needs spectralRadiusTolerance > 0 and spectralRadiusMaxSteps >= " +
                                        std::to_string( minimumSteps ) );

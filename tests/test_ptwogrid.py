@@ -256,14 +256,15 @@ def test_block2_storage_of_a_two_component_field_matches_scalar_storage():
 
 
 def test_an_adaptive_and_a_fixed_estimate_come_within_the_smoothers_margin(problem):
-    """The default estimate stops once the residual norm of its largest Ritz pair is below 5 % of the Ritz value; a fixed
-    number of steps is the other way. Both come within the margin of the smoother's interval (higher = 1.1)."""
+    """The default estimate takes 10 steps; an adaptive one stops once the residual norm of its largest Ritz pair is
+    below a tolerance times the Ritz value. Both come within the margin of the smoother's interval (higher = 1.1)."""
     As, scaling, coords, isCorner, edgeEndpoints, r = problem
     free = np.nonzero(np.diff(As.indptr) != 1)[0]
     exact = np.max(np.abs(np.linalg.eigvals(As[free, :][:, free].toarray())))
     for tree in (
         fineChebyshevTree(),
         fineChebyshevTree(spectralRadiusSteps=10),
+        fineChebyshevTree() | {"relax": dict(fineChebyshevTree()["relax"], spectralRadiusTolerance=0.05)},
         fineChebyshevTree() | {"relax": dict(fineChebyshevTree()["relax"], spectralRadiusTolerance=0.01)},
     ):
         preconditioner, _, _ = _built(As, scaling, isCorner, edgeEndpoints, tree)
