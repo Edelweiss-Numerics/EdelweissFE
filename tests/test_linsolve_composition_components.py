@@ -315,6 +315,32 @@ def test_the_schur_complement_keeps_nothing_formed_from_its_matrices_between_sol
     assert root.lastRebuildReason is None and _relative(1.0001 * (A @ x), b) < 1e-7
 
 
+def test_the_schur_complement_notes_what_it_condensed_for_the_debug_column_of_a_rebuild_only():
+    A, b, barDofs = barOnFoundation(n=8)
+    fields = [FieldBlock("u", 0, A.shape[0], 1)]
+    schur = condensingGivenDofs(
+        SchurComplement(["bars"], preconditionS=DiagonalScaling(Multiplicative([OnField("u", AMG())]))), barDofs
+    )
+    solver = ComposedLinearSolver(LGMRES(schur, tolerance=FixedTolerance(1e-8)), verbosity="debug")
+    solver.setFieldStructure(fields)
+    solver(A, b)
+    first = solver.lastSolveSummary.detailLines
+    assert first[0] == "rebuilt(first)"
+    assert first[2] == "{:} dofs condensed".format(len(barDofs)) and first[3].startswith("S̃ ")
+    assert all(len(note) <= 24 for note in first)
+    solver((1.0001 * A).tocsr(), b)
+    assert solver.lastSolveSummary.detailLines[0] == "reused" and len(solver.lastSolveSummary.detailLines) == 2
+
+
+@pytest.mark.parametrize(
+    "count, compact", [(7, "7"), (999, "999"), (240084, "240k"), (1830294, "1.83M"), (233398138, "233M")]
+)
+def test_a_count_in_a_note_has_three_significant_digits(count, compact):
+    from edelweissfe.linsolve.composition.schurcomplement import _compactCount
+
+    assert _compactCount(count) == compact
+
+
 # ----- statistics -----
 
 

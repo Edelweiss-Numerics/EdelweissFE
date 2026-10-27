@@ -67,7 +67,7 @@ from edelweissfe.linsolve.composition.base import (
 from edelweissfe.linsolve.composition.solvedumps import SolveDumps
 from edelweissfe.linsolve.composition.systemmatrix import SystemMatrix
 
-_IDENTIFICATION = "ComposedLinearSolver"
+_IDENTIFICATION = "ComposedSolver"
 _VERBOSITY_LEVELS = ("silent", "warning", "info", "debug")
 _WARNING_MARKER = "⚠ "
 
@@ -128,8 +128,8 @@ class ComposedLinearSolver(LinearSolver):
         diverged attempt starts below its last residual, and is not one).
     verbosity
         ``"silent"``, ``"warning"`` (default: nothing on a normal solve; a warning for a slow or unconverged one),
-        ``"info"`` (one line per solve, the structure of the solver at the first solve, and the "linear solve" column
-        of the nonlinear solver's table) or ``"debug"`` (also each continuation of a Krylov solve, and why the
+        ``"info"`` (the structure of the solver at the first solve, in a frame, and the "linear solve" column of the
+        nonlinear solver's table) or ``"debug"`` (also each continuation of a Krylov solve, and why the
         preconditioner was rebuilt or reused, in that column).
     warnOuterIterations
         A solve with more outer iterations than this gets a warning (a sign that the preconditioner no longer fits).
@@ -297,6 +297,16 @@ class ComposedLinearSolver(LinearSolver):
         else:
             print(message, flush=True)
 
+    def _logFramed(self, level: str, title: str, message: str) -> None:
+        """Show ``message`` in a frame with ``title`` if the verbosity reaches ``level``: in the journal, or printed
+        without one."""
+        if _VERBOSITY_LEVELS.index(self.verbosity) < _VERBOSITY_LEVELS.index(level):
+            return
+        if self._journal is not None:
+            self._journal.framedMessage(message, _IDENTIFICATION, title, level=2)
+        else:
+            print(title + ":\n" + message, flush=True)
+
     def _changeFor(self, A: SystemMatrix, fields: list, residualNorm: float) -> MatrixChange:
         """What changed since the last solve."""
         context = SetUpContext(
@@ -364,7 +374,7 @@ class ComposedLinearSolver(LinearSolver):
         self._rootBeforeReload = None
         if self._fields is None or self._reloaded:
             # after the first set-up: a combination made per field shows its corrections only then
-            self._log("info", "composed linear solver:\n" + str(self.root) + self._scriptLine())
+            self._logFramed("info", "composed linear solver", str(self.root) + self._scriptLine())
         x = np.column_stack([self.root(np.ascontiguousarray(r)) for r in rightHandSides.T]).reshape(b.shape)
         record = self.root.solveRecord()
         condensedDofs = self.root.condensedDofs()
@@ -392,22 +402,14 @@ class ComposedLinearSolver(LinearSolver):
         if self.verbosity == "debug":
             rebuilt = "rebuilt({:})".format(record.rebuildReason) if record.rebuildReason is not None else "reused"
             detailLines = (rebuilt, "η={:.1e} · {:.1f}s".format(record.eta, seconds))
+            if record.rebuildReason is not None:
+                detailLines += self.root.setUpNotes()
         self._lastSolveSummary = LinearSolveSummary(
             iters=record.iterations,
             residual=record.residual,
             residualMet=record.converged,
             retries=record.continuations,
             detailLines=detailLines,
-        )
-        self._log(
-            "info",
-            "solve #{:}: {:} outer iterations, ‖r‖/‖b‖ = {:.1e}{:} · {:.1f}s".format(
-                self._solveCount,
-                record.iterations,
-                record.residual,
-                "" if record.rebuildReason is None else ", rebuilt ({:})".format(record.rebuildReason),
-                seconds,
-            ),
         )
         if record.iterations > self.warnOuterIterations:
             self._log(

@@ -59,15 +59,20 @@ All messages are nested inside the Newton iteration they belong to; warnings are
     is not reported; the hierarchies are rebuilt all the same.
 
 ``info``
-    Adds one line per solve, and turns on the "linear solve" column of the nonlinear solver's per-iteration table: outer iteration
+    Turns on the "linear solve" column of the nonlinear solver's per-iteration table: outer iteration
     count, achieved true residual (and whether it met the requested tolerance) and number of
-    continuations of each solve; and the structure of the solver at its first solve. This is the level to run at
-    when first characterising a model on an iterative solver.
+    continuations of each solve; and shows the structure of the solver, in a frame, at its first solve. The frame
+    stands above the header of the table, so that nothing the solver says interrupts the rows. This is the level to
+    run at when first characterising a model on an iterative solver.
 
 ``debug``
     Adds, per solve, whether the hierarchies were rebuilt (and why, e.g. ``rebuilt(stale)``) or ``reused``, the
     requested tolerance and the wall-clock, in the "linear solve" column, and one line per continuation of a Krylov
-    solve on a scaled system.
+    solve on a scaled system. After a rebuild, the notes of the components on what they built follow in the column:
+    for a ``SchurComplement``, the condensed dofs and the nonzeros of :math:`\tilde S`.
+
+The sizes of what a ``SchurComplement`` built are also recorded in its statistics (``condensed dofs``, ``S̃ nnz``), see
+the run-statistics view.
 
 Per-stage wall-clock -- equilibration, the equilibrated system (the scaled operator and the coupling
 blocks between fields, built in one threaded pass), hierarchy build (per field, and per stage of a

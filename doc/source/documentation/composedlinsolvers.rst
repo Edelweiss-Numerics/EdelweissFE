@@ -58,8 +58,8 @@ is started in the directory of the input file, as ``run_tests_edelweissfe`` does
 
 The script defines the global ``linearSolver`` and holds only the math: the tree. What the adapter does around it --
 the verbosity, the dumps, the hot reload -- are data lines of the block (a ``ComposedLinearSolver`` bound in the script
-is refused; see :ref:`composed-adapter`). The journal logs the structure of the solver and a hash of the script at the
-first solve (with ``verbosity=info``).
+is refused; see :ref:`composed-adapter`). The journal shows the structure of the solver and a hash of the script in a frame at the
+first solve (with ``verbosity=info``), above the header of the iteration table.
 
 How to read the nesting
 -----------------------

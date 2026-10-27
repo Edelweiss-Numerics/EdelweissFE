@@ -534,7 +534,7 @@ class NIST(NonlinearSolverBase):
             "notes": "",
         }
 
-        self.journal.preformatted(self.convergenceTable.headerLines(), self.identification, level=2)
+        self.tableHeaderWritten = False
 
         if modelHasChanged and equilibrateAfterModelChange:
             # Settle the warm-started refined mesh to equilibrium at the LAST converged load

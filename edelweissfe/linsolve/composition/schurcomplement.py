@@ -723,6 +723,14 @@ def blockLU(r: np.ndarray, condensation, preconditionS, solveA_bb, blockFactors:
     return z
 
 
+def _compactCount(count: int) -> str:
+    """A count with three significant digits and a suffix: ``233398138`` is ``233M``, ``240084`` is ``240k``."""
+    for factor, suffix in ((1e9, "G"), (1e6, "M"), (1e3, "k")):
+        if count >= factor:
+            return "{:.3g}{:}".format(count / factor, suffix)
+    return str(count)
+
+
 class SchurComplement(Preconditioner):
     """The block LU preconditioner around the Schur complement of the condensed dofs; see the module documentation.
 
@@ -855,11 +863,7 @@ class SchurComplement(Preconditioner):
                 condensing = False
                 dofs, dofsChanged = self._condensedDofsOf(condensing)
             else:
-                context.message(
-                    "info",
-                    "SchurComplement: {:} dofs condensed; the approximate Schur complement of the {:} remaining dofs "
-                    "has {:} nonzeros".format(dofs.size, A.shape[0] - dofs.size, self.S_tilde.nnz),
-                )
+                self.statistics.sizes.update({"condensed dofs": dofs.size, "S̃ nnz": self.S_tilde.nnz})
                 if condensation.nonPositiveDiagonalEntries:
                     self._warn(
                         context,
@@ -916,6 +920,14 @@ class SchurComplement(Preconditioner):
 
     def condensedDofs(self) -> "np.ndarray | None":
         return self.condensation.condensedDofs if self.condensing else None
+
+    def setUpNotes(self) -> tuple:
+        if not self.condensing:
+            return super().setUpNotes()
+        return (
+            "{:} dofs condensed".format(_compactCount(self.condensation.condensedDofs.size)),
+            "S̃ {:} nnz".format(_compactCount(self.S_tilde.nnz)),
+        ) + super().setUpNotes()
 
     def _apply(self, r: np.ndarray) -> np.ndarray:
         if not self.condensing:

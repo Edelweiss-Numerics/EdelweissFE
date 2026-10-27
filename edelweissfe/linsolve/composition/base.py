@@ -457,6 +457,12 @@ class Preconditioner:
                 return record
         return None
 
+    def setUpNotes(self) -> tuple:
+        """Short facts about what this component and its children built in the last set-up or update, one string
+        each, for the "linear solve" column of the nonlinear solver's table at verbosity ``"debug"``: at most 24
+        characters, the width of that column. Most components have none."""
+        return tuple(note for _, child in self.children() for note in child.setUpNotes())
+
     def condensedDofs(self) -> "np.ndarray | None":
         """The dofs a Schur complement in this component condensed in the last solve, or ``None`` (for a degradation
         dump, which records them for an offline replay without the model)."""

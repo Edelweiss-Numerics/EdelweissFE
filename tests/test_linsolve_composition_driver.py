@@ -61,8 +61,13 @@ class _Journal:
 
     def __init__(self):
         self.messages = []
+        self.frames = []
 
     def message(self, text, identification, level=None):
+        self.messages.append(text)
+
+    def framedMessage(self, text, identification, title, level=None):
+        self.frames.append(title)
         self.messages.append(text)
 
     def take(self) -> str:
@@ -108,6 +113,15 @@ def test_the_debug_column_says_why_the_preconditioner_was_rebuilt():
     assert solver.lastSolveSummary.detailLines[0] == "rebuilt(first)"
     solver(A, 0.5 * b)
     assert solver.lastSolveSummary.detailLines[0] == "reused"
+
+
+def test_the_tree_is_shown_in_a_frame_once_and_a_solve_is_not_narrated():
+    A, b, fields = displacementDamageSystem(n=8, coupling="symmetric")
+    solver, journal = _driven(blockAMG(), fields, verbosity="info")
+    solver(A, b)
+    solver(A, 0.5 * b)
+    assert journal.frames == ["composed linear solver"]
+    assert "solve #" not in journal.take()
 
 
 def test_the_continuations_on_the_scaled_system_are_logged_at_debug():
