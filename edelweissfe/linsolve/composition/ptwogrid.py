@@ -60,7 +60,7 @@ The coarse problem is a field of its own
 ----------------------------------------
 
 The coarse solve is a component of the composed solver, set up on :math:`A_c` with the context of the corner-node field
-(:meth:`~edelweissfe.linsolve.composition.base.SetUpContext.ofCornerNodes`: the same field on the corner nodes, their
+(:meth:`~edelweissfe.linsolve.composition.base.SetUpContext.ofCoarseNodes`: the same field on the coarse nodes, their
 coordinates, the scaling :math:`D_c`), so that every component works on it unchanged. Its default,
 ``DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModes()))``, scales :math:`A_c` to a unit diagonal once more: where a
 midside diagonal is tiny against its corners', the weights :math:`s_a / s_m` reach about 1000,
@@ -79,8 +79,12 @@ the fine smoothing and the Galerkin projection must act on the *free* DOFs only,
 DOFs decoupled entirely, not merely masked in place -- masking in place for the fine smoother
 alone was tried and diverged outright. A free midside node whose edge-endpoint corner is Dirichlet-constrained keeps
 only the surviving weight of its free endpoint -- no renormalization (the constrained corner contributes exactly zero
-to a homogeneous Newton correction, which the dropped weight already encodes). A Dirichlet corner dof is a zero column
-of :math:`P` and an identity row of :math:`A_c`: the coarse field keeps its Dirichlet rows, as the fine one does.
+to a homogeneous Newton correction, which the dropped weight already encodes). A free midside dof whose *both*
+endpoint dofs are constrained (a symmetry plane and a tie on one edge, issue #223) would get an empty row of :math:`P`
+-- no coarse correction at all -- so its node becomes a coarse node of its own (:attr:`PTwoGridPreconditioner.coarseNodes`),
+as :func:`~edelweissfe.numerics.p1topology.buildP1Map` makes a node a corner on an AMR edge conflict; it is decided at the
+build, where the Dirichlet rows are known, not in the topology map. A Dirichlet coarse dof is a zero column of :math:`P`
+and an identity row of :math:`A_c`: the coarse field keeps its Dirichlet rows, as the fine one does.
 
 The C++ implementation does not extract the free submatrix, it decouples the Dirichlet DOFs exactly
 inside the full block layout instead: the fine right-hand side and iterate are kept zero on them (a
@@ -169,8 +173,8 @@ class PTwoGridPreconditioner(TwoLevelPreconditioner):
         Returns
         -------
         sp.csr_matrix
-            :math:`A_c = P^T \\hat A P` on all corner dofs, in the corners' node order and then by component, with an
-            identity row for each Dirichlet corner dof; 0 x 0 for a field without a free dof (the cycle is then the
+            :math:`A_c = P^T \\hat A P` on all dofs of the :attr:`coarseNodes`, in node order and then by component,
+            with an identity row for each Dirichlet coarse dof; 0 x 0 for a field without a free dof (the cycle is then the
             exact diagonal inverse and needs no coarse solve).
         """
         A = A.tocsr()
@@ -194,8 +198,14 @@ class PTwoGridPreconditioner(TwoLevelPreconditioner):
 
     @property
     def nCoarse(self) -> int:
-        """The coarse dofs: all dofs of the corner nodes."""
+        """The coarse dofs: all dofs of the :attr:`coarseNodes`."""
         return self._preconditioner.nCoarse
+
+    @property
+    def coarseNodes(self) -> np.ndarray:
+        """Per node, whether the last build made it a coarse node: the corner nodes of the P1 map, and every midside node
+        with a free dof whose two edge-endpoint dofs are both constrained (see the module documentation)."""
+        return self._preconditioner.coarseNodes
 
     def prolongationMatrix(self) -> sp.csr_matrix:
         """The prolongation ``P`` as the cycle uses it, a scipy CSR matrix (for inspection)."""

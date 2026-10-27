@@ -789,9 +789,12 @@ a scaling above the cycle (:math:`D = I`), :math:`P = P_{geo}`. On the tunnel li
 253--279 outer iterations, the scaled ones 14--21 (:ref:`measured-scaled-p1`).
 
 **The coarse problem is a field of its own.** :math:`A_c` is handed to the component ``coarse`` with the context of the
-corner-node field (:meth:`~edelweissfe.linsolve.composition.base.SetUpContext.ofCornerNodes`): the same field name and
+corner-node field (:meth:`~edelweissfe.linsolve.composition.base.SetUpContext.ofCoarseNodes`): the same field name and
 dimension on the corner nodes, their coordinates, :math:`D_c` as its scaling, and an identity row for each Dirichlet
-corner dof (a zero column of :math:`P`). So every component works on it unchanged: ``RigidBodyModes`` builds the
+corner dof (a zero column of :math:`P`). A midside node with a free dof whose two edge corners are both constrained in
+that component (a symmetry plane and a tie, issue #223) would get an empty row of :math:`P`, no coarse correction at
+all: it joins the coarse nodes, as a node the P1 map cannot classify becomes a corner. This is decided at the build,
+where the Dirichlet rows are known. So every component works on it unchanged: ``RigidBodyModes`` builds the
 rigid-body modes of the corners, ``AMG(backendBlockSize=1)`` takes them as its near null-space, ``DirectSolver()``
 solves exactly. It is called back from the C++ cycle once per application.
 

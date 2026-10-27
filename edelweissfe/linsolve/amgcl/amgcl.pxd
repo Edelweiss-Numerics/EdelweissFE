@@ -116,6 +116,7 @@ cdef extern from "amgcl-wrapper.hpp":
         @staticmethod
         void dirichletRowMask(int n, const int* ptr, const int* col, const double* val, char* isDirichlet) except +
         void setCoarseSolve(PyPrecondApplyFn applyFn, void* ctx)
+        const vector[signed char]& coarseNodes()
         ScalarCsr build(int n, const int* ptr, const int* col, const double* val, const double* scaling,
                         int nNodes, const signed char* isCorner, const int* edgeEndpoints,
                         double spectralRadius, const double* dominantVector, int dominantVectorSize) except +

@@ -40,7 +40,13 @@ import pytest
 import scipy.sparse as sp
 import scipy.sparse.linalg as spla
 from _linsolvesystems import DirichletStub
-from _p1lattice import dirichletDofs, fineChebyshevTree, lattice, latticeSystem
+from _p1lattice import (
+    dirichletDofs,
+    fineChebyshevTree,
+    lattice,
+    latticeSystem,
+    orphanSystem,
+)
 
 pytest.importorskip("edelweissfe.linsolve.amgcl.amgcl")
 
@@ -396,16 +402,38 @@ def test_dirichlet_rows_with_stored_zeros_are_recognized():
     assert _relativeDifference(results[0], results[1]) < 1e-12
 
 
-def test_an_orphan_midside_raises():
-    coords, isCorner, edgeEndpoints = lattice(4)
-    # an interior midside whose two edge-endpoint corners are fully clamped, while it stays free
-    interior = np.all((coords > 0.0) & (coords < 3.0), axis=1)
-    orphan = np.nonzero(~isCorner & interior)[0][0]
-    clampedCorners = edgeEndpoints[orphan]
-    dofs = np.sort((3 * clampedCorners[:, None] + np.arange(3)).ravel())
-    As, scaling = latticeSystem(coords, dofs)
-    with pytest.raises(RuntimeError, match="orphan"):
-        _built(As, scaling, isCorner, edgeEndpoints)
+def test_a_free_midside_dof_between_two_constrained_corners_makes_its_node_a_coarse_node():
+    """Issue #223: interpolated from its corners, the free dof would get an empty row of P; its node becomes a coarse
+    node instead, and P still reproduces the scaled translations D^-1 t, at that dof too."""
+    As, scaling, coords, isCorner, edgeEndpoints, orphan = orphanSystem()
+    isDirichlet = np.diff(As.indptr) == 1
+    assert not isDirichlet[3 * orphan + 2] and isDirichlet[3 * edgeEndpoints[orphan] + 2].all()
+    preconditioner, coarse, A_c = _built(As, scaling, isCorner, edgeEndpoints)
+    coarseNodes = preconditioner.coarseNodes
+    assert np.array_equal(coarseNodes, isCorner | (np.arange(len(isCorner)) == orphan))
+    coarseDofs = _cornerDofs(coarseNodes, 3)
+    assert A_c.shape == (len(coarseDofs), len(coarseDofs)) == (preconditioner.nCoarse,) * 2
+    # the coarse dof of the orphan's z component is free, those of its constrained components are identity rows
+    orphanCoarseDofs = 3 * np.count_nonzero(coarseNodes[:orphan]) + np.arange(3)
+    identityRows = np.diff(A_c.indptr) == 1
+    assert np.array_equal(identityRows[orphanCoarseDofs], isDirichlet[3 * orphan + np.arange(3)])
+    P = preconditioner.prolongationMatrix()
+    componentOf = np.arange(As.shape[0]) % 3
+    free = ~isDirichlet
+    assert P[3 * orphan + 2].nnz == 1
+    for component in range(3):
+        scaledTranslation = (componentOf == component) / scaling
+        interpolated = P @ scaledTranslation[coarseDofs]
+        nodeOf = np.arange(As.shape[0]) // 3
+        midside = ~coarseNodes[nodeOf]
+        endpointsFree = np.ones(As.shape[0], dtype=bool)
+        for k in range(2):
+            endpointsFree[midside] &= ~isDirichlet[3 * edgeEndpoints[nodeOf[midside], k] + componentOf[midside]]
+        checked = free & endpointsFree
+        assert checked[3 * orphan + 2]
+        assert np.allclose(interpolated[checked], scaledTranslation[checked], rtol=1e-14, atol=0.0)
+    r = np.random.default_rng(5).standard_normal(As.shape[0])
+    assert _gmresIterations(As, r, preconditioner.applyPreconditioner) < _gmresIterations(As, r, None) / 3
 
 
 def _unbuilt(isCorner, edgeEndpoints, fineTree=None, **options):

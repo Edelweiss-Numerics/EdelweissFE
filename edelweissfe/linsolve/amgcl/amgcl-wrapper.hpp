@@ -2132,6 +2132,11 @@ public:
     coarseSolveContext_ = ctx;
   }
 
+  /// @brief Per node of the field, whether the last build() made it a coarse node: the corners of the P1 map, and
+  /// every midside node with a free DOF between two Dirichlet DOFs of its edge's corners (see prolongation()). Empty
+  /// for a field without a free DOF.
+  const std::vector< signed char >& coarseNodes() const { return coarseNodes_; }
+
   /// @brief Build everything apply() needs but the coarse solve, and return the coarse operator for it.
   /// @param n, ptr, col, val the field's scaled diagonal block \hat A = D A D (scalar CSR, sorted columns, Dirichlet
   /// identity rows included). Copied; the caller's arrays are not referenced after build().
@@ -2141,8 +2146,8 @@ public:
   /// @param spectralRadius > 0: start from this fine spectral radius (typically a previous build's) instead of
   /// estimating it from scratch, re-checked with a dominantVector (n entries, the previous build's
   /// fineDominantVector()), see TwoLevelPreconditioner::chooseFineSpectralRadius().
-  /// @return A_c = P^T \hat A P on all corner DOFs (corner order, then DOF), an identity row for each Dirichlet corner
-  /// DOF; empty for a field without a free DOF
+  /// @return A_c = P^T \hat A P on all DOFs of the coarse nodes (coarseNodes(), in node order, then DOF), an identity
+  /// row for each Dirichlet coarse DOF; empty for a field without a free DOF
   ScalarCsr build( int                n,
                    const int*         ptr,
                    const int*         col,
@@ -2172,6 +2177,7 @@ public:
     std::shared_ptr< ScalarMatrix > P, PT;
     {
       SetupStage stage( *this, "dirichlet + P" );
+      coarseNodes_.clear();
       if ( beginBuild( n, ptr, col, val ) ) {
         coarseOperator.ptr.assign( 1, 0 );
         return coarseOperator;
@@ -2204,7 +2210,9 @@ private:
   /// @brief The coarse solve (setCoarseSolve()).
   PyPrecondApplyFn coarseSolveFn_      = nullptr;
   void*            coarseSolveContext_ = nullptr;
-  /// @brief Per coarse DOF, whether it is a Dirichlet DOF (its corner's fine DOF is): set by prolongation().
+  /// @brief Per node, whether it is a coarse node: set by prolongation().
+  std::vector< signed char > coarseNodes_;
+  /// @brief Per coarse DOF, whether it is a Dirichlet DOF (its coarse node's fine DOF is): set by prolongation().
   std::vector< char > coarseIsDirichlet_;
 
   /// @brief See PTwoGridPreconditionerT(const char*).
@@ -2285,31 +2293,17 @@ private:
     return coarseOperator;
   }
 
-  /// @brief P = D^-1 P_geo D_c on the free DOFs (see the class comment): 1 on corners, 1/2 s_a / s_m and 1/2 s_b / s_m
-  /// on a midside m from its two edge-endpoint corners a and b, per DOF. The coarse DOFs are all corner DOFs, in corner
-  /// order and then DOF; P has no rows for Dirichlet fine DOFs and zero columns for Dirichlet coarse DOFs, and the
-  /// weight of a dropped column is *not* redistributed (a constrained corner contributes exactly zero to a homogeneous
-  /// Newton correction). A free midside DOF whose both endpoint DOFs are constrained is an orphan and raises. Sets
-  /// nCoarse_ and coarseIsDirichlet_.
+  /// @brief P = D^-1 P_geo D_c on the free DOFs (see the class comment): 1 on coarse nodes, 1/2 s_a / s_m and
+  /// 1/2 s_b / s_m on a midside m from its two edge-endpoint corners a and b, per DOF. The coarse DOFs are all DOFs of
+  /// the coarse nodes (coarseNodes()), in node order and then DOF; P has no rows for Dirichlet fine DOFs and zero
+  /// columns for Dirichlet coarse DOFs, and the weight of a dropped column is *not* redistributed (a constrained corner
+  /// contributes exactly zero to a homogeneous Newton correction). Sets coarseNodes_, nCoarse_ and coarseIsDirichlet_.
   std::shared_ptr< ScalarMatrix > prolongation( int                nNodes,
                                                 int                nDim,
                                                 const signed char* isCorner,
                                                 const int*         edgeEndpoints,
                                                 const double*      scaling )
   {
-    std::vector< int > cornerIndex( nNodes, -1 );
-    int                nCorners = 0;
-    for ( int node = 0; node < nNodes; ++node )
-      if ( isCorner[node] )
-        cornerIndex[node] = nCorners++;
-    nCoarse_ = nCorners * nDim;
-    coarseIsDirichlet_.assign( nCoarse_, 0 );
-    for ( int node = 0; node < nNodes; ++node )
-      if ( isCorner[node] )
-        for ( int d = 0; d < nDim; ++d )
-          coarseIsDirichlet_[static_cast< size_t >( cornerIndex[node] ) * nDim +
-                             d] = isDirichlet_[static_cast< size_t >( node ) * nDim + d];
-
     for ( int node = 0; node < nNodes; ++node ) {
       if ( isCorner[node] )
         continue;
@@ -2321,40 +2315,58 @@ private:
         }
       }
     }
+    // The coarse nodes: the corners, and every midside node with a free DOF whose two edge-endpoint DOFs are both
+    // Dirichlet DOFs (issue #223: a symmetry plane and a tie constrain both corners of an edge in one component, its
+    // midside stays free). Interpolated from its corners, that DOF would get an empty row of P -- no coarse correction
+    // at all -- so the node is a coarse node of its own, as buildP1Map makes a node a corner on an AMR edge conflict.
+    coarseNodes_.assign( isCorner, isCorner + nNodes );
+    for ( int node = 0; node < nNodes; ++node ) {
+      if ( isCorner[node] )
+        continue;
+      for ( int d = 0; d < nDim; ++d ) {
+        const size_t dof = static_cast< size_t >( node ) * nDim + d;
+        const size_t a   = static_cast< size_t >( edgeEndpoints[2 * node] ) * nDim + d;
+        const size_t b   = static_cast< size_t >( edgeEndpoints[2 * node + 1] ) * nDim + d;
+        if ( !isDirichlet_[dof] && isDirichlet_[a] && isDirichlet_[b] )
+          coarseNodes_[node] = 1;
+      }
+    }
+    const signed char* isCoarseNode = coarseNodes_.data();
+    std::vector< int > coarseIndex( nNodes, -1 );
+    int                nCoarseNodes = 0;
+    for ( int node = 0; node < nNodes; ++node )
+      if ( isCoarseNode[node] )
+        coarseIndex[node] = nCoarseNodes++;
+    nCoarse_ = nCoarseNodes * nDim;
+    coarseIsDirichlet_.assign( nCoarse_, 0 );
+    for ( int node = 0; node < nNodes; ++node )
+      if ( isCoarseNode[node] )
+        for ( int d = 0; d < nDim; ++d )
+          coarseIsDirichlet_[static_cast< size_t >( coarseIndex[node] ) * nDim +
+                             d] = isDirichlet_[static_cast< size_t >( node ) * nDim + d];
+
     // the coarse DOF of component d of an edge endpoint's corner, or -1 if it is a Dirichlet DOF
     auto freeCoarseDof = [&]( int endpoint, int d ) {
-      const int c = cornerIndex[endpoint] * nDim + d;
+      const int c = coarseIndex[endpoint] * nDim + d;
       return coarseIsDirichlet_[c] ? -1 : c;
     };
 
     const ptrdiff_t n = static_cast< ptrdiff_t >( nNodes ) * nDim;
     auto            P = std::make_shared< ScalarMatrix >();
     P->set_size( n, nCoarse_, true );
-    int orphanRow = -1;
 #pragma omp parallel for
     for ( ptrdiff_t i = 0; i < n; ++i ) {
       int width = 0;
       if ( !isDirichlet_[i] ) {
         const int node = static_cast< int >( i / nDim ), d = static_cast< int >( i % nDim );
-        if ( isCorner[node] )
+        if ( isCoarseNode[node] )
           width = 1;
-        else {
+        else
           for ( int k = 0; k < 2; ++k )
             if ( freeCoarseDof( edgeEndpoints[2 * node + k], d ) >= 0 )
               ++width;
-          if ( width == 0 ) {
-#pragma omp critical
-            orphanRow = static_cast< int >( i );
-          }
-        }
       }
       P->ptr[i + 1] = width;
-    }
-    if ( orphanRow >= 0 ) {
-      throw std::runtime_error( "ptwogrid: a free midside row of the restricted P is entirely zero -- both "
-                                "edge-endpoint corners are Dirichlet-constrained, an orphan the topology map "
-                                "disagrees with the Dirichlet data on. First bad row (one of): " +
-                                std::to_string( orphanRow ) + "." );
     }
     P->scan_row_sizes();
     P->set_nonzeros();
@@ -2364,8 +2376,8 @@ private:
       if ( P->ptr[i + 1] == head )
         continue;
       const int node = static_cast< int >( i / nDim ), d = static_cast< int >( i % nDim );
-      if ( isCorner[node] ) {
-        P->col[head] = cornerIndex[node] * nDim + d;
+      if ( isCoarseNode[node] ) {
+        P->col[head] = coarseIndex[node] * nDim + d;
         P->val[head] = 1.0;
         continue;
       }

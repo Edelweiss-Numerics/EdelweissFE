@@ -214,8 +214,10 @@ class P1Interpolation(CoarseSpace):
     The prolongation interpolates the scaled variables of the field, :math:`P = D^{-1} P_{geo} D_c`, so that the
     coarse operator :math:`A_c = P^T \\hat A P` is the P1 operator of the corner-node field, scaled by :math:`D_c` (see
     :mod:`~edelweissfe.linsolve.composition.ptwogrid`). The coarse problem is set up as that field: the same field on
-    the corner nodes, their coordinates, :math:`D_c` as its scaling, an identity row for each Dirichlet corner dof
-    (:meth:`~edelweissfe.linsolve.composition.base.SetUpContext.ofCornerNodes`).
+    the coarse nodes -- the corner nodes, and a midside node with a free dof between two constrained ones of its edge's
+    corners (issue #223), which no interpolation from them could correct -- their coordinates, :math:`D_c` as its
+    scaling, an identity row for each Dirichlet coarse dof
+    (:meth:`~edelweissfe.linsolve.composition.base.SetUpContext.ofCoarseNodes`).
 
     Parameters
     ----------
@@ -265,7 +267,7 @@ class P1Interpolation(CoarseSpace):
         with performancetiming.timeit("{:} p-two-grid build".format(field.name)):
             A_c = built.build(matrix, context.scalingOf(slice(None)))
         if A_c.shape[0] > 0:
-            self.coarse.setUp(SystemMatrix(A_c), context.ofCornerNodes(field, isCorner))
+            self.coarse.setUp(SystemMatrix(A_c), context.ofCoarseNodes(field, built.coarseNodes))
         return built
 
     def sizesOf(self, cycle) -> dict:

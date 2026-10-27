@@ -685,6 +685,16 @@ cdef class PyAMGCLPTwoGrid(_PyAMGCLTwoLevel):
             self.coarseSolve.raisePending()
             raise
 
+    @property
+    def coarseNodes(self):
+        """Per node, whether the last build made it a coarse node (a bool array): the corners of the P1 map, and every
+        midside node with a free DOF between two Dirichlet DOFs of its edge's corners."""
+        cdef const vector[signed char]* nodes = &self.preconditioner.coarseNodes()
+        if nodes.size() == 0:
+            return np.zeros(0, dtype=bool)
+        # astype copies: the C++ object may change it or go
+        return np.asarray(<signed char[:nodes.size()]> <signed char*> nodes.data()).astype(bool)
+
     @staticmethod
     def dirichletRows(object A):
         """The rows of a scipy.sparse CSR matrix this preconditioner treats as Dirichlet rows: a nonzero
@@ -702,7 +712,8 @@ cdef class PyAMGCLPTwoGrid(_PyAMGCLTwoLevel):
         """
         Build the preconditioner for A (scipy.sparse csr_matrix, the field's scaled diagonal block D A D with its
         Dirichlet identity rows) but its coarse solve, and return the coarse operator A_c for it (scipy.sparse
-        csr_matrix on all corner DOFs, an identity row for each Dirichlet one; 0 x 0 for a field without a free DOF).
+        csr_matrix on all DOFs of the :attr:`coarseNodes`, an identity row for each Dirichlet one; 0 x 0 for a field
+        without a free DOF).
 
         scaling: (n,) float64, the diagonal of D: the weights of the prolongation.
         isCorner: (nNodes,) bool/int8; edgeEndpoints: (nNodes, 2) int, read for midside nodes only.

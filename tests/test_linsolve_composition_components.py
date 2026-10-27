@@ -37,7 +37,7 @@ from _linsolvesystems import (
     condensingGivenDofs,
     displacementDamageSystem,
 )
-from _p1lattice import dirichletDofs, lattice, latticeSystem
+from _p1lattice import dirichletDofs, lattice, latticeSystem, orphanSystem
 
 pytest.importorskip("edelweissfe.linsolve.amgcl.amgcl")
 
@@ -291,6 +291,40 @@ def test_the_p1_coarse_problem_is_the_corner_node_field():
     # the coarse dofs are the corners' dofs, and the coarse component is a child of the cycle
     assert twoLevel.cycle.nCoarse == len(cornerDofs)
     assert twoLevel.children() == (("coarse", coarse),)
+
+
+def test_the_p1_coarse_field_includes_a_midside_node_made_a_coarse_node():
+    """Issue #223: a free midside dof between two constrained corner dofs makes its node a coarse node, and the coarse
+    field the default coarse solve gets includes it: its coordinates, its scaling, its Dirichlet rows."""
+    As, scaling, coords, isCorner, edgeEndpoints, orphan = orphanSystem()
+    A = (As.multiply(1.0 / scaling[:, None]).multiply(1.0 / scaling[None, :])).tocsr()
+    b = np.random.default_rng(3).standard_normal(A.shape[0])
+    b[np.diff(As.indptr) == 1] = 0.0
+    fields = [FieldBlock("displacement", 0, A.shape[0], 3)]
+    coarse = _RecordingExactSolve()
+    p1TwoGrid = TwoLevel(P1Interpolation(coarse=coarse))
+    root = LGMRES(DiagonalScaling(p1TwoGrid), tolerance=FixedTolerance(1e-8), maxIterations=300)
+    x, _ = _solved(
+        A, b, root, fields, nodeCoordinates={"displacement": coords}, p1Maps={"displacement": (isCorner, edgeEndpoints)}
+    )
+    assert _relative(A @ x, b) < 1e-8
+    A_c, context = coarse.recorded
+    coarseNodes = np.nonzero(isCorner | (np.arange(len(isCorner)) == orphan))[0]
+    coarseDofs = (3 * coarseNodes[:, None] + np.arange(3)).ravel()
+    assert np.array_equal(context.coordinates("displacement"), coords[coarseNodes])
+    assert np.array_equal(context.scaling, root.preconditioner.D[coarseDofs])
+    assert np.array_equal(np.diff(A_c.indptr) == 1, (np.diff(As.indptr) == 1)[coarseDofs])
+    # the default coarse solve runs on it too
+    default = LGMRES(DiagonalScaling(TwoLevel(P1Interpolation())), tolerance=FixedTolerance(1e-8), maxIterations=300)
+    x, _ = _solved(
+        A,
+        b,
+        default,
+        fields,
+        nodeCoordinates={"displacement": coords},
+        p1Maps={"displacement": (isCorner, edgeEndpoints)},
+    )
+    assert _relative(A @ x, b) < 1e-8
 
 
 def test_the_p1_two_grid_with_its_default_coarse_solve_converges():

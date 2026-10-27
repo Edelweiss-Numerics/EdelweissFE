@@ -98,3 +98,16 @@ def fineChebyshevTree(npre: int = 1, npost: int = 1, degree: int = 5, powerIters
         "npre": npre,
         "npost": npost,
     }
+
+
+def orphanSystem():
+    """The lattice with a midside dof that is free while both corners of its edge are constrained in that component
+    (issue #223: a symmetry plane and a tie): on the y = 0 face the z component is constrained, but at one midside node
+    of an edge in that face it is not."""
+    coords, isCorner, edgeEndpoints = lattice(5)
+    dofs = dirichletDofs(coords)
+    onFace = (coords[:, 1] == 0.0) & (coords[:, 0] > 0.0)
+    orphan = np.nonzero(~isCorner & onFace & onFace[edgeEndpoints[:, 0]] & onFace[edgeEndpoints[:, 1]])[0][0]
+    dofs = dofs[dofs != 3 * orphan + 2]
+    As, scaling = latticeSystem(coords, dofs)
+    return As, scaling, coords, isCorner, edgeEndpoints, orphan

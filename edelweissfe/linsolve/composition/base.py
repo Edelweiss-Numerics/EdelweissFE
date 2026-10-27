@@ -260,20 +260,21 @@ class SetUpContext:
             p1MapOf=p1MapOf,
         )
 
-    def ofCornerNodes(self, field: FieldBlock, isCorner: np.ndarray) -> "SetUpContext":
+    def ofCoarseNodes(self, field: FieldBlock, isCoarseNode: np.ndarray) -> "SetUpContext":
         """The context of the coarse problem of a P1 interpolation of this problem's one field ``field``: the same field
-        on its corner nodes alone (``isCorner``, per node of the field), its dofs numbered corner by corner. The corners
-        keep their coordinates and their scaling :math:`D_c`; the corner-node field is linear, so it has no P1 map, and
-        it is no field of the model."""
-        isCorner = np.asarray(isCorner, dtype=bool)
-        cornerNodes = np.nonzero(isCorner)[0]
-        cornerDofs = (cornerNodes[:, None] * field.dimension + np.arange(field.dimension)).ravel()
-        corners = self.restrictedTo(
-            (FieldBlock(field.name, 0, len(cornerDofs), field.dimension),),
-            field.start + cornerDofs,
-            nodesOf=lambda fieldName: isCorner,
+        on its coarse nodes alone (``isCoarseNode``, per node of the field: the corner nodes, and the midside nodes the
+        interpolation keeps as nodes of their own), its dofs numbered node by node. The coarse nodes keep their
+        coordinates and their scaling :math:`D_c`; the coarse field is linear, so it has no P1 map, and it is no field
+        of the model."""
+        isCoarseNode = np.asarray(isCoarseNode, dtype=bool)
+        coarseNodes = np.nonzero(isCoarseNode)[0]
+        coarseDofs = (coarseNodes[:, None] * field.dimension + np.arange(field.dimension)).ravel()
+        coarse = self.restrictedTo(
+            (FieldBlock(field.name, 0, len(coarseDofs), field.dimension),),
+            field.start + coarseDofs,
+            nodesOf=lambda fieldName: isCoarseNode,
         )
-        return replace(corners, p1MapOf=None, model=None)
+        return replace(coarse, p1MapOf=None, model=None)
 
 
 @dataclass(frozen=True)
