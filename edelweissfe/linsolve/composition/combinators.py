@@ -56,7 +56,6 @@ from collections.abc import Callable
 import numpy as np
 import scipy.sparse as sp
 
-from edelweissfe.linsolve.base import FieldBlock
 from edelweissfe.linsolve.composition.base import (
     Description,
     Preconditioner,
@@ -392,6 +391,18 @@ class CoarseCorrection(Preconditioner):
     the new :math:`A_c` as an update, and keeps what it can (an :class:`~edelweissfe.linsolve.composition.amg.AMG` its
     hierarchy, as :class:`~edelweissfe.linsolve.composition.twolevel.TwoLevel` does).
 
+    The coarse solve is a component like any other, set up on :math:`A_c` with a context that says what the coarse
+    dofs are. A callable that builds :math:`P` knows that, and returns it with :math:`P`: for the P1 interpolant,
+    ``context.ofCoarseNodes(field, isCorner)`` -- the field on its corner nodes, their coordinates -- on which
+    ``DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModes()))`` works as on any displacement field; for coarse dofs
+    that are no nodes, ``context.ofCoarseDofs(nCoarse)``. A fixed :math:`P` says nothing about its columns: its coarse
+    dofs are one field of scalar dofs, ``context.ofCoarseDofs``.
+
+    :math:`P` acts on the matrix the correction gets. Under a
+    :class:`~edelweissfe.linsolve.composition.diagonalscaling.DiagonalScaling` that is :math:`\\hat A = D A D`, whose
+    variables are :math:`D^{-1} u`: an interpolation of displacements is then :math:`D^{-1} P_{geo} D_c` (the scaling
+    is ``context.scaling``), as :class:`~edelweissfe.linsolve.composition.twolevel.P1Interpolation` builds it.
+
     With smoothers around it, ``Multiplicative([smoother, CoarseCorrection(P, coarse), smoother])`` is a two-level cycle
     spelled out: any :math:`P`, any coarse solve, but in SciPy and about twice as costly per application as the C++
     cycle :class:`~edelweissfe.linsolve.composition.twolevel.TwoLevel`, which is kept beside it on purpose (see the
@@ -400,10 +411,11 @@ class CoarseCorrection(Preconditioner):
     Parameters
     ----------
     prolongation
-        :math:`P`, a sparse matrix, or a callable ``(A, context) -> P`` that builds it for the matrix.
+        :math:`P`, a sparse matrix; or a callable ``(A, context) -> (P, coarseContext)`` that builds it for the matrix
+        and says what its coarse dofs are.
     coarse
-        :math:`A_c^{-1}`, e.g. a :class:`~edelweissfe.linsolve.composition.direct.DirectSolver` or an
-        :class:`~edelweissfe.linsolve.composition.amg.AMG`.
+        :math:`A_c^{-1}`, e.g. a :class:`~edelweissfe.linsolve.composition.direct.DirectSolver`, an
+        :class:`~edelweissfe.linsolve.composition.amg.AMG`, or a two-level cycle of its own.
     """
 
     def __init__(self, prolongation, coarse: Preconditioner):
@@ -414,14 +426,31 @@ class CoarseCorrection(Preconditioner):
 
     def _forget(self) -> None:
         self.P = None
+        self.coarseContext = None
 
     def _setUp(self, A, context: SetUpContext) -> None:
-        P = self.prolongation(A, context) if callable(self.prolongation) else self.prolongation
+        if callable(self.prolongation):
+            P, self.coarseContext = self.prolongation(A, context)
+            if not isinstance(self.coarseContext, SetUpContext):
+                raise TypeError(
+                    "CoarseCorrection: the prolongation callable must return (P, coarseContext), the context of the "
+                    "coarse dofs (e.g. context.ofCoarseNodes(field, isCorner) or context.ofCoarseDofs(nCoarse)), got "
+                    "{!r} as its context".format(self.coarseContext)
+                )
+        else:
+            P = self.prolongation
+            self.coarseContext = context.ofCoarseDofs(P.shape[1])
         self.P = sp.csr_matrix(P)
         if self.P.shape[0] != A.shape[0]:
             raise ValueError("CoarseCorrection: P has {:} rows, but the matrix {:}".format(self.P.shape[0], A.shape[0]))
-        A_c, coarseContext = self._coarseSystem(A)
-        self.coarse.setUp(A_c, coarseContext)
+        if self.coarseContext.size != self.P.shape[1]:
+            raise ValueError(
+                "CoarseCorrection: P has {:} columns, but its coarse context {:} dofs".format(
+                    self.P.shape[1], self.coarseContext.size
+                )
+            )
+        A_c = self._coarseMatrix(A)
+        self.coarse.setUp(A_c, self.coarseContext)
         self.statistics.sizes["coarse dofs"] = A_c.shape[0]
 
     def _update(self, A, change) -> None:
@@ -429,13 +458,11 @@ class CoarseCorrection(Preconditioner):
             self.setUp(A, change.context)
             return
         # P stays; A_c follows the matrix, and the coarse solve decides what it keeps (an AMG its hierarchy)
-        A_c, coarseContext = self._coarseSystem(A)
-        self.coarse.update(A_c, change.withContext(coarseContext))
+        self.coarse.update(self._coarseMatrix(A), change.withContext(self.coarseContext))
 
-    def _coarseSystem(self, A) -> tuple:
-        """:math:`A_c = P^T A P` and its context, one field of scalar dofs."""
-        A_c = (self.P.T @ A.matrix() @ self.P).tocsr()
-        return SystemMatrix(A_c), SetUpContext(fields=(FieldBlock("coarse", 0, A_c.shape[0], 1),))
+    def _coarseMatrix(self, A) -> SystemMatrix:
+        """:math:`A_c = P^T A P`."""
+        return SystemMatrix((self.P.T @ A.matrix() @ self.P).tocsr())
 
     def _apply(self, r: np.ndarray) -> np.ndarray:
         return self.P @ self.coarse(self.P.T @ r)

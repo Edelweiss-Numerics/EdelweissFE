@@ -5,20 +5,24 @@ import numpy as np
 import scipy.sparse as sp
 
 from edelweissfe.linsolve.composition import (
-    AMG,
     LGMRES,
     CoarseCorrection,
+    DiagonalScaling,
     FixedTolerance,
     Jacobi,
     Multiplicative,
+    RigidBodyModes,
+    TwoLevel,
 )
 
 
 def p1Interpolation(A, context):
     """P, the prolongation from the corner nodes to all nodes: a corner node keeps its own displacement, a midside node
-    takes the mean of the two corner nodes of its edge. The matrix here is not scaled (no DiagonalScaling above), so
-    its variables are the displacements themselves; on a scaled matrix D A D, P would interpolate D⁻¹ u and take the
-    weights of D, as P1Interpolation does."""
+    takes the mean of the two corner nodes of its edge; and what the coarse dofs are: the displacement field on the
+    corner nodes.
+
+    The matrix here is not scaled (no DiagonalScaling above), so its variables are the displacements themselves; on a
+    scaled matrix D A D, P would interpolate D⁻¹ u and take the weights of D, as P1Interpolation does."""
     field = context.onlyField("p1Interpolation")
     isCorner, edgeEndpoints = context.p1Map(field.name)
     cornerNumber = np.cumsum(isCorner) - 1  # the number of a corner node among the corner nodes
@@ -31,11 +35,14 @@ def p1Interpolation(A, context):
             weights.append(1.0 / len(corners))
     nodalP = sp.csr_matrix((weights, (rows, columns)), shape=(len(isCorner), np.count_nonzero(isCorner)))
     # each component of the displacement is interpolated alike; the dofs are numbered node by node
-    return sp.kron(nodalP, sp.identity(field.dimension), format="csr")
+    P = sp.kron(nodalP, sp.identity(field.dimension), format="csr")
+    # the coarse dofs are the displacements of the corner nodes: a displacement field of its own, with their coordinates
+    return P, context.ofCoarseNodes(field, isCorner)
 
 
-# the coarse problem, A_c = Pᵀ A P, solved approximately by one AMG cycle
-coarseCorrection = CoarseCorrection(p1Interpolation, AMG())
+# the coarse problem, A_c = Pᵀ A P, is the displacement field on the corner nodes, so a solver for a displacement field
+# solves it: scaled to a unit diagonal, one cycle of the rigid-body coarse level
+coarseCorrection = CoarseCorrection(p1Interpolation, DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModes())))
 
 # damped Jacobi before and after: one smoother, applied twice. It damps the fast modes only if omega < 2 / λ_max(D⁻¹A):
 # on these quadratic elements λ_max is about 3.7, and the textbook omega = 2/3 would amplify them

@@ -56,6 +56,7 @@ from edelweissfe.linsolve.composition import (  # noqa: E402
     Multiplicative,
     OnField,
     P1Interpolation,
+    RigidBodyModes,
     SchurComplement,
     SetUpContext,
     SystemMatrix,
@@ -199,7 +200,8 @@ def test_a_two_grid_cycle_spelled_out_by_combinators_beats_its_smoother_alone():
     rigidBody.build(K_scaled, D, coordinates)
 
     def prolongation(A, context):
-        return rigidBody.prolongationMatrix()
+        P = rigidBody.prolongationMatrix()
+        return P, context.ofCoarseDofs(P.shape[1])
 
     twoLevel = Multiplicative([Jacobi(), CoarseCorrection(prolongation, DirectSolver()), Jacobi()])
     iterations = {}
@@ -210,6 +212,60 @@ def test_a_two_grid_cycle_spelled_out_by_combinators_beats_its_smoother_alone():
     # Jacobi alone does not even converge within the cap; the two-level cycle converges
     assert _relative(K @ x, b) < 1e-7
     assert iterations["two-level"] < iterations["jacobi"] / 5
+
+
+def _spelledOutP1Interpolation(A, context):
+    """The P1 interpolation of the field's displacements in the variables of the matrix: D^-1 P_geo D_c, with the
+    scaling of the context (P_geo without one), and the corner-node field as the coarse context."""
+    field = context.onlyField("p1Interpolation")
+    isCorner, edgeEndpoints = context.p1Map(field.name)
+    cornerNumber = np.cumsum(isCorner) - 1
+    rows, columns, weights = [], [], []
+    for node in range(len(isCorner)):
+        corners = [node] if isCorner[node] else edgeEndpoints[node]
+        for corner in corners:
+            rows, columns, weights = rows + [node], columns + [cornerNumber[corner]], weights + [1.0 / len(corners)]
+    nodalP = sp.csr_matrix((weights, (rows, columns)), shape=(len(isCorner), np.count_nonzero(isCorner)))
+    P_geo = sp.kron(nodalP, sp.identity(field.dimension), format="csr")
+    coarseContext = context.ofCoarseNodes(field, isCorner)
+    s, s_c = context.scalingOf(slice(None)), coarseContext.scalingOf(slice(None))
+    return (sp.diags(1.0 / s) @ P_geo @ sp.diags(s_c)).tocsr(), coarseContext
+
+
+def test_a_spelled_out_p1_two_grid_solves_its_coarse_field_with_the_rigid_body_coarse_level():
+    """Multiplicative([smoother, CoarseCorrection(p1Interpolation, DiagonalScaling(TwoLevel(RigidBodyModes()))),
+    smoother]): the prolongation callable says that the coarse dofs are the displacement field on the corner nodes, so
+    the coarse solve of a displacement field works on them."""
+    A, b, fields, coords, isCorner, edgeEndpoints, constrained = _p1System()
+    coarse = DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModes()))
+    smoother = Jacobi(omega=0.4)
+    cycle = Multiplicative([smoother, CoarseCorrection(_spelledOutP1Interpolation, coarse), smoother])
+    iterations = {}
+    for name, root in (
+        ("smoother alone", LGMRES(DiagonalScaling(smoother), tolerance=FixedTolerance(1e-8), maxIterations=2000)),
+        ("two-level", LGMRES(DiagonalScaling(cycle), tolerance=FixedTolerance(1e-8), maxIterations=2000)),
+    ):
+        x, composed = _solved(
+            A,
+            b,
+            root,
+            fields,
+            nodeCoordinates={"displacement": coords},
+            p1Maps={"displacement": (isCorner, edgeEndpoints)},
+        )
+        assert _relative(A @ x, b) < 1e-7
+        iterations[name] = composed.lastSolveSummary.iters
+    assert iterations["two-level"] < iterations["smoother alone"] / 2
+    # the rigid-body coarse level was built once, on the dofs of the corner nodes
+    assert coarse.inner.statistics.setUps == 1
+    assert coarse.inner.statistics.sizes["rows"] == 3 * np.count_nonzero(isCorner)
+
+
+def test_a_prolongation_callable_must_say_what_the_coarse_dofs_are():
+    A, b, fields, coords, isCorner, edgeEndpoints, constrained = _p1System(4)
+    correction = CoarseCorrection(lambda A, context: sp.identity(A.shape[0], format="csr"), DirectSolver())
+    with pytest.raises((TypeError, ValueError)):
+        correction.setUp(SystemMatrix(A), _context(fields))
 
 
 def test_a_reused_coarse_correction_keeps_its_prolongation_and_its_coarse_hierarchy():
@@ -225,7 +281,7 @@ def test_a_reused_coarse_correction_keeps_its_prolongation_and_its_coarse_hierar
 
     def prolongation(A, context):
         prolongations.append(A.shape)
-        return P
+        return P, context.ofCoarseDofs(P.shape[1])
 
     coarse = AMG()
     root = LGMRES(

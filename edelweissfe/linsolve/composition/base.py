@@ -260,6 +260,12 @@ class SetUpContext:
             p1MapOf=p1MapOf,
         )
 
+    def ofCoarseDofs(self, nCoarse: int) -> "SetUpContext":
+        """The context of a coarse problem whose dofs are no nodes (the coefficients of the modes of aggregates, say):
+        one field ``"coarse"`` of ``nCoarse`` scalar dofs, without coordinates, P1 map or scaling. The journal and the
+        log stay."""
+        return SetUpContext(fields=(FieldBlock("coarse", 0, nCoarse, 1),), journal=self.journal, log=self.log)
+
     def ofCoarseNodes(self, field: FieldBlock, isCoarseNode: np.ndarray) -> "SetUpContext":
         """The context of the coarse problem of a P1 interpolation of this problem's one field ``field``: the same field
         on its coarse nodes alone (``isCoarseNode``, per node of the field: the corner nodes, and the midside nodes the

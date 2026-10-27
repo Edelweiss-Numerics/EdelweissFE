@@ -132,7 +132,10 @@ Components
     * - ``CoarseCorrection(P, coarse)``, ``Jacobi(omega)``
       - :math:`P A_c^{-1} P^T` with :math:`A_c = P^T A P`, and :math:`\omega \operatorname{diag}(A)^{-1}`: the pieces
         of a two-level cycle spelled out, ``Multiplicative([Jacobi(), CoarseCorrection(P, coarse), Jacobi()])``
-        (slow, for learning and new coarse spaces; see :ref:`composed-two-level-two-ways`)
+        (slow, for learning and new coarse spaces; see :ref:`composed-two-level-two-ways`). ``P`` is a matrix, or a
+        callable ``(A, context) -> (P, coarseContext)`` that also says what the coarse dofs are, e.g.
+        ``context.ofCoarseNodes(field, isCorner)`` for the P1 interpolant: then the coarse solve may be any solver
+        of a displacement field, ``DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModes()))``
 
 The combinators show that methods which look unrelated share one structure. Block Gauss--Seidel over the fields *is*
 ``Multiplicative([OnField("displacement", M_u), OnField("nonlocal damage", M_d)])``, and a two-level cycle *is*
@@ -174,7 +177,18 @@ much per application as ``TwoLevel`` (101 ms plus about 98 ms). The difference i
 * ``Multiplicative`` forms the residual :math:`r - A z` between its steps; ``TwoLevel`` takes it from the smoother.
 
 The testfile deck ``testfiles/edelweiss-only/TwoLevelSpelledOut`` runs the spelled-out cycle in a simulation, on
-quadratic elements with the P1 interpolant as the coarse space. Its smoother is ``Jacobi(omega=0.4)``: damped Jacobi
+quadratic elements with the P1 interpolant as the coarse space. Its prolongation callable returns :math:`P` together
+with the context of the coarse dofs, ``context.ofCoarseNodes(field, isCorner)`` -- the displacement field on the corner
+nodes, with their coordinates -- so its coarse solve is the rigid-body coarse level,
+``DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModes()))``, as in ``P1Interpolation``'s default. (A callable whose
+coarse dofs are no nodes returns ``context.ofCoarseDofs(nCoarse)``, one field of scalar dofs; a fixed matrix :math:`P`
+gets that context.) :math:`P` acts on the matrix the correction is handed: the deck has no ``DiagonalScaling`` above
+the cycle, so its variables are the displacements, and the plain weights :math:`\tfrac12, \tfrac12` are right. Under a
+``DiagonalScaling`` the variables are :math:`D^{-1} u`, and the same interpolation of displacements is
+:math:`D^{-1} P_{geo} D_c` -- the scaled weights of ``P1Interpolation`` (:ref:`blockamg-p-multigrid`), with :math:`D`
+from ``context.scaling`` and :math:`D_c` from the coarse context's scaling. Unlike ``TwoLevel``, the deck's :math:`P`
+keeps the Dirichlet rows, so a Dirichlet corner dof is no identity row of :math:`A_c`; the coarse solve treats it as
+free, which is still a valid preconditioner. Its smoother is ``Jacobi(omega=0.4)``: damped Jacobi
 damps the fast error modes only for :math:`\omega < 2 / \lambda_{max}(\operatorname{diag}(A)^{-1} A)`, and on
 quadratic elements :math:`\lambda_{max}` is larger than for the Laplacian the default :math:`\omega = 2/3` is made
 for (about 3.7 there), so the default amplifies them and the cycle stalls.
