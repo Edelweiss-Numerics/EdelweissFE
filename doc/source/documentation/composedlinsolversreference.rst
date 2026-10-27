@@ -102,8 +102,8 @@ On disk:
 
 * ``A_<solver>_<solve>.npz`` (SciPy, uncompressed), ``b_<solver>_<solve>.npy``, and with a Schur complement the
   condensed dofs, ``schurDofs_<solver>_<solve>.npy``; ``<solver>`` is the ordinal of the linear solver in the process
-  (one per step), so the dumps of several solvers never overwrite each other, and the solve numbering continues
-  across a hot reload;
+  (one per nonlinear solver, made anew only when a step names another linear solver), so the dumps of several
+  solvers never overwrite each other, and the solve numbering continues across steps and a hot reload;
 * ``geometry_<solver>_<solve>.npz``: what a replay of the tree needs of the model, the node coordinates of every vector
   field (``<field>_coordinates``, for its rigid-body modes) and the P1 maps the tree used (``<field>_isCorner``,
   ``<field>_edgeEndpoints``);
@@ -153,6 +153,16 @@ a ``DiagonalScaling`` keeps its :math:`D`, a ``Multiplicative`` always takes the
 A ``DiagonalScaling`` rebuilds its :math:`D` together with what is below it, also for the reasons a Krylov solver below
 it adds itself (``Preconditioner.withRebuildReasons``), so that ``DiagonalScaling(LGMRES(...))`` rebuilds as
 ``LGMRES(DiagonalScaling(...))`` does.
+
+What is rebuilt is first forgotten (``Preconditioner.forget``): a Krylov solver that rebuilds its preconditioner drops
+all of it before any part is built again, a ``SchurComplement`` drops :math:`\tilde S` and its child before it forms
+the next :math:`\tilde S`, the blocks of the last matrix before it cuts out those of this one, and a direct solve its
+factorization before it factorizes again; the adapter forgets the whole tree when the model changes (a new step, a
+change of the mesh). So the old and the new hierarchies, factorizations and matrices are never held at once. What is
+reused on purpose survives: the hierarchies while no rebuild is asked for, the selection of the condensed dofs, the
+fine spectral radius of ``fineSpectralRadiusReuse``, a symbolic factorization (PARDISO's
+``reuseSymbolicFactorization``), and what the Krylov solver has learnt (its reference iterations, the gap of a
+``GapCompensation``, its scratch vectors).
 
 Performance: a diagonal scaling does not form :math:`D A D`; the first component below it that needs a block forms
 :math:`\hat A` and all field blocks in one threaded native pass, kept with the matrix for all others, which also keeps :math:`A` as the operator of the outer Krylov solve

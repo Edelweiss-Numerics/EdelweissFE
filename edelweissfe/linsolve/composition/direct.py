@@ -50,7 +50,8 @@ class DirectSolver(Preconditioner):
 
     The backend is created here, at construction, and lives as long as this component: a backend that keeps its
     symbolic factorization while only the values of the matrix change (PARDISO's ``reuseSymbolicFactorization``)
-    keeps it from one set-up to the next. A backend whose optional extension is not installed raises
+    keeps it from one set-up to the next, while the numeric factorization of the last matrix is released before the
+    next one is computed (:meth:`_forget`). A backend whose optional extension is not installed raises
     :class:`ImportError` here.
 
     Parameters
@@ -62,12 +63,16 @@ class DirectSolver(Preconditioner):
     """
 
     def __init__(self, backend: str = "superlu", **options):
-        super().__init__()
         self.backend = backend
         self.options = options
         backendClass, _ = registry.lookup("directsolver", backend)
         #: The factorizing backend of this component.
         self.solver = backendClass(**options)
+        # after the backend: what this component builds is the backend's factorization (see _forget)
+        super().__init__()
+
+    def _forget(self) -> None:
+        self.solver.releaseFactorization()
 
     def _setUp(self, A, context: SetUpContext) -> None:
         self.solver.factorize(A.matrix())

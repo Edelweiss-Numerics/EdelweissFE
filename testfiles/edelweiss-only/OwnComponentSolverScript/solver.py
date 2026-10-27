@@ -17,9 +17,9 @@ class SymmetricGaussSeidel(Preconditioner):
     """One forward and one backward Gauss-Seidel sweep: z = (D + U)⁻¹ D (D + L)⁻¹ r, with A = L + D + U split into its
     strictly lower triangle, its diagonal and its strictly upper triangle."""
 
-    def __init__(self):
-        super().__init__()
-        self.lower = None
+    def _forget(self):
+        # what _setUp builds, before it is built (also called by the constructor of Preconditioner)
+        self.lower = self.upper = self.diagonal = None
 
     def _setUp(self, A, context):
         # A is a SystemMatrix, as every component gets it; A.matrix() is the SciPy matrix
@@ -31,7 +31,7 @@ class SymmetricGaussSeidel(Preconditioner):
     def _update(self, A, change):
         # only the values changed: the triangles of the last matrix still make a good smoother for the new one
         if change.requiresRebuild or self.lower is None:
-            self._setUp(A, change.context)
+            self.setUp(A, change.context)
 
     def _apply(self, r):
         y = spsolve_triangular(self.lower, r, lower=True)  # forward sweep: (D + L) y = r

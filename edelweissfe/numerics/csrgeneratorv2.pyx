@@ -28,8 +28,11 @@ import numpy as np
 from scipy.sparse import csr_matrix
 
 cimport numpy as np
+from cpython.ref cimport Py_INCREF
 from libc.stdint cimport int64_t
 from libcpp.vector cimport vector
+
+np.import_array()
 
 
 class AliasedCSRMatrix(csr_matrix):
@@ -130,6 +133,36 @@ cdef extern from "_csrcore.h":
         int64_t memoryBytes()
         int nBuffers
 
+cdef class _CSRCoreOwner:
+    """Owns the C++ core of a :class:`CSRGenerator`, its CSR pattern and its gather map, and frees it when it goes.
+
+    The generator holds it, and so do the pattern arrays (``indptr``, ``indices``) of the generator's matrix, which
+    point into the core: their base object is this owner (see :func:`_intArrayOwnedBy`). So the pattern lives as long
+    as the generator or the matrix, whichever goes last, the gather map only as long as the generator. Neither of the
+    two refers to the other: a reference cycle would leave both to the cyclic garbage collector, which does not see
+    the size of the core.
+    """
+
+    cdef CSRCore* core
+
+    def __dealloc__(self):
+        if self.core != NULL:
+            del self.core
+
+
+cdef np.ndarray _intArrayOwnedBy(_CSRCoreOwner owner, int* data, np.npy_intp n):
+    """The ``n`` ints at ``data``, memory of the core of ``owner``, as a NumPy array whose base is ``owner``: the
+    array keeps the core alive."""
+    if n == 0:
+        # an empty vector of the core may have no memory at all
+        return np.empty(0, dtype=np.intc)
+    cdef np.ndarray array = np.PyArray_SimpleNewFromData(1, &n, np.NPY_INT, data)
+    # PyArray_SetBaseObject takes over a reference
+    Py_INCREF(owner)
+    np.PyArray_SetBaseObject(array, owner)
+    return array
+
+
 cdef class CSRGenerator:
     """
     CSRGenerator class to create and manage a CSR matrix from COO format.
@@ -149,14 +182,18 @@ cdef class CSRGenerator:
         :class:`DirectCSRAssembler` and nothing will gather.
     """
 
+    # the owner of the core, shared with the pattern arrays of csrMatrix, and the core itself, for the calls below
+    cdef _CSRCoreOwner coreOwner
     cdef CSRCore* core
     cdef public object csrMatrix
     cdef double[:] data_view
     cdef int64_t nCooPairs
 
     def __dealloc__(self):
-        if self.core != NULL:
-            del self.core
+        # Only this generator gathers: its gather map goes with it, also while the matrix keeps the pattern alive.
+        # A cyclic collection may have cleared coreOwner (to None) first, and freed the core with it.
+        if self.coreOwner is not None:
+            self.coreOwner.core.releaseGatherMap()
 
     def __init__(self, systemMatrix, bint patternOnly=False):
         # Ensure int32 dtype regardless of the source array's dtype.
@@ -170,28 +207,21 @@ cdef class CSRGenerator:
         cdef int nDof = int(systemMatrix.nDof)
 
         # 1. Run C++ Core
+        cdef CSRCore* core
         with nogil:
-            self.core = new CSRCore(&I[0], &J[0], self.nCooPairs, nDof, patternOnly)
-
-        cdef int* ptr_indptr = self.core.indptr.data()
-        cdef int* ptr_indices = self.core.indices.data()
+            core = new CSRCore(&I[0], &J[0], self.nCooPairs, nDof, patternOnly)
+        self.coreOwner = _CSRCoreOwner()
+        self.coreOwner.core = core
+        self.core = core
 
         cdef int nnz = self.core.nnz
 
-        cdef int[::1] view_indptr = <int[:nDof+1]> ptr_indptr
-        cdef int[::1] view_indices = <int[:nnz]> ptr_indices
-
-        cdef np.ndarray nd_indptr = np.asarray(view_indptr)
-        cdef np.ndarray nd_indices = np.asarray(view_indices)
+        # the pattern arrays point into the core and keep it alive (see _CSRCoreOwner); the values are NumPy's own
+        cdef np.ndarray nd_indptr = _intArrayOwnedBy(self.coreOwner, self.core.indptr.data(), nDof + 1)
+        cdef np.ndarray nd_indices = _intArrayOwnedBy(self.coreOwner, self.core.indices.data(), nnz)
 
         cdef np.ndarray[double, ndim=1] data = np.zeros(nnz, dtype=np.double)
         self.csrMatrix = AliasedCSRMatrix((data, nd_indices, nd_indptr), shape=(nDof, nDof))
-
-        # Keep this CSRGenerator object alive as long as csrMatrix is referenced.
-        # _parent is a SciPy-internal attribute — it exists in all supported
-        # versions but is undocumented; callers should not hold csrMatrix
-        # independently of its CSRGenerator.
-        self.csrMatrix._parent = self
 
         self.data_view = self.csrMatrix.data
 

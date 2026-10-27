@@ -67,3 +67,6 @@ class PardisoBackend(DirectSolverBackend):
 
     def solveFactorized(self, b):
         return self._solver.solveFactorized(b)
+
+    def releaseFactorization(self) -> None:
+        self._solver.releaseFactorization()

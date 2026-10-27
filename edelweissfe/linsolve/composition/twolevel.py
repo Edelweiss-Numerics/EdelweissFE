@@ -314,9 +314,13 @@ class TwoLevel(Preconditioner):
         self.fineSpectralRadiusReuse = fineSpectralRadiusReuse
         self.dropTolerance = dropTolerance
         self.lumpDroppedEntries = lumpDroppedEntries
+        # the fine spectral radius and dominant vector of the last build, which the next one may start from
+        # (fineSpectralRadiusReuse): kept on purpose when the cycle is forgotten
+        self._fineSpectralRadius = (None, None)
+
+    def _forget(self) -> None:
         self.cycle = None
         self._field = None
-        self._fineSpectralRadius = (None, None)
 
     def setModel(self, model, dofManager) -> None:
         # the fine spectral radius of another mesh is no estimate for this one
@@ -357,7 +361,7 @@ class TwoLevel(Preconditioner):
 
     def _update(self, A, change) -> None:
         if change.requiresRebuild or self.cycle is None:
-            self._setUp(A, change.context)
+            self.setUp(A, change.context)
 
     def _apply(self, r):
         return self.cycle.applyPreconditioner(r)

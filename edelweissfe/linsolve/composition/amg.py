@@ -337,6 +337,8 @@ class AMG(Preconditioner):
         self.rigidBodyNullspace = rigidBodyNullspace
         self.dropTolerance = dropTolerance
         self.lumpDroppedEntries = lumpDroppedEntries
+
+    def _forget(self) -> None:
         self.hierarchy = None
         self._field = None
 
@@ -365,7 +367,7 @@ class AMG(Preconditioner):
 
     def _update(self, A, change) -> None:
         if change.requiresRebuild or self.hierarchy is None:
-            self._setUp(A, change.context)
+            self.setUp(A, change.context)
 
     def _apply(self, r):
         return self.hierarchy.applyPreconditioner(r)
