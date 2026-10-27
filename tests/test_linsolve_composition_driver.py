@@ -251,7 +251,8 @@ def test_a_new_tree_that_fails_to_set_up_is_rolled_back(tmp_path):
     _script(script, 'linearSolver = LGMRES(Multiplicative([OnField("no such field", AMG())]))\n')
     x = solver(A, b)
     assert "ROLLED BACK" in journal.take()
-    assert solver.root is standing and solver.root.lastRebuildReason is None
+    # the tree in force forgot what it built when it was replaced: it is built again
+    assert solver.root is standing and solver.root.lastRebuildReason == "reload"
     assert np.linalg.norm(b - A @ x) <= 1e-6 * np.linalg.norm(b) * (1 + 1e-9)
 
 

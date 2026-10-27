@@ -49,3 +49,6 @@ class MumpsBackend(DirectSolverBackend):
 
     def solveFactorized(self, b):
         return self._factorization.solve(b)
+
+    def releaseFactorization(self) -> None:
+        self._factorization.release()

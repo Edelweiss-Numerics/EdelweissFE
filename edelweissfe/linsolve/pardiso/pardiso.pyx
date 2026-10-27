@@ -141,7 +141,7 @@ cdef class PardisoSolver:
         self._releaseMemory()
 
     cdef void _releaseMemory(self):
-        """Release all internal PARDISO memory (phase -1)."""
+        """Release all internal PARDISO memory (phase -1), and the pattern it was analyzed for."""
         cdef int phase = -1
         cdef int error = 0
         cdef int nRhs = 1
@@ -161,6 +161,8 @@ cdef class PardisoSolver:
         self.currentIndices = None
         self.currentIndptr = None
         self.currentData = None
+        self.indicesFortran = None
+        self.indptrFortran = None
 
     cdef bint _hasSamePattern(self, A):
         """Check if the sparsity pattern of A matches the analyzed one."""
@@ -399,6 +401,22 @@ cdef class PardisoSolver:
 
         return np.reshape(x, b.shape)
 
+    def releaseFactorization(self):
+        """
+        Free the numeric factorization stored by :meth:`factorize`, before the next one is computed.
+
+        Without ``reuseSymbolicFactorization`` the next :meth:`factorize` analyzes anew, so all of PARDISO's internal
+        memory goes (phase -1), and the copies of the matrix's pattern with it. With it, the reordering and the
+        symbolic factorization are kept for the next matrix of the same pattern, which PARDISO factorizes into the
+        memory of the last one; only the values the factorization belonged to are dropped, and
+        :meth:`solveFactorized` raises until the next :meth:`factorize`.
+        """
+        if self.reuseSymbolicFactorization:
+            self.hasNumericFactorization = False
+            self.currentData = None
+        else:
+            self._releaseMemory()
+
     def invalidate(self):
         """
         Force a fresh reordering and symbolic factorization (PARDISO phase 11) on the
@@ -407,10 +425,7 @@ cdef class PardisoSolver:
 
         Call this whenever the caller knows the sparsity pattern may have changed
         through a channel the automatic detection might not reliably catch — e.g. a
-        solver that rebuilds its CSR generator whenever the active domain changes,
-        which can happen more often than once per analysis step (unlike EdelweissFE's
-        own static-mesh usage, where a fresh instance is constructed once per step and
-        the pattern is never actually re-checked against a real change).
+        solver that rebuilds its CSR generator whenever the active domain changes.
 
         No-op when ``reuseSymbolicFactorization`` is False, since every solve already
         re-analyzes unconditionally in that case.

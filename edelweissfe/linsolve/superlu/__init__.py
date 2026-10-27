@@ -57,3 +57,6 @@ class SuperLUBackend(DirectSolverBackend):
 
     def solveFactorized(self, b):
         return self._factorization.solve(b, trans="T")
+
+    def releaseFactorization(self) -> None:
+        self._factorization = None

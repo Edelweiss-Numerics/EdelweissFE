@@ -200,12 +200,20 @@ class SchurComplementCondensation:
         # where the entries of the blocks of A are in A.data, found once per sparsity pattern of A and choice of b,
         # see _split
         self._splitCache = None
-        self.A_bb = self.A_bk = self.A_kb = None
-        # A_kb by columns, for cutting out the columns of the windows, see approximateSchurComplement
-        self._A_kb_byColumns = None
         # the last selection of the condensed dofs, and the markers' stamps it was made with, see
         # _selectCondensedDofs
         self._selection = self._selectionStamp = None
+        self.forget()
+
+    def forget(self) -> None:
+        """Drop what was formed from the last matrix: its blocks :math:`A_{bb}`, :math:`A_{bk}`, :math:`A_{kb}`, and
+        what :meth:`approximateSchurComplement` formed from them (the columns of :math:`A_{kb}`, the factorization of
+        the zones). What is reused for the next matrix stays: the selection of the condensed dofs, and where the
+        entries of the blocks are in a matrix of the same pattern."""
+        self.A_bb = self.A_bk = self.A_kb = None
+        # A_kb by columns, for cutting out the columns of the windows, see approximateSchurComplement
+        self._A_kb_byColumns = None
+        self._zoneSolver.forget()
 
     # ----- the condensed dofs -----
 
@@ -286,6 +294,8 @@ class SchurComplementCondensation:
         A
             The system matrix, CSR in canonical format.
         """
+        # the blocks of the last matrix go before those of this one are cut out
+        self.forget()
         with performancetiming.timeit("schur dof selection"):
             dofs, nodeOfDof = self._selectCondensedDofs()
         selectedAllDofs = dofs.size == A.shape[0]
@@ -671,7 +681,6 @@ class SchurComplement(Preconditioner):
         haloNodes: int = None,
         blockFactors: str = "U",
     ):
-        super().__init__()
         if preconditionS is None:
             raise ValueError("SchurComplement: preconditionS, the preconditioner of the Schur complement, is needed")
         requirePreconditioner("SchurComplement", "preconditionS", preconditionS)
@@ -698,11 +707,19 @@ class SchurComplement(Preconditioner):
             windowNodes=windowNodes,
             haloNodes=haloNodes,
         )
-        self.condensing = False
-        self.S_tilde = None
-        self._builtForDofs = None
         # the messages shown once per model
         self._messagesShown = set()
+        # after the condensation: what this component builds includes the blocks it cuts out (see _forget)
+        super().__init__()
+
+    def _forget(self) -> None:
+        self.condensation.forget()
+        #: Whether the last set-up condenses (else the child is built on the whole matrix).
+        self.condensing = False
+        #: :math:`\tilde S`, on which the child is built.
+        self.S_tilde = None
+        # the condensed dofs the child was built for (None: built on the whole matrix, or not built)
+        self._builtForDofs = None
 
     def setModel(self, model, dofManager) -> None:
         self.condensation.setModel(model, dofManager)
@@ -744,6 +761,10 @@ class SchurComplement(Preconditioner):
             )
         rebuild = rebuild or change is None
         dofs, dofsChanged = self._condensedDofsOf(condensing)
+        if rebuild or dofsChanged:
+            # the child is built anew, on a new S~ or on A: the old S~ and the child's old state go first
+            self.S_tilde = None
+            self.preconditionS.forget()
         if condensing and (rebuild or dofsChanged):
             try:
                 with performancetiming.timeit("schur complement"):
@@ -778,7 +799,6 @@ class SchurComplement(Preconditioner):
             childMatrix = self.S_tilde
             remainingNodes = {block.name: condensation.remainingNodes(block) for block in context.fields}
             childContext = context.restrictedTo(remainingFields, condensation.remainingDofs, nodesOf=remainingNodes.get)
-        self._builtForDofs = dofs
         if change is None:
             self.preconditionS.setUp(childMatrix, childContext)
         else:
@@ -786,6 +806,7 @@ class SchurComplement(Preconditioner):
             if dofsChanged:
                 childChange = childChange.withRebuild("condensed dofs")
             self.preconditionS.update(childMatrix, childChange)
+        self._builtForDofs = dofs
 
     def _condensedDofsOf(self, condensing: bool) -> tuple:
         """The condensed dofs of this solve (``None`` without condensation), and whether they differ from those the child

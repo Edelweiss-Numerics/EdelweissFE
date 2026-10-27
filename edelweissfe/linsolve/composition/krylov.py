@@ -394,6 +394,8 @@ class KrylovSolver(Preconditioner):
         self.lastRebuildReason = change.rebuildReason
         if change.requiresRebuild:
             with performancetiming.timeit("hierarchy build"):
+                # all of the preconditioner is built anew: the old one goes first, never two at once
+                self.preconditioner.forget()
                 self.preconditioner.update(A, change)
             self._stale = False
             self._checkPreconditioner()
@@ -405,6 +407,8 @@ class KrylovSolver(Preconditioner):
         if self._krylov is None or self._krylov.n != n:
             from edelweissfe.linsolve.amgcl.amgcl import PyAMGCLKrylovSolver
 
+            # the scratch vectors for the old size go first
+            self._krylov = None
             self._krylov = PyAMGCLKrylovSolver(n, self.method, self._parameters())
         return self._krylov
 

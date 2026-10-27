@@ -216,6 +216,23 @@ def test_a_matrix_obtained_before_add_to_pattern_keeps_its_pattern():
     _assertIdentical(old, reference)
 
 
+def test_a_pattern_array_obtained_before_add_to_pattern_stays_valid_without_its_matrix():
+    from types import SimpleNamespace
+
+    csrgeneratorv2 = pytest.importorskip("edelweissfe.numerics.csrgeneratorv2")
+    n = 150
+    K = _randomSparseK(n, density=0.05, seed=11).tocoo()
+    generator = csrgeneratorv2.CSRGenerator(SimpleNamespace(I=K.row.astype(np.intc), J=K.col.astype(np.intc), nDof=n))
+    old = generator.updateInPlace(K.data)
+    indptr, indices = old.indptr, old.indices
+    referenceIndptr, referenceIndices = indptr.copy(), indices.copy()
+    mpc = MultiPointConstraintTransformation(_randomRecords(n, 30, 11), n, useThreadedCondensation=True)
+    generator.addToPattern(mpc.condensedPatternFillIn(old))
+    del old, generator
+    np.testing.assert_array_equal(indptr, referenceIndptr)
+    np.testing.assert_array_equal(indices, referenceIndices)
+
+
 def test_threaded_matches_plain_expression():
     n = 200
     records = [

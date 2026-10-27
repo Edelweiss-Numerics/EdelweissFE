@@ -58,6 +58,9 @@ class UMFPACKBackend(DirectSolverBackend):
         except (RuntimeError, UserWarning) as error:
             raise np.linalg.LinAlgError(str(error)) from error
 
+    def releaseFactorization(self) -> None:
+        self._solve = None
+
     def solveFactorized(self, b):
         b = np.asarray(b, dtype=float)
         if b.ndim == 1:

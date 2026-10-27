@@ -79,8 +79,8 @@ Memory Safety and Lifetime Management
 - **In-Place Matrix Updates**:
   ``updateInPlace(V)`` modifies the internal SciPy ``csr_matrix.data`` buffer directly using raw C++ pointers, avoiding any Python object creation or memory allocations during iteration loops. Note that the returned matrix is a live view; its contents are mutated on subsequent update calls.
 
-- **Lifetime Extension**:
-  To prevent Python from garbage-collecting the ``CSRGenerator`` object while the generated SciPy ``csr_matrix`` is still in use, the generator attaches itself as the private attribute ``csrMatrix._parent = self``. This ensures that the underlying C++ pointer to ``CSRCore`` remains valid as long as the matrix is referenced.
+- **Lifetime of the C++ core**:
+  The pattern arrays (``indptr``, ``indices``) of the generated SciPy ``csr_matrix`` point into the ``CSRCore``. The core is owned by a small object, ``_CSRCoreOwner``, which both the generator and these arrays hold (it is their NumPy base object): the pattern stays valid as long as the generator or the matrix is referenced, whichever goes last; the gather map, which only the generator reads, goes with the generator. Neither refers to the other, so no reference cycle keeps them alive until Python's cyclic garbage collector runs: a replaced generator is freed right away.
 
 
 Gathering efficiently of element results

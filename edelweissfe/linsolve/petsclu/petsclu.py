@@ -42,14 +42,15 @@ class PetscLUFactorization:
         self._ksp = None
         self._matrix = None
 
-    def _destroy(self) -> None:
+    def release(self) -> None:
+        """Destroy the KSP and the matrix, and with them the factorization (nothing to destroy before the first)."""
         if self._ksp is not None:
             self._ksp.destroy()
             self._matrix.destroy()
             self._ksp = self._matrix = None
 
     def __del__(self):
-        self._destroy()
+        self.release()
 
     def factorize(self, A) -> None:
         """Factorize the square sparse matrix ``A``.
@@ -60,7 +61,7 @@ class PetscLUFactorization:
             If the LU factorization fails (e.g. a zero pivot of a singular matrix): PETSc records that as the failure
             of the PC, which is checked here instead of surfacing as a diverged solve later.
         """
-        self._destroy()
+        self.release()
         A = A.tocsr()
         matrix = PETSc.Mat().createAIJ(size=A.shape, csr=(A.indptr, A.indices, A.data))
         ksp = PETSc.KSP().create()

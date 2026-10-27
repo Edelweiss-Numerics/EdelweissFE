@@ -120,6 +120,8 @@ class DiagonalScaling(Preconditioner):
         requirePreconditioner("DiagonalScaling", "inner", inner)
         super().__init__()
         self.inner = inner
+
+    def _forget(self) -> None:
         self.D = None
 
     def _setUp(self, A, context: SetUpContext) -> None:
