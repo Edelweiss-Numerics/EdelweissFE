@@ -87,7 +87,8 @@ _SCALAR_FIELD_TREE = {
 def defaultFieldTree(dimension: int) -> dict:
     """The default AMGCL preconditioner tree of a field, from its nodal dimension: :data:`_VECTOR_FIELD_TREE` for a
     vector field, a Chebyshev-smoothed smoothed aggregation with AMGCL's defaults for a scalar field (e.g.
-    ``nonlocal damage``). A copy: the trees are nested, and a caller may adapt the one it gets. The backend the tree is
+    ``nonlocal damage``), but the smoother's margin ``higher`` 1.1 above the estimated spectral radius, the default of
+    EdelweissFE's Chebyshev smoother (see ``amgcl-chebyshev.hpp``). A copy: the trees are nested, and a caller may adapt the one it gets. The backend the tree is
     built on (block size, precision) is chosen apart from it, see :func:`backendOf`."""
     return copy.deepcopy(_VECTOR_FIELD_TREE if dimension > 1 else _SCALAR_FIELD_TREE)
 
