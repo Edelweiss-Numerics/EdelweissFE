@@ -27,10 +27,14 @@
 serendipity displacement mesh -- the enabler for p-multigrid
 (:class:`~edelweissfe.linsolve.composition.cornernodetwolevelcycle.CornerNodeTwoLevelCycle`).
 
-The projection :math:`P` is purely topological: identity on corner nodes, ½/½ on each exclusive
-midside node from its two edge-endpoint corners (the P1 function expressed in the serendipity
-basis) -- so building it only requires classifying every node of a vector field as a corner or an
-exclusive midside, with its two edge-endpoint corners if the latter.
+This module provides the topology only: it classifies every node of a vector field as a corner or an
+exclusive midside, with its two edge-endpoint corners if the latter. The prolongation itself is built from it
+in C++ (``CornerNodeTwoLevelCycleT`` in ``amgcl-wrapper.hpp``): in physical variables the P1 function
+expressed in the serendipity basis, :math:`P_{geo}` -- identity on corner nodes, ½/½ on each midside node
+from its two edge-endpoint corners --, and in the scaled variables of :math:`\\hat A = D A D` the scaled
+weights :math:`P = D^{-1} P_{geo} D_c`, i.e. :math:`\\tfrac12 s_a / s_m` and :math:`\\tfrac12 s_b / s_m`. That
+build also uses what the topology cannot know, the Dirichlet rows: a midside node with a free dof between two
+constrained dofs of its edge's corners becomes a coarse node of its own (issue #223).
 """
 
 import numpy as np

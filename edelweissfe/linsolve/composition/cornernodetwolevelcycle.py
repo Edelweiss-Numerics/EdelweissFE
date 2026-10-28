@@ -116,6 +116,7 @@ class CornerNodeTwoLevelCycle(TwoLevelCycle):
     coarseSolve
         The coarse solve, a callable ``r_c -> z_c`` with :math:`z_c \\approx A_c^{-1} r_c`, e.g. a component of the
         composed solver once it is set up on the coarse operator :meth:`build` returns; called once per application.
+        ``None``: set it with :meth:`setCoarseSolve` after the build, before the first application.
     amgclTree, backendBlockSize, backendPrecision
         The parameters of the cycle, see
         :meth:`~edelweissfe.linsolve.composition.twolevelcycle.TwoLevelCycle.cycleParameters`: the fine
@@ -144,13 +145,14 @@ class CornerNodeTwoLevelCycle(TwoLevelCycle):
             PyAMGCLCornerNodeTwoLevelCycle,
             self.cycleParameters(amgclTree, backendBlockSize, backendPrecision),
         )
-        self._preconditioner.setCoarseSolve(coarseSolve)
+        self.coarseSolve = None
+        if coarseSolve is not None:
+            self.setCoarseSolve(coarseSolve)
 
-    @classmethod
-    def parameterRejection(cls, **parameters) -> "str | None":
-        """Why these settings -- keywords of this class -- cannot be used, or ``None``, asked without a topology
-        map and a coarse solve."""
-        return super().parameterRejection(np.zeros(0, dtype=bool), np.zeros((0, 2), dtype=int), None, **parameters)
+    def setCoarseSolve(self, coarseSolve) -> None:
+        """The coarse solve (see the class parameters), before or after the build; the cycle calls the one set last."""
+        self.coarseSolve = coarseSolve
+        self._preconditioner.setCoarseSolve(coarseSolve)
 
     def build(self, A, scaling: np.ndarray) -> sp.csr_matrix:
         """Build the prolongation, the Galerkin coarse operator and the fine Chebyshev smoother, all in C++, and return
