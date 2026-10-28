@@ -674,7 +674,8 @@ cdef class PyAMGCLCornerNodeTwoLevelCycle(_PyAMGCLTwoLevelCycle):
 
     def setCoarseSolve(self, object coarseSolve):
         """The coarse solve, a callable ``r_c -> A_c^-1 r_c`` (approximately) on the coarse DOFs: called once per
-        :meth:`applyPreconditioner`, and kept alive here for as long as the C++ cycle may call it."""
+        :meth:`applyPreconditioner`, and kept alive here for as long as the C++ cycle may call it. It may be set before
+        or after :meth:`build`, and replaced: the cycle calls the one set last (it reads it at every application)."""
         self.coarseSolve = _PreconditionerCallback(coarseSolve)
         self.preconditioner.setCoarseSolve(_preconditionerCallbackTrampoline, <void*> self.coarseSolve)
 

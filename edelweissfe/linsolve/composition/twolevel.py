@@ -121,9 +121,10 @@ class CoarseSpace:
         """What a built cycle reports about its coarse level (for the run statistics)."""
         return {}
 
-    def children(self) -> tuple:
-        """The ``(role, component)`` pairs of the coarse space, children of the :class:`TwoLevel` that uses it: its
-        coarse solve, if that is a component (:class:`CornerNodeInterpolation`); none if the cycle solves on its own."""
+    def children(self, cycle) -> tuple:
+        """The ``(role, component)`` pairs of the coarse space, children of the :class:`TwoLevel` that uses it, for its
+        built ``cycle`` (``None`` before a build): its coarse solve, if that is a component
+        (:class:`CornerNodeInterpolation`); none if the cycle solves on its own."""
         return ()
 
     def coarseSolveStep(self) -> Step:
@@ -135,10 +136,13 @@ class CoarseSpace:
         return {"coarse space": self.name, "coarse solve": "AMG V-cycle"}
 
 
-def _rejected(field, reason: "str | None") -> None:
-    """Raise if the C++ cycle rejected the parameters: it names itself in the message; here the field does."""
-    if reason is not None:
-        raise ValueError("TwoLevel on the field '{:}': {:}".format(field.name, reason))
+def _cycleFor(field, cycleClass, *args, **kwargs):
+    """The C++ cycle of the field, which checks its parameters as it is created, before the build has spent anything:
+    a rejection names the cycle in its message, and here the field too."""
+    try:
+        return cycleClass(*args, **kwargs)
+    except (TypeError, ValueError) as error:
+        raise ValueError("TwoLevel on the field '{:}': {:}".format(field.name, error)) from error
 
 
 class RigidBodyModesPerAggregate(CoarseSpace):
@@ -192,19 +196,18 @@ class RigidBodyModesPerAggregate(CoarseSpace):
                 "modes as the near null-space of AMG() itself; the rigid-body coarse level is for the block backends, "
                 "backendBlockSize 2 or 3".format(field.name)
             )
-        from edelweissfe.linsolve.composition.rigidbodymodestwolevelcycle import (
-            RigidBodyModesTwoLevelCycle,
-        )
-
-        _rejected(field, RigidBodyModesTwoLevelCycle.parameterRejection(**self._parameters(cycle)))
 
     def build(self, field, matrix, context: SetUpContext, cycle: dict, fineSpectralRadius, fineDominantVector):
         from edelweissfe.linsolve.composition.rigidbodymodestwolevelcycle import (
             RigidBodyModesTwoLevelCycle,
         )
 
-        built = RigidBodyModesTwoLevelCycle(
-            fineSpectralRadius=fineSpectralRadius, fineDominantVector=fineDominantVector, **self._parameters(cycle)
+        built = _cycleFor(
+            field,
+            RigidBodyModesTwoLevelCycle,
+            fineSpectralRadius=fineSpectralRadius,
+            fineDominantVector=fineDominantVector,
+            **self._parameters(cycle),
         )
         with performancetiming.timeit("{:} rigid-body coarse level build".format(field.name)):
             built.build(matrix, context.scalingOf(slice(None)), context.coordinates(field.name))
@@ -241,7 +244,8 @@ class CornerNodeInterpolation(CoarseSpace):
     coarseSolve
         The coarse solve :math:`A_c^{-1}`, a component built on :math:`A_c` and applied once per cycle. ``None``: the
         coarse field is solved like any field of the ``blockamg`` preset, under a diagonal scaling of its own
-        (:meth:`defaultCoarseSolve`, chosen at the first build, when the field is known): for a 3D displacement field
+        (:meth:`defaultCoarseSolve`, chosen anew at every build, for the coarse field of that build, and held by the
+        built cycle, not by this coarse space): for a 3D displacement field
         ``DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModesPerAggregate()))``, measured fastest (see
         :ref:`measured-scaled-corner-node-interpolation`), for any other field ``DiagonalScaling(AMG())``.
         ``AMG(...)`` is the plain AMG hierarchy on it, ``AMG(backendBlockSize=1)`` one with the rigid-body modes of the
@@ -253,33 +257,33 @@ class CornerNodeInterpolation(CoarseSpace):
     def __init__(self, coarseSolve: Preconditioner = None):
         if coarseSolve is not None:
             requirePreconditioner("CornerNodeInterpolation", "coarseSolve", coarseSolve)
+        # the coarse solve asked for; None: the default, chosen at every build (see build)
         self.coarseSolve = coarseSolve
 
     def check(self, field, context: SetUpContext, cycle: dict) -> None:
-        """It needs the field's midside corners, and parameters the C++ cycle can use."""
+        """It needs the field's midside corners."""
         if context.midsideCorners(field.name) is None:
             raise ValueError(
                 "TwoLevel: the corner-node interpolation of the field '{:}' needs its midside corners".format(
                     field.name
                 )
             )
-        from edelweissfe.linsolve.composition.cornernodetwolevelcycle import (
-            CornerNodeTwoLevelCycle,
-        )
-
-        _rejected(field, CornerNodeTwoLevelCycle.parameterRejection(**cycle))
 
     def build(self, field, matrix, context: SetUpContext, cycle: dict, fineSpectralRadius, fineDominantVector):
-        """Build the cycle in C++, which returns :math:`A_c`, and set up the coarse component on it."""
+        """Build the cycle in C++, which returns :math:`A_c`, and set up the coarse component on it: the one asked for,
+        or the default for this build's coarse field. The built cycle holds it, so that one ``CornerNodeInterpolation()``
+        in two places of the tree gives each its own."""
         from edelweissfe.linsolve.composition.cornernodetwolevelcycle import (
             CornerNodeTwoLevelCycle,
         )
 
         isCorner, edgeEndpoints = context.midsideCorners(field.name)
-        built = CornerNodeTwoLevelCycle(
+        built = _cycleFor(
+            field,
+            CornerNodeTwoLevelCycle,
             isCorner,
             edgeEndpoints,
-            self._applyCoarseSolve,
+            None,
             fineSpectralRadius=fineSpectralRadius,
             fineDominantVector=fineDominantVector,
             **cycle,
@@ -288,14 +292,12 @@ class CornerNodeInterpolation(CoarseSpace):
             A_c = built.build(matrix, context.scalingOf(slice(None)))
         if A_c.shape[0] > 0:
             coarseContext = context.ofCoarseNodes(field, built.coarseNodes)
-            if self.coarseSolve is None:
-                self.coarseSolve = self.defaultCoarseSolve(coarseContext.fields[0], coarseContext)
-            self.coarseSolve.setUp(SystemMatrix(A_c), coarseContext)
+            coarseSolve = self.coarseSolve
+            if coarseSolve is None:
+                coarseSolve = self.defaultCoarseSolve(coarseContext.fields[0], coarseContext)
+            coarseSolve.setUp(SystemMatrix(A_c), coarseContext)
+            built.setCoarseSolve(coarseSolve)
         return built
-
-    def _applyCoarseSolve(self, r_c):
-        """:math:`A_c^{-1} r_c`, called back by the C++ cycle: the coarse solve of the build."""
-        return self.coarseSolve(r_c)
 
     @staticmethod
     def defaultCoarseSolve(coarseField, coarseContext: SetUpContext) -> Preconditioner:
@@ -310,9 +312,10 @@ class CornerNodeInterpolation(CoarseSpace):
     def sizesOf(self, cycle) -> dict:
         return {"coarse dofs": cycle.nCoarse}
 
-    def children(self) -> tuple:
-        # coarseSolve=None: no child until the first build chooses it
-        return () if self.coarseSolve is None else (("coarseSolve", self.coarseSolve),)
+    def children(self, cycle) -> tuple:
+        # the coarse solve of the built cycle; before a build, the one asked for (none for the default)
+        coarseSolve = cycle.coarseSolve if cycle is not None and cycle.coarseSolve is not None else self.coarseSolve
+        return () if coarseSolve is None else (("coarseSolve", coarseSolve),)
 
     def coarseSolveStep(self) -> Step:
         return Step("z += P A_c⁻¹ Pᵀ (r − A z),  A_c = Pᵀ A P  (corner nodes, scaled weights)", "coarseSolve")
@@ -428,7 +431,7 @@ class TwoLevel(Preconditioner):
         return self.cycle.applyPreconditioner(r)
 
     def children(self) -> tuple:
-        return self.coarseSpace.children()
+        return self.coarseSpace.children(self.cycle)
 
     def _parameters(self) -> dict:
         parameters = self.coarseSpace.describe()
@@ -442,7 +445,7 @@ class TwoLevel(Preconditioner):
 
     def describe(self) -> Description:
         name = self._field.name if self._field is not None else "A"
-        coarse = "; A_c⁻¹ = {coarseSolve}" if self.coarseSpace.children() else ""
+        coarse = "; A_c⁻¹ = {coarseSolve}" if self.children() else ""
         return Description(
             name="TwoLevel",
             formula="TwoLevel(" + name + "; " + self.coarseSpace.name + coarse + ")⁻¹",
