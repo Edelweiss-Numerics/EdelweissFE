@@ -55,6 +55,7 @@ from edelweissfe.linsolve.composition import (  # noqa: E402
     Multiplicative,
     OnField,
     Preconditioner,
+    RebuildPolicy,
     SchurComplement,
 )
 from edelweissfe.linsolve.composition.schurcomplement import (  # noqa: E402
@@ -81,7 +82,11 @@ def _newPattern(A):
 def test_a_krylov_rebuild_forgets_every_hierarchy_before_it_builds_one(monkeypatch):
     A, b, fields = displacementDamageSystem(n=10, coupling="symmetric")
     amgs = [AMG(), AMG()]
-    root = LGMRES(Multiplicative([OnField(f.name, amg) for f, amg in zip(fields, amgs)]), FixedTolerance(1e-8))
+    root = LGMRES(
+        Multiplicative([OnField(f.name, amg) for f, amg in zip(fields, amgs)]),
+        FixedTolerance(1e-8),
+        rebuild=RebuildPolicy(reuse=True),
+    )
     solver = _composed(root, fields)
     solver(A, b)
 
@@ -112,7 +117,7 @@ def test_the_schur_complement_drops_its_old_complement_and_child_before_it_forms
     fields = [FieldBlock("u", 0, A.shape[0], 1)]
     child = AMG()
     schur = condensingGivenDofs(SchurComplement(["bars"], preconditionS=child), barDofs)
-    root = LGMRES(schur, FixedTolerance(1e-8))
+    root = LGMRES(schur, FixedTolerance(1e-8), rebuild=RebuildPolicy(reuse=True))
     solver = _composed(root, fields)
     solver(A, b)
     assert schur.S_tilde is not None and child.hierarchy is not None

@@ -304,14 +304,16 @@ Per-field AMG hierarchies: ``AMG``
 
 Each diagonal block gets its own AMGCL hierarchy, applied on every visit of the sweep to its field
 (once per outer Krylov iteration with ``symmetric = false``; with ``symmetric = true`` the reverse sweep
-revisits all fields but the last) and reused across Newton iterations while it still fits the Jacobian
-(see the reuse rules below). The defaults differ by nodal dimension (:func:`~edelweissfe.linsolve.composition.amg.defaultFieldTree` in
+revisits all fields but the last), built anew for every solve by default or, with ``RebuildPolicy(reuse=True)``,
+reused across Newton iterations while it still fits the Jacobian (see the reuse rules below). The defaults differ by nodal dimension (:func:`~edelweissfe.linsolve.composition.amg.defaultFieldTree` in
 the code): a **3D vector** field (e.g. displacement) is stored in :math:`3\times3` nodal blocks in
 float, coarsened by smoothed aggregation with a strong-connection threshold of 0.01 and
 ``estimate_spectral_radius`` (see :ref:`blockamg-chebyshev`) from the translations of its equilibrated block (see
 :ref:`below <blockamg-block-nullspace>`), and smoothed by a degree-16 Chebyshev polynomial
-(one post-smoothing sweep, no pre-smoothing) -- and its hierarchy starts with the rigid-body coarse level, a first
-coarse level of all its rigid-body modes, rotations included (see :ref:`below <blockamg-rigid-body-coarse-level>`);
+(one post-smoothing sweep, no pre-smoothing) -- and in the ``blockAMG()`` preset its hierarchy starts with the
+rigid-body coarse level, a first coarse level of all its rigid-body modes, rotations included (see
+:ref:`below <blockamg-rigid-body-coarse-level>`), or, for quadratic elements, with the corner-node level
+(:ref:`blockamg-p-multigrid`);
 a **2D vector** field gets the same coarsening and
 smoothing but in :math:`2\times2` blocks, in double (this wrapper has no float 2x2 backend); a vector
 field of any other dimension gets the same recipe on the plain scalar backend -- the only backend that
@@ -727,10 +729,16 @@ Reuse across Newton iterations: ``RebuildPolicy``
 -------------------------------------------------
 
 Building the per-field hierarchies is a large fraction of a solve, and it is avoidable when the
-Jacobian has barely moved since the last one. ``LGMRES`` therefore keeps the hierarchies below it (and the
-equilibration they were built for) standing across solves by default; when they are rebuilt is the outer solve's
-:class:`~edelweissfe.linsolve.composition.krylov.RebuildPolicy`,
+Jacobian has barely moved since the last one. ``LGMRES`` can therefore keep the hierarchies below it (and the
+equilibration they were built for) standing across solves, ``RebuildPolicy(reuse=True)``; when they are rebuilt is the
+outer solve's :class:`~edelweissfe.linsolve.composition.krylov.RebuildPolicy`,
 ``LGMRES(..., rebuild=RebuildPolicy(stalenessFactor, rebuildOnNewIncrement, reuse))``.
+
+By default it does not (``reuse=False``): every solve builds its own preconditioner. A reused hierarchy was built for
+an earlier Jacobian, and the outer iterations it costs grow faster than its build saves: live on a contact anchor
+model, rebuilding for every solve took 11.5 % less wall time, with a third of the outer iterations per solve and no
+solve at the iteration cap (:ref:`measured-rebuild-every-solve`). Offline replays of captured solves had shown the
+opposite, because they did not reproduce how far a live Jacobian moves between solves.
 
 The outer Krylov solve always operates on the current matrix (equilibrated with the scaling the standing
 hierarchies were built for, which is the same system whatever the scaling); only the preconditioner may be
@@ -781,12 +789,13 @@ solver script builds a new ``LGMRES``, and with it a new instance.)
 
 .. _blockamg-p-multigrid:
 
-p-multigrid: ``TwoLevel(coarseSpace=CornerNodeInterpolation(coarseSolve))`` (opt-in)
-------------------------------------------------------------------------------------
+p-multigrid: ``TwoLevel(coarseSpace=CornerNodeInterpolation(coarseSolve))``
+--------------------------------------------------------------------------
 
-For a field discretized entirely with quadratic elements, a ``custom`` solver script can replace that field's
-single-level hierarchy with a two-level cycle whose coarse level is the field's linear part, ``OnField(name,
-TwoLevel(coarseSpace=CornerNodeInterpolation()))`` (:class:`~edelweissfe.linsolve.composition.cornernodetwolevelcycle.CornerNodeTwoLevelCycle`):
+For a field discretized with quadratic elements, a two-level cycle whose coarse level is the field's linear part
+replaces the field's single-level hierarchy, ``OnField(name, TwoLevel(coarseSpace=CornerNodeInterpolation()))``: the
+``blockAMG()`` preset gives it to a quadratic 3D displacement field (``cornerNodeInterpolation=false`` switches it
+off), a ``custom`` solver script to any quadratic field (:class:`~edelweissfe.linsolve.composition.cornernodetwolevelcycle.CornerNodeTwoLevelCycle`):
 ``npre`` Chebyshev sweeps on the field's own scaled block :math:`\hat A = D A D`, restriction of the residual through
 :math:`P^\mathsf{T}`, the coarse solve on the Galerkin-projected coarse operator :math:`A_c = P^\mathsf{T} \hat A P`,
 prolongation through :math:`P`, and ``npost`` more Chebyshev sweeps. The coarse space is purely topological -- the
@@ -795,16 +804,19 @@ components:
 
 .. code-block:: python
 
-    tree = defaultCornerNodeTwoLevelTree()  # the smoother of the corner-node two-level cycle: Chebyshev of degree 8
-    coarse = DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModesPerAggregate(), tree=tree))
-    displacement = OnField("displacement", TwoLevel(coarseSpace=CornerNodeInterpolation(coarseSolve=coarse), tree=tree))
+    # each level its own copy of the tree with the smoother of the corner-node two-level cycle (Chebyshev, degree 8)
+    coarse = DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModesPerAggregate(), tree=defaultCornerNodeTwoLevelTree()))
+    displacement = OnField(
+        "displacement",
+        TwoLevel(coarseSpace=CornerNodeInterpolation(coarseSolve=coarse), tree=defaultCornerNodeTwoLevelTree()),
+    )
 
 **The corner-node two-level cycle smooths with a weaker polynomial.** Both of its smoothed levels, the quadratic field and the
 rigid-body coarse level of the corner-node field, take a Chebyshev polynomial of degree 8 on the interval from 0.03 to
 1.1 times the spectral radius (:func:`~edelweissfe.linsolve.composition.amg.defaultCornerNodeTwoLevelTree`), not the degree 16
 on 0.01 to 1.1 of the default field trees. A sweep of degree 8 costs half the matrix products of one of degree 16;
 the corner-node two-level cycle then needs more outer iterations (27 instead of 21 on the tunnel lining), but fewer than twice as many,
-so it is faster: about 10 % less time on 14 captured systems, the same or less on every one. ``AMG()`` and the
+so it is faster: 8 % less time on 14 captured systems, the same or less on every one. ``AMG()`` and the
 rigid-body coarse level alone gained nothing from degree 8 -- their iterations grew about as much as each one got
 cheaper -- and keep degree 16 (:ref:`measured-corner-node-two-level-smoother`).
 
@@ -844,8 +856,9 @@ on the edge breakout some differ by a factor of :math:`10^6` -- the weights :mat
 :math:`A_c` inherits entries of their square. A two-level cycle on it then smooths with a spectral
 radius of :math:`1.8 \cdot 10^5` instead of about 5. ``DiagonalScaling`` around the coarse solve rescales :math:`A_c`
 to a unit diagonal, :math:`D_2 A_c D_2` with :math:`D_2 = |\operatorname{diag} A_c|^{-1/2}`: without it, the edge
-breakout's solves needed twice the iterations and 40--50 % more time. The default coarse solve is the measured fastest,
-``DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModesPerAggregate()))``; an AMG hierarchy with the rigid-body modes of the corners
+breakout's solves needed twice the iterations and 40--50 % more time. The default coarse solve is the measured fastest: the
+coarse field solved as the ``blockAMG()`` preset solves any field, under a diagonal scaling of its own, for a 3D
+displacement field ``DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModesPerAggregate()))``; an AMG hierarchy with the rigid-body modes of the corners
 (``coarseSolve=DiagonalScaling(AMG(backendBlockSize=1))``) took 25--60 % more time (:ref:`measured-scaled-corner-node-interpolation`).
 
 Its preconditioner is rebuilt exactly when the single-level hierarchies are (see the reuse rules above): while only
@@ -1225,11 +1238,10 @@ Practical guidance
   power-iteration setting of the vector-field default makes that difference large.
 * Reach for the knobs in roughly this order: the tree of a field whose hierarchy is clearly the weak one (a
   ``custom`` script), then ``sweeps``/``symmetric`` for the sweep itself, then the tolerance.
-  ``TwoLevel(coarseSpace=CornerNodeInterpolation())`` is an alternative per-field preconditioner for quadratic elements, see
-  :ref:`blockamg-p-multigrid`.
-* The rigid-body coarse level is on for the 3D displacement field by default: give a 2D displacement field the
-  coarse level in a ``custom`` script, and switch it off (``rigidBodyModesPerAggregate=false``) on a model whose solves
-  converge in a few outer iterations without it, see :ref:`blockamg-rigid-body-coarse-level`.
+* The corner-node two-level cycle is on for a quadratic 3D displacement field by default, the rigid-body coarse level
+  for a linear one: give a 2D displacement field either in a ``custom`` script, and switch the rigid-body coarse level
+  off (``rigidBodyModesPerAggregate=false``) on a model whose solves converge in a few outer iterations without it,
+  see :ref:`blockamg-p-multigrid` and :ref:`blockamg-rigid-body-coarse-level`.
 * When a run degrades reproducibly, capture it with ``dumps=slow`` plus a few ``dumpContextSolves`` rather than trying
   to reproduce it by rerunning the simulation (:ref:`composed-solve-dumps`).
 

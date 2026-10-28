@@ -256,8 +256,16 @@ class BlockAMGSchema(LinearSolverSchema):
 
     rigidBodyModesPerAggregate: bool = schemaField(
         description=(
-            "A 3D displacement field gets the two-level cycle on its rigid-body modes (else one AMG hierarchy, on the "
-            "translations)."
+            "A (linear) 3D displacement field gets the two-level cycle on its rigid-body modes (else one AMG hierarchy, "
+            "on the translations)."
+        ),
+        dtype=bool,
+        default=True,
+    )
+    cornerNodeInterpolation: bool = schemaField(
+        description=(
+            "A quadratic 3D displacement field gets the two-level cycle on its corner nodes (else the case of a linear "
+            "one)."
         ),
         dtype=bool,
         default=True,
@@ -308,6 +316,7 @@ class BlockAMG(LinearSolverType):
     def tree(cls, configuration: BlockAMGSchema) -> Preconditioner:
         return blockAMG(
             rigidBodyModesPerAggregate=configuration.rigidBodyModesPerAggregate,
+            cornerNodeInterpolation=configuration.cornerNodeInterpolation,
             tolerance=None if configuration.tolerance is None else FixedTolerance(configuration.tolerance),
             maxIterations=configuration.maxIterations,
             sweeps=configuration.sweeps,

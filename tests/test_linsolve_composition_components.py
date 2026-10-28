@@ -56,6 +56,7 @@ from edelweissfe.linsolve.composition import (  # noqa: E402
     Jacobi,
     Multiplicative,
     OnField,
+    RebuildPolicy,
     RigidBodyModesPerAggregate,
     SchurComplement,
     SetUpContext,
@@ -288,6 +289,7 @@ def test_a_reused_coarse_correction_keeps_its_prolongation_and_its_coarse_hierar
         DiagonalScaling(Multiplicative([Jacobi(), CoarseCorrection(prolongation, coarse), Jacobi()])),
         tolerance=FixedTolerance(1e-8),
         maxIterations=2000,
+        rebuild=RebuildPolicy(reuse=True),
     )
     _, composed = _solved(K, b, root, fields)
     x = composed((1.0001 * K).tocsr(), b)
@@ -607,7 +609,7 @@ def test_the_schur_complement_keeps_nothing_formed_from_its_matrices_between_sol
     schur = condensingGivenDofs(
         SchurComplement(["bars"], preconditionS=DiagonalScaling(Multiplicative([OnField("u", AMG())]))), barDofs
     )
-    root = LGMRES(schur, tolerance=FixedTolerance(1e-8))
+    root = LGMRES(schur, tolerance=FixedTolerance(1e-8), rebuild=RebuildPolicy(reuse=True))
     _, composed = _solved(A, b, root, fields)
     assert schur.S_tilde._fieldSplit is None and schur.S_tilde._krylovOperator is None
     x = composed((1.0001 * A).tocsr(), b)
@@ -620,7 +622,9 @@ def test_the_schur_complement_notes_what_it_condensed_for_the_debug_column_of_a_
     schur = condensingGivenDofs(
         SchurComplement(["bars"], preconditionS=DiagonalScaling(Multiplicative([OnField("u", AMG())]))), barDofs
     )
-    solver = ComposedLinearSolver(LGMRES(schur, tolerance=FixedTolerance(1e-8)), verbosity="debug")
+    solver = ComposedLinearSolver(
+        LGMRES(schur, tolerance=FixedTolerance(1e-8), rebuild=RebuildPolicy(reuse=True)), verbosity="debug"
+    )
     solver.setFieldStructure(fields)
     solver(A, b)
     first = solver.lastSolveSummary.detailLines

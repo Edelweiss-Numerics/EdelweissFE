@@ -243,21 +243,24 @@ class CornerNodeInterpolation(CoarseSpace):
     as its scaling, an identity row for each Dirichlet coarse dof
     (:meth:`~edelweissfe.linsolve.composition.base.SetUpContext.ofCoarseNodes`).
 
-    The corner-node two-level cycle smooths a vector field with a weaker Chebyshev polynomial than an AMG hierarchy: a
-    :class:`TwoLevel` on this coarse space that is given no tree, and the rigid-body coarse level of the default coarse
-    solve, take :func:`~edelweissfe.linsolve.composition.amg.defaultCornerNodeTwoLevelTree` (degree 8 instead of 16); a
-    scalar field keeps the default tree of its dimension. A tree given to either replaces it.
+    The corner-node two-level cycle smooths a 3D displacement field with a weaker Chebyshev polynomial than an AMG
+    hierarchy (:meth:`defaultTree`): a :class:`TwoLevel` on this coarse space that is given no tree, and the default
+    coarse solve on the coarse field, take
+    :func:`~edelweissfe.linsolve.composition.amg.defaultCornerNodeTwoLevelTree` (degree 8 instead of 16). Any other
+    field keeps the default tree of its dimension. A tree given to either replaces it.
 
     Parameters
     ----------
     coarseSolve
         The coarse solve :math:`A_c^{-1}`, a component built on :math:`A_c` and applied once per cycle. ``None``: the
-        coarse field is solved like any field of the ``blockamg`` preset, under a diagonal scaling of its own
-        (:meth:`defaultCoarseSolve`, chosen at the first build, when the field is known): for a 3D displacement field
-        ``DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModesPerAggregate()))``, measured fastest (see
-        :ref:`measured-scaled-corner-node-interpolation`), for any other field ``DiagonalScaling(AMG())``.
-        ``AMG(...)`` is the plain AMG hierarchy on it, ``AMG(backendBlockSize=1)`` one with the rigid-body modes of the
-        corners as its near null-space.
+        coarse field is solved like any field of the ``blockamg`` preset, under a diagonal scaling of its own, with the
+        tree of this coarse space (:meth:`defaultCoarseSolve`, chosen at the first build, when the field is known): for
+        a 3D displacement field
+        ``DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModesPerAggregate(), tree=defaultCornerNodeTwoLevelTree()))``,
+        measured fastest (see :ref:`measured-scaled-corner-node-interpolation` and
+        :ref:`measured-corner-node-two-level-smoother`), for any other field ``DiagonalScaling(AMG())``. ``AMG(...)``
+        is the plain AMG hierarchy on it, ``AMG(backendBlockSize=1)`` one with the rigid-body modes of the corners as
+        its near null-space.
     """
 
     name = "corner-node interpolation"
@@ -268,10 +271,10 @@ class CornerNodeInterpolation(CoarseSpace):
         self.coarseSolve = coarseSolve
 
     def defaultTree(self, field) -> dict:
-        """For a vector field, the smoother of the corner-node two-level cycle
-        (:func:`~edelweissfe.linsolve.composition.amg.defaultCornerNodeTwoLevelTree`), measured on displacement fields;
-        a scalar field keeps the default tree of its dimension, as on any coarse space."""
-        if field.dimension > 1:
+        """For a 3D displacement field, the smoother of the corner-node two-level cycle
+        (:func:`~edelweissfe.linsolve.composition.amg.defaultCornerNodeTwoLevelTree`), where it was measured; any other
+        field keeps the default tree of its dimension, as on any coarse space."""
+        if field.dimension == 3 and carriesRigidBodyModes(field):
             return defaultCornerNodeTwoLevelTree()
         return super().defaultTree(field)
 
@@ -315,15 +318,16 @@ class CornerNodeInterpolation(CoarseSpace):
         """:math:`A_c^{-1} r_c`, called back by the C++ cycle: the coarse solve of the build."""
         return self.coarseSolve(r_c)
 
-    @staticmethod
-    def defaultCoarseSolve(coarseField, coarseContext: SetUpContext) -> Preconditioner:
+    def defaultCoarseSolve(self, coarseField, coarseContext: SetUpContext) -> Preconditioner:
         """The coarse solve of ``coarseSolve=None``: the coarse field solved like any field of the ``blockamg`` preset
         (:func:`~edelweissfe.linsolve.composition.presets.blockAMGFieldPreconditioner`), under a diagonal scaling of
-        its own."""
+        its own, with the tree of this coarse space (:meth:`defaultTree`): one smoother on both levels."""
         from edelweissfe.linsolve.composition.diagonalscaling import DiagonalScaling
         from edelweissfe.linsolve.composition.presets import blockAMGFieldPreconditioner
 
-        return DiagonalScaling(blockAMGFieldPreconditioner(coarseField, coarseContext))
+        return DiagonalScaling(
+            blockAMGFieldPreconditioner(coarseField, coarseContext, tree=self.defaultTree(coarseField))
+        )
 
     def sizesOf(self, cycle) -> dict:
         return {"coarse dofs": cycle.nCoarse}
@@ -397,7 +401,7 @@ class TwoLevel(Preconditioner):
     def _cycleParameters(self, field) -> dict:
         """The cycle's parameters for the field: the tree and the backend, the defaults for what is not given
         (see :meth:`~edelweissfe.linsolve.composition.twolevelcycle.TwoLevelCycle.cycleParameters`)."""
-        tree = fieldTreeOf("TwoLevel", self.tree, field, self.coarseSpace.defaultTree(field))
+        tree = fieldTreeOf("TwoLevel", self.tree, field, self.coarseSpace.defaultTree)
         # the block translations belong to AMG's hierarchy on the block backend; a coarse space is its own
         backendBlockSize, backendPrecision, _ = backendOf(
             "TwoLevel", field, tree, self.backendBlockSize, self.backendPrecision, blockTranslationNullspace=False

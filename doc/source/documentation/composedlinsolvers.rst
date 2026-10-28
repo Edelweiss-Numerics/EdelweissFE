@@ -48,7 +48,8 @@ and in the input file:
     linsolver=mySolver
 
 ``LGMRES``'s defaults are the production ones: an Eisenstat--Walker tolerance per solve (``ForcingTolerance``), a
-``RebuildPolicy`` that reuses the preconditioner across Newton iterations, and the detection of a new increment
+``RebuildPolicy`` that builds the preconditioner anew for every solve (``RebuildPolicy(reuse=True)`` keeps it
+across Newton iterations, :ref:`measured-rebuild-every-solve`), and the detection of a new increment
 through the adapter's ``residualGrowthFactor``; for a plain solve to a fixed tolerance, write
 ``LGMRES(..., tolerance=FixedTolerance(1e-8))``.
 
@@ -122,8 +123,8 @@ Components
         preset under a diagonal scaling of its own, for a 3D displacement field
         ``DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModesPerAggregate()))``, :ref:`blockamg-p-multigrid`). Both
         read the fine Chebyshev smoother from the tree's ``relax``, ``npre`` and ``npost``; without a tree, the default
-        tree of the field (degree 16), and for ``CornerNodeInterpolation`` on a vector field the smoother of the
-        corner-node two-level cycle (degree 8), on both of its levels (:ref:`composed-default-field-trees`)
+        tree of the field (degree 16), and for ``CornerNodeInterpolation`` on a 3D displacement field the smoother of
+        the corner-node two-level cycle (degree 8), on both of its levels (:ref:`composed-default-field-trees`)
     * - ``SchurComplement(condense, preconditionS, solveA_bb, approximation, dropTolerance, windowNodes, haloNodes,
         blockFactors)``
       - block LU: :math:`z_k = M_{\tilde S}^{-1}(r_k - A_{kb} A_{bb}^{-1} r_b)`,
@@ -186,9 +187,9 @@ The testfile deck ``testfiles/edelweiss-only/TwoLevelSpelledOut`` runs the spell
 quadratic elements with the P1 interpolant as the coarse space. Its prolongation callable returns :math:`P` together
 with the context of the coarse dofs, ``context.ofCoarseNodes(field, isCorner)`` -- the displacement field on the corner
 nodes, with their coordinates -- so its coarse solve is the rigid-body coarse level,
-``DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModesPerAggregate()))``, as in ``CornerNodeInterpolation``'s default for a 3D
-displacement field (which smooths with the weaker smoother of the corner-node two-level cycle,
-:ref:`composed-default-field-trees`). (A callable whose
+``DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModesPerAggregate()))``, the default of ``CornerNodeInterpolation``
+for a 3D displacement field but for its smoother: this deck keeps the field's default tree (degree 16), the default
+takes the weaker smoother of the corner-node two-level cycle (degree 8, :ref:`composed-default-field-trees`). (A callable whose
 coarse dofs are no nodes returns ``context.ofCoarseDofs(nCoarse)``, one field of scalar dofs; a fixed matrix :math:`P`
 gets that context.) :math:`P` acts on the matrix the correction is handed: the deck has no ``DiagonalScaling`` above
 the cycle, so its variables are the displacements, and the plain weights :math:`\tfrac12, \tfrac12` are right. Under a
@@ -226,15 +227,24 @@ with ``gaussSeidelOrder``. ``blockAMG(krylovOnScaledSystem=True)`` puts the scal
 (:ref:`composed-scaled-krylov`), ``continuations`` and ``gapCompensation`` go to LGMRES, and ``dropTolerance`` and
 ``lumpDroppedEntries`` to every field (:ref:`composed-drop-tolerance`).
 
-The 3D displacement field gets the rigid-body coarse level, ``TwoLevel(coarseSpace=RigidBodyModesPerAggregate())``: a first coarse
-level built from all rigid-body modes, rotations included, which a bending-dominated structure needs
-(:ref:`blockamg-rigid-body-coarse-level`). Switch it off where the solves converge in a few outer iterations without
-it -- there it saves little, for a larger setup:
+Each field gets the preconditioner measured fastest for it (``blockAMGFieldPreconditioner``):
+
+* a **quadratic** 3D displacement field (one with midside nodes) the two-level cycle on its corner nodes,
+  ``TwoLevel(coarseSpace=CornerNodeInterpolation())`` (:ref:`blockamg-p-multigrid`): three levels, the quadratic field,
+  its linear part on the corner nodes, and the rigid-body modes of aggregates of those;
+* a **linear** 3D displacement field the rigid-body coarse level, ``TwoLevel(coarseSpace=RigidBodyModesPerAggregate())``:
+  a first coarse level built from all rigid-body modes, rotations included, which a bending-dominated structure needs
+  (:ref:`blockamg-rigid-body-coarse-level`);
+* any other field one AMG hierarchy, ``AMG()``.
+
+Each two-level cycle can be switched off; the rigid-body coarse level where the solves converge in a few outer
+iterations without it -- there it saves little, for a larger setup:
 
 .. code-block:: edelweiss
 
     *linearSolver, name=translationsOnly, type=blockamg
     rigidBodyModesPerAggregate=false
+    cornerNodeInterpolation=false
 
 A 2D displacement field, or any other vector field, gets the coarse level in a ``custom`` solver script,
 ``OnField("displacement", TwoLevel(coarseSpace=RigidBodyModesPerAggregate()))``.
