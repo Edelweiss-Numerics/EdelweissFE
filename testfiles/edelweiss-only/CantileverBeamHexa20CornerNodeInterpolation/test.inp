@@ -1,6 +1,6 @@
 ** Regression test for the corner-node two-level cycle with a composed coarse solve (see solver.py): a slender 3D linear-elastic
 ** cantilever of quadratic hexahedra (C3D20, 3663 displacement dofs), preconditioned by
-** TwoLevel(coarseSpace=CornerNodeInterpolation(coarseSolve=DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModesPerAggregate())))): the P1
+** TwoLevel(coarseSpace=CornerNodeInterpolation(coarseSolve=DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModesPerAggregate())))): the corner-node
 ** interpolation of the scaled variables to the corner nodes, and on the corner-node field the rigid-body coarse level.
 ** Exercises end-to-end through the Newton loop: the midside corners and the node coordinates read from the model, the coarse
 ** context of the corner-node field (its coordinates, its scaling, its Dirichlet rows), the callback of the coarse
@@ -11,11 +11,11 @@
 30000.0, 0.2
 
 *job, name=c3d20job, domain=3d
-*linearSolver, name=scaledP1, type=custom
+*linearSolver, name=cornerNodeInterpolation, type=custom
 script=solver.py
 
 *solver, solver=NIST, name=theSolver
-linsolver=scaledP1
+linsolver=cornerNodeInterpolation
 
 *modelGenerator, generator=boxGen, name=gen
 nX=40
