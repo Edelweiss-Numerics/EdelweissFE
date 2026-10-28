@@ -10,16 +10,17 @@
 **
 **  - the defaults of the blockamg preset: the block only sets the log verbosity. The defaults (outer
 **    solve by AMGCL's LGMRES on the unscaled system, block Gauss-Seidel over the fields of the diagonally
-**    scaled matrix, a two-level cycle on the rigid-body modes for the displacement field, adaptive
-**    Eisenstat-Walker tolerance between 1e-4 and 1e-3, an outer-iteration cap of 100) are explained in
+**    scaled matrix, a two-level cycle for the displacement field (see below), a new preconditioner for every
+**    solve, adaptive Eisenstat-Walker tolerance between 1e-4 and 1e-3, an outer-iteration cap of 100) are explained in
 **    doc/source/documentation/composedlinsolvers.rst and blockamgtheory.rst.
 **  - `useThreadedMPCCondensation=True` (`>>options` on the loading step below): computes the multi-
 **    point-constraint condensation this model's 5 ties require (`T^T K T + C`, every solve) with
 **    the OpenMP-threaded kernel instead of single-threaded SciPy CSR routines.
-**  - Not enabled: the corner-node two-level cycle (`TwoLevel(CornerNodeInterpolation())`). It was measured on this model only in
-**    its former form -- the plain 1/2, 1/2 weights and an AMG coarse solve -- at parity with the former
-**    default, one AMG hierarchy on the translations. The current form (corner-node interpolation of the scaled
-**    variables, rigid-body coarse solve on the corner-node field) has not been measured on this model.
+**  - The concrete is quadratic (C3D20R), so the blockamg preset gives the displacement field the corner-node
+**    two-level cycle (`TwoLevel(CornerNodeInterpolation())`, the default for a quadratic 3D displacement field;
+**    `cornerNodeInterpolation=false` switches back to the two-level cycle on the rigid-body modes). In its former
+**    form -- the plain 1/2, 1/2 weights and an AMG coarse solve -- it was at parity with one AMG hierarchy on the
+**    translations on this model; the current form has not been measured on this model yet.
 **
 ** An earlier version of this file set a fixed, tight tolerance of 1e-8 on the theory that it was just an
 ** accuracy choice: a live smoke test on this exact model caught that it was not -- the first real cutback
