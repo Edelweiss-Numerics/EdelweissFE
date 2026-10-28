@@ -27,10 +27,14 @@
 serendipity displacement mesh -- the enabler for p-multigrid
 (:class:`~edelweissfe.linsolve.composition.cornernodetwolevelcycle.CornerNodeTwoLevelCycle`).
 
-The projection :math:`P` is purely topological: identity on corner nodes, ½/½ on each exclusive
-midside node from its two edge-endpoint corners (the P1 function expressed in the serendipity
-basis) -- so building it only requires classifying every node of a vector field as a corner or an
-exclusive midside, with its two edge-endpoint corners if the latter.
+This module provides the topology only: it classifies every node of a vector field as a corner or an
+exclusive midside, with its two edge-endpoint corners if the latter. The prolongation itself is built from it
+in C++ (``CornerNodeTwoLevelCycleT`` in ``amgcl-wrapper.hpp``): in physical variables the P1 function
+expressed in the serendipity basis, :math:`P_{geo}` -- identity on corner nodes, ½/½ on each midside node
+from its two edge-endpoint corners --, and in the scaled variables of :math:`\\hat A = D A D` the scaled
+weights :math:`P = D^{-1} P_{geo} D_c`, i.e. :math:`\\tfrac12 s_a / s_m` and :math:`\\tfrac12 s_b / s_m`. That
+build also uses what the topology cannot know, the Dirichlet rows: a midside node with a free dof between two
+constrained dofs of its edge's corners becomes a coarse node of its own (issue #223).
 """
 
 import numpy as np
@@ -69,6 +73,11 @@ _QUADRATIC_TOPOLOGY = {(2, 8): _QUAD8_TOPOLOGY, (3, 20): _HEXA20_TOPOLOGY}
 _KNOWN_LINEAR_NODE_COUNTS = {1, 2, 3, 4, 6, 8}
 
 
+class UnsupportedElementTopology(ValueError):
+    """An element whose corner/midside topology this module does not know (e.g. a Tet10): the field it carries has no
+    midside corners to build a corner-node interpolation from."""
+
+
 def classifyElementTopology(nSpatialDimensions, nNodes: int):
     """Return ``(cornerLocalIndices, edgeEndpointsLocal)`` for one element's local node numbering.
 
@@ -89,7 +98,7 @@ def classifyElementTopology(nSpatialDimensions, nNodes: int):
 
     Raises
     ------
-    ValueError
+    UnsupportedElementTopology
         If ``nNodes`` is neither a recognized quadratic-serendipity count for
         ``nSpatialDimensions`` nor among the verified pure-corner node counts -- silently
         misclassifying an unrecognized element's midside nodes as corners would quietly degrade
@@ -100,7 +109,7 @@ def classifyElementTopology(nSpatialDimensions, nNodes: int):
         return _QUADRATIC_TOPOLOGY[key]
     if nSpatialDimensions is None or nNodes in _KNOWN_LINEAR_NODE_COUNTS:
         return list(range(nNodes)), []
-    raise ValueError(
+    raise UnsupportedElementTopology(
         "p1topology: unrecognized element topology (nSpatialDimensions={:}, nNodes={:}) -- neither "
         "a known quadratic-serendipity family ((2, 8) Quad8, (3, 20) Hexa20) nor a verified linear "
         "node count. Add its corner/midside topology before including it in the midside corners.".format(

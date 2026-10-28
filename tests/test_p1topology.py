@@ -34,7 +34,11 @@ so this stays pure-Python and Cython/Marmot-free.
 import numpy as np
 import pytest
 
-from edelweissfe.numerics.p1topology import buildMidsideCorners, classifyElementTopology
+from edelweissfe.numerics.p1topology import (
+    UnsupportedElementTopology,
+    buildMidsideCorners,
+    classifyElementTopology,
+)
 
 
 class _FakeNode:
@@ -134,7 +138,7 @@ def test_contact_facet_without_nspatialdimensions_is_pure_corner():
 
 
 def test_unrecognized_topology_raises():
-    with pytest.raises(ValueError):
+    with pytest.raises(UnsupportedElementTopology):
         classifyElementTopology(3, 10)  # e.g. a Tet10 -- not a handled quadratic family
 
     weirdNodes = [_FakeNode(300 + i, {"displacement": True}) for i in range(10)]

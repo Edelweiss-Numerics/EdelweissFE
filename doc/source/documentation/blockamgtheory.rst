@@ -462,7 +462,10 @@ the prolongation smoothing -- is estimated one way (``edelweissfe/linsolve/amgcl
   :math:`\theta` is the Ritz value of the dominant eigenvalue. For a
   nonsymmetric matrix :math:`(\theta, x)` is an exact eigenpair of a matrix within :math:`r` of :math:`A`, which bounds
   the error only together with the conditioning of the eigenvectors: :math:`r` is an indicator there, not a bound, and
-  the smoother keeps its own margin (``higher`` 1.1).
+  the smoother keeps its own margin, ``higher`` 1.1 -- the default of every Chebyshev smoother in EdelweissFE, a tree
+  that leaves it out included. AMGCL's own default is 1.0, which sits on its Gershgorin bound, never below
+  :math:`\rho`; the Arnoldi estimate can be, slightly, and an eigenvalue above the interval is amplified, not
+  damped.
 * **A fixed number of steps, or an adaptive one.** By default 10 steps (``spectralRadiusSteps``); on 14 operators of
   captured systems they gave :math:`1.005` to :math:`1.043\,\rho`. Instead, a tree can ask for an adaptive estimate:
   the steps stop when :math:`r < \tau\, |\theta|` (``spectralRadiusTolerance``, e.g. 0.05, half the margin of
@@ -894,7 +897,8 @@ precision.
 The fine Chebyshev smoother is the tree's ``relax`` (``degree``, ``lower``, ``higher`` and the spectral radius estimate,
 :ref:`blockamg-chebyshev`), applied ``npre`` times before and ``npost`` times after the coarse-grid correction -- the
 same spelling as for the rigid-body coarse level. It uses AMGCL's polynomial, with the bounds of the vector-field
-default tree (``lower`` 0.01, ``higher`` 1.1 times the spectral radius; AMGCL's own defaults are 1/30 and 1); its
+default tree (``lower`` 0.01, ``higher`` 1.1 times the spectral radius; the defaults are 1/30 and 1.1, AMGCL's 1/30
+and 1 but the margin, :ref:`blockamg-chebyshev`); its
 estimate runs on the free rows (the start vector is zero on the Dirichlet rows) and is built anew with the cycle.
 
 
