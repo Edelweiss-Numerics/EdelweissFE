@@ -870,7 +870,7 @@ TwoLevel(coarseSpace=CornerNodeInterpolation(coarseSolve), tree=...))``; the top
 recomputed whenever the model changes (``setModel``, e.g. after adaptive refinement). There is no fallback to the
 single-level default: on linear elements every node is a corner, so the coarse operator is the field's block itself and
 the cycle gains nothing, and an element topology the map does not know raises. A node that two elements classify
-inconsistently (seen at non-conforming refinement interfaces) is made a corner, with a warning.
+inconsistently (seen at non-conforming refinement interfaces) is made a corner; the log says once per model how many.
 
 The whole cycle, and every stage of its build, runs in C++ and is OpenMP-threaded. The Dirichlet
 DOFs of the field's block -- rows whose only nonzero is the diagonal, which includes the identity

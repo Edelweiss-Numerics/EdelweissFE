@@ -159,8 +159,8 @@ def buildMidsideCorners(model, fieldName: str):
         Int, shape ``(nNodes, 2)``, ``-1`` for corner rows; for an exclusive midside row, the two
         edge-endpoint corner rows (both guaranteed corners themselves, by construction).
     conflictingRows : np.ndarray
-        Int, sorted: the rows demoted to a corner because of a genuine edge-endpoint disagreement
-        between two elements (empty on an ordinary, conforming mesh).
+        Int, sorted: the rows to which two elements give different edge endpoints; they are corners
+        (empty on an ordinary, conforming mesh).
     """
     field = model.nodeFields[fieldName]
     nodeRows = {node: i for i, node in enumerate(field.nodes)}
@@ -220,7 +220,7 @@ def buildMidsideCorners(model, fieldName: str):
                 "recorded edge endpoints -- every non-corner node must be an exclusive midside of "
                 "at least one element.".format(row, fieldName)
             )
-        edgeEndpoints[row] = tuple(candidate)
+        edgeEndpoints[row] = tuple(sorted(candidate))
 
     return isCorner, edgeEndpoints, conflictingRows
 
