@@ -1,4 +1,4 @@
-** Regression test for the rigid-body coarse level of the blockamg linear solver (rigidBodyCoarseLevel), on a
+** Regression test for the rigid-body coarse level of the blockamg linear solver (rigidBodyModesPerAggregate), on a
 ** slender 3D linear-elastic cantilever of quadratic hexahedra (C3D20, 3663 displacement dofs): a bending-dominated
 ** structure, whose slowly converging error rotates every aggregate of nodes almost as a rigid body. Exercises the
 ** option end-to-end through the Newton loop: the node coordinates read from the model, the coarse level of all
@@ -13,7 +13,7 @@
 *job, name=c3d20job, domain=3d
 *linearSolver, name=rigidBodySolver, type=blockamg
 tolerance=1e-8
-rigidBodyCoarseLevel=true
+rigidBodyModesPerAggregate=true
 
 *solver, solver=NIST, name=theSolver
 linsolver=rigidBodySolver

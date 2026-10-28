@@ -3,17 +3,17 @@
 # of aggregates of corner nodes.
 from edelweissfe.linsolve.composition import (
     LGMRES,
+    CornerNodeInterpolation,
     DiagonalScaling,
     FixedTolerance,
     OnField,
-    P1Interpolation,
-    RigidBodyModes,
+    RigidBodyModesPerAggregate,
     TwoLevel,
 )
 
 # the coarse problem is the displacement field on the corner nodes: scaled to a unit diagonal once more, and solved by
-# the rigid-body coarse level (this is P1Interpolation's default coarse solve, written out)
-coarse = DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModes()))
-displacement = OnField("displacement", TwoLevel(coarseSpace=P1Interpolation(coarse=coarse)))
+# the rigid-body coarse level (this is CornerNodeInterpolation's default coarse solve, written out)
+coarse = DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModesPerAggregate()))
+displacement = OnField("displacement", TwoLevel(coarseSpace=CornerNodeInterpolation(coarseSolve=coarse)))
 
 linearSolver = LGMRES(DiagonalScaling(displacement), tolerance=FixedTolerance(1e-8))

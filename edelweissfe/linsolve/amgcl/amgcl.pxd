@@ -92,10 +92,10 @@ cdef extern from "amgcl-wrapper.hpp":
         vector[int] col
         vector[double] val
 
-    # The two-level cycle the p-two-grid and the rigid-body coarse level share: the cycle itself, the fine spectral
-    # radius, P and the coarse operator, the timings and the report -- see TwoLevelPreconditioner's own comment. Arrays
+    # What the two-level cycles on the corner nodes and on the rigid-body modes share: the cycle itself, the fine
+    # spectral radius, P and the coarse operator, the timings and the report -- see TwoLevelCycle's own comment. Arrays
     # come back as C++ vectors, which Cython copies (_copied in amgcl.pyx).
-    cdef cppclass TwoLevelPreconditioner:
+    cdef cppclass TwoLevelCycle:
         void apply(int n, const double* r, double* x) except +
         double fineSpectralRadius()
         string fineSpectralRadiusSource()
@@ -108,10 +108,11 @@ cdef extern from "amgcl-wrapper.hpp":
         double applyFineSeconds_
         double applyCoarseSeconds_
 
-    # The p-two-grid (P1) preconditioner of edelweissfe/linsolve/composition/ptwogrid.py: the cycle in C++ (OpenMP), its
-    # coarse solve a callback into a component of the composed solver -- see PTwoGridPreconditionerT's own comment.
-    cdef cppclass PTwoGridPreconditioner(TwoLevelPreconditioner):
-        PTwoGridPreconditioner(const char* json_params) except +
+    # The corner-node two-level cycle of edelweissfe/linsolve/composition/cornernodetwolevelcycle.py: the cycle in C++
+    # (OpenMP), its coarse solve a callback into a component of the composed solver -- see CornerNodeTwoLevelCycleT's
+    # own comment.
+    cdef cppclass CornerNodeTwoLevelCycle(TwoLevelCycle):
+        CornerNodeTwoLevelCycle(const char* json_params) except +
 
         @staticmethod
         void dirichletRowMask(int n, const int* ptr, const int* col, const double* val, char* isDirichlet) except +
@@ -121,10 +122,11 @@ cdef extern from "amgcl-wrapper.hpp":
                         int nNodes, const signed char* isCorner, const int* edgeEndpoints,
                         double spectralRadius, const double* dominantVector, int dominantVectorSize) except +
 
-    # The rigid-body coarse level preconditioner of edelweissfe/linsolve/composition/rigidbodycoarselevel.py, built and
-    # applied entirely in C++ (OpenMP) on the near null-space Python hands it -- see
-    # RigidBodyCoarseLevelPreconditioner's own comment, and amgcl-rigid-body-coarse-level.hpp for its steps.
-    cdef cppclass RigidBodyCoarseLevelPreconditioner(TwoLevelPreconditioner):
+    # The two-level cycle on the rigid-body modes per aggregate of
+    # edelweissfe/linsolve/composition/rigidbodymodestwolevelcycle.py, built and applied entirely in C++ (OpenMP) on the
+    # near null-space Python hands it -- see RigidBodyModesTwoLevelCycle's own comment, and
+    # amgcl-rigid-body-coarse-level.hpp for its steps.
+    cdef cppclass RigidBodyModesTwoLevelCycle(TwoLevelCycle):
         void build(int n, const int* ptr, const int* col, const double* val,
                    const double* nullspace, int nullspaceRows, int nullspaceCols,
                    double spectralRadius, const double* dominantVector, int dominantVectorSize) except +
@@ -137,5 +139,6 @@ cdef extern from "amgcl-wrapper.hpp":
         const vector[ptrdiff_t]& aggregateOfNode()
         const vector[double]& coarseNullspace()
 
-    # The rigid-body coarse level preconditioner for the field's backendBlockSize (2 or 3), owned by the caller.
-    RigidBodyCoarseLevelPreconditioner* makeRigidBodyCoarseLevelPreconditioner(const char* json_params) except +
+    # The two-level cycle on the rigid-body modes per aggregate for the field's backendBlockSize (2 or 3), owned by the
+    # caller.
+    RigidBodyModesTwoLevelCycle* makeRigidBodyModesTwoLevelCycle(const char* json_params) except +

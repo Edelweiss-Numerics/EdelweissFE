@@ -139,8 +139,8 @@ class ComposedLinearSolver(LinearSolver):
         for an offline replay. ``None`` (default): none.
     nodeCoordinates
         ``{fieldName: (nNodes, dimension) array}``, coordinates to use instead of the model's (an offline replay).
-    p1Maps
-        ``{fieldName: (isCorner, edgeEndpoints)}``, P1 maps to use instead of those derived from the model.
+    midsideCorners
+        ``{fieldName: (isCorner, edgeEndpoints)}``, midside corners to use instead of those derived from the model.
     """
 
     identification = _IDENTIFICATION
@@ -157,7 +157,7 @@ class ComposedLinearSolver(LinearSolver):
         warnOuterIterations: int = 100,
         dumps: SolveDumps = None,
         nodeCoordinates: dict = None,
-        p1Maps: dict = None,
+        midsideCorners: dict = None,
     ):
         if not isinstance(root, Preconditioner):
             raise TypeError(
@@ -180,7 +180,7 @@ class ComposedLinearSolver(LinearSolver):
         self._givenCoordinates = {
             name: np.asarray(coordinates, dtype=float) for name, coordinates in (nodeCoordinates or {}).items()
         }
-        self._givenP1Maps = dict(p1Maps or {})
+        self._givenMidsideCorners = dict(midsideCorners or {})
         #: The solver script the tree was built by (see :meth:`fromScript`), ``None`` for a tree built in Python.
         self.script = None
         #: Whether the tree is built again whenever the solver script changes on disk (see :meth:`_hotReload`).
@@ -191,7 +191,7 @@ class ComposedLinearSolver(LinearSolver):
         self._rootBeforeReload = None
         self._reloaded = False
         self._coordinateCache = {}
-        self._p1MapCache = {}
+        self._midsideCornersCache = {}
         #: The stored entries of the last matrix: a new count is a new sparsity pattern.
         self.lastNnz = None
         #: The right-hand side norm of the last solve, ``None`` before the first one and after a new model.
@@ -235,7 +235,7 @@ class ComposedLinearSolver(LinearSolver):
         self.root.forget()
         super().setModel(model, dofManager)
         self._coordinateCache.clear()
-        self._p1MapCache.clear()
+        self._midsideCornersCache.clear()
         self._modelChanged = True
         self.lastResidualNorm = None
         self.root.setModel(model, dofManager)
@@ -251,21 +251,22 @@ class ComposedLinearSolver(LinearSolver):
             self._coordinateCache[fieldName] = np.array([node.coordinates for node in nodeField.nodes], dtype=float)
         return self._coordinateCache[fieldName]
 
-    def p1MapOf(self, fieldName: str):
-        """The P1 corner/midside map of a field: a given one first, else derived from the model, else ``None``."""
-        if fieldName in self._givenP1Maps:
-            return self._givenP1Maps[fieldName]
+    def midsideCornersOf(self, fieldName: str):
+        """The midside corners of a field (which nodes are corners, and the corners of each midside node): a given one
+        first, else derived from the model, else ``None``."""
+        if fieldName in self._givenMidsideCorners:
+            return self._givenMidsideCorners[fieldName]
         if self._model is None:
             return None
-        if fieldName not in self._p1MapCache:
-            from edelweissfe.numerics.p1topology import buildP1Map
+        if fieldName not in self._midsideCornersCache:
+            from edelweissfe.numerics.p1topology import buildMidsideCorners
 
-            with performancetiming.timeit("p1 topology"):
-                isCorner, edgeEndpoints, warnings = buildP1Map(self._model, fieldName)
+            with performancetiming.timeit("midside corners"):
+                isCorner, edgeEndpoints, warnings = buildMidsideCorners(self._model, fieldName)
             for warning in warnings:
                 self._log("warning", warning)
-            self._p1MapCache[fieldName] = (isCorner, edgeEndpoints)
-        return self._p1MapCache[fieldName]
+            self._midsideCornersCache[fieldName] = (isCorner, edgeEndpoints)
+        return self._midsideCornersCache[fieldName]
 
     # ----- the solve -----
 
@@ -312,7 +313,7 @@ class ComposedLinearSolver(LinearSolver):
         context = SetUpContext(
             fields=tuple(fields),
             coordinatesOf=self.coordinatesOf,
-            p1MapOf=self.p1MapOf,
+            midsideCornersOf=self.midsideCornersOf,
             model=self._model,
             journal=self._journal,
             log=self._log,
@@ -474,14 +475,15 @@ class ComposedLinearSolver(LinearSolver):
         )
 
     def _dumpedGeometry(self, fields: list) -> dict:
-        """What a replay without the model needs of the fields (``nodeCoordinates`` and ``p1Maps`` of the adapter):
-        the node coordinates of every vector field, and the P1 maps the tree asked for, as ``{name: array}``."""
+        """What a replay without the model needs of the fields (``nodeCoordinates`` and ``midsideCorners`` of the
+        adapter): the node coordinates of every vector field, and the midside corners the tree asked for, as
+        ``{name: array}``."""
         geometry = {}
         for field in fields:
             coordinates = self.coordinatesOf(field.name) if field.dimension > 1 else None
             if coordinates is not None:
                 geometry[field.name + "_coordinates"] = coordinates
-        for name, (isCorner, edgeEndpoints) in {**self._p1MapCache, **self._givenP1Maps}.items():
+        for name, (isCorner, edgeEndpoints) in {**self._midsideCornersCache, **self._givenMidsideCorners}.items():
             geometry[name + "_isCorner"], geometry[name + "_edgeEndpoints"] = isCorner, edgeEndpoints
         return geometry
 

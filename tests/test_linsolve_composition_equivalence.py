@@ -65,18 +65,18 @@ from edelweissfe.linsolve.composition.amg import droppedSmallEntries  # noqa: E4
 
 #: The numbers of BlockAMGSolver, per solve: (outer iterations, continuations, tolerance met, ||x||).
 _TIGHT = {
-    "rigidBodyCoarseLevel": [(13, 0, True, 418.5446467044291)],
+    "rigidBodyModesPerAggregate": [(13, 0, True, 418.5446467044291)],
     "translations": [(39, 0, True, 418.5446466721881)],
     "sweeps2": [(26, 0, True, 418.5446466695883)],
     "symmetric": [(29, 0, True, 418.5446465899491)],
     "sweeps2symmetric": [(19, 0, True, 418.5446466862166)],
-    "drop rigidBodyCoarseLevel": [(25, 0, True, 418.54464674509273)],
-    "drop rigidBodyCoarseLevel lumped": [(25, 0, True, 418.5446467835993)],
+    "drop rigidBodyModesPerAggregate": [(25, 0, True, 418.54464674509273)],
+    "drop rigidBodyModesPerAggregate lumped": [(25, 0, True, 418.5446467835993)],
     "drop translations": [(42, 0, True, 418.54464669479614)],
     "drop translations lumped": [(41, 0, True, 418.54464665267045)],
 }
 _SEQUENCE = {
-    "rigidBodyCoarseLevel": [
+    "rigidBodyModesPerAggregate": [
         (8, 0, True, 418.5460793742515),
         (50, 0, True, 41.3224365881195),
         (16, 0, True, 5.624813634654173),
@@ -107,7 +107,7 @@ _SEQUENCE = {
 }
 #: Whether BlockAMGSolver rebuilt its preconditioner, per solve of the sequence (its dumps' ``mustRefresh``).
 _REBUILT = {
-    "rigidBodyCoarseLevel": [True, False, True, True, True],
+    "rigidBodyModesPerAggregate": [True, False, True, True, True],
     "translations": [True, False, False, True, True],
 }
 #: BlockAMGSolver's learnt gap between the scaled and the true residual after the sequence.
@@ -155,11 +155,13 @@ def _assertSolve(composed, A, b, frozen, tight: bool):
     return x
 
 
-@pytest.mark.parametrize("rigidBodyCoarseLevel", [True, False])
-def test_one_solve_has_blockamgs_numbers(rigidBodyCoarseLevel):
+@pytest.mark.parametrize("rigidBodyModesPerAggregate", [True, False])
+def test_one_solve_has_blockamgs_numbers(rigidBodyModesPerAggregate):
     A, b, fields, coordinates = _beamWithDamage()
-    composed = _composed(coordinates, fields, rigidBodyCoarseLevel=rigidBodyCoarseLevel, tolerance=FixedTolerance(1e-8))
-    (frozen,) = _TIGHT["rigidBodyCoarseLevel" if rigidBodyCoarseLevel else "translations"]
+    composed = _composed(
+        coordinates, fields, rigidBodyModesPerAggregate=rigidBodyModesPerAggregate, tolerance=FixedTolerance(1e-8)
+    )
+    (frozen,) = _TIGHT["rigidBodyModesPerAggregate" if rigidBodyModesPerAggregate else "translations"]
     _assertSolve(composed, A, b, frozen, tight=True)
     assert 1 < composed.lastSolveSummary.iters < 100
 
@@ -172,7 +174,7 @@ def test_several_and_symmetric_sweeps_have_blockamgs_numbers(sweeps, symmetric, 
     composed = _composed(
         coordinates,
         fields,
-        rigidBodyCoarseLevel=False,
+        rigidBodyModesPerAggregate=False,
         tolerance=FixedTolerance(1e-8),
         sweeps=sweeps,
         symmetric=symmetric,
@@ -181,13 +183,13 @@ def test_several_and_symmetric_sweeps_have_blockamgs_numbers(sweeps, symmetric, 
     _assertSolve(composed, A, b, frozen, tight=True)
 
 
-@pytest.mark.parametrize("rigidBodyCoarseLevel", [True, False])
-def test_a_sequence_of_solves_has_blockamgs_numbers_and_reuse_decisions(rigidBodyCoarseLevel):
+@pytest.mark.parametrize("rigidBodyModesPerAggregate", [True, False])
+def test_a_sequence_of_solves_has_blockamgs_numbers_and_reuse_decisions(rigidBodyModesPerAggregate):
     """Forcing tolerance, hierarchy reuse: new values only (reused), a shrinking right-hand side (Newton converging),
     a jump of the right-hand side (a new increment: rebuilt), and a new sparsity pattern (rebuilt)."""
     A, b, fields, coordinates = _beamWithDamage()
-    name = "rigidBodyCoarseLevel" if rigidBodyCoarseLevel else "translations"
-    composed = _composed(coordinates, fields, rigidBodyCoarseLevel=rigidBodyCoarseLevel)
+    name = "rigidBodyModesPerAggregate" if rigidBodyModesPerAggregate else "translations"
+    composed = _composed(coordinates, fields, rigidBodyModesPerAggregate=rigidBodyModesPerAggregate)
     rebuilds = []
     for (A_k, b_k), frozen in zip(_newtonLikeSequence(A, b, fields), _SEQUENCE[name]):
         _assertSolve(composed, A_k, b_k, frozen, tight=False)
@@ -246,18 +248,22 @@ def test_the_filtered_matrix_keeps_the_diagonal_symmetry_and_with_lumping_the_ro
 
 
 @pytest.mark.parametrize("lump", [False, True])
-@pytest.mark.parametrize("rigidBodyCoarseLevel", [True, False])
-def test_a_drop_tolerance_has_blockamgs_numbers(rigidBodyCoarseLevel, lump):
+@pytest.mark.parametrize("rigidBodyModesPerAggregate", [True, False])
+def test_a_drop_tolerance_has_blockamgs_numbers(rigidBodyModesPerAggregate, lump):
     A, b, fields, coordinates = _beamWithDamage()
     composed = _composed(
         coordinates,
         fields,
         tolerance=FixedTolerance(1e-8),
-        rigidBodyCoarseLevel=rigidBodyCoarseLevel,
+        rigidBodyModesPerAggregate=rigidBodyModesPerAggregate,
         dropTolerance=0.01,
         lumpDroppedEntries=lump,
     )
-    name = "drop " + ("rigidBodyCoarseLevel" if rigidBodyCoarseLevel else "translations") + (" lumped" if lump else "")
+    name = (
+        "drop "
+        + ("rigidBodyModesPerAggregate" if rigidBodyModesPerAggregate else "translations")
+        + (" lumped" if lump else "")
+    )
     (frozen,) = _TIGHT[name]
     _assertSolve(composed, A, b, frozen, tight=True)
     displacement = composed.root.preconditioner.inner.corrections[0].inner
@@ -278,7 +284,7 @@ def test_a_krylov_solve_on_the_scaled_system_has_blockamgs_numbers_along_a_seque
         fields,
         krylovOnScaledSystem=True,
         gapCompensation=GapCompensation() if gapCompensated else None,
-        rigidBodyCoarseLevel=False,
+        rigidBodyModesPerAggregate=False,
     )
     for (A_k, b_k), frozen in zip(_newtonLikeSequence(A, b, fields), _SEQUENCE[name]):
         _assertSolve(composed, A_k, b_k, frozen, tight=False)
@@ -288,7 +294,9 @@ def test_a_krylov_solve_on_the_scaled_system_has_blockamgs_numbers_along_a_seque
 
 def test_no_continuations_on_the_scaled_system_has_blockamgs_numbers():
     A, b, fields, coordinates = _beamWithDamage()
-    composed = _composed(coordinates, fields, krylovOnScaledSystem=True, continuations=0, rigidBodyCoarseLevel=False)
+    composed = _composed(
+        coordinates, fields, krylovOnScaledSystem=True, continuations=0, rigidBodyModesPerAggregate=False
+    )
     _assertSolve(composed, A, b, (19, 0, False, 418.3551421303781), tight=False)
 
 

@@ -44,31 +44,38 @@ from edelweissfe.linsolve.composition.krylov import (
     GapCompensation,
     RebuildPolicy,
 )
-from edelweissfe.linsolve.composition.twolevel import RigidBodyModes, TwoLevel
+from edelweissfe.linsolve.composition.twolevel import (
+    RigidBodyModesPerAggregate,
+    TwoLevel,
+)
 from edelweissfe.linsolve.nullspace import carriesRigidBodyModes
 
 
 def blockAMGFieldPreconditioner(
-    field, context, rigidBodyCoarseLevel: bool = True, dropTolerance: float = 0.0, lumpDroppedEntries: bool = False
+    field,
+    context,
+    rigidBodyModesPerAggregate: bool = True,
+    dropTolerance: float = 0.0,
+    lumpDroppedEntries: bool = False,
 ):
     """The preconditioner of a field in the ``blockamg`` preset: a two-level cycle on the rigid-body modes
     for a 3D displacement field (with node coordinates), one AMG hierarchy otherwise."""
     isDisplacement3D = field.dimension == 3 and carriesRigidBodyModes(field)
-    if rigidBodyCoarseLevel and isDisplacement3D and context.coordinates(field.name) is None:
+    if rigidBodyModesPerAggregate and isDisplacement3D and context.coordinates(field.name) is None:
         context.message(
             "info",
             "blockAMG: the field '{:}' has no node coordinates (no model, and no nodeCoordinates given): it gets AMG() on "
             "the translations instead of the two-level cycle on its rigid-body modes".format(field.name),
         )
-    elif rigidBodyCoarseLevel and isDisplacement3D:
+    elif rigidBodyModesPerAggregate and isDisplacement3D:
         return TwoLevel(
-            coarseSpace=RigidBodyModes(), dropTolerance=dropTolerance, lumpDroppedEntries=lumpDroppedEntries
+            coarseSpace=RigidBodyModesPerAggregate(), dropTolerance=dropTolerance, lumpDroppedEntries=lumpDroppedEntries
         )
     return AMG(dropTolerance=dropTolerance, lumpDroppedEntries=lumpDroppedEntries)
 
 
 def blockAMG(
-    rigidBodyCoarseLevel: bool = True,
+    rigidBodyModesPerAggregate: bool = True,
     tolerance=None,
     maxIterations: int = 100,
     sweeps: int = 1,
@@ -85,8 +92,8 @@ def blockAMG(
 
         LGMRES(
             DiagonalScaling(
-                Multiplicative([OnField(f, M_f) for every field f])   # M_f: TwoLevel(RigidBodyModes()) for a
-            )                                                         # 3D displacement field, else AMG()
+                Multiplicative([OnField(f, M_f) for every field f])   # M_f: TwoLevel(RigidBodyModesPerAggregate())
+            )                                                         # for a 3D displacement field, else AMG()
         )
 
     The corrections are made at the first set-up, for the fields of the model (:class:`~edelweissfe.linsolve.
@@ -95,7 +102,7 @@ def blockAMG(
 
     Parameters
     ----------
-    rigidBodyCoarseLevel
+    rigidBodyModesPerAggregate
         Whether a 3D displacement field gets the two-level cycle on its rigid-body modes (else one AMG hierarchy, on
         the translations).
     tolerance
@@ -120,7 +127,9 @@ def blockAMG(
         corrections = [
             OnField(
                 field.name,
-                blockAMGFieldPreconditioner(field, context, rigidBodyCoarseLevel, dropTolerance, lumpDroppedEntries),
+                blockAMGFieldPreconditioner(
+                    field, context, rigidBodyModesPerAggregate, dropTolerance, lumpDroppedEntries
+                ),
             )
             for field in context.fields
         ]

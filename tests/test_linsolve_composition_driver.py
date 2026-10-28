@@ -41,13 +41,13 @@ from edelweissfe.linsolve.composition import (  # noqa: E402
     AMG,
     LGMRES,
     ComposedLinearSolver,
+    CornerNodeInterpolation,
     FixedTolerance,
     ForcingTolerance,
     GapCompensation,
     OnField,
-    P1Interpolation,
     RebuildPolicy,
-    RigidBodyModes,
+    RigidBodyModesPerAggregate,
     SetUpContext,
     SolveDumps,
     SystemMatrix,
@@ -152,7 +152,7 @@ def test_the_continuations_on_the_scaled_system_are_logged_at_debug():
         lambda: AMG(dropTolerance=-1.0),
         lambda: AMG(backendPrecision="half"),
         lambda: AMG(backendBlockSize=2, backendPrecision="float"),
-        lambda: TwoLevel(RigidBodyModes(), coarseHierarchyPrecision="half"),
+        lambda: TwoLevel(RigidBodyModesPerAggregate(), coarseHierarchyPrecision="half"),
         lambda: SolveDumps("unused", maxDumps=-1),
         lambda: ComposedLinearSolver(blockAMG(), verbosity="loud"),
         lambda: ComposedLinearSolver(blockAMG(), residualGrowthFactor=1.0),
@@ -168,9 +168,9 @@ def test_a_setting_out_of_range_is_refused_at_construction(construct):
     [
         (AMG(backendBlockSize=2), "does not match the field's dimension 3"),
         (AMG(tree={"coarsening": {"type": "ruge_stuben"}}), "blockTranslationNullspace=False"),
-        (TwoLevel(RigidBodyModes(), backendBlockSize=1), "is on the scalar backend"),
-        (TwoLevel(RigidBodyModes(), tree={"relax": {"type": "spai0"}}), "relax.type must be chebyshev"),
-        (TwoLevel(P1Interpolation(), backendBlockSize=3), "needs its P1 map"),
+        (TwoLevel(RigidBodyModesPerAggregate(), backendBlockSize=1), "is on the scalar backend"),
+        (TwoLevel(RigidBodyModesPerAggregate(), tree={"relax": {"type": "spai0"}}), "relax.type must be chebyshev"),
+        (TwoLevel(CornerNodeInterpolation(), backendBlockSize=3), "needs its midside corners"),
     ],
 )
 def test_a_field_tree_that_cannot_be_built_fails_at_the_set_up(component, message):
@@ -188,7 +188,7 @@ def test_node_wise_fine_blocks_of_the_p1_interpolation_need_a_field_of_as_many_c
     n = A.shape[0] // 2 * 2
     context = SetUpContext(fields=(FieldBlock("displacement", 0, n, 2),))
     with pytest.raises(ValueError, match="backendBlockSize 3 does not match the field's dimension 2"):
-        TwoLevel(P1Interpolation(), backendBlockSize=3).setUp(SystemMatrix(A[:n, :n]), context)
+        TwoLevel(CornerNodeInterpolation(), backendBlockSize=3).setUp(SystemMatrix(A[:n, :n]), context)
 
 
 # ----- type=custom, hotReload=true: the solver script is run again -----
