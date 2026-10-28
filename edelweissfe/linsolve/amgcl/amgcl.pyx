@@ -632,7 +632,8 @@ cdef class _PyAMGCLTwoLevelCycle:
 
     def coarseOperator(self):
         """The Galerkin coarse operator P^T A P of the last build as its AMGCL hierarchy holds it: a scipy.sparse
-        csr_matrix, for inspection."""
+        csr_matrix, for inspection. Raises for a cycle whose coarse solve is a component of the composed solver (the
+        corner-node cycle, whose :meth:`build` returns the coarse operator instead)."""
         return _scipyCsr(self.twoLevel.coarseOperatorCsr(), self.twoLevel.nCoarse())
 
 

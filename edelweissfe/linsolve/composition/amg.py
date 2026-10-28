@@ -87,8 +87,8 @@ _SCALAR_FIELD_TREE = {
 #: coarse level of its default coarse solve (:func:`defaultCornerNodeTwoLevelTree`). A sweep of degree 8 costs half the
 #: matrix products of one of degree 16, and the corner-node two-level cycle needs fewer than twice the outer iterations
 #: with it. Measured ("The smoother of the corner-node two-level cycle" in
-#: ``doc/source/documentation/fieldsplitmeasurements.rst``): about 10 % less time on 14 captured systems, the same or
-#: less on every one. ``AMG()`` and the rigid-body coarse level alone keep degree 16 (:data:`_VECTOR_FIELD_TREE`):
+#: ``doc/source/documentation/fieldsplitmeasurements.rst``): 8 % less time on 14 captured systems, the same or less
+#: on every one. ``AMG()`` and the rigid-body coarse level alone keep degree 16 (:data:`_VECTOR_FIELD_TREE`):
 #: there, degree 8 gained nothing.
 _CORNER_NODE_TWO_LEVEL_SMOOTHER = {"type": "chebyshev", "degree": 8, "lower": 0.03, "higher": 1.1}
 
@@ -109,7 +109,7 @@ def defaultCornerNodeTwoLevelTree() -> dict:
     (:data:`_CORNER_NODE_TWO_LEVEL_SMOOTHER`). The corner-node two-level cycle reads only the smoother of its tree
     (``relax``, ``npre``, ``npost``), the rigid-body coarse level the whole tree. A copy, as :func:`defaultFieldTree`.
     """
-    tree = copy.deepcopy(_VECTOR_FIELD_TREE)
+    tree = defaultFieldTree(3)
     tree["relax"] = dict(_CORNER_NODE_TWO_LEVEL_SMOOTHER)
     return tree
 
@@ -264,12 +264,12 @@ def preconditionerMatrix(A, dropTolerance: float, lumpDroppedEntries: bool, stat
     return filtered
 
 
-def fieldTreeOf(owner: str, amgclTree: "dict | None", field, defaultTree: dict) -> dict:
-    """The AMGCL tree a one-field component builds on: ``amgclTree``, or the component's ``defaultTree`` for the field
-    (:func:`defaultFieldTree`, :func:`defaultCornerNodeTwoLevelTree`); raises, naming ``owner`` and the field, if
-    ``amgclTree`` is not a tree."""
+def fieldTreeOf(owner: str, amgclTree: "dict | None", field, defaultTree) -> dict:
+    """The AMGCL tree a one-field component builds on: ``amgclTree``, or the component's default for the field,
+    ``defaultTree(field)`` (built only then); raises, naming ``owner`` and the field, if ``amgclTree`` is not a
+    tree."""
     if amgclTree is None:
-        return defaultTree
+        return defaultTree(field)
     if not isinstance(amgclTree, dict):
         raise ValueError(
             "{:} on the field '{:}': its amgclTree must be an AMGCL preconditioner tree (a dict), got {!r}".format(
@@ -379,7 +379,7 @@ class AMG(Preconditioner):
     def _setUp(self, A, context: SetUpContext) -> None:
         field = context.onlyField("AMG")
         self._field = field
-        amgclTree = fieldTreeOf("AMG", self.amgclTree, field, defaultFieldTree(field.dimension))
+        amgclTree = fieldTreeOf("AMG", self.amgclTree, field, lambda field: defaultFieldTree(field.dimension))
         backend = backendOf("AMG", field, amgclTree, self.backendBlockSize, self.backendPrecision, self.nearNullspace)
         coords = context.coordinates(field.name) if backend[2] == "rigidBodyModes" else None
         self.hierarchy = buildFieldHierarchy(

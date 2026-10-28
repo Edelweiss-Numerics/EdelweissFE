@@ -16,7 +16,7 @@ holds only its identity, ``name`` and ``type``; the data lines are the options o
 .. code-block:: edelweiss
 
     *linearSolver, name=fast, type=blockamg
-    rigidBodyModesPerAggregate=false
+    cornerNodeInterpolation=false
     verbosity=info
 
     *solver, solver=NIST, name=theSolver

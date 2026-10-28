@@ -181,12 +181,15 @@ class RebuildPolicy:
     rebuildOnNewIncrement
         Whether a new increment of the nonlinear solver rebuilds it.
     reusePreconditioner
-        Whether it is reused at all: ``False`` rebuilds it for every solve.
+        Whether it is reused across solves at all. ``False`` (the default) builds it anew for every solve, which was
+        measured faster live (-11.5 % wall time on a contact anchor model): a reused preconditioner of an earlier
+        Jacobian costs more outer iterations than its build saves. ``True`` keeps it until one of the other reasons
+        asks for a rebuild.
     """
 
     stalenessFactor: float = 3.0
     rebuildOnNewIncrement: bool = True
-    reusePreconditioner: bool = True
+    reusePreconditioner: bool = False
 
     def __post_init__(self):
         if not self.stalenessFactor >= 1.0:

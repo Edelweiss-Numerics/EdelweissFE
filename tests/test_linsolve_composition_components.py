@@ -56,6 +56,7 @@ from edelweissfe.linsolve.composition import (  # noqa: E402
     Jacobi,
     Multiplicative,
     OnField,
+    RebuildPolicy,
     RigidBodyModesPerAggregate,
     SchurComplement,
     SetUpContext,
@@ -267,7 +268,7 @@ def test_a_spelled_out_corner_node_two_level_cycle_solves_its_coarse_field_with_
 def test_a_prolongation_callable_must_say_what_the_coarse_dofs_are():
     A, b, fields, coords, isCorner, edgeEndpoints, constrained = _p1System(4)
     correction = CoarseCorrection(lambda A, context: sp.identity(A.shape[0], format="csr"), DirectSolver())
-    with pytest.raises((TypeError, ValueError)):
+    with pytest.raises(TypeError, match="must return a tuple"):
         correction.setUp(SystemMatrix(A), _context(fields))
 
 
@@ -291,6 +292,7 @@ def test_a_reused_coarse_correction_keeps_its_prolongation_and_its_coarse_hierar
         DiagonalScaling(Multiplicative([Jacobi(), CoarseCorrection(prolongation, coarse), Jacobi()])),
         tolerance=FixedTolerance(1e-8),
         maxIterations=2000,
+        rebuild=RebuildPolicy(reusePreconditioner=True),
     )
     _, composed = _solved(K, b, root, fields)
     x = composed((1.0001 * K).tocsr(), b)
@@ -413,6 +415,54 @@ def test_the_corner_node_two_level_cycle_with_its_default_coarse_solve_converges
     assert coarse.statistics.setUps == 1
     assert coarse.statistics.applications == cornerNodeTwoLevel.statistics.applications
     assert composed.lastSolveSummary.iters <= 12
+
+
+def test_the_default_coarse_solve_of_a_scalar_quadratic_field_is_amg():
+    """coarseSolve=None solves the coarse field like any field of the blockamg preset: a scalar field, which has no
+    rigid-body modes, gets DiagonalScaling(AMG()) on its corner nodes."""
+    A, b, fields, coords, isCorner, edgeEndpoints, constrained = _p1System()
+    # the x-components alone: a scalar quadratic field on the same mesh
+    x = np.arange(0, A.shape[0], 3)
+    A_x, b_x = A[x][:, x].tocsr(), b[x]
+    scalarFields = [FieldBlock("temperature", 0, len(x), 1)]
+    cornerNodeTwoLevel = TwoLevel(CornerNodeInterpolation())
+    root = LGMRES(DiagonalScaling(cornerNodeTwoLevel), tolerance=FixedTolerance(1e-8), maxIterations=300)
+    solution, _ = _solved(
+        A_x,
+        b_x,
+        root,
+        scalarFields,
+        nodeCoordinates={"temperature": coords},
+        midsideCorners={"temperature": (isCorner, edgeEndpoints)},
+    )
+    assert _relative(A_x @ solution, b_x) < 1e-8
+    coarse = cornerNodeTwoLevel.coarseSpace.coarseSolve
+    assert isinstance(coarse, DiagonalScaling) and isinstance(coarse.inner, AMG)
+
+
+def test_one_component_in_two_places_of_the_tree_is_refused():
+    """A component is set up for one matrix: one corner-node interpolation (and so its coarse solve) under two
+    TwoLevel cycles would solve one field's coarse problem with the other's operator."""
+    A, b, fields, coords, isCorner, edgeEndpoints, constrained = _p1System(4)
+    shared = CornerNodeInterpolation(coarseSolve=DirectSolver())
+    root = LGMRES(DiagonalScaling(Additive([TwoLevel(shared), TwoLevel(shared)])), tolerance=FixedTolerance(1e-8))
+    with pytest.raises(ValueError, match="two places"):
+        _solved(
+            A,
+            b,
+            root,
+            fields,
+            nodeCoordinates={"displacement": coords},
+            midsideCorners={"displacement": (isCorner, edgeEndpoints)},
+        )
+
+
+def test_a_correction_applied_twice_by_a_sweep_is_in_one_place():
+    A, b, fields, coords, isCorner, edgeEndpoints, constrained = _p1System(4)
+    jacobi = Jacobi(omega=0.4)
+    root = LGMRES(DiagonalScaling(Multiplicative([jacobi, jacobi])), tolerance=FixedTolerance(1e-8), maxIterations=2000)
+    solution, _ = _solved(A, b, root, fields)
+    assert _relative(A @ solution, b) < 1e-7
 
 
 def test_the_p1_coarse_solve_with_an_exact_solve_beats_the_default_in_iterations_only():
@@ -562,7 +612,7 @@ def test_the_schur_complement_keeps_nothing_formed_from_its_matrices_between_sol
     schur = condensingGivenDofs(
         SchurComplement(["bars"], schurComplementSolve=DiagonalScaling(Multiplicative([OnField("u", AMG())]))), barDofs
     )
-    root = LGMRES(schur, tolerance=FixedTolerance(1e-8))
+    root = LGMRES(schur, tolerance=FixedTolerance(1e-8), rebuild=RebuildPolicy(reusePreconditioner=True))
     _, composed = _solved(A, b, root, fields)
     assert schur.S_tilde._fieldSplit is None and schur.S_tilde._krylovOperator is None
     x = composed((1.0001 * A).tocsr(), b)
@@ -575,7 +625,10 @@ def test_the_schur_complement_notes_what_it_condensed_for_the_debug_column_of_a_
     schur = condensingGivenDofs(
         SchurComplement(["bars"], schurComplementSolve=DiagonalScaling(Multiplicative([OnField("u", AMG())]))), barDofs
     )
-    solver = ComposedLinearSolver(LGMRES(schur, tolerance=FixedTolerance(1e-8)), verbosity="debug")
+    solver = ComposedLinearSolver(
+        LGMRES(schur, tolerance=FixedTolerance(1e-8), rebuild=RebuildPolicy(reusePreconditioner=True)),
+        verbosity="debug",
+    )
     solver.setFieldStructure(fields)
     solver(A, b)
     first = solver.lastSolveSummary.detailLines

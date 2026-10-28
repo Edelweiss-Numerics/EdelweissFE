@@ -37,7 +37,8 @@ have rotations among their modes is :func:`carriesRigidBodyModes`.
 :func:`rigidBodyNullspace` (translations *and* rotations) is preferred whenever node coordinates are
 available: measured fewer isolated per-field outer iterations than :func:`translationNullspace`
 alone on real captured production systems, and unlike translations alone, robust to both thread
-count and the Chebyshev ``power_iters`` setting. It costs one extra pass over the field's diagonal
+count and the Chebyshev smoother's spectral radius estimate (measured with the power iteration that the Arnoldi
+estimate has since replaced). It costs one extra pass over the field's diagonal
 scaling vector plus a handful of elementwise operations on the node coordinates -- O(nNodes),
 negligible against the AMG hierarchy build it feeds.
 """

@@ -57,6 +57,7 @@ from edelweissfe.linsolve.composition import (  # noqa: E402
     FixedTolerance,
     Multiplicative,
     OnField,
+    RebuildPolicy,
     ResidualGapCompensation,
     SchurComplement,
     SolveDumps,
@@ -135,7 +136,9 @@ def _beamWithDamage(seed: int = 0, couplingStrength: float = 1e-2):
 
 def _composed(coordinates, fields, **presetOptions) -> ComposedLinearSolver:
     composed = ComposedLinearSolver(
-        blockAMG(**presetOptions), nodeCoordinates={"displacement": coordinates}, verbosity="silent"
+        blockAMG(rebuild=RebuildPolicy(reusePreconditioner=True), **presetOptions),
+        nodeCoordinates={"displacement": coordinates},
+        verbosity="silent",
     )
     composed.setFieldStructure(fields)
     return composed

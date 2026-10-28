@@ -380,6 +380,49 @@ halves the iterations.
 These measurements were taken with the smoother of the time, degree 16 on both levels of the corner-node two-level cycle; the default
 is now degree 8 (:ref:`measured-corner-node-two-level-smoother`).
 
+.. _measured-rebuild-every-solve:
+
+Rebuilding the preconditioner for every solve
+---------------------------------------------
+
+See :ref:`blockamg-per-field-amg` and the reuse rules on :doc:`blockamgtheory`.
+
+Live, one model (the contact anchor model with many multi-point-constraint slaves, edge breakout, increments 230 to
+255), two runs from the same checkpoint on two nodes of a cluster: the reuse rules of ``RebuildPolicy``, against
+``reusePreconditioner=False``, a new preconditioner for every solve. The paths split at increment 233 (other hierarchies, other
+linear solutions within the tolerance).
+
+.. list-table::
+    :width: 100%
+    :header-rows: 1
+
+    * -
+      - reuse rules
+      - a new preconditioner for every solve
+    * - wall time of the window
+      - 9,697 s
+      - 8,579 s (-11.5 %)
+    * - attempts / Newton iterations / simulated time reached
+      - 34 / 165 / 0.378483
+      - 36 / 169 / 0.378633
+    * - linear solves, per solve
+      - 14.4 s
+      - 9.8 s (-25 %)
+    * - outer Krylov solve, per solve
+      - 9.25 s
+      - 2.73 s
+    * - outer iterations per solve
+      - mean 21.5, median 15, 11 at the cap
+      - mean 7.6, median 6, max 18, none at the cap
+    * - preconditioner builds
+      - 138, 9.38 s each
+      - 301, 6.71 s each
+
+The second node was 5-10 % faster on the rows no preconditioner touches, so part of the cheaper build is the node; the
+Krylov solve, 70 % cheaper per solve, is not. A reused preconditioner needed about three times the outer iterations of
+a fresh one here, while offline replays of captured solves had reused ones at only 4-6 more iterations and reuse 16-46 %
+faster: they did not reproduce how far a live Jacobian moves between solves. Not yet measured live on a second model.
+
 .. _measured-corner-node-two-level-smoother:
 
 The smoother of the corner-node two-level cycle
@@ -567,7 +610,8 @@ contact anchor model with many multi-point-constraint slaves):
 * ``LGMRES(restart=50)`` matches the outer-iteration cap (``maxIterations = 100``), so
   LGMRES restarts at most once within it; ``augmentationVectors`` only allocates its augmentation vectors without
   ever exhausting them before the cap.
-* ``RebuildPolicy(stalenessFactor=3)`` reuses hierarchies longer than the former factor of 1.5, which fired on
+* ``RebuildPolicy(stalenessFactor=3)``, where hierarchies are reused (``reusePreconditioner=True``; since
+  :ref:`measured-rebuild-every-solve` not the default), reuses them longer than the former factor of 1.5, which fired on
   noise at small iteration counts; with the cap of 100 it can fire only while the solve the
   hierarchies were built for took fewer than about 34 iterations -- beyond that, only a cap hit (or a
   new increment, a pattern change) rebuilds them.
@@ -580,8 +624,8 @@ contact anchor model with many multi-point-constraint slaves):
   inert, defaults.
 * ``pruneCondensedMatrixZeros`` (a nonlinear-solver option, not a component's) now defaults to
   "off for a solver that needs the pattern stable", and a solver with a Krylov solve reports exactly that -- so on a
-  model with multi-point constraints the hierarchies are now reused automatically; the former setup
-  needed this set by hand (see the reuse rules on :doc:`blockamgtheory`).
+  model with multi-point constraints the hierarchies can be reused (``reusePreconditioner=True``) without more settings; the former
+  setup needed this set by hand (see the reuse rules on :doc:`blockamgtheory`).
 
 Measured live, from the same checkpoints, the defaults against the former defaults (no per-model settings in
 either run): the contact model's increments finished markedly faster; on the damage cylinder, the

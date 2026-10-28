@@ -54,6 +54,13 @@ from edelweissfe.linsolve.composition import (  # noqa: E402
     TwoLevel,
     blockAMG,
 )
+from edelweissfe.linsolve.composition.amg import (  # noqa: E402
+    defaultCornerNodeTwoLevelTree,
+    defaultFieldTree,
+)
+from edelweissfe.linsolve.composition.presets import (  # noqa: E402
+    blockAMGFieldPreconditioner,
+)
 
 
 class _Journal:
@@ -105,9 +112,50 @@ def test_a_solve_stopped_at_the_cap_is_warned_about_and_rebuilds_the_preconditio
     assert solver.root.lastRebuildReason == "stale"
 
 
+def test_the_default_rebuild_policy_builds_every_preconditioner_anew():
+    assert RebuildPolicy().reusePreconditioner is False
+
+
+@pytest.mark.parametrize(
+    "isCorner, options, expected",
+    [
+        ([True, False, True], {}, "corner-node"),
+        ([True, True, True], {}, "rigid-body"),
+        (None, {}, "rigid-body"),
+        ([True, False, True], {"cornerNodeInterpolation": False}, "rigid-body"),
+        ([True, False, True], {"cornerNodeInterpolation": False, "rigidBodyModesPerAggregate": False}, "AMG"),
+    ],
+    ids=["quadratic", "linear", "no topology", "corner nodes off", "both off"],
+)
+def test_the_blockamg_preset_gives_a_3d_displacement_field_the_fastest_measured_cycle(isCorner, options, expected):
+    """A quadratic field (with midside nodes) gets the two-level cycle on its corner nodes, a linear one that on its
+    rigid-body modes; each can be switched off."""
+    nNodes = 3
+    midsideCorners = None if isCorner is None else (np.array(isCorner), np.array([[-1, -1], [0, 2], [-1, -1]]))
+    context = SetUpContext(
+        fields=(FieldBlock("displacement", 0, 3 * nNodes, 3),),
+        coordinatesOf=lambda name: np.zeros((nNodes, 3)),
+        midsideCornersOf=lambda name: midsideCorners,
+    )
+    preconditioner = blockAMGFieldPreconditioner(context.fields[0], context, **options)
+    if expected == "AMG":
+        assert isinstance(preconditioner, AMG)
+    else:
+        assert isinstance(preconditioner, TwoLevel) and expected in preconditioner.coarseSpace.name
+
+
+def test_the_corner_node_smoother_is_the_vector_default_with_degree_8():
+    """One place of the vector-field defaults: the corner-node tree is the 3D default but for its Chebyshev smoother."""
+    vector, cornerNode = defaultFieldTree(3), defaultCornerNodeTwoLevelTree()
+    assert vector["relax"]["degree"] == 16 and cornerNode["relax"]["degree"] == 8
+    assert {key: value for key, value in cornerNode.items() if key != "relax"} == {
+        key: value for key, value in vector.items() if key != "relax"
+    }
+
+
 def test_the_debug_column_says_why_the_preconditioner_was_rebuilt():
     A, b, fields = displacementDamageSystem(n=8, coupling="symmetric")
-    solver, journal = _driven(blockAMG(), fields, verbosity="debug")
+    solver, journal = _driven(blockAMG(rebuild=RebuildPolicy(reusePreconditioner=True)), fields, verbosity="debug")
     solver(A, b)
     assert solver.reportsSolveSummary
     assert solver.lastSolveSummary.detailLines[0] == "rebuilt(first)"
@@ -152,7 +200,7 @@ def test_the_true_residual_restarts_on_the_scaled_system_are_logged_at_debug():
         lambda: AMG(dropTolerance=-1.0),
         lambda: AMG(backendPrecision="half"),
         lambda: AMG(backendBlockSize=2, backendPrecision="float"),
-        lambda: TwoLevel(RigidBodyModesPerAggregate(), coarseHierarchyPrecision="half"),
+        lambda: RigidBodyModesPerAggregate(coarseHierarchyPrecision="half"),
         lambda: SolveDumps("unused", maxDumps=-1),
         lambda: ComposedLinearSolver(blockAMG(), verbosity="loud"),
         lambda: ComposedLinearSolver(blockAMG(), residualGrowthFactor=1.0),
@@ -211,7 +259,12 @@ def _script(path, body: str) -> None:
 
 def _scriptSolver(tmp_path, eta: float, **settings):
     script = tmp_path / "solver.py"
-    _script(script, "linearSolver = blockAMG(tolerance=FixedTolerance({:g}))\n".format(eta))
+    _script(
+        script,
+        "linearSolver = blockAMG(tolerance=FixedTolerance({:g}), rebuild=RebuildPolicy(reusePreconditioner=True))\n".format(
+            eta
+        ),
+    )
     A, b, fields = displacementDamageSystem(n=8, coupling="symmetric")
     solver = ComposedLinearSolver.fromScript(str(script), hotReload=True, **settings)
     solver.setFieldStructure(fields)
@@ -225,7 +278,10 @@ def test_a_changed_script_replaces_the_tree_and_says_so(tmp_path):
     solver(A, b)
     assert "hot reload" not in journal.take()
 
-    _script(script, "linearSolver = blockAMG(tolerance=FixedTolerance(1e-9))\n")
+    _script(
+        script,
+        "linearSolver = blockAMG(tolerance=FixedTolerance(1e-9), rebuild=RebuildPolicy(reusePreconditioner=True))\n",
+    )
     x = solver(A, b)
     text = journal.take()
     assert "hot reload of {:} (sha256 ".format(script) in text and "the tree is replaced" in text

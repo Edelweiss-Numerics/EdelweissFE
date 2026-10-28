@@ -300,7 +300,7 @@ relaxation as the 2D and 3D fields, on the scalar backend. ``AMG(backendBlockSiz
 field on the scalar backend, the only one that takes the rotations (:ref:`blockamg-block-nullspace`); a tree with another coarsening than
 smoothed aggregation on a block backend needs ``nearNullspace=None``, which is checked.
 
-The 3D displacement field of the ``blockAMG()`` preset gets the rigid-body coarse level
+A linear 3D displacement field of the ``blockAMG()`` preset gets the rigid-body coarse level
 (``TwoLevel(coarseSpace=RigidBodyModesPerAggregate())``), configured by the same tree: its ``relax`` and ``npre``/``npost`` are the
 fine smoother of the rigid-body coarse level, its ``coarsening`` the aggregation of that level, and the whole tree the
 AMGCL hierarchy below it. Only a genuinely scalar field (nodal dimension 1) gets the plain scalar tree, which predates
@@ -311,13 +311,12 @@ The corner-node two-level cycle's default tree is another: ``TwoLevel(coarseSpac
 tree in the same spelling (``relax``, ``npre``, ``npost``; it has no coarsening of its own), and its coarse solve is a
 component of its own, ``CornerNodeInterpolation(coarseSolve=...)``. For the corner-node two-level cycle, degree 16 is stronger than it pays: degree
 8 costs half the products per sweep for fewer than twice the outer iterations (:ref:`measured-corner-node-two-level-smoother`).
-So a ``TwoLevel`` on ``CornerNodeInterpolation`` that is given no tree, and the
-rigid-body coarse level of the default coarse solve,
-``DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModesPerAggregate(), amgclTree=defaultCornerNodeTwoLevelTree()))``, take the vector field's tree
-with a Chebyshev polynomial of degree 8 on the interval from 0.03 to 1.1 times the spectral radius
-(:func:`~edelweissfe.linsolve.composition.amg.defaultCornerNodeTwoLevelTree`), for a vector field of any dimension (a
-scalar field keeps its default tree, ``defaultFieldTree(1)``: the smoother of degree 8 was measured on displacement
-fields only):
+So a ``TwoLevel`` on ``CornerNodeInterpolation`` that is given no tree, and the default coarse solve on its corner-node
+field, take one tree, ``CornerNodeInterpolation.defaultTree(field)``: for a 3D displacement field, the vector field's
+tree with a Chebyshev polynomial of degree 8 on the interval from 0.03 to 1.1 times the spectral radius
+(:func:`~edelweissfe.linsolve.composition.amg.defaultCornerNodeTwoLevelTree`), where it was measured; any other field
+keeps its default tree (``defaultFieldTree(field.dimension)``). For a 3D displacement field the default coarse solve
+is ``DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModesPerAggregate(), amgclTree=defaultCornerNodeTwoLevelTree()))``:
 
 .. code-block:: json
 
@@ -348,22 +347,20 @@ and ``spectralRadiusMaxSteps`` (:ref:`blockamg-chebyshev`). The trees leave the 
 The rigid-body coarse level: ``RigidBodyModesPerAggregate`` and ``TwoLevel``
 ----------------------------------------------------------------------------
 
-The ``blockAMG()`` preset (``type=blockamg``) gives the 3D displacement field the rigid-body coarse level; ``rigidBodyModesPerAggregate=false``
-switches it off. A 2D displacement field, or a 3D one with other options, gets it in a ``custom`` solver script,
+The ``blockAMG()`` preset (``type=blockamg``) gives a linear 3D displacement field the rigid-body coarse level, and
+the corner-node field of a quadratic one too (as the coarse solve of its corner-node two-level cycle);
+``rigidBodyModesPerAggregate=false`` switches it off, ``cornerNodeInterpolation=false`` the corner-node two-level cycle. A 2D displacement field, or a 3D one with other options, gets it in a ``custom`` solver script,
 ``OnField(name, TwoLevel(coarseSpace=RigidBodyModesPerAggregate(...), ...))``. The field must be on a block backend
 (``backendBlockSize`` 2 or 3, the default of a 2D or 3D field), and its tree must smooth with a Chebyshev polynomial
 (``relax.type`` ``chebyshev``, without ``relax.scale``, ``relax.spectralRadiusSteps`` at least 1) and coarsen by smoothed
 aggregation, as the default trees do; ``TwoLevel`` checks this when it meets its field, and the parameters of
-``RigidBodyModesPerAggregate`` at construction. The option of ``RigidBodyModesPerAggregate``:
+``RigidBodyModesPerAggregate`` at construction. The options of ``RigidBodyModesPerAggregate``:
 
 ``prolongation`` (``"smoothed"``)
     ``"smoothed"``: :math:`P = (I - \omega\, \mathrm{diag}_B(\hat A_F)^{-1} \hat A_F) P^{\mathrm{tent}}`.
     ``"tentative"``:
     :math:`P^{\mathrm{tent}}` itself -- a cheaper setup and a sparser coarse operator, for more outer iterations (32
     instead of 22 on the elastic tunnel system).
-
-and those of ``TwoLevel`` (the same for the corner-node two-level cycle):
-
 ``coarseHierarchyPrecision`` (``"double"``)
     The value type of the AMGCL hierarchy below: ``"double"``, or ``"float"`` (AMGCL's single-precision backend, its
     setup included) for half its memory, at the price of more outer iterations.

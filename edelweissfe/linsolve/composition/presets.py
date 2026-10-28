@@ -45,6 +45,7 @@ from edelweissfe.linsolve.composition.krylov import (
     ResidualGapCompensation,
 )
 from edelweissfe.linsolve.composition.twolevel import (
+    CornerNodeInterpolation,
     RigidBodyModesPerAggregate,
     TwoLevel,
 )
@@ -55,27 +56,44 @@ def blockAMGFieldPreconditioner(
     field,
     context,
     rigidBodyModesPerAggregate: bool = True,
+    cornerNodeInterpolation: bool = True,
     dropTolerance: float = 0.0,
     lumpDroppedEntries: bool = False,
+    amgclTree: dict = None,
 ):
-    """The preconditioner of a field in the ``blockamg`` preset: a two-level cycle on the rigid-body modes
-    for a 3D displacement field (with node coordinates), one AMG hierarchy otherwise."""
+    """The preconditioner of a field in the ``blockamg`` preset, the fastest measured for it:
+
+    - a quadratic 3D displacement field (with node coordinates): the two-level cycle on its corner nodes,
+      ``TwoLevel(coarseSpace=CornerNodeInterpolation())``, whose coarse field (linear) gets the next case;
+    - a linear 3D displacement field (with node coordinates): the two-level cycle on its rigid-body modes,
+      ``TwoLevel(coarseSpace=RigidBodyModesPerAggregate())``;
+    - any other field: one AMG hierarchy, ``AMG()``.
+
+    ``amgclTree`` is the field's AMGCL tree (``None``: the component's default). A field is quadratic if it has midside
+    nodes (:meth:`~edelweissfe.linsolve.composition.base.SetUpContext.midsideCorners`)."""
     isDisplacement3D = field.dimension == 3 and carriesRigidBodyModes(field)
-    if rigidBodyModesPerAggregate and isDisplacement3D and context.coordinates(field.name) is None:
+    options = dict(amgclTree=amgclTree, dropTolerance=dropTolerance, lumpDroppedEntries=lumpDroppedEntries)
+    if not isDisplacement3D or not (rigidBodyModesPerAggregate or cornerNodeInterpolation):
+        return AMG(**options)
+    if context.coordinates(field.name) is None:
         context.message(
             "info",
             "blockAMG: the field '{:}' has no node coordinates (no model, and no nodeCoordinates given): it gets AMG() on "
-            "the translations instead of the two-level cycle on its rigid-body modes".format(field.name),
+            "the translations instead of a two-level cycle".format(field.name),
         )
-    elif rigidBodyModesPerAggregate and isDisplacement3D:
-        return TwoLevel(
-            coarseSpace=RigidBodyModesPerAggregate(), dropTolerance=dropTolerance, lumpDroppedEntries=lumpDroppedEntries
-        )
-    return AMG(dropTolerance=dropTolerance, lumpDroppedEntries=lumpDroppedEntries)
+        return AMG(**options)
+    midsideCorners = context.midsideCorners(field.name)
+    isQuadratic = midsideCorners is not None and not midsideCorners[0].all()
+    if cornerNodeInterpolation and isQuadratic:
+        return TwoLevel(coarseSpace=CornerNodeInterpolation(), **options)
+    if rigidBodyModesPerAggregate:
+        return TwoLevel(coarseSpace=RigidBodyModesPerAggregate(), **options)
+    return AMG(**options)
 
 
 def blockAMG(
     rigidBodyModesPerAggregate: bool = True,
+    cornerNodeInterpolation: bool = True,
     tolerance=None,
     maxIterations: int = 100,
     sweeps: int = 1,
@@ -92,9 +110,13 @@ def blockAMG(
 
         LGMRES(
             DiagonalScaling(
-                Multiplicative([OnField(f, M_f) for every field f])   # M_f: TwoLevel(RigidBodyModesPerAggregate())
-            )                                                         # for a 3D displacement field, else AMG()
+                Multiplicative([OnField(f, M_f) for every field f])   # M_f: blockAMGFieldPreconditioner(f)
+            )
         )
+
+    with each field's preconditioner the fastest measured for it (:func:`blockAMGFieldPreconditioner`): the
+    two-level cycle on the corner nodes for a quadratic 3D displacement field, on the rigid-body modes for a linear
+    one, one AMG hierarchy for any other field.
 
     The corrections are made at the first set-up, for the fields of the model (:class:`~edelweissfe.linsolve.
     composition.combinators.Multiplicative` takes a function of the context). A tree, not a solver: a solver script
@@ -103,8 +125,11 @@ def blockAMG(
     Parameters
     ----------
     rigidBodyModesPerAggregate
-        Whether a 3D displacement field gets the two-level cycle on its rigid-body modes (else one AMG hierarchy, on
-        the translations).
+        Whether a (linear) 3D displacement field gets the two-level cycle on its rigid-body modes (else one AMG
+        hierarchy, on the translations).
+    cornerNodeInterpolation
+        Whether a quadratic 3D displacement field gets the two-level cycle on its corner nodes (else the case of a
+        linear one).
     tolerance
         The tolerance per solve (default: the Eisenstat--Walker forcing tolerance).
     maxIterations
@@ -128,7 +153,12 @@ def blockAMG(
             OnField(
                 field.name,
                 blockAMGFieldPreconditioner(
-                    field, context, rigidBodyModesPerAggregate, dropTolerance, lumpDroppedEntries
+                    field,
+                    context,
+                    rigidBodyModesPerAggregate,
+                    cornerNodeInterpolation,
+                    dropTolerance,
+                    lumpDroppedEntries,
                 ),
             )
             for field in context.fields
