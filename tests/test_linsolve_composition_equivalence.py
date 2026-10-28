@@ -33,7 +33,7 @@ the deletion (xeon, branch ``feat/linsolve-composition`` at ``ffe4b681``) and fr
 estimate changed from AMGCL's power iteration to Arnoldi steps (``amgcl-spectral-radius.hpp``), the numbers were
 recorded again, with the composed solver (xeon, ``OMP_NUM_THREADS`` 16 and 1: the same iterations, which no longer
 depend on the thread count); the rebuild decisions stayed BlockAMGSolver's. Per solve: the outer iterations, whether
-the preconditioner was rebuilt, the true-residual continuations, whether the tolerance was met, and ``||x||``.
+the preconditioner was rebuilt, the true-residual restarts, whether the tolerance was met, and ``||x||``.
 
 ``||x||`` is compared to 1e-8 for a solve to ``1e-8``; a solve to the forcing tolerance (eta about 1e-3) leaves an
 error that depends on the order of threaded reductions, so its ``||x||`` is compared to 1e-4, and its true residual is
@@ -55,16 +55,16 @@ from edelweissfe.linsolve.composition import (  # noqa: E402
     ComposedLinearSolver,
     DiagonalScaling,
     FixedTolerance,
-    GapCompensation,
     Multiplicative,
     OnField,
+    ResidualGapCompensation,
     SchurComplement,
     SolveDumps,
     blockAMG,
 )
 from edelweissfe.linsolve.composition.amg import droppedSmallEntries  # noqa: E402
 
-#: The numbers of the composed solver, per solve: (outer iterations, continuations, tolerance met, ||x||).
+#: The numbers of the composed solver, per solve: (outer iterations, true-residual restarts, tolerance met, ||x||).
 _TIGHT = {
     "rigidBodyModesPerAggregate": [(13, 0, True, 418.5446467174296)],
     "translations": [(40, 0, True, 418.54464670055614)],
@@ -142,12 +142,12 @@ def _composed(coordinates, fields, **presetOptions) -> ComposedLinearSolver:
 
 
 def _assertSolve(composed, A, b, frozen, tight: bool):
-    """One solve of ``composed`` against BlockAMGSolver's frozen ``(iterations, continuations, met, ||x||)``."""
-    iterations, continuations, met, norm = frozen
+    """One solve of ``composed`` against BlockAMGSolver's frozen ``(iterations, trueResidualRestarts, met, ||x||)``."""
+    iterations, trueResidualRestarts, met, norm = frozen
     x = composed(A, b)
     summary = composed.lastSolveSummary
     assert summary.iters in (iterations if isinstance(iterations, tuple) else (iterations,))
-    assert summary.retries == continuations
+    assert summary.retries == trueResidualRestarts
     assert summary.residualMet == met
     assert np.linalg.norm(x) == pytest.approx(norm, rel=1e-8 if tight else 1e-4)
     if met:
@@ -271,12 +271,12 @@ def test_a_drop_tolerance_has_blockamgs_numbers(rigidBodyModesPerAggregate, lump
     assert displacement.statistics.sizes["nnz kept"] < displacement.statistics.sizes["nnz"]
 
 
-# ----- DiagonalScaling(LGMRES(...)): continuations and the gap compensation -----
+# ----- DiagonalScaling(LGMRES(...)): true-residual restarts and the gap compensation -----
 
 
 @pytest.mark.parametrize("gapCompensated", [False, True])
 def test_a_krylov_solve_on_the_scaled_system_has_blockamgs_numbers_along_a_sequence(gapCompensated):
-    """The tree DiagonalScaling(LGMRES(...)): the outer iterations, continuations and solutions of blockamg's
+    """The tree DiagonalScaling(LGMRES(...)): the outer iterations, true-residual restarts and solutions of blockamg's
     krylovOnScaledSystem, with and without the gap compensation (learnt across the solves)."""
     A, b, fields, coordinates = _beamWithDamage()
     name = "scaled gapCompensated" if gapCompensated else "scaled"
@@ -284,19 +284,19 @@ def test_a_krylov_solve_on_the_scaled_system_has_blockamgs_numbers_along_a_seque
         coordinates,
         fields,
         krylovOnScaledSystem=True,
-        gapCompensation=GapCompensation() if gapCompensated else None,
+        residualGapCompensation=ResidualGapCompensation() if gapCompensated else None,
         rigidBodyModesPerAggregate=False,
     )
     for (A_k, b_k), frozen in zip(_newtonLikeSequence(A, b, fields), _SEQUENCE[name]):
         _assertSolve(composed, A_k, b_k, frozen, tight=False)
     if gapCompensated:
-        assert composed.root.inner.gapCompensation.gap == pytest.approx(_GAP[name], rel=1e-2)
+        assert composed.root.inner.residualGapCompensation.gap == pytest.approx(_GAP[name], rel=1e-2)
 
 
-def test_no_continuations_on_the_scaled_system_has_blockamgs_numbers():
+def test_no_true_residual_restarts_on_the_scaled_system_has_blockamgs_numbers():
     A, b, fields, coordinates = _beamWithDamage()
     composed = _composed(
-        coordinates, fields, krylovOnScaledSystem=True, continuations=0, rigidBodyModesPerAggregate=False
+        coordinates, fields, krylovOnScaledSystem=True, trueResidualRestarts=0, rigidBodyModesPerAggregate=False
     )
     _assertSolve(composed, A, b, (19, 0, False, 418.3153141552291), tight=False)
 
@@ -322,7 +322,7 @@ _MANIFEST_KEYS = {
     "blocks",
     "capHit",
     "contextOffset",
-    "continuations",
+    "trueResidualRestarts",
     "eta",
     "geometryFile",
     "iterations",
@@ -368,7 +368,12 @@ def test_the_degradation_dumps_are_blockamgs_on_disk(tmp_path):
         assert (record["newIncrement"], record["patternChanged"], record["nnz"]) == (newIncrement, patternChanged, nnz)
         assert record["previousIterations"] == previousIterations
         assert (record["role"], record["triggerSolveCount"], record["contextOffset"]) == ("trigger", solveCount, 0)
-        assert (record["rows"], record["continuations"], record["capHit"], record["eta"]) == (12740, 0, False, 0.001)
+        assert (record["rows"], record["trueResidualRestarts"], record["capHit"], record["eta"]) == (
+            12740,
+            0,
+            False,
+            0.001,
+        )
         assert record["blocks"] == [
             {"name": "displacement", "start": 0, "stop": 9555, "dimension": 3},
             {"name": "nonlocal damage", "start": 9555, "stop": 12740, "dimension": 1},
@@ -390,7 +395,7 @@ def test_a_dump_of_a_condensed_solve_holds_its_condensed_dofs(tmp_path):
     fields = [FieldBlock("u", 0, A.shape[0], 1)]
     root = LGMRES(
         condensingGivenDofs(
-            SchurComplement(["bars"], preconditionS=DiagonalScaling(Multiplicative([OnField("u", AMG())]))),
+            SchurComplement(["bars"], schurComplementSolve=DiagonalScaling(Multiplicative([OnField("u", AMG())]))),
             barDofs,
         ),
         tolerance=FixedTolerance(1e-8),

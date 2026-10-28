@@ -114,7 +114,7 @@ does therefore works the same for every type, with the same data lines
     * - ``verbosity``
       - ``warning``
       - ``silent``, ``warning``, ``info`` or ``debug`` (:ref:`composed-verbosity`)
-    * - ``warnOuterIterations``
+    * - ``warningOuterIterations``
       - 100
       - a Krylov solve with more outer iterations is warned about, and is a slow solve
     * - ``residualGrowthFactor``

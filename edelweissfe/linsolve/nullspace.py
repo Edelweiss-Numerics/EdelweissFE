@@ -31,7 +31,7 @@ richer basis) its node coordinates -- no solver-instance state. Any algebraic-mu
 preconditioner needing an elasticity near-null-space can use them; today
 :class:`~edelweissfe.linsolve.composition.amg.AMG` and the corner-node two-level cycle do, to
 seed AMGCL's smoothed-aggregation coarsening. A block backend takes :func:`translationNullspace` alone
-(``blockTranslationNullspace``): its node-major layout gives every node a diagonal block of weights. Which fields
+(``AMG(nearNullspace=...)``, translations on a block backend): its node-major layout gives every node a diagonal block of weights. Which fields
 have rotations among their modes is :func:`carriesRigidBodyModes`.
 
 :func:`rigidBodyNullspace` (translations *and* rotations) is preferred whenever node coordinates are

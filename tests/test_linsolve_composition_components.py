@@ -63,7 +63,10 @@ from edelweissfe.linsolve.composition import (  # noqa: E402
     TwoLevel,
     gaussSeidelOrder,
 )
-from edelweissfe.linsolve.composition.amg import defaultFieldTree  # noqa: E402
+from edelweissfe.linsolve.composition.amg import (  # noqa: E402
+    backendOf,
+    defaultFieldTree,
+)
 from edelweissfe.linsolve.composition.rigidbodymodestwolevelcycle import (  # noqa: E402
     RigidBodyModesTwoLevelCycle,
 )
@@ -493,7 +496,7 @@ def test_the_corner_node_two_level_cycle_smooths_both_of_its_levels_with_its_own
     assert coarse.inner._cycleParameters(field)["amgclTree"] == defaultCornerNodeTwoLevelTree()
     assert TwoLevel(RigidBodyModesPerAggregate())._cycleParameters(field)["amgclTree"] == defaultFieldTree(3)
     given = defaultFieldTree(3)
-    assert TwoLevel(CornerNodeInterpolation(), tree=given)._cycleParameters(field)["amgclTree"] is given
+    assert TwoLevel(CornerNodeInterpolation(), amgclTree=given)._cycleParameters(field)["amgclTree"] is given
 
 
 @pytest.mark.parametrize("dimension", [2, 3, 4])
@@ -511,7 +514,7 @@ def test_the_corner_node_two_level_cycle_keeps_the_default_tree_of_a_scalar_fiel
     field = FieldBlock("nonlocal damage", 0, 10, 1)
     assert TwoLevel(CornerNodeInterpolation())._cycleParameters(field)["amgclTree"] == defaultFieldTree(1)
     given = defaultFieldTree(3)
-    assert TwoLevel(CornerNodeInterpolation(), tree=given)._cycleParameters(field)["amgclTree"] is given
+    assert TwoLevel(CornerNodeInterpolation(), amgclTree=given)._cycleParameters(field)["amgclTree"] is given
 
 
 # ----- the Schur complement -----
@@ -520,7 +523,7 @@ def test_the_corner_node_two_level_cycle_keeps_the_default_tree_of_a_scalar_fiel
 def test_block_lu_with_the_exact_schur_complement_and_exact_solves_is_the_inverse():
     A, b, barDofs = barOnFoundation(n=6)
     schur = condensingGivenDofs(
-        SchurComplement(["bars"], preconditionS=DirectSolver(), blockFactors="LU"),
+        SchurComplement(["bars"], schurComplementSolve=DirectSolver(), blockFactors="both"),
         barDofs,
         dropTolerance=0.0,
         windowNodes=10_000,
@@ -539,7 +542,7 @@ def test_the_schur_complement_tree_has_blockamgs_numbers_with_condensation():
         condensingGivenDofs(
             SchurComplement(
                 ["bars"],
-                preconditionS=DiagonalScaling(Multiplicative(gaussSeidelOrder([OnField("u", AMG())], sweeps=2))),
+                schurComplementSolve=DiagonalScaling(Multiplicative(gaussSeidelOrder([OnField("u", AMG())], sweeps=2))),
             ),
             barDofs,
         ),
@@ -557,7 +560,7 @@ def test_the_schur_complement_keeps_nothing_formed_from_its_matrices_between_sol
     A, b, barDofs = barOnFoundation(n=8)
     fields = [FieldBlock("u", 0, A.shape[0], 1)]
     schur = condensingGivenDofs(
-        SchurComplement(["bars"], preconditionS=DiagonalScaling(Multiplicative([OnField("u", AMG())]))), barDofs
+        SchurComplement(["bars"], schurComplementSolve=DiagonalScaling(Multiplicative([OnField("u", AMG())]))), barDofs
     )
     root = LGMRES(schur, tolerance=FixedTolerance(1e-8))
     _, composed = _solved(A, b, root, fields)
@@ -570,7 +573,7 @@ def test_the_schur_complement_notes_what_it_condensed_for_the_debug_column_of_a_
     A, b, barDofs = barOnFoundation(n=8)
     fields = [FieldBlock("u", 0, A.shape[0], 1)]
     schur = condensingGivenDofs(
-        SchurComplement(["bars"], preconditionS=DiagonalScaling(Multiplicative([OnField("u", AMG())]))), barDofs
+        SchurComplement(["bars"], schurComplementSolve=DiagonalScaling(Multiplicative([OnField("u", AMG())]))), barDofs
     )
     solver = ComposedLinearSolver(LGMRES(schur, tolerance=FixedTolerance(1e-8)), verbosity="debug")
     solver.setFieldStructure(fields)
@@ -684,13 +687,13 @@ def test_a_child_must_be_a_component():
     with pytest.raises(ValueError, match="at least one correction"):
         Additive([])
     with pytest.raises(ValueError, match="nothing to condense"):
-        SchurComplement(preconditionS=AMG())
+        SchurComplement(schurComplementSolve=AMG())
     with pytest.raises(ValueError, match="blockFactors"):
-        SchurComplement(["a marker"], preconditionS=AMG(), blockFactors="L")
-    with pytest.raises(TypeError, match="solveA_bb must be a DirectSolver"):
-        SchurComplement(["a marker"], preconditionS=AMG(), solveA_bb=AMG())
+        SchurComplement(["a marker"], schurComplementSolve=AMG(), blockFactors="L")
+    with pytest.raises(TypeError, match="condensedBlockSolve must be a DirectSolver"):
+        SchurComplement(["a marker"], schurComplementSolve=AMG(), condensedBlockSolve=AMG())
     with pytest.raises(ValueError, match="approximation"):
-        SchurComplement(["a marker"], preconditionS=AMG(), approximation="exact")
+        SchurComplement(["a marker"], schurComplementSolve=AMG(), approximation="exact")
 
 
 def test_a_missing_field_fails_at_the_set_up_and_names_the_fields():
@@ -742,3 +745,22 @@ def test_the_default_trees_on_the_reference_page_are_the_code_defaults():
     }
     p1Block = page.split("The corner-node two-level cycle's default tree", 1)[1].split(".. code-block:: json", 1)[1]
     assert json.JSONDecoder().raw_decode(p1Block.strip())[0] == defaultCornerNodeTwoLevelTree()
+
+
+def test_the_near_null_space_of_amg_resolves_per_backend_and_field():
+    # the default, "rigidBodyModes": as far as the backend and the field hold them
+    displacement = FieldBlock("displacement", 0, 30, 3)
+    microRotation = FieldBlock("micro rotation", 0, 30, 3)
+    damage = FieldBlock("nonlocal damage", 0, 10, 1)
+    vectorTree, scalarTree = defaultFieldTree(3), defaultFieldTree(1)
+    assert backendOf("AMG", displacement, vectorTree)[2] == "translations"
+    assert backendOf("AMG", displacement, vectorTree, backendBlockSize=1)[2] == "rigidBodyModes"
+    assert backendOf("AMG", microRotation, vectorTree, backendBlockSize=1)[2] == "translations"
+    assert backendOf("AMG", damage, scalarTree)[2] is None
+    # given
+    assert backendOf("AMG", displacement, vectorTree, 1, None, "translations")[2] == "translations"
+    assert backendOf("AMG", displacement, vectorTree, nearNullspace=None)[2] is None
+    rugeStuben = {"coarsening": {"type": "ruge_stuben"}}
+    assert backendOf("AMG", displacement, rugeStuben, nearNullspace=None)[2] is None
+    with pytest.raises(ValueError, match="nearNullspace must be"):
+        AMG(nearNullspace="rotations")

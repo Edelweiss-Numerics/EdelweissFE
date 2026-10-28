@@ -40,9 +40,9 @@ import scipy.sparse as sp
 from _linsolvesystems import (
     FixedCondensation,
     barOnFoundation,
+    condensedBlockSolveOf,
     condensingGivenDofs,
     gridLaplacian,
-    solveA_bbOf,
 )
 
 import edelweissfe.adaptivity.marking as marking
@@ -276,8 +276,10 @@ class _FailingFromTheSecondFactorization(DirectSolver):
 
 def test_a_solve_whose_condensed_block_cannot_be_factorized_does_without_the_condensation():
     A, b, barDofs = barOnFoundation(n=8)
-    solveA_bb = _FailingFromTheSecondFactorization()
-    schur = condensingGivenDofs(SchurComplement(["bars"], preconditionS=DirectSolver(), solveA_bb=solveA_bb), barDofs)
+    condensedBlockSolve = _FailingFromTheSecondFactorization()
+    schur = condensingGivenDofs(
+        SchurComplement(["bars"], schurComplementSolve=DirectSolver(), condensedBlockSolve=condensedBlockSolve), barDofs
+    )
     warnings = []
     context = SetUpContext(
         fields=(FieldBlock("u", 0, A.shape[0], 1),), log=lambda level, message: warnings.append(message)
@@ -285,7 +287,7 @@ def test_a_solve_whose_condensed_block_cannot_be_factorized_does_without_the_con
     schur.setUp(SystemMatrix(A), context)
     assert schur.condensing and schur.condensedDofs() is not None
     schur.setUp(SystemMatrix(A), context)
-    assert not schur.condensing and schur.condensedDofs() is None and solveA_bb.factorizations == 2
+    assert not schur.condensing and schur.condensedDofs() is None and condensedBlockSolve.factorizations == 2
     assert any("cannot be factorized" in message for message in warnings)
     # without the condensation, the child alone solves the system
     assert np.linalg.norm(A @ schur(b) - b) < 1e-10 * np.linalg.norm(b)
@@ -358,7 +360,7 @@ def test_by_default_the_block_upper_triangular_factor_is_inverted():
     condensation = FixedCondensation(barDofs, dropTolerance=0.0, windowNodes=10_000)
     condensation.update(A)
     S = condensation.approximateSchurComplement(A).toarray()
-    z = blockLU(b, condensation, lambda r_k: np.linalg.solve(S, r_k), solveA_bbOf(condensation), "U")
+    z = blockLU(b, condensation, lambda r_k: np.linalg.solve(S, r_k), condensedBlockSolveOf(condensation), "upper")
     U = sp.bmat([[condensation.A_bb, condensation.A_bk], [None, sp.csr_matrix(S)]])
     order = np.concatenate([barDofs, condensation.remainingDofs])
     assert np.allclose(U @ z[order], b[order], rtol=0.0, atol=1e-10 * np.abs(b).max())
@@ -381,15 +383,19 @@ def test_tutorial_why_the_condensation_works():
     # 2. With the exact S, the block LU factorization is the inverse of A: GMRES needs one iteration ...
     # 3. ... and the block upper triangular factor alone two (A U^-1 = L, unit block lower triangular, (L - I)^2 = 0)
     S = _exactSchurComplement(A, barDofs)
-    for blockFactors, iterations in (("LU", 1), ("U", 2)):
+    for blockFactors, iterations in (("both", 1), ("upper", 2)):
         condensation = FixedCondensation(barDofs, dropTolerance=0.0, windowNodes=10_000)
         condensation.update(A)
-        solveA_bb = solveA_bbOf(condensation)
+        condensedBlockSolve = condensedBlockSolveOf(condensation)
         assert np.array_equal(condensation.remainingDofs, remaining)
 
         def preconditioner(r):
             return blockLU(
-                np.asarray(r).ravel(), condensation, lambda r_k: np.linalg.solve(S, r_k), solveA_bb, blockFactors
+                np.asarray(r).ravel(),
+                condensation,
+                lambda r_k: np.linalg.solve(S, r_k),
+                condensedBlockSolve,
+                blockFactors,
             )
 
         counted = []

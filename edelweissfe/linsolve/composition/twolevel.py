@@ -42,7 +42,7 @@ with :math:`A_c^{-1}` approximated. The coarse space decides what the cycle can 
   of an AMG hierarchy;
 - :class:`CornerNodeInterpolation`: the linear interpolant of a quadratic field from its corner nodes (P1);
   :math:`A_c^{-1}` is a component of its own, by default
-  ``DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModesPerAggregate(), tree=...))`` on the corner-node field -- three
+  ``DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModesPerAggregate(), amgclTree=...))`` on the corner-node field -- three
   levels: quadratic, linear, rigid-body modes of aggregates. On a vector field both of its levels smooth with the
   smoother of the corner-node two-level cycle, a Chebyshev polynomial of degree 8 instead of 16
   (:func:`~edelweissfe.linsolve.composition.amg.defaultCornerNodeTwoLevelTree`).
@@ -237,7 +237,7 @@ class CornerNodeInterpolation(CoarseSpace):
     ----------
     coarseSolve
         The coarse solve :math:`A_c^{-1}`, a component built on :math:`A_c` and applied once per cycle; ``None``:
-        ``DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModesPerAggregate(), tree=defaultCornerNodeTwoLevelTree()))``,
+        ``DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModesPerAggregate(), amgclTree=defaultCornerNodeTwoLevelTree()))``,
         measured fastest (see :ref:`measured-scaled-corner-node-interpolation` and
         :ref:`measured-corner-node-two-level-smoother`). ``AMG(...)`` is the plain AMG hierarchy on it,
         ``AMG(backendBlockSize=1)`` one with the rigid-body modes of the corners as its near null-space.
@@ -250,7 +250,7 @@ class CornerNodeInterpolation(CoarseSpace):
             from edelweissfe.linsolve.composition.diagonalscaling import DiagonalScaling
 
             coarseSolve = DiagonalScaling(
-                TwoLevel(coarseSpace=RigidBodyModesPerAggregate(), tree=defaultCornerNodeTwoLevelTree())
+                TwoLevel(coarseSpace=RigidBodyModesPerAggregate(), amgclTree=defaultCornerNodeTwoLevelTree())
             )
         requirePreconditioner("CornerNodeInterpolation", "coarseSolve", coarseSolve)
         self.coarseSolve = coarseSolve
@@ -330,7 +330,7 @@ class TwoLevel(Preconditioner):
     ----------
     coarseSpace
         A :class:`CoarseSpace`: :class:`RigidBodyModesPerAggregate` or :class:`CornerNodeInterpolation`.
-    tree
+    amgclTree
         The field's AMGCL tree: its ``relax`` (a Chebyshev polynomial), ``npre`` and ``npost`` are the fine smoother;
         with :class:`RigidBodyModesPerAggregate` its coarsening also builds the coarse level, and the whole tree the AMG
         hierarchy below. ``None``: the coarse space's default (:meth:`CoarseSpace.defaultTree`), the default tree of the
@@ -353,7 +353,7 @@ class TwoLevel(Preconditioner):
     def __init__(
         self,
         coarseSpace: CoarseSpace,
-        tree: dict = None,
+        amgclTree: dict = None,
         backendBlockSize: int = None,
         backendPrecision: str = None,
         coarseHierarchyPrecision: str = "double",
@@ -376,7 +376,7 @@ class TwoLevel(Preconditioner):
             )
         super().__init__()
         self.coarseSpace = coarseSpace
-        self.tree = tree
+        self.amgclTree = amgclTree
         self.backendBlockSize = backendBlockSize
         self.backendPrecision = backendPrecision
         self.coarseHierarchyPrecision = coarseHierarchyPrecision
@@ -390,13 +390,13 @@ class TwoLevel(Preconditioner):
     def _cycleParameters(self, field) -> dict:
         """The cycle's parameters for the field: the tree and the backend, the defaults for what is not given
         (see :meth:`~edelweissfe.linsolve.composition.twolevelcycle.TwoLevelCycle.cycleParameters`)."""
-        tree = fieldTreeOf("TwoLevel", self.tree, field, self.coarseSpace.defaultTree(field))
-        # the block translations belong to AMG's hierarchy on the block backend; a coarse space is its own
+        amgclTree = fieldTreeOf("TwoLevel", self.amgclTree, field, self.coarseSpace.defaultTree(field))
+        # the near null-space belongs to AMG's hierarchy; a coarse space is its own
         backendBlockSize, backendPrecision, _ = backendOf(
-            "TwoLevel", field, tree, self.backendBlockSize, self.backendPrecision, blockTranslationNullspace=False
+            "TwoLevel", field, amgclTree, self.backendBlockSize, self.backendPrecision, nearNullspace=None
         )
         return {
-            "amgclTree": tree,
+            "amgclTree": amgclTree,
             "backendBlockSize": backendBlockSize,
             "backendPrecision": backendPrecision,
             "coarseHierarchyPrecision": self.coarseHierarchyPrecision,

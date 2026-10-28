@@ -129,9 +129,9 @@ class ComposedLinearSolver(LinearSolver):
     verbosity
         ``"silent"``, ``"warning"`` (default: nothing on a normal solve; a warning for a slow or unconverged one),
         ``"info"`` (the structure of the solver at the first solve, in a frame, and the "linear solve" column of the
-        nonlinear solver's table) or ``"debug"`` (also each continuation of a Krylov solve, and why the
+        nonlinear solver's table) or ``"debug"`` (also each true-residual restart of a Krylov solve, and why the
         preconditioner was rebuilt or reused, in that column).
-    warnOuterIterations
+    warningOuterIterations
         A solve with more outer iterations than this gets a warning (a sign that the preconditioner no longer fits).
         A solve that misses its tolerance gets a warning of its own, whatever this says.
     dumps
@@ -154,7 +154,7 @@ class ComposedLinearSolver(LinearSolver):
         root: Preconditioner,
         residualGrowthFactor: float = 4.0,
         verbosity: str = "warning",
-        warnOuterIterations: int = 100,
+        warningOuterIterations: int = 100,
         dumps: SolveDumps = None,
         nodeCoordinates: dict = None,
         midsideCorners: dict = None,
@@ -170,12 +170,12 @@ class ComposedLinearSolver(LinearSolver):
             )
         if not residualGrowthFactor > 1.0:
             raise ValueError("ComposedLinearSolver: residualGrowthFactor must be greater than 1")
-        if warnOuterIterations < 0:
-            raise ValueError("ComposedLinearSolver: warnOuterIterations must not be negative")
+        if warningOuterIterations < 0:
+            raise ValueError("ComposedLinearSolver: warningOuterIterations must not be negative")
         self.root = root
         self.residualGrowthFactor = residualGrowthFactor
         self.verbosity = verbosity
-        self.warnOuterIterations = warnOuterIterations
+        self.warningOuterIterations = warningOuterIterations
         self.dumps = dumps
         self._givenCoordinates = {
             name: np.asarray(coordinates, dtype=float) for name, coordinates in (nodeCoordinates or {}).items()
@@ -409,16 +409,16 @@ class ComposedLinearSolver(LinearSolver):
             iters=record.iterations,
             residual=record.residual,
             residualMet=record.converged,
-            retries=record.continuations,
+            retries=record.trueResidualRestarts,
             detailLines=detailLines,
         )
-        if record.iterations > self.warnOuterIterations:
+        if record.iterations > self.warningOuterIterations:
             self._log(
                 "warning",
                 "solve #{:} needed {:} outer Krylov iterations, above the warning threshold of {:}. Likely a "
                 "preconditioner-quality problem, not a physics one -- worth checking whether the Jacobian changed "
                 "sharply since the last rebuild of the preconditioner.".format(
-                    self._solveCount, record.iterations, self.warnOuterIterations
+                    self._solveCount, record.iterations, self.warningOuterIterations
                 ),
             )
         if record.converged:
@@ -426,18 +426,18 @@ class ComposedLinearSolver(LinearSolver):
         if record.capHit:
             self._log(
                 "warning",
-                "solve #{:} did not converge: ‖r‖={:.1e} still exceeds η={:.1e} after {:} continuations, and a pass "
+                "solve #{:} did not converge: ‖r‖={:.1e} still exceeds η={:.1e} after {:} true-residual restarts, and a pass "
                 "of the Krylov solver stopped at its iteration cap. The cap is a budget, not a tolerance: a solve that "
                 "needs more is a preconditioning problem -- the preconditioner is rebuilt for the next "
-                "solve.".format(self._solveCount, record.residual, record.eta, record.continuations),
+                "solve.".format(self._solveCount, record.residual, record.eta, record.trueResidualRestarts),
             )
         elif record.scaledSystem:
             self._log(
                 "warning",
-                "solve #{:} did not fully converge: ‖r‖={:.1e} still exceeds η={:.1e} after {:} continuations, though "
+                "solve #{:} did not fully converge: ‖r‖={:.1e} still exceeds η={:.1e} after {:} true-residual restarts, though "
                 "the Krylov solve converged its own (scaled) residual: the gap between the scaled and the true "
-                "residual, which more continuations or a GapCompensation close; a rebuilt preconditioner does "
-                "not.".format(self._solveCount, record.residual, record.eta, record.continuations),
+                "residual, which more true-residual restarts or a ResidualGapCompensation close; a rebuilt preconditioner does "
+                "not.".format(self._solveCount, record.residual, record.eta, record.trueResidualRestarts),
             )
         else:
             self._log(
@@ -458,7 +458,7 @@ class ComposedLinearSolver(LinearSolver):
         slow = False
         if record is not None:
             state = {**dataclasses.asdict(record), **state, "previousIterations": self._previousIterations}
-            slow = record.iterations > self.dumps.thresholdOr(self.warnOuterIterations) or (
+            slow = record.iterations > self.dumps.thresholdOr(self.warningOuterIterations) or (
                 record.capHit and not record.converged
             )
         self.dumps.afterSolve(

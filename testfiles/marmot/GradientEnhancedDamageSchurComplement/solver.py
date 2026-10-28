@@ -21,6 +21,6 @@ def fieldCorrections(context):
 
 blockGaussSeidel = Multiplicative(fieldCorrections)
 linearSolver = LGMRES(
-    SchurComplement(condense=[softeningZone], preconditionS=DiagonalScaling(blockGaussSeidel)),
+    SchurComplement(condensedDofs=[softeningZone], schurComplementSolve=DiagonalScaling(blockGaussSeidel)),
     tolerance=FixedTolerance(1e-10),
 )

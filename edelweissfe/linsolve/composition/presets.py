@@ -41,8 +41,8 @@ from edelweissfe.linsolve.composition.combinators import (
 from edelweissfe.linsolve.composition.diagonalscaling import DiagonalScaling
 from edelweissfe.linsolve.composition.krylov import (
     LGMRES,
-    GapCompensation,
     RebuildPolicy,
+    ResidualGapCompensation,
 )
 from edelweissfe.linsolve.composition.twolevel import (
     RigidBodyModesPerAggregate,
@@ -82,8 +82,8 @@ def blockAMG(
     symmetric: bool = False,
     rebuild: RebuildPolicy = None,
     krylovOnScaledSystem: bool = False,
-    continuations: int = 2,
-    gapCompensation: GapCompensation = None,
+    trueResidualRestarts: int = 2,
+    residualGapCompensation: ResidualGapCompensation = None,
     dropTolerance: float = 0.0,
     lumpDroppedEntries: bool = False,
 ) -> Preconditioner:
@@ -115,8 +115,8 @@ def blockAMG(
         When the preconditioner is rebuilt.
     krylovOnScaledSystem
         Run LGMRES on the scaled matrix, ``DiagonalScaling(LGMRES(Multiplicative(...)))``, with its true-residual
-        ``continuations`` and ``gapCompensation`` (see :class:`~edelweissfe.linsolve.composition.krylov.KrylovSolver`).
-    continuations, gapCompensation
+        ``trueResidualRestarts`` and ``residualGapCompensation`` (see :class:`~edelweissfe.linsolve.composition.krylov.KrylovSolver`).
+    trueResidualRestarts, residualGapCompensation
         See :class:`~edelweissfe.linsolve.composition.krylov.KrylovSolver`; only with ``krylovOnScaledSystem``.
     dropTolerance, lumpDroppedEntries
         Build every field's preconditioner on its filtered block, see
@@ -143,8 +143,8 @@ def blockAMG(
             tolerance=tolerance,
             maxIterations=maxIterations,
             rebuild=rebuild,
-            continuations=continuations,
-            gapCompensation=gapCompensation,
+            trueResidualRestarts=trueResidualRestarts,
+            residualGapCompensation=residualGapCompensation,
         )
 
     if krylovOnScaledSystem:

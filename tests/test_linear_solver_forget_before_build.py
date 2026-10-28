@@ -111,7 +111,7 @@ def test_the_schur_complement_drops_its_old_complement_and_child_before_it_forms
     A, b, barDofs = barOnFoundation(n=8)
     fields = [FieldBlock("u", 0, A.shape[0], 1)]
     child = AMG()
-    schur = condensingGivenDofs(SchurComplement(["bars"], preconditionS=child), barDofs)
+    schur = condensingGivenDofs(SchurComplement(["bars"], schurComplementSolve=child), barDofs)
     root = LGMRES(schur, FixedTolerance(1e-8))
     solver = _composed(root, fields)
     solver(A, b)

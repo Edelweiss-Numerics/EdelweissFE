@@ -504,7 +504,7 @@ cdef class PyAMGCLKrylovSolver:
             the ``maxIterations`` of the Krylov component), set on the underlying ``amgcl::solver::lgmres`` object's own
             ``prm`` for this call.
         x0
-            Optional initial guess (warm start), e.g. a true-residual continuation of the Krylov component.
+            Optional initial guess (warm start), e.g. a true-residual restart of the Krylov component.
             Defaults to zero.
 
         AMGCL's lgmres returns ``x = 0`` at once for ``||rhs|| < 2 eps`` (about 4.4e-16), whatever the units of

@@ -967,7 +967,7 @@ inline void forceOuterKrylovParameters( boost::property_tree::ptree&,
 /// the component's augmentationVectors) is unaffected.
 ///
 /// tol/maxiter are set on every call on the solver's own public prm member -- the forcing tolerance and the
-/// tolerances of the continuations change per call -- and every call iterates on the EquilibratedSystemT it is
+/// tolerances of the true-residual restarts change per call -- and every call iterates on the EquilibratedSystemT it is
 /// given.
 template < class SolverType >
 class OuterKrylovSolverT : public OuterKrylovSolver {
@@ -990,7 +990,7 @@ public:
   }
 
   /// @brief x <- A^-1 rhs, right-preconditioned by the callback (applyFn/ctx). x holds the initial
-  /// guess on input (a continuation of the Krylov component pre-fills it) and the solution on
+  /// guess on input (a true-residual restart of the Krylov component pre-fills it) and the solution on
   /// output; iters/error return lgmres's iteration count and its own relative residual -- of the
   /// equilibrated system As, or, onUnscaledOperator, of A itself (the right preconditioner then has
   /// to map an A-residual to an A-correction).

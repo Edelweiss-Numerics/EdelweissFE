@@ -157,7 +157,7 @@ Every linear solver is a composed solver (`edelweissfe/linsolve/composition/`, a
 `edelweissfe/linsolve/types.py`, registry category `linsolver`), named by a `*solver`'s `linsolver=` (or a type name
 for its defaults); Python: `getLinSolverByName(type, options)`.
 - **Direct solvers** (`type=pardiso`, `superlu`, `umfpack`, `klu`, `petsclu`, `mumps`, `panuapardiso`): the one leaf
-  `DirectSolver(backend)`; backends in `linsolve/<name>/` (registry category `directsolver`). MKL PARDISO is the
+  `DirectSolver(package)`; packages in `linsolve/<name>/` (registry category `directsolver`). MKL PARDISO is the
   default, with optional symbolic factorization reuse (`reuseSymbolicFactorization`, off by default).
 - **`type=blockamg`**: the `blockAMG()` preset, field-split block AMG for coupled multi-field problems (AMGCL).
 - **`type=custom`**: a solver script binding the tree to its global `linearSolver`.

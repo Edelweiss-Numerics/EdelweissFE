@@ -126,7 +126,7 @@ Displacement block alone, on captured systems of the damage cylinder: AMGCL's co
 :math:`D^{-1} t`.
 
 Full system, offline, on the captured sequences and on isolated systems of both reference models, the
-configuration with and without ``blockTranslationNullspace``, outer iterations only: clearly
+configuration with and without the translations as near-null-space (``nearNullspace``), outer iterations only: clearly
 fewer on the damage cylinder, both in its onset sequence and on its isolated systems; on the contact
 model about the same in its sequence, whose hierarchies were rebuilt more often, and fewer on its
 isolated systems. A control with unit weights needed exactly the iterations of AMGCL's identity blocks,
@@ -169,7 +169,7 @@ See :ref:`blockamg-gap-compensation`.
 
 Gap compensation is a live option only on the scaled system. Per increment it
 is a clear win there: on a live window of a reference model it substantially cut both the number of
-continuations and the outer iterations needed, with no cutbacks or material return-mapping
+true-residual restarts and the outer iterations needed, with no cutbacks or material return-mapping
 failures. But the scaled system, left uncompensated, happens
 to over-solve every system by a large factor, and the Newton iteration quietly relies on that:
 converging merely inside the requested tolerance costs Newton extra iterations per
@@ -451,7 +451,7 @@ level and the rigid-body coarse level of its default coarse solve), the others o
 
 On the 14 systems (outer iterations / wall s, the mean of two repetitions; the default
 ``TwoLevel(coarseSpace=CornerNodeInterpolation())``, against the former default written out,
-``TwoLevel(coarseSpace=CornerNodeInterpolation(DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModesPerAggregate(), tree=t))), tree=t)``
+``TwoLevel(coarseSpace=CornerNodeInterpolation(DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModesPerAggregate(), amgclTree=t))), amgclTree=t)``
 with ``t = defaultFieldTree(3)``):
 
 .. list-table::
@@ -551,7 +551,7 @@ contact anchor model with many multi-point-constraint slaves):
   for its prolongation smoother (``estimate_spectral_radius``, 20 power iterations) cut outer
   iterations for the same number of preconditioner applications.
 * **The translations of the equilibrated block** as a block hierarchy's near-null-space
-  (``blockTranslationNullspace``), instead of AMGCL's identity blocks, which are :math:`D`-weighted
+  (``nearNullspace``, the default on a block backend), instead of AMGCL's identity blocks, which are :math:`D`-weighted
   translations (see :ref:`the near-null-space of a block backend <blockamg-block-nullspace>`). Measured
   later than the rest, live on more models than these two, with and without them: fewer outer iterations
   and fewer solves stopping at the iteration cap on most models, with the same physical results. The
@@ -571,12 +571,12 @@ contact anchor model with many multi-point-constraint slaves):
   noise at small iteration counts; with the cap of 100 it can fire only while the solve the
   hierarchies were built for took fewer than about 34 iterations -- beyond that, only a cap hit (or a
   new increment, a pattern change) rebuilds them.
-* ``ForcingTolerance(maximum=1e-3)`` is not about the linear solver at all: through a damage onset, Newton needs
+* ``EisenstatWalkerTolerance(maximum=1e-3)`` is not about the linear solver at all: through a damage onset, Newton needs
   linear solves about ten times tighter than the Eisenstat--Walker forcing allowed at a maximum of 1e-2.
   ``minimum = 1e-4`` was measured against ``1e-3``: the looser value cost Newton extra
   iterations already before the damage onset, and more wall-clock to match.
 * ``krylovOnScaledSystem = false`` converges the true residual directly, so the gap compensation and
-  the continuations of the scaled system have nothing to do and are left at their own, otherwise
+  the true-residual restarts of the scaled system have nothing to do and are left at their own, otherwise
   inert, defaults.
 * ``pruneCondensedMatrixZeros`` (a nonlinear-solver option, not a component's) now defaults to
   "off for a solver that needs the pattern stable", and a solver with a Krylov solve reports exactly that -- so on a

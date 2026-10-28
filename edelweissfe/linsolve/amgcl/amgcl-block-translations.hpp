@@ -1,6 +1,6 @@
 /*
  * Smoothed aggregation on a block backend with the translations of the block as its near null-space
- * (EdelweissFE, AMG(blockTranslationNullspace=True) of edelweissfe/linsolve/composition/amg.py).
+ * (EdelweissFE, AMG(nearNullspace="translations") of edelweissfe/linsolve/composition/amg.py).
  *
  * smoothed_aggregation_with_translations::transfer_operators() is the one of
  * amgcl/coarsening/smoothed_aggregation.hpp (AMGCL 1.4.x) except for the tentative prolongation and the minimum

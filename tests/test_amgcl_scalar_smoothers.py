@@ -85,7 +85,7 @@ def test_scalar_backend_preconditions_a_krylov_solve(system, relaxationType):
     A, b = system
     tree = {"coarsening": {"type": "smoothed_aggregation"}, "relax": {"type": relaxationType}}
     solver = ComposedLinearSolver(
-        LGMRES(AMG(tree=tree, backendBlockSize=1), tolerance=FixedTolerance(1e-8), maxIterations=300),
+        LGMRES(AMG(amgclTree=tree, backendBlockSize=1), tolerance=FixedTolerance(1e-8), maxIterations=300),
         verbosity="silent",
     )
     solver.setFieldStructure([FieldBlock("u", 0, A.shape[0], 1)])

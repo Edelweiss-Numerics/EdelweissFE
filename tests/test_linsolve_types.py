@@ -165,7 +165,7 @@ def test_linsolver_names_a_block_or_a_type_with_its_defaults(tmp_path):
     )
     named = createLinearSolver("Dumping", definitions)
     assert named.verbosity == "silent" and named.dumps.trigger == "every"
-    assert isinstance(named.root, DirectSolver) and named.root.backend == "superlu"
+    assert isinstance(named.root, DirectSolver) and named.root.package == "superlu"
     byType = createLinearSolver("superlu", definitions)
     assert byType.dumps is None and byType.verbosity == "warning"
     assert createLinearSolver("superlu", definitions) is not byType  # a new solver per step

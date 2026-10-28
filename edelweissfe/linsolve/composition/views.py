@@ -71,14 +71,14 @@ def structure(component) -> str:
 
     Example::
 
-        LGMRES(tolerance=ForcingTolerance(minimum=0.0001, maximum=0.001), maxIterations=100, restart=50,
+        LGMRES(tolerance=EisenstatWalkerTolerance(minimum=0.0001, maximum=0.001), maxIterations=100, restart=50,
         augmentationVectors=3)
         └─ DiagonalScaling(D=diag(1/√|aᵢᵢ|))
            └─ Multiplicative
               ├─ M1: OnField(field=displacement)
               │  └─ TwoLevel(coarse space=rigid-body modes, prolongation=smoothed, coarse solve=AMG V-cycle)
               └─ M2: OnField(field=nonlocal damage)
-                 └─ AMG(tree=default)
+                 └─ AMG(amgclTree=default)
     """
     lines = []
     _tree(component, "", lines, "", True, True, lambda _: "")

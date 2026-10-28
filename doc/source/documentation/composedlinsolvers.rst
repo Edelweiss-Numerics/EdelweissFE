@@ -47,7 +47,7 @@ and in the input file:
     *solver, solver=NIST, name=theSolver
     linsolver=mySolver
 
-``LGMRES``'s defaults are the production ones: an Eisenstat--Walker tolerance per solve (``ForcingTolerance``), a
+``LGMRES``'s defaults are the production ones: an Eisenstat--Walker tolerance per solve (``EisenstatWalkerTolerance``), a
 ``RebuildPolicy`` that reuses the preconditioner across Newton iterations, and the detection of a new increment
 through the adapter's ``residualGrowthFactor``; for a plain solve to a fixed tolerance, write
 ``LGMRES(..., tolerance=FixedTolerance(1e-8))``.
@@ -85,14 +85,14 @@ Components
 
     * - Component
       - :math:`M^{-1}`
-    * - ``LGMRES(preconditioner, tolerance, maxIterations, restart, augmentationVectors, rebuild, continuations, gapCompensation)``
+    * - ``LGMRES(preconditioner, tolerance, maxIterations, restart, augmentationVectors, rebuild, trueResidualRestarts, residualGapCompensation)``
       - the outer Krylov solve :math:`A x = b`, right-preconditioned (AMGCL); owns when the preconditioner is rebuilt
-        (``RebuildPolicy(stalenessFactor, rebuildOnNewIncrement, reuse)``). Needs a fixed linear preconditioner, and
+        (``RebuildPolicy(stalenessFactor, rebuildOnNewIncrement, reusePreconditioner)``). Needs a fixed linear preconditioner, and
         refuses one that is not at construction. On a diagonally scaled matrix see :ref:`composed-scaled-krylov`.
     * - ``FGMRES(preconditioner, tolerance, maxIterations, restart)``
       - flexible GMRES (AMGCL): :math:`x = Z_m y_m` from the preconditioned vectors themselves, so the preconditioner
         may change between iterations -- e.g. an inner Krylov solve
-    * - ``ForcingTolerance(minimum, maximum)``, ``FixedTolerance(eta)``
+    * - ``EisenstatWalkerTolerance(minimum, maximum)``, ``FixedTolerance(eta)``
       - the tolerance per solve: Eisenstat--Walker, or fixed
     * - ``DiagonalScaling(inner)``
       - :math:`D \, \hat M^{-1} D`, :math:`\hat M` built on :math:`\hat A = D A D`,
@@ -105,28 +105,27 @@ Components
         symmetric)`` gives the order of several or symmetric sweeps. The corrections may also be a function of the
         context, made at the first set-up (one per field, whatever the model). Every field must get a correction
         (else :math:`z = 0` there): the set-up raises for a field none acts on
-    * - ``AMG(tree, backendBlockSize, backendPrecision, blockTranslationNullspace, rigidBodyNullspace, dropTolerance,
-        lumpDroppedEntries)``
-      - one AMGCL hierarchy on a field, one cycle per application. ``tree`` holds AMGCL's parameters only, forwarded
-        verbatim; the backend (scalar entries or node-wise blocks, double or float, the block translations) is chosen
-        by the keywords, the field's default for those not given (:ref:`composed-amg-backend`); with
+    * - ``AMG(amgclTree, backendBlockSize, backendPrecision, nearNullspace, dropTolerance, lumpDroppedEntries)``
+      - one AMGCL hierarchy on a field, one cycle per application. ``amgclTree`` holds AMGCL's parameters only,
+        forwarded verbatim; the backend (scalar entries or node-wise blocks, double or float) and the near null-space
+        (``"rigidBodyModes"``, ``"translations"`` or ``None``) are chosen by the keywords, the field's default for those not given (:ref:`composed-amg-backend`); with
         ``dropTolerance`` built on the filtered block (:ref:`composed-drop-tolerance`)
-    * - ``TwoLevel(coarseSpace, tree, backendBlockSize, backendPrecision, coarseHierarchyPrecision, dropTolerance,
+    * - ``TwoLevel(coarseSpace, amgclTree, backendBlockSize, backendPrecision, coarseHierarchyPrecision, dropTolerance,
         lumpDroppedEntries)``
       - a two-level cycle with a coarse space of its own (a ``CoarseSpace``): all rigid-body modes per aggregate,
         ``RigidBodyModesPerAggregate(prolongation)``, or the interpolant from the corner nodes in the scaled variables (P1), ``CornerNodeInterpolation(coarseSolve)``,
         whose coarse solve is a component on the corner-node field (default
-        ``DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModesPerAggregate(), tree=defaultCornerNodeTwoLevelTree()))``,
+        ``DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModesPerAggregate(), amgclTree=defaultCornerNodeTwoLevelTree()))``,
         :ref:`blockamg-p-multigrid`). Both read the fine Chebyshev smoother from the tree's ``relax``, ``npre`` and
         ``npost``; without a tree, the default tree of the field (degree 16), and for ``CornerNodeInterpolation`` on a vector
         field the smoother of the corner-node two-level cycle (degree 8), on both of its levels (:ref:`composed-default-field-trees`)
-    * - ``SchurComplement(condense, preconditionS, solveA_bb, approximation, dropTolerance, windowNodes, haloNodes,
-        blockFactors)``
+    * - ``SchurComplement(condensedDofs, schurComplementSolve, condensedBlockSolve, approximation, dropTolerance,
+        windowNodes, haloNodes, blockFactors)``
       - block LU: :math:`z_k = M_{\tilde S}^{-1}(r_k - A_{kb} A_{bb}^{-1} r_b)`,
-        :math:`z_b = A_{bb}^{-1}(r_b - A_{bk} z_k)`; ``solveA_bb`` is a ``DirectSolver``, set up on :math:`A_{bb}`
+        :math:`z_b = A_{bb}^{-1}(r_b - A_{bk} z_k)`; ``condensedBlockSolve`` is a ``DirectSolver``, set up on :math:`A_{bb}`
         on every solve
-    * - ``DirectSolver(backend, **options)``
-      - :math:`A^{-1}` by a registered direct solver backend (``superlu``, ``umfpack``, ``pardiso``, ``klu``,
+    * - ``DirectSolver(package, **options)``
+      - :math:`A^{-1}` by a registered direct solver package (``superlu``, ``umfpack``, ``pardiso``, ``klu``,
         ``mumps``, ``petsclu``, ``panuapardiso``; registry category ``directsolver``): every backend factorizes once
         per set-up (a singular matrix is reported there) and back-substitutes in every application, so it is as
         cheap inside a Krylov tree as alone; ``type=pardiso`` is ``DirectSolver("pardiso",
@@ -218,7 +217,7 @@ of that type (``*linearSolver, type=blockamg``), and in a script ``linearSolver 
 
 The corrections are made at the first set-up, for the fields of the model; ``sweeps`` and ``symmetric`` order them
 with ``gaussSeidelOrder``. ``blockAMG(krylovOnScaledSystem=True)`` puts the scaling around LGMRES instead
-(:ref:`composed-scaled-krylov`), ``continuations`` and ``gapCompensation`` go to LGMRES, and ``dropTolerance`` and
+(:ref:`composed-scaled-krylov`), ``trueResidualRestarts`` and ``residualGapCompensation`` go to LGMRES, and ``dropTolerance`` and
 ``lumpDroppedEntries`` to every field (:ref:`composed-drop-tolerance`).
 
 The 3D displacement field gets the rigid-body coarse level, ``TwoLevel(coarseSpace=RigidBodyModesPerAggregate())``: a first coarse
@@ -269,7 +268,7 @@ marked elements -- the nodes all of whose elements are marked. For embedded bars
 
 
     blockGaussSeidel = Multiplicative(fieldCorrections)
-    linearSolver = LGMRES(SchurComplement(condense=[bars, bonds], preconditionS=DiagonalScaling(blockGaussSeidel)))
+    linearSolver = LGMRES(SchurComplement(condensedDofs=[bars, bonds], schurComplementSolve=DiagonalScaling(blockGaussSeidel)))
 
 .. code-block:: edelweiss
 
@@ -358,13 +357,13 @@ system, after two solves:
 
 ``print(solver)`` -- the structure::
 
-    LGMRES(tolerance=ForcingTolerance(minimum=0.0001, maximum=0.001), maxIterations=100, restart=50, augmentationVectors=3)
+    LGMRES(tolerance=EisenstatWalkerTolerance(minimum=0.0001, maximum=0.001), maxIterations=100, restart=50, augmentationVectors=3)
     └─ DiagonalScaling(D=diag(1/√|aᵢᵢ|))
        └─ Multiplicative
           ├─ M1: OnField(field=displacement)
           │  └─ TwoLevel(coarse space=rigid-body modes, prolongation=smoothed, coarse solve=AMG V-cycle)
           └─ M2: OnField(field=nonlocal damage)
-             └─ AMG(tree=default)
+             └─ AMG(amgclTree=default)
 
 ``views.formula(solver)`` -- the composed approximate inverse (``latex=True`` for LaTeX)::
 

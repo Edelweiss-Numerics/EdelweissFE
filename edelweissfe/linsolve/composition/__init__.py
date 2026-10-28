@@ -74,10 +74,10 @@ from edelweissfe.linsolve.composition.direct import DirectSolver
 from edelweissfe.linsolve.composition.krylov import (
     FGMRES,
     LGMRES,
+    EisenstatWalkerTolerance,
     FixedTolerance,
-    ForcingTolerance,
-    GapCompensation,
     RebuildPolicy,
+    ResidualGapCompensation,
     SolveRecord,
 )
 from edelweissfe.linsolve.composition.presets import blockAMG
@@ -106,8 +106,8 @@ __all__ = [
     "DirectSolver",
     "FGMRES",
     "FixedTolerance",
-    "ForcingTolerance",
-    "GapCompensation",
+    "EisenstatWalkerTolerance",
+    "ResidualGapCompensation",
     "Jacobi",
     "LGMRES",
     "MatrixChange",

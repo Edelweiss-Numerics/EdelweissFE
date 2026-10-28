@@ -198,12 +198,12 @@ class FixedCondensation(SchurComplementCondensation):
         return self.dofs, self.dofs
 
 
-def solveA_bbOf(condensation) -> DirectSolver:
+def condensedBlockSolveOf(condensation) -> DirectSolver:
     """:math:`A_{bb}^{-1}` of a condensation's last update: a SuperLU leaf set up on its :math:`A_{bb}`."""
-    solveA_bb = DirectSolver()
+    condensedBlockSolve = DirectSolver()
     n = condensation.A_bb.shape[0]
-    solveA_bb.setUp(SystemMatrix(condensation.A_bb), SetUpContext(fields=(FieldBlock("condensed", 0, n, 1),)))
-    return solveA_bb
+    condensedBlockSolve.setUp(SystemMatrix(condensation.A_bb), SetUpContext(fields=(FieldBlock("condensed", 0, n, 1),)))
+    return condensedBlockSolve
 
 
 def condensingGivenDofs(schur, dofs, **options):

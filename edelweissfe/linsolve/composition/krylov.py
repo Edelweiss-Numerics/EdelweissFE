@@ -25,7 +25,7 @@
 #  The full text of the license can be found in the file LICENSE.md at
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
-"""The outer Krylov solve: :class:`LGMRES` or :class:`FGMRES`, its tolerance per solve (:class:`ForcingTolerance`,
+"""The outer Krylov solve: :class:`LGMRES` or :class:`FGMRES`, its tolerance per solve (:class:`EisenstatWalkerTolerance`,
 :class:`FixedTolerance`) and when it rebuilds its preconditioner (:class:`RebuildPolicy`).
 
 A Krylov method accelerates a basic iteration :math:`x \\leftarrow x + M^{-1}(b - A x)`: from the preconditioned
@@ -119,7 +119,7 @@ class FixedTolerance:
         return "FixedTolerance({:g})".format(self.eta)
 
 
-class ForcingTolerance:
+class EisenstatWalkerTolerance:
     """The Eisenstat--Walker forcing tolerance per solve, see :func:`eisenstatWalkerTolerance`.
 
     Parameters
@@ -135,12 +135,12 @@ class ForcingTolerance:
     ):
         if not 0.0 < minimum <= maximum < 1.0:
             raise ValueError(
-                "ForcingTolerance: needs 0 < minimum <= maximum < 1, got {!r}, {!r}".format(minimum, maximum)
+                "EisenstatWalkerTolerance: needs 0 < minimum <= maximum < 1, got {!r}, {!r}".format(minimum, maximum)
             )
         # the ranges of Eisenstat and Walker's choice 2
         if not 0.0 < gamma <= 1.0 or not 1.0 < alpha <= 2.0:
             raise ValueError(
-                "ForcingTolerance: needs 0 < gamma <= 1 and 1 < alpha <= 2, got {!r}, {!r}".format(gamma, alpha)
+                "EisenstatWalkerTolerance: needs 0 < gamma <= 1 and 1 < alpha <= 2, got {!r}, {!r}".format(gamma, alpha)
             )
         self.minimum = minimum
         self.maximum = maximum
@@ -164,7 +164,7 @@ class ForcingTolerance:
         return eta
 
     def __repr__(self) -> str:
-        return "ForcingTolerance(minimum={:g}, maximum={:g})".format(self.minimum, self.maximum)
+        return "EisenstatWalkerTolerance(minimum={:g}, maximum={:g})".format(self.minimum, self.maximum)
 
 
 @dataclass
@@ -180,13 +180,13 @@ class RebuildPolicy:
         iteration cap.
     rebuildOnNewIncrement
         Whether a new increment of the nonlinear solver rebuilds it.
-    reuse
+    reusePreconditioner
         Whether it is reused at all: ``False`` rebuilds it for every solve.
     """
 
     stalenessFactor: float = 3.0
     rebuildOnNewIncrement: bool = True
-    reuse: bool = True
+    reusePreconditioner: bool = True
 
     def __post_init__(self):
         if not self.stalenessFactor >= 1.0:
@@ -198,21 +198,21 @@ class RebuildPolicy:
             change = change.withRebuild("increment")
         if stale:
             change = change.withRebuild("stale")
-        if not self.reuse:
+        if not self.reusePreconditioner:
             change = change.withRebuild("always")
         return change
 
 
-class GapCompensation:
+class ResidualGapCompensation:
     """For a Krylov solve on a diagonally scaled matrix :math:`\\hat A = D A D` (``DiagonalScaling(LGMRES(...))``):
     ask the first pass for :math:`s \\, \\eta / g` instead of :math:`\\eta`, with :math:`g` the gap between the true
     and the scaled relative residual of the same iterate, learned from the previous solves, so that the pass lands on
-    the true-residual target without a continuation; a continuation then tightens by the measured gap instead of
+    the true-residual target without a true-residual restart; such a restart then tightens by the measured gap instead of
     the fixed factor 0.01.
 
     The Krylov method converges the scaled residual :math:`\\lVert D (b - A x) \\rVert`, while the solve is accepted
     on the true one, :math:`\\lVert b - A x \\rVert / \\lVert b \\rVert`; their ratio was measured from close to one
-    (gradient-enhanced damage) to far larger (contact with multi-point constraints). Measured to save continuations
+    (gradient-enhanced damage) to far larger (contact with multi-point constraints). Measured to save true-residual restarts
     and iterations per increment, but the uncompensated scaled solve over-solves, and Newton relies on that: per
     unit of simulated time the saving was largely given back. Hence it is opt-in.
 
@@ -227,9 +227,9 @@ class GapCompensation:
 
     def __init__(self, safetyFactor: float = 0.3, maxFactor: float = 1e3):
         if not safetyFactor > 0.0:
-            raise ValueError("GapCompensation: safetyFactor must be positive, got {!r}".format(safetyFactor))
+            raise ValueError("ResidualGapCompensation: safetyFactor must be positive, got {!r}".format(safetyFactor))
         if not maxFactor >= 1.0:
-            raise ValueError("GapCompensation: maxFactor must be at least 1 (the gap is floored at 1)")
+            raise ValueError("ResidualGapCompensation: maxFactor must be at least 1 (the gap is floored at 1)")
         self.safetyFactor = safetyFactor
         self.maxFactor = maxFactor
         #: :math:`g`, smoothed over the solves (an exponential moving average with weight 1/2).
@@ -245,14 +245,14 @@ class GapCompensation:
         if np.isfinite(measuredGap) and measuredGap > 0.0:
             self.gap = min(max(0.5 * self.gap + 0.5 * measuredGap, 1.0), self.maxFactor)
 
-    def continuationTolerance(self, eta: float, previousTolerance: float, trueResidual: float, scaledResidual):
-        """The tolerance of a continuation: aimed at :math:`s \\, \\eta / g` of the current gap, and at least half the
-        previous one, so that the continuations end."""
+    def restartTolerance(self, eta: float, previousTolerance: float, trueResidual: float, scaledResidual):
+        """The tolerance of a true-residual restart: aimed at :math:`s \\, \\eta / g` of the current gap, and at least half the
+        previous one, so that the restarts end."""
         gap = trueResidual / max(scaledResidual, 1e-300)
         return max(min(self.safetyFactor * eta / max(gap, 1.0), 0.5 * previousTolerance), 1e-14)
 
     def __repr__(self) -> str:
-        return "GapCompensation(safetyFactor={:g}, maxFactor={:g})".format(self.safetyFactor, self.maxFactor)
+        return "ResidualGapCompensation(safetyFactor={:g}, maxFactor={:g})".format(self.safetyFactor, self.maxFactor)
 
 
 @dataclass(frozen=True)
@@ -262,7 +262,7 @@ class SolveRecord:
     Attributes
     ----------
     iterations
-        Its outer iterations, continuations included.
+        Its outer iterations, true-residual restarts included.
     residual
         Its true relative residual :math:`\\lVert b - A x \\rVert / \\lVert b \\rVert`, in the physical variables of
         its (sub-)problem.
@@ -270,7 +270,7 @@ class SolveRecord:
         Its tolerance.
     capHit
         Whether a pass stopped at the iteration cap short of its tolerance.
-    continuations
+    trueResidualRestarts
         How many warm-restarted passes followed the first (only on a diagonally scaled matrix).
     rebuildReason
         Why the preconditioner was rebuilt for it, or ``None`` (reused).
@@ -282,7 +282,7 @@ class SolveRecord:
     residual: float
     eta: float
     capHit: bool
-    continuations: int
+    trueResidualRestarts: int
     rebuildReason: "str | None"
     scaledSystem: bool
 
@@ -303,21 +303,21 @@ class KrylovSolver(Preconditioner):
     preconditioner
         :math:`M^{-1}`.
     tolerance
-        The tolerance per solve: :class:`ForcingTolerance` (default) or :class:`FixedTolerance`. May be replaced
+        The tolerance per solve: :class:`EisenstatWalkerTolerance` (default) or :class:`FixedTolerance`. May be replaced
         between solves (an offline replay pins it to the live one).
     maxIterations
         The iteration cap of a solve (across restarts). A solve that reaches it returns its iterate.
     rebuild
         When the preconditioner is rebuilt, see :class:`RebuildPolicy`.
-    continuations
+    trueResidualRestarts
         On a diagonally scaled matrix (``DiagonalScaling(LGMRES(...))``) the method converges the scaled residual,
         while the solve is accepted on the true one, which can be larger (stiff rows are weighted down by
         :math:`D`): a pass that misses :math:`\\eta` on the true residual is continued from its iterate, at most this
-        many times, with a tighter tolerance (0.01 times the previous, or see :class:`GapCompensation`). On an
+        many times, with a tighter tolerance (0.01 times the previous, or see :class:`ResidualGapCompensation`). On an
         unscaled matrix the residual the method converges is the true one, and a pass that misses :math:`\\eta` has
-        hit the iteration cap, which a warm restart would only extend: no continuations there.
-    gapCompensation
-        A :class:`GapCompensation`, or ``None`` (the default): only on a diagonally scaled matrix.
+        hit the iteration cap, which a warm restart would only extend: no true-residual restarts there.
+    residualGapCompensation
+        A :class:`ResidualGapCompensation`, or ``None`` (the default): only on a diagonally scaled matrix.
     """
 
     #: AMGCL's name of the method.
@@ -329,23 +329,25 @@ class KrylovSolver(Preconditioner):
         tolerance=None,
         maxIterations: int = 100,
         rebuild=None,
-        continuations: int = 2,
-        gapCompensation: GapCompensation = None,
+        trueResidualRestarts: int = 2,
+        residualGapCompensation: ResidualGapCompensation = None,
     ):
         name = type(self).__name__
         requirePreconditioner(name, "preconditioner", preconditioner)
         super().__init__()
         if maxIterations < 1:
             raise ValueError("{:}: maxIterations must be at least 1, got {:}".format(name, maxIterations))
-        if continuations < 0:
-            raise ValueError("{:}: continuations must not be negative, got {:}".format(name, continuations))
+        if trueResidualRestarts < 0:
+            raise ValueError(
+                "{:}: trueResidualRestarts must not be negative, got {:}".format(name, trueResidualRestarts)
+            )
         self.preconditioner = preconditioner
         self._checkPreconditioner()
-        self.tolerance = tolerance if tolerance is not None else ForcingTolerance()
+        self.tolerance = tolerance if tolerance is not None else EisenstatWalkerTolerance()
         self.maxIterations = maxIterations
         self.rebuild = rebuild if rebuild is not None else RebuildPolicy()
-        self.continuations = continuations
-        self.gapCompensation = gapCompensation
+        self.trueResidualRestarts = trueResidualRestarts
+        self.residualGapCompensation = residualGapCompensation
         self.A = None
         self.eta = None
         self._context = None
@@ -354,7 +356,7 @@ class KrylovSolver(Preconditioner):
         self.lastIterations = None
         self.lastResidual = None
         self.lastCapHit = False
-        self.lastContinuations = 0
+        self.lastTrueResidualRestarts = 0
         self.lastScaledSystem = False
         self.lastRebuildReason = None
         self._krylov = None
@@ -413,26 +415,26 @@ class KrylovSolver(Preconditioner):
         return self._krylov
 
     def _apply(self, b: np.ndarray) -> np.ndarray:
-        """The solve: a first pass, and on a diagonally scaled matrix the continuations while the true residual misses
-        :math:`\\eta` (see ``continuations``)."""
+        """The solve: a first pass, and on a diagonally scaled matrix the true-residual restarts while the true residual misses
+        :math:`\\eta` (see ``trueResidualRestarts``)."""
         # on D A D (DiagonalScaling(LGMRES(...))): the method converges the scaled residual, not the true one
         onScaledSystem = self.A.scaling is not None
         eta = self.eta
-        compensating = self.gapCompensation is not None and onScaledSystem
-        passTolerance = self.gapCompensation.firstPassTolerance(eta) if compensating else eta
+        compensating = self.residualGapCompensation is not None and onScaledSystem
+        passTolerance = self.residualGapCompensation.firstPassTolerance(eta) if compensating else eta
         with performancetiming.timeit("outer Krylov solve"):
             x, iterations, capHit = self._pass(b, passTolerance)
             trueResidual, scaledResidual = self._residuals(b, x, onScaledSystem)
         if compensating:
-            self.gapCompensation.learn(trueResidual, scaledResidual)
-        continuations = 0
-        with performancetiming.timeit("true-residual continuations"):
+            self.residualGapCompensation.learn(trueResidual, scaledResidual)
+        trueResidualRestarts = 0
+        with performancetiming.timeit("true-residual restarts"):
             if compensating:
                 passTolerance = min(eta, passTolerance)
-            while onScaledSystem and trueResidual > eta and continuations < self.continuations:
-                continuations += 1
+            while onScaledSystem and trueResidual > eta and trueResidualRestarts < self.trueResidualRestarts:
+                trueResidualRestarts += 1
                 if compensating:
-                    passTolerance = self.gapCompensation.continuationTolerance(
+                    passTolerance = self.residualGapCompensation.restartTolerance(
                         eta, passTolerance, trueResidual, scaledResidual
                     )
                 else:
@@ -443,10 +445,10 @@ class KrylovSolver(Preconditioner):
                 capHit = capHit or passCapHit
                 self._context.message(
                     "debug",
-                    "{:}:   continuation {:}/{:} eta={:.1e} +{:}it res={:.1e}".format(
+                    "{:}:   true-residual restart {:}/{:} eta={:.1e} +{:}it res={:.1e}".format(
                         type(self).__name__,
-                        continuations,
-                        self.continuations,
+                        trueResidualRestarts,
+                        self.trueResidualRestarts,
                         passTolerance,
                         passIterations,
                         trueResidual,
@@ -455,7 +457,7 @@ class KrylovSolver(Preconditioner):
         self.lastIterations = iterations
         self.lastResidual = trueResidual
         self.lastCapHit = capHit
-        self.lastContinuations = continuations
+        self.lastTrueResidualRestarts = trueResidualRestarts
         self.lastScaledSystem = onScaledSystem
         self._judgeStaleness()
         return x
@@ -516,7 +518,7 @@ class KrylovSolver(Preconditioner):
             residual=self.lastResidual,
             eta=self.eta,
             capHit=self.lastCapHit,
-            continuations=self.lastContinuations,
+            trueResidualRestarts=self.lastTrueResidualRestarts,
             rebuildReason=self.lastRebuildReason,
             scaledSystem=self.lastScaledSystem,
         )
@@ -534,8 +536,8 @@ class KrylovSolver(Preconditioner):
     def _describedParameters(self) -> dict:
         """The parameters the views show, in the names of this class (a method adds its own)."""
         parameters = {"tolerance": repr(self.tolerance), "maxIterations": self.maxIterations}
-        if self.gapCompensation is not None:
-            parameters["gapCompensation"] = repr(self.gapCompensation)
+        if self.residualGapCompensation is not None:
+            parameters["residualGapCompensation"] = repr(self.residualGapCompensation)
         return parameters
 
     def _steps(self) -> tuple:
@@ -550,7 +552,7 @@ class LGMRES(KrylovSolver):
 
     Parameters
     ----------
-    preconditioner, tolerance, maxIterations, rebuild, continuations, gapCompensation
+    preconditioner, tolerance, maxIterations, rebuild, trueResidualRestarts, residualGapCompensation
         See :class:`KrylovSolver`.
     restart
         The iterations of a cycle, :math:`m` (the Krylov vectors kept before a restart).
@@ -568,8 +570,8 @@ class LGMRES(KrylovSolver):
         restart: int = 50,
         augmentationVectors: int = 3,
         rebuild: RebuildPolicy = None,
-        continuations: int = 2,
-        gapCompensation: GapCompensation = None,
+        trueResidualRestarts: int = 2,
+        residualGapCompensation: ResidualGapCompensation = None,
     ):
         if restart < 1 or augmentationVectors < 0:
             raise ValueError(
@@ -579,7 +581,9 @@ class LGMRES(KrylovSolver):
             )
         self.restart = restart
         self.augmentationVectors = augmentationVectors
-        super().__init__(preconditioner, tolerance, maxIterations, rebuild, continuations, gapCompensation)
+        super().__init__(
+            preconditioner, tolerance, maxIterations, rebuild, trueResidualRestarts, residualGapCompensation
+        )
 
     def _checkPreconditioner(self) -> None:
         if not self.preconditioner.isFixedLinearOperator:
@@ -617,7 +621,7 @@ class FGMRES(KrylovSolver):
 
     Parameters
     ----------
-    preconditioner, tolerance, maxIterations, rebuild, continuations, gapCompensation
+    preconditioner, tolerance, maxIterations, rebuild, trueResidualRestarts, residualGapCompensation
         See :class:`KrylovSolver`.
     restart
         The iterations of a cycle (the vectors kept before a restart).
@@ -632,13 +636,15 @@ class FGMRES(KrylovSolver):
         maxIterations: int = 100,
         restart: int = 30,
         rebuild: RebuildPolicy = None,
-        continuations: int = 2,
-        gapCompensation: GapCompensation = None,
+        trueResidualRestarts: int = 2,
+        residualGapCompensation: ResidualGapCompensation = None,
     ):
         if restart < 1:
             raise ValueError("FGMRES: needs restart >= 1, got {:}".format(restart))
         self.restart = restart
-        super().__init__(preconditioner, tolerance, maxIterations, rebuild, continuations, gapCompensation)
+        super().__init__(
+            preconditioner, tolerance, maxIterations, rebuild, trueResidualRestarts, residualGapCompensation
+        )
 
     def _parameters(self) -> dict:
         # AMGCL's name of the restart length

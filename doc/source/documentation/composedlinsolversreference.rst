@@ -23,7 +23,7 @@ reports on the solve. Its settings are the data lines every type has (the table 
     ** silent, warning (default), info, debug
     verbosity=info
     ** a solve with more outer iterations gets a warning (default 100)
-    warnOuterIterations=60
+    warningOuterIterations=60
     ** a right-hand side this many times the last one is a new increment (default 4)
     residualGrowthFactor=4.0
     ** none (default), slow, every, or the numbers of the solves: 12 13 14
@@ -34,7 +34,7 @@ reports on the solve. Its settings are the data lines every type has (the table 
     ** custom only: run the script again whenever it changes, during the run
     hotReload=true
 
-In Python, the same adapter is ``ComposedLinearSolver(tree, verbosity=..., warnOuterIterations=...,
+In Python, the same adapter is ``ComposedLinearSolver(tree, verbosity=..., warningOuterIterations=...,
 residualGrowthFactor=..., dumps=SolveDumps(directory, trigger, maxDumps=..., contextSolves=...))``, or
 ``ComposedLinearSolver.fromScript("solver.py", hotReload=True, ...)``; ``nodeCoordinates`` and ``midsideCorners`` give node
 coordinates and midside corners per field instead of those of the model (an offline replay without a model).
@@ -53,21 +53,21 @@ All messages are nested inside the Newton iteration they belong to; warnings are
 
 ``warning`` (default)
     Only abnormal conditions, so a healthy run stays quiet: an outer iteration count past
-    ``warnOuterIterations`` (a slow solve), a true residual still above the requested tolerance after every
-    continuation (saying whether an outer pass stopped at the iteration cap, or whether, on a scaled system, the scaled
-    residual was met but not the true one), and any dump written. A pass that stopped at the cap but whose solve still met the tolerance, after a continuation,
+    ``warningOuterIterations`` (a slow solve), a true residual still above the requested tolerance after every
+    true-residual restart (saying whether an outer pass stopped at the iteration cap, or whether, on a scaled system, the scaled
+    residual was met but not the true one), and any dump written. A pass that stopped at the cap but whose solve still met the tolerance, after a true-residual restart,
     is not reported; the hierarchies are rebuilt all the same.
 
 ``info``
     Turns on the "linear solve" column of the nonlinear solver's per-iteration table: outer iteration
     count, achieved true residual (and whether it met the requested tolerance) and number of
-    continuations of each solve; and shows the structure of the solver, in a frame, at its first solve. The frame
+    true-residual restarts of each solve; and shows the structure of the solver, in a frame, at its first solve. The frame
     stands above the header of the table, so that nothing the solver says interrupts the rows. This is the level to
     run at when first characterising a model on an iterative solver.
 
 ``debug``
     Adds, per solve, whether the hierarchies were rebuilt (and why, e.g. ``rebuilt(stale)``) or ``reused``, the
-    requested tolerance and the wall-clock, in the "linear solve" column, and one line per continuation of a Krylov
+    requested tolerance and the wall-clock, in the "linear solve" column, and one line per true-residual restart of a Krylov
     solve on a scaled system. After a rebuild, the notes of the components on what they built follow in the column:
     for a ``SchurComplement``, the condensed dofs and the nonzeros of :math:`\tilde S`.
 
@@ -76,7 +76,7 @@ the run-statistics view.
 
 Per-stage wall-clock -- equilibration, the equilibrated system (the scaled operator and the coupling
 blocks between fields, built in one threaded pass), hierarchy build (per field, and per stage of a
-p-multigrid build), near-null-space construction, outer solve, and continuations -- is recorded through
+p-multigrid build), near-null-space construction, outer solve, and true-residual restarts -- is recorded through
 :mod:`~edelweissfe.utils.performancetiming` regardless of verbosity, and appears nested under "linear
 solve" in the job's performance table. That table, not the log, is the first place to look when
 deciding whether a run is dominated by hierarchy builds or by outer iterations.
@@ -95,7 +95,7 @@ the raw ``(A, b)`` of a solve -- before any diagonal scaling -- with the field-b
 which is what a replay needs in order to go back through the same tree without a live model: a sequence of
 authentic systems, so that every solver variant replayed offline sees the same input. The trigger:
 
-* ``slow``: a solve with more outer iterations than ``warnOuterIterations`` (so that a dump and its warning fire
+* ``slow``: a solve with more outer iterations than ``warningOuterIterations`` (so that a dump and its warning fire
   together), or one stopped at the iteration cap short of its tolerance. A preconditioner that degrades typically shows
   only tens of hours into a run, at a solve nobody can name in advance (a late-increment, heavily damaged Jacobian,
   say); unlike ``every`` or solve numbers, fixed *before* the run, this trigger decides by the solve's own outcome;
@@ -115,7 +115,7 @@ On disk:
 * one line per dumped system in ``manifest.jsonl``: ``solveCount``, ``role`` (``"trigger"`` or ``"context"``),
   ``triggerSolveCount``, ``contextOffset``, ``rows``, ``nnz``, ``matrixFile``, ``rhsFile``, ``geometryFile``, the field
   ``blocks`` (name, start, stop, dimension), ``patternChanged``, ``newIncrement``, and for a Krylov solve its
-  ``SolveRecord`` -- ``iterations``, ``residual`` (the true relative residual), ``eta``, ``capHit``, ``continuations``,
+  ``SolveRecord`` -- ``iterations``, ``residual`` (the true relative residual), ``eta``, ``capHit``, ``trueResidualRestarts``,
   ``rebuildReason`` (``null``: the preconditioner was reused), ``scaledSystem`` -- and ``previousIterations``.
 
 ``dumpContextSolves`` also writes the solves *before* a dumped one, kept in memory as copies. A single snapshot cannot
@@ -151,7 +151,7 @@ Reuse and tolerance
 :class:`~edelweissfe.linsolve.composition.solver.ComposedLinearSolver` finds what changed since the last solve (the
 first solve, a new model, a resized system, a new sparsity pattern, a jump of the right-hand side that marks a new
 increment) and hands it down the tree as a ``MatrixChange``. ``LGMRES`` adds its own reasons -- a new increment, a
-stale preconditioner (too many more iterations than the solve it was built for, or a cap hit), or ``reuse=False`` --
+stale preconditioner (too many more iterations than the solve it was built for, or a cap hit), or ``reusePreconditioner=False`` --
 and every component decides in ``update`` what to keep: an ``AMG`` hierarchy is kept unless a rebuild is asked for,
 a ``DiagonalScaling`` keeps its :math:`D`, a ``Multiplicative`` always takes the new couplings.
 
@@ -167,7 +167,7 @@ change of the mesh). So the old and the new hierarchies, factorizations and matr
 reused on purpose survives: the hierarchies while no rebuild is asked for, the selection of the condensed dofs, a
 symbolic factorization (PARDISO's
 ``reuseSymbolicFactorization``), and what the Krylov solver has learnt (its reference iterations, the gap of a
-``GapCompensation``, its scratch vectors).
+``ResidualGapCompensation``, its scratch vectors).
 
 Performance: a diagonal scaling does not form :math:`D A D`; the first component below it that needs a block forms
 :math:`\hat A` and all field blocks in one threaded native pass, kept with the matrix for all others, which also keeps :math:`A` as the operator of the outer Krylov solve
@@ -186,12 +186,12 @@ residual :math:`\lVert D (b - A x) \rVert`, which weighs every row by its own di
 entries is resolved as well as the others -- but which can be smaller than the true one, on which the solve is accepted.
 
 So a Krylov solver on a scaled matrix checks the true residual after its pass (in the physical variables of its
-problem: :math:`b - A x = D^{-1} (\hat b - \hat A \hat x)`) and, while it misses :math:`\eta`, continues from its
-iterate with a tighter tolerance, 0.01 times the last, at most ``continuations`` times (default 2). With
-``gapCompensation=GapCompensation(safetyFactor=0.3, maxFactor=1e3)`` the first pass asks for
+problem: :math:`b - A x = D^{-1} (\hat b - \hat A \hat x)`) and, while it misses :math:`\eta`, restarts from its
+iterate with a tighter tolerance, 0.01 times the last, at most ``trueResidualRestarts`` times (default 2). With
+``residualGapCompensation=ResidualGapCompensation(safetyFactor=0.3, maxFactor=1e3)`` the first pass asks for
 :math:`s \, \eta / g` instead, with :math:`g` the ratio of the true to the scaled residual learnt from the previous
-solves, and a continuation tightens by the measured ratio; it is opt-in (:ref:`measured-gap-compensation`). On an unscaled matrix there are no
-continuations: a pass that misses :math:`\eta` has hit the iteration cap, which a warm restart would only extend.
+solves, and a true-residual restart tightens by the measured ratio; it is opt-in (:ref:`measured-gap-compensation`). On an unscaled matrix there are no
+true-residual restarts: a pass that misses :math:`\eta` has hit the iteration cap, which a warm restart would only extend.
 The method is :ref:`blockamg-true-residual`.
 
 .. _composed-drop-tolerance:
@@ -230,9 +230,11 @@ EdelweissFE stores the field's matrix for it. The defaults are chosen in one pla
     * - ``backendPrecision``
       - ``"float"`` on 3x3 blocks (set up in double, only the matrices the cycle reads stored in float), else
         ``"double"``
-    * - ``blockTranslationNullspace`` (``AMG`` only)
-      - on a block backend, smoothed aggregation from the translations :math:`D^{-1} t` of the scaled block instead of
-        AMGCL's constant blocks
+    * - ``nearNullspace`` (``AMG`` only)
+      - ``"rigidBodyModes"``: the field's rigid-body modes as far as the backend holds them -- on a block backend the
+        translations :math:`D^{-1} t` of the scaled block (instead of AMGCL's constant blocks), on the scalar backend
+        the translations and rotations of a displacement field, the translations of another vector field.
+        ``"translations"`` takes the translations on either backend, ``None`` AMGCL's own near null-space
 
 So ``AMG(backendBlockSize=1)`` puts a 3D displacement field on the scalar backend, in double, where its hierarchy
 takes all rigid-body modes as its near null-space. Rotations belong to the near null-space of a displacement field
@@ -244,7 +246,7 @@ micropolar model gets its translations.
 Default field trees
 -------------------
 
-``AMG(tree=...)`` and ``TwoLevel(..., tree=...)`` take a field's AMGCL parameter tree, forwarded to AMGCL verbatim. A
+``AMG(amgclTree=...)`` and ``TwoLevel(..., amgclTree=...)`` take a field's AMGCL parameter tree, forwarded to AMGCL verbatim. A
 tree given replaces the default outright, so start from the one that applies
 and change only what is intended. The defaults are, by the field's nodal dimension
 (:func:`~edelweissfe.linsolve.composition.amg.defaultFieldTree` in the code):
@@ -289,14 +291,14 @@ and change only what is intended. The defaults are, by the field's nodal dimensi
     }
 
 The backend the tree is built on is chosen apart from it, by the keywords ``backendBlockSize``, ``backendPrecision``
-and (``AMG`` only) ``blockTranslationNullspace``, with defaults from the field
+and (``AMG`` only) ``nearNullspace``, with defaults from the field
 (:func:`~edelweissfe.linsolve.composition.amg.backendOf`): node-wise 3x3 blocks stored in float for a 3D field, 2x2
 blocks in double for a 2D one (this wrapper has no float 2x2 backend), the scalar backend in double otherwise, and on
 a block backend the translations :math:`D^{-1} t` as the near null-space. A vector field of a dimension the defaults
 were never tuned for (anything but 2 or 3, e.g. a 4-DOF-per-node formulation) gets the same coarsening and
 relaxation as the 2D and 3D fields, on the scalar backend. ``AMG(backendBlockSize=1)`` puts a 2D or 3D displacement
 field on the scalar backend, the only one that takes the rotations (:ref:`blockamg-block-nullspace`); a tree with another coarsening than
-smoothed aggregation on a block backend needs ``blockTranslationNullspace=False``, which is checked.
+smoothed aggregation on a block backend needs ``nearNullspace=None``, which is checked.
 
 The 3D displacement field of the ``blockAMG()`` preset gets the rigid-body coarse level
 (``TwoLevel(coarseSpace=RigidBodyModesPerAggregate())``), configured by the same tree: its ``relax`` and ``npre``/``npost`` are the
@@ -311,7 +313,7 @@ component of its own, ``CornerNodeInterpolation(coarseSolve=...)``. For the corn
 8 costs half the products per sweep for fewer than twice the outer iterations (:ref:`measured-corner-node-two-level-smoother`).
 So a ``TwoLevel`` on ``CornerNodeInterpolation`` that is given no tree, and the
 rigid-body coarse level of the default coarse solve,
-``DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModesPerAggregate(), tree=defaultCornerNodeTwoLevelTree()))``, take the vector field's tree
+``DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModesPerAggregate(), amgclTree=defaultCornerNodeTwoLevelTree()))``, take the vector field's tree
 with a Chebyshev polynomial of degree 8 on the interval from 0.03 to 1.1 times the spectral radius
 (:func:`~edelweissfe.linsolve.composition.amg.defaultCornerNodeTwoLevelTree`), for a vector field of any dimension (a
 scalar field keeps its default tree, ``defaultFieldTree(1)``: the smoother of degree 8 was measured on displacement
@@ -331,9 +333,9 @@ fields only):
     }
 
 ``AMG()`` and ``TwoLevel(coarseSpace=RigidBodyModesPerAggregate())`` alone keep degree 16: there, degree 8 gained nothing. A tree
-given to the corner-node two-level cycle (``TwoLevel(coarseSpace=CornerNodeInterpolation(), tree=...)``) is its fine smoother only; one for its
+given to the corner-node two-level cycle (``TwoLevel(coarseSpace=CornerNodeInterpolation(), amgclTree=...)``) is its fine smoother only; one for its
 coarse level is given with the coarse solve,
-``CornerNodeInterpolation(coarseSolve=DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModesPerAggregate(), tree=...)))``.
+``CornerNodeInterpolation(coarseSolve=DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModesPerAggregate(), amgclTree=...)))``.
 
 Every spectral radius in these trees -- of the Chebyshev smoother (``relax``) and of the prolongation smoothing
 (``coarsening`` with ``estimate_spectral_radius``) -- is estimated by ``spectralRadiusSteps`` Arnoldi steps (default
@@ -374,11 +376,11 @@ The arguments of ``SchurComplement``
 The method is :ref:`blockamg-schur-complement`, a complete script :ref:`composed-schur-complement-recipe`. The
 arguments of :class:`~edelweissfe.linsolve.composition.schurcomplement.SchurComplement`:
 
-``condense`` (required)
+``condensedDofs`` (required)
     A list of markers, created through the marker registry from the options of a ``>>marker`` line of
     ``*modelModifier, type=hAdaptivity``, e.g. ``getMarkerClass("fieldOutput").fromOptions({"fieldOutput":
     "damage", "threshold": 0.05, "halo": 1})``. Sets, surfaces and fieldOutputs they name must exist.
-``preconditionS`` (required)
+``schurComplementSolve`` (required)
     The preconditioner of :math:`\tilde S`, e.g. ``DiagonalScaling(Multiplicative(...))``.
 ``approximation`` (``"local"``)
     ``"local"``: :math:`\tilde S` as in :ref:`blockamg-schur-complement`. ``"none"``: :math:`\tilde S = A_{kk}`, the coupling through :math:`b`
@@ -388,8 +390,8 @@ arguments of :class:`~edelweissfe.linsolve.composition.schurcomplement.SchurComp
 ``windowNodes``, ``haloNodes`` (``50``, ``windowNodes``)
     The nodes of a window's core along a chain, and of the halo on either side. A chain no longer than one core with
     both halos is corrected exactly.
-``blockFactors`` (``"U"``)
-    ``"U"``: the block upper triangular factor, one solve with :math:`A_{bb}` per application. ``"LU"``: the block
-    LU factorization, two solves.
-``solveA_bb`` (``DirectSolver("superlu")``)
+``blockFactors`` (``"upper"``)
+    ``"upper"``: the block upper triangular factor, one solve with :math:`A_{bb}` per application. ``"both"``: both
+    factors of the block LU factorization, two solves.
+``condensedBlockSolve`` (``DirectSolver("superlu")``)
     The solver of :math:`A_{bb}`.
