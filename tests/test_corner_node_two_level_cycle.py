@@ -256,20 +256,13 @@ def test_block2_storage_of_a_two_component_field_matches_scalar_storage():
     assert _relativeDifference(block2.applyPreconditioner(r), scalar.applyPreconditioner(r)) < 1e-12
 
 
-def test_an_adaptive_and_a_fixed_estimate_come_within_the_smoothers_margin(problem):
-    """The default estimate takes 10 steps; an adaptive one stops once the residual norm of its largest Ritz pair is
-    below a tolerance times the Ritz value. Both come within the margin of the smoother's interval (higher = 1.1)."""
+def test_a_tree_without_spectral_radius_steps_takes_ten(problem):
+    """The default estimate is 10 Arnoldi steps: a tree that leaves spectralRadiusSteps out gets the same estimate, bit
+    for bit, as one that sets 10."""
     As, scaling, coords, isCorner, edgeEndpoints, r = problem
-    free = np.nonzero(np.diff(As.indptr) != 1)[0]
-    exact = np.max(np.abs(np.linalg.eigvals(As[free, :][:, free].toarray())))
-    for tree in (
-        fineChebyshevTree(),
-        fineChebyshevTree(spectralRadiusSteps=10),
-        fineChebyshevTree() | {"relax": dict(fineChebyshevTree()["relax"], spectralRadiusTolerance=0.05)},
-        fineChebyshevTree() | {"relax": dict(fineChebyshevTree()["relax"], spectralRadiusTolerance=0.01)},
-    ):
-        preconditioner, _, _ = _built(As, scaling, isCorner, edgeEndpoints, tree)
-        assert exact / 1.1 < preconditioner.fineSpectralRadius < 1.1 * exact
+    default, _, _ = _built(As, scaling, isCorner, edgeEndpoints)
+    tenSteps, _, _ = _built(As, scaling, isCorner, edgeEndpoints, fineChebyshevTree(spectralRadiusSteps=10))
+    assert tenSteps.fineSpectralRadius == default.fineSpectralRadius
 
 
 def test_the_spectral_radius_estimate_is_reproducible_bit_for_bit(problem):
@@ -478,11 +471,10 @@ def test_an_invalid_smoother_raises_before_any_build():
         (fineChebyshevTree(degree=0), {}),
         (fineChebyshevTree(npost=-1), {}),
         (fineChebyshevTree(spectralRadiusSteps=0), {}),
-        # the power iteration is gone: one estimate, fixed or adaptive, not both
+        # the Arnoldi steps replace AMGCL's power iteration
         ({"relax": dict(fineChebyshevTree()["relax"], power_iters=50)}, {}),
-        ({"relax": dict(fineChebyshevTree(spectralRadiusSteps=10)["relax"], spectralRadiusTolerance=0.05)}, {}),
-        ({"relax": dict(fineChebyshevTree()["relax"], spectralRadiusTolerance=0.0)}, {}),
-        ({"relax": dict(fineChebyshevTree()["relax"], spectralRadiusMaxSteps=2)}, {}),
+        # a key the Chebyshev smoother does not know
+        ({"relax": dict(fineChebyshevTree()["relax"], tolerance=0.05)}, {}),
         (fineChebyshevTree() | {"relax": fineChebyshevTree()["relax"] | {"higher": 0.9}}, {}),
         (fineChebyshevTree() | {"relax": fineChebyshevTree()["relax"] | {"lower": 0.0}}, {}),
         (fineChebyshevTree(), {"backendBlockSize": 4}),

@@ -460,17 +460,10 @@ the prolongation smoothing -- is estimated one way (``edelweissfe/linsolve/amgcl
   that leaves it out included. AMGCL's own default is 1.0, which sits on its Gershgorin bound, never below
   :math:`\rho`; the Arnoldi estimate can be, slightly, and an eigenvalue above the interval is amplified, not
   damped.
-* **A fixed number of steps, or an adaptive one.** By default 10 steps (``spectralRadiusSteps``); on 14 operators of
-  captured systems they gave :math:`1.005` to :math:`1.043\,\rho`. Instead, a tree can ask for an adaptive estimate:
-  the steps stop when :math:`r < \tau\, |\theta|` (``spectralRadiusTolerance``, e.g. 0.05, half the margin of
-  ``higher``), after at least 8 and at most ``spectralRadiusMaxSteps`` (default 30) steps -- one or the other, not
-  both. For a symmetric operator a tolerance below the margin makes the margin provably sufficient; for a nonsymmetric
-  one :math:`r` is only an indicator. Measured, the adaptive estimate (0.05) stopped after 8 to 11 steps on those
-  operators and needed the same outer iterations as 10 fixed steps, but more setup on the small coarse AMG levels,
-  where it takes more steps; so the fixed number is the default (:ref:`measured-power-iterations`).
-
+* **A fixed number of steps**, ``spectralRadiusSteps``, 10 by default: on the captured systems the estimate then lies
+  slightly above :math:`\rho`, well within the smoother's margin (:ref:`measured-power-iterations`).
 * **Its memory.** Arnoldi keeps its :math:`k` basis vectors while it runs, :math:`k` doubles per DOF (80 bytes per DOF
-  for the 10 default steps, 240 for an adaptive estimate of up to 30); the power iteration needed two. Against the
+  for the 10 default steps); the power iteration needed two. Against the
   operator itself (about 80 stored entries per DOF of a 3D field) that is small, and it is freed before the next level
   of a hierarchy is built.
 

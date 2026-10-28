@@ -68,7 +68,7 @@ namespace amgcl {
         /// @brief The lower end of the interval, relative to the estimate.
         float lower = 1.0f / 30;
         /// @brief How the spectral radius is estimated.
-        spectral_radius_estimate spectralRadius = spectral_radius_estimate::byDefault();
+        spectral_radius_estimate spectralRadius;
         /// @brief Smooth D^-1 A instead of A.
         bool scale = false;
 
@@ -240,7 +240,7 @@ namespace amgcl {
       /// @brief How rho(D^-1 A) is estimated.
       spectral_radius_estimate spectralRadius;
 
-      smoothed_aggregation_estimate_params() : spectralRadius( spectral_radius_estimate::byDefault() ) {}
+      smoothed_aggregation_estimate_params() {}
 
       /// @brief From a parameter tree: the keys of the estimate to spectralRadius, the rest to AMGCL's parameters.
       /// (Each member is initialized from p itself: a base-class initializer that wrote to spectralRadius would be

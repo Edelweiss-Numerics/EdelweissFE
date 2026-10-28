@@ -71,87 +71,29 @@
 
 namespace amgcl {
 
-  /// @brief How a spectral radius is estimated: Arnoldi steps from a start vector seeded per row, and either a fixed
-  /// number of them (spectralRadiusSteps), or as many as the largest Ritz pair needs (spectralRadiusTolerance, at most
-  /// spectralRadiusMaxSteps): the steps stop when its residual norm r is below the tolerance times the modulus of its
-  /// Ritz value theta, but not before minimumSteps. For a symmetric matrix |theta| + r is an upper bound of the
-  /// spectral radius once theta is the Ritz value closest to the dominant eigenvalue, so a tolerance below the
-  /// Chebyshev margin (higher - 1) makes the margin sufficient; for a nonsymmetric matrix r is only an indicator of
-  /// convergence.
+  /// @brief How a spectral radius is estimated: spectralRadiusSteps Arnoldi steps from a start vector seeded per row.
   struct spectral_radius_estimate {
-    /// @brief The steps of a fixed estimate (spectralRadiusSteps), 0 for an adaptive one.
-    int steps = 0;
-    /// @brief The tolerance of an adaptive estimate (spectralRadiusTolerance), 0 for a fixed one.
-    double tolerance = 0.0;
-    /// @brief The most steps of an adaptive estimate (spectralRadiusMaxSteps).
-    int maxSteps = 0;
+    /// @brief The Arnoldi steps (spectralRadiusSteps), at least 1.
+    int steps = 10;
 
-    /// @brief The fewest steps of an adaptive estimate: the first Ritz values can look converged before the Krylov
-    /// space has reached the largest eigenvalues. After 5 steps theta + r was down to 0.92 rho on captured systems, and
-    /// the cycle of a 2D beam of the test suite diverged; after 8 it was at least rho on all of them.
-    static const int minimumSteps = 8;
-
-    /// @brief The tolerance of an adaptive estimate that does not give one: half the margin of the default Chebyshev
-    /// interval (higher = 1.1).
-    static double adaptiveTolerance() { return 0.05; }
-    /// @brief The most steps of an adaptive estimate that does not give them.
-    static int adaptiveMaxSteps() { return 30; }
-
-    /// @brief The estimate of a tree that says nothing about it: 10 steps. On 14 operators of captured systems they
-    /// gave 1.005 to 1.043 times the spectral radius; the adaptive estimate (tolerance 0.05) the same outer iterations,
-    /// but more setup on the coarse AMG levels (fieldsplitmeasurements.rst, "The spectral radius estimate of the
-    /// Chebyshev smoother").
-    static spectral_radius_estimate byDefault()
-    {
-      spectral_radius_estimate how;
-      how.steps = 10;
-      return how;
-    }
-
-    bool isAdaptive() const { return tolerance > 0.0; }
-    int  maximumSteps() const { return isAdaptive() ? maxSteps : steps; }
-
-    /// @brief Take the estimate out of a parameter tree (spectralRadiusSteps, or spectralRadiusTolerance and
-    /// spectralRadiusMaxSteps; the default if none is there), for parameters that AMGCL's own check: power_iters, the
-    /// power iteration's, is rejected -- there is one estimate.
-    /// @param p the tree, without these keys afterwards
+    /// @brief Take the estimate out of a parameter tree: spectralRadiusSteps, 10 if the tree has none. power_iters,
+    /// the steps of AMGCL's power iteration, which this estimate replaces, is refused.
+    /// @param p the tree, without spectralRadiusSteps afterwards
     /// @param where the tree's name in the messages, e.g. "relax"
-    /// @throws std::invalid_argument for power_iters, both kinds at once, or values that cannot be used
+    /// @throws std::invalid_argument for power_iters, or fewer than one step
     static spectral_radius_estimate take( boost::property_tree::ptree& p, const std::string& where )
     {
       if ( p.count( "power_iters" ) ) {
-        throw std::invalid_argument(
-          where + ".power_iters: the spectral radius is estimated by Arnoldi steps "
-                  "(spectralRadiusSteps, or spectralRadiusTolerance and spectralRadiusMaxSteps), not "
-                  "by power iterations" );
+        throw std::invalid_argument( where + ".power_iters: the spectral radius is estimated by Arnoldi steps "
+                                             "(spectralRadiusSteps), not by power iterations" );
       }
-      const bool               fixed    = p.count( "spectralRadiusSteps" ) > 0;
-      const bool               adaptive = p.count( "spectralRadiusTolerance" ) || p.count( "spectralRadiusMaxSteps" );
-      spectral_radius_estimate how      = byDefault();
-      if ( fixed && adaptive ) {
-        throw std::invalid_argument( where +
-                                     ": either a fixed number of steps (spectralRadiusSteps) or an adaptive estimate "
-                                     "(spectralRadiusTolerance, spectralRadiusMaxSteps), not both" );
-      }
-      if ( fixed ) {
-        how       = spectral_radius_estimate();
-        how.steps = p.get< int >( "spectralRadiusSteps" );
-        if ( how.steps < 1 )
-          throw std::invalid_argument( where + ".spectralRadiusSteps must be at least 1, got " +
-                                       std::to_string( how.steps ) );
-      }
-      if ( adaptive ) {
-        how           = spectral_radius_estimate();
-        how.tolerance = p.get( "spectralRadiusTolerance", adaptiveTolerance() );
-        how.maxSteps  = p.get( "spectralRadiusMaxSteps", adaptiveMaxSteps() );
-        if ( !( how.tolerance > 0.0 ) || how.maxSteps < minimumSteps ) {
-          throw std::invalid_argument( where + ": needs spectralRadiusTolerance > 0 and spectralRadiusMaxSteps >= " +
-                                       std::to_string( minimumSteps ) );
-        }
-      }
+      spectral_radius_estimate how;
+      how.steps = p.get( "spectralRadiusSteps", how.steps );
       p.erase( "spectralRadiusSteps" );
-      p.erase( "spectralRadiusTolerance" );
-      p.erase( "spectralRadiusMaxSteps" );
+      if ( how.steps < 1 ) {
+        throw std::invalid_argument( where + ".spectralRadiusSteps must be at least 1, got " +
+                                     std::to_string( how.steps ) );
+      }
       return how;
     }
   };
@@ -310,9 +252,8 @@ namespace amgcl {
     }
 
     /// @brief The spectral radius estimate of the module comment on the operator `apply`, from the start vector `v`
-    /// (n entries, not all zero): Arnoldi steps as `how` says -- a fixed number, or until the residual norm of the
-    /// dominant Ritz pair is below a tolerance relative to its Ritz value -- and |theta| + r of the last step's Ritz
-    /// pair of largest modulus. Stops early, with an exact estimate, if the Krylov space becomes invariant.
+    /// (n entries, not all zero): how.steps Arnoldi steps, and |theta| + r of the last step's Ritz pair of largest
+    /// modulus. Stops early, with an exact estimate, if the Krylov space becomes invariant.
     /// @param apply y <- A x, for double arrays of n entries
     /// @param stepsTaken if not null, the Arnoldi steps taken
     template < class Apply >
@@ -322,9 +263,9 @@ namespace amgcl {
                                     Apply                           apply,
                                     int*                            stepsTaken = nullptr )
     {
-      const int maxSteps = how.maximumSteps();
+      const int maxSteps = how.steps;
       // inner products over a fixed partition of the rows, the partial sums added in order: the same bits at any thread
-      // count, and from run to run -- so also the step the adaptive estimate stops at
+      // count, and from run to run
       const ptrdiff_t       nChunks = std::max< ptrdiff_t >( 1, std::min< ptrdiff_t >( n, 4096 ) );
       const ptrdiff_t       chunk   = ( n + nChunks - 1 ) / nChunks;
       std::vector< double > partial( nChunks );
@@ -378,11 +319,6 @@ namespace amgcl {
         if ( invariant || m == maxSteps ) {
           ritz = largest_ritz_value( H, maxSteps, m );
           break;
-        }
-        if ( how.isAdaptive() && m >= spectral_radius_estimate::minimumSteps ) {
-          ritz = largest_ritz_value( H, maxSteps, m );
-          if ( ritz.second < how.tolerance * std::abs( ritz.first ) )
-            break;
         }
         std::vector< double > next( n );
 #pragma omp parallel for

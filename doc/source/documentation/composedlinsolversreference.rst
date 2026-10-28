@@ -308,9 +308,8 @@ recipe and was never re-tuned against it. Note that AMGCL silently ignores param
 
 Every spectral radius in these trees -- of the Chebyshev smoother (``relax``) and of the prolongation smoothing
 (``coarsening`` with ``estimate_spectral_radius``) -- is estimated by ``spectralRadiusSteps`` Arnoldi steps (default
-10) from a start vector seeded per row, the same at any thread count, or adaptively with ``spectralRadiusTolerance``
-and ``spectralRadiusMaxSteps`` (:ref:`blockamg-chebyshev`). The trees leave the default; a tree that sets AMGCL's
-``power_iters`` is refused, since there is no power iteration any more.
+10) from a start vector seeded per row, the same at any thread count (:ref:`blockamg-chebyshev`). The trees leave the
+default; a tree that sets AMGCL's ``power_iters`` is refused, since there is no power iteration any more.
 
 .. _blockamg-rigid-body-coarse-level-configuration:
 

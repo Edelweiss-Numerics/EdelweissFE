@@ -1514,8 +1514,7 @@ struct TwoLevelCycleParameters {
   int fineDegree;
   /// @brief The fine Chebyshev interval relative to the spectral radius: relax.lower and relax.higher.
   float fineLower, fineHigher;
-  /// @brief How the fine spectral radius is estimated (relax.spectralRadiusSteps, or relax.spectralRadiusTolerance and
-  /// relax.spectralRadiusMaxSteps).
+  /// @brief How the fine spectral radius is estimated: relax.spectralRadiusSteps.
   amgcl::spectral_radius_estimate fineSpectralRadius;
   /// @brief The value types of the fine level (and of P and P^T), backendPrecision, and of the coarse hierarchy,
   /// coarseHierarchyPrecision: "double" or "float".
@@ -2372,7 +2371,7 @@ protected:
   float prolongationRelax_      = 1.0f;
   bool  estimateSpectralRadius_ = false;
   /// @brief How rho(D^-1 A) is estimated for the damping weight.
-  amgcl::spectral_radius_estimate prolongationSpectralRadius_ = amgcl::spectral_radius_estimate::byDefault();
+  amgcl::spectral_radius_estimate prolongationSpectralRadius_;
   /// @brief The AMGCL tree of the hierarchy below (its aggr.block_size set by each build to M).
   boost::property_tree::ptree hierarchyBelow_;
 
