@@ -796,7 +796,7 @@ solver script builds a new ``LGMRES``, and with it a new instance.)
 .. _blockamg-p-multigrid:
 
 p-multigrid: ``TwoLevel(coarseSpace=CornerNodeInterpolation(coarseSolve))``
---------------------------------------------------------------------------
+---------------------------------------------------------------------------
 
 For a field discretized with quadratic elements, a two-level cycle whose coarse level is the field's linear part
 replaces the field's single-level hierarchy, ``OnField(name, TwoLevel(coarseSpace=CornerNodeInterpolation()))``: the
