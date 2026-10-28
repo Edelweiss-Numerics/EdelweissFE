@@ -268,7 +268,7 @@ class CornerNodeInterpolation(CoarseSpace):
         built = CornerNodeTwoLevelCycle(
             isCorner,
             edgeEndpoints,
-            self.coarse,
+            self.coarseSolve,
             **_withoutCoarseHierarchy(cycle),
         )
         with performancetiming.timeit("{:} corner-node cycle build".format(field.name)):
