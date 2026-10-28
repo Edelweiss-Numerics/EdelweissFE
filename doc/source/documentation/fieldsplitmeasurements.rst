@@ -576,6 +576,46 @@ time around (76.43 against 76.33 s): the tunnel lining about 20 % faster, the la
 
 Not yet measured live: with Newton in the loop, and with the hierarchies reused over several solves.
 
+.. _measured-two-level-written-out:
+
+The two-level cycle written out
+-------------------------------
+
+See :ref:`composed-two-level-two-ways`.
+
+The corner-node two-level cycle in C++, ``TwoLevel(coarseSpace=CornerNodeInterpolation(coarseSolve))``, against the
+same cycle written out, ``Multiplicative([CoarseCorrection(cornerNodeInterpolation, coarseSolve), smoother])``: the same
+:math:`P` (bit for bit), the same coarse solve, and as the smoother AMGCL's Chebyshev relaxation (degree 8, on the
+scalar double-precision matrix: EdelweissFE has no Chebyshev component). The displacement blocks of the three systems
+of the linear-solver bench (a tunnel lining, 1.37 M dofs; a damage cylinder, 0.63 M; an edge breakout, 0.81 M), each
+inside ``LGMRES(DiagonalScaling(.))`` to :math:`10^{-6}`, 18 threads on one socket of a two-socket workstation (on both
+sockets the written-out cycle's times scattered by up to a factor of two between repetitions), three repetitions
+(the times per application within 2 % of each other; one set-up 26 % above the other two). Both forms need the same iterations on every system.
+
+.. list-table::
+    :width: 100%
+    :header-rows: 1
+
+    * - wall time, sum over the three systems
+      - C++ cycle
+      - written out, ``CoarseCorrection`` in SciPy (former)
+      - written out, ``CoarseCorrection`` threaded
+    * - total
+      - 20.7 -- 21.6 s
+      - 50.4 -- 52.3 s
+      - 41.4 -- 42.0 s
+    * - set-up, tunnel lining
+      - 3.9 s
+      - 11.0 s
+      - 6.5 s
+
+Per step, on the damage cylinder (32 threads, the median of 15): :math:`P^T r` 1.8 ms in SciPy against 0.2 ms
+threaded, :math:`P z_c` 1.4 against 0.3 ms, :math:`P^T A P` 2.55 against 0.45 s (tunnel lining 6.36 against 1.16 s).
+Of one application of the written-out cycle, 100 ms, the smoother takes 78 ms, the residual of ``Multiplicative``
+7.5 ms (threaded), the coarse correction 7.4 ms; the C++ cycle's whole application takes 36 ms, its fine level stored
+in single-precision 3x3 node blocks, half the bytes per product. What remains of the factor of two is that smoother,
+and in the set-up the test script's own detection of the Dirichlet rows in NumPy (1.1 -- 2.4 s).
+
 .. _measured-defaults:
 
 Why the defaults are what they are

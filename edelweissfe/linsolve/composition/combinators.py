@@ -403,10 +403,14 @@ class CoarseCorrection(Preconditioner):
     variables are :math:`D^{-1} u`: an interpolation of displacements is then :math:`D^{-1} P_{geo} D_c` (the scaling
     is ``context.scaling``), as :class:`~edelweissfe.linsolve.composition.twolevel.CornerNodeInterpolation` builds it.
 
+    :math:`P^T r`, :math:`P z_c` and :math:`P^T A P` are AMGCL's threaded products
+    (:class:`~edelweissfe.linsolve.amgcl.amgcl.PyAMGCLProlongation`), the same as SciPy's up to the order of the sums.
+
     With smoothers around it, ``Multiplicative([smoother, CoarseCorrection(P, coarseSolve), smoother])`` is a two-level
-    cycle spelled out: any :math:`P`, any coarse solve, but in SciPy and about twice as costly per application as the
-    C++ cycle :class:`~edelweissfe.linsolve.composition.twolevel.TwoLevel`, which is kept beside it on purpose (see the
-    "two-level cycle: two ways" section of ``doc/source/documentation/composedlinsolvers.rst``).
+    cycle spelled out: any :math:`P`, any coarse solve, at about twice the wall time of the C++ cycle
+    :class:`~edelweissfe.linsolve.composition.twolevel.TwoLevel`, whose smoother reads a compact single-precision copy
+    of the matrix; both are kept on purpose (see the "two-level cycle: two ways" section of
+    ``doc/source/documentation/composedlinsolvers.rst``).
 
     Parameters
     ----------

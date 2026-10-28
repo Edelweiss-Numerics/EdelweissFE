@@ -173,14 +173,13 @@ production runs; ``blockAMG()`` (``type=blockamg``) uses it for 3D displacement 
 
 The spelled-out way builds the same cycle from general components, each of which can be replaced -- another smoother,
 a coarse space of your own (any :math:`P`), a direct coarse solve. Use it to learn how a two-level cycle works and to
-try a new coarse space or smoother. It is correct, but slow: on a 631k-dof displacement block it costs about twice as
-much per application as ``TwoLevel`` (101 ms plus about 98 ms). The difference is where the work runs:
-
-* ``TwoLevel`` keeps one compact copy of the field block (single precision, 3x3 node blocks) for the smoother and its
-  residuals; the spelled-out components work on the general double-precision matrix and so read about twice the bytes
-  per product;
-* ``TwoLevel`` forms :math:`P x`, :math:`P^T r` and :math:`P^T A P` threaded in C++; ``CoarseCorrection`` uses SciPy;
-* ``Multiplicative`` forms the residual :math:`r - A z` between its steps; ``TwoLevel`` takes it from the smoother.
+try a new coarse space or smoother. It is correct, but slower: on three bench systems it takes about twice the wall
+time of ``TwoLevel``, with the same iterations (:ref:`measured-two-level-written-out`). Not because it is Python: its
+products all run threaded in C++ -- ``Multiplicative`` forms its residuals in the threaded pass of the field split, and
+``CoarseCorrection`` forms :math:`P^T r`, :math:`P z` and :math:`P^T A P` with AMGCL's threaded products -- but because
+of the smoother. ``TwoLevel`` keeps one compact copy of the field block (single precision, 3x3 node blocks) for its
+Chebyshev smoother, which reads half the bytes per product; a smoother component works on the general double-precision
+matrix.
 
 The testfile deck ``testfiles/edelweiss-only/TwoLevelSpelledOut`` runs the spelled-out cycle in a simulation, on
 quadratic elements with the P1 interpolant as the coarse space. Its prolongation callable returns :math:`P` together
