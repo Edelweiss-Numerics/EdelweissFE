@@ -1081,12 +1081,12 @@ inline OuterKrylovSolver* makeOuterKrylovSolver( const std::string& method, int 
 // result is the free-submatrix cycle up to floating-point summation order (verified in
 // tests/test_corner_node_two_level_cycle.py).
 //
-// The fine Chebyshev smoother reimplements amgcl::relaxation::chebyshev's polynomial (same degree,
-// lower/higher conventions, same recurrence; no Jacobi scaling) rather than wrapping it,
-// because it works on the fine level's own storage (node-wise blocks, float). Its spectral radius is the estimate
-// every Chebyshev smoother of EdelweissFE uses (amgcl-spectral-radius.hpp: Arnoldi steps from a start vector seeded
-// per row, independent of the thread count), on the free rows: the start vector is zero on the Dirichlet rows, which
-// the cycle keeps zero.
+// The fine Chebyshev smoother applies the polynomial of every Chebyshev smoother of EdelweissFE
+// (EdelweissFE::linsolve::ChebyshevPolynomial, amgcl-chebyshev.hpp; no Jacobi scaling) in a loop of its own rather than
+// through amgcl::relaxation::chebyshev_with_estimate, because it works on the fine level's own storage (node-wise
+// blocks, float). Its spectral radius is the estimate every Chebyshev smoother of EdelweissFE uses
+// (amgcl-spectral-radius.hpp: Arnoldi steps from a start vector seeded per row, independent of the thread count), on
+// the free rows: the start vector is zero on the Dirichlet rows, which the cycle keeps zero.
 
 /// The fine smoother as the two-level cycle sees it, independent of the operator's storage format
 /// (scalar entries or node-wise B x B blocks) and value type (double or float). Vectors are always plain
@@ -1127,7 +1127,7 @@ inline void twoLevelFineResidual( const amgcl::backend::crs< MatrixValueType, in
 /// double B x B block); MatrixValueType is how the operator is stored for the smoother and the residual:
 /// ValueType itself, or its float counterpart -- half the bytes per entry, the dominant traffic of
 /// the cycle. The spectral-radius estimate only ever runs on a double operator: a float level is made
-/// from a double one (makeFloatCopy()), which has estimated or re-checked the radius before.
+/// from a double one (makeFloatCopy()), which has estimated the radius before.
 template < typename ValueType, typename MatrixValueType = ValueType >
 class TwoLevelFineLevelT : public TwoLevelFineSmoother {
 public:
@@ -1144,10 +1144,8 @@ public:
   std::shared_ptr< Matrix > A_;
   /// @brief Work vectors of the Chebyshev iteration (residual r and search direction p), one entry per scalar row.
   std::vector< double > r_, p_;
-  /// @brief Chebyshev polynomial degree, i.e. matrix products per smoothing sweep.
-  unsigned degree_ = 0;
-  /// @brief Centre d and half-width c of the Chebyshev interval [d - c, d + c] (setPolynomial()).
-  double d_ = 0.0, c_ = 0.0;
+  /// @brief The coefficients alpha_k and beta_k of the Chebyshev steps, one step per matrix product (setPolynomial()).
+  std::vector< double > alpha_, beta_;
 
   /// @brief Take over the operator A (already in this storage format).
   void setOperator( std::shared_ptr< Matrix > A )
@@ -1164,40 +1162,32 @@ public:
   {
     std::unique_ptr< TwoLevelFineLevelT< ValueType, FloatValueType > > level(
       new TwoLevelFineLevelT< ValueType, FloatValueType >() );
-    level->A_      = convertedCopy< FloatValueType >( *A_ );
-    level->degree_ = degree_;
-    level->d_      = d_;
-    level->c_      = c_;
+    level->A_     = convertedCopy< FloatValueType >( *A_ );
+    level->alpha_ = alpha_;
+    level->beta_  = beta_;
     level->r_.assign( r_.size(), 0.0 );
     level->p_.assign( p_.size(), 0.0 );
     return level;
   }
 
-  /// @brief Set up the Chebyshev polynomial for the given spectral radius.
-  /// @param lower, higher amgcl::relaxation::chebyshev's own `float` parameters, kept as `float` so
-  /// the ellipse bounds round exactly as AMGCL's do.
-  void setPolynomial( unsigned degree, float lower, float higher, double spectralRadius )
+  /// @brief Set up the Chebyshev polynomial's coefficients for the given spectral radius.
+  void setPolynomial( const EdelweissFE::linsolve::ChebyshevPolynomial& polynomial, double spectralRadius )
   {
-    degree_   = degree;
-    double hi = spectralRadius;
-    double lo = hi * lower;
-    hi *= higher;
-    d_ = 0.5 * ( hi + lo );
-    c_ = 0.5 * ( hi - lo );
+    polynomial.coefficients( spectralRadius, alpha_, beta_ );
   }
 
-  /// @brief The spectral radius estimate of A (amgcl-spectral-radius.hpp): `steps` Arnoldi steps from the start
+  /// @brief The spectral radius estimate of A (amgcl-spectral-radius.hpp): estimate.steps Arnoldi steps from the start
   /// vector seeded per row, zero on the rows with isDirichlet set -- which the cycle keeps zero, so that the estimate
   /// is that of the free rows.
+  /// @throws std::runtime_error for an estimate that is not positive and finite
   double estimateSpectralRadius( const EdelweissFE::linsolve::SpectralRadiusEstimate& estimate,
                                  const char*                                          isDirichlet ) const
   {
     return EdelweissFE::linsolve::estimatedSpectralRadius( *A_, estimate, /*inverseDiagonal=*/nullptr, isDirichlet );
   }
 
-  /// @brief `degree_` Chebyshev steps on A x = b, continuing from the given x -- the recurrence of
-  /// amgcl::relaxation::chebyshev::solve(), step for step, with two economies that leave the result
-  /// bitwise unchanged:
+  /// @brief The Chebyshev steps on A x = b, continuing from the given x -- as amgcl::relaxation::chebyshev::solve()
+  /// applies them, step for step, with two economies that leave the result bitwise unchanged:
   ///   * from x = 0 (xIsZero, the pre-smoothing), the first residual is b itself -- b - A 0 is b
   ///     exactly for a finite A -- so its sparse product is skipped, and x = 0 + p is written as p
   ///     (identical, up to the sign of a zero entry);
@@ -1205,26 +1195,14 @@ public:
   ///     the same arithmetic per entry.
   void smooth( const double* b, double* x, bool xIsZero ) override
   {
-    const ptrdiff_t n     = static_cast< ptrdiff_t >( r_.size() );
-    double          alpha = 0.0, beta = 0.0;
-    for ( unsigned k = 0; k < degree_; ++k ) {
+    const ptrdiff_t n = static_cast< ptrdiff_t >( r_.size() );
+    for ( size_t k = 0; k < alpha_.size(); ++k ) {
       const bool    fromZero = xIsZero && k == 0;
       const double* residual = fromZero ? b : r_.data();
       if ( !fromZero )
         twoLevelFineResidual( *A_, b, x, r_.data() );
-      if ( k == 0 ) {
-        alpha = 1.0 / d_;
-        beta  = 0.0;
-      }
-      else if ( k == 1 ) {
-        alpha = 2 * d_ * ( 1.0 / ( 2 * d_ * d_ - c_ * c_ ) );
-        beta  = alpha * d_ - 1.0;
-      }
-      else {
-        alpha = 1.0 / ( d_ - 0.25 * alpha * c_ * c_ );
-        beta  = alpha * d_ - 1.0;
-      }
-      double* p = p_.data();
+      const double alpha = alpha_[k], beta = beta_[k];
+      double*      p = p_.data();
       if ( fromZero ) {
 #pragma omp parallel for
         for ( ptrdiff_t i = 0; i < n; ++i ) {
@@ -1511,10 +1489,8 @@ private:
 struct TwoLevelCycleParameters {
   /// @brief The fine Chebyshev sweeps before and after the coarse correction: npre and npost.
   int nuPre, nuPost;
-  /// @brief The fine Chebyshev degree: relax.degree.
-  int fineDegree;
-  /// @brief The fine Chebyshev interval relative to the spectral radius: relax.lower and relax.higher.
-  float fineLower, fineHigher;
+  /// @brief The fine Chebyshev polynomial: relax.degree, relax.lower and relax.higher.
+  EdelweissFE::linsolve::ChebyshevPolynomial finePolynomial;
   /// @brief How the fine spectral radius is estimated: relax.spectralRadiusSteps.
   EdelweissFE::linsolve::SpectralRadiusEstimate fineSpectralRadius;
   /// @brief The value types of the fine level (and of P and P^T), backendPrecision, and of the coarse hierarchy,
@@ -1552,9 +1528,7 @@ struct TwoLevelCycleParameters {
     // AMGCL's defaults of amg::params for the sweeps
     cycle.nuPre              = tree.get( "npre", 1 );
     cycle.nuPost             = tree.get( "npost", 1 );
-    cycle.fineDegree         = static_cast< int >( chebyshev.degree );
-    cycle.fineLower          = chebyshev.lower;
-    cycle.fineHigher         = chebyshev.higher;
+    cycle.finePolynomial     = chebyshev.polynomial;
     cycle.fineSpectralRadius = chebyshev.spectralRadius;
     cycle.fineValueType      = prm.get( "backendPrecision", std::string( "double" ) );
     cycle.coarseValueType    = prm.get( "coarseHierarchyPrecision", std::string( "double" ) );
@@ -1571,20 +1545,11 @@ struct TwoLevelCycleParameters {
       throw std::runtime_error( name + ": npre and npost must not be negative, got " + std::to_string( nuPre ) +
                                 " and " + std::to_string( nuPost ) );
     }
-    if ( fineDegree < 1 ) {
-      throw std::runtime_error( name + ": relax.degree must be at least 1, got " + std::to_string( fineDegree ) );
-    }
     if ( fineValueType != "double" && fineValueType != "float" ) {
       throw std::runtime_error( name + ": backendPrecision must be double or float, got " + fineValueType );
     }
     if ( coarseValueType != "double" && coarseValueType != "float" ) {
       throw std::runtime_error( name + ": coarseHierarchyPrecision must be double or float, got " + coarseValueType );
-    }
-    // the Chebyshev interval is [lower, higher] times the spectral radius: it must start above zero and reach at least
-    // the radius itself, or the smoother amplifies the highest modes
-    if ( !( fineLower > 0.0f && fineLower < 1.0f ) || !( fineHigher >= 1.0f ) ) {
-      throw std::runtime_error( name + ": needs 0 < relax.lower < 1 <= relax.higher, got " +
-                                std::to_string( fineLower ) + " and " + std::to_string( fineHigher ) );
     }
   }
 };
@@ -1924,10 +1889,7 @@ protected:
     level->setOperator( A );
     // positive and finite, or the estimate throws
     fineSpectralRadius_ = level->estimateSpectralRadius( cycle_.fineSpectralRadius, isDirichlet_.data() );
-    level->setPolynomial( static_cast< unsigned >( cycle_.fineDegree ),
-                          cycle_.fineLower,
-                          cycle_.fineHigher,
-                          fineSpectralRadius_ );
+    level->setPolynomial( cycle_.finePolynomial, fineSpectralRadius_ );
     if ( cycle_.fineValueType == "float" )
       fine_ = floatStoredCopy( *level );
     else
