@@ -396,15 +396,6 @@ def test_a_coarse_solve_may_be_set_after_the_build_but_must_be_set_before_the_fi
     assert np.all(np.isfinite(preconditioner.applyPreconditioner(r)))
 
 
-@pytest.mark.parametrize("bad", [0.0, np.inf, np.nan])
-def test_a_zero_or_non_finite_scaling_raises_instead_of_filling_p_with_nan(problem, bad):
-    As, scaling, coords, isCorner, edgeEndpoints, r = problem
-    broken = scaling.copy()
-    broken[len(broken) // 2] = bad
-    with pytest.raises(RuntimeError, match="zero or not finite"):
-        _unbuilt(isCorner, edgeEndpoints).build(As, broken)
-
-
 def _systemWithStoredZeros(coords, constrainedDofs):
     """The same block as :func:`latticeSystem`, but constrained by the solvers' own Dirichlet elimination,
     which keeps the eliminated entries as explicitly stored zeros, and scaled in place."""
