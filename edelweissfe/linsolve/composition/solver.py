@@ -254,16 +254,25 @@ class ComposedLinearSolver(LinearSolver):
 
     def midsideCornersOf(self, fieldName: str):
         """The midside corners of a field (which nodes are corners, and the corners of each midside node): a given one
-        first, else derived from the model, else ``None``."""
+        first, else derived from the model, else ``None`` -- also for a field on elements whose topology the
+        corner-node interpolation does not know (e.g. Tet10), which the log says once per model."""
         if fieldName in self._givenMidsideCorners:
             return self._givenMidsideCorners[fieldName]
         if self._model is None:
             return None
         if fieldName not in self._midsideCornersCache:
-            from edelweissfe.numerics.p1topology import buildMidsideCorners
+            from edelweissfe.numerics.p1topology import (
+                UnsupportedElementTopology,
+                buildMidsideCorners,
+            )
 
-            with performancetiming.timeit("midside corners"):
-                isCorner, edgeEndpoints, warnings = buildMidsideCorners(self._model, fieldName)
+            try:
+                with performancetiming.timeit("midside corners"):
+                    isCorner, edgeEndpoints, warnings = buildMidsideCorners(self._model, fieldName)
+            except UnsupportedElementTopology as error:
+                self._log("info", "no midside corners for the field '{:}': {:}".format(fieldName, error))
+                self._midsideCornersCache[fieldName] = None
+                return None
             for warning in warnings:
                 self._log("warning", warning)
             self._midsideCornersCache[fieldName] = (isCorner, edgeEndpoints)
@@ -485,8 +494,9 @@ class ComposedLinearSolver(LinearSolver):
             coordinates = self.coordinatesOf(field.name) if field.dimension > 1 else None
             if coordinates is not None:
                 geometry[field.name + "_coordinates"] = coordinates
-        for name, (isCorner, edgeEndpoints) in {**self._midsideCornersCache, **self._givenMidsideCorners}.items():
-            geometry[name + "_isCorner"], geometry[name + "_edgeEndpoints"] = isCorner, edgeEndpoints
+        for name, midsideCorners in {**self._midsideCornersCache, **self._givenMidsideCorners}.items():
+            if midsideCorners is not None:
+                geometry[name + "_isCorner"], geometry[name + "_edgeEndpoints"] = midsideCorners
         return geometry
 
     # ----- the solver script -----

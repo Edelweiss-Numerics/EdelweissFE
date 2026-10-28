@@ -282,9 +282,8 @@ class CornerNodeInterpolation(CoarseSpace):
         """It needs the field's midside corners, and parameters the C++ cycle can use."""
         if context.midsideCorners(field.name) is None:
             raise ValueError(
-                "TwoLevel: the corner-node interpolation of the field '{:}' needs its midside corners".format(
-                    field.name
-                )
+                "TwoLevel: the corner-node interpolation of the field '{:}' needs its midside corners (a quadratic "
+                "field on Hexa20/Quad8 elements; the log says why there are none)".format(field.name)
             )
         from edelweissfe.linsolve.composition.cornernodetwolevelcycle import (
             CornerNodeTwoLevelCycle,

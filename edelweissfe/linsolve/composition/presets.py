@@ -70,7 +70,8 @@ def blockAMGFieldPreconditioner(
     - any other field: one AMG hierarchy, ``AMG()``.
 
     ``tree`` is the field's AMGCL tree (``None``: the component's default). A field is quadratic if it has midside
-    nodes (:meth:`~edelweissfe.linsolve.composition.base.SetUpContext.midsideCorners`)."""
+    nodes (:meth:`~edelweissfe.linsolve.composition.base.SetUpContext.midsideCorners`); a field on elements whose
+    topology the corner-node interpolation does not know (e.g. Tet10) has none, and gets the rigid-body cycle."""
     isDisplacement3D = field.dimension == 3 and carriesRigidBodyModes(field)
     options = dict(tree=tree, dropTolerance=dropTolerance, lumpDroppedEntries=lumpDroppedEntries)
     if not isDisplacement3D or not (rigidBodyModesPerAggregate or cornerNodeInterpolation):

@@ -29,6 +29,7 @@
 and the journal, the validation of the settings, and the hot reload of the solver script during a run."""
 
 import textwrap
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -142,6 +143,25 @@ def test_the_blockamg_preset_gives_a_3d_displacement_field_the_fastest_measured_
         assert isinstance(preconditioner, AMG)
     else:
         assert isinstance(preconditioner, TwoLevel) and expected in preconditioner.coarseSpace.name
+
+
+def test_a_field_on_elements_of_an_unknown_topology_gets_the_rigid_body_cycle():
+    """A quadratic element the corner-node interpolation does not know (a Tet10, 10 nodes in 3D): the solver finds no
+    midside corners for its field, says so once in the log, and the preset gives the rigid-body cycle (it raised before
+    #246's review)."""
+    nodes = [SimpleNamespace(label=i, fields={"displacement": True}, coordinates=np.zeros(3)) for i in range(10)]
+    tet10 = SimpleNamespace(nodes=nodes, fields=[["displacement"]] * 10, nSpatialDimensions=3)
+    model = SimpleNamespace(nodeFields={"displacement": SimpleNamespace(nodes=nodes, dimension=3)}, elements={1: tet10})
+    solver, journal = _driven(blockAMG(), [], verbosity="info")
+    solver.setModel(model, SimpleNamespace(idcsOfFieldsInDofVector={"displacement": range(0, 30)}))
+    assert solver.midsideCornersOf("displacement") is None
+    assert "no midside corners for the field 'displacement'" in journal.take()
+    field = FieldBlock("displacement", 0, 30, 3)
+    context = SetUpContext(
+        fields=(field,), coordinatesOf=solver.coordinatesOf, midsideCornersOf=solver.midsideCornersOf
+    )
+    preconditioner = blockAMGFieldPreconditioner(field, context)
+    assert isinstance(preconditioner, TwoLevel) and isinstance(preconditioner.coarseSpace, RigidBodyModesPerAggregate)
 
 
 def test_the_corner_node_smoother_is_the_vector_default_with_degree_8():
