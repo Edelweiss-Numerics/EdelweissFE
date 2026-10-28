@@ -586,38 +586,19 @@ See :ref:`composed-two-level-two-ways`.
 The corner-node two-level cycle in C++, ``TwoLevel(coarseSpace=CornerNodeInterpolation(coarseSolve))``, against the
 same cycle written out, ``Multiplicative([CoarseCorrection(cornerNodeInterpolation, coarseSolve), smoother])``: the same
 :math:`P` (bit for bit), the same coarse solve, and as the smoother AMGCL's Chebyshev relaxation (degree 8, on the
-scalar double-precision matrix: EdelweissFE has no Chebyshev component). The displacement blocks of the three systems
-of the linear-solver bench (a tunnel lining, 1.37 M dofs; a damage cylinder, 0.63 M; an edge breakout, 0.81 M), each
-inside ``LGMRES(DiagonalScaling(.))`` to :math:`10^{-6}`, 18 threads on one socket of a two-socket workstation (on both
-sockets the written-out cycle's times scattered by up to a factor of two between repetitions), three repetitions
-(the times per application within 2 % of each other; one set-up 26 % above the other two). Both forms need the same iterations on every system.
+scalar double-precision matrix: EdelweissFE has no Chebyshev component). Offline, on the displacement blocks of three
+captured systems (a tunnel lining, a damage cylinder, an edge breakout), each inside ``LGMRES(DiagonalScaling(.))`` to
+:math:`10^{-6}`, in repetitions.
 
-.. list-table::
-    :width: 100%
-    :header-rows: 1
-
-    * - wall time, sum over the three systems
-      - C++ cycle
-      - written out, ``CoarseCorrection`` in SciPy (former)
-      - written out, ``CoarseCorrection`` threaded
-    * - total
-      - 20.7 -- 21.6 s
-      - 50.4 -- 52.3 s
-      - 41.4 -- 42.0 s
-    * - set-up, tunnel lining
-      - 3.9 s
-      - 11.0 s
-      - 6.5 s
-
-Per step, on the damage cylinder (32 threads, the median of 15): :math:`P^T r` 1.8 ms in SciPy against 0.2 ms
-threaded, :math:`P z_c` 1.4 against 0.3 ms, :math:`P^T A P` 2.55 against 0.45 s (tunnel lining 6.36 against 1.16 s).
-Of one application of the written-out cycle, 100 ms, the smoother takes 78 ms, the residual of ``Multiplicative``
-7.5 ms (threaded), the coarse correction 7.4 ms; the C++ cycle's whole application takes 36 ms, its fine level stored
-in single-precision 3x3 node blocks, half the bytes per product. The same C++ cycle on double-precision scalar entries
-(``backendBlockSize=1, backendPrecision="double"``) took 1.1 -- 2 times as long per application as on those blocks
-(32 threads: tunnel lining 0.15 -- 0.17 against 0.10 -- 0.13 s, damage cylinder 0.06 -- 0.08 against 0.035 s, edge
-breakout 0.11 -- 0.12 against 0.06 s). What remains of the factor of two is that smoother,
-and in the set-up the test script's own detection of the Dirichlet rows in NumPy (1.1 -- 2.4 s).
+Both forms need the same iterations on every system, and the written-out cycle takes markedly more wall time, in its
+applications and in its set-up. Forming ``CoarseCorrection``'s products with :math:`P` and :math:`P^T A P` threaded,
+instead of in SciPy, made each of them several times faster and the written-out cycle faster as a whole, most in the
+set-up, but not as fast as the C++ cycle. In one application of the written-out cycle the smoother takes most of the
+time; the residual of ``Multiplicative`` and the coarse correction take a small share each. The C++ cycle smooths on its
+fine level stored in single-precision 3x3 node blocks, half the bytes per product; the same C++ cycle on
+double-precision scalar entries (``backendBlockSize=1, backendPrecision="double"``) was slower per application on every
+system. What remains of the difference is that smoother, and in the set-up the bench script's own search for the
+Dirichlet rows in NumPy, on one thread.
 
 .. _measured-defaults:
 
