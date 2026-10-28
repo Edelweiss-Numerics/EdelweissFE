@@ -685,7 +685,8 @@ cdef class PyAMGCLCornerNodeTwoLevelCycle(_PyAMGCLTwoLevelCycle):
         try:
             return _PyAMGCLTwoLevelCycle.applyPreconditioner(self, r)
         except RuntimeError:
-            self.coarseSolve.raisePending()
+            if self.coarseSolve is not None:
+                self.coarseSolve.raisePending()
             raise
 
     @property
@@ -725,8 +726,6 @@ cdef class PyAMGCLCornerNodeTwoLevelCycle(_PyAMGCLTwoLevelCycle):
         radius is then re-checked by a few power iterations from it (``fineRecheckIters``) and
         raised, or re-estimated in full, if the operator has stiffened.
         """
-        if self.coarseSolve is None:
-            raise ValueError("PyAMGCLCornerNodeTwoLevelCycle: set the coarse solve (setCoarseSolve) before the build")
         A, indptr, indices, data = _csrArrays(A, sortIndices=True)
         s = np.ascontiguousarray(scaling, dtype=np.float64).reshape(-1)
         if s.shape[0] != A.shape[0]:
