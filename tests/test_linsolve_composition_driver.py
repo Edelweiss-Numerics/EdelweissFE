@@ -43,6 +43,7 @@ from edelweissfe.linsolve.composition import (  # noqa: E402
     LGMRES,
     ComposedLinearSolver,
     CornerNodeInterpolation,
+    DiagonalScaling,
     FixedTolerance,
     ForcingTolerance,
     GapCompensation,
@@ -143,6 +144,32 @@ def test_the_blockamg_preset_gives_a_3d_displacement_field_the_fastest_measured_
         assert isinstance(preconditioner, AMG)
     else:
         assert isinstance(preconditioner, TwoLevel) and expected in preconditioner.coarseSpace.name
+
+
+@pytest.mark.parametrize("rigidBodyModesPerAggregate", [True, False], ids=["rigid-body modes", "AMG"])
+def test_the_blockamg_preset_gives_the_corner_node_coarse_level_its_options(rigidBodyModesPerAggregate):
+    """The preset passes the coarse solve of the corner-node interpolation explicitly: under a diagonal scaling of its
+    own, the case of a linear 3D displacement field, with the preset's options; the rigid-body coarse level with the
+    smoother of the corner-node two-level cycle, AMG() with its default tree."""
+    context = SetUpContext(
+        fields=(FieldBlock("displacement", 0, 9, 3),),
+        coordinatesOf=lambda name: np.zeros((3, 3)),
+        midsideCornersOf=lambda name: (np.array([True, False, True]), np.array([[-1, -1], [0, 2], [-1, -1]])),
+    )
+    filtering = dict(dropTolerance=1e-3, lumpDroppedEntries=True)
+    preconditioner = blockAMGFieldPreconditioner(
+        context.fields[0], context, rigidBodyModesPerAggregate=rigidBodyModesPerAggregate, **filtering
+    )
+    assert isinstance(preconditioner.coarseSpace, CornerNodeInterpolation)
+    coarse = preconditioner.coarseSpace.coarseSolve
+    assert isinstance(coarse, DiagonalScaling)
+    if rigidBodyModesPerAggregate:
+        assert isinstance(coarse.inner, TwoLevel) and isinstance(coarse.inner.coarseSpace, RigidBodyModesPerAggregate)
+        assert coarse.inner.tree == defaultCornerNodeTwoLevelTree()
+    else:
+        assert isinstance(coarse.inner, AMG) and coarse.inner.tree is None
+    for level in (preconditioner, coarse.inner):
+        assert (level.dropTolerance, level.lumpDroppedEntries) == (1e-3, True)
 
 
 def test_a_field_on_elements_of_an_unknown_topology_gets_the_rigid_body_cycle():

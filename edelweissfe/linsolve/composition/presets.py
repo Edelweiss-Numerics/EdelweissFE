@@ -31,7 +31,7 @@ A preset is nothing but a function returning a tree, so there is no preset machi
 builds, copy it into a solver script to change it.
 """
 
-from edelweissfe.linsolve.composition.amg import AMG
+from edelweissfe.linsolve.composition.amg import AMG, defaultCornerNodeTwoLevelTree
 from edelweissfe.linsolve.composition.base import Preconditioner
 from edelweissfe.linsolve.composition.combinators import (
     Multiplicative,
@@ -61,35 +61,60 @@ def blockAMGFieldPreconditioner(
     lumpDroppedEntries: bool = False,
     tree: dict = None,
 ):
-    """The preconditioner of a field in the ``blockamg`` preset, the fastest measured for it:
+    """The preconditioner of a field in the ``blockamg`` preset:
 
     - a quadratic 3D displacement field (with node coordinates): the two-level cycle on its corner nodes,
-      ``TwoLevel(coarseSpace=CornerNodeInterpolation())``, whose coarse field (linear) gets the next case;
+      ``TwoLevel(coarseSpace=CornerNodeInterpolation(coarseSolve))``, whose coarse field (linear) gets the next case,
+      under a diagonal scaling of its own and with the smoother of the corner-node two-level cycle
+      (:func:`~edelweissfe.linsolve.composition.amg.defaultCornerNodeTwoLevelTree`);
     - a linear 3D displacement field (with node coordinates): the two-level cycle on its rigid-body modes,
-      ``TwoLevel(coarseSpace=RigidBodyModesPerAggregate())``;
+      ``TwoLevel(coarseSpace=RigidBodyModesPerAggregate())`` (:func:`linearDisplacementFieldPreconditioner`);
     - any other field: one AMG hierarchy, ``AMG()``.
 
-    ``tree`` is the field's AMGCL tree (``None``: the component's default). A field is quadratic if it has midside
-    nodes (:meth:`~edelweissfe.linsolve.composition.base.SetUpContext.midsideCorners`); a field on elements whose
-    topology the corner-node interpolation does not know (e.g. Tet10) has none, and gets the rigid-body cycle."""
+    ``tree`` is the field's AMGCL tree (``None``: the component's default); ``dropTolerance`` and ``lumpDroppedEntries``
+    reach every level. A field is quadratic if it has midside nodes
+    (:meth:`~edelweissfe.linsolve.composition.base.SetUpContext.midsideCorners`); a field on elements whose topology the
+    corner-node interpolation does not know (e.g. Tet10) has none, and gets the rigid-body cycle."""
     isDisplacement3D = field.dimension == 3 and carriesRigidBodyModes(field)
-    options = dict(tree=tree, dropTolerance=dropTolerance, lumpDroppedEntries=lumpDroppedEntries)
+    filtering = dict(dropTolerance=dropTolerance, lumpDroppedEntries=lumpDroppedEntries)
     if not isDisplacement3D or not (rigidBodyModesPerAggregate or cornerNodeInterpolation):
-        return AMG(**options)
+        return AMG(tree=tree, **filtering)
     if context.coordinates(field.name) is None:
         context.message(
             "info",
             "blockAMG: the field '{:}' has no node coordinates (no model, and no nodeCoordinates given): it gets AMG() on "
             "the translations instead of a two-level cycle".format(field.name),
         )
-        return AMG(**options)
+        return AMG(tree=tree, **filtering)
     midsideCorners = context.midsideCorners(field.name)
     isQuadratic = midsideCorners is not None and not midsideCorners[0].all()
     if cornerNodeInterpolation and isQuadratic:
-        return TwoLevel(coarseSpace=CornerNodeInterpolation(), **options)
+        coarseSolve = DiagonalScaling(
+            linearDisplacementFieldPreconditioner(
+                rigidBodyModesPerAggregate, twoLevelTree=defaultCornerNodeTwoLevelTree(), **filtering
+            )
+        )
+        return TwoLevel(coarseSpace=CornerNodeInterpolation(coarseSolve=coarseSolve), tree=tree, **filtering)
+    return linearDisplacementFieldPreconditioner(
+        rigidBodyModesPerAggregate, twoLevelTree=tree, amgTree=tree, **filtering
+    )
+
+
+def linearDisplacementFieldPreconditioner(
+    rigidBodyModesPerAggregate: bool,
+    twoLevelTree: dict = None,
+    amgTree: dict = None,
+    dropTolerance: float = 0.0,
+    lumpDroppedEntries: bool = False,
+):
+    """The preconditioner of a linear 3D displacement field in the ``blockamg`` preset, a field of its own or the coarse
+    field of the corner-node interpolation: the two-level cycle on its rigid-body modes,
+    ``TwoLevel(coarseSpace=RigidBodyModesPerAggregate(), tree=twoLevelTree)``, or with ``rigidBodyModesPerAggregate``
+    false one AMG hierarchy on the translations, ``AMG(tree=amgTree)``. Each tree ``None``: the component's default."""
+    filtering = dict(dropTolerance=dropTolerance, lumpDroppedEntries=lumpDroppedEntries)
     if rigidBodyModesPerAggregate:
-        return TwoLevel(coarseSpace=RigidBodyModesPerAggregate(), **options)
-    return AMG(**options)
+        return TwoLevel(coarseSpace=RigidBodyModesPerAggregate(), tree=twoLevelTree, **filtering)
+    return AMG(tree=amgTree, **filtering)
 
 
 def blockAMG(
@@ -115,7 +140,7 @@ def blockAMG(
             )
         )
 
-    with each field's preconditioner the fastest measured for it (:func:`blockAMGFieldPreconditioner`): the
+    with each field's preconditioner chosen for it by measurement (:func:`blockAMGFieldPreconditioner`): the
     two-level cycle on the corner nodes for a quadratic 3D displacement field, on the rigid-body modes for a linear
     one, one AMG hierarchy for any other field.
 
@@ -126,8 +151,8 @@ def blockAMG(
     Parameters
     ----------
     rigidBodyModesPerAggregate
-        Whether a (linear) 3D displacement field gets the two-level cycle on its rigid-body modes (else one AMG
-        hierarchy, on the translations).
+        Whether a linear 3D displacement field, and the coarse field of the corner-node interpolation, get the
+        two-level cycle on their rigid-body modes (else one AMG hierarchy, on the translations).
     cornerNodeInterpolation
         Whether a quadratic 3D displacement field gets the two-level cycle on its corner nodes (else the case of a
         linear one).
