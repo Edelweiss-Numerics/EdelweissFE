@@ -198,6 +198,7 @@ def test_the_true_residual_restarts_on_the_scaled_system_are_logged_at_debug():
         lambda: LGMRES(AMG(), restart=0),
         lambda: LGMRES(AMG(), trueResidualRestarts=-1),
         lambda: AMG(dropTolerance=-1.0),
+        lambda: AMG(nearNullspace=np.zeros((6, 1))),
         lambda: AMG(backendPrecision="half"),
         lambda: AMG(backendBlockSize=2, backendPrecision="float"),
         lambda: RigidBodyModesPerAggregate(coarseHierarchyPrecision="half"),
@@ -261,9 +262,8 @@ def _scriptSolver(tmp_path, eta: float, **settings):
     script = tmp_path / "solver.py"
     _script(
         script,
-        "linearSolver = blockAMG(tolerance=FixedTolerance({:g}), rebuild=RebuildPolicy(reusePreconditioner=True))\n".format(
-            eta
-        ),
+        "linearSolver = blockAMG(tolerance=FixedTolerance({:g}), "
+        "rebuild=RebuildPolicy(reusePreconditioner=True))\n".format(eta),
     )
     A, b, fields = displacementDamageSystem(n=8, coupling="symmetric")
     solver = ComposedLinearSolver.fromScript(str(script), hotReload=True, **settings)

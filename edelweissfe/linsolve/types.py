@@ -259,8 +259,8 @@ class BlockAMGSchema(LinearSolverSchema):
 
     rigidBodyModesPerAggregate: bool = schemaField(
         description=(
-            "A (linear) 3D displacement field gets the two-level cycle on its rigid-body modes (else one AMG hierarchy, "
-            "on the translations)."
+            "A (linear) 3D displacement field gets the two-level cycle on its rigid-body modes (else one AMG "
+            "hierarchy, on the translations)."
         ),
         dtype=bool,
         default=True,

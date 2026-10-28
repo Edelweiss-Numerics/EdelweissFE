@@ -428,18 +428,20 @@ class ComposedLinearSolver(LinearSolver):
         if record.capHit:
             self._log(
                 "warning",
-                "solve #{:} did not converge: ‖r‖={:.1e} still exceeds η={:.1e} after {:} true-residual restarts, and a pass "
-                "of the Krylov solver stopped at its iteration cap. The cap is a budget, not a tolerance: a solve that "
-                "needs more is a preconditioning problem -- the preconditioner is rebuilt for the next "
+                "solve #{:} did not converge: ‖r‖={:.1e} still exceeds η={:.1e} after {:} true-residual restarts, and "
+                "a pass of the Krylov solver stopped at its iteration cap. The cap is a budget, not a tolerance: a "
+                "solve that needs more is a preconditioning problem -- the preconditioner is rebuilt for the next "
                 "solve.".format(self._solveCount, record.residual, record.eta, record.trueResidualRestarts),
             )
         elif record.scaledSystem:
             self._log(
                 "warning",
-                "solve #{:} did not fully converge: ‖r‖={:.1e} still exceeds η={:.1e} after {:} true-residual restarts, though "
-                "the Krylov solve converged its own (scaled) residual: the gap between the scaled and the true "
-                "residual, which more true-residual restarts or a ResidualGapCompensation close; a rebuilt preconditioner does "
-                "not.".format(self._solveCount, record.residual, record.eta, record.trueResidualRestarts),
+                "solve #{:} did not fully converge: ‖r‖={:.1e} still exceeds η={:.1e} after {:} true-residual "
+                "restarts, though the Krylov solve converged its own (scaled) residual: the gap between the scaled and "
+                "the true residual, which more true-residual restarts or a ResidualGapCompensation close; a rebuilt "
+                "preconditioner does not.".format(
+                    self._solveCount, record.residual, record.eta, record.trueResidualRestarts
+                ),
             )
         else:
             self._log(

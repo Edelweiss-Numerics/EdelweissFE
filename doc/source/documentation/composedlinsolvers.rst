@@ -124,7 +124,7 @@ Components
         read the fine Chebyshev smoother from the tree's ``relax``, ``npre`` and ``npost``; without a tree, the default
         tree of the field (degree 16), and for ``CornerNodeInterpolation`` on a 3D displacement field the smoother of
         the corner-node two-level cycle (degree 8), on both of its levels (:ref:`composed-default-field-trees`)
-    * - ``SchurComplement(condensedDofs, schurComplementSolve, condensedBlockSolve, approximation, dropTolerance,
+    * - ``SchurComplement(condensedDofMarkers, schurComplementSolve, condensedBlockSolve, approximation, dropTolerance,
         windowNodes, haloNodes, blockFactors)``
       - block LU: :math:`z_k = M_{\tilde S}^{-1}(r_k - A_{kb} A_{bb}^{-1} r_b)`,
         :math:`z_b = A_{bb}^{-1}(r_b - A_{bk} z_k)`; ``condensedBlockSolve`` is a ``DirectSolver``, set up on :math:`A_{bb}`
@@ -283,7 +283,7 @@ marked elements -- the nodes all of whose elements are marked. For embedded bars
 
 
     blockGaussSeidel = Multiplicative(fieldCorrections)
-    linearSolver = LGMRES(SchurComplement(condensedDofs=[bars, bonds], schurComplementSolve=DiagonalScaling(blockGaussSeidel)))
+    linearSolver = LGMRES(SchurComplement(condensedDofMarkers=[bars, bonds], schurComplementSolve=DiagonalScaling(blockGaussSeidel)))
 
 .. code-block:: edelweiss
 

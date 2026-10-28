@@ -434,8 +434,8 @@ class CoarseCorrection(Preconditioner):
             if not (isinstance(built, tuple) and len(built) == 2 and isinstance(built[1], SetUpContext)):
                 raise TypeError(
                     "CoarseCorrection: the prolongation callable must return a tuple (P, coarseContext), the context "
-                    "of the coarse dofs (e.g. context.ofCoarseNodes(field, isCorner) or context.ofCoarseDofs(nCoarse)), "
-                    "got {!r}".format(type(built).__name__)
+                    "of the coarse dofs (e.g. context.ofCoarseNodes(field, isCorner) or "
+                    "context.ofCoarseDofs(nCoarse)), got {!r}".format(type(built).__name__)
                 )
             P, self.coarseContext = built
         else:

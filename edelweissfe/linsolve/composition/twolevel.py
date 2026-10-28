@@ -42,8 +42,8 @@ with :math:`A_c^{-1}` approximated. The coarse space decides what the cycle can 
   of an AMG hierarchy;
 - :class:`CornerNodeInterpolation`: the linear interpolant of a quadratic field from its corner nodes (P1);
   :math:`A_c^{-1}` is a component of its own, by default
-  ``DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModesPerAggregate(), amgclTree=...))`` on the corner-node field -- three
-  levels: quadratic, linear, rigid-body modes of aggregates. On a vector field both of its levels smooth with the
+  ``DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModesPerAggregate(), amgclTree=...))`` on the corner-node field --
+  three levels: quadratic, linear, rigid-body modes of aggregates. On a vector field both of its levels smooth with the
   smoother of the corner-node two-level cycle, a Chebyshev polynomial of degree 8 instead of 16
   (:func:`~edelweissfe.linsolve.composition.amg.defaultCornerNodeTwoLevelTree`).
 
@@ -51,9 +51,9 @@ Why "two-level": the component is the fine level and one coarse correction, and 
 The coarse space need not be a coarser mesh. With :class:`RigidBodyModesPerAggregate` it is
 spanned by aggregates of nodes, and the whole cycle is smoothed aggregation with all rigid-body modes on every level,
 the method Trilinos ML and MueLu use for elasticity (Vaněk, Mandel and Brezina, Computing 56, 1996). The first coarse
-level is built here, on the node-wise blocks of the fine level, with the modes scaled by the diagonal scaling and zero on
-the Dirichlet rows. The levels below are built by AMGCL, which takes the coefficients of the modes in the coarse space
-as its near null-space. ``prolongation="tentative"`` makes the first level plain aggregation. With
+level is built here, on the node-wise blocks of the fine level, with the modes scaled by the diagonal scaling and zero
+on the Dirichlet rows. The levels below are built by AMGCL, which takes the coefficients of the modes in the coarse
+space as its near null-space. ``prolongation="tentative"`` makes the first level plain aggregation. With
 :class:`CornerNodeInterpolation` the coarse level is a coarser grid, the corner nodes (p-multigrid): a field of its own,
 which its coarse component solves like any field (:mod:`~edelweissfe.linsolve.composition.cornernodetwolevelcycle`).
 
@@ -256,8 +256,9 @@ class CornerNodeInterpolation(CoarseSpace):
         coarse field is solved like any field of the ``blockamg`` preset, under a diagonal scaling of its own, with the
         tree of this coarse space (:meth:`defaultCoarseSolve`, chosen at the first build, when the field is known): for
         a 3D displacement field
-        ``DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModesPerAggregate(), amgclTree=defaultCornerNodeTwoLevelTree()))``,
-        measured fastest (see :ref:`measured-scaled-corner-node-interpolation` and
+        ``DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModesPerAggregate(),
+        amgclTree=defaultCornerNodeTwoLevelTree()))``, measured fastest (see
+        :ref:`measured-scaled-corner-node-interpolation` and
         :ref:`measured-corner-node-two-level-smoother`), for any other field ``DiagonalScaling(AMG())``. ``AMG(...)``
         is the plain AMG hierarchy on it, ``AMG(backendBlockSize=1)`` one with the rigid-body modes of the corners as
         its near null-space.

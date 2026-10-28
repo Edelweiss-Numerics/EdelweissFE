@@ -84,8 +84,8 @@ def _equilibratedBeam(dimension: int):
 def _preconditioner(
     dimension: int, backendPrecision: str = "double", kind=RigidBodyModesTwoLevelCycle, **options
 ) -> RigidBodyModesTwoLevelCycle:
-    """The rigid-body coarse level (or its control, ``kind``) of the default tree of a field of this dimension, stored in
-    backendPrecision."""
+    """The rigid-body coarse level (or its control, ``kind``) of the default tree of a field of this dimension, stored
+    in backendPrecision."""
     return kind(defaultFieldTree(dimension), dimension, backendPrecision, **options)
 
 

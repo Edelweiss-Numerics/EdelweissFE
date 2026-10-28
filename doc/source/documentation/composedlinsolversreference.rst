@@ -373,7 +373,7 @@ The arguments of ``SchurComplement``
 The method is :ref:`blockamg-schur-complement`, a complete script :ref:`composed-schur-complement-recipe`. The
 arguments of :class:`~edelweissfe.linsolve.composition.schurcomplement.SchurComplement`:
 
-``condensedDofs`` (required)
+``condensedDofMarkers`` (required)
     A list of markers, created through the marker registry from the options of a ``>>marker`` line of
     ``*modelModifier, type=hAdaptivity``, e.g. ``getMarkerClass("fieldOutput").fromOptions({"fieldOutput":
     "damage", "threshold": 0.05, "halo": 1})``. Sets, surfaces and fieldOutputs they name must exist.

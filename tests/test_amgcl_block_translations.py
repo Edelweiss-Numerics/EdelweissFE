@@ -25,8 +25,8 @@
 #  The full text of the license can be found in the file LICENSE.md at
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
-"""``AMG(nearNullspace="translations")``, the default on a block backend (2D/3D fields): smoothed aggregation on a block backend whose
-tentative prolongation is built from the translations D^-1 t of the equilibrated block D A D
+"""``AMG(nearNullspace="translations")``, the default on a block backend (2D/3D fields): smoothed aggregation on a block
+backend whose tentative prolongation is built from the translations D^-1 t of the equilibrated block D A D
 (``amgcl-block-translations.hpp``), instead of AMGCL's constant blocks, which are D-weighted translations."""
 
 import copy

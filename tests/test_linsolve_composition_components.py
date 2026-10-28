@@ -90,6 +90,17 @@ def _solved(A, b, root, fields, **options):
 # ----- the components -----
 
 
+def test_amg_shows_the_near_null_space_it_was_built_with():
+    """A block backend takes the translations at most: AMG() asks for the rigid-body modes, and after the set-up its
+    description says what it got."""
+    K, coordinates, _ = cantilever((8, 2, 2), (4.0, 1.0, 1.0))
+    fields = [FieldBlock("displacement", 0, K.shape[0], 3)]
+    amg = AMG()
+    assert "nearNullspace" not in amg.describe().parameters
+    amg.setUp(SystemMatrix(K), _context(fields, {"displacement": coordinates}))
+    assert amg.describe().parameters["nearNullspace"] == "translations"
+
+
 def test_diagonal_scaling_around_an_exact_solve_is_the_exact_inverse():
     """D (D A D)^-1 D = A^-1, whatever D: the scaling changes the variables, not the solution."""
     A, b, fields = displacementDamageSystem(n=6, coupling="symmetric", rowScaling=True)

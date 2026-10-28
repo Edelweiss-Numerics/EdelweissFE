@@ -25,8 +25,9 @@
 #  The full text of the license can be found in the file LICENSE.md at
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
-"""The outer Krylov solve: :class:`LGMRES` or :class:`FGMRES`, its tolerance per solve (:class:`EisenstatWalkerTolerance`,
-:class:`FixedTolerance`) and when it rebuilds its preconditioner (:class:`RebuildPolicy`).
+"""The outer Krylov solve: :class:`LGMRES` or :class:`FGMRES`, its tolerance per solve
+(:class:`EisenstatWalkerTolerance`, :class:`FixedTolerance`) and when it rebuilds its preconditioner
+(:class:`RebuildPolicy`).
 
 A Krylov method accelerates a basic iteration :math:`x \\leftarrow x + M^{-1}(b - A x)`: from the preconditioned
 residuals it builds a subspace and takes the best solution in it. LGMRES is restarted GMRES, augmented at each
@@ -210,14 +211,14 @@ class ResidualGapCompensation:
     """For a Krylov solve on a diagonally scaled matrix :math:`\\hat A = D A D` (``DiagonalScaling(LGMRES(...))``):
     ask the first pass for :math:`s \\, \\eta / g` instead of :math:`\\eta`, with :math:`g` the gap between the true
     and the scaled relative residual of the same iterate, learned from the previous solves, so that the pass lands on
-    the true-residual target without a true-residual restart; such a restart then tightens by the measured gap instead of
-    the fixed factor 0.01.
+    the true-residual target without a true-residual restart; such a restart then tightens by the measured gap instead
+    of the fixed factor 0.01.
 
     The Krylov method converges the scaled residual :math:`\\lVert D (b - A x) \\rVert`, while the solve is accepted
     on the true one, :math:`\\lVert b - A x \\rVert / \\lVert b \\rVert`; their ratio was measured from close to one
-    (gradient-enhanced damage) to far larger (contact with multi-point constraints). Measured to save true-residual restarts
-    and iterations per increment, but the uncompensated scaled solve over-solves, and Newton relies on that: per
-    unit of simulated time the saving was largely given back. Hence it is opt-in.
+    (gradient-enhanced damage) to far larger (contact with multi-point constraints). Measured to save true-residual
+    restarts and iterations per increment, but the uncompensated scaled solve over-solves, and Newton relies on that:
+    per unit of simulated time the saving was largely given back. Hence it is opt-in.
 
     Parameters
     ----------
@@ -249,8 +250,8 @@ class ResidualGapCompensation:
             self.gap = min(max(0.5 * self.gap + 0.5 * measuredGap, 1.0), self.maxFactor)
 
     def restartTolerance(self, eta: float, previousTolerance: float, trueResidual: float, scaledResidual):
-        """The tolerance of a true-residual restart: aimed at :math:`s \\, \\eta / g` of the current gap, and at least half the
-        previous one, so that the restarts end."""
+        """The tolerance of a true-residual restart: aimed at :math:`s \\, \\eta / g` of the current gap, and at least
+        half the previous one, so that the restarts end."""
         gap = trueResidual / max(scaledResidual, 1e-300)
         return max(min(self.safetyFactor * eta / max(gap, 1.0), 0.5 * previousTolerance), 1e-14)
 
@@ -418,8 +419,8 @@ class KrylovSolver(Preconditioner):
         return self._krylov
 
     def _apply(self, b: np.ndarray) -> np.ndarray:
-        """The solve: a first pass, and on a diagonally scaled matrix the true-residual restarts while the true residual misses
-        :math:`\\eta` (see ``trueResidualRestarts``)."""
+        """The solve: a first pass, and on a diagonally scaled matrix the true-residual restarts while the true residual
+        misses :math:`\\eta` (see ``trueResidualRestarts``)."""
         # on D A D (DiagonalScaling(LGMRES(...))): the method converges the scaled residual, not the true one
         onScaledSystem = self.A.scaling is not None
         eta = self.eta
@@ -550,8 +551,9 @@ class KrylovSolver(Preconditioner):
 class LGMRES(KrylovSolver):
     """LGMRES (Baker, Jessup and Manteuffel 2005): GMRES restarted every ``restart`` iterations, each cycle augmented
     with ``augmentationVectors`` error approximations of the previous cycles, AMGCL's implementation.
-    Right-preconditioned: :math:`x = M^{-1} y` with :math:`y` from the Krylov space of :math:`A M^{-1}`, which is a Krylov space only for a fixed linear :math:`M^{-1}` -- so LGMRES refuses a variable
-    preconditioner (a Krylov solve inside), for which :class:`FGMRES` is made.
+    Right-preconditioned: :math:`x = M^{-1} y` with :math:`y` from the Krylov space of :math:`A M^{-1}`, which is a
+    Krylov space only for a fixed linear :math:`M^{-1}` -- so LGMRES refuses a variable preconditioner (a Krylov solve
+    inside), for which :class:`FGMRES` is made.
 
     Parameters
     ----------

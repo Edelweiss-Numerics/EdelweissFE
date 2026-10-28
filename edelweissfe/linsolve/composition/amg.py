@@ -129,7 +129,7 @@ def checkBackend(owner: str, backendBlockSize, backendPrecision, nearNullspace="
         raise ValueError("{:}: backendPrecision must be 'double' or 'float', got {!r}".format(owner, backendPrecision))
     if backendBlockSize == 2 and backendPrecision == "float":
         raise ValueError("{:}: 2x2 blocks are stored in double only, got backendPrecision 'float'".format(owner))
-    if nearNullspace not in NEAR_NULLSPACES:
+    if not (nearNullspace is None or (isinstance(nearNullspace, str) and nearNullspace in NEAR_NULLSPACES)):
         raise ValueError(
             "{:}: nearNullspace must be 'rigidBodyModes', 'translations' or None, got {!r}".format(owner, nearNullspace)
         )
@@ -252,9 +252,10 @@ def droppedSmallEntries(A: sp.csr_matrix, dropTolerance: float, lumpDroppedEntri
 
 
 def preconditionerMatrix(A, dropTolerance: float, lumpDroppedEntries: bool, statistics) -> sp.csr_matrix:
-    """The matrix a one-field preconditioner (:class:`AMG`, :class:`~edelweissfe.linsolve.composition.twolevel.TwoLevel`)
-    is built on: :math:`A` itself, or with ``dropTolerance > 0`` its filtered copy (:func:`droppedSmallEntries`),
-    with the stored entries before and after recorded in the component's ``statistics``."""
+    """The matrix a one-field preconditioner (:class:`AMG`,
+    :class:`~edelweissfe.linsolve.composition.twolevel.TwoLevel`) is built on: :math:`A` itself, or with
+    ``dropTolerance > 0`` its filtered copy (:func:`droppedSmallEntries`), with the stored entries before and after
+    recorded in the component's ``statistics``."""
     matrix = A.matrix()
     if dropTolerance <= 0.0:
         return matrix
@@ -375,6 +376,8 @@ class AMG(Preconditioner):
     def _forget(self) -> None:
         self.hierarchy = None
         self._field = None
+        # the near null-space the hierarchy was built with, as far as the backend and the field hold the one asked for
+        self._builtNearNullspace = None
 
     def _setUp(self, A, context: SetUpContext) -> None:
         field = context.onlyField("AMG")
@@ -382,6 +385,8 @@ class AMG(Preconditioner):
         amgclTree = fieldTreeOf("AMG", self.amgclTree, field, lambda field: defaultFieldTree(field.dimension))
         backend = backendOf("AMG", field, amgclTree, self.backendBlockSize, self.backendPrecision, self.nearNullspace)
         coords = context.coordinates(field.name) if backend[2] == "rigidBodyModes" else None
+        # the rotations need the node coordinates; without them, the hierarchy takes the translations
+        self._builtNearNullspace = "translations" if backend[2] == "rigidBodyModes" and coords is None else backend[2]
         self.hierarchy = buildFieldHierarchy(
             field,
             amgclTree,
@@ -406,8 +411,11 @@ class AMG(Preconditioner):
         }
         parameters = {"amgclTree": "default" if self.amgclTree is None else "given"}
         parameters.update({key: value for key, value in backend.items() if value is not None})
-        if self.nearNullspace != "rigidBodyModes":
-            parameters["nearNullspace"] = self.nearNullspace
+        # the near null-space as built, once it is, where it differs from the one asked for (a block backend takes the
+        # translations at most); before, the one asked for, where it is not the default
+        nearNullspace = self._builtNearNullspace if self._field is not None else self.nearNullspace
+        if nearNullspace != self.nearNullspace or self.nearNullspace != "rigidBodyModes":
+            parameters["nearNullspace"] = nearNullspace
         if self.dropTolerance > 0.0:
             parameters["dropTolerance"] = self.dropTolerance
             parameters["lumpDroppedEntries"] = self.lumpDroppedEntries

@@ -1208,7 +1208,7 @@ that condensation pays only where AMG struggles with the zone: the field-split p
 gradient-enhanced damage band well, and the condensation then costs more per iteration and per rebuild of
 :math:`\tilde S` (rebuilt whenever the zone grows) than it saves in iterations.
 
-The condensation is a ``custom`` solver script, ``LGMRES(SchurComplement(condensedDofs=[...], schurComplementSolve=...))``: a
+The condensation is a ``custom`` solver script, ``LGMRES(SchurComplement(condensedDofMarkers=[...], schurComplementSolve=...))``: a
 complete one is :ref:`composed-schur-complement-recipe`, the arguments of
 :class:`~edelweissfe.linsolve.composition.schurcomplement.SchurComplement` are listed in
 :ref:`composed-schur-complement-arguments`.

@@ -78,8 +78,8 @@ def blockAMGFieldPreconditioner(
     if context.coordinates(field.name) is None:
         context.message(
             "info",
-            "blockAMG: the field '{:}' has no node coordinates (no model, and no nodeCoordinates given): it gets AMG() on "
-            "the translations instead of a two-level cycle".format(field.name),
+            "blockAMG: the field '{:}' has no node coordinates (no model, and no nodeCoordinates given): it gets "
+            "AMG() on the translations instead of a two-level cycle".format(field.name),
         )
         return AMG(**options)
     midsideCorners = context.midsideCorners(field.name)
@@ -140,7 +140,8 @@ def blockAMG(
         When the preconditioner is rebuilt.
     krylovOnScaledSystem
         Run LGMRES on the scaled matrix, ``DiagonalScaling(LGMRES(Multiplicative(...)))``, with its true-residual
-        ``trueResidualRestarts`` and ``residualGapCompensation`` (see :class:`~edelweissfe.linsolve.composition.krylov.KrylovSolver`).
+        ``trueResidualRestarts`` and ``residualGapCompensation`` (see
+        :class:`~edelweissfe.linsolve.composition.krylov.KrylovSolver`).
     trueResidualRestarts, residualGapCompensation
         See :class:`~edelweissfe.linsolve.composition.krylov.KrylovSolver`; only with ``krylovOnScaledSystem``.
     dropTolerance, lumpDroppedEntries

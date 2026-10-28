@@ -80,9 +80,9 @@ class SolveDumps:
     trigger
         Which solves are dumped: ``"slow"`` (default), ``"every"``, or a collection of solve numbers.
     threshold
-        For ``"slow"``: a solve with more outer iterations than this is dumped; ``None``: the warning threshold of the solver
-        (``warningOuterIterations``), so that a dump and its warning fire on the same solves. A solve that stops at the
-        iteration cap short of its tolerance is dumped whatever the threshold.
+        For ``"slow"``: a solve with more outer iterations than this is dumped; ``None``: the warning threshold of the
+        solver (``warningOuterIterations``), so that a dump and its warning fire on the same solves. A solve that stops
+        at the iteration cap short of its tolerance is dumped whatever the threshold.
     maxDumps
         The most systems written to ``directory`` in this process, across all solvers that dump there (e.g. one per
         analysis step), context solves included: a disk-space guard for a run that degrades on every remaining solve.
