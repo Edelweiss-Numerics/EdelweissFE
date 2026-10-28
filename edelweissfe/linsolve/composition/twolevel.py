@@ -423,6 +423,8 @@ class TwoLevel(Preconditioner):
         self.statistics.sizes.update(rows=A.shape[0], **self.coarseSpace.sizesOf(self.cycle))
 
     def _update(self, A, change) -> None:
+        # A_c is built above the coarse solve: rebuilt with it, also for reasons the coarse solve adds itself
+        change = self.withRebuildReasons(change)
         # only the values changed: the whole cycle, its coarse solve included, is kept
         if change.requiresRebuild or self.cycle is None:
             self.setUp(A, change.context)
