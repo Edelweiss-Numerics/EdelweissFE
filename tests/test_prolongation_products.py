@@ -56,7 +56,6 @@ def test_the_restriction_and_the_prolongation_are_scipys(problem):
     A, P, products = problem
     rng = np.random.default_rng(8)
     r, z_c = rng.standard_normal(P.shape[0]), rng.standard_normal(P.shape[1])
-    assert products.shape == P.shape
     np.testing.assert_allclose(products.restrict(r), P.T @ r, rtol=1e-13, atol=1e-13)
     np.testing.assert_allclose(products.prolongate(z_c), P @ z_c, rtol=1e-13, atol=1e-13)
 

@@ -592,11 +592,6 @@ cdef class PyAMGCLProlongation:
         P, indptr, indices, data = _csrArrays(P)
         self.prolongation.build(P.shape[0], P.shape[1], _intData(indptr), _intData(indices), _constDoubleData(data))
 
-    @property
-    def shape(self):
-        """``(fine rows, coarse columns)`` of P."""
-        return (self.prolongation.nFine(), self.prolongation.nCoarse())
-
     def restrict(self, object r):
         """Returns ``P^T r`` as a new float64 array."""
         rArray = _vector(r, self.prolongation.nFine(), "r")
