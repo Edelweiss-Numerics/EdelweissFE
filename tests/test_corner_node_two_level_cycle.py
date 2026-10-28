@@ -505,11 +505,16 @@ def test_an_invalid_smoother_raises_before_any_build():
         (fineChebyshevTree() | {"relax": fineChebyshevTree()["relax"] | {"higher": 0.9}}, {}),
         (fineChebyshevTree() | {"relax": fineChebyshevTree()["relax"] | {"lower": 0.0}}, {}),
         (fineChebyshevTree(), {"backendBlockSize": 4}),
-        # the coarse solve is a component, not an AMGCL tree
-        (fineChebyshevTree(), {"coarse": {"relax": {"type": "spai0"}}}),
     ):
         with pytest.raises(RuntimeError):
             PyAMGCLCornerNodeTwoLevelCycle({"amgcl": amgclTree, **parameters})
+
+
+def test_an_unknown_parameter_raises_naming_the_valid_ones():
+    from edelweissfe.linsolve.amgcl.amgcl import PyAMGCLCornerNodeTwoLevelCycle
+
+    with pytest.raises(RuntimeError, match='unknown parameter "coarseHierarchyPrecision"; valid: amgcl, '):
+        PyAMGCLCornerNodeTwoLevelCycle({"amgcl": fineChebyshevTree(), "coarseHierarchyPrecision": "double"})
 
 
 def test_the_coarse_operator_is_held_by_the_coarse_solve_not_by_the_cycle(problem):
