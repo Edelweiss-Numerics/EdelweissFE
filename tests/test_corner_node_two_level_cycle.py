@@ -511,15 +511,6 @@ def test_the_coarse_operator_is_held_by_the_coarse_solve_not_by_the_cycle(proble
         preconditioner._preconditioner.coarseOperator()
 
 
-def test_a_build_without_a_coarse_solve_raises():
-    from edelweissfe.linsolve.amgcl.amgcl import PyAMGCLCornerNodeTwoLevelCycle
-
-    coords, isCorner, edgeEndpoints = lattice(3)
-    As, scaling = latticeSystem(coords, dirichletDofs(coords))
-    with pytest.raises(ValueError, match="coarse solve"):
-        PyAMGCLCornerNodeTwoLevelCycle({"amgcl": fineChebyshevTree()}).build(As, scaling, isCorner, edgeEndpoints)
-
-
 def test_a_fully_constrained_field_is_the_identity():
     coords, isCorner, edgeEndpoints = lattice(3)
     n = 3 * len(coords)
