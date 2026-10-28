@@ -1068,8 +1068,8 @@ inline OuterKrylovSolver* makeOuterKrylovSolver( const std::string& method, int 
 //     carries nothing but its diagonal, so every residual r_D = 0 - a_DD * 0 = 0, hence every
 //     Chebyshev update leaves x_D = 0. On the free rows, A x = A_FF x_F + A_FD x_D = A_FF x_F,
 //     whether or not the upstream Dirichlet elimination also cleared the columns A_FD;
-//   * the power iteration starts from a vector that is zero on Dirichlet DOFs, which stays zero by
-//     the same argument, so it estimates the spectral radius of A_FF, not of A;
+//   * the spectral radius estimate starts from a vector that is zero on Dirichlet DOFs, and its Krylov space stays
+//     zero there by the same argument, so it estimates the spectral radius of A_FF, not of A;
 //   * P has nothing in the rows of Dirichlet fine DOFs (the corner-node two-level cycle no entries, the rigid-body
 //     coarse level zero ones) and nothing in the columns of Dirichlet coarse DOFs, so P^T A P = P_F^T A_FF P_F exactly,
 //     but for the rows and columns of the Dirichlet coarse DOFs: the corner-node two-level cycle makes them identity
@@ -2056,9 +2056,8 @@ private:
 
   /// @brief The fine operator, copied once with an OpenMP-parallel first touch (crs's own range constructor). The input
   /// arrays come from a single-threaded SciPy allocation, i.e. from one NUMA node, and every sparse product on them --
-  /// the power iteration, the Galerkin product, every smoothing step -- would otherwise be bound by that one node's
-  /// memory bandwidth: used in place, a multi-solve replay sequence was measured noticeably slower on a two-socket
-  /// machine.
+  /// the spectral radius estimate, the Galerkin product, every smoothing step -- would otherwise be bound by that one
+  /// node's memory bandwidth on a machine of several NUMA nodes.
   std::shared_ptr< ScalarMatrix > copiedFineOperator( int n, const int* ptr, const int* col, const double* val )
   {
     SetupStage stage( *this, "fine operator" );

@@ -244,8 +244,8 @@ micropolar model gets its translations.
 Default field trees
 -------------------
 
-``AMG(tree=...)`` and ``TwoLevel(..., tree=...)`` take a field's AMGCL parameter tree, forwarded to AMGCL verbatim. A
-tree given replaces the default outright, so start from the one that applies
+``AMG(tree=...)`` and ``TwoLevel(..., tree=...)`` take a field's AMGCL parameter tree, plus EdelweissFE's own key
+``spectralRadiusSteps`` (below). A tree given replaces the default outright, so start from the one that applies
 and change only what is intended. The defaults are, by the field's nodal dimension
 (:func:`~edelweissfe.linsolve.composition.amg.defaultFieldTree` in the code):
 
@@ -303,13 +303,15 @@ The 3D displacement field of the ``blockAMG()`` preset gets the rigid-body coars
 fine smoother of the rigid-body coarse level, its ``coarsening`` the aggregation of that level, and the whole tree the
 AMGCL hierarchy below it. ``TwoLevel(coarseSpace=CornerNodeInterpolation())`` reads its fine smoother from the tree in the same
 spelling; its coarse solve is a component of its own, ``CornerNodeInterpolation(coarseSolve=...)``, with its own tree. Only a genuinely scalar field (nodal dimension 1) gets the plain scalar tree, which predates the vector
-recipe and was never re-tuned against it. Note that AMGCL silently ignores parameter keys it does not recognise
-(warning only on stderr), so check its stderr if an override appears to do nothing.
+recipe and was never re-tuned against it. AMGCL warns on stderr about a parameter key it does not recognise and
+otherwise ignores it, so check its stderr if an override appears to do nothing; a Chebyshev ``relax``, EdelweissFE's
+own, rejects such a key instead.
 
 Every spectral radius in these trees -- of the Chebyshev smoother (``relax``) and of the prolongation smoothing
 (``coarsening`` with ``estimate_spectral_radius``) -- is estimated by ``spectralRadiusSteps`` Arnoldi steps (default
-10) from a start vector seeded per row, the same at any thread count (:ref:`blockamg-chebyshev`). The trees leave the
-default; a tree that sets AMGCL's ``power_iters`` is refused, since there is no power iteration any more.
+10) from a start vector seeded per row, the same at any thread count (:ref:`blockamg-chebyshev`). The key is
+EdelweissFE's own, read by its Chebyshev smoother and its smoothed aggregation; the trees leave the default. A tree
+that sets AMGCL's ``power_iters``, which the Arnoldi steps replace, is refused.
 
 .. _blockamg-rigid-body-coarse-level-configuration:
 

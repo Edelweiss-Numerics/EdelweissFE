@@ -31,87 +31,26 @@ The spectral radius estimate of the Chebyshev smoother
 See :ref:`blockamg-chebyshev`.
 
 **Why it changed.** AMGCL estimated the spectral radius by power iteration from a start vector seeded per OpenMP
-thread. With 50 iterations one captured solve needed 1460 outer iterations at 16 threads and 43 at 4, nothing else
-differing; the true spectral radius (ARPACK) barely moved between the solves of that run. 300 iterations removed the
-sensitivity, at 1.5 to 4 s of setup per hierarchy on the systems below.
+thread. With a short power iteration, one captured solve needed far more outer iterations at one thread count than at
+another, nothing else differing, while the true spectral radius barely moved between the solves of that run. A long
+power iteration removed that sensitivity, but made the estimate the most expensive stage of the setup.
 
-**The estimate against ARPACK.** Arnoldi and Lanczos from the same row-seeded start vector, on the scaled
-displacement block :math:`D K D` and the re-scaled coarse operator of the corner-node interpolation of seven captured systems (asymmetry
-:math:`\lVert A - A^T \rVert_F / \lVert A \rVert_F` of the free rows up to 0.21), agree to three digits: Arnoldi is
-kept, since it holds for nonsymmetric matrices. Its estimate :math:`\theta + r`, relative to the spectral radius:
+**The estimate against a reference eigensolver.** On the scaled displacement blocks and the coarse operators of the
+corner-node interpolation of captured systems, markedly nonsymmetric ones among them, Arnoldi and Lanczos from the same
+row-seeded start vector agree to about three digits; Arnoldi is kept, since it holds for nonsymmetric matrices. With
+the default number of steps, its estimate :math:`|\theta| + r` lay slightly above the spectral radius on every
+operator, well within the smoother's margin; more steps bring it closer, and too few can leave it well below, where
+the rigid-body coarse level of a small 2D beam of the test suite diverged.
 
-.. list-table::
-    :width: 100%
-    :header-rows: 1
-
-    * - steps
-      - 5
-      - 8
-      - 10
-      - 15
-      - 20
-      - adaptive, tolerance 0.05
-    * - :math:`(\theta + r) / \rho`, 14 operators
-      - 0.92 -- 1.05
-      - 1.00 -- 1.04
-      - 1.005 -- 1.043
-      - 1.001 -- 1.015
-      - 0.993 -- 1.013
-      - 1.003 -- 1.039, after 8 -- 11 steps
-
-The adaptive estimate stops when :math:`r < 0.05\, \theta`, after at least 8 steps; it took 9.1 steps on average
-here, a tolerance of 0.03 11.4 and of 0.02 14.2, without a better estimate; 0.1 stopped after 6 -- 8 steps, once at
-:math:`0.975\,\rho`. The minimum of 8 steps: after 5, :math:`\theta + r` was down to :math:`0.92\,\rho` above, and
-on the small coarse levels of a 2D beam of the test suite (650 unknowns) the rigid-body coarse level then diverged (301
-GMRES iterations against 6 with 8 or more steps).
-
-**Outer iterations, setup and wall time** (s, mean over 8, 16 and 32 threads, xeon) to 1e-6 on the displacement
-block alone, the 14 systems of :ref:`measured-scaled-corner-node-interpolation` and two post-onset cylinder solves (21, 27), for the default
-AMG tree (``AMG()``), the rigid-body coarse level and the scaled corner-node interpolation; the sums over the systems:
-
-.. list-table::
-    :width: 100%
-    :header-rows: 1
-
-    * - estimate
-      - ``AMG()``: its / setup / wall
-      - ``RigidBodyModesPerAggregate``: its / setup / wall
-      - ``CornerNodeInterpolation``: its / setup / wall
-      - largest spread of the its over the thread counts
-    * - power iteration, 300 (the former default)
-      - 596 / 73.8 / 202
-      - 455 / 82.7 / 177
-      - 284 / 79.9 / 138
-      - 1
-    * - power iteration, 50
-      - 593 / 25.3 / 154
-      - 452 / 33.5 / 130
-      - 284 / 28.1 / 87
-      - 1
-    * - power iteration, 50, start vector seeded per row
-      - 591 / 24.6 / 152
-      - 452 / 32.9 / 127
-      - 285 / 28.2 / 87
-      - 0
-    * - Arnoldi, 10 steps (the default)
-      - 600 / 16.4 / 144
-      - 458 / 22.9 / 117
-      - 286 / 20.0 / 79
-      - 0
-    * - Arnoldi, adaptive, tolerance 0.05, 8 to 30 steps
-      - 600 / 19.4 / 151
-      - 458 / 23.0 / 118
-      - 286 / 19.9 / 80
-      - 0
-
-Against the former default, 10 Arnoldi steps need 0.7 % more outer iterations (the estimate :math:`\theta + r` lies slightly above the
-radius, which shifts the smoother's interval upwards), 22 -- 28 % of the setup, 29 -- 43 % less wall time, and
-show no thread-count dependence at all -- the estimate is the same, bit for bit, at any thread count. The adaptive
-estimate needs the same outer iterations, but more setup with ``AMG()``, whose small coarse levels take more steps to
-the tolerance: so 10 fixed steps are the default, and the adaptive estimate is an option, for an operator whose
-estimate converges more slowly, or where the guarantee for symmetric operators matters. Not measured: the 10 AnchorPryOut systems behind the 300 iterations (the dumps no
-longer exist). Scratch scripts and logs: xeon ``~/scratch_sr_2026-10-27`` (``sr_bench.py``, ``arnoldi_bench.py``,
-``krylov_quality.py``, ``krylov_traj.py``).
+**Outer iterations, setup and wall time**, on the displacement block alone of the captured systems of
+:ref:`measured-scaled-corner-node-interpolation` and of the damage cylinder after its onset, for ``AMG()``, the
+rigid-body coarse level and the scaled corner-node interpolation, at several thread counts: the default Arnoldi steps
+needed about the outer iterations of the former long power iteration, for a fraction of its setup and clearly less wall
+time, and their outer iterations no longer depend on the thread count at all. A start vector seeded per row alone
+already removes the thread-count dependence of a power iteration. An adaptive number of steps, stopping once the
+residual norm of the dominant Ritz pair is small against its Ritz value, needed the same outer iterations with more
+setup on the small coarse AMG levels, so the estimate takes a fixed number of steps. The contact anchor systems the
+former long power iteration was chosen on were not measured again.
 
 .. _measured-block-translations:
 

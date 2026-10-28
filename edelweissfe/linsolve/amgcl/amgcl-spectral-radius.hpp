@@ -31,11 +31,11 @@
 /// Why Arnoldi. A Chebyshev polynomial damps the eigenvalues in [lower, higher] times the estimate; an estimate below
 /// the spectral radius leaves the largest eigenvalues outside that interval, where the polynomial amplifies them. The
 /// power method converges with the ratio of the two largest eigenvalues, which is close to one for finite element
-/// operators: AMGCL's 50 power iterations could stop well below the radius. Arnoldi builds the Krylov space of the same
-/// number of products, and its largest Ritz value converges far faster -- about 10 steps reach what 300 power
-/// iterations do. Our operators are not symmetric (contact, softening, non-associated plasticity, the multi-point
-/// constraint condensation), so symmetric Lanczos has no theory for them; Arnoldi holds for any matrix, and its
-/// orthogonalization (k^2/2 vector operations for k steps) is cheap against the k sparse products.
+/// operators, so a short power iteration can stop well below the radius. Arnoldi builds the Krylov space of the same
+/// number of products, and its largest Ritz value converges far faster: a few steps reach what takes the power method
+/// many. Our operators are not symmetric (contact, softening, non-associated plasticity, the multi-point constraint
+/// condensation), so symmetric Lanczos has no theory for them; Arnoldi holds for any matrix, and its orthogonalization
+/// (k^2/2 vector operations for k steps) is cheap against the k sparse products.
 ///
 /// Why a start vector seeded per row. AMGCL seeds its start vector per OpenMP thread, so its estimate -- and with it
 /// the outer iterations -- depended on the thread count. A value computed from the row index alone gives the same start

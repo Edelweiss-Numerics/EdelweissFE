@@ -320,7 +320,9 @@ shape the block backend was never tuned for; a **scalar** field takes the plain 
 aggregation, Chebyshev at AMGCL's own defaults). Any field can be given another tree in a ``custom`` solver
 script, ``OnField(name, AMG(tree=...))``; the default trees are listed in :ref:`composed-default-field-trees`.
 
-The tree holds AMGCL parameters only. Three keyword arguments of ``AMG`` (the first two also of ``TwoLevel``) select
+The tree is AMGCL's parameter tree, plus one key of EdelweissFE's own, ``spectralRadiusSteps``, which its Chebyshev
+smoother and its smoothed aggregation read (:ref:`blockamg-chebyshev`); a Chebyshev ``relax`` rejects keys it does
+not know. Three keyword arguments of ``AMG`` (the first two also of ``TwoLevel``) select
 the backend the hierarchy is built on; left unset, :func:`~edelweissfe.linsolve.composition.amg.backendOf` chooses
 them from the field:
 
@@ -435,21 +437,21 @@ the Chebyshev smoother of every AMG level, of the fine level of ``TwoLevel``, an
 the prolongation smoothing -- is estimated one way (``edelweissfe/linsolve/amgcl/amgcl-spectral-radius.hpp``):
 
 * **Arnoldi steps**, not the power iteration. The power iteration converges with the ratio of the two largest
-  eigenvalues, close to one for finite element operators: AMGCL's 50 steps could stop far below :math:`\rho`, and the
-  former default took 300. The largest Ritz value :math:`\theta` of the Arnoldi process from the same number of
-  products converges much faster -- about 10 steps reach what 300 power iterations did. Our operators are not
-  symmetric (contact, softening, non-associated plasticity, the condensation of multi-point constraints;
-  :math:`\lVert A - A^T \rVert_F / \lVert A \rVert_F` up to 0.21 on the captured cylinder systems), so the symmetric
+  eigenvalues, close to one for finite element operators, so a short power iteration can stop far below
+  :math:`\rho`. The largest Ritz value :math:`\theta` of the Arnoldi process from the same number of products
+  converges much faster: a few steps reach what takes the power iteration many. Our operators are not symmetric
+  (contact, softening, non-associated plasticity, the condensation of multi-point constraints), so the symmetric
   Lanczos process has no theory for them; Arnoldi holds for any matrix, and its orthogonalization costs :math:`k^2/2`
-  vector operations for :math:`k` steps, little against the :math:`k` sparse products. Measured, both give the same
-  estimates to three digits on these systems.
+  vector operations for :math:`k` steps, little against the :math:`k` sparse products. On the captured systems,
+  markedly nonsymmetric ones among them, the two give the same estimates (:ref:`measured-power-iterations`).
 * **A start vector seeded per row.** AMGCL seeds its start vector per OpenMP thread, so its estimate -- and with it the
-  outer iterations -- depended on the thread count (one captured solve took 1460 outer iterations at 16 threads and 43
-  at 4, :ref:`measured-power-iterations`). The start vector is computed from the row index alone, zero on the
-  Dirichlet rows of a two-level cycle, and the inner products sum over a fixed partition of the rows in order: the
-  estimate is the same, bit for bit, at any thread count.
+  outer iterations, on a hard system by far -- depends on the thread count (:ref:`measured-power-iterations`). The
+  start vector is computed from the row index alone, zero on the Dirichlet rows of a two-level cycle, and the inner
+  products sum over a fixed partition of the rows in order: the estimate is the same, bit for bit, at any thread
+  count.
 * **The Ritz value of largest modulus plus its residual norm**, :math:`|\theta| + r` with :math:`r = |h_{k+1,k} y_k|`
-  for the eigenvector :math:`y` of the Arnoldi matrix. The modulus, because the spectral radius is the largest
+  for the unit eigenvector :math:`y` of the small :math:`k \times k` Arnoldi matrix, which Eigen's dense eigensolver
+  computes. The modulus, because the spectral radius is the largest
   modulus of the eigenvalues: a dominant eigenvalue that is negative or complex, as an indefinite or strongly
   nonsymmetric level (contact, softening) may have, is not missed, as the largest real part would miss it. For a
   symmetric matrix there is an eigenvalue within :math:`r` of :math:`\theta`, so :math:`|\theta| + r \geq \rho` once
@@ -467,11 +469,12 @@ the prolongation smoothing -- is estimated one way (``edelweissfe/linsolve/amgcl
   operator itself (about 80 stored entries per DOF of a 3D field) that is small, and it is freed before the next level
   of a hierarchy is built.
 
-The parameters sit where AMGCL's ``power_iters`` sat: in a tree's ``relax`` for the smoother, in its ``coarsening`` for
-the prolongation smoothing (with ``estimate_spectral_radius``). A tree that sets ``power_iters`` is refused, also
-``power_iters`` 0, AMGCL's Gershgorin bound: there is one estimate. The
-Chebyshev relaxation and the smoothed aggregation that use the estimate are EdelweissFE's own
-(``amgcl-chebyshev.hpp``), step for step AMGCL's otherwise; every other relaxation and coarsening is AMGCL's.
+The key ``spectralRadiusSteps`` is EdelweissFE's own, not AMGCL's: it sits in a tree's ``relax`` for the smoother and
+in its ``coarsening`` for the prolongation smoothing (with ``estimate_spectral_radius``). AMGCL's ``power_iters``, which
+it replaces, is refused, also ``power_iters`` 0, AMGCL's Gershgorin bound: there is one estimate. The Chebyshev
+relaxation and the smoothed aggregation that use it are EdelweissFE's own (``amgcl-chebyshev.hpp``), step for step
+AMGCL's otherwise, with one Chebyshev polynomial for every Chebyshev smoother; every other relaxation and coarsening is
+AMGCL's.
 
 .. _blockamg-block-nullspace:
 
@@ -860,10 +863,10 @@ precision.
 
 The fine Chebyshev smoother is the tree's ``relax`` (``degree``, ``lower``, ``higher`` and the spectral radius estimate,
 :ref:`blockamg-chebyshev`), applied ``npre`` times before and ``npost`` times after the coarse-grid correction -- the
-same spelling as for the rigid-body coarse level. It uses AMGCL's polynomial, with the bounds of the vector-field
-default tree (``lower`` 0.01, ``higher`` 1.1 times the spectral radius; the defaults are 1/30 and 1.1, AMGCL's 1/30
-and 1 but the margin, :ref:`blockamg-chebyshev`); its
-estimate runs on the free rows (the start vector is zero on the Dirichlet rows) and is built anew with the cycle.
+same spelling as for the rigid-body coarse level. It is the Chebyshev polynomial of every Chebyshev smoother, with the
+bounds of the vector-field default tree (``lower`` 0.01, ``higher`` 1.1 times the spectral radius; the defaults are
+1/30 and 1.1, AMGCL's 1/30 and 1 but the margin, :ref:`blockamg-chebyshev`); its estimate runs on the free rows (the
+start vector is zero on the Dirichlet rows) and is built anew with the cycle.
 
 
 .. _blockamg-rigid-body-coarse-level:
