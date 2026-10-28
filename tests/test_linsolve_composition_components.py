@@ -420,9 +420,7 @@ def test_the_default_coarse_solve_of_a_scalar_quadratic_field_is_amg():
     x = np.arange(0, A.shape[0], 3)
     A_x, b_x = A[x][:, x].tocsr(), b[x]
     scalarFields = [FieldBlock("temperature", 0, len(x), 1)]
-    # the fine smoother of a scalar field estimates its spectral radius by power iterations, which AMGCL's default leaves
-    # at none
-    cornerNodeTwoLevel = TwoLevel(CornerNodeInterpolation(), tree={"relax": {"type": "chebyshev", "power_iters": 20}})
+    cornerNodeTwoLevel = TwoLevel(CornerNodeInterpolation())
     root = LGMRES(DiagonalScaling(cornerNodeTwoLevel), tolerance=FixedTolerance(1e-8), maxIterations=300)
     solution, _ = _solved(
         A_x,
