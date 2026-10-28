@@ -741,10 +741,8 @@ equilibration they were built for) standing across solves, ``RebuildPolicy(reuse
 ``LGMRES(..., rebuild=RebuildPolicy(stalenessFactor, rebuildOnNewIncrement, reuse))``.
 
 By default it does not (``reuse=False``): every solve builds its own preconditioner. A reused hierarchy was built for
-an earlier Jacobian, and the outer iterations it costs grow faster than its build saves: live on a contact anchor
-model, rebuilding for every solve took 11.5 % less wall time, with a third of the outer iterations per solve and no
-solve at the iteration cap (:ref:`measured-rebuild-every-solve`). Offline replays of captured solves had shown the
-opposite, because they did not reproduce how far a live Jacobian moves between solves.
+an earlier Jacobian, and the outer iterations it costs grow faster than its build saves: rebuilding for every solve
+needed far fewer outer iterations per solve and was faster (:ref:`measured-rebuild-every-solve`).
 
 The outer Krylov solve always operates on the current matrix (equilibrated with the scaling the standing
 hierarchies were built for, which is the same system whatever the scaling); only the preconditioner may be
@@ -821,10 +819,9 @@ components:
 rigid-body coarse level of the corner-node field, take a Chebyshev polynomial of degree 8 on the interval from 0.03 to
 1.1 times the spectral radius (:func:`~edelweissfe.linsolve.composition.amg.defaultCornerNodeTwoLevelTree`), not the degree 16
 on 0.01 to 1.1 of the default field trees. A sweep of degree 8 costs half the matrix products of one of degree 16;
-the corner-node two-level cycle then needs more outer iterations (27 instead of 21 on the tunnel lining), but fewer than twice as many,
-so it is faster: 8 % less time on 14 captured systems, the same or less on every one. ``AMG()`` and the
-rigid-body coarse level alone gained nothing from degree 8 -- their iterations grew about as much as each one got
-cheaper -- and keep degree 16 (:ref:`measured-corner-node-two-level-smoother`).
+the corner-node two-level cycle then needs more outer iterations, but fewer than twice as many, so it is faster.
+``AMG()`` and the rigid-body coarse level alone gain nothing from degree 8 -- their iterations grow about as much as
+each one gets cheaper -- and keep degree 16 (:ref:`measured-corner-node-two-level-smoother`).
 
 **The prolongation interpolates the scaled variables.** The P1 interpolant :math:`P_{geo}` keeps a corner node's
 displacement and gives a midside node the mean of its two edge-endpoint corners. But the cycle works on

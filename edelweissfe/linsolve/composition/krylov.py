@@ -181,10 +181,9 @@ class RebuildPolicy:
     rebuildOnNewIncrement
         Whether a new increment of the nonlinear solver rebuilds it.
     reuse
-        Whether it is reused across solves at all. ``False`` (the default) builds it anew for every solve, which was
-        measured faster live (-11.5 % wall time on a contact anchor model): a reused preconditioner of an earlier
-        Jacobian costs more outer iterations than its build saves. ``True`` keeps it until one of the other reasons
-        asks for a rebuild.
+        Whether it is reused across solves at all. ``False`` (the default) builds it anew for every solve: a
+        preconditioner reused from an earlier Jacobian costs more outer iterations than its build saves
+        (:ref:`measured-rebuild-every-solve`). ``True`` keeps it until one of the other reasons asks for a rebuild.
     """
 
     stalenessFactor: float = 3.0

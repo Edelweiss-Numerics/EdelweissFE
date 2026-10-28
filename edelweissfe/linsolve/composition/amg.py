@@ -86,10 +86,8 @@ _SCALAR_FIELD_TREE = {
 #: degree 8 on the interval from 0.03 to 1.1 times the spectral radius, on the quadratic field and on the rigid-body
 #: coarse level of its default coarse solve (:func:`defaultCornerNodeTwoLevelTree`). A sweep of degree 8 costs half the
 #: matrix products of one of degree 16, and the corner-node two-level cycle needs fewer than twice the outer iterations
-#: with it. Measured ("The smoother of the corner-node two-level cycle" in
-#: ``doc/source/documentation/fieldsplitmeasurements.rst``): 8 % less time on 14 captured systems, the same or less
-#: on every one. ``AMG()`` and the rigid-body coarse level alone keep degree 16 (:data:`_VECTOR_FIELD_TREE`):
-#: there, degree 8 gained nothing.
+#: with it, so it is faster (:ref:`measured-corner-node-two-level-smoother`). ``AMG()`` and the rigid-body coarse level
+#: alone keep degree 16 (:data:`_VECTOR_FIELD_TREE`): there, degree 8 gains nothing.
 _CORNER_NODE_TWO_LEVEL_SMOOTHER = {"type": "chebyshev", "degree": 8, "lower": 0.03, "higher": 1.1}
 
 

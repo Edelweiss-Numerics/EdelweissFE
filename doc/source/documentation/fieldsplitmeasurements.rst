@@ -67,8 +67,7 @@ GMRES iterations against 6 with 8 or more steps).
 
 **Outer iterations, setup and wall time** (s, mean over 8, 16 and 32 threads, xeon) to 1e-6 on the displacement
 block alone, the 14 systems of :ref:`measured-scaled-corner-node-interpolation` and two post-onset cylinder solves (21, 27), for the default
-AMG tree (``AMG()``), the rigid-body coarse level and the scaled corner-node interpolation (with the smoother of the time, degree
-16 on both levels, :ref:`measured-corner-node-two-level-smoother`); the sums over the systems:
+AMG tree (``AMG()``), the rigid-body coarse level and the scaled corner-node interpolation; the sums over the systems:
 
 .. list-table::
     :width: 100%
@@ -377,8 +376,8 @@ Where the scaling varies little along the edges (the tunnel, the cylinder) the s
 nothing; on the edge breakout, where midside diagonals are up to :math:`10^6` times smaller than their corners', it
 halves the iterations.
 
-These measurements were taken with the smoother of the time, degree 16 on both levels of the corner-node two-level cycle; the default
-is now degree 8 (:ref:`measured-corner-node-two-level-smoother`).
+These measurements were taken with the smoother of the time, degree 16 on both levels of the corner-node two-level
+cycle; the default is now degree 8 (:ref:`measured-corner-node-two-level-smoother`).
 
 .. _measured-rebuild-every-solve:
 
@@ -387,40 +386,15 @@ Rebuilding the preconditioner for every solve
 
 See :ref:`blockamg-per-field-amg` and the reuse rules on :doc:`blockamgtheory`.
 
-Live, one model (the contact anchor model with many multi-point-constraint slaves, edge breakout, increments 230 to
-255), two runs from the same checkpoint on two nodes of a cluster: the reuse rules of ``RebuildPolicy``, against
-``reuse=False``, a new preconditioner for every solve. The paths split at increment 233 (other hierarchies, other
-linear solutions within the tolerance).
+Live, on the contact anchor model with many multi-point-constraint slaves, over a window of increments: two runs
+from the same checkpoint, the reuse rules of ``RebuildPolicy`` against ``reuse=False``, a new preconditioner for every
+solve. The two runs took slightly different paths (other hierarchies, other linear solutions
+within the tolerance), with about the same Newton iterations and simulated time reached.
 
-.. list-table::
-    :width: 100%
-    :header-rows: 1
-
-    * -
-      - reuse rules
-      - a new preconditioner for every solve
-    * - wall time of the window
-      - 9,697 s
-      - 8,579 s (-11.5 %)
-    * - attempts / Newton iterations / simulated time reached
-      - 34 / 165 / 0.378483
-      - 36 / 169 / 0.378633
-    * - linear solves, per solve
-      - 14.4 s
-      - 9.8 s (-25 %)
-    * - outer Krylov solve, per solve
-      - 9.25 s
-      - 2.73 s
-    * - outer iterations per solve
-      - mean 21.5, median 15, 11 at the cap
-      - mean 7.6, median 6, max 18, none at the cap
-    * - preconditioner builds
-      - 138, 9.38 s each
-      - 301, 6.71 s each
-
-The second node was 5-10 % faster on the rows no preconditioner touches, so part of the cheaper build is the node; the
-Krylov solve, 70 % cheaper per solve, is not. A reused preconditioner needed about three times the outer iterations of
-a fresh one here, while offline replays of captured solves had reused ones at only 4-6 more iterations and reuse 16-46 %
+A new preconditioner for every solve was faster over the window. A reused preconditioner needed several times the
+outer iterations of a fresh one, and a share of its solves stopped at the iteration cap, against none with a new
+preconditioner for every solve; the far cheaper Krylov solves outweighed the more frequent builds. Offline replays of
+captured solves had shown the opposite, a reused preconditioner only a few iterations behind a fresh one and reuse
 faster: they did not reproduce how far a live Jacobian moves between solves. Not yet measured live on a second model.
 
 .. _measured-corner-node-two-level-smoother:
@@ -432,147 +406,33 @@ See :ref:`blockamg-p-multigrid` and :ref:`composed-default-field-trees`.
 
 The Chebyshev smoother -- its degree, the lower end of its interval relative to the spectral radius, and the cycle,
 V(0,1) or V(1,1) -- was swept for the three displacement preconditioners, ``AMG()``,
-``TwoLevel(coarseSpace=RigidBodyModesPerAggregate())`` and ``TwoLevel(coarseSpace=CornerNodeInterpolation())``, offline on the
-displacement block alone: ``LGMRES(DiagonalScaling(.))`` to a true relative residual of 1e-6, setup included, 32
-threads on a two-socket workstation (xeon), first on three systems (the damaged tunnel lining, solve 26 of the damage
-cylinder, solve 20 of the edge breakout), then on 14 systems: the 12 of :ref:`measured-scaled-corner-node-interpolation` and two post-onset
-cylinder solves (21, 27). Every solve reached the tolerance. Run-to-run scatter of the wall time was up to about 12 % on the three systems.
+``TwoLevel(coarseSpace=RigidBodyModesPerAggregate())`` and ``TwoLevel(coarseSpace=CornerNodeInterpolation())``,
+offline on the displacement block alone: ``LGMRES(DiagonalScaling(.))`` to a true relative residual of 1e-6, setup
+included, first on three systems (the damaged tunnel lining, a late solve of the damage cylinder and of the edge
+breakout), then on the systems of :ref:`measured-scaled-corner-node-interpolation` and two post-onset cylinder solves.
+Every solve reached the tolerance. The smoother of ``CornerNodeInterpolation`` was set on both of its levels (the
+fine level and the rigid-body coarse level of its default coarse solve), the others on every level they smooth.
 
-Wall s / outer iterations on the three systems; the smoother of ``CornerNodeInterpolation`` on both of its levels (the fine
-level and the rigid-body coarse level of its default coarse solve), the others on every level they smooth:
+* **For** ``AMG()`` **and the rigid-body coarse level, degree 16 is within the run-to-run scatter of the best
+  setting.** The optimum is flat along a ridge: a wider interval needs a higher degree (degree 16 on 0.01 to 1.1,
+  degree 8 on 0.03 to 1.1 and V(1,1) with degree 4 on 0.03 to 1.1 tie). A lower degree made the tunnel lining faster
+  and the late cylinder solves slower, at more than twice the iterations, and moved no time overall. They keep
+  degree 16.
+* **For the corner-node two-level cycle, degree 16 is stronger than it pays.** The optimum is flat over degrees 6 to
+  10 and lower ends 0.02 to 0.05; degree 8 on 0.03 to 1.1 was faster on both levels than on the fine level alone.
+* A lower end of 0.1 lost everywhere; V(0,1) beat V(1,1) at the same number of polynomial applications for all three
+  preconditioners.
+* The outer iterations of the corner-node two-level cycle did not depend on the number of threads, and the gain was
+  larger at fewer threads.
 
-.. list-table::
-    :width: 100%
-    :header-rows: 1
-
-    * - smoother
-      - tunnel lining, damaged
-      - damage cylinder, solve 26
-      - edge breakout, solve 20
-      - sum of the wall times
-    * - ``AMG()``, degree 16, lower 0.01 (its default)
-      - 16.24 / 63
-      - 6.94 / 70
-      - 4.35 / 23
-      - 27.54 (repeated: 29.17)
-    * - ``AMG()``, degree 8, lower 0.03
-      - 13.66 / 85
-      - 9.23 / 133
-      - 4.87 / 42
-      - 27.76
-    * - rigid-body coarse level, degree 16, lower 0.01 (its default)
-      - 13.07 / 37
-      - 6.13 / 59
-      - 4.27 / 22
-      - 23.46 (repeated: 23.41)
-    * - rigid-body coarse level, degree 8, lower 0.03
-      - 10.37 / 47
-      - 8.06 / 132
-      - 4.40 / 40
-      - 22.84
-    * - corner-node two-level cycle, degree 16, lower 0.01 (the former default)
-      - 8.02 / 21
-      - 4.19 / 39
-      - 4.04 / 13
-      - 16.16
-    * - corner-node two-level cycle, degree 8, lower 0.03 (the default)
-      - 6.65 / 27
-      - 3.67 / 52
-      - 3.92 / 21
-      - 14.23
-
-* **For** ``AMG()`` **and the rigid-body coarse level, degree 16 is within scatter of the best setting.** The optimum is
-  flat along a ridge: a wider interval needs a higher degree (degree 16 on 0.01 to 1.1, degree 8 on 0.03 to 1.1 and
-  V(1,1) with degree 4 on 0.03 to 1.1 tie). A lower degree makes the tunnel about 20 % faster and the cylinder 25--35
-  % slower. They keep degree 16.
-* **For the corner-node two-level cycle, degree 16 is stronger than it pays.** The optimum is flat over degrees 6 to 10 and lower ends
-  0.02 to 0.05; degree 8 on 0.03 to 1.1 on the fine level alone took 14.93 s, on both levels 14.23 s.
-* A lower end of 0.1 lost everywhere, by 10--30 %; V(0,1) beat V(1,1) at the same number of polynomial applications
-  for all three preconditioners.
-* The iterations of the corner-node two-level cycle were the same at 8, 16 and 32 threads, and the gain larger at fewer threads: 34.74
-  against 27.80 s at 8 threads (-20 %), 21.71 against 17.18 s at 16 (-21 %), 16.16 against 14.23 s at 32 (-12 %).
-
-On the 14 systems (outer iterations / wall s, the mean of two repetitions; the default
-``TwoLevel(coarseSpace=CornerNodeInterpolation())``, against the former default written out,
-``TwoLevel(coarseSpace=CornerNodeInterpolation(DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModesPerAggregate(), tree=t))), tree=t)``
-with ``t = defaultFieldTree(3)``):
-
-.. list-table::
-    :width: 100%
-    :header-rows: 1
-
-    * - system
-      - degree 16, lower 0.01 (former)
-      - degree 8, lower 0.03 (default)
-      - wall time
-    * - tunnel lining, elastic
-      - 14 / 5.95
-      - 17 / 4.99
-      - -16 %
-    * - tunnel lining, damaged
-      - 21 / 7.94
-      - 27 / 6.71
-      - -16 %
-    * - damage cylinder, solve 2
-      - 10 / 1.97
-      - 12 / 1.73
-      - -12 %
-    * - damage cylinder, solve 16
-      - 13 / 2.21
-      - 18 / 2.03
-      - -8 %
-    * - damage cylinder, solve 21
-      - 24 / 3.05
-      - 33 / 2.81
-      - -8 %
-    * - damage cylinder, solve 22
-      - 25 / 3.07
-      - 33 / 2.87
-      - -7 %
-    * - damage cylinder, solve 26
-      - 39 / 4.06
-      - 52 / 3.75
-      - -8 %
-    * - damage cylinder, solve 27
-      - 38 / 4.11
-      - 51 / 3.84
-      - -6 %
-    * - damage cylinder, solve 30
-      - 40 / 4.28
-      - 53 / 3.74
-      - -13 %
-    * - edge breakout, solve 1
-      - 9 / 3.54
-      - 14 / 3.40
-      - -4 %
-    * - edge breakout, solve 8
-      - 13 / 4.08
-      - 22 / 4.03
-      - -1 %
-    * - edge breakout, solve 13
-      - 13 / 4.02
-      - 22 / 4.00
-      - 0 %
-    * - edge breakout, solve 20
-      - 13 / 4.09
-      - 21 / 3.96
-      - -3 %
-    * - edge breakout, solve 26
-      - 14 / 4.24
-      - 23 / 4.16
-      - -2 %
-    * - sum
-      - 56.6
-      - 52.0
-      - -8 %
-
-The default needs more outer iterations on every system, but fewer than twice as many, at half the matrix products per
-smoothing sweep: faster or the same on all 14, by 16 % on the tunnel lining, 6--13 % on the cylinder; the edge
-breakout, whose wall time is mostly the setup, ties. The sweep had shown -9.6 % on the same systems (59.14 and 56.43 s
-against 52.25 s in two repetitions each). On these systems, the rigid-body coarse level alone with degree 8 only moved
-time around (76.43 against 76.33 s): the tunnel lining about 20 % faster, the late cylinder solves 20--35 % slower at
-2.2--2.5 times the iterations (solve 30: 61 against 155). The iterations of ``AMG()`` and of
-``TwoLevel(coarseSpace=RigidBodyModesPerAggregate())`` with their defaults are unchanged by this default.
+On all systems, the default ``TwoLevel(coarseSpace=CornerNodeInterpolation())`` (degree 8 on 0.03 to 1.1) against the
+former default written out,
+``TwoLevel(coarseSpace=CornerNodeInterpolation(DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModesPerAggregate(),
+tree=t))), tree=t)`` with ``t = defaultFieldTree(3)``, needed more outer iterations on every system, but fewer than
+twice as many, at half the matrix products per smoothing sweep: it was faster or as fast on every system, most on the
+tunnel lining and the damage cylinder; the edge breakout, whose time is mostly the setup, ties. The iterations of
+``AMG()`` and of ``TwoLevel(coarseSpace=RigidBodyModesPerAggregate())`` with their defaults are unchanged by this
+default.
 
 Not yet measured live: with Newton in the loop, and with the hierarchies reused over several solves.
 
