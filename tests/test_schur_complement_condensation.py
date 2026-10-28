@@ -71,7 +71,7 @@ from edelweissfe.linsolve.composition.schurcomplement import (
     blockLU,
 )
 from edelweissfe.linsolve.superlu import SuperLUBackend
-from edelweissfe.numerics.p1topology import restrictP1Map
+from edelweissfe.numerics.p1topology import restrictMidsideCorners
 from edelweissfe.utils.fieldoutput import _FieldOutputBase
 
 
@@ -235,7 +235,7 @@ def test_restricted_p1_map_turns_a_midside_node_with_a_condensed_endpoint_into_a
     isCorner = np.array([True, True, True, False, False])
     edgeEndpoints = np.array([[-1, -1], [-1, -1], [-1, -1], [0, 1], [1, 2]])
     remains = np.array([True, True, False, True, True])
-    isCorner, edgeEndpoints = restrictP1Map(isCorner, edgeEndpoints, remains)
+    isCorner, edgeEndpoints = restrictMidsideCorners(isCorner, edgeEndpoints, remains)
     assert np.array_equal(isCorner, [True, True, False, True])
     assert np.array_equal(edgeEndpoints, [[-1, -1], [-1, -1], [0, 1], [-1, -1]])
 

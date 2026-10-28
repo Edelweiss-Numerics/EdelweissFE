@@ -36,8 +36,8 @@ reports on the solve. Its settings are the data lines every type has (the table 
 
 In Python, the same adapter is ``ComposedLinearSolver(tree, verbosity=..., warnOuterIterations=...,
 residualGrowthFactor=..., dumps=SolveDumps(directory, trigger, maxDumps=..., contextSolves=...))``, or
-``ComposedLinearSolver.fromScript("solver.py", hotReload=True, ...)``; ``nodeCoordinates`` and ``p1Maps`` give node
-coordinates and P1 maps per field instead of those of the model (an offline replay without a model).
+``ComposedLinearSolver.fromScript("solver.py", hotReload=True, ...)``; ``nodeCoordinates`` and ``midsideCorners`` give node
+coordinates and midside corners per field instead of those of the model (an offline replay without a model).
 
 .. _composed-verbosity:
 
@@ -90,7 +90,7 @@ The data line ``dumps`` (in Python ``SolveDumps(directory, trigger, maxDumps, co
 of chosen solves to ``dumpDirectory``, for an offline replay (``scripts/benchmark_linsolve.py``, which replays a
 dumped sequence through direct solver variants, or a
 ``ComposedLinearSolver`` driven by hand with ``setFieldStructure`` and the dumped geometry as ``nodeCoordinates`` and
-``p1Maps``). It works for every type, direct solvers included, and is the one way to capture a solve. A dump is
+``midsideCorners``). It works for every type, direct solvers included, and is the one way to capture a solve. A dump is
 the raw ``(A, b)`` of a solve -- before any diagonal scaling -- with the field-block layout active for that solve,
 which is what a replay needs in order to go back through the same tree without a live model: a sequence of
 authentic systems, so that every solver variant replayed offline sees the same input. The trigger:
@@ -110,7 +110,7 @@ On disk:
   (one per nonlinear solver, made anew only when a step names another linear solver), so the dumps of several
   solvers never overwrite each other, and the solve numbering continues across steps and a hot reload;
 * ``geometry_<solver>_<solve>.npz``: what a replay of the tree needs of the model, the node coordinates of every vector
-  field (``<field>_coordinates``, for its rigid-body modes) and the P1 maps the tree used (``<field>_isCorner``,
+  field (``<field>_coordinates``, for its rigid-body modes) and the midside corners the tree used (``<field>_isCorner``,
   ``<field>_edgeEndpoints``);
 * one line per dumped system in ``manifest.jsonl``: ``solveCount``, ``role`` (``"trigger"`` or ``"context"``),
   ``triggerSolveCount``, ``contextOffset``, ``rows``, ``nnz``, ``matrixFile``, ``rhsFile``, ``geometryFile``, the field
@@ -299,21 +299,21 @@ field on the scalar backend, the only one that takes the rotations (:ref:`blocka
 smoothed aggregation on a block backend needs ``blockTranslationNullspace=False``, which is checked.
 
 The 3D displacement field of the ``blockAMG()`` preset gets the rigid-body coarse level
-(``TwoLevel(coarseSpace=RigidBodyModes())``), configured by the same tree: its ``relax`` and ``npre``/``npost`` are the
+(``TwoLevel(coarseSpace=RigidBodyModesPerAggregate())``), configured by the same tree: its ``relax`` and ``npre``/``npost`` are the
 fine smoother of the rigid-body coarse level, its ``coarsening`` the aggregation of that level, and the whole tree the
 AMGCL hierarchy below it. Only a genuinely scalar field (nodal dimension 1) gets the plain scalar tree, which predates
 the vector recipe and was never re-tuned against it. Note that AMGCL silently ignores parameter keys it does not
 recognise (warning only on stderr), so check its stderr if an override appears to do nothing.
 
-The p-two-grid's default tree is another: ``TwoLevel(coarseSpace=P1Interpolation())`` reads its fine smoother from the
+The corner-node two-level cycle's default tree is another: ``TwoLevel(coarseSpace=CornerNodeInterpolation())`` reads its fine smoother from the
 tree in the same spelling (``relax``, ``npre``, ``npost``; it has no coarsening of its own), and its coarse solve is a
-component of its own, ``P1Interpolation(coarse=...)``. For the p-two-grid, degree 16 is stronger than it pays: degree
-8 costs half the products per sweep for fewer than twice the outer iterations (:ref:`measured-p-two-grid-smoother`).
-So a ``TwoLevel`` on ``P1Interpolation`` that is given no tree, and the
+component of its own, ``CornerNodeInterpolation(coarseSolve=...)``. For the corner-node two-level cycle, degree 16 is stronger than it pays: degree
+8 costs half the products per sweep for fewer than twice the outer iterations (:ref:`measured-corner-node-two-level-smoother`).
+So a ``TwoLevel`` on ``CornerNodeInterpolation`` that is given no tree, and the
 rigid-body coarse level of the default coarse solve,
-``DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModes(), tree=defaultPTwoGridTree()))``, take the vector field's tree
+``DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModesPerAggregate(), tree=defaultCornerNodeTwoLevelTree()))``, take the vector field's tree
 with a Chebyshev polynomial of degree 8 on the interval from 0.03 to 1.1 times the spectral radius
-(:func:`~edelweissfe.linsolve.composition.amg.defaultPTwoGridTree`), for a field of any dimension:
+(:func:`~edelweissfe.linsolve.composition.amg.defaultCornerNodeTwoLevelTree`), for a field of any dimension:
 
 .. code-block:: json
 
@@ -328,10 +328,10 @@ with a Chebyshev polynomial of degree 8 on the interval from 0.03 to 1.1 times t
         "npost": 1
     }
 
-``AMG()`` and ``TwoLevel(coarseSpace=RigidBodyModes())`` alone keep degree 16: there, degree 8 gained nothing. A tree
-given to the p-two-grid (``TwoLevel(coarseSpace=P1Interpolation(), tree=...)``) is its fine smoother only; one for its
+``AMG()`` and ``TwoLevel(coarseSpace=RigidBodyModesPerAggregate())`` alone keep degree 16: there, degree 8 gained nothing. A tree
+given to the corner-node two-level cycle (``TwoLevel(coarseSpace=CornerNodeInterpolation(), tree=...)``) is its fine smoother only; one for its
 coarse level is given with the coarse solve,
-``P1Interpolation(coarse=DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModes(), tree=...)))``.
+``CornerNodeInterpolation(coarseSolve=DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModesPerAggregate(), tree=...)))``.
 
 Every spectral radius in these trees -- of the Chebyshev smoother (``relax``) and of the prolongation smoothing
 (``coarsening`` with ``estimate_spectral_radius``) -- is estimated by ``spectralRadiusSteps`` Arnoldi steps (default
@@ -341,16 +341,16 @@ and ``spectralRadiusMaxSteps`` (:ref:`blockamg-chebyshev`). The trees leave the 
 
 .. _blockamg-rigid-body-coarse-level-configuration:
 
-The rigid-body coarse level: ``RigidBodyModes`` and ``TwoLevel``
-----------------------------------------------------------------
+The rigid-body coarse level: ``RigidBodyModesPerAggregate`` and ``TwoLevel``
+----------------------------------------------------------------------------
 
-The ``blockAMG()`` preset (``type=blockamg``) gives the 3D displacement field the rigid-body coarse level; ``rigidBodyCoarseLevel=false``
+The ``blockAMG()`` preset (``type=blockamg``) gives the 3D displacement field the rigid-body coarse level; ``rigidBodyModesPerAggregate=false``
 switches it off. A 2D displacement field, or a 3D one with other options, gets it in a ``custom`` solver script,
-``OnField(name, TwoLevel(coarseSpace=RigidBodyModes(...), ...))``. The field must be on a block backend
+``OnField(name, TwoLevel(coarseSpace=RigidBodyModesPerAggregate(...), ...))``. The field must be on a block backend
 (``backendBlockSize`` 2 or 3, the default of a 2D or 3D field), and its tree must smooth with a Chebyshev polynomial
 (``relax.type`` ``chebyshev``, without ``relax.scale``, ``relax.spectralRadiusSteps`` at least 1) and coarsen by smoothed
 aggregation, as the default trees do; ``TwoLevel`` checks this when it meets its field, and the parameters of
-``RigidBodyModes`` at construction. The option of ``RigidBodyModes``:
+``RigidBodyModesPerAggregate`` at construction. The option of ``RigidBodyModesPerAggregate``:
 
 ``prolongation`` (``"smoothed"``)
     ``"smoothed"``: :math:`P = (I - \omega\, \mathrm{diag}_B(\hat A_F)^{-1} \hat A_F) P^{\mathrm{tent}}`.
@@ -358,7 +358,7 @@ aggregation, as the default trees do; ``TwoLevel`` checks this when it meets its
     :math:`P^{\mathrm{tent}}` itself -- a cheaper setup and a sparser coarse operator, for more outer iterations (32
     instead of 22 on the elastic tunnel system).
 
-and those of ``TwoLevel`` (the same for the p-two-grid):
+and those of ``TwoLevel`` (the same for the corner-node two-level cycle):
 
 ``coarseHierarchyPrecision`` (``"double"``)
     The value type of the AMGCL hierarchy below: ``"double"``, or ``"float"`` (AMGCL's single-precision backend, its

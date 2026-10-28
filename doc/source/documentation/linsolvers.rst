@@ -16,7 +16,7 @@ holds only its identity, ``name`` and ``type``; the data lines are the options o
 .. code-block:: edelweiss
 
     *linearSolver, name=fast, type=blockamg
-    rigidBodyCoarseLevel=false
+    rigidBodyModesPerAggregate=false
     verbosity=info
 
     *solver, solver=NIST, name=theSolver
@@ -24,7 +24,7 @@ holds only its identity, ``name`` and ``type``; the data lines are the options o
 
 A type name in ``linsolver=`` means that type with its defaults, so a block must not be named like a type.
 ``linsolver`` unset means ``pardiso`` if it was built, else ``superlu``. From Python, the same linear solver is
-``getLinSolverByName("blockamg", {"rigidBodyCoarseLevel": False})`` (:mod:`edelweissfe.config.linsolve`).
+``getLinSolverByName("blockamg", {"rigidBodyModesPerAggregate": False})`` (:mod:`edelweissfe.config.linsolve`).
 
 .. list-table:: The types of linear solver
     :width: 100%

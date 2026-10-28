@@ -23,8 +23,9 @@
 #  The full text of the license can be found in the file LICENSE.md at
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
-"""Tests for the C++ p-two-grid preconditioner (:mod:`edelweissfe.linsolve.composition.ptwogrid`,
-``PTwoGridPreconditionerT`` in ``amgcl-wrapper.hpp``).
+"""Tests for the C++ corner-node two-level cycle preconditioner
+(:mod:`edelweissfe.linsolve.composition.cornernodetwolevelcycle`, ``CornerNodeTwoLevelCycleT`` in
+``amgcl-wrapper.hpp``).
 
 The system is a small Hex20-like lattice: corner nodes on a cubic grid, one exclusive midside node on
 every grid edge, a vector-Laplacian-like 3x3-coupled operator with a mild non-symmetric part, fully
@@ -50,8 +51,8 @@ from _p1lattice import (
 
 pytest.importorskip("edelweissfe.linsolve.amgcl.amgcl")
 
-from edelweissfe.linsolve.composition.ptwogrid import (  # noqa: E402
-    PTwoGridPreconditioner,
+from edelweissfe.linsolve.composition.cornernodetwolevelcycle import (  # noqa: E402
+    CornerNodeTwoLevelCycle,
 )
 
 
@@ -79,10 +80,10 @@ class ExactCoarseSolve:
 
 
 def _built(As, scaling, isCorner, edgeEndpoints, fineTree=None, **options):
-    """The p-two-grid with the fine smoother ``fineTree`` (default :func:`fineChebyshevTree`) and an exact coarse
-    solve, built for ``As``; returns it, its coarse solve and the coarse operator."""
+    """The corner-node two-level cycle with the fine smoother ``fineTree`` (default :func:`fineChebyshevTree`) and an
+    exact coarse solve, built for ``As``; returns it, its coarse solve and the coarse operator."""
     coarse = ExactCoarseSolve()
-    preconditioner = PTwoGridPreconditioner(
+    preconditioner = CornerNodeTwoLevelCycle(
         isCorner, edgeEndpoints, coarse, fineTree if fineTree is not None else fineChebyshevTree(), **options
     )
     A_c = preconditioner.build(As, scaling)
@@ -337,7 +338,7 @@ def test_an_exception_of_the_coarse_solve_is_raised_as_it_is(problem):
     def failingCoarseSolve(r_c):
         raise ArithmeticError("coarse solve failed")
 
-    preconditioner = PTwoGridPreconditioner(isCorner, edgeEndpoints, failingCoarseSolve, fineChebyshevTree())
+    preconditioner = CornerNodeTwoLevelCycle(isCorner, edgeEndpoints, failingCoarseSolve, fineChebyshevTree())
     preconditioner.build(As, scaling)
     with pytest.raises(ArithmeticError, match="coarse solve failed"):
         preconditioner.applyPreconditioner(r)
@@ -365,9 +366,9 @@ def test_dirichlet_rows_with_stored_zeros_are_recognized():
     withoutZeros = withZeros.copy()
     withoutZeros.eliminate_zeros()
 
-    from edelweissfe.linsolve.amgcl.amgcl import PyAMGCLPTwoGrid
+    from edelweissfe.linsolve.amgcl.amgcl import PyAMGCLCornerNodeTwoLevelCycle
 
-    isDirichlet = PyAMGCLPTwoGrid.dirichletRows(withZeros)
+    isDirichlet = PyAMGCLCornerNodeTwoLevelCycle.dirichletRows(withZeros)
     assert np.array_equal(np.nonzero(isDirichlet)[0], dofs)
 
     r = np.random.default_rng(2).standard_normal(withZeros.shape[0])
@@ -414,7 +415,7 @@ def test_a_free_midside_dof_between_two_constrained_corners_makes_its_node_a_coa
 
 
 def _unbuilt(isCorner, edgeEndpoints, fineTree=None, **options):
-    return PTwoGridPreconditioner(
+    return CornerNodeTwoLevelCycle(
         isCorner,
         edgeEndpoints,
         ExactCoarseSolve(),
@@ -442,7 +443,7 @@ def test_an_invalid_smoother_raises_before_any_build():
     with pytest.raises(ValueError, match="relax.type must be chebyshev"):
         _unbuilt(isCorner, edgeEndpoints, {"relax": {"type": "spai0"}})
     # the C++ class checks them itself, in its constructor, in the spelling of the rigid-body coarse level
-    from edelweissfe.linsolve.amgcl.amgcl import PyAMGCLPTwoGrid
+    from edelweissfe.linsolve.amgcl.amgcl import PyAMGCLCornerNodeTwoLevelCycle
 
     for amgclTree, parameters in (
         (fineChebyshevTree(degree=0), {}),
@@ -460,16 +461,16 @@ def test_an_invalid_smoother_raises_before_any_build():
         (fineChebyshevTree(), {"coarse": {"relax": {"type": "spai0"}}}),
     ):
         with pytest.raises(RuntimeError):
-            PyAMGCLPTwoGrid({"amgcl": amgclTree, **parameters})
+            PyAMGCLCornerNodeTwoLevelCycle({"amgcl": amgclTree, **parameters})
 
 
 def test_a_build_without_a_coarse_solve_raises():
-    from edelweissfe.linsolve.amgcl.amgcl import PyAMGCLPTwoGrid
+    from edelweissfe.linsolve.amgcl.amgcl import PyAMGCLCornerNodeTwoLevelCycle
 
     coords, isCorner, edgeEndpoints = lattice(3)
     As, scaling = latticeSystem(coords, dirichletDofs(coords))
     with pytest.raises(ValueError, match="coarse solve"):
-        PyAMGCLPTwoGrid({"amgcl": fineChebyshevTree()}).build(As, scaling, isCorner, edgeEndpoints)
+        PyAMGCLCornerNodeTwoLevelCycle({"amgcl": fineChebyshevTree()}).build(As, scaling, isCorner, edgeEndpoints)
 
 
 def test_a_fully_constrained_field_is_the_identity():

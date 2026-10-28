@@ -25,12 +25,12 @@
 #  The full text of the license can be found in the file LICENSE.md at
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
-"""The rigid-body coarse level (``TwoLevel(coarseSpace=RigidBodyModes())``, the default of the ``blockamg`` preset for
-3D displacement fields, :mod:`edelweissfe.linsolve.composition.rigidbodycoarselevel`): the defining properties of its
-construction -- the tentative prolongation reproduces the rigid-body modes, the coarse operator is the Galerkin product,
-Dirichlet rows stay out of the coarse space, linearly dependent modes are dropped -- its control (with the translations
-alone it is AMGCL's own first coarse level) and its purpose (fewer iterations on a bending-dominated structure). Its
-place in the composed solvers is tested with them (test_linsolve_composition_*)."""
+"""The rigid-body coarse level (``TwoLevel(coarseSpace=RigidBodyModesPerAggregate())``, the default of the ``blockamg``
+preset for 3D displacement fields, :mod:`edelweissfe.linsolve.composition.rigidbodymodestwolevelcycle`): the defining
+properties of its construction -- the tentative prolongation reproduces the rigid-body modes, the coarse operator is the
+Galerkin product, Dirichlet rows stay out of the coarse space, linearly dependent modes are dropped -- its control (with
+the translations alone it is AMGCL's own first coarse level) and its purpose (fewer iterations on a bending-dominated
+structure). Its place in the composed solvers is tested with them (test_linsolve_composition_*)."""
 
 import os
 import re
@@ -55,8 +55,8 @@ pytest.importorskip("edelweissfe.linsolve.amgcl.amgcl")
 from edelweissfe.linsolve.amgcl.amgcl import PyAMGCLSolver  # noqa: E402
 from edelweissfe.linsolve.base import FieldBlock  # noqa: E402
 from edelweissfe.linsolve.composition.amg import defaultFieldTree  # noqa: E402
-from edelweissfe.linsolve.composition.rigidbodycoarselevel import (  # noqa: E402
-    RigidBodyCoarseLevelPreconditioner,
+from edelweissfe.linsolve.composition.rigidbodymodestwolevelcycle import (  # noqa: E402
+    RigidBodyModesTwoLevelCycle,
 )
 from edelweissfe.linsolve.nullspace import (  # noqa: E402
     rigidBodyNullspace,
@@ -64,7 +64,7 @@ from edelweissfe.linsolve.nullspace import (  # noqa: E402
 )
 
 
-class _TranslationsOnly(RigidBodyCoarseLevelPreconditioner):
+class _TranslationsOnly(RigidBodyModesTwoLevelCycle):
     """The control of the construction: the coarse level on the translations alone, M = B -- AMGCL's own coarse space
     on the block backend, so that it differs from the rigid-body coarse level in the rotations alone."""
 
@@ -82,8 +82,8 @@ def _equilibratedBeam(dimension: int):
 
 
 def _preconditioner(
-    dimension: int, backendPrecision: str = "double", kind=RigidBodyCoarseLevelPreconditioner, **options
-) -> RigidBodyCoarseLevelPreconditioner:
+    dimension: int, backendPrecision: str = "double", kind=RigidBodyModesTwoLevelCycle, **options
+) -> RigidBodyModesTwoLevelCycle:
     """The rigid-body coarse level (or its control, ``kind``) of the default tree of a field of this dimension, stored in
     backendPrecision."""
     return kind(defaultFieldTree(dimension), dimension, backendPrecision, **options)
@@ -288,7 +288,7 @@ def test_the_translations_alone_are_amgcls_own_first_coarse_level():
 
     translations = _TranslationsOnly(tree, 3, "double")
     translations.build(As, scaling, coordinates)
-    rigidBody = RigidBodyCoarseLevelPreconditioner(tree, 3, "double")
+    rigidBody = RigidBodyModesTwoLevelCycle(tree, 3, "double")
     rigidBody.build(As, scaling, coordinates)
     assert translations.coarseNullspace().shape[1] == 3 and translations.droppedModes == 0
 
@@ -307,7 +307,7 @@ def test_the_translations_alone_are_amgcls_own_first_coarse_level():
 
 @pytest.mark.parametrize(
     "kind, modes",
-    [(RigidBodyCoarseLevelPreconditioner, 6), (_TranslationsOnly, 3)],
+    [(RigidBodyModesTwoLevelCycle, 6), (_TranslationsOnly, 3)],
     ids=["rigid-body modes", "translations alone"],
 )
 def test_the_hierarchy_below_takes_the_modes_of_an_aggregate_as_one_point_on_every_level(kind, modes):
@@ -350,13 +350,13 @@ sys.path.insert(0, sys.argv[1])
 from _elasticbeam import slenderBeam
 from _linsolvesystems import equilibrated, gmresIterations
 from edelweissfe.linsolve.composition.amg import defaultFieldTree
-from edelweissfe.linsolve.composition.rigidbodycoarselevel import RigidBodyCoarseLevelPreconditioner
+from edelweissfe.linsolve.composition.rigidbodymodestwolevelcycle import RigidBodyModesTwoLevelCycle
 
 K, coordinates, _ = slenderBeam(3)
 As, scaling = equilibrated(K)
 tree = defaultFieldTree(3)
 tree["coarsening"]["estimate_spectral_radius"] = sys.argv[3] == "estimate"
-preconditioner = RigidBodyCoarseLevelPreconditioner(tree, 3, "double")
+preconditioner = RigidBodyModesTwoLevelCycle(tree, 3, "double")
 preconditioner.build(As, scaling, coordinates)
 iterations = gmresIterations(As, preconditioner)
 Ac, P = preconditioner.coarseOperator(), preconditioner.prolongationMatrix()
@@ -397,11 +397,11 @@ def test_the_rotations_cut_the_iterations_of_a_bending_dominated_beam(dimension)
     # aggregate. The translations alone cannot represent it, the rotations can.
     As, scaling, coordinates, _ = _equilibratedBeam(dimension)
     iterations = {}
-    for kind in (_TranslationsOnly, RigidBodyCoarseLevelPreconditioner):
+    for kind in (_TranslationsOnly, RigidBodyModesTwoLevelCycle):
         preconditioner = _preconditioner(dimension, kind=kind)
         preconditioner.build(As, scaling, coordinates)
         iterations[kind] = gmresIterations(As, preconditioner)
-    translations, rigidBody = iterations[_TranslationsOnly], iterations[RigidBodyCoarseLevelPreconditioner]
+    translations, rigidBody = iterations[_TranslationsOnly], iterations[RigidBodyModesTwoLevelCycle]
     print("GMRES iterations, translations alone / rigid-body modes:", translations, rigidBody)
     assert rigidBody <= GMRES_CAP and rigidBody < 0.5 * translations
 
@@ -474,10 +474,10 @@ def test_coordinates_of_other_nodes_and_a_near_null_space_it_cannot_take_are_ref
 def test_settings_it_cannot_use_raise_before_any_build(tree, blockSize, backendPrecision, options, reason):
     fullTree = {key: value for key, value in defaultFieldTree(3).items() if key not in tree} | tree
     with pytest.raises(ValueError, match=reason):
-        RigidBodyCoarseLevelPreconditioner(fullTree, blockSize, backendPrecision, **options)
+        RigidBodyModesTwoLevelCycle(fullTree, blockSize, backendPrecision, **options)
 
 
 def test_a_tree_without_a_smoother_is_told_that_amgcls_default_is_not_chebyshev():
     tree = {key: value for key, value in defaultFieldTree(3).items() if key != "relax"}
     with pytest.raises(ValueError, match=r"relax.type must be chebyshev, got spai0 \(AMGCL's default\)"):
-        RigidBodyCoarseLevelPreconditioner(tree, 3, "double")
+        RigidBodyModesTwoLevelCycle(tree, 3, "double")

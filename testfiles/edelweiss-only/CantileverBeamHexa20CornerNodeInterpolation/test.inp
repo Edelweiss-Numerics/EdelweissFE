@@ -1,8 +1,8 @@
-** Regression test for the p-two-grid with a composed coarse solve (see solver.py): a slender 3D linear-elastic
+** Regression test for the corner-node two-level cycle with a composed coarse solve (see solver.py): a slender 3D linear-elastic
 ** cantilever of quadratic hexahedra (C3D20, 3663 displacement dofs), preconditioned by
-** TwoLevel(coarseSpace=P1Interpolation(coarse=DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModes())))): the P1
+** TwoLevel(coarseSpace=CornerNodeInterpolation(coarseSolve=DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModesPerAggregate())))): the P1
 ** interpolation of the scaled variables to the corner nodes, and on the corner-node field the rigid-body coarse level.
-** Exercises end-to-end through the Newton loop: the P1 map and the node coordinates read from the model, the coarse
+** Exercises end-to-end through the Newton loop: the midside corners and the node coordinates read from the model, the coarse
 ** context of the corner-node field (its coordinates, its scaling, its Dirichlet rows), the callback of the coarse
 ** solve, the outer Krylov solve. Newton converges in 2 iterations on this linear problem (maxIter=3). The reference
 ** solution is that of a direct solver (pardiso, copied from CantileverBeamHexa20BlockAMGRigidBody).

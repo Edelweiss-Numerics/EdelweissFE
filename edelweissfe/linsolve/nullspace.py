@@ -29,7 +29,7 @@ Solver-independent: both functions are pure geometry/linear algebra over a
 :class:`~edelweissfe.linsolve.base.FieldBlock`, its diagonal-equilibration scaling, and (for the
 richer basis) its node coordinates -- no solver-instance state. Any algebraic-multigrid-style
 preconditioner needing an elasticity near-null-space can use them; today
-:class:`~edelweissfe.linsolve.composition.amg.AMG` and the p-two-grid cycle do, to
+:class:`~edelweissfe.linsolve.composition.amg.AMG` and the corner-node two-level cycle do, to
 seed AMGCL's smoothed-aggregation coarsening. A block backend takes :func:`translationNullspace` alone
 (``blockTranslationNullspace``): its node-major layout gives every node a diagonal block of weights. Which fields
 have rotations among their modes is :func:`carriesRigidBodyModes`.

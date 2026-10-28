@@ -25,7 +25,7 @@
 #  ---------------------------------------------------------------------
 """Corner/midside node topology for building a P1 (linear) restriction operator over a quadratic
 serendipity displacement mesh -- the enabler for p-multigrid
-(:class:`~edelweissfe.linsolve.composition.ptwogrid.PTwoGridPreconditioner`).
+(:class:`~edelweissfe.linsolve.composition.cornernodetwolevelcycle.CornerNodeTwoLevelCycle`).
 
 The projection :math:`P` is purely topological: identity on corner nodes, ½/½ on each exclusive
 midside node from its two edge-endpoint corners (the P1 function expressed in the serendipity
@@ -103,13 +103,13 @@ def classifyElementTopology(nSpatialDimensions, nNodes: int):
     raise ValueError(
         "p1topology: unrecognized element topology (nSpatialDimensions={:}, nNodes={:}) -- neither "
         "a known quadratic-serendipity family ((2, 8) Quad8, (3, 20) Hexa20) nor a verified linear "
-        "node count. Add its corner/midside topology before including it in a P1 map.".format(
+        "node count. Add its corner/midside topology before including it in the midside corners.".format(
             nSpatialDimensions, nNodes
         )
     )
 
 
-def buildP1Map(model, fieldName: str):
+def buildMidsideCorners(model, fieldName: str):
     """Classify every node of ``fieldName`` (a vector field, e.g. ``"displacement"``) as a corner
     or an exclusive midside, in the same order as ``model.nodeFields[fieldName].nodes`` (the
     field's own DOF-vector row order, see ``DofManager._reserveSpaceForNodeFields``).
@@ -222,17 +222,17 @@ def buildP1Map(model, fieldName: str):
     return isCorner, edgeEndpoints, warnings
 
 
-def restrictP1Map(isCorner: np.ndarray, edgeEndpoints: np.ndarray, remains: np.ndarray) -> tuple:
-    """A field's P1 map (see :func:`buildP1Map`) restricted to some of its nodes, ``remains`` (e.g. those a Schur
-    complement does not condense): the rows are renumbered, and a midside node whose edge endpoint is not among them
-    becomes a corner.
+def restrictMidsideCorners(isCorner: np.ndarray, edgeEndpoints: np.ndarray, remains: np.ndarray) -> tuple:
+    """A field's midside corners (see :func:`buildMidsideCorners`) restricted to some of its nodes, ``remains`` (e.g.
+    those a Schur complement does not condense): the rows are renumbered, and a midside node whose edge endpoint is not
+    among them becomes a corner.
     That is always safe: the P1 restriction takes a corner as it is, so a promoted node only enlarges the coarse space
-    of the p-two-grid preconditioner, it never makes it wrong.
+    of the corner-node two-level cycle, it never makes it wrong.
 
     Parameters
     ----------
     isCorner, edgeEndpoints
-        The field's P1 map, see :func:`buildP1Map`.
+        The field's midside corners, see :func:`buildMidsideCorners`.
     remains
         Per node of the field, whether it remains.
 

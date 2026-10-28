@@ -188,8 +188,8 @@ def test_a_custom_block_needs_its_script(tmp_path):
 
 
 def test_an_unknown_linsolver_names_the_blocks_and_the_types(tmp_path):
-    definitions = _definitions(tmp_path, "*linearSolver, name=fast, type=blockamg\nrigidBodyCoarseLevel=false\n")
-    assert definitions["fast"].configuration.rigidBodyCoarseLevel is False
+    definitions = _definitions(tmp_path, "*linearSolver, name=fast, type=blockamg\nrigidBodyModesPerAggregate=false\n")
+    assert definitions["fast"].configuration.rigidBodyModesPerAggregate is False
     with pytest.raises(ValueError, match="fast.*blockamg"):
         createLinearSolver("fats", definitions)
 

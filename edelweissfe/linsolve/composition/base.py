@@ -65,7 +65,7 @@ from dataclasses import dataclass, field, replace
 import numpy as np
 
 from edelweissfe.linsolve.base import FieldBlock
-from edelweissfe.numerics.p1topology import restrictP1Map
+from edelweissfe.numerics.p1topology import restrictMidsideCorners
 
 
 @dataclass
@@ -169,7 +169,7 @@ class SetUpContext:
     coordinatesOf
         ``fieldName -> (nNodes, dimension)`` node coordinates of the field, in its dof order, or ``None`` if
         unknown (an offline replay without a model).
-    p1MapOf
+    midsideCornersOf
         ``fieldName -> (isCorner, edgeEndpoints)``, the corner/midside topology of a quadratic field, or ``None``.
     model
         The model, if there is one (markers read it), else ``None``.
@@ -183,7 +183,7 @@ class SetUpContext:
     fields: tuple
     scaling: "np.ndarray | None" = None
     coordinatesOf: object = None
-    p1MapOf: object = None
+    midsideCornersOf: object = None
     model: object = None
     journal: object = None
     log: object = None
@@ -215,9 +215,10 @@ class SetUpContext:
         """The node coordinates of a field, or ``None``."""
         return None if self.coordinatesOf is None else self.coordinatesOf(fieldName)
 
-    def p1Map(self, fieldName: str):
-        """The P1 corner/midside map of a field, or ``None``."""
-        return None if self.p1MapOf is None else self.p1MapOf(fieldName)
+    def midsideCorners(self, fieldName: str):
+        """The midside corners of a field (which nodes are corners, and the corners of each midside node), or
+        ``None``."""
+        return None if self.midsideCornersOf is None else self.midsideCornersOf(fieldName)
 
     def scalingOf(self, dofs: "slice | np.ndarray") -> np.ndarray:
         """The scaling of some dofs (ones without a scaling)."""
@@ -240,38 +241,42 @@ class SetUpContext:
     def restrictedTo(self, fields: tuple, dofs: np.ndarray, nodesOf=None) -> "SetUpContext":
         """The context of a subset ``dofs`` of this problem's dofs, whose fields are ``fields`` (as the Schur
         complement leaves them). ``nodesOf``: ``fieldName -> boolean mask`` of the nodes of the field that remain,
-        to restrict the coordinates and P1 maps."""
+        to restrict the coordinates and midside corners."""
 
         def coordinatesOf(fieldName):
             coordinates = self.coordinates(fieldName)
             mask = None if nodesOf is None else nodesOf(fieldName)
             return coordinates if coordinates is None or mask is None else coordinates[mask]
 
-        def p1MapOf(fieldName):
-            p1Map = self.p1Map(fieldName)
+        def midsideCornersOf(fieldName):
+            midsideCorners = self.midsideCorners(fieldName)
             mask = None if nodesOf is None else nodesOf(fieldName)
-            return p1Map if p1Map is None or mask is None else restrictP1Map(*p1Map, mask)
+            return (
+                midsideCorners
+                if midsideCorners is None or mask is None
+                else restrictMidsideCorners(*midsideCorners, mask)
+            )
 
         return replace(
             self,
             fields=tuple(fields),
             scaling=None if self.scaling is None else self.scaling[dofs],
             coordinatesOf=coordinatesOf,
-            p1MapOf=p1MapOf,
+            midsideCornersOf=midsideCornersOf,
         )
 
     def ofCoarseDofs(self, nCoarse: int) -> "SetUpContext":
         """The context of a coarse problem whose dofs are no nodes (the coefficients of the modes of aggregates, say):
-        one field ``"coarse"`` of ``nCoarse`` scalar dofs, without coordinates, P1 map or scaling. The journal and the
-        log stay."""
+        one field ``"coarse"`` of ``nCoarse`` scalar dofs, without coordinates, midside corners or scaling. The journal
+        and the log stay."""
         return SetUpContext(fields=(FieldBlock("coarse", 0, nCoarse, 1),), journal=self.journal, log=self.log)
 
     def ofCoarseNodes(self, field: FieldBlock, isCoarseNode: np.ndarray) -> "SetUpContext":
-        """The context of the coarse problem of a P1 interpolation of this problem's one field ``field``: the same field
-        on its coarse nodes alone (``isCoarseNode``, per node of the field: the corner nodes, and the midside nodes the
-        interpolation keeps as nodes of their own), its dofs numbered node by node. The coarse nodes keep their
-        coordinates and their scaling :math:`D_c`; the coarse field is linear, so it has no P1 map, and it is no field
-        of the model."""
+        """The context of the coarse problem of a corner-node interpolation of this problem's one field ``field``: the
+        same field on its coarse nodes alone (``isCoarseNode``, per node of the field: the corner nodes, and the midside
+        nodes the interpolation keeps as nodes of their own), its dofs numbered node by node. The coarse nodes keep
+        their coordinates and their scaling :math:`D_c`; the coarse field is linear, so it has no midside corners, and
+        it is no field of the model."""
         isCoarseNode = np.asarray(isCoarseNode, dtype=bool)
         coarseNodes = np.nonzero(isCoarseNode)[0]
         coarseDofs = (coarseNodes[:, None] * field.dimension + np.arange(field.dimension)).ravel()
@@ -280,7 +285,7 @@ class SetUpContext:
             field.start + coarseDofs,
             nodesOf=lambda fieldName: isCoarseNode,
         )
-        return replace(coarse, p1MapOf=None, model=None)
+        return replace(coarse, midsideCornersOf=None, model=None)
 
 
 @dataclass(frozen=True)
