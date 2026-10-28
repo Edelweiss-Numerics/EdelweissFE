@@ -82,14 +82,15 @@ _SCALAR_FIELD_TREE = {
     "coarsening": {"type": "smoothed_aggregation"},
     "relax": {"type": "chebyshev"},
 }
-#: The smoother of the p-two-grid, ``TwoLevel(coarseSpace=P1Interpolation())``: Chebyshev of degree 8 on the interval
-#: from 0.03 to 1.1 times the spectral radius, on the quadratic field and on the rigid-body coarse level of its default
-#: coarse solve (:func:`defaultPTwoGridTree`). A sweep of degree 8 costs half the matrix products of one of degree 16,
-#: and the p-two-grid needs fewer than twice the outer iterations with it. Measured ("The smoother of the p-two-grid" in
+#: The smoother of the corner-node two-level cycle, ``TwoLevel(coarseSpace=CornerNodeInterpolation())``: Chebyshev of
+#: degree 8 on the interval from 0.03 to 1.1 times the spectral radius, on the quadratic field and on the rigid-body
+#: coarse level of its default coarse solve (:func:`defaultCornerNodeTwoLevelTree`). A sweep of degree 8 costs half the
+#: matrix products of one of degree 16, and the corner-node two-level cycle needs fewer than twice the outer iterations
+#: with it. Measured ("The smoother of the corner-node two-level cycle" in
 #: ``doc/source/documentation/fieldsplitmeasurements.rst``): about 10 % less time on 14 captured systems, the same or
 #: less on every one. ``AMG()`` and the rigid-body coarse level alone keep degree 16 (:data:`_VECTOR_FIELD_TREE`):
 #: there, degree 8 gained nothing.
-_P_TWO_GRID_SMOOTHER = {"type": "chebyshev", "degree": 8, "lower": 0.03, "higher": 1.1}
+_CORNER_NODE_TWO_LEVEL_SMOOTHER = {"type": "chebyshev", "degree": 8, "lower": 0.03, "higher": 1.1}
 
 
 def defaultFieldTree(dimension: int) -> dict:
@@ -100,14 +101,15 @@ def defaultFieldTree(dimension: int) -> dict:
     return copy.deepcopy(_VECTOR_FIELD_TREE if dimension > 1 else _SCALAR_FIELD_TREE)
 
 
-def defaultPTwoGridTree() -> dict:
-    """The default AMGCL tree of the p-two-grid, ``TwoLevel(coarseSpace=P1Interpolation())``, and of the rigid-body
-    coarse level of its default coarse solve: the default tree of a vector field (:data:`_VECTOR_FIELD_TREE`) with the
-    smoother of the p-two-grid (:data:`_P_TWO_GRID_SMOOTHER`). The p-two-grid reads only the smoother of its tree
+def defaultCornerNodeTwoLevelTree() -> dict:
+    """The default AMGCL tree of the corner-node two-level cycle, ``TwoLevel(coarseSpace=CornerNodeInterpolation())``,
+    and of the rigid-body coarse level of its default coarse solve: the default tree of a vector field
+    (:data:`_VECTOR_FIELD_TREE`) with the smoother of the corner-node two-level cycle
+    (:data:`_CORNER_NODE_TWO_LEVEL_SMOOTHER`). The corner-node two-level cycle reads only the smoother of its tree
     (``relax``, ``npre``, ``npost``), the rigid-body coarse level the whole tree. A copy, as :func:`defaultFieldTree`.
     """
     tree = copy.deepcopy(_VECTOR_FIELD_TREE)
-    tree["relax"] = dict(_P_TWO_GRID_SMOOTHER)
+    tree["relax"] = dict(_CORNER_NODE_TWO_LEVEL_SMOOTHER)
     return tree
 
 
@@ -250,8 +252,8 @@ def preconditionerMatrix(A, dropTolerance: float, lumpDroppedEntries: bool, stat
 
 def fieldTreeOf(owner: str, tree: "dict | None", field, defaultTree: dict) -> dict:
     """The AMGCL tree a one-field component builds on: ``tree``, or the component's ``defaultTree`` for the field
-    (:func:`defaultFieldTree`, :func:`defaultPTwoGridTree`); raises, naming ``owner`` and the field, if ``tree`` is not
-    a tree."""
+    (:func:`defaultFieldTree`, :func:`defaultCornerNodeTwoLevelTree`); raises, naming ``owner`` and the field, if
+    ``tree`` is not a tree."""
     if tree is None:
         return defaultTree
     if not isinstance(tree, dict):

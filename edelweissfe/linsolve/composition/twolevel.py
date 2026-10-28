@@ -37,13 +37,14 @@ One cycle, for :math:`z \\approx A^{-1} r` with a prolongation :math:`P` from th
 
 with :math:`A_c^{-1}` approximated. The coarse space decides what the cycle can correct:
 
-- :class:`RigidBodyModesPerAggregate`: all rigid-body modes of each aggregate of nodes (3 translations and 3 rotations in
-  3D), where an AMG hierarchy on node-wise 3x3 blocks takes the translations alone; :math:`A_c^{-1}` is one V-cycle of
-  an AMG hierarchy;
-- :class:`CornerNodeInterpolation`: the linear (P1) interpolant of a quadratic field from its corner nodes; :math:`A_c^{-1}` is
-  a component of its own, by default ``DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModesPerAggregate(), tree=...))`` on the
-  corner-node field -- three levels: quadratic, linear, rigid-body modes of aggregates. Both of its levels smooth with
-  the smoother of the corner-node two-level cycle, a Chebyshev polynomial of degree 8 instead of 16
+- :class:`RigidBodyModesPerAggregate`: all rigid-body modes of each aggregate of nodes (3 translations and 3 rotations
+  in 3D), where an AMG hierarchy on node-wise 3x3 blocks takes the translations alone; :math:`A_c^{-1}` is one V-cycle
+  of an AMG hierarchy;
+- :class:`CornerNodeInterpolation`: the linear interpolant of a quadratic field from its corner nodes (P1);
+  :math:`A_c^{-1}` is a component of its own, by default
+  ``DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModesPerAggregate(), tree=...))`` on the corner-node field -- three
+  levels: quadratic, linear, rigid-body modes of aggregates. Both of its levels smooth with the smoother of the
+  corner-node two-level cycle, a Chebyshev polynomial of degree 8 instead of 16
   (:func:`~edelweissfe.linsolve.composition.amg.defaultCornerNodeTwoLevelTree`).
 
 Why "two-level": the component is the fine level and one coarse correction, and its coarse problem is solved inexactly.
@@ -69,8 +70,8 @@ import edelweissfe.utils.performancetiming as performancetiming
 from edelweissfe.linsolve.composition.amg import (
     backendOf,
     checkBackend,
+    defaultCornerNodeTwoLevelTree,
     defaultFieldTree,
-    defaultPTwoGridTree,
     fieldTreeOf,
     preconditionerMatrix,
 )
@@ -227,18 +228,19 @@ class CornerNodeInterpolation(CoarseSpace):
     as its scaling, an identity row for each Dirichlet coarse dof
     (:meth:`~edelweissfe.linsolve.composition.base.SetUpContext.ofCoarseNodes`).
 
-    The p-two-grid smooths with a weaker Chebyshev polynomial than an AMG hierarchy: a :class:`TwoLevel` on this coarse
-    space that is given no tree, and the rigid-body coarse level of the default coarse solve, take
-    :func:`~edelweissfe.linsolve.composition.amg.defaultPTwoGridTree` (degree 8 instead of 16). A tree given to either
-    replaces it.
+    The corner-node two-level cycle smooths with a weaker Chebyshev polynomial than an AMG hierarchy: a
+    :class:`TwoLevel` on this coarse space that is given no tree, and the rigid-body coarse level of the default coarse
+    solve, take :func:`~edelweissfe.linsolve.composition.amg.defaultCornerNodeTwoLevelTree` (degree 8 instead of 16). A
+    tree given to either replaces it.
 
     Parameters
     ----------
     coarseSolve
         The coarse solve :math:`A_c^{-1}`, a component built on :math:`A_c` and applied once per cycle; ``None``:
-        ``DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModesPerAggregate(), tree=defaultCornerNodeTwoLevelTree()))``, measured fastest (see
-        :ref:`measured-scaled-corner-node-interpolation` and :ref:`measured-corner-node-two-level-smoother`). ``AMG(...)`` is the plain AMG hierarchy on
-        it, ``AMG(backendBlockSize=1)`` one with the rigid-body modes of the corners as its near null-space.
+        ``DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModesPerAggregate(), tree=defaultCornerNodeTwoLevelTree()))``,
+        measured fastest (see :ref:`measured-scaled-corner-node-interpolation` and
+        :ref:`measured-corner-node-two-level-smoother`). ``AMG(...)`` is the plain AMG hierarchy on it,
+        ``AMG(backendBlockSize=1)`` one with the rigid-body modes of the corners as its near null-space.
     """
 
     name = "corner-node interpolation"
@@ -254,9 +256,9 @@ class CornerNodeInterpolation(CoarseSpace):
         self.coarseSolve = coarseSolve
 
     def defaultTree(self, field) -> dict:
-        """The smoother of the p-two-grid (:func:`~edelweissfe.linsolve.composition.amg.defaultPTwoGridTree`), for a
-        field of any dimension."""
-        return defaultPTwoGridTree()
+        """The smoother of the corner-node two-level cycle
+        (:func:`~edelweissfe.linsolve.composition.amg.defaultCornerNodeTwoLevelTree`), for a field of any dimension."""
+        return defaultCornerNodeTwoLevelTree()
 
     def check(self, field, context: SetUpContext, cycle: dict) -> None:
         """It needs the field's midside corners, and parameters the C++ cycle can use."""
@@ -327,10 +329,11 @@ class TwoLevel(Preconditioner):
         A :class:`CoarseSpace`: :class:`RigidBodyModesPerAggregate` or :class:`CornerNodeInterpolation`.
     tree
         The field's AMGCL tree: its ``relax`` (a Chebyshev polynomial), ``npre`` and ``npost`` are the fine smoother;
-        with :class:`RigidBodyModesPerAggregate` its coarsening also builds the coarse level, and the whole tree the AMG hierarchy
-        below. ``None``: the coarse space's default (:meth:`CoarseSpace.defaultTree`), the default tree of the field's
-        dimension (:func:`~edelweissfe.linsolve.composition.amg.defaultFieldTree`) for :class:`RigidBodyModesPerAggregate`, the
-        smoother of the corner-node two-level cycle (:func:`~edelweissfe.linsolve.composition.amg.defaultCornerNodeTwoLevelTree`) for
+        with :class:`RigidBodyModesPerAggregate` its coarsening also builds the coarse level, and the whole tree the AMG
+        hierarchy below. ``None``: the coarse space's default (:meth:`CoarseSpace.defaultTree`), the default tree of the
+        field's dimension (:func:`~edelweissfe.linsolve.composition.amg.defaultFieldTree`) for
+        :class:`RigidBodyModesPerAggregate`, the smoother of the corner-node two-level cycle
+        (:func:`~edelweissfe.linsolve.composition.amg.defaultCornerNodeTwoLevelTree`) for
         :class:`CornerNodeInterpolation`.
     backendBlockSize, backendPrecision
         The storage of the fine operator and of :math:`P`, :math:`P^T`, as for

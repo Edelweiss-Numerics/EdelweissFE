@@ -67,7 +67,7 @@ GMRES iterations against 6 with 8 or more steps).
 
 **Outer iterations, setup and wall time** (s, mean over 8, 16 and 32 threads, xeon) to 1e-6 on the displacement
 block alone, the 14 systems of :ref:`measured-scaled-corner-node-interpolation` and two post-onset cylinder solves (21, 27), for the default
-AMG tree (``AMG()``), the rigid-body coarse level and the scaled P1 interpolation (with the smoother of the time, degree
+AMG tree (``AMG()``), the rigid-body coarse level and the scaled corner-node interpolation (with the smoother of the time, degree
 16 on both levels, :ref:`measured-corner-node-two-level-smoother`); the sums over the systems:
 
 .. list-table::
@@ -377,25 +377,25 @@ Where the scaling varies little along the edges (the tunnel, the cylinder) the s
 nothing; on the edge breakout, where midside diagonals are up to :math:`10^6` times smaller than their corners', it
 halves the iterations.
 
-These measurements were taken with the smoother of the time, degree 16 on both levels of the p-two-grid; the default
-is now degree 8 (:ref:`measured-p-two-grid-smoother`).
+These measurements were taken with the smoother of the time, degree 16 on both levels of the corner-node two-level cycle; the default
+is now degree 8 (:ref:`measured-corner-node-two-level-smoother`).
 
-.. _measured-p-two-grid-smoother:
+.. _measured-corner-node-two-level-smoother:
 
-The smoother of the p-two-grid
-------------------------------
+The smoother of the corner-node two-level cycle
+-----------------------------------------------
 
 See :ref:`blockamg-p-multigrid` and :ref:`composed-default-field-trees`.
 
 The Chebyshev smoother -- its degree, the lower end of its interval relative to the spectral radius, and the cycle,
 V(0,1) or V(1,1) -- was swept for the three displacement preconditioners, ``AMG()``,
-``TwoLevel(coarseSpace=RigidBodyModes())`` and ``TwoLevel(coarseSpace=P1Interpolation())``, offline on the
+``TwoLevel(coarseSpace=RigidBodyModesPerAggregate())`` and ``TwoLevel(coarseSpace=CornerNodeInterpolation())``, offline on the
 displacement block alone: ``LGMRES(DiagonalScaling(.))`` to a true relative residual of 1e-6, setup included, 32
 threads on a two-socket workstation (xeon), first on three systems (the damaged tunnel lining, solve 26 of the damage
-cylinder, solve 20 of the edge breakout), then on 14 systems: the 12 of :ref:`measured-scaled-p1` and two post-onset
+cylinder, solve 20 of the edge breakout), then on 14 systems: the 12 of :ref:`measured-scaled-corner-node-interpolation` and two post-onset
 cylinder solves (21, 27). Every solve reached the tolerance. Run-to-run scatter of the wall time was up to about 12 % on the three systems.
 
-Wall s / outer iterations on the three systems; the smoother of ``P1Interpolation`` on both of its levels (the fine
+Wall s / outer iterations on the three systems; the smoother of ``CornerNodeInterpolation`` on both of its levels (the fine
 level and the rigid-body coarse level of its default coarse solve), the others on every level they smooth:
 
 .. list-table::
@@ -427,12 +427,12 @@ level and the rigid-body coarse level of its default coarse solve), the others o
       - 8.06 / 132
       - 4.40 / 40
       - 22.84
-    * - p-two-grid, degree 16, lower 0.01 (the former default)
+    * - corner-node two-level cycle, degree 16, lower 0.01 (the former default)
       - 8.02 / 21
       - 4.19 / 39
       - 4.04 / 13
       - 16.16
-    * - p-two-grid, degree 8, lower 0.03 (the default)
+    * - corner-node two-level cycle, degree 8, lower 0.03 (the default)
       - 6.65 / 27
       - 3.67 / 52
       - 3.92 / 21
@@ -442,16 +442,16 @@ level and the rigid-body coarse level of its default coarse solve), the others o
   flat along a ridge: a wider interval needs a higher degree (degree 16 on 0.01 to 1.1, degree 8 on 0.03 to 1.1 and
   V(1,1) with degree 4 on 0.03 to 1.1 tie). A lower degree makes the tunnel about 20 % faster and the cylinder 25--35
   % slower. They keep degree 16.
-* **For the p-two-grid, degree 16 is stronger than it pays.** The optimum is flat over degrees 6 to 10 and lower ends
+* **For the corner-node two-level cycle, degree 16 is stronger than it pays.** The optimum is flat over degrees 6 to 10 and lower ends
   0.02 to 0.05; degree 8 on 0.03 to 1.1 on the fine level alone took 14.93 s, on both levels 14.23 s.
 * A lower end of 0.1 lost everywhere, by 10--30 %; V(0,1) beat V(1,1) at the same number of polynomial applications
   for all three preconditioners.
-* The iterations of the p-two-grid were the same at 8, 16 and 32 threads, and the gain larger at fewer threads: 34.74
+* The iterations of the corner-node two-level cycle were the same at 8, 16 and 32 threads, and the gain larger at fewer threads: 34.74
   against 27.80 s at 8 threads (-20 %), 21.71 against 17.18 s at 16 (-21 %), 16.16 against 14.23 s at 32 (-12 %).
 
 On the 14 systems (outer iterations / wall s, the mean of two repetitions; the default
-``TwoLevel(coarseSpace=P1Interpolation())``, against the former default written out,
-``TwoLevel(coarseSpace=P1Interpolation(DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModes(), tree=t))), tree=t)``
+``TwoLevel(coarseSpace=CornerNodeInterpolation())``, against the former default written out,
+``TwoLevel(coarseSpace=CornerNodeInterpolation(DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModesPerAggregate(), tree=t))), tree=t)``
 with ``t = defaultFieldTree(3)``):
 
 .. list-table::
@@ -529,7 +529,7 @@ breakout, whose wall time is mostly the setup, ties. The sweep had shown -9.6 % 
 against 52.25 s in two repetitions each). On these systems, the rigid-body coarse level alone with degree 8 only moved
 time around (76.43 against 76.33 s): the tunnel lining about 20 % faster, the late cylinder solves 20--35 % slower at
 2.2--2.5 times the iterations (solve 30: 61 against 155). The iterations of ``AMG()`` and of
-``TwoLevel(coarseSpace=RigidBodyModes())`` with their defaults are unchanged by this default.
+``TwoLevel(coarseSpace=RigidBodyModesPerAggregate())`` with their defaults are unchanged by this default.
 
 Not yet measured live: with Newton in the loop, and with the hierarchies reused over several solves.
 

@@ -63,12 +63,12 @@ The coarse problem is a field of its own
 The coarse solve is a component of the composed solver, set up on :math:`A_c` with the context of the corner-node field
 (:meth:`~edelweissfe.linsolve.composition.base.SetUpContext.ofCoarseNodes`: the same field on the coarse nodes, their
 coordinates, the scaling :math:`D_c`), so that every component works on it unchanged. Its default,
-``DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModesPerAggregate(), tree=defaultCornerNodeTwoLevelTree()))``, smooths with the smoother of
-the corner-node two-level cycle (:func:`~edelweissfe.linsolve.composition.amg.defaultCornerNodeTwoLevelTree`), as the fine level does, and scales
-:math:`A_c` to a unit diagonal once more: where a
-midside diagonal is tiny against its corners', the weights :math:`s_a / s_m` reach about 1000,
-:math:`A_c` inherits entries of that size squared, and the spectral radius the coarse level's own Chebyshev smoother
-works with was measured at :math:`1.8 \\cdot 10^5` instead of about 5. Measurements:
+``DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModesPerAggregate(), tree=defaultCornerNodeTwoLevelTree()))``, smooths
+with the smoother of the corner-node two-level cycle
+(:func:`~edelweissfe.linsolve.composition.amg.defaultCornerNodeTwoLevelTree`), as the fine level does, and scales
+:math:`A_c` to a unit diagonal once more: where a midside diagonal is tiny against its corners', the weights
+:math:`s_a / s_m` reach about 1000, :math:`A_c` inherits entries of that size squared, and the spectral radius the
+coarse level's own Chebyshev smoother works with was measured at :math:`1.8 \\cdot 10^5` instead of about 5. Measurements:
 :ref:`measured-scaled-corner-node-interpolation`.
 
 The cycle runs in C++ (``CornerNodeTwoLevelCycleT`` in ``edelweissfe/linsolve/amgcl/amgcl-wrapper.hpp``, wrapped as
