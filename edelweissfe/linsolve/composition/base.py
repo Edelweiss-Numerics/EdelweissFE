@@ -280,12 +280,17 @@ class SetUpContext:
         isCoarseNode = np.asarray(isCoarseNode, dtype=bool)
         coarseNodes = np.nonzero(isCoarseNode)[0]
         coarseDofs = (coarseNodes[:, None] * field.dimension + np.arange(field.dimension)).ravel()
-        coarse = self.restrictedTo(
-            (FieldBlock(field.name, 0, len(coarseDofs), field.dimension),),
-            field.start + coarseDofs,
-            nodesOf=lambda fieldName: isCoarseNode,
+        # restricted once, here: the coarse context keeps no reference to this (fine) one
+        coordinates = self.coordinates(field.name)
+        coarseCoordinates = None if coordinates is None else coordinates[isCoarseNode]
+        return replace(
+            self,
+            fields=(FieldBlock(field.name, 0, len(coarseDofs), field.dimension),),
+            scaling=None if self.scaling is None else self.scaling[field.start + coarseDofs],
+            coordinatesOf=lambda fieldName: coarseCoordinates if fieldName == field.name else None,
+            midsideCornersOf=None,
+            model=None,
         )
-        return replace(coarse, midsideCornersOf=None, model=None)
 
 
 @dataclass(frozen=True)
@@ -512,6 +517,26 @@ class Preconditioner:
         from edelweissfe.linsolve.composition.views import html
 
         return html(self, standalone=False)
+
+
+def requireEachComponentOnce(root: Preconditioner) -> None:
+    """Raise if one component (one instance) sits in two places of the tree: it is set up for one matrix, so the
+    second place would overwrite what the first one built, e.g. ``AMG()`` bound to a name and put under two
+    :class:`~edelweissfe.linsolve.composition.combinators.OnField`. A combination that applies one correction several
+    times (a symmetric sweep) lists it once among its children, so that is no second place."""
+    seen = {}
+
+    def visit(component, path):
+        if id(component) in seen:
+            raise ValueError(
+                "the component {:} sits in two places of the solver tree, {:} and {:}; it is set up for one matrix, so "
+                "make a new one for each place".format(type(component).__name__, seen[id(component)], path)
+            )
+        seen[id(component)] = path
+        for role, child in component.children():
+            visit(child, path + "/" + role)
+
+    visit(root, type(root).__name__)
 
 
 def requirePreconditioner(owner: str, role: str, child) -> None:

@@ -67,7 +67,10 @@ namespace amgcl {
       scalar_type omega = relax;
       if ( estimateSpectralRadius ) {
         omega *= static_cast< scalar_type >( 4.0 / 3 ) /
-                 static_cast< scalar_type >( backend::estimated_spectral_radius( A, spectralRadius, true ) );
+                 static_cast< scalar_type >(
+                   backend::estimated_spectral_radius( A,
+                                                       spectralRadius,
+                                                       backend::diagonal( A, /*invert*/ true ).get() ) );
       }
       else {
         omega *= static_cast< scalar_type >( 2.0 / 3 );

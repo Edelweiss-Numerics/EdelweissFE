@@ -63,6 +63,7 @@ from edelweissfe.linsolve.composition.base import (
     MatrixChange,
     Preconditioner,
     SetUpContext,
+    requireEachComponentOnce,
 )
 from edelweissfe.linsolve.composition.solvedumps import SolveDumps
 from edelweissfe.linsolve.composition.systemmatrix import SystemMatrix
@@ -374,7 +375,8 @@ class ComposedLinearSolver(LinearSolver):
             self.root.update(A, change)
         self._rootBeforeReload = None
         if self._fields is None or self._reloaded:
-            # after the first set-up: a combination made per field shows its corrections only then
+            # after the first set-up: a combination made per field has made its corrections only then
+            requireEachComponentOnce(self.root)
             self._logFramed("info", "composed linear solver", str(self.root) + self._scriptLine())
         x = np.column_stack([self.root(np.ascontiguousarray(r)) for r in rightHandSides.T]).reshape(b.shape)
         record = self.root.solveRecord()

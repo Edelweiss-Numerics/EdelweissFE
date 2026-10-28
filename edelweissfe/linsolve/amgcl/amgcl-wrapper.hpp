@@ -72,13 +72,17 @@ inline boost::property_tree::ptree parseJsonParameters( const char* jsonParamete
 inline boost::property_tree::ptree childOrEmpty( const boost::property_tree::ptree& tree, const std::string& path );
 
 /// @brief The parameters of an AMG hierarchy (amgcl::amg_hierarchy) from a "precond" tree: its class must be amg,
-/// which is then dropped.
+/// which is then dropped. AMGCL's other classes are not offered: a relaxation alone as the preconditioner
+/// (precond.class relaxation) only on the scalar backend, where LinearSolverT takes it before this; dummy and nested
+/// not at all (the composed solver composes preconditioners itself).
 /// @throws std::runtime_error for another class
 inline boost::property_tree::ptree amgHierarchyParameters( boost::property_tree::ptree precond )
 {
   const std::string precondClass = precond.get< std::string >( "class", "amg" );
   if ( precondClass != "amg" )
-    throw std::runtime_error( "precond.class must be amg here, got " + precondClass );
+    throw std::runtime_error( "precond.class must be amg, got '" + precondClass +
+                              "' (a relaxation alone, precond.class relaxation, is taken on the scalar backend only, "
+                              "backendBlockSize 1)" );
   precond.erase( "class" );
   return precond;
 }
@@ -1187,7 +1191,7 @@ public:
   /// is that of the free rows.
   double estimateSpectralRadius( const amgcl::spectral_radius_estimate& how, const char* isDirichlet ) const
   {
-    return amgcl::backend::estimated_spectral_radius( *A_, how, /*scaleByDiagonal=*/false, isDirichlet );
+    return amgcl::backend::estimated_spectral_radius( *A_, how, /*inverseDiagonal=*/nullptr, isDirichlet );
   }
 
   /// @brief `degree_` Chebyshev steps on A x = b, continuing from the given x -- the recurrence of
@@ -1603,9 +1607,6 @@ public:
   std::unique_ptr< TransferOperators > transfer_;
   /// @brief The coarse solve; none without a coarse level.
   std::unique_ptr< CoarseSolve > coarse_;
-  /// @brief coarse_ when it is an AMGCL hierarchy (buildCoarseHierarchy()), for the inspection of the coarse operator;
-  /// else null.
-  const CoarseHierarchy* coarseHierarchy_ = nullptr;
   /// @brief Per DOF, whether its row is a Dirichlet row (dirichletRowMask()).
   std::vector< char > isDirichlet_;
   /// @brief The Dirichlet rows.
@@ -1751,15 +1752,22 @@ public:
   }
 
   /// @brief The scalar CSR arrays of the Galerkin coarse operator as the coarse AMGCL hierarchy holds it, for
-  /// inspection; empty if the coarse solve is not one (a callback holds no operator of its own here).
+  /// inspection; empty without a coarse level.
+  /// @throw std::runtime_error if the coarse solve is no AMGCL hierarchy of this cycle (the corner-node cycle's is a
+  /// component of the composed solver, which holds its operator)
   ScalarCsr coarseOperatorCsr() const
   {
     checkBuilt();
-    if ( coarseHierarchy_ )
-      return coarseHierarchy_->operatorCsr();
-    ScalarCsr none;
-    none.ptr.assign( 1, 0 );
-    return none;
+    if ( !coarse_ ) {
+      ScalarCsr none;
+      none.ptr.assign( 1, 0 );
+      return none;
+    }
+    const auto* hierarchy = dynamic_cast< const CoarseHierarchy* >( coarse_.get() );
+    if ( !hierarchy )
+      throw std::runtime_error( "the coarse solve of this two-level cycle is a component of the composed solver, which "
+                                "holds the coarse operator; this cycle holds none" );
+    return hierarchy->operatorCsr();
   }
 
   /// @brief The coarse level's AMGCL hierarchy report.
@@ -1830,7 +1838,6 @@ protected:
     trivial_ = std::find( isDirichlet_.begin(), isDirichlet_.end(), 0 ) == isDirichlet_.end();
     transfer_.reset();
     coarse_.reset();
-    coarseHierarchy_ = nullptr;
     coarseNullspace_.clear();
     coarseNullspaceColumns_ = 0;
     fine_.reset();
@@ -1893,8 +1900,7 @@ protected:
       hierarchy.reset( new CoarseHierarchyT< float >( Ac, coarsePrm ) );
     else
       hierarchy.reset( new CoarseHierarchyT< double >( Ac, coarsePrm ) );
-    coarseHierarchy_ = hierarchy.get();
-    coarse_          = std::move( hierarchy );
+    coarse_ = std::move( hierarchy );
   }
 
   /// @brief Set up the fine level on the operator A, of ValueType entries (double, or a double B x B block), with its
@@ -2119,15 +2125,16 @@ private:
     SetupStage                      stage( *this, "galerkin P^T A P" );
     std::shared_ptr< ScalarMatrix > Ac = amgcl::backend::product( PT, *amgcl::backend::product( A, P ), true );
     ScalarCsr                       coarseOperator;
+    // a Dirichlet coarse DOF's row is the identity row alone, whatever the product stores there: its column of P is
+    // zero, so its row of P^T A P is too
     coarseOperator.ptr.assign( nCoarse_ + 1, 0 );
     for ( ptrdiff_t i = 0; i < nCoarse_; ++i )
-      coarseOperator.ptr[i + 1] = coarseOperator.ptr[i] + static_cast< int >( Ac->ptr[i + 1] - Ac->ptr[i] ) +
-                                  ( coarseIsDirichlet_[i] ? 1 : 0 );
+      coarseOperator.ptr[i + 1] = coarseOperator.ptr[i] +
+                                  ( coarseIsDirichlet_[i] ? 1 : static_cast< int >( Ac->ptr[i + 1] - Ac->ptr[i] ) );
     coarseOperator.col.resize( coarseOperator.ptr[nCoarse_] );
     coarseOperator.val.resize( coarseOperator.ptr[nCoarse_] );
 #pragma omp parallel for
     for ( ptrdiff_t i = 0; i < nCoarse_; ++i ) {
-      // a Dirichlet coarse DOF has an empty row in P^T A P: its column of P is zero
       int head = coarseOperator.ptr[i];
       if ( coarseIsDirichlet_[i] ) {
         coarseOperator.col[head] = static_cast< int >( i );

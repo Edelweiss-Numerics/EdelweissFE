@@ -464,6 +464,15 @@ def test_an_invalid_smoother_raises_before_any_build():
             PyAMGCLCornerNodeTwoLevelCycle({"amgcl": amgclTree, **parameters})
 
 
+def test_the_coarse_operator_is_held_by_the_coarse_solve_not_by_the_cycle(problem):
+    """The corner-node cycle's coarse solve is a callable (a component of the composed solver), so the cycle returns
+    A_c from build() and holds none to inspect."""
+    As, scaling, coords, isCorner, edgeEndpoints, r = problem
+    preconditioner, _, _ = _built(As, scaling, isCorner, edgeEndpoints)
+    with pytest.raises(RuntimeError, match="holds the coarse operator"):
+        preconditioner._preconditioner.coarseOperator()
+
+
 def test_a_build_without_a_coarse_solve_raises():
     from edelweissfe.linsolve.amgcl.amgcl import PyAMGCLCornerNodeTwoLevelCycle
 

@@ -95,10 +95,12 @@ namespace amgcl {
           p( Backend::create_vector( backend::rows( A ), backend_prm ) ),
           r( Backend::create_vector( backend::rows( A ), backend_prm ) )
       {
+        // with scale, the inverse diagonal of A: computed once, for the estimate of rho(D^-1 A) and the smoother
+        auto inverseDiagonal = prm.scale ? backend::diagonal( A, /*invert*/ true ) : nullptr;
         if ( prm.scale )
-          M = Backend::copy_vector( backend::diagonal( A, /*invert*/ true ), backend_prm );
+          M = Backend::copy_vector( inverseDiagonal, backend_prm );
         scalar_type hi = static_cast< scalar_type >(
-          backend::estimated_spectral_radius( A, prm.spectralRadius, prm.scale ) );
+          backend::estimated_spectral_radius( A, prm.spectralRadius, inverseDiagonal.get() ) );
         const scalar_type lo = hi * prm.lower;
         hi *= prm.higher;
         d = 0.5 * ( hi + lo );
@@ -234,21 +236,29 @@ namespace amgcl {
       typedef typename smoothed_aggregation< Backend >::params Base;
 
       /// @brief How rho(D^-1 A) is estimated.
-      spectral_radius_estimate spectralRadius = spectral_radius_estimate::byDefault();
+      spectral_radius_estimate spectralRadius;
 
-      smoothed_aggregation_estimate_params() {}
+      smoothed_aggregation_estimate_params() : spectralRadius( spectral_radius_estimate::byDefault() ) {}
 
-      smoothed_aggregation_estimate_params( boost::property_tree::ptree p )
-        : Base( without_estimate( p, spectralRadius ) )
+      /// @brief From a parameter tree: the keys of the estimate to spectralRadius, the rest to AMGCL's parameters.
+      /// (Each member is initialized from p itself: a base-class initializer that wrote to spectralRadius would be
+      /// overwritten by the member's own initialization, which runs after it.)
+      smoothed_aggregation_estimate_params( const boost::property_tree::ptree& p )
+        : Base( without_estimate( p ) ), spectralRadius( estimate_of( p ) )
       {
       }
 
     private:
-      /// @brief p without the keys of the estimate, which go to how (AMGCL's parameters would warn about them).
-      static boost::property_tree::ptree without_estimate( boost::property_tree::ptree p,
-                                                           spectral_radius_estimate&   how )
+      /// @brief How p says rho(D^-1 A) is estimated.
+      static spectral_radius_estimate estimate_of( boost::property_tree::ptree p )
       {
-        how = spectral_radius_estimate::take( p, "coarsening" );
+        return spectral_radius_estimate::take( p, "coarsening" );
+      }
+
+      /// @brief p without the keys of the estimate (AMGCL's parameters would warn about them).
+      static boost::property_tree::ptree without_estimate( boost::property_tree::ptree p )
+      {
+        spectral_radius_estimate::take( p, "coarsening" );
         return p;
       }
     };
