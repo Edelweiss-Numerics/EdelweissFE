@@ -455,10 +455,17 @@ class Preconditioner:
 
     @property
     def containsKrylovSolver(self) -> bool:
-        """Whether this component is, or has among its children, a Krylov solver. A Krylov solver reuses its
-        preconditioner across solves (so the nonlinear solver keeps the sparsity pattern of the matrix stable) and
-        records each solve (the "linear solve" column); a direct solve does neither."""
+        """Whether this component is, or has among its children, a Krylov solver. A Krylov solver records each solve
+        (the "linear solve" column of the nonlinear solver); a direct solve does not."""
         return any(child.containsKrylovSolver for _, child in self.children())
+
+    @property
+    def reusesPreconditioner(self) -> bool:
+        """Whether this component is, or has among its children, a Krylov solver that keeps its preconditioner across
+        solves (:class:`~edelweissfe.linsolve.composition.krylov.RebuildPolicy` with ``reuse``). A new sparsity
+        pattern forces a rebuild that such a solver would have saved, so the nonlinear solver then keeps the pattern
+        stable (:attr:`~edelweissfe.linsolve.base.LinearSolver.needsStableSparsityPattern`)."""
+        return any(child.reusesPreconditioner for _, child in self.children())
 
     def setModel(self, model, dofManager) -> None:
         """Take a new model (the first, or one after a change of the mesh), and hand it to the children. A component

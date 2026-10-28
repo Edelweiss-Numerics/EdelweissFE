@@ -116,10 +116,12 @@ The MPC condensation is skipped entirely while no multi-point constraint has a r
 This matters for hierarchy reuse: the condensed matrix would be pruned of exact zeros
 (``pruneCondensedMatrixZeros``, a nonlinear-solver option), which changes its sparsity pattern from
 one Newton iteration to the next, and a changed pattern forces a hierarchy rebuild (step (4) below).
-Left unset, that option is automatic and leaves pruning off for a linear solver with a Krylov solve in its tree
-(it reports :attr:`~edelweissfe.linsolve.base.LinearSolver.needsStableSparsityPattern`), so this cost is not paid
-by default; an explicit ``pruneCondensedMatrixZeros = true`` in the nonlinear solver's own
-configuration would still force it. The uncondensed matrix keeps the assembler's fixed pattern.
+Left unset, that option is automatic: it leaves pruning off for a linear solver whose Krylov solve reuses its
+preconditioner (``RebuildPolicy(reuse=True)``; the solver reports
+:attr:`~edelweissfe.linsolve.base.LinearSolver.needsStableSparsityPattern`), and prunes for one that builds a new
+preconditioner for every solve (the default), which a changed pattern costs nothing. An explicit
+``pruneCondensedMatrixZeros = true`` or ``false`` in the nonlinear solver's own configuration overrides the choice.
+The uncondensed matrix keeps the assembler's fixed pattern.
 
 Beyond that matrix and right-hand side, the linear solver is told nothing about the Newton loop -- like
 every registered linear solver it is called as ``(A, b) -> x``. Both of its stateful mechanisms
@@ -781,10 +783,10 @@ iterations, and then the sparsity pattern -- and with it the nonzero count -- ch
 hierarchies are rebuilt. How often that happens depends on the model: the multi-point condensation
 would otherwise drop exact zeros (``pruneCondensedMatrixZeros``, a nonlinear-solver option), which
 changes the count on almost every Newton iteration even when the constraint set does not; left unset,
-that option's "auto" default already leaves pruning off here, because a solver with a Krylov solve reports
-:attr:`~edelweissfe.linsolve.base.LinearSolver.needsStableSparsityPattern`, so reuse pays on such
-models without any extra configuration (on a contact model with many multi-point constraint slaves,
-a configuration relying on it ran noticeably faster than with pruning on).
+that option's "auto" default leaves pruning off whenever the hierarchies are reused, because a solver whose Krylov
+solve reuses its preconditioner reports :attr:`~edelweissfe.linsolve.base.LinearSolver.needsStableSparsityPattern`,
+so reuse pays on such models without any extra configuration (on a contact model with many multi-point constraint
+slaves, a configuration relying on it ran noticeably faster than with pruning on).
 
 The native LGMRES instance is deliberately *not* torn down on a hierarchy refresh -- only on an
 actual system-size change, which invalidates AMGCL's preallocated scratch vectors. (A hot reload of a ``custom``

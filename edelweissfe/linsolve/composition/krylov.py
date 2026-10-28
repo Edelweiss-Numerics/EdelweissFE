@@ -370,6 +370,10 @@ class KrylovSolver(Preconditioner):
         return True
 
     @property
+    def reusesPreconditioner(self) -> bool:
+        return self.rebuild.reuse or super().reusesPreconditioner
+
+    @property
     def isFixedLinearOperator(self) -> bool:
         return False
 

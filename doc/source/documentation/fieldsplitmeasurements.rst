@@ -623,9 +623,9 @@ contact anchor model with many multi-point-constraint slaves):
   the continuations of the scaled system have nothing to do and are left at their own, otherwise
   inert, defaults.
 * ``pruneCondensedMatrixZeros`` (a nonlinear-solver option, not a component's) now defaults to
-  "off for a solver that needs the pattern stable", and a solver with a Krylov solve reports exactly that -- so on a
-  model with multi-point constraints the hierarchies can be reused (``reuse=True``) without more settings; the former
-  setup needed this set by hand (see the reuse rules on :doc:`blockamgtheory`).
+  "off for a solver that needs the pattern stable", and a solver whose Krylov solve reuses its preconditioner reports
+  exactly that -- so on a model with multi-point constraints the hierarchies can be reused (``reuse=True``) without
+  more settings; the former setup needed this set by hand (see the reuse rules on :doc:`blockamgtheory`).
 
 Measured live, from the same checkpoints, the defaults against the former defaults (no per-model settings in
 either run): the contact model's increments finished markedly faster; on the damage cylinder, the

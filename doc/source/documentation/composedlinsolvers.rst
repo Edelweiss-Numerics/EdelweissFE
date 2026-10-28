@@ -360,8 +360,9 @@ leaf; override a method only in the case named:
   releases it here, so that no copy of the last matrix is kept while the nonlinear solver assembles the next one.
 * ``isFixedLinearOperator``: false for a component whose :math:`M^{-1} r` is not one fixed linear operator between two
   set-ups (a Krylov solve inside); ``LGMRES`` refuses such a preconditioner, ``FGMRES`` takes it.
-* ``containsKrylovSolver``: true for a Krylov solver (the nonlinear solver then keeps the sparsity pattern stable,
-  and the solve is recorded in the "linear solve" column).
+* ``containsKrylovSolver``: true for a Krylov solver (the solve is recorded in the "linear solve" column).
+* ``reusesPreconditioner``: true for a Krylov solver that keeps its preconditioner across solves
+  (``RebuildPolicy(reuse=True)``); the nonlinear solver then keeps the sparsity pattern stable.
 * ``builtMatrices()``, ``solveRecord()``, ``condensedDofs()``: the matrices a component formed (for ``views.spy``),
   what its last Krylov solve did, and the dofs a Schur complement condensed (for the dumps).
 
