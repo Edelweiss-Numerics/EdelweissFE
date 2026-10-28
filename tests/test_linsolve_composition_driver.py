@@ -149,7 +149,14 @@ def test_a_field_on_elements_of_an_unknown_topology_gets_the_rigid_body_cycle():
     """A quadratic element the corner-node interpolation does not know (a Tet10, 10 nodes in 3D): the solver finds no
     midside corners for its field, says so once in the log, and the preset gives the rigid-body cycle (it raised before
     #246's review)."""
-    nodes = [SimpleNamespace(label=i, fields={"displacement": True}, coordinates=np.zeros(3)) for i in range(10)]
+
+    class Node:
+        """A node as the topology pass reads it (a dict key, so hashable)."""
+
+        fields = {"displacement": True}
+        coordinates = np.zeros(3)
+
+    nodes = [Node() for _ in range(10)]
     tet10 = SimpleNamespace(nodes=nodes, fields=[["displacement"]] * 10, nSpatialDimensions=3)
     model = SimpleNamespace(nodeFields={"displacement": SimpleNamespace(nodes=nodes, dimension=3)}, elements={1: tet10})
     solver, journal = _driven(blockAMG(), [], verbosity="info")
