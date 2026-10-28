@@ -671,7 +671,8 @@ cdef class PyAMGCLCornerNodeTwoLevelCycle(_PyAMGCLTwoLevelCycle):
         try:
             return _PyAMGCLTwoLevelCycle.applyPreconditioner(self, r)
         except RuntimeError:
-            self.coarseSolve.raisePending()
+            if self.coarseSolve is not None:
+                self.coarseSolve.raisePending()
             raise
 
     @property
@@ -706,8 +707,6 @@ cdef class PyAMGCLCornerNodeTwoLevelCycle(_PyAMGCLTwoLevelCycle):
         scaling: (n,) float64, the diagonal of D: the weights of the prolongation.
         isCorner: (nNodes,) bool/int8; edgeEndpoints: (nNodes, 2) int, read for midside nodes only.
         """
-        if self.coarseSolve is None:
-            raise ValueError("PyAMGCLCornerNodeTwoLevelCycle: set the coarse solve (setCoarseSolve) before the build")
         A, indptr, indices, data = _csrArrays(A, sortIndices=True)
         s = np.ascontiguousarray(scaling, dtype=np.float64).reshape(-1)
         if s.shape[0] != A.shape[0]:
