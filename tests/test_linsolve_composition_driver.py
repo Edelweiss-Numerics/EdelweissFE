@@ -152,7 +152,7 @@ def test_the_continuations_on_the_scaled_system_are_logged_at_debug():
         lambda: AMG(dropTolerance=-1.0),
         lambda: AMG(backendPrecision="half"),
         lambda: AMG(backendBlockSize=2, backendPrecision="float"),
-        lambda: TwoLevel(RigidBodyModesPerAggregate(), coarseHierarchyPrecision="half"),
+        lambda: RigidBodyModesPerAggregate(coarseHierarchyPrecision="half"),
         lambda: SolveDumps("unused", maxDumps=-1),
         lambda: ComposedLinearSolver(blockAMG(), verbosity="loud"),
         lambda: ComposedLinearSolver(blockAMG(), residualGrowthFactor=1.0),
