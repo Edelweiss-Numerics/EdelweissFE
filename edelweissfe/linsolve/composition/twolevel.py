@@ -277,7 +277,7 @@ class CornerNodeInterpolation(CoarseSpace):
             fineDominantVector=fineDominantVector,
             **_withoutCoarseHierarchy(cycle),
         )
-        with performancetiming.timeit("{:} corner-node two-level cycle build".format(field.name)):
+        with performancetiming.timeit("{:} corner-node cycle build".format(field.name)):
             A_c = built.build(matrix, context.scalingOf(slice(None)))
         if A_c.shape[0] > 0:
             self.coarseSolve.setUp(SystemMatrix(A_c), context.ofCoarseNodes(field, built.coarseNodes))
