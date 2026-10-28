@@ -43,8 +43,8 @@ with :math:`A_c^{-1}` approximated. The coarse space decides what the cycle can 
 - :class:`CornerNodeInterpolation`: the linear interpolant of a quadratic field from its corner nodes (P1);
   :math:`A_c^{-1}` is a component of its own, by default
   ``DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModesPerAggregate(), tree=...))`` on the corner-node field -- three
-  levels: quadratic, linear, rigid-body modes of aggregates. Both of its levels smooth with the smoother of the
-  corner-node two-level cycle, a Chebyshev polynomial of degree 8 instead of 16
+  levels: quadratic, linear, rigid-body modes of aggregates. On a vector field both of its levels smooth with the
+  smoother of the corner-node two-level cycle, a Chebyshev polynomial of degree 8 instead of 16
   (:func:`~edelweissfe.linsolve.composition.amg.defaultCornerNodeTwoLevelTree`).
 
 Why "two-level": the component is the fine level and one coarse correction, and its coarse problem is solved inexactly.
@@ -228,10 +228,10 @@ class CornerNodeInterpolation(CoarseSpace):
     as its scaling, an identity row for each Dirichlet coarse dof
     (:meth:`~edelweissfe.linsolve.composition.base.SetUpContext.ofCoarseNodes`).
 
-    The corner-node two-level cycle smooths with a weaker Chebyshev polynomial than an AMG hierarchy: a
+    The corner-node two-level cycle smooths a vector field with a weaker Chebyshev polynomial than an AMG hierarchy: a
     :class:`TwoLevel` on this coarse space that is given no tree, and the rigid-body coarse level of the default coarse
-    solve, take :func:`~edelweissfe.linsolve.composition.amg.defaultCornerNodeTwoLevelTree` (degree 8 instead of 16). A
-    tree given to either replaces it.
+    solve, take :func:`~edelweissfe.linsolve.composition.amg.defaultCornerNodeTwoLevelTree` (degree 8 instead of 16); a
+    scalar field keeps the default tree of its dimension. A tree given to either replaces it.
 
     Parameters
     ----------
@@ -256,9 +256,12 @@ class CornerNodeInterpolation(CoarseSpace):
         self.coarseSolve = coarseSolve
 
     def defaultTree(self, field) -> dict:
-        """The smoother of the corner-node two-level cycle
-        (:func:`~edelweissfe.linsolve.composition.amg.defaultCornerNodeTwoLevelTree`), for a field of any dimension."""
-        return defaultCornerNodeTwoLevelTree()
+        """For a vector field, the smoother of the corner-node two-level cycle
+        (:func:`~edelweissfe.linsolve.composition.amg.defaultCornerNodeTwoLevelTree`), measured on displacement fields;
+        a scalar field keeps the default tree of its dimension, as on any coarse space."""
+        if field.dimension > 1:
+            return defaultCornerNodeTwoLevelTree()
+        return super().defaultTree(field)
 
     def check(self, field, context: SetUpContext, cycle: dict) -> None:
         """It needs the field's midside corners, and parameters the C++ cycle can use."""
@@ -332,9 +335,8 @@ class TwoLevel(Preconditioner):
         with :class:`RigidBodyModesPerAggregate` its coarsening also builds the coarse level, and the whole tree the AMG
         hierarchy below. ``None``: the coarse space's default (:meth:`CoarseSpace.defaultTree`), the default tree of the
         field's dimension (:func:`~edelweissfe.linsolve.composition.amg.defaultFieldTree`) for
-        :class:`RigidBodyModesPerAggregate`, the smoother of the corner-node two-level cycle
-        (:func:`~edelweissfe.linsolve.composition.amg.defaultCornerNodeTwoLevelTree`) for
-        :class:`CornerNodeInterpolation`.
+        :class:`RigidBodyModesPerAggregate`, and for :class:`CornerNodeInterpolation` on a vector field the smoother of
+        the corner-node two-level cycle (:func:`~edelweissfe.linsolve.composition.amg.defaultCornerNodeTwoLevelTree`).
     backendBlockSize, backendPrecision
         The storage of the fine operator and of :math:`P`, :math:`P^T`, as for
         :class:`~edelweissfe.linsolve.composition.amg.AMG`; ``None``: the field's default

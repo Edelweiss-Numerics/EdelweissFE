@@ -496,6 +496,24 @@ def test_the_corner_node_two_level_cycle_smooths_both_of_its_levels_with_its_own
     assert TwoLevel(CornerNodeInterpolation(), tree=given)._cycleParameters(field)["amgclTree"] is given
 
 
+@pytest.mark.parametrize("dimension", [2, 3, 4])
+def test_the_corner_node_two_level_cycle_smooths_a_vector_field_of_any_dimension_with_its_own_smoother(dimension):
+    from edelweissfe.linsolve.composition.amg import defaultCornerNodeTwoLevelTree
+
+    field = FieldBlock("vector", 0, 10 * dimension, dimension)
+    tree = TwoLevel(CornerNodeInterpolation())._cycleParameters(field)["amgclTree"]
+    assert tree == defaultCornerNodeTwoLevelTree() and tree["relax"]["degree"] == 8
+
+
+def test_the_corner_node_two_level_cycle_keeps_the_default_tree_of_a_scalar_field():
+    """The smoother of degree 8 was measured on displacement fields: a scalar field (e.g. a quadratic nonlocal damage
+    field) under the corner-node interpolation keeps the default tree of its dimension, as under any coarse space."""
+    field = FieldBlock("nonlocal damage", 0, 10, 1)
+    assert TwoLevel(CornerNodeInterpolation())._cycleParameters(field)["amgclTree"] == defaultFieldTree(1)
+    given = defaultFieldTree(3)
+    assert TwoLevel(CornerNodeInterpolation(), tree=given)._cycleParameters(field)["amgclTree"] is given
+
+
 # ----- the Schur complement -----
 
 

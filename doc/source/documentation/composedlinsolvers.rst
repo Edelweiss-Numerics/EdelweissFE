@@ -118,8 +118,8 @@ Components
         whose coarse solve is a component on the corner-node field (default
         ``DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModesPerAggregate(), tree=defaultCornerNodeTwoLevelTree()))``,
         :ref:`blockamg-p-multigrid`). Both read the fine Chebyshev smoother from the tree's ``relax``, ``npre`` and
-        ``npost``; without a tree, the default tree of the field (degree 16), and for ``CornerNodeInterpolation`` the smoother of
-        the corner-node two-level cycle (degree 8), on both of its levels (:ref:`composed-default-field-trees`)
+        ``npost``; without a tree, the default tree of the field (degree 16), and for ``CornerNodeInterpolation`` on a vector
+        field the smoother of the corner-node two-level cycle (degree 8), on both of its levels (:ref:`composed-default-field-trees`)
     * - ``SchurComplement(condense, preconditionS, solveA_bb, approximation, dropTolerance, windowNodes, haloNodes,
         blockFactors)``
       - block LU: :math:`z_k = M_{\tilde S}^{-1}(r_k - A_{kb} A_{bb}^{-1} r_b)`,

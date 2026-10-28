@@ -102,8 +102,9 @@ def defaultFieldTree(dimension: int) -> dict:
 
 
 def defaultCornerNodeTwoLevelTree() -> dict:
-    """The default AMGCL tree of the corner-node two-level cycle, ``TwoLevel(coarseSpace=CornerNodeInterpolation())``,
-    and of the rigid-body coarse level of its default coarse solve: the default tree of a vector field
+    """The default AMGCL tree of the corner-node two-level cycle on a vector field,
+    ``TwoLevel(coarseSpace=CornerNodeInterpolation())``, and of the rigid-body coarse level of its default coarse solve
+    (a scalar field keeps :func:`defaultFieldTree`): the default tree of a vector field
     (:data:`_VECTOR_FIELD_TREE`) with the smoother of the corner-node two-level cycle
     (:data:`_CORNER_NODE_TWO_LEVEL_SMOOTHER`). The corner-node two-level cycle reads only the smoother of its tree
     (``relax``, ``npre``, ``npost``), the rigid-body coarse level the whole tree. A copy, as :func:`defaultFieldTree`.

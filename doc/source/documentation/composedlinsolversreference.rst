@@ -313,7 +313,9 @@ So a ``TwoLevel`` on ``CornerNodeInterpolation`` that is given no tree, and the
 rigid-body coarse level of the default coarse solve,
 ``DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModesPerAggregate(), tree=defaultCornerNodeTwoLevelTree()))``, take the vector field's tree
 with a Chebyshev polynomial of degree 8 on the interval from 0.03 to 1.1 times the spectral radius
-(:func:`~edelweissfe.linsolve.composition.amg.defaultCornerNodeTwoLevelTree`), for a field of any dimension:
+(:func:`~edelweissfe.linsolve.composition.amg.defaultCornerNodeTwoLevelTree`), for a vector field of any dimension (a
+scalar field keeps its default tree, ``defaultFieldTree(1)``: the smoother of degree 8 was measured on displacement
+fields only):
 
 .. code-block:: json
 
