@@ -150,25 +150,22 @@ namespace EdelweissFE {
     /// (n entries, not all zero): estimate.steps Arnoldi steps, and |theta| + r of the last step's Ritz pair of largest
     /// modulus. Stops early, with an exact estimate, if the Krylov space becomes invariant.
     /// @param apply y <- A x, for double arrays of n entries
-    /// @param stepsTaken if not null, the Arnoldi steps taken
     template < class Apply >
     double arnoldiSpectralRadius( ptrdiff_t                     n,
                                   std::vector< double >         v,
                                   const SpectralRadiusEstimate& estimate,
-                                  Apply                         apply,
-                                  int*                          stepsTaken = nullptr )
+                                  Apply                         apply )
     {
       const int maxSteps = estimate.steps;
       // inner products over a fixed partition of the rows, the partial sums added in order: the same bits at any thread
-      // count, and from run to run
+      // count, and from run to run; chunk k holds the rows [k n / nChunks, (k + 1) n / nChunks), none of them empty
       const ptrdiff_t       nChunks = std::max< ptrdiff_t >( 1, std::min< ptrdiff_t >( n, 4096 ) );
-      const ptrdiff_t       chunk   = ( n + nChunks - 1 ) / nChunks;
       std::vector< double > partial( nChunks );
       auto                  dot = [&]( const double* a, const double* b ) {
 #pragma omp parallel for schedule( static )
         for ( ptrdiff_t k = 0; k < nChunks; ++k ) {
           double s = 0.0;
-          for ( ptrdiff_t i = k * chunk, e = std::min( n, ( k + 1 ) * chunk ); i < e; ++i )
+          for ( ptrdiff_t i = k * n / nChunks, e = ( k + 1 ) * n / nChunks; i < e; ++i )
             s += a[i] * b[i];
           partial[k] = s;
         }
@@ -211,8 +208,6 @@ namespace EdelweissFE {
           columnSquared += H( i, j ) * H( i, j );
         const bool invariant = !( h > 1e-14 * std::sqrt( columnSquared ) );
         if ( invariant || m == maxSteps ) {
-          if ( stepsTaken )
-            *stepsTaken = m;
           const Eigen::MatrixXd Hm = H.topLeftCorner( m, m );
           ritz                     = largestRitzValue( Hm, H( m, m - 1 ) );
           break;
@@ -256,8 +251,7 @@ namespace EdelweissFE {
       const Matrix&                                                                             A,
       const SpectralRadiusEstimate&                                                             estimate,
       const amgcl::backend::numa_vector< typename amgcl::backend::value_type< Matrix >::type >* inverseDiagonal,
-      const char*                                                                               zeroStart  = nullptr,
-      int*                                                                                      stepsTaken = nullptr )
+      const char*                                                                               zeroStart = nullptr )
     {
       typedef typename amgcl::backend::value_type< Matrix >::type value_type;
       const int                                                   B = EntryBlock< value_type >::rows;
@@ -269,32 +263,27 @@ namespace EdelweissFE {
       for ( ptrdiff_t i = 0; i < n; ++i )
         start[i] = zeroStart && zeroStart[i] ? 0.0 : rowSeededValue( static_cast< uint64_t >( i ) );
 
-      return arnoldiSpectralRadius(
-        n,
-        std::move( start ),
-        estimate,
-        [&]( const double* x, double* y ) {
+      return arnoldiSpectralRadius( n, std::move( start ), estimate, [&]( const double* x, double* y ) {
 #pragma omp parallel for
-          for ( ptrdiff_t i = 0; i < nRows; ++i ) {
-            double s[EntryBlock< value_type >::rows] = {};
-            for ( ptrdiff_t j = A.ptr[i]; j < A.ptr[i + 1]; ++j ) {
-              const double* xc = x + static_cast< ptrdiff_t >( A.col[j] ) * B;
-              for ( int r = 0; r < B; ++r )
-                for ( int c = 0; c < B; ++c )
-                  s[r] += EntryBlock< value_type >::at( A.val[j], r, c ) * xc[c];
-            }
-            for ( int r = 0; r < B; ++r ) {
-              double value = s[r];
-              if ( inverseDiagonal ) {
-                value = 0.0;
-                for ( int c = 0; c < B; ++c )
-                  value += EntryBlock< value_type >::at( ( *inverseDiagonal )[i], r, c ) * s[c];
-              }
-              y[i * B + r] = value;
-            }
+        for ( ptrdiff_t i = 0; i < nRows; ++i ) {
+          double s[EntryBlock< value_type >::rows] = {};
+          for ( ptrdiff_t j = A.ptr[i]; j < A.ptr[i + 1]; ++j ) {
+            const double* xc = x + static_cast< ptrdiff_t >( A.col[j] ) * B;
+            for ( int r = 0; r < B; ++r )
+              for ( int c = 0; c < B; ++c )
+                s[r] += EntryBlock< value_type >::at( A.val[j], r, c ) * xc[c];
           }
-        },
-        stepsTaken );
+          for ( int r = 0; r < B; ++r ) {
+            double value = s[r];
+            if ( inverseDiagonal ) {
+              value = 0.0;
+              for ( int c = 0; c < B; ++c )
+                value += EntryBlock< value_type >::at( ( *inverseDiagonal )[i], r, c ) * s[c];
+            }
+            y[i * B + r] = value;
+          }
+        }
+      } );
     }
 
   } // namespace linsolve
