@@ -246,8 +246,8 @@ micropolar model gets its translations.
 Default field trees
 -------------------
 
-``AMG(amgclTree=...)`` and ``TwoLevel(..., amgclTree=...)`` take a field's AMGCL parameter tree, forwarded to AMGCL verbatim. A
-tree given replaces the default outright, so start from the one that applies
+``AMG(amgclTree=...)`` and ``TwoLevel(..., amgclTree=...)`` take a field's AMGCL parameter tree, plus EdelweissFE's own
+key ``spectralRadiusSteps`` (below). A tree given replaces the default outright, so start from the one that applies
 and change only what is intended. The defaults are, by the field's nodal dimension
 (:func:`~edelweissfe.linsolve.composition.amg.defaultFieldTree` in the code):
 
@@ -304,19 +304,18 @@ A linear 3D displacement field of the ``blockAMG()`` preset gets the rigid-body 
 (``TwoLevel(coarseSpace=RigidBodyModesPerAggregate())``), configured by the same tree: its ``relax`` and ``npre``/``npost`` are the
 fine smoother of the rigid-body coarse level, its ``coarsening`` the aggregation of that level, and the whole tree the
 AMGCL hierarchy below it. Only a genuinely scalar field (nodal dimension 1) gets the plain scalar tree, which predates
-the vector recipe and was never re-tuned against it. Note that AMGCL silently ignores parameter keys it does not
-recognise (warning only on stderr), so check its stderr if an override appears to do nothing.
+the vector recipe and was never re-tuned against it. AMGCL warns on stderr about a parameter key it does not recognise
+and otherwise ignores it, so check its stderr if an override appears to do nothing; a Chebyshev ``relax``,
+EdelweissFE's own, rejects such a key instead.
 
-The corner-node two-level cycle's default tree is another: ``TwoLevel(coarseSpace=CornerNodeInterpolation())`` reads its fine smoother from the
-tree in the same spelling (``relax``, ``npre``, ``npost``; it has no coarsening of its own), and its coarse solve is a
-component of its own, ``CornerNodeInterpolation(coarseSolve=...)``. For the corner-node two-level cycle, degree 16 is stronger than it pays: degree
-8 costs half the products per sweep for fewer than twice the outer iterations (:ref:`measured-corner-node-two-level-smoother`).
-So a ``TwoLevel`` on ``CornerNodeInterpolation`` that is given no tree, and the default coarse solve on its corner-node
-field, take one tree, ``CornerNodeInterpolation.defaultTree(field)``: for a 3D displacement field, the vector field's
-tree with a Chebyshev polynomial of degree 8 on the interval from 0.03 to 1.1 times the spectral radius
-(:func:`~edelweissfe.linsolve.composition.amg.defaultCornerNodeTwoLevelTree`), where it was measured; any other field
-keeps its default tree (``defaultFieldTree(field.dimension)``). For a 3D displacement field the default coarse solve
-is ``DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModesPerAggregate(), amgclTree=defaultCornerNodeTwoLevelTree()))``:
+The corner-node two-level cycle's default tree is another: ``TwoLevel(coarseSpace=CornerNodeInterpolation())`` reads
+its fine smoother from the tree in the same spelling (``relax``, ``npre``, ``npost``; it has no coarsening of its
+own). For the corner-node two-level cycle, degree 16 is stronger than it pays: degree 8 costs half the products per
+sweep for fewer than twice the outer iterations (:ref:`measured-corner-node-two-level-smoother`). So a ``TwoLevel`` on
+``CornerNodeInterpolation`` that is given no tree takes ``CornerNodeInterpolation.defaultTree(field)``: for a 3D
+displacement field, the vector field's tree with a Chebyshev polynomial of degree 8 on the interval from 0.03 to 1.1
+times the spectral radius (:func:`~edelweissfe.linsolve.composition.amg.defaultCornerNodeTwoLevelTree`), where it was
+measured; any other field keeps its default tree (``defaultFieldTree(field.dimension)``):
 
 .. code-block:: json
 
@@ -331,16 +330,19 @@ is ``DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModesPerAggregate(), amgclTre
         "npost": 1
     }
 
-``AMG()`` and ``TwoLevel(coarseSpace=RigidBodyModesPerAggregate())`` alone keep degree 16: there, degree 8 gained nothing. A tree
-given to the corner-node two-level cycle (``TwoLevel(coarseSpace=CornerNodeInterpolation(), amgclTree=...)``) is its fine smoother only; one for its
-coarse level is given with the coarse solve,
-``CornerNodeInterpolation(coarseSolve=DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModesPerAggregate(), amgclTree=...)))``.
+``AMG()`` and ``TwoLevel(coarseSpace=RigidBodyModesPerAggregate())`` alone keep degree 16: there, degree 8 gained
+nothing. Each level has its own tree. One given to the corner-node two-level cycle
+(``TwoLevel(coarseSpace=CornerNodeInterpolation(), amgclTree=...)``) is its fine smoother only; the coarse level has the
+tree of its coarse solve, ``CornerNodeInterpolation(coarseSolve=...)``. The default coarse solve,
+``DiagonalScaling(AMG())``, takes AMG's default tree; the ``blockAMG()`` preset gives a 3D displacement field the same
+smoother on both levels, ``CornerNodeInterpolation(coarseSolve=DiagonalScaling(TwoLevel(coarseSpace=
+RigidBodyModesPerAggregate(), amgclTree=defaultCornerNodeTwoLevelTree())))``.
 
 Every spectral radius in these trees -- of the Chebyshev smoother (``relax``) and of the prolongation smoothing
 (``coarsening`` with ``estimate_spectral_radius``) -- is estimated by ``spectralRadiusSteps`` Arnoldi steps (default
-10) from a start vector seeded per row, the same at any thread count, or adaptively with ``spectralRadiusTolerance``
-and ``spectralRadiusMaxSteps`` (:ref:`blockamg-chebyshev`). The trees leave the default; a tree that sets AMGCL's
-``power_iters`` is refused, since there is no power iteration any more.
+10) from a start vector seeded per row, the same at any thread count (:ref:`blockamg-chebyshev`). The key is
+EdelweissFE's own, read by its Chebyshev smoother and its smoothed aggregation; the trees leave the default. A tree
+that sets AMGCL's ``power_iters``, which the Arnoldi steps replace, is refused.
 
 .. _blockamg-rigid-body-coarse-level-configuration:
 

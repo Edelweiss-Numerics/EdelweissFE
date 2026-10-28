@@ -194,6 +194,14 @@ def test_an_unknown_linsolver_names_the_blocks_and_the_types(tmp_path):
         createLinearSolver("fats", definitions)
 
 
+def test_reuse_preconditioner_is_a_data_line_of_blockamg(tmp_path):
+    """Off by default (a new preconditioner for every solve); ``reusePreconditioner=true`` is
+    ``blockAMG(rebuild=RebuildPolicy(reusePreconditioner=True))``."""
+    definitions = _definitions(tmp_path, "*linearSolver, name=reusing, type=blockamg\nreusePreconditioner=true\n")
+    assert createLinearSolver("reusing", definitions).root.rebuild.reusePreconditioner is True
+    assert createLinearSolver("blockamg", definitions).root.rebuild.reusePreconditioner is False
+
+
 def test_several_right_hand_sides_are_solved_column_by_column():
     """As an arc-length method asks: the columns of a matrix, each with the same set-up."""
     A, b = _system()

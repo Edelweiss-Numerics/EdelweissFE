@@ -142,7 +142,8 @@ def gmresIterations(A, preconditioner) -> int:
     """The iterations of (left-preconditioned, unrestarted) GMRES to a preconditioned relative residual of 1e-10, or
     ``GMRES_CAP + 1`` if it does not reach a true relative residual of 1e-5 within ``GMRES_CAP``. The preconditioned
     residual of left preconditioning can lie far below the true one where the preconditioner amplifies some error (the
-    bending of a slender beam: 1e-8 preconditioned was 3e-5 true there), so it is driven well below the true target."""
+    bending of a slender beam: a preconditioned 1e-8 left the true residual above 1e-5), so it is driven well below the
+    true target."""
     b = np.random.default_rng(7).standard_normal(A.shape[0])
     M = LinearOperator(A.shape, matvec=preconditioner.applyPreconditioner)
     history = []
