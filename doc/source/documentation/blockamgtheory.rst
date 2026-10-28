@@ -1227,6 +1227,9 @@ suite's ``tests/_linsolvesystems.py``:
 .. literalinclude:: ../../../tests/test_blockamg_tutorial.py
    :start-after: # The worked example of the theory page.
 
+The written-out half is for reading: its products run in SciPy, on one thread. For a real model use the composed
+solver (:ref:`composed-performance-of-forms`).
+
 
 Practical guidance
 ------------------

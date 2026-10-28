@@ -1,6 +1,10 @@
 # A two-level cycle spelled out from general components, accelerated by LGMRES: smooth, correct on a coarse space,
 # smooth again. The coarse space is the linear (P1) interpolant on the quadratic elements: the displacements of the
 # corner nodes.
+#
+# For learning: it shows the steps. For production runs use TwoLevel(coarseSpace=CornerNodeInterpolation()), which
+# builds P in C++ and smooths with Chebyshev on a compact copy of the matrix, at about half the wall time
+# (doc: composedlinsolvers, "Which form to use: what each costs").
 import numpy as np
 import scipy.sparse as sp
 

@@ -613,7 +613,10 @@ Per step, on the damage cylinder (32 threads, the median of 15): :math:`P^T r` 1
 threaded, :math:`P z_c` 1.4 against 0.3 ms, :math:`P^T A P` 2.55 against 0.45 s (tunnel lining 6.36 against 1.16 s).
 Of one application of the written-out cycle, 100 ms, the smoother takes 78 ms, the residual of ``Multiplicative``
 7.5 ms (threaded), the coarse correction 7.4 ms; the C++ cycle's whole application takes 36 ms, its fine level stored
-in single-precision 3x3 node blocks, half the bytes per product. What remains of the factor of two is that smoother,
+in single-precision 3x3 node blocks, half the bytes per product. The same C++ cycle on double-precision scalar entries
+(``backendBlockSize=1, backendPrecision="double"``) took 1.1 -- 2 times as long per application as on those blocks
+(32 threads: tunnel lining 0.15 -- 0.17 against 0.10 -- 0.13 s, damage cylinder 0.06 -- 0.08 against 0.035 s, edge
+breakout 0.11 -- 0.12 against 0.06 s). What remains of the factor of two is that smoother,
 and in the set-up the test script's own detection of the Dirichlet rows in NumPy (1.1 -- 2.4 s).
 
 .. _measured-defaults:

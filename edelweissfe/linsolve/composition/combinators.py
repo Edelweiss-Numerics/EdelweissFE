@@ -409,8 +409,8 @@ class CoarseCorrection(Preconditioner):
     With smoothers around it, ``Multiplicative([smoother, CoarseCorrection(P, coarseSolve), smoother])`` is a two-level
     cycle spelled out: any :math:`P`, any coarse solve, at about twice the wall time of the C++ cycle
     :class:`~edelweissfe.linsolve.composition.twolevel.TwoLevel`, whose smoother reads a compact single-precision copy
-    of the matrix; both are kept on purpose (see the "two-level cycle: two ways" section of
-    ``doc/source/documentation/composedlinsolvers.rst``).
+    of the matrix; both are kept on purpose (see the "two-level cycle: two ways" and "which form to use" sections of
+    ``doc/source/documentation/composedlinsolvers.rst``). For production runs, ``TwoLevel``.
 
     Parameters
     ----------
@@ -492,6 +492,10 @@ class CoarseCorrection(Preconditioner):
 
 class Jacobi(Preconditioner):
     """Damped Jacobi, the simplest smoother: :math:`z = \\omega \\operatorname{diag}(A)^{-1} r`.
+
+    A smoother for learning and for small problems; for production runs the Chebyshev smoother of
+    :class:`~edelweissfe.linsolve.composition.twolevel.TwoLevel` and :class:`~edelweissfe.linsolve.composition.amg.AMG`
+    (the "which form to use" section of ``doc/source/documentation/composedlinsolvers.rst``).
 
     Parameters
     ----------
