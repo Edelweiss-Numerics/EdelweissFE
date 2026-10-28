@@ -2122,13 +2122,6 @@ public:
                                 " is not a multiple of the topology map's node count " + std::to_string( nNodes ) +
                                 " -- the map does not match this field." );
     }
-    for ( ptrdiff_t i = 0; i < n; ++i ) {
-      // the weights of P divide by the scaling: a zero or non-finite entry would put Inf/NaN into P and A_c
-      if ( !std::isfinite( scaling[i] ) || scaling[i] == 0.0 ) {
-        throw std::runtime_error( "cornerNodeTwoLevelCycle: the scaling of DOF " + std::to_string( i ) +
-                                  " is zero or not finite" );
-      }
-    }
     const int nDim = nNodes > 0 ? n / nNodes : 0;
     if ( fineBlockSize_ > 1 && n > 0 && nDim != fineBlockSize_ ) {
       throw std::runtime_error( "cornerNodeTwoLevelCycle: backendBlockSize " + std::to_string( fineBlockSize_ ) +
