@@ -90,9 +90,9 @@ def dirichletDofs(coords):
 
 
 def fineChebyshevTree(npre: int = 1, npost: int = 1, degree: int = 5, spectralRadiusSteps: int = None) -> dict:
-    """The AMGCL tree of a corner-node two-level cycle's fine smoother: ``npre`` and ``npost`` Chebyshev sweeps of ``degree`` on
-    [0.01, 1.1] times the spectral radius, estimated by ``spectralRadiusSteps`` Arnoldi steps, or by the default
-    estimate (10 steps) for ``None``."""
+    """The AMGCL tree of a corner-node two-level cycle's fine smoother: ``npre`` and ``npost`` Chebyshev sweeps of
+    ``degree`` on [0.01, 1.1] times the spectral radius, estimated by ``spectralRadiusSteps`` Arnoldi steps, or by the
+    default estimate (10 steps) for ``None``."""
     relax = {"type": "chebyshev", "degree": degree, "lower": 0.01, "higher": 1.1}
     if spectralRadiusSteps is not None:
         relax["spectralRadiusSteps"] = spectralRadiusSteps

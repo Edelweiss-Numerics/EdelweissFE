@@ -36,7 +36,7 @@ differing; the true spectral radius (ARPACK) barely moved between the solves of 
 sensitivity, at 1.5 to 4 s of setup per hierarchy on the systems below.
 
 **The estimate against ARPACK.** Arnoldi and Lanczos from the same row-seeded start vector, on the scaled
-displacement block :math:`D K D` and the re-scaled P1 coarse operator of seven captured systems (asymmetry
+displacement block :math:`D K D` and the re-scaled coarse operator of the corner-node interpolation of seven captured systems (asymmetry
 :math:`\lVert A - A^T \rVert_F / \lVert A \rVert_F` of the free rows up to 0.21), agree to three digits: Arnoldi is
 kept, since it holds for nonsymmetric matrices. Its estimate :math:`\theta + r`, relative to the spectral radius:
 
@@ -66,8 +66,8 @@ on the small coarse levels of a 2D beam of the test suite (650 unknowns) the rig
 GMRES iterations against 6 with 8 or more steps).
 
 **Outer iterations, setup and wall time** (s, mean over 8, 16 and 32 threads, xeon) to 1e-6 on the displacement
-block alone, the 14 systems of :ref:`measured-scaled-p1` and two post-onset cylinder solves (21, 27), for the default
-AMG tree (``AMG()``), the rigid-body coarse level and the scaled P1 interpolation; the sums over the systems:
+block alone, the 14 systems of :ref:`measured-scaled-corner-node-interpolation` and two post-onset cylinder solves (21, 27), for the default
+AMG tree (``AMG()``), the rigid-body coarse level and the scaled corner-node interpolation; the sums over the systems:
 
 .. list-table::
     :width: 100%
@@ -75,8 +75,8 @@ AMG tree (``AMG()``), the rigid-body coarse level and the scaled P1 interpolatio
 
     * - estimate
       - ``AMG()``: its / setup / wall
-      - ``RigidBodyModes``: its / setup / wall
-      - ``P1Interpolation``: its / setup / wall
+      - ``RigidBodyModesPerAggregate``: its / setup / wall
+      - ``CornerNodeInterpolation``: its / setup / wall
       - largest spread of the its over the thread counts
     * - power iteration, 300 (the former default)
       - 596 / 73.8 / 202

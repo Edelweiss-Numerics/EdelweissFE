@@ -295,7 +295,9 @@ def test_a_krylov_solve_on_the_scaled_system_has_blockamgs_numbers_along_a_seque
 
 def test_no_continuations_on_the_scaled_system_has_blockamgs_numbers():
     A, b, fields, coordinates = _beamWithDamage()
-    composed = _composed(coordinates, fields, krylovOnScaledSystem=True, continuations=0, rigidBodyModesPerAggregate=False)
+    composed = _composed(
+        coordinates, fields, krylovOnScaledSystem=True, continuations=0, rigidBodyModesPerAggregate=False
+    )
     _assertSolve(composed, A, b, (19, 0, False, 418.3153141552291), tight=False)
 
 

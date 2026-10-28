@@ -2268,11 +2268,11 @@ private:
 /// the control of tests and measurements, which differs from the rigid-body coarse level in the rotations alone (a test
 /// checks that it reproduces AMGCL's first coarse level to rounding).
 ///
-/// The parameters are those of the cycle (TwoLevelCycleParameters::fromTree(), the spelling of the corner-node two-level cycle too):
-/// backendBlockSize (2 or 3, the components per node), backendPrecision (the storage of the fine level and of P and
-/// P^T: double, or float with 3x3 blocks), coarseHierarchyPrecision (double or float) and the field's AMGCL tree
-/// under "amgcl"; and prolongation ("smoothed" or "tentative"). The tree means what it means to AMGCL's own hierarchy
-/// (with AMGCL's defaults for what it leaves out):
+/// The parameters are those of the cycle (TwoLevelCycleParameters::fromTree(), the spelling of the corner-node
+/// two-level cycle too): backendBlockSize (2 or 3, the components per node), backendPrecision (the storage of the fine
+/// level and of P and P^T: double, or float with 3x3 blocks), coarseHierarchyPrecision (double or float) and the
+/// field's AMGCL tree under "amgcl"; and prolongation ("smoothed" or "tentative"). The tree means what it means to
+/// AMGCL's own hierarchy (with AMGCL's defaults for what it leaves out):
 ///   * relax, npre, npost: the fine smoother, a Chebyshev polynomial (relax.type chebyshev, relax.scale false, its
 ///     spectral radius estimated by Arnoldi steps, amgcl::spectral_radius_estimate) with npre sweeps before and npost
 ///     after the coarse correction;
