@@ -36,7 +36,7 @@ They are the vocabulary of Schwarz methods, and methods which look unrelated sha
   ``Multiplicative([OnField("displacement", M_u), OnField("nonlocal damage", M_d)])``, and block Jacobi their additive
   one, ``Additive([...])``; a symmetric sweep visits the fields forward and back, see :func:`gaussSeidelOrder`;
 - a two-level cycle is a multiplicative combination of a smoother, a coarse correction and the smoother again,
-  ``Multiplicative([Jacobi(), CoarseCorrection(P, coarse), Jacobi()])``.
+  ``Multiplicative([Jacobi(), CoarseCorrection(P, coarseSolve), Jacobi()])``.
 
 This is also the fast way. A combination asks each correction which field it acts on (:attr:`~edelweissfe.linsolve.
 composition.base.Preconditioner.fieldIndex`), and computes the residual of a correction on field :math:`i` only on
@@ -394,18 +394,18 @@ class CoarseCorrection(Preconditioner):
     The coarse solve is a component like any other, set up on :math:`A_c` with a context that says what the coarse
     dofs are. A callable that builds :math:`P` knows that, and returns it with :math:`P`: for the P1 interpolant,
     ``context.ofCoarseNodes(field, isCorner)`` -- the field on its corner nodes, their coordinates -- on which
-    ``DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModes()))`` works as on any displacement field; for coarse dofs
-    that are no nodes, ``context.ofCoarseDofs(nCoarse)``. A fixed :math:`P` says nothing about its columns: its coarse
-    dofs are one field of scalar dofs, ``context.ofCoarseDofs``.
+    ``DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModesPerAggregate()))`` works as on any displacement field; for
+    coarse dofs that are no nodes, ``context.ofCoarseDofs(nCoarse)``. A fixed :math:`P` says nothing about its columns:
+    its coarse dofs are one field of scalar dofs, ``context.ofCoarseDofs``.
 
     :math:`P` acts on the matrix the correction gets. Under a
     :class:`~edelweissfe.linsolve.composition.diagonalscaling.DiagonalScaling` that is :math:`\\hat A = D A D`, whose
     variables are :math:`D^{-1} u`: an interpolation of displacements is then :math:`D^{-1} P_{geo} D_c` (the scaling
-    is ``context.scaling``), as :class:`~edelweissfe.linsolve.composition.twolevel.P1Interpolation` builds it.
+    is ``context.scaling``), as :class:`~edelweissfe.linsolve.composition.twolevel.CornerNodeInterpolation` builds it.
 
-    With smoothers around it, ``Multiplicative([smoother, CoarseCorrection(P, coarse), smoother])`` is a two-level cycle
-    spelled out: any :math:`P`, any coarse solve, but in SciPy and about twice as costly per application as the C++
-    cycle :class:`~edelweissfe.linsolve.composition.twolevel.TwoLevel`, which is kept beside it on purpose (see the
+    With smoothers around it, ``Multiplicative([smoother, CoarseCorrection(P, coarseSolve), smoother])`` is a two-level
+    cycle spelled out: any :math:`P`, any coarse solve, but in SciPy and about twice as costly per application as the
+    C++ cycle :class:`~edelweissfe.linsolve.composition.twolevel.TwoLevel`, which is kept beside it on purpose (see the
     "two-level cycle: two ways" section of ``doc/source/documentation/composedlinsolvers.rst``).
 
     Parameters
@@ -413,16 +413,16 @@ class CoarseCorrection(Preconditioner):
     prolongation
         :math:`P`, a sparse matrix; or a callable ``(A, context) -> (P, coarseContext)`` that builds it for the matrix
         and says what its coarse dofs are.
-    coarse
+    coarseSolve
         :math:`A_c^{-1}`, e.g. a :class:`~edelweissfe.linsolve.composition.direct.DirectSolver`, an
         :class:`~edelweissfe.linsolve.composition.amg.AMG`, or a two-level cycle of its own.
     """
 
-    def __init__(self, prolongation, coarse: Preconditioner):
-        requirePreconditioner("CoarseCorrection", "coarse", coarse)
+    def __init__(self, prolongation, coarseSolve: Preconditioner):
+        requirePreconditioner("CoarseCorrection", "coarseSolve", coarseSolve)
         super().__init__()
         self.prolongation = prolongation
-        self.coarse = coarse
+        self.coarseSolve = coarseSolve
 
     def _forget(self) -> None:
         self.P = None
@@ -450,7 +450,7 @@ class CoarseCorrection(Preconditioner):
                 )
             )
         A_c = self._coarseMatrix(A)
-        self.coarse.setUp(A_c, self.coarseContext)
+        self.coarseSolve.setUp(A_c, self.coarseContext)
         self.statistics.sizes["coarse dofs"] = A_c.shape[0]
 
     def _update(self, A, change) -> None:
@@ -458,24 +458,24 @@ class CoarseCorrection(Preconditioner):
             self.setUp(A, change.context)
             return
         # P stays; A_c follows the matrix, and the coarse solve decides what it keeps (an AMG its hierarchy)
-        self.coarse.update(self._coarseMatrix(A), change.withContext(self.coarseContext))
+        self.coarseSolve.update(self._coarseMatrix(A), change.withContext(self.coarseContext))
 
     def _coarseMatrix(self, A) -> SystemMatrix:
         """:math:`A_c = P^T A P`."""
         return SystemMatrix((self.P.T @ A.matrix() @ self.P).tocsr())
 
     def _apply(self, r: np.ndarray) -> np.ndarray:
-        return self.P @ self.coarse(self.P.T @ r)
+        return self.P @ self.coarseSolve(self.P.T @ r)
 
     def children(self) -> tuple:
-        return (("coarse", self.coarse),)
+        return (("coarseSolve", self.coarseSolve),)
 
     def describe(self) -> Description:
         return Description(
             name="CoarseCorrection",
-            formula="P {coarse} Pᵀ",
-            latex="P \\, {coarse} \\, P^T",
-            steps=(Step("r_c = Pᵀ r"), Step("z_c = A_c⁻¹ r_c,  A_c = Pᵀ A P", "coarse"), Step("z = P z_c")),
+            formula="P {coarseSolve} Pᵀ",
+            latex="P \\, {coarseSolve} \\, P^T",
+            steps=(Step("r_c = Pᵀ r"), Step("z_c = A_c⁻¹ r_c,  A_c = Pᵀ A P", "coarseSolve"), Step("z = P z_c")),
         )
 
 

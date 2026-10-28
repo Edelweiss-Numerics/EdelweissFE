@@ -23,7 +23,7 @@
 #  The full text of the license can be found in the file LICENSE.md at
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
-"""Tests for ``edelweissfe.numerics.p1topology.buildP1Map`` -- the corner/midside
+"""Tests for ``edelweissfe.numerics.p1topology.buildMidsideCorners`` -- the corner/midside
 classification underlying the p-multigrid P1 restriction operator.
 
 Minimal stub objects mirror the real ``Node``/``Element``/``NodeField``/``Model`` interface
@@ -34,7 +34,7 @@ so this stays pure-Python and Cython/Marmot-free.
 import numpy as np
 import pytest
 
-from edelweissfe.numerics.p1topology import buildP1Map, classifyElementTopology
+from edelweissfe.numerics.p1topology import buildMidsideCorners, classifyElementTopology
 
 
 class _FakeNode:
@@ -69,7 +69,7 @@ def test_quad8_isolated_element():
     element = _FakeElement(nodes, nSpatialDimensions=2)
     model = _FakeModel({"displacement": _FakeNodeField(nodes)}, [element])
 
-    isCorner, edgeEndpoints, warnings = buildP1Map(model, "displacement")
+    isCorner, edgeEndpoints, warnings = buildMidsideCorners(model, "displacement")
     assert list(np.nonzero(isCorner)[0]) == [0, 1, 2, 3]
     assert set(edgeEndpoints[4].tolist()) == {0, 1}
     assert set(edgeEndpoints[5].tolist()) == {1, 2}
@@ -84,7 +84,7 @@ def test_hexa20_isolated_element():
     element = _FakeElement(nodes, nSpatialDimensions=3)
     model = _FakeModel({"displacement": _FakeNodeField(nodes)}, [element])
 
-    isCorner, edgeEndpoints, warnings = buildP1Map(model, "displacement")
+    isCorner, edgeEndpoints, warnings = buildMidsideCorners(model, "displacement")
     assert list(np.nonzero(isCorner)[0]) == list(range(8))
     expectedEdges = {
         8: (0, 1),
@@ -117,7 +117,7 @@ def test_amr_corner_wins_over_midside_from_a_different_element():
     allNodes = nodes + linearNodes[1:]
     model = _FakeModel({"displacement": _FakeNodeField(allNodes)}, [quad8, linearElement])
 
-    isCorner, edgeEndpoints, warnings = buildP1Map(model, "displacement")
+    isCorner, edgeEndpoints, warnings = buildMidsideCorners(model, "displacement")
     rowOf4 = allNodes.index(sharedMidNode)
     assert isCorner[rowOf4], "corner status must win over midside status from a different element"
     assert (edgeEndpoints[rowOf4] == -1).all(), "a corner row must not carry edge endpoints"
@@ -128,7 +128,7 @@ def test_contact_facet_without_nspatialdimensions_is_pure_corner():
     facetElement = _FakeElement(facetNodes, nSpatialDimensions=None)
     model = _FakeModel({"displacement": _FakeNodeField(facetNodes)}, [facetElement])
 
-    isCorner, edgeEndpoints, warnings = buildP1Map(model, "displacement")
+    isCorner, edgeEndpoints, warnings = buildMidsideCorners(model, "displacement")
     assert isCorner.all()
     assert (edgeEndpoints == -1).all()
 
@@ -141,7 +141,7 @@ def test_unrecognized_topology_raises():
     weirdElement = _FakeElement(weirdNodes, nSpatialDimensions=3)
     model = _FakeModel({"displacement": _FakeNodeField(weirdNodes)}, [weirdElement])
     with pytest.raises(ValueError):
-        buildP1Map(model, "displacement")
+        buildMidsideCorners(model, "displacement")
 
 
 def test_inconsistent_edge_endpoints_falls_back_to_corner():
@@ -162,7 +162,7 @@ def test_inconsistent_edge_endpoints_falls_back_to_corner():
     allNodes = nodes + otherCorners + otherNodes[5:]
     model = _FakeModel({"displacement": _FakeNodeField(allNodes)}, [quad8, conflicting])
 
-    isCorner, edgeEndpoints, warnings = buildP1Map(model, "displacement")
+    isCorner, edgeEndpoints, warnings = buildMidsideCorners(model, "displacement")
     rowOf4 = allNodes.index(nodes[4])
     assert isCorner[rowOf4], "a genuine edge-endpoint conflict must fall back to corner"
     assert (edgeEndpoints[rowOf4] == -1).all()
@@ -175,7 +175,7 @@ def test_node_without_elements_is_a_corner():
     element = _FakeElement(nodes[:8], nSpatialDimensions=2)
     model = _FakeModel({"displacement": _FakeNodeField(nodes)}, [element])
 
-    isCorner, edgeEndpoints, warnings = buildP1Map(model, "displacement")
+    isCorner, edgeEndpoints, warnings = buildMidsideCorners(model, "displacement")
     assert list(np.nonzero(isCorner)[0]) == [0, 1, 2, 3, 8]
     assert (edgeEndpoints[8] == -1).all()
     assert warnings == []

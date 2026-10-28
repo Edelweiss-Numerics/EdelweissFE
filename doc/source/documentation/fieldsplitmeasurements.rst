@@ -253,19 +253,19 @@ hierarchy on the translations against the rigid-body coarse level for the displa
 * the damage cylinder (0.84 M unknowns, implicit dynamics): simulated time 0.215 against 0.185 in the same time,
   and 7.9 against 12.6 outer iterations per solve. The load agrees to 3e-4 at the same simulated times.
 
-.. _measured-scaled-p1:
+.. _measured-scaled-corner-node-interpolation:
 
-The p-two-grid with scaled weights and a composed coarse solve
---------------------------------------------------------------
+The corner-node two-level cycle with scaled weights and a composed coarse solve
+-------------------------------------------------------------------------------
 
 See :ref:`blockamg-p-multigrid`.
 
 Outer iterations and wall time in seconds (setup included) to a relative residual of 1e-6 on the displacement block
 alone, one cycle per outer iteration, LGMRES (restart 50), 32 threads on a two-socket workstation, from the systems of
-:ref:`measured-rigid-body-coarse-level`: the rigid-body coarse level (``TwoLevel(coarseSpace=RigidBodyModes())``); the
-former p-two-grid with the plain weights :math:`\tfrac12, \tfrac12` and an AMG coarse solve fused into its C++
-cycle (measured on the same machine with the code before the change); ``TwoLevel(coarseSpace=P1Interpolation())`` with its default coarse solve,
-``DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModes()))``, every fine spectral radius from 50 power iterations
+:ref:`measured-rigid-body-coarse-level`: the rigid-body coarse level (``TwoLevel(coarseSpace=RigidBodyModesPerAggregate())``); the
+former corner-node two-level cycle with the plain weights :math:`\tfrac12, \tfrac12` and an AMG coarse solve fused into its C++
+cycle (measured on the same machine with the code before the change); ``TwoLevel(coarseSpace=CornerNodeInterpolation())`` with its default coarse solve,
+``DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModesPerAggregate()))``, every fine spectral radius from 50 power iterations
 (as the first two columns); and the same with the default trees of the time (300 power iterations; the estimate is
 now :ref:`measured-power-iterations`).
 
@@ -275,9 +275,9 @@ now :ref:`measured-power-iterations`).
 
     * - system (unknowns)
       - rigid-body coarse level
-      - former p-two-grid
-      - scaled P1, 50 power iterations
-      - scaled P1, default trees
+      - former corner-node two-level cycle
+      - scaled weights, 50 power iterations
+      - scaled weights, default trees
     * - tunnel lining, elastic (1.37 M)
       - 22 / 9.2
       - 279 / 72.7
@@ -352,8 +352,8 @@ Other coarse solves, with 50 power iterations (iterations / wall s):
     :header-rows: 1
 
     * - system
-      - default: ``DiagonalScaling(TwoLevel(RigidBodyModes()))``
-      - ``TwoLevel(RigidBodyModes())``, :math:`A_c` not scaled again
+      - default: ``DiagonalScaling(TwoLevel(RigidBodyModesPerAggregate()))``
+      - ``TwoLevel(RigidBodyModesPerAggregate())``, :math:`A_c` not scaled again
       - ``DiagonalScaling(AMG(backendBlockSize=1))``, the rigid-body modes of the corners
     * - tunnel lining, elastic
       - 14 / 6.5
@@ -402,7 +402,7 @@ contact anchor model with many multi-point-constraint slaves):
   per simulated time, and the contact model, with more outer iterations at fewer Newton iterations; both
   ran no slower. The translations are the near-null-space of the elastic operator, and help less on a
   softening, indefinite one.
-* **The rigid-body coarse level** for the 3D displacement field (``rigidBodyCoarseLevel``), which holds the rotations
+* **The rigid-body coarse level** for the 3D displacement field (``rigidBodyModesPerAggregate``), which holds the rotations
   the translations cannot: offline, on captured systems of three models and of the testfile deck, never more outer
   iterations than the hierarchy on the translations and up to three times fewer on a bending-dominated one, at a setup
   of up to 1.2 times; live, faster on all three models measured, with the same results (see

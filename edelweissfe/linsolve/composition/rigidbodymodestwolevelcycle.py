@@ -26,7 +26,7 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 """The rigid-body coarse level of a vector field: the cycle of
-``TwoLevel(coarseSpace=RigidBodyModes())`` (:class:`~edelweissfe.linsolve.composition.twolevel.TwoLevel`).
+``TwoLevel(coarseSpace=RigidBodyModesPerAggregate())`` (:class:`~edelweissfe.linsolve.composition.twolevel.TwoLevel`).
 
 Why
 ---
@@ -64,10 +64,10 @@ first coarse level itself, from all rigid-body modes:
    AMGCL hierarchy continues the field's tree, with the R factors of the QR factorizations -- the coefficients of the
    rigid-body modes in the coarse basis -- as its near null-space.
 
-One application is the two-level cycle the p-two-grid (:mod:`~edelweissfe.linsolve.composition.ptwogrid`) uses too:
-restriction of the residual, one V-cycle of the AMGCL hierarchy, prolongation, and the fine Chebyshev sweeps. Everything
-runs in C++: the steps in ``amgcl-rigid-body-coarse-level.hpp``, the cycle in ``amgcl-wrapper.hpp``
-(``RigidBodyCoarseLevelPreconditionerT``).
+One application is the two-level cycle the corner-node interpolation
+(:mod:`~edelweissfe.linsolve.composition.cornernodetwolevelcycle`) uses too: restriction of the residual, one V-cycle of
+the AMGCL hierarchy, prolongation, and the fine Chebyshev sweeps. Everything runs in C++: the steps in
+``amgcl-rigid-body-coarse-level.hpp``, the cycle in ``amgcl-wrapper.hpp`` (``RigidBodyModesTwoLevelCycleT``).
 
 When
 ----
@@ -75,9 +75,9 @@ When
 It is the default of the ``blockAMG()`` preset for the 3D displacement field (of any element type), and pays most where the solves would need many outer iterations although the operator is (nearly) elastic: typically a
 bending-dominated structure. The rigid-body modes are the near null-space of elasticity on the displacement field; a
 rotation field, or any other vector field, has another, so a solver script gives it the coarse level only by name
-(``OnField("displacement", TwoLevel(coarseSpace=RigidBodyModes()))``, e.g. for a 2D displacement field). It needs the
-field's node coordinates (read from the model), and the field's tree configures its smoother, its aggregation and the
-AMGCL hierarchy below it. Its setup costs more than AMGCL's hierarchy on the translations (the
+(``OnField("displacement", TwoLevel(coarseSpace=RigidBodyModesPerAggregate()))``, e.g. for a 2D displacement field). It
+needs the field's node coordinates (read from the model), and the field's tree configures its smoother, its aggregation
+and the AMGCL hierarchy below it. Its setup costs more than AMGCL's hierarchy on the translations (the
 Galerkin product with 6 coarse dofs per aggregate, the larger hierarchy below), so on a model where that converges in a
 few iterations it gains little. The measurements are in :ref:`measured-rigid-body-coarse-level`.
 """
@@ -85,21 +85,21 @@ few iterations it gains little. The measurements are in :ref:`measured-rigid-bod
 import numpy as np
 
 from edelweissfe.linsolve.base import FieldBlock
-from edelweissfe.linsolve.composition.twolevelcycle import TwoLevelPreconditioner
+from edelweissfe.linsolve.composition.twolevelcycle import TwoLevelCycle
 from edelweissfe.linsolve.nullspace import rigidBodyNullspace
 
 
-class RigidBodyCoarseLevelPreconditioner(TwoLevelPreconditioner):
+class RigidBodyModesTwoLevelCycle(TwoLevelCycle):
     """The preconditioner of one vector field with a rigid-body coarse level (see the module docstring): a two-level
-    preconditioner (:class:`~edelweissfe.linsolve.composition.twolevelcycle.TwoLevelPreconditioner`) whose coarse level is spanned
-    by the rigid-body modes of the aggregates. The C++ class takes any near null-space; this class hands it the
+    preconditioner (:class:`~edelweissfe.linsolve.composition.twolevelcycle.TwoLevelCycle`) whose coarse level is
+    spanned by the rigid-body modes of the aggregates. The C++ class takes any near null-space; this class hands it the
     rigid-body modes (:meth:`nearNullspace`).
 
     Parameters
     ----------
     amgclTree, backendBlockSize, backendPrecision
         The parameters of the cycle, see
-        :meth:`~edelweissfe.linsolve.composition.twolevelcycle.TwoLevelPreconditioner.cycleParameters`;
+        :meth:`~edelweissfe.linsolve.composition.twolevelcycle.TwoLevelCycle.cycleParameters`;
         ``backendBlockSize`` is the field's components per node, 3 (6 rigid-body modes per aggregate) or 2 (3). The
         AMGCL tree means what it means to AMGCL's own hierarchy, with AMGCL's defaults for what it leaves out:
         ``relax``, ``npre`` and ``npost`` the fine smoother; ``coarsening`` (smoothed aggregation) the aggregation and
@@ -126,11 +126,11 @@ class RigidBodyCoarseLevelPreconditioner(TwoLevelPreconditioner):
         coarseHierarchyPrecision: str = "double",
         prolongation: str = "smoothed",
     ):
-        from edelweissfe.linsolve.amgcl.amgcl import PyAMGCLRigidBodyCoarseLevel
+        from edelweissfe.linsolve.amgcl.amgcl import PyAMGCLRigidBodyModesTwoLevelCycle
 
         self._blockSize = backendBlockSize
         super().__init__(
-            PyAMGCLRigidBodyCoarseLevel,
+            PyAMGCLRigidBodyModesTwoLevelCycle,
             {
                 **self.cycleParameters(amgclTree, backendBlockSize, backendPrecision),
                 "coarseHierarchyPrecision": coarseHierarchyPrecision,
@@ -162,8 +162,10 @@ class RigidBodyCoarseLevelPreconditioner(TwoLevelPreconditioner):
             dimension, e.g. ``z`` of a 2D field, are ignored): the modes are built from them.
         """
         if coordinates is None:
-            raise ValueError("rigidBodyCoarseLevel: needs the field's node coordinates to build its rigid-body modes")
-        block = FieldBlock("rigidBodyCoarseLevel", 0, A.shape[0], self._blockSize)
+            raise ValueError(
+                "rigidBodyModesTwoLevelCycle: needs the field's node coordinates to build its rigid-body modes"
+            )
+        block = FieldBlock("rigidBodyModesTwoLevelCycle", 0, A.shape[0], self._blockSize)
         self._preconditioner.build(
             A,
             self.nearNullspace(block, coordinates, scaling),

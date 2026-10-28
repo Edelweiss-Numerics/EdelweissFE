@@ -24,7 +24,8 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 """p-multigrid (Galerkin P1 corner-node) preconditioner for one field's diagonal block: the cycle of
-``TwoLevel(coarseSpace=P1Interpolation(coarse))`` (:class:`~edelweissfe.linsolve.composition.twolevel.TwoLevel`).
+``TwoLevel(coarseSpace=CornerNodeInterpolation(coarseSolve))``
+(:class:`~edelweissfe.linsolve.composition.twolevel.TwoLevel`).
 
 Precondition the quadratic operator through its linear (P1) part: :math:`\\nu` Chebyshev sweeps on the field's own
 (scaled) block, restrict the residual through :math:`P^T`, solve on the Galerkin-projected :math:`A_c = P^T A P` with
@@ -62,15 +63,15 @@ The coarse problem is a field of its own
 The coarse solve is a component of the composed solver, set up on :math:`A_c` with the context of the corner-node field
 (:meth:`~edelweissfe.linsolve.composition.base.SetUpContext.ofCoarseNodes`: the same field on the coarse nodes, their
 coordinates, the scaling :math:`D_c`), so that every component works on it unchanged. Its default,
-``DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModes()))``, scales :math:`A_c` to a unit diagonal once more: where a
-midside diagonal is tiny against its corners', the weights :math:`s_a / s_m` reach about 1000,
+``DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModesPerAggregate()))``, scales :math:`A_c` to a unit diagonal once
+more: where a midside diagonal is tiny against its corners', the weights :math:`s_a / s_m` reach about 1000,
 :math:`A_c` inherits entries of that size squared, and the spectral radius the coarse level's own Chebyshev smoother
 works with was measured at :math:`1.8 \\cdot 10^5` instead of about 5. Measurements:
-:ref:`measured-scaled-p1`.
+:ref:`measured-scaled-corner-node-interpolation`.
 
-The cycle runs in C++ (``PTwoGridPreconditionerT`` in ``edelweissfe/linsolve/amgcl/amgcl-wrapper.hpp``, wrapped as
-:class:`~edelweissfe.linsolve.amgcl.amgcl.PyAMGCLPTwoGrid`), OpenMP-threaded throughout, and calls the coarse
-component back once per application.
+The cycle runs in C++ (``CornerNodeTwoLevelCycleT`` in ``edelweissfe/linsolve/amgcl/amgcl-wrapper.hpp``, wrapped as
+:class:`~edelweissfe.linsolve.amgcl.amgcl.PyAMGCLCornerNodeTwoLevelCycle`), OpenMP-threaded throughout, and calls the
+coarse component back once per application.
 
 **Dirichlet handling is load-bearing, do not simplify away.** A field's diagonal block still carries
 its Dirichlet identity rows (production applies Dirichlet elimination upstream of the linear solver), and
@@ -81,10 +82,11 @@ alone was tried and diverged outright. A free midside node whose edge-endpoint c
 only the surviving weight of its free endpoint -- no renormalization (the constrained corner contributes exactly zero
 to a homogeneous Newton correction, which the dropped weight already encodes). A free midside dof whose *both*
 endpoint dofs are constrained (a symmetry plane and a tie on one edge, issue #223) would get an empty row of :math:`P`
--- no coarse correction at all -- so its node becomes a coarse node of its own (:attr:`PTwoGridPreconditioner.coarseNodes`),
-as :func:`~edelweissfe.numerics.p1topology.buildP1Map` makes a node a corner on an AMR edge conflict; it is decided at the
-build, where the Dirichlet rows are known, not in the topology map. A Dirichlet coarse dof is a zero column of :math:`P`
-and an identity row of :math:`A_c`: the coarse field keeps its Dirichlet rows, as the fine one does.
+-- no coarse correction at all -- so its node becomes a coarse node of its own
+(:attr:`CornerNodeTwoLevelCycle.coarseNodes`), as :func:`~edelweissfe.numerics.p1topology.buildMidsideCorners` makes a
+node a corner on an AMR edge conflict; it is decided at the build, where the Dirichlet rows are known, not in the
+topology map. A Dirichlet coarse dof is a zero column of :math:`P` and an identity row of :math:`A_c`: the coarse field
+keeps its Dirichlet rows, as the fine one does.
 
 The C++ implementation does not extract the free submatrix, it decouples the Dirichlet DOFs exactly
 inside the full block layout instead: the fine right-hand side and iterate are kept zero on them (a
@@ -97,26 +99,26 @@ block storage of the fine operator (``fineBlockSize``) on partially constrained 
 import numpy as np
 import scipy.sparse as sp
 
-from edelweissfe.linsolve.composition.twolevelcycle import TwoLevelPreconditioner
+from edelweissfe.linsolve.composition.twolevelcycle import TwoLevelCycle
 from edelweissfe.utils import performancetiming
 
 
-class PTwoGridPreconditioner(TwoLevelPreconditioner):
-    """A p-two-grid preconditioner for one vector field's diagonal block, a two-level preconditioner
-    (:class:`~edelweissfe.linsolve.composition.twolevelcycle.TwoLevelPreconditioner`) whose coarse level is the P1
+class CornerNodeTwoLevelCycle(TwoLevelCycle):
+    """A corner-node two-level cycle for one vector field's diagonal block, a two-level preconditioner
+    (:class:`~edelweissfe.linsolve.composition.twolevelcycle.TwoLevelCycle`) whose coarse level is the P1
     corner nodes, and whose coarse solve is a callable.
 
     Parameters
     ----------
     isCorner, edgeEndpoints
-        This field's P1 topology map (:func:`edelweissfe.numerics.p1topology.buildP1Map`), in the
+        This field's midside corners (:func:`edelweissfe.numerics.p1topology.buildMidsideCorners`), in the
         field's own node order.
     coarseSolve
         The coarse solve, a callable ``r_c -> z_c`` with :math:`z_c \\approx A_c^{-1} r_c`, e.g. a component of the
         composed solver once it is set up on the coarse operator :meth:`build` returns; called once per application.
     amgclTree, backendBlockSize, backendPrecision
         The parameters of the cycle, see
-        :meth:`~edelweissfe.linsolve.composition.twolevelcycle.TwoLevelPreconditioner.cycleParameters`: the fine
+        :meth:`~edelweissfe.linsolve.composition.twolevelcycle.TwoLevelCycle.cycleParameters`: the fine
         Chebyshev smoother is the ``relax``, ``npre`` and ``npost`` of the field's AMGCL tree. With ``npre`` 0 the cycle
         starts with the coarse-grid correction of the right-hand side itself and ends with ``npost`` sweeps: one
         smoother application fewer per cycle than a symmetric one, at the price of a nonsymmetric preconditioner -- of
@@ -136,10 +138,10 @@ class PTwoGridPreconditioner(TwoLevelPreconditioner):
     ):
         self._isCorner = np.ascontiguousarray(isCorner, dtype=np.int8)
         self._edgeEndpoints = np.ascontiguousarray(edgeEndpoints, dtype=np.int32)
-        from edelweissfe.linsolve.amgcl.amgcl import PyAMGCLPTwoGrid
+        from edelweissfe.linsolve.amgcl.amgcl import PyAMGCLCornerNodeTwoLevelCycle
 
         super().__init__(
-            PyAMGCLPTwoGrid,
+            PyAMGCLCornerNodeTwoLevelCycle,
             self.cycleParameters(amgclTree, backendBlockSize, backendPrecision),
         )
         self._preconditioner.setCoarseSolve(coarseSolve)
@@ -174,7 +176,7 @@ class PTwoGridPreconditioner(TwoLevelPreconditioner):
         nNodes = len(self._isCorner)
         if (nNodes == 0) != (n == 0) or (nNodes > 0 and n % nNodes != 0):
             raise ValueError(
-                "ptwogrid: block size {:} is not a multiple of the topology map's node count {:} -- "
+                "cornerNodeTwoLevelCycle: block size {:} is not a multiple of the topology map's node count {:} -- "
                 "the map does not match this field.".format(n, nNodes)
             )
         with performancetiming.timeit("C++ build"):
@@ -193,7 +195,7 @@ class PTwoGridPreconditioner(TwoLevelPreconditioner):
 
     @property
     def coarseNodes(self) -> np.ndarray:
-        """Per node, whether the last build made it a coarse node: the corner nodes of the P1 map, and every midside node
+        """Per node, whether the last build made it a coarse node: the corner nodes, and every midside node
         with a free dof whose two edge-endpoint dofs are both constrained (see the module documentation)."""
         return self._preconditioner.coarseNodes
 

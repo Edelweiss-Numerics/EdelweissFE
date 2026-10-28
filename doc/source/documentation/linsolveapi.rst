@@ -66,8 +66,8 @@ The adapter, the matrix the tree is set up on, the dumps, and the native cycles 
 .. automodule:: edelweissfe.linsolve.composition.twolevelcycle
     :members:
 
-.. automodule:: edelweissfe.linsolve.composition.rigidbodycoarselevel
+.. automodule:: edelweissfe.linsolve.composition.rigidbodymodestwolevelcycle
     :members:
 
-.. automodule:: edelweissfe.linsolve.composition.ptwogrid
+.. automodule:: edelweissfe.linsolve.composition.cornernodetwolevelcycle
     :members:

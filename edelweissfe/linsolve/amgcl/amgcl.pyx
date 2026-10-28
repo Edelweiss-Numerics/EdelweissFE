@@ -362,7 +362,8 @@ cdef class PyAMGCLEquilibratedSystem:
 cdef class _PreconditionerCallback:
     """A Python callable ``r -> M^-1 r`` (a component of the composed solver) as C++ calls it, through
     :func:`_preconditionerCallbackTrampoline`: the preconditioner of AMGCL's outer Krylov solve
-    (:class:`PyAMGCLKrylovSolver`), and the coarse solve of the p-two-grid (:class:`PyAMGCLPTwoGrid`).
+    (:class:`PyAMGCLKrylovSolver`), and the coarse solve of the corner-node two-level cycle
+    (:class:`PyAMGCLCornerNodeTwoLevelCycle`).
 
     A Python exception cannot propagate through the C function-pointer boundary: the trampoline keeps it here
     (:attr:`pendingException`) and returns 1, the C++ side then throws, which ends its loop at once, and the caller
@@ -389,8 +390,8 @@ cdef int _preconditionerCallbackTrampoline(void* ctx, int n, const double* rhs, 
     ``amgcl-wrapper.hpp``'s ``PyPrecondApplyFn``): ``x <- apply(rhs)``.
 
     No manual ``PyObject*`` reference counting is needed: the caller keeps the callback object alive for as long as C++
-    may call it (a Krylov solve for the duration of :meth:`PyAMGCLKrylovSolver.solve`, the p-two-grid for its own
-    lifetime).
+    may call it (a Krylov solve for the duration of :meth:`PyAMGCLKrylovSolver.solve`, the corner-node two-level cycle
+    for its own lifetime).
 
     Declared ``noexcept`` and *not* ``nogil``: every call happens nested inside a C++ call made from a plain ``def``
     method that never releases the GIL (as every AMGCL wrapper method in this module), so it needs no ``with gil:`` on
@@ -579,11 +580,11 @@ cdef object _scipyCsr(const ScalarCsr& csr, int nCols):
     )
 
 
-cdef class _PyAMGCLTwoLevel:
-    """What the two-level preconditioners share (``TwoLevelPreconditioner`` in ``amgcl-wrapper.hpp``): the cycle, the
+cdef class _PyAMGCLTwoLevelCycle:
+    """What the two-level preconditioners share (``TwoLevelCycle`` in ``amgcl-wrapper.hpp``): the cycle, the
     fine spectral radius it was built with, the timings and the report. A derived class creates the C++ object and
     points :attr:`twoLevel` at it; this class owns it (the C++ base class has a virtual destructor)."""
-    cdef TwoLevelPreconditioner* twoLevel
+    cdef TwoLevelCycle* twoLevel
 
     def __dealloc__(self):
         if self.twoLevel != NULL:
@@ -635,14 +636,14 @@ cdef class _PyAMGCLTwoLevel:
         return _scipyCsr(self.twoLevel.coarseOperatorCsr(), self.twoLevel.nCoarse())
 
 
-cdef class PyAMGCLPTwoGrid(_PyAMGCLTwoLevel):
-    """The p-two-grid (P1) preconditioner of :mod:`edelweissfe.linsolve.composition.ptwogrid`, built and applied in
-    C++: Dirichlet detection, the prolongation ``P`` of the scaled variables, the Galerkin coarse operator ``P^T A P``,
-    the fine Chebyshev smoother and the two-level cycle, all OpenMP-threaded. The coarse solve is a Python callable
-    (a component of the composed solver), called back once per cycle. See ``PTwoGridPreconditionerT`` in
+cdef class PyAMGCLCornerNodeTwoLevelCycle(_PyAMGCLTwoLevelCycle):
+    """The corner-node two-level cycle of :mod:`edelweissfe.linsolve.composition.cornernodetwolevelcycle`, built and
+    applied in C++: Dirichlet detection, the prolongation ``P`` of the scaled variables, the Galerkin coarse operator
+    ``P^T A P``, the fine Chebyshev smoother and the two-level cycle, all OpenMP-threaded. The coarse solve is a Python
+    callable (a component of the composed solver), called back once per cycle. See ``CornerNodeTwoLevelCycleT`` in
     ``amgcl-wrapper.hpp`` for the prolongation and the Dirichlet scheme.
     """
-    cdef PTwoGridPreconditioner* preconditioner
+    cdef CornerNodeTwoLevelCycle* preconditioner
     cdef _PreconditionerCallback coarseSolve
 
     def __cinit__(self, dict params):
@@ -653,7 +654,7 @@ cdef class PyAMGCLPTwoGrid(_PyAMGCLTwoLevel):
         """
         cdef bytes json_bytes = json.dumps(params).encode("utf-8")
         cdef const char* c_json = json_bytes
-        self.preconditioner = new PTwoGridPreconditioner(c_json)
+        self.preconditioner = new CornerNodeTwoLevelCycle(c_json)
         self.twoLevel = self.preconditioner
 
     def setCoarseSolve(self, object coarseSolve):
@@ -666,14 +667,14 @@ cdef class PyAMGCLPTwoGrid(_PyAMGCLTwoLevel):
         """One two-level cycle: returns M^-1 r as a new float64 array (Dirichlet rows solved exactly); an exception of
         the coarse solve is raised as it is."""
         try:
-            return _PyAMGCLTwoLevel.applyPreconditioner(self, r)
+            return _PyAMGCLTwoLevelCycle.applyPreconditioner(self, r)
         except RuntimeError:
             self.coarseSolve.raisePending()
             raise
 
     @property
     def coarseNodes(self):
-        """Per node, whether the last build made it a coarse node (a bool array): the corners of the P1 map, and every
+        """Per node, whether the last build made it a coarse node (a bool array): the corner nodes, and every
         midside node with a free DOF between two Dirichlet DOFs of its edge's corners."""
         cdef const vector[signed char]* nodes = &self.preconditioner.coarseNodes()
         if nodes.size() == 0:
@@ -689,8 +690,8 @@ cdef class PyAMGCLPTwoGrid(_PyAMGCLTwoLevel):
         condensation included. Returns a bool array."""
         A, indptr, indices, data = _csrArrays(A)
         mask = np.zeros(A.shape[0], dtype=np.int8)
-        PTwoGridPreconditioner.dirichletRowMask(A.shape[0], _intData(indptr), _intData(indices), _constDoubleData(data),
-                                                _writableByteData(mask))
+        CornerNodeTwoLevelCycle.dirichletRowMask(A.shape[0], _intData(indptr), _intData(indices),
+                                                 _constDoubleData(data), _writableByteData(mask))
         return mask.astype(bool)
 
     def build(self, object A, object scaling, object isCorner, object edgeEndpoints):
@@ -704,7 +705,7 @@ cdef class PyAMGCLPTwoGrid(_PyAMGCLTwoLevel):
         isCorner: (nNodes,) bool/int8; edgeEndpoints: (nNodes, 2) int, read for midside nodes only.
         """
         if self.coarseSolve is None:
-            raise ValueError("PyAMGCLPTwoGrid: set the coarse solve (setCoarseSolve) before the build")
+            raise ValueError("PyAMGCLCornerNodeTwoLevelCycle: set the coarse solve (setCoarseSolve) before the build")
         A, indptr, indices, data = _csrArrays(A, sortIndices=True)
         s = np.ascontiguousarray(scaling, dtype=np.float64).reshape(-1)
         if s.shape[0] != A.shape[0]:
@@ -721,24 +722,25 @@ cdef class PyAMGCLPTwoGrid(_PyAMGCLTwoLevel):
         return _scipyCsr(coarseOperator, coarseOperator.ptr.size() - 1)
 
 
-cdef class PyAMGCLRigidBodyCoarseLevel(_PyAMGCLTwoLevel):
-    """The rigid-body coarse level preconditioner of :mod:`edelweissfe.linsolve.composition.rigidbodycoarselevel`, built
-    and applied entirely in C++ (``RigidBodyCoarseLevelPreconditionerT`` in ``amgcl-wrapper.hpp``, its steps in
-    ``amgcl-rigid-body-coarse-level.hpp``) on the near null-space handed to :meth:`build`: the aggregates, the tentative
-    prolongation, the smoothed prolongation, the Galerkin coarse operator, the AMGCL hierarchy below it, the fine
-    Chebyshev smoother and the cycle, all OpenMP-threaded -- no Python runs inside :meth:`applyPreconditioner`.
+cdef class PyAMGCLRigidBodyModesTwoLevelCycle(_PyAMGCLTwoLevelCycle):
+    """The two-level cycle on the rigid-body modes per aggregate of
+    :mod:`edelweissfe.linsolve.composition.rigidbodymodestwolevelcycle`, built and applied entirely in C++
+    (``RigidBodyModesTwoLevelCycleT`` in ``amgcl-wrapper.hpp``, its steps in ``amgcl-rigid-body-coarse-level.hpp``) on
+    the near null-space handed to :meth:`build`: the aggregates, the tentative prolongation, the smoothed prolongation,
+    the Galerkin coarse operator, the AMGCL hierarchy below it, the fine Chebyshev smoother and the cycle, all
+    OpenMP-threaded -- no Python runs inside :meth:`applyPreconditioner`.
     """
-    cdef RigidBodyCoarseLevelPreconditioner* preconditioner
+    cdef RigidBodyModesTwoLevelCycle* preconditioner
 
     def __cinit__(self, dict params):
         """
         params: {"backendBlockSize": 3, "backendPrecision": "float", "prolongation": "smoothed",
         "coarseHierarchyPrecision": "double", "amgcl": {<the field's AMGCL tree>}}, see
-        ``RigidBodyCoarseLevelPreconditioner`` in ``amgcl-wrapper.hpp``. Validated here, before any build.
+        ``RigidBodyModesTwoLevelCycle`` in ``amgcl-wrapper.hpp``. Validated here, before any build.
         """
         cdef bytes json_bytes = json.dumps(params).encode("utf-8")
         cdef const char* c_json = json_bytes
-        self.preconditioner = makeRigidBodyCoarseLevelPreconditioner(c_json)
+        self.preconditioner = makeRigidBodyModesTwoLevelCycle(c_json)
         self.twoLevel = self.preconditioner
 
     def build(self, object A, object nullspace):

@@ -106,7 +106,7 @@ their defaults; `doc/source/documentation/composedlinsolvers.rst` shows the tree
 | `maxIterations` | 100 | the outer-iteration cap of one solve; a solve that reaches it rebuilds the preconditioner |
 | `krylovOnScaledSystem` | false | the outer solve runs on `A` itself, preconditioned by `D M^-1 D`, so its residual is the true one |
 | `sweeps`, `symmetric` | 1, false | one forward block Gauss-Seidel sweep over the fields per preconditioner application |
-| `rigidBodyCoarseLevel` | true | displacement (3D): a two-level cycle on its rigid-body modes; else (and for the scalar nonlocal damage) one smoothed-aggregation AMG hierarchy |
+| `rigidBodyModesPerAggregate` | true | displacement (3D): a two-level cycle on its rigid-body modes; else (and for the scalar nonlocal damage) one smoothed-aggregation AMG hierarchy |
 | `dropTolerance`, `lumpDroppedEntries` | 0, false | build the field preconditioners on filtered blocks |
 | `verbosity` | **info** (default `warning`) | `silent`, `warning`, `info` or `debug` |
 

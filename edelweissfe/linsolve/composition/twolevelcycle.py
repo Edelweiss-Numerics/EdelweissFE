@@ -23,14 +23,15 @@
 #  The full text of the license can be found in the file LICENSE.md at
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
-"""What the two-level cycles of a vector field (:class:`~edelweissfe.linsolve.composition.twolevel.TwoLevel`) share: the p-two-grid (:mod:`~edelweissfe.linsolve.composition.ptwogrid`) and the rigid-body coarse level
-(:mod:`~edelweissfe.linsolve.composition.rigidbodycoarselevel`).
+"""What the two-level cycles of a vector field (:class:`~edelweissfe.linsolve.composition.twolevel.TwoLevel`) share: the
+corner-node two-level cycle (:mod:`~edelweissfe.linsolve.composition.cornernodetwolevelcycle`) and the rigid-body coarse
+level (:mod:`~edelweissfe.linsolve.composition.rigidbodymodestwolevelcycle`).
 
 Both are one two-level cycle -- fine Chebyshev sweeps on the field's scaled block, and the coarse correction on the
 Galerkin coarse operator -- that differ in their coarse level and coarse solve: the rigid-body coarse level solves with
-an AMGCL hierarchy of its own, the p-two-grid with a component of the composed solver. Both are built and applied in
-C++: the shared cycle is ``TwoLevelPreconditioner`` in ``amgcl-wrapper.hpp``, wrapped as ``_PyAMGCLTwoLevel`` in
-``amgcl.pyx``. :class:`TwoLevelPreconditioner` mirrors those bases here: it creates the C++ object, which validates
+an AMGCL hierarchy of its own, the corner-node two-level cycle with a component of the composed solver. Both are built
+and applied in C++: the shared cycle is ``TwoLevelCycle`` in ``amgcl-wrapper.hpp``, wrapped as ``_PyAMGCLTwoLevelCycle``
+in ``amgcl.pyx``. :class:`TwoLevelCycle` mirrors those bases here: it creates the C++ object, which validates
 every parameter, keeps the fine spectral radius a build may start from, and passes the cycle, the fine spectral radius a
 build ends with, the timings and the report through. A derived class chooses the parameters and builds its coarse level,
 in its ``build``, from what that coarse level needs.
@@ -39,7 +40,7 @@ in its ``build``, from what that coarse level needs.
 import numpy as np
 
 
-class TwoLevelPreconditioner:
+class TwoLevelCycle:
     """A two-level preconditioner of one vector field's equilibrated diagonal block, built once per hierarchy refresh and
     applied many times within the outer Krylov solve, with the ``build`` / ``applyPreconditioner`` life cycle of
     :class:`~edelweissfe.linsolve.amgcl.amgcl.PyAMGCLSolver`.

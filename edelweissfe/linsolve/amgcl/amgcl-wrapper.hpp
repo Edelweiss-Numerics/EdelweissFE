@@ -1040,17 +1040,17 @@ inline OuterKrylovSolver* makeOuterKrylovSolver( const std::string& method, int 
   throw std::runtime_error( "makeOuterKrylovSolver(): unknown method '" + method + "' (lgmres, fgmres)" );
 }
 
-// --- two-level preconditioners: the p-two-grid (P1) and the rigid-body coarse level -------------------------------
+// --- two-level cycles: on the corner nodes and on the rigid-body modes per aggregate ---------------------------------
 //
-// Two preconditioners of one vector field's diagonal block share the two-level cycle of TwoLevelPreconditioner, in
-// C++ throughout: the p-multigrid two-level cycle of edelweissfe/linsolve/composition/ptwogrid.py
-// (PTwoGridPreconditionerT, its coarse level the P1 corner nodes) and the rigid-body coarse level of
-// edelweissfe/linsolve/composition/rigidbodycoarselevel.py (RigidBodyCoarseLevelPreconditionerT, its coarse level a
+// Two preconditioners of one vector field's diagonal block share the two-level cycle TwoLevelCycle, in
+// C++ throughout: the p-multigrid two-level cycle of edelweissfe/linsolve/composition/cornernodetwolevelcycle.py
+// (CornerNodeTwoLevelCycleT, its coarse level the P1 corner nodes) and the rigid-body coarse level of
+// edelweissfe/linsolve/composition/rigidbodymodestwolevelcycle.py (RigidBodyModesTwoLevelCycleT, its coarse level a
 // smoothed aggregation spanned by the rigid-body modes of the aggregates). The cycle: nu fine Chebyshev sweeps, the
 // fine residual, restriction through P^T, the coarse solve on the Galerkin coarse operator A_c = P^T A P, prolongation
 // through P, nu more fine Chebyshev sweeps. Every stage of build() and apply() is OpenMP-threaded. The coarse solve of
-// the rigid-body coarse level is one V-cycle of an AMGCL hierarchy, in C++ too; that of the p-two-grid is a component
-// of the composed solver, called back once per cycle (CallbackCoarseSolve).
+// the rigid-body coarse level is one V-cycle of an AMGCL hierarchy, in C++ too; that of the corner-node two-level cycle
+// is a component of the composed solver, called back once per cycle (CallbackCoarseSolve).
 //
 // Dirichlet handling: the field's diagonal block arrives *with* its Dirichlet identity rows (a row
 // whose only nonzero is its diagonal; stored zeros, which the Dirichlet elimination keeps, do not
@@ -1066,16 +1066,16 @@ inline OuterKrylovSolver* makeOuterKrylovSolver( const std::string& method, int 
 //     whether or not the upstream Dirichlet elimination also cleared the columns A_FD;
 //   * the power iteration starts from a vector that is zero on Dirichlet DOFs, which stays zero by
 //     the same argument, so it estimates the spectral radius of A_FF, not of A;
-//   * P has nothing in the rows of Dirichlet fine DOFs (the p-two-grid no entries, the rigid-body coarse level zero
-//     ones) and nothing in the columns of Dirichlet coarse DOFs, so P^T A P = P_F^T A_FF P_F exactly, but for the rows
-//     and columns of the Dirichlet coarse DOFs: the p-two-grid makes them identity rows of A_c, the Dirichlet rows of
-//     its coarse field.
+//   * P has nothing in the rows of Dirichlet fine DOFs (the corner-node two-level cycle no entries, the rigid-body
+//     coarse level zero ones) and nothing in the columns of Dirichlet coarse DOFs, so P^T A P = P_F^T A_FF P_F exactly,
+//     but for the rows and columns of the Dirichlet coarse DOFs: the corner-node two-level cycle makes them identity
+//     rows of A_c, the Dirichlet rows of its coarse field.
 //
 // This is what makes a node-wise block storage of the fine operator possible at all: a node may
 // be partially constrained, which a free submatrix cannot represent in node-wise blocks, but the
 // full layout always can. For the scalar storage it simply saves the free-submatrix extraction. The
 // result is the free-submatrix cycle up to floating-point summation order (verified in
-// tests/test_ptwogrid.py).
+// tests/test_corner_node_two_level_cycle.py).
 //
 // The fine Chebyshev smoother reimplements amgcl::relaxation::chebyshev's polynomial (same degree,
 // lower/higher conventions, same recurrence; no Jacobi scaling) rather than wrapping it,
@@ -1322,7 +1322,7 @@ public:
   virtual ScalarCsr prolongationCsr() const = 0;
 };
 
-/// @brief P and P^T of scalar entries in double, applied with AMGCL's spmv: the p-two-grid's.
+/// @brief P and P^T of scalar entries in double, applied with AMGCL's spmv: the corner-node two-level cycle's.
 class ScalarTransferOperators : public TransferOperators {
 public:
   /// @brief The storage of P and P^T.
@@ -1419,8 +1419,9 @@ public:
 };
 
 /// @brief The coarse solve as a callback into Python: a component of the composed solver, e.g.
-/// DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModes())) on the coarse operator of the p-two-grid. The callback has
-/// the signature of the preconditioner of the outer Krylov solve (PyPrecondApplyFn): x <- M^-1 rhs.
+/// DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModesPerAggregate())) on the coarse operator of the corner-node
+/// two-level cycle. The callback has the signature of the preconditioner of the outer Krylov solve (PyPrecondApplyFn):
+/// x <- M^-1 rhs.
 class CallbackCoarseSolve : public CoarseSolve {
 public:
   /// @param applyFn, ctx the callback and its opaque context
@@ -1488,7 +1489,7 @@ private:
   std::vector< Real > rhs_, x_;
 };
 
-/// @brief The parameters of the two-level cycle (TwoLevelPreconditioner), read from the parameter tree of both
+/// @brief The parameters of the two-level cycle (TwoLevelCycle), read from the parameter tree of both
 /// two-level preconditioners in one spelling, AMGCL's (fromTree()): the fine smoother is the Chebyshev relaxation of
 /// the field's AMGCL tree, with AMGCL's own defaults for what the tree leaves out, so the defaults of EdelweissFE live
 /// in one place, the default trees in Python (composition/amg.py's defaultFieldTree).
@@ -1574,23 +1575,23 @@ struct TwoLevelCycleParameters {
   }
 };
 
-/// The two-level cycle of one vector field's equilibrated diagonal block A, shared by the p-two-grid
-/// (PTwoGridPreconditionerT) and the rigid-body coarse level (RigidBodyCoarseLevelPreconditionerT), see the comment
+/// The two-level cycle of one vector field's equilibrated diagonal block A, shared by the corner-node two-level cycle
+/// (CornerNodeTwoLevelCycleT) and the rigid-body coarse level (RigidBodyModesTwoLevelCycleT), see the comment
 /// block above: Chebyshev smoothing on A and the coarse correction
 ///
 ///   x <- x + P A_c^-1 P^T (r - A x),   A_c = P^T A P, the Galerkin coarse operator,
 ///
 /// with A_c^-1 a CoarseSolve, nuPre smoothing sweeps before it and nuPost after. A derived class builds the
 /// prolongation P, A_c and the coarse solve -- one V-cycle of an AMGCL hierarchy (buildCoarseHierarchy(), the
-/// rigid-body coarse level), or a callback into a component of the composed solver (the p-two-grid) -- and hands over P
-/// and P^T (TransferOperators); this class does everything else: the Dirichlet rows, the fine level and its spectral
-/// radius, and the cycle (apply()).
-class TwoLevelPreconditioner {
+/// rigid-body coarse level), or a callback into a component of the composed solver (the corner-node two-level cycle) --
+/// and hands over P and P^T (TransferOperators); this class does everything else: the Dirichlet rows, the fine level
+/// and its spectral radius, and the cycle (apply()).
+class TwoLevelCycle {
 public:
   typedef amgcl::backend::crs< double, int, int > ScalarMatrix;
   typedef std::chrono::steady_clock               Clock;
 
-  virtual ~TwoLevelPreconditioner() {}
+  virtual ~TwoLevelCycle() {}
 
   /// @brief The parameter tree given to the constructor, where the derived class reads its parameters from.
   boost::property_tree::ptree prm;
@@ -1771,7 +1772,7 @@ public:
   }
 
 protected:
-  /// @brief The preconditioner's name in messages, e.g. "ptwogrid".
+  /// @brief The preconditioner's name in messages, e.g. "cornerNodeTwoLevelCycle".
   std::string name_;
   /// @brief The parameters of the cycle, checked as the preconditioner is created.
   const TwoLevelCycleParameters cycle_;
@@ -1780,7 +1781,7 @@ protected:
   /// it (TwoLevelCycleParameters::fromTree())
   /// @param name the preconditioner's name in messages
   /// @throws std::runtime_error for cycle parameters that cannot be used
-  TwoLevelPreconditioner( const boost::property_tree::ptree& parameters, const std::string& name )
+  TwoLevelCycle( const boost::property_tree::ptree& parameters, const std::string& name )
     : prm( parameters ), name_( name ), cycle_( TwoLevelCycleParameters::fromTree( parameters, name ) )
   {
   }
@@ -1789,7 +1790,7 @@ protected:
   /// of a build is a scope, `{ SetupStage stage( *this, "aggregates" ); ... }`, or a function that opens with one.
   class SetupStage {
   public:
-    SetupStage( TwoLevelPreconditioner& preconditioner, const std::string& name )
+    SetupStage( TwoLevelCycle& preconditioner, const std::string& name )
       : preconditioner_( preconditioner ), name_( name ), start_( Clock::now() )
     {
     }
@@ -1798,7 +1799,7 @@ protected:
     SetupStage& operator=( const SetupStage& ) = delete;
 
   private:
-    TwoLevelPreconditioner& preconditioner_;
+    TwoLevelCycle&          preconditioner_;
     const std::string       name_;
     const Clock::time_point start_;
   };
@@ -1956,8 +1957,8 @@ private:
   }
 };
 
-/// @brief The p-two-grid preconditioner for one vector field's diagonal block: the two-level cycle of
-/// TwoLevelPreconditioner with the P1 corner nodes as its coarse level, and a callback into a component of the composed
+/// @brief The corner-node two-level cycle for one vector field's diagonal block: the two-level cycle of
+/// TwoLevelCycle with the corner nodes as its coarse level, and a callback into a component of the composed
 /// solver as its coarse solve. build() once per hierarchy refresh -- it returns the coarse operator A_c, on which the
 /// caller sets up that component -- and apply() once per outer Krylov iteration.
 ///
@@ -1970,7 +1971,7 @@ private:
 /// s the diagonal of D, per DOF, and D_c its restriction to the corners. This P reproduces the scaled translations D^-1
 /// t exactly, and A_c = P^T \hat A P = D_c P_geo^T A P_geo D_c is the P1 operator of the physical problem in the
 /// corners' scaled variables: the coarse field's operator, scaled by D_c.
-class PTwoGridPreconditionerT : public TwoLevelPreconditioner {
+class CornerNodeTwoLevelCycleT : public TwoLevelCycle {
 public:
   /// @brief The storage of the fine operator, backendBlockSize: 1 scalar entries, 2 or 3 node-wise blocks of the
   /// field's components.
@@ -1980,7 +1981,9 @@ public:
   /// field's AMGCL tree under "amgcl", backendPrecision) and backendBlockSize (the storage of the fine operator). The
   /// parameters are validated here, so that a bad value fails before build() has spent anything on the prolongation or
   /// the Galerkin product.
-  PTwoGridPreconditionerT( const char* json_params ) : PTwoGridPreconditionerT( parseJsonParameters( json_params ) ) {}
+  CornerNodeTwoLevelCycleT( const char* json_params ) : CornerNodeTwoLevelCycleT( parseJsonParameters( json_params ) )
+  {
+  }
 
   /// @brief The coarse solve, x <- A_c^-1 rhs: a callback and its opaque context, called once per apply().
   void setCoarseSolve( PyPrecondApplyFn applyFn, void* ctx )
@@ -1989,7 +1992,7 @@ public:
     coarseSolveContext_ = ctx;
   }
 
-  /// @brief Per node of the field, whether the last build() made it a coarse node: the corners of the P1 map, and
+  /// @brief Per node of the field, whether the last build() made it a coarse node: the corner nodes, and
   /// every midside node with a free DOF between two Dirichlet DOFs of its edge's corners (see prolongation()). Empty
   /// for a field without a free DOF.
   const std::vector< signed char >& coarseNodes() const { return coarseNodes_; }
@@ -1998,7 +2001,7 @@ public:
   /// @param n, ptr, col, val the field's scaled diagonal block \hat A = D A D (scalar CSR, sorted columns, Dirichlet
   /// identity rows included). Copied; the caller's arrays are not referenced after build().
   /// @param scaling the diagonal of D, n entries: the weights of P (see the class comment)
-  /// @param nNodes, isCorner, edgeEndpoints the P1 topology map (edgeEndpoints: nNodes x 2, row-major; read for
+  /// @param nNodes, isCorner, edgeEndpoints the midside corners (edgeEndpoints: nNodes x 2, row-major; read for
   /// midside nodes only).
   /// @return A_c = P^T \hat A P on all DOFs of the coarse nodes (coarseNodes(), in node order, then DOF), an identity
   /// row for each Dirichlet coarse DOF; empty for a field without a free DOF
@@ -2012,15 +2015,15 @@ public:
                    const int*         edgeEndpoints )
   {
     if ( n < 0 || nNodes < 0 || ( nNodes == 0 ) != ( n == 0 ) || ( nNodes > 0 && n % nNodes != 0 ) ) {
-      throw std::runtime_error( "ptwogrid: block size " + std::to_string( n ) +
+      throw std::runtime_error( "cornerNodeTwoLevelCycle: block size " + std::to_string( n ) +
                                 " is not a multiple of the topology map's node count " + std::to_string( nNodes ) +
                                 " -- the map does not match this field." );
     }
     if ( coarseSolveFn_ == nullptr )
-      throw std::runtime_error( "ptwogrid: no coarse solve -- call setCoarseSolve() before build()" );
+      throw std::runtime_error( "cornerNodeTwoLevelCycle: no coarse solve -- call setCoarseSolve() before build()" );
     const int nDim = nNodes > 0 ? n / nNodes : 0;
     if ( fineBlockSize_ > 1 && n > 0 && nDim != fineBlockSize_ ) {
-      throw std::runtime_error( "ptwogrid: backendBlockSize " + std::to_string( fineBlockSize_ ) +
+      throw std::runtime_error( "cornerNodeTwoLevelCycle: backendBlockSize " + std::to_string( fineBlockSize_ ) +
                                 " needs a field of as many components per node, got " + std::to_string( nDim ) +
                                 " DOFs per node." );
     }
@@ -2060,21 +2063,22 @@ private:
   /// @brief Per coarse DOF, whether it is a Dirichlet DOF (its coarse node's fine DOF is): set by prolongation().
   std::vector< char > coarseIsDirichlet_;
 
-  /// @brief See PTwoGridPreconditionerT(const char*).
-  PTwoGridPreconditionerT( const boost::property_tree::ptree& parameters )
-    : TwoLevelPreconditioner( parameters, "ptwogrid" )
+  /// @brief See CornerNodeTwoLevelCycleT(const char*).
+  CornerNodeTwoLevelCycleT( const boost::property_tree::ptree& parameters )
+    : TwoLevelCycle( parameters, "cornerNodeTwoLevelCycle" )
   {
     fineBlockSize_ = prm.get( "backendBlockSize", 1 );
     if ( fineBlockSize_ < 1 || fineBlockSize_ > 3 ) {
-      throw std::runtime_error( "ptwogrid: backendBlockSize must be 1, 2 or 3, got " +
+      throw std::runtime_error( "cornerNodeTwoLevelCycle: backendBlockSize must be 1, 2 or 3, got " +
                                 std::to_string( fineBlockSize_ ) );
     }
     if ( cycle_.fineValueType == "float" && !storableInFloat( fineBlockSize_ ) ) {
-      throw std::runtime_error( "ptwogrid: 2x2 blocks are stored in double only, got backendPrecision float" );
+      throw std::runtime_error(
+        "cornerNodeTwoLevelCycle: 2x2 blocks are stored in double only, got backendPrecision float" );
     }
     if ( prm.get_child_optional( "coarse" ) ) {
-      throw std::runtime_error( "ptwogrid: the coarse solve is a component of the composed solver "
-                                "(P1Interpolation(coarse=...)), not an AMGCL tree under \"coarse\"" );
+      throw std::runtime_error( "cornerNodeTwoLevelCycle: the coarse solve is a component of the composed solver "
+                                "(CornerNodeInterpolation(coarseSolve=...)), not an AMGCL tree under \"coarse\"" );
     }
   }
 
@@ -2155,7 +2159,7 @@ private:
       for ( int k = 0; k < 2; ++k ) {
         const int endpoint = edgeEndpoints[2 * node + k];
         if ( endpoint < 0 || endpoint >= nNodes || !isCorner[endpoint] ) {
-          throw std::runtime_error( "ptwogrid: midside node " + std::to_string( node ) +
+          throw std::runtime_error( "cornerNodeTwoLevelCycle: midside node " + std::to_string( node ) +
                                     " has an edge endpoint that is not a corner node." );
         }
       }
@@ -2163,7 +2167,8 @@ private:
     // The coarse nodes: the corners, and every midside node with a free DOF whose two edge-endpoint DOFs are both
     // Dirichlet DOFs (issue #223: a symmetry plane and a tie constrain both corners of an edge in one component, its
     // midside stays free). Interpolated from its corners, that DOF would get an empty row of P -- no coarse correction
-    // at all -- so the node is a coarse node of its own, as buildP1Map makes a node a corner on an AMR edge conflict.
+    // at all -- so the node is a coarse node of its own, as buildMidsideCorners makes a node a corner on an AMR edge
+    // conflict.
     coarseNodes_.assign( isCorner, isCorner + nNodes );
     for ( int node = 0; node < nNodes; ++node ) {
       if ( isCorner[node] )
@@ -2250,20 +2255,20 @@ private:
   }
 };
 
-/// The rigid-body coarse level preconditioner of one vector field's equilibrated diagonal block
-/// (TwoLevel(coarseSpace=RigidBodyModes()), edelweissfe/linsolve/composition/rigidbodycoarselevel.py): the two-level
-/// cycle of TwoLevelPreconditioner whose coarse level is a smoothed aggregation spanned, on every aggregate, by a near
-/// null-space of M vectors per node (amgcl-rigid-body-coarse-level.hpp), below which an AMGCL hierarchy continues the
-/// field's own. The interface Cython drives, whatever the number of components per node
-/// (RigidBodyCoarseLevelPreconditionerT).
+/// The two-level cycle on the rigid-body modes per aggregate of one vector field's equilibrated diagonal block
+/// (TwoLevel(coarseSpace=RigidBodyModesPerAggregate()),
+/// edelweissfe/linsolve/composition/rigidbodymodestwolevelcycle.py): the two-level cycle TwoLevelCycle whose coarse
+/// level is a smoothed aggregation spanned, on every aggregate, by a near null-space of M vectors per node
+/// (amgcl-rigid-body-coarse-level.hpp), below which an AMGCL hierarchy continues the field's own. The interface Cython
+/// drives, whatever the number of components per node (RigidBodyModesTwoLevelCycleT).
 ///
 /// It takes the near null-space from Python, n x M and already divided by the equilibration, and is agnostic to what
-/// the vectors are: the rigid-body modes, M = B (B + 1) / 2 (rigidbodycoarselevel.py builds them with nullspace.py's
-/// rigidBodyNullspace()), or the translations, M = B -- AMGCL's own coarse space on the block backend, the control of
-/// tests and measurements, which differs from the rigid-body coarse level in the rotations alone (a test checks that it
-/// reproduces AMGCL's first coarse level to rounding).
+/// the vectors are: the rigid-body modes, M = B (B + 1) / 2 (rigidbodymodestwolevelcycle.py builds them with
+/// nullspace.py's rigidBodyNullspace()), or the translations, M = B -- AMGCL's own coarse space on the block backend,
+/// the control of tests and measurements, which differs from the rigid-body coarse level in the rotations alone (a test
+/// checks that it reproduces AMGCL's first coarse level to rounding).
 ///
-/// The parameters are those of the cycle (TwoLevelCycleParameters::fromTree(), the spelling of the p-two-grid too):
+/// The parameters are those of the cycle (TwoLevelCycleParameters::fromTree(), the spelling of the corner-node two-level cycle too):
 /// backendBlockSize (2 or 3, the components per node), backendPrecision (the storage of the fine level and of P and
 /// P^T: double, or float with 3x3 blocks), coarseHierarchyPrecision (double or float) and the field's AMGCL tree
 /// under "amgcl"; and prolongation ("smoothed" or "tentative"). The tree means what it means to AMGCL's own hierarchy
@@ -2276,7 +2281,7 @@ private:
 ///   * the whole tree, too, for the AMGCL hierarchy below, with eps_strong halved as AMGCL halves it from one level to
 ///     the next and the M coarse DOFs of an aggregate together as one point (aggr.block_size), with the coarse near
 ///     null-space.
-class RigidBodyCoarseLevelPreconditioner : public TwoLevelPreconditioner {
+class RigidBodyModesTwoLevelCycle : public TwoLevelCycle {
 public:
   /// @brief Build everything apply() needs.
   /// @param n, ptr, col, val the field's equilibrated diagonal block \hat A = D A D (scalar CSR, sorted columns,
@@ -2366,8 +2371,8 @@ protected:
 
   /// @brief Parse and check the parameters (see the class comment), so that a bad value fails before build() has
   /// spent anything.
-  RigidBodyCoarseLevelPreconditioner( const boost::property_tree::ptree& parameters )
-    : TwoLevelPreconditioner( parameters, "rigidBodyCoarseLevel" )
+  RigidBodyModesTwoLevelCycle( const boost::property_tree::ptree& parameters )
+    : TwoLevelCycle( parameters, "rigidBodyModesTwoLevelCycle" )
   {
     blockSize_ = prm.get( "backendBlockSize", 3 );
     if ( blockSize_ != 2 && blockSize_ != 3 ) {
@@ -2440,19 +2445,19 @@ private:
   {
     boost::property_tree::ptree tree = childOrEmpty( prm, "amgcl" );
     if ( tree.get( "class", std::string( "amg" ) ) != "amg" ) {
-      throw std::runtime_error( "rigidBodyCoarseLevel: needs an AMG hierarchy, class amg, got class " +
+      throw std::runtime_error( "rigidBodyModesTwoLevelCycle: needs an AMG hierarchy, class amg, got class " +
                                 tree.get< std::string >( "class" ) );
     }
     return tree;
   }
 };
 
-/// @brief The rigid-body coarse level preconditioner of a field of B components per node (B = 2 or 3), see
-/// RigidBodyCoarseLevelPreconditioner. Its build() runs the steps of amgcl-rigid-body-coarse-level.hpp, one private
+/// @brief The two-level cycle on the rigid-body modes per aggregate of a field of B components per node (B = 2 or 3),
+/// see RigidBodyModesTwoLevelCycle. Its build() runs the steps of amgcl-rigid-body-coarse-level.hpp, one private
 /// function each, and the coarse level on M modes per aggregate is a template on M: B (the translations) or
 /// B (B + 1) / 2 (all rigid-body modes), as the near null-space has columns.
 template < int B >
-class RigidBodyCoarseLevelPreconditionerT : public RigidBodyCoarseLevelPreconditioner {
+class RigidBodyModesTwoLevelCycleT : public RigidBodyModesTwoLevelCycle {
 public:
   /// @brief The number of rigid-body modes: B translations and B (B - 1) / 2 rotations.
   enum { RigidBodyModes = B * ( B + 1 ) / 2 };
@@ -2461,9 +2466,9 @@ public:
   /// @brief The fine operator, as the fine level stores it in double.
   typedef typename TwoLevelFineLevelT< FineBlock >::Matrix FineMatrix;
 
-  /// @brief See RigidBodyCoarseLevelPreconditioner.
-  RigidBodyCoarseLevelPreconditionerT( const char* json_params )
-    : RigidBodyCoarseLevelPreconditioner( parseJsonParameters( json_params ) )
+  /// @brief See RigidBodyModesTwoLevelCycle.
+  RigidBodyModesTwoLevelCycleT( const char* json_params )
+    : RigidBodyModesTwoLevelCycle( parseJsonParameters( json_params ) )
   {
   }
 
@@ -2510,7 +2515,7 @@ public:
 private:
   /// @brief The fine operator in node-wise B x B blocks, double: the aggregates, the prolongation, the Galerkin product
   /// and the fine spectral radius are computed on it, then the fine level keeps it (or its float copy). The copy is an
-  /// OpenMP-parallel first touch, which spreads it over the NUMA nodes (see PTwoGridPreconditionerT).
+  /// OpenMP-parallel first touch, which spreads it over the NUMA nodes (see CornerNodeTwoLevelCycleT).
   std::shared_ptr< FineMatrix > blockedFineOperator( int n, const int* ptr, const int* col, const double* val )
   {
     SetupStage stage( *this, "fine operator" );
@@ -2637,15 +2642,15 @@ private:
   }
 };
 
-/// @brief The rigid-body coarse level preconditioner for the parameters (see RigidBodyCoarseLevelPreconditioner), of
-/// the field's backendBlockSize, owned by the caller. It only dispatches: the constructor checks the parameters,
-/// backendBlockSize among them.
+/// @brief The two-level cycle on the rigid-body modes per aggregate for the parameters (see
+/// RigidBodyModesTwoLevelCycle), of the field's backendBlockSize, owned by the caller. It only dispatches: the
+/// constructor checks the parameters, backendBlockSize among them.
 /// @throws std::runtime_error for parameters that cannot be used
-inline RigidBodyCoarseLevelPreconditioner* makeRigidBodyCoarseLevelPreconditioner( const char* json_params )
+inline RigidBodyModesTwoLevelCycle* makeRigidBodyModesTwoLevelCycle( const char* json_params )
 {
   if ( parseJsonParameters( json_params ).get( "backendBlockSize", 3 ) == 2 )
-    return new RigidBodyCoarseLevelPreconditionerT< 2 >( json_params );
-  return new RigidBodyCoarseLevelPreconditionerT< 3 >( json_params );
+    return new RigidBodyModesTwoLevelCycleT< 2 >( json_params );
+  return new RigidBodyModesTwoLevelCycleT< 3 >( json_params );
 }
 
 // The default double-precision wrapper (plain amgcl::backend::builtin<double>, unchanged from before
@@ -2690,8 +2695,8 @@ typedef EquilibratedSystemT EquilibratedSystem;
 
 // AMGCL's own native outer Krylov solves (lgmres, fgmres) are created by makeOuterKrylovSolver(), see above.
 
-// The p-two-grid (P1) preconditioner, see PTwoGridPreconditionerT above.
-typedef PTwoGridPreconditionerT PTwoGridPreconditioner;
+// The corner-node two-level cycle, see CornerNodeTwoLevelCycleT above.
+typedef CornerNodeTwoLevelCycleT CornerNodeTwoLevelCycle;
 
-// The rigid-body coarse level preconditioner is RigidBodyCoarseLevelPreconditioner itself (created by
-// makeRigidBodyCoarseLevelPreconditioner()), see there.
+// The two-level cycle on the rigid-body modes per aggregate is RigidBodyModesTwoLevelCycle itself (created by
+// makeRigidBodyModesTwoLevelCycle()), see there.

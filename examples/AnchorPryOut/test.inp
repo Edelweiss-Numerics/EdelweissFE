@@ -16,9 +16,9 @@
 **  - `useThreadedMPCCondensation=True` (`>>options` on the loading step below): computes the multi-
 **    point-constraint condensation this model's 5 ties require (`T^T K T + C`, every solve) with
 **    the OpenMP-threaded kernel instead of single-threaded SciPy CSR routines.
-**  - Not enabled: the p-two-grid (`TwoLevel(P1Interpolation())`). It was measured on this model only in
+**  - Not enabled: the corner-node two-level cycle (`TwoLevel(CornerNodeInterpolation())`). It was measured on this model only in
 **    its former form -- the plain 1/2, 1/2 weights and an AMG coarse solve -- at parity with the former
-**    default, one AMG hierarchy on the translations. The current form (P1 interpolation of the scaled
+**    default, one AMG hierarchy on the translations. The current form (corner-node interpolation of the scaled
 **    variables, rigid-body coarse solve on the corner-node field) has not been measured on this model.
 **
 ** An earlier version of this file set a fixed, tight tolerance of 1e-8 on the theory that it was just an

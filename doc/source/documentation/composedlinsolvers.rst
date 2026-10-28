@@ -22,11 +22,11 @@ A solver script
 
     # solver.py -- the linear solver of a displacement / nonlocal damage model
     from edelweissfe.linsolve.composition import (
-        AMG, LGMRES, DiagonalScaling, Multiplicative, OnField, RigidBodyModes, TwoLevel,
+        AMG, LGMRES, DiagonalScaling, Multiplicative, OnField, RigidBodyModesPerAggregate, TwoLevel,
     )
 
     # the displacement field: a two-level cycle on the rigid-body modes, AMG below the first coarse level
-    displacement = OnField("displacement", TwoLevel(coarseSpace=RigidBodyModes()))
+    displacement = OnField("displacement", TwoLevel(coarseSpace=RigidBodyModesPerAggregate()))
     # the nonlocal damage field: one AMG hierarchy
     damage = OnField("nonlocal damage", AMG())
 
@@ -114,9 +114,9 @@ Components
     * - ``TwoLevel(coarseSpace, tree, backendBlockSize, backendPrecision, coarseHierarchyPrecision, dropTolerance,
         lumpDroppedEntries)``
       - a two-level cycle with a coarse space of its own (a ``CoarseSpace``): all rigid-body modes per aggregate,
-        ``RigidBodyModes(prolongation)``, or the P1 interpolant of the scaled variables, ``P1Interpolation(coarse)``,
+        ``RigidBodyModesPerAggregate(prolongation)``, or the interpolant from the corner nodes in the scaled variables (P1), ``CornerNodeInterpolation(coarseSolve)``,
         whose coarse solve is a component on the corner-node field (default
-        ``DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModes()))``, :ref:`blockamg-p-multigrid`). Both read the fine
+        ``DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModesPerAggregate()))``, :ref:`blockamg-p-multigrid`). Both read the fine
         Chebyshev smoother from the tree's ``relax``, ``npre`` and ``npost``
     * - ``SchurComplement(condense, preconditionS, solveA_bb, approximation, dropTolerance, windowNodes, haloNodes,
         blockFactors)``
@@ -129,17 +129,17 @@ Components
         per set-up (a singular matrix is reported there) and back-substitutes in every application, so it is as
         cheap inside a Krylov tree as alone; ``type=pardiso`` is ``DirectSolver("pardiso",
         reuseSymbolicFactorization=...)`` alone
-    * - ``CoarseCorrection(P, coarse)``, ``Jacobi(omega)``
+    * - ``CoarseCorrection(P, coarseSolve)``, ``Jacobi(omega)``
       - :math:`P A_c^{-1} P^T` with :math:`A_c = P^T A P`, and :math:`\omega \operatorname{diag}(A)^{-1}`: the pieces
-        of a two-level cycle spelled out, ``Multiplicative([Jacobi(), CoarseCorrection(P, coarse), Jacobi()])``
+        of a two-level cycle spelled out, ``Multiplicative([Jacobi(), CoarseCorrection(P, coarseSolve), Jacobi()])``
         (slow, for learning and new coarse spaces; see :ref:`composed-two-level-two-ways`). ``P`` is a matrix, or a
         callable ``(A, context) -> (P, coarseContext)`` that also says what the coarse dofs are, e.g.
         ``context.ofCoarseNodes(field, isCorner)`` for the P1 interpolant: then the coarse solve may be any solver
-        of a displacement field, ``DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModes()))``
+        of a displacement field, ``DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModesPerAggregate()))``
 
 The combinators show that methods which look unrelated share one structure. Block Gauss--Seidel over the fields *is*
 ``Multiplicative([OnField("displacement", M_u), OnField("nonlocal damage", M_d)])``, and a two-level cycle *is*
-``Multiplicative([smoother, CoarseCorrection(P, coarse), smoother])``. They are also fast: a combination asks each
+``Multiplicative([smoother, CoarseCorrection(P, coarseSolve), smoother])``. They are also fast: a combination asks each
 correction which field it acts on, and forms the residual of a correction on field :math:`i` only on that field's
 rows, :math:`r_i - \sum_{j: z_j \neq 0} A_{ij} z_j`, from the field blocks of the matrix (formed once, in one
 threaded pass, for all corrections).
@@ -158,8 +158,8 @@ A two-level cycle can be written in two ways, and both are kept deliberately:
 
 .. code-block:: python
 
-    TwoLevel(coarseSpace=RigidBodyModes())                                  # the fast way
-    Multiplicative([Jacobi(), CoarseCorrection(P, AMG()), Jacobi()])       # the spelled-out way
+    TwoLevel(coarseSpace=RigidBodyModesPerAggregate())                 # the fast way
+    Multiplicative([Jacobi(), CoarseCorrection(P, AMG()), Jacobi()])   # the spelled-out way
 
 ``TwoLevel`` is a leaf, like ``AMG``: pre-smoothing (Chebyshev), the coarse correction
 :math:`P A_c^{-1} P^T (r - A z)` with :math:`A_c = P^T A P`, and post-smoothing run as one cycle in C++. Use it for
@@ -180,12 +180,12 @@ The testfile deck ``testfiles/edelweiss-only/TwoLevelSpelledOut`` runs the spell
 quadratic elements with the P1 interpolant as the coarse space. Its prolongation callable returns :math:`P` together
 with the context of the coarse dofs, ``context.ofCoarseNodes(field, isCorner)`` -- the displacement field on the corner
 nodes, with their coordinates -- so its coarse solve is the rigid-body coarse level,
-``DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModes()))``, as in ``P1Interpolation``'s default. (A callable whose
+``DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModesPerAggregate()))``, as in ``CornerNodeInterpolation``'s default. (A callable whose
 coarse dofs are no nodes returns ``context.ofCoarseDofs(nCoarse)``, one field of scalar dofs; a fixed matrix :math:`P`
 gets that context.) :math:`P` acts on the matrix the correction is handed: the deck has no ``DiagonalScaling`` above
 the cycle, so its variables are the displacements, and the plain weights :math:`\tfrac12, \tfrac12` are right. Under a
 ``DiagonalScaling`` the variables are :math:`D^{-1} u`, and the same interpolation of displacements is
-:math:`D^{-1} P_{geo} D_c` -- the scaled weights of ``P1Interpolation`` (:ref:`blockamg-p-multigrid`), with :math:`D`
+:math:`D^{-1} P_{geo} D_c` -- the scaled weights of ``CornerNodeInterpolation`` (:ref:`blockamg-p-multigrid`), with :math:`D`
 from ``context.scaling`` and :math:`D_c` from the coarse context's scaling. Unlike ``TwoLevel``, the deck's :math:`P`
 keeps the Dirichlet rows, so a Dirichlet corner dof is no identity row of :math:`A_c`; the coarse solve treats it as
 free, which is still a valid preconditioner. Its smoother is ``Jacobi(omega=0.4)``: damped Jacobi
@@ -196,8 +196,8 @@ for (about 3.7 there), so the default amplifies them and the cycle stalls.
 There is no native Chebyshev component yet, so the spelled-out way cannot reproduce ``TwoLevel`` exactly; a
 ``Chebyshev`` component is issue #237 (https://github.com/Edelweiss-Numerics/EdelweissFE/issues/237). The exception
 goes away once these three pieces exist natively: the compact field-block copy kept by the system matrix, a Chebyshev
-smoother component, and threaded products with :math:`P` in ``CoarseCorrection`` (with ``RigidBodyModes`` and
-``P1Interpolation`` building :math:`P`). Then ``TwoLevel`` is replaced by its spelled-out form.
+smoother component, and threaded products with :math:`P` in ``CoarseCorrection`` (with ``RigidBodyModesPerAggregate`` and
+``CornerNodeInterpolation`` building :math:`P`). Then ``TwoLevel`` is replaced by its spelled-out form.
 
 .. _composed-presets:
 
@@ -209,8 +209,8 @@ of that type (``*linearSolver, type=blockamg``), and in a script ``linearSolver 
 
     LGMRES(
         DiagonalScaling(
-            Multiplicative([OnField(f, M_f) for every field f])   # M_f: TwoLevel(RigidBodyModes()) for a
-        )                                                         # 3D displacement field, else AMG()
+            Multiplicative([OnField(f, M_f) for every field f])   # M_f: TwoLevel(RigidBodyModesPerAggregate())
+        )                                                         # for a 3D displacement field, else AMG()
     )
 
 The corrections are made at the first set-up, for the fields of the model; ``sweeps`` and ``symmetric`` order them
@@ -218,7 +218,7 @@ with ``gaussSeidelOrder``. ``blockAMG(krylovOnScaledSystem=True)`` puts the scal
 (:ref:`composed-scaled-krylov`), ``continuations`` and ``gapCompensation`` go to LGMRES, and ``dropTolerance`` and
 ``lumpDroppedEntries`` to every field (:ref:`composed-drop-tolerance`).
 
-The 3D displacement field gets the rigid-body coarse level, ``TwoLevel(coarseSpace=RigidBodyModes())``: a first coarse
+The 3D displacement field gets the rigid-body coarse level, ``TwoLevel(coarseSpace=RigidBodyModesPerAggregate())``: a first coarse
 level built from all rigid-body modes, rotations included, which a bending-dominated structure needs
 (:ref:`blockamg-rigid-body-coarse-level`). Switch it off where the solves converge in a few outer iterations without
 it -- there it saves little, for a larger setup:
@@ -226,10 +226,10 @@ it -- there it saves little, for a larger setup:
 .. code-block:: edelweiss
 
     *linearSolver, name=translationsOnly, type=blockamg
-    rigidBodyCoarseLevel=false
+    rigidBodyModesPerAggregate=false
 
 A 2D displacement field, or any other vector field, gets the coarse level in a ``custom`` solver script,
-``OnField("displacement", TwoLevel(coarseSpace=RigidBodyModes()))``.
+``OnField("displacement", TwoLevel(coarseSpace=RigidBodyModesPerAggregate()))``.
 
 Everything else -- another tree for a field, the rebuild policy, the parameters of the forcing tolerance or of LGMRES,
 the options of the rigid-body coarse level, the p-multigrid variant, a Schur complement -- is a ``custom`` solver

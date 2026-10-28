@@ -254,7 +254,7 @@ class BlockAMGSchema(LinearSolverSchema):
     """The data lines of ``blockamg``: the arguments of the preset
     :func:`~edelweissfe.linsolve.composition.presets.blockAMG`."""
 
-    rigidBodyCoarseLevel: bool = schemaField(
+    rigidBodyModesPerAggregate: bool = schemaField(
         description=(
             "A 3D displacement field gets the two-level cycle on its rigid-body modes (else one AMG hierarchy, on the "
             "translations)."
@@ -307,7 +307,7 @@ class BlockAMG(LinearSolverType):
     @classmethod
     def tree(cls, configuration: BlockAMGSchema) -> Preconditioner:
         return blockAMG(
-            rigidBodyCoarseLevel=configuration.rigidBodyCoarseLevel,
+            rigidBodyModesPerAggregate=configuration.rigidBodyModesPerAggregate,
             tolerance=None if configuration.tolerance is None else FixedTolerance(configuration.tolerance),
             maxIterations=configuration.maxIterations,
             sweeps=configuration.sweeps,

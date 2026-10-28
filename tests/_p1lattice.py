@@ -26,8 +26,8 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 """A small Hex20-like lattice and its Dirichlet-eliminated, equilibrated 3D vector operator, shared by the
-p-two-grid tests: corner nodes on a cubic grid, one exclusive midside node on every grid edge, in a shuffled
-node order, a vector-Laplacian-like 3x3-coupled operator with a mild non-symmetric part, fully clamped nodes on
+corner-node two-level cycle tests: corner nodes on a cubic grid, one exclusive midside node on every grid edge, in a
+shuffled node order, a vector-Laplacian-like 3x3-coupled operator with a mild non-symmetric part, fully clamped nodes on
 one face and a single constrained component on another (partially constrained nodes)."""
 
 import numpy as np
@@ -90,7 +90,7 @@ def dirichletDofs(coords):
 
 
 def fineChebyshevTree(npre: int = 1, npost: int = 1, degree: int = 5, spectralRadiusSteps: int = None) -> dict:
-    """The AMGCL tree of a p-two-grid's fine smoother: ``npre`` and ``npost`` Chebyshev sweeps of ``degree`` on
+    """The AMGCL tree of a corner-node two-level cycle's fine smoother: ``npre`` and ``npost`` Chebyshev sweeps of ``degree`` on
     [0.01, 1.1] times the spectral radius, estimated by ``spectralRadiusSteps`` Arnoldi steps, or by the default
     estimate (10 steps) for ``None``."""
     relax = {"type": "chebyshev", "degree": degree, "lower": 0.01, "higher": 1.1}
