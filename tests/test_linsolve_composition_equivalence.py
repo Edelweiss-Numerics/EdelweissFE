@@ -349,7 +349,7 @@ def test_the_degradation_dumps_are_blockamgs_on_disk(tmp_path):
     """The files and manifest lines blockamg wrote, for every solve of a sequence (threshold 0: all dumped)."""
     A, b, fields, coordinates = _beamWithDamage()
     composed = ComposedLinearSolver(
-        blockAMG(),
+        blockAMG(rebuild=RebuildPolicy(reusePreconditioner=True)),
         nodeCoordinates={"displacement": coordinates},
         verbosity="silent",
         dumps=SolveDumps(str(tmp_path), threshold=0, maxDumps=20),
