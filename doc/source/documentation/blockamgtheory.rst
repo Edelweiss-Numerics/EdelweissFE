@@ -759,8 +759,9 @@ TwoLevel(coarseSpace=CornerNodeInterpolation()))`` (:class:`~edelweissfe.linsolv
 ``npre`` Chebyshev sweeps on the field's own scaled block :math:`\hat A = D A D`, restriction of the residual through
 :math:`P^\mathsf{T}`, the coarse solve on the Galerkin-projected coarse operator :math:`A_c = P^\mathsf{T} \hat A P`,
 prolongation through :math:`P`, and ``npost`` more Chebyshev sweeps. The coarse space is purely topological -- the
-mesh's corner nodes -- so no re-discretization is involved. Written out, the default is three levels built from
-components:
+mesh's corner nodes -- so no re-discretization is involved. The coarse solve is a component; its default,
+``DiagonalScaling(AMG())``, works on any field. On a 3D displacement field the rigid-body coarse level is faster, three
+levels built from components:
 
 .. code-block:: python
 
@@ -798,14 +799,15 @@ where the Dirichlet rows are known. So every component works on it unchanged: ``
 rigid-body modes of the corners, ``AMG(backendBlockSize=1)`` takes them as its near null-space, ``DirectSolver()``
 solves exactly. It is called back from the C++ cycle once per application.
 
-**Why the default scales the coarse operator once more.** Where a midside diagonal is tiny against its corners' --
-on the edge breakout some differ by a factor of :math:`10^6` -- the weights :math:`s_a / s_m` reach about 1000, and
-:math:`A_c` inherits entries of their square. A two-level cycle on it then smooths with a spectral
-radius of :math:`1.8 \cdot 10^5` instead of about 5. ``DiagonalScaling`` around the coarse solve rescales :math:`A_c`
-to a unit diagonal, :math:`D_2 A_c D_2` with :math:`D_2 = |\operatorname{diag} A_c|^{-1/2}`: without it, the edge
-breakout's solves needed twice the iterations and 40--50 % more time. The default coarse solve is the measured fastest,
-``DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModesPerAggregate()))``; an AMG hierarchy with the rigid-body modes of the corners
-(``coarseSolve=DiagonalScaling(AMG(backendBlockSize=1))``) took 25--60 % more time (:ref:`measured-scaled-corner-node-interpolation`).
+**Why the coarse solve scales the coarse operator once more.** Where a midside diagonal is tiny against its corners',
+the weights :math:`s_a / s_m` are large, and :math:`A_c` inherits entries of their square: a smoother on :math:`A_c`
+would work with a spectral radius far above that of a unit-diagonal operator. ``DiagonalScaling`` around the coarse
+solve rescales :math:`A_c` to a unit diagonal, :math:`D_2 A_c D_2` with
+:math:`D_2 = |\operatorname{diag} A_c|^{-1/2}`; on a model with such diagonals, it saves outer iterations and time. Of
+the coarse solves measured on a 3D displacement field,
+``DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModesPerAggregate()))`` was the fastest, ahead of an AMG hierarchy
+with the rigid-body modes of the corners, ``DiagonalScaling(AMG(backendBlockSize=1))``
+(:ref:`measured-scaled-corner-node-interpolation`).
 
 Its preconditioner is rebuilt exactly when the single-level hierarchies are (see the reuse rules above): while only
 the values change, the cycle and its coarse solve are both kept. Enable it per field with ``OnField(name,

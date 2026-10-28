@@ -118,10 +118,10 @@ Components
       - a two-level cycle with a coarse space of its own (a ``CoarseSpace``): all rigid-body modes per aggregate,
         ``RigidBodyModesPerAggregate(prolongation, coarseHierarchyPrecision)``, or the interpolant from the corner
         nodes in the scaled variables (P1), ``CornerNodeInterpolation(coarseSolve)``, whose coarse solve is a
-        component on the corner-node field (default: the coarse field solved like any field of the ``blockAMG()``
-        preset under a diagonal scaling of its own, for a 3D displacement field
-        ``DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModesPerAggregate()))``, :ref:`blockamg-p-multigrid`). Both
-        read the fine Chebyshev smoother from the tree's ``relax``, ``npre`` and ``npost``
+        component on the corner-node field (default ``DiagonalScaling(AMG())``; for a 3D displacement field
+        ``DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModesPerAggregate()))`` is faster,
+        :ref:`blockamg-p-multigrid`). Both read the fine Chebyshev smoother from the tree's ``relax``, ``npre`` and
+        ``npost``
     * - ``SchurComplement(condense, preconditionS, solveA_bb, approximation, dropTolerance, windowNodes, haloNodes,
         blockFactors)``
       - block LU: :math:`z_k = M_{\tilde S}^{-1}(r_k - A_{kb} A_{bb}^{-1} r_b)`,
@@ -184,8 +184,8 @@ The testfile deck ``testfiles/edelweiss-only/TwoLevelSpelledOut`` runs the spell
 quadratic elements with the P1 interpolant as the coarse space. Its prolongation callable returns :math:`P` together
 with the context of the coarse dofs, ``context.ofCoarseNodes(field, isCorner)`` -- the displacement field on the corner
 nodes, with their coordinates -- so its coarse solve is the rigid-body coarse level,
-``DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModesPerAggregate()))``, as in ``CornerNodeInterpolation``'s default for a 3D
-displacement field. (A callable whose
+``DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModesPerAggregate()))``, the faster coarse solve of
+``CornerNodeInterpolation`` for a 3D displacement field. (A callable whose
 coarse dofs are no nodes returns ``context.ofCoarseDofs(nCoarse)``, one field of scalar dofs; a fixed matrix :math:`P`
 gets that context.) :math:`P` acts on the matrix the correction is handed: the deck has no ``DiagonalScaling`` above
 the cycle, so its variables are the displacements, and the plain weights :math:`\tfrac12, \tfrac12` are right. Under a

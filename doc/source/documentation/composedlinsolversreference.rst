@@ -305,7 +305,9 @@ The 3D displacement field of the ``blockAMG()`` preset gets the rigid-body coars
 (``TwoLevel(coarseSpace=RigidBodyModesPerAggregate())``), configured by the same tree: its ``relax`` and ``npre``/``npost`` are the
 fine smoother of the rigid-body coarse level, its ``coarsening`` the aggregation of that level, and the whole tree the
 AMGCL hierarchy below it. ``TwoLevel(coarseSpace=CornerNodeInterpolation())`` reads its fine smoother from the tree in the same
-spelling; its coarse solve is a component of its own, ``CornerNodeInterpolation(coarseSolve=...)``, with its own tree. Only a genuinely scalar field (nodal dimension 1) gets the plain scalar tree, which predates the vector
+spelling; its coarse solve is a component of its own, ``CornerNodeInterpolation(coarseSolve=...)`` (by default
+``DiagonalScaling(AMG())``), with its own tree. Only a genuinely scalar field (nodal dimension 1) gets the plain
+scalar tree, which predates the vector
 recipe and was never re-tuned against it. Note that AMGCL silently ignores parameter keys it does not recognise
 (warning only on stderr), so check its stderr if an override appears to do nothing.
 

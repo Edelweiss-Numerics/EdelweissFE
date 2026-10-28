@@ -63,11 +63,12 @@ The coarse problem is a field of its own
 The coarse solve is a component of the composed solver, set up on :math:`A_c` with the context of the corner-node field
 (:meth:`~edelweissfe.linsolve.composition.base.SetUpContext.ofCoarseNodes`: the same field on the coarse nodes, their
 coordinates, the scaling :math:`D_c`), so that every component works on it unchanged. Its default,
-``DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModesPerAggregate()))``, scales :math:`A_c` to a unit diagonal once
-more: where a midside diagonal is tiny against its corners', the weights :math:`s_a / s_m` reach about 1000,
-:math:`A_c` inherits entries of that size squared, and the spectral radius the coarse level's own Chebyshev smoother
-works with was measured at :math:`1.8 \\cdot 10^5` instead of about 5. Measurements:
-:ref:`measured-scaled-corner-node-interpolation`.
+``DiagonalScaling(AMG())``, works on any field; for a 3D displacement field
+``DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModesPerAggregate()))`` is faster
+(:ref:`measured-scaled-corner-node-interpolation`). Both scale :math:`A_c` to a unit diagonal once more: where a
+midside diagonal is tiny against its corners', the weights :math:`s_a / s_m` are large, :math:`A_c` inherits entries
+of their square, and a Chebyshev smoother on the unscaled :math:`A_c` would work with a spectral radius far above that
+of a unit-diagonal operator.
 
 The cycle runs in C++ (``CornerNodeTwoLevelCycleT`` in ``edelweissfe/linsolve/amgcl/amgcl-wrapper.hpp``, wrapped as
 :class:`~edelweissfe.linsolve.amgcl.amgcl.PyAMGCLCornerNodeTwoLevelCycle`), OpenMP-threaded throughout, and calls the
@@ -148,13 +149,11 @@ class CornerNodeTwoLevelCycle(TwoLevelCycle):
             fineSpectralRadius,
             fineDominantVector,
         )
-        self.coarseSolve = None
 
     def setCoarseSolve(self, coarseSolve) -> None:
         """The coarse solve, a callable ``r_c -> z_c`` with :math:`z_c \\approx A_c^{-1} r_c`, e.g. a component of the
         composed solver once it is set up on the coarse operator :meth:`build` returns; called once per application.
         Set before or after the build, before the first application; the cycle calls the one set last."""
-        self.coarseSolve = coarseSolve
         self._preconditioner.setCoarseSolve(coarseSolve)
 
     def build(self, A, scaling: np.ndarray) -> sp.csr_matrix:

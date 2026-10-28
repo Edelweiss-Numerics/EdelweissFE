@@ -383,7 +383,7 @@ def test_the_coarse_solve_set_last_is_the_one_called(problem):
     preconditioner.setCoarseSolve(second)
     del first
     z = preconditioner.applyPreconditioner(r)
-    assert second.applications == 1 and preconditioner.coarseSolve is second
+    assert second.applications == 1
     assert np.all(np.isfinite(z))
 
 
