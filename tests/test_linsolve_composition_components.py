@@ -570,6 +570,7 @@ def test_the_p1_coarse_solve_takes_any_component_and_shows_in_the_views():
     from edelweissfe.linsolve.composition.views import formula
 
     assert "AMG" in formula(root) and "corner-node interpolation" in formula(root)
+    assert "A_c^{-1} = \\mathrm{AMG}" in formula(root, latex=True)
     assert "AMG" in str(root)
 
 

@@ -430,11 +430,13 @@ class TwoLevel(Preconditioner):
 
     def describe(self) -> Description:
         name = self._field.name if self._field is not None else "A"
-        coarse = "; A_c⁻¹ = {coarseSolve}" if self.children() else ""
+        hasCoarseSolve = bool(self.children())
+        coarse = "; A_c⁻¹ = {coarseSolve}" if hasCoarseSolve else ""
+        coarseLatex = "; A_c^{-1} = {coarseSolve}" if hasCoarseSolve else ""
         return Description(
             name="TwoLevel",
             formula="TwoLevel(" + name + "; " + self.coarseSpace.name + coarse + ")⁻¹",
-            latex="\\mathrm{TL}(A_{\\text{" + name + "}})^{-1}",
+            latex="\\mathrm{TL}(A_{\\text{" + name + "}}" + coarseLatex + ")^{-1}",
             parameters=self._parameters(),
             steps=(
                 Step("z = S(0, r)   (pre-smoothing)"),
