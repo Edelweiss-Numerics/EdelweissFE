@@ -69,40 +69,39 @@
 #include <utility>
 #include <vector>
 
-namespace amgcl {
+namespace EdelweissFE {
+  namespace linsolve {
 
-  /// @brief How a spectral radius is estimated: spectralRadiusSteps Arnoldi steps from a start vector seeded per row.
-  struct spectral_radius_estimate {
-    /// @brief The Arnoldi steps (spectralRadiusSteps), at least 1.
-    int steps = 10;
+    /// @brief How a spectral radius is estimated: spectralRadiusSteps Arnoldi steps from a start vector seeded per row.
+    struct SpectralRadiusEstimate {
+      /// @brief The Arnoldi steps (spectralRadiusSteps), at least 1.
+      int steps = 10;
 
-    /// @brief Take the estimate out of a parameter tree: spectralRadiusSteps, 10 if the tree has none. power_iters,
-    /// the steps of AMGCL's power iteration, which this estimate replaces, is refused.
-    /// @param p the tree, without spectralRadiusSteps afterwards
-    /// @param where the tree's name in the messages, e.g. "relax"
-    /// @throws std::invalid_argument for power_iters, or fewer than one step
-    static spectral_radius_estimate take( boost::property_tree::ptree& p, const std::string& where )
-    {
-      if ( p.count( "power_iters" ) ) {
-        throw std::invalid_argument( where + ".power_iters: the spectral radius is estimated by Arnoldi steps "
-                                             "(spectralRadiusSteps), not by power iterations" );
+      /// @brief Take the estimate out of a parameter tree: spectralRadiusSteps, 10 if the tree has none. power_iters,
+      /// the steps of AMGCL's power iteration, which this estimate replaces, is refused.
+      /// @param p the tree, without spectralRadiusSteps afterwards
+      /// @param where the tree's name in the messages, e.g. "relax"
+      /// @throws std::invalid_argument for power_iters, or fewer than one step
+      static SpectralRadiusEstimate take( boost::property_tree::ptree& p, const std::string& where )
+      {
+        if ( p.count( "power_iters" ) ) {
+          throw std::invalid_argument( where + ".power_iters: the spectral radius is estimated by Arnoldi steps "
+                                               "(spectralRadiusSteps), not by power iterations" );
+        }
+        SpectralRadiusEstimate estimate;
+        estimate.steps = p.get( "spectralRadiusSteps", estimate.steps );
+        p.erase( "spectralRadiusSteps" );
+        if ( estimate.steps < 1 ) {
+          throw std::invalid_argument( where + ".spectralRadiusSteps must be at least 1, got " +
+                                       std::to_string( estimate.steps ) );
+        }
+        return estimate;
       }
-      spectral_radius_estimate how;
-      how.steps = p.get( "spectralRadiusSteps", how.steps );
-      p.erase( "spectralRadiusSteps" );
-      if ( how.steps < 1 ) {
-        throw std::invalid_argument( where + ".spectralRadiusSteps must be at least 1, got " +
-                                     std::to_string( how.steps ) );
-      }
-      return how;
-    }
-  };
-
-  namespace backend {
+    };
 
     /// @brief The start-vector entry of row i, from i alone (splitmix64, uniform in [-1, 1)): the same at any thread
     /// count.
-    inline double row_seeded_value( uint64_t i )
+    inline double rowSeededValue( uint64_t i )
     {
       uint64_t z = i + 0x9e3779b97f4a7c15ULL;
       z          = ( z ^ ( z >> 30 ) ) * 0xbf58476d1ce4e5b9ULL;
@@ -236,7 +235,7 @@ namespace amgcl {
 
     /// @brief The largest modulus |theta| of the Ritz values of the leading m x m block of the Arnoldi matrix H (row
     /// width `width`), and the residual norm r = |h_{m+1,m} y_m| of its Ritz pair, y its normalized eigenvector of H.
-    inline std::pair< double, double > largest_ritz_value( const std::vector< double >& H, int width, int m )
+    inline std::pair< double, double > largestRitzValue( const std::vector< double >& H, int width, int m )
     {
       std::vector< double > Hm( static_cast< size_t >( m ) * m );
       for ( int i = 0; i < m; ++i )
@@ -252,18 +251,18 @@ namespace amgcl {
     }
 
     /// @brief The spectral radius estimate of the module comment on the operator `apply`, from the start vector `v`
-    /// (n entries, not all zero): how.steps Arnoldi steps, and |theta| + r of the last step's Ritz pair of largest
+    /// (n entries, not all zero): estimate.steps Arnoldi steps, and |theta| + r of the last step's Ritz pair of largest
     /// modulus. Stops early, with an exact estimate, if the Krylov space becomes invariant.
     /// @param apply y <- A x, for double arrays of n entries
     /// @param stepsTaken if not null, the Arnoldi steps taken
     template < class Apply >
-    double arnoldi_spectral_radius( ptrdiff_t                       n,
-                                    std::vector< double >           v,
-                                    const spectral_radius_estimate& how,
-                                    Apply                           apply,
-                                    int*                            stepsTaken = nullptr )
+    double arnoldiSpectralRadius( ptrdiff_t                     n,
+                                  std::vector< double >         v,
+                                  const SpectralRadiusEstimate& estimate,
+                                  Apply                         apply,
+                                  int*                          stepsTaken = nullptr )
     {
-      const int maxSteps = how.steps;
+      const int maxSteps = estimate.steps;
       // inner products over a fixed partition of the rows, the partial sums added in order: the same bits at any thread
       // count, and from run to run
       const ptrdiff_t       nChunks = std::max< ptrdiff_t >( 1, std::min< ptrdiff_t >( n, 4096 ) );
@@ -317,7 +316,7 @@ namespace amgcl {
           columnSquared += H[i * maxSteps + j] * H[i * maxSteps + j];
         const bool invariant = !( h > 1e-14 * std::sqrt( columnSquared ) );
         if ( invariant || m == maxSteps ) {
-          ritz = largest_ritz_value( H, maxSteps, m );
+          ritz = largestRitzValue( H, maxSteps, m );
           break;
         }
         std::vector< double > next( n );
@@ -333,64 +332,67 @@ namespace amgcl {
 
     /// @brief The block of a matrix entry as rows x columns doubles (a scalar entry is 1 x 1).
     template < class Value >
-    struct entry_block {
+    struct EntryBlock {
       static const int rows = 1;
       static double    at( const Value& v, int, int ) { return static_cast< double >( v ); }
     };
 
-    /// @brief See entry_block.
+    /// @brief See EntryBlock.
     template < class T, int N, int M >
-    struct entry_block< static_matrix< T, N, M > > {
+    struct EntryBlock< amgcl::static_matrix< T, N, M > > {
       static const int rows = N;
-      static double at( const static_matrix< T, N, M >& v, int r, int c ) { return static_cast< double >( v( r, c ) ); }
+      static double    at( const amgcl::static_matrix< T, N, M >& v, int r, int c )
+      {
+        return static_cast< double >( v( r, c ) );
+      }
     };
 
-    /// @brief The spectral radius estimate (arnoldi_spectral_radius()) of a CSR matrix A of scalar or B x B block
+    /// @brief The spectral radius estimate (arnoldiSpectralRadius()) of a CSR matrix A of scalar or B x B block
     /// entries, or of D^-1 A given the inverse diagonal entries (blocks) of A, as AMGCL's backend::diagonal(A, true)
     /// computes them for the smoother (so that the estimate is of the operator the smoother applies), from the start
     /// vector seeded per row; rows with zeroStart set (may be null) start at zero -- the Dirichlet rows, which a cycle
     /// keeps zero.
     ///
     /// The product is written out rather than AMGCL's backend::spmv, because the stored entries may be float (the
-    /// float backends) while the Arnoldi vectors are double; entry_block reads a scalar or a block entry alike.
+    /// float backends) while the Arnoldi vectors are double; EntryBlock reads a scalar or a block entry alike.
     template < class Matrix >
-    double estimated_spectral_radius(
-      const Matrix&                                                      A,
-      const spectral_radius_estimate&                                    how,
-      const numa_vector< typename backend::value_type< Matrix >::type >* inverseDiagonal,
-      const char*                                                        zeroStart  = nullptr,
-      int*                                                               stepsTaken = nullptr )
+    double estimatedSpectralRadius(
+      const Matrix&                                                                             A,
+      const SpectralRadiusEstimate&                                                             estimate,
+      const amgcl::backend::numa_vector< typename amgcl::backend::value_type< Matrix >::type >* inverseDiagonal,
+      const char*                                                                               zeroStart  = nullptr,
+      int*                                                                                      stepsTaken = nullptr )
     {
-      typedef typename backend::value_type< Matrix >::type value_type;
-      const int                                            B     = entry_block< value_type >::rows;
-      const ptrdiff_t                                      nRows = static_cast< ptrdiff_t >( backend::rows( A ) );
-      const ptrdiff_t                                      n     = nRows * B;
+      typedef typename amgcl::backend::value_type< Matrix >::type value_type;
+      const int                                                   B = EntryBlock< value_type >::rows;
+      const ptrdiff_t nRows = static_cast< ptrdiff_t >( amgcl::backend::rows( A ) );
+      const ptrdiff_t n     = nRows * B;
 
       std::vector< double > start( n );
 #pragma omp parallel for
       for ( ptrdiff_t i = 0; i < n; ++i )
-        start[i] = zeroStart && zeroStart[i] ? 0.0 : row_seeded_value( static_cast< uint64_t >( i ) );
+        start[i] = zeroStart && zeroStart[i] ? 0.0 : rowSeededValue( static_cast< uint64_t >( i ) );
 
-      return arnoldi_spectral_radius(
+      return arnoldiSpectralRadius(
         n,
         std::move( start ),
-        how,
+        estimate,
         [&]( const double* x, double* y ) {
 #pragma omp parallel for
           for ( ptrdiff_t i = 0; i < nRows; ++i ) {
-            double s[entry_block< value_type >::rows] = {};
+            double s[EntryBlock< value_type >::rows] = {};
             for ( ptrdiff_t j = A.ptr[i]; j < A.ptr[i + 1]; ++j ) {
               const double* xc = x + static_cast< ptrdiff_t >( A.col[j] ) * B;
               for ( int r = 0; r < B; ++r )
                 for ( int c = 0; c < B; ++c )
-                  s[r] += entry_block< value_type >::at( A.val[j], r, c ) * xc[c];
+                  s[r] += EntryBlock< value_type >::at( A.val[j], r, c ) * xc[c];
             }
             for ( int r = 0; r < B; ++r ) {
               double value = s[r];
               if ( inverseDiagonal ) {
                 value = 0.0;
                 for ( int c = 0; c < B; ++c )
-                  value += entry_block< value_type >::at( ( *inverseDiagonal )[i], r, c ) * s[c];
+                  value += EntryBlock< value_type >::at( ( *inverseDiagonal )[i], r, c ) * s[c];
               }
               y[i * B + r] = value;
             }
@@ -399,5 +401,5 @@ namespace amgcl {
         stepsTaken );
     }
 
-  } // namespace backend
-} // namespace amgcl
+  } // namespace linsolve
+} // namespace EdelweissFE

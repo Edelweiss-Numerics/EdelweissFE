@@ -1189,9 +1189,10 @@ public:
   /// @brief The spectral radius estimate of A (amgcl-spectral-radius.hpp): `steps` Arnoldi steps from the start
   /// vector seeded per row, zero on the rows with isDirichlet set -- which the cycle keeps zero, so that the estimate
   /// is that of the free rows.
-  double estimateSpectralRadius( const amgcl::spectral_radius_estimate& how, const char* isDirichlet ) const
+  double estimateSpectralRadius( const EdelweissFE::linsolve::SpectralRadiusEstimate& estimate,
+                                 const char*                                          isDirichlet ) const
   {
-    return amgcl::backend::estimated_spectral_radius( *A_, how, /*inverseDiagonal=*/nullptr, isDirichlet );
+    return EdelweissFE::linsolve::estimatedSpectralRadius( *A_, estimate, /*inverseDiagonal=*/nullptr, isDirichlet );
   }
 
   /// @brief `degree_` Chebyshev steps on A x = b, continuing from the given x -- the recurrence of
@@ -1515,7 +1516,7 @@ struct TwoLevelCycleParameters {
   /// @brief The fine Chebyshev interval relative to the spectral radius: relax.lower and relax.higher.
   float fineLower, fineHigher;
   /// @brief How the fine spectral radius is estimated: relax.spectralRadiusSteps.
-  amgcl::spectral_radius_estimate fineSpectralRadius;
+  EdelweissFE::linsolve::SpectralRadiusEstimate fineSpectralRadius;
   /// @brief The value types of the fine level (and of P and P^T), backendPrecision, and of the coarse hierarchy,
   /// coarseHierarchyPrecision: "double" or "float".
   std::string fineValueType, coarseValueType;
@@ -2289,8 +2290,8 @@ private:
 /// field's AMGCL tree under "amgcl"; and prolongation ("smoothed" or "tentative"). The tree means what it means to
 /// AMGCL's own hierarchy (with AMGCL's defaults for what it leaves out):
 ///   * relax, npre, npost: the fine smoother, a Chebyshev polynomial (relax.type chebyshev, relax.scale false, its
-///     spectral radius estimated by Arnoldi steps, amgcl::spectral_radius_estimate) with npre sweeps before and npost
-///     after the coarse correction;
+///     spectral radius estimated by relax.spectralRadiusSteps Arnoldi steps, amgcl-spectral-radius.hpp) with npre
+///     sweeps before and npost after the coarse correction;
 ///   * coarsening: smoothed aggregation, its aggr.eps_strong the strength threshold of the aggregates and its relax,
 ///     estimate_spectral_radius and the spectral radius estimate the damping weight of the prolongation smoothing;
 ///   * the whole tree, too, for the AMGCL hierarchy below, with eps_strong halved as AMGCL halves it from one level to
@@ -2371,7 +2372,7 @@ protected:
   float prolongationRelax_      = 1.0f;
   bool  estimateSpectralRadius_ = false;
   /// @brief How rho(D^-1 A) is estimated for the damping weight.
-  amgcl::spectral_radius_estimate prolongationSpectralRadius_;
+  EdelweissFE::linsolve::SpectralRadiusEstimate prolongationSpectralRadius_;
   /// @brief The AMGCL tree of the hierarchy below (its aggr.block_size set by each build to M).
   boost::property_tree::ptree hierarchyBelow_;
 

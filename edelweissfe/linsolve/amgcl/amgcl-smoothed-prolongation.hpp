@@ -57,10 +57,10 @@ namespace amgcl {
     /// @return omega
     template < class Matrix >
     typename math::scalar_of< typename backend::value_type< Matrix >::type >::type prolongation_smoothing_weight(
-      const Matrix&                   A,
-      float                           relax,
-      bool                            estimateSpectralRadius,
-      const spectral_radius_estimate& spectralRadius )
+      const Matrix&                                        A,
+      float                                                relax,
+      bool                                                 estimateSpectralRadius,
+      const EdelweissFE::linsolve::SpectralRadiusEstimate& spectralRadius )
     {
       typedef typename math::scalar_of< typename backend::value_type< Matrix >::type >::type scalar_type;
 
@@ -68,9 +68,9 @@ namespace amgcl {
       if ( estimateSpectralRadius ) {
         omega *= static_cast< scalar_type >( 4.0 / 3 ) /
                  static_cast< scalar_type >(
-                   backend::estimated_spectral_radius( A,
-                                                       spectralRadius,
-                                                       backend::diagonal( A, /*invert*/ true ).get() ) );
+                   EdelweissFE::linsolve::estimatedSpectralRadius( A,
+                                                                   spectralRadius,
+                                                                   backend::diagonal( A, /*invert*/ true ).get() ) );
       }
       else {
         omega *= static_cast< scalar_type >( 2.0 / 3 );

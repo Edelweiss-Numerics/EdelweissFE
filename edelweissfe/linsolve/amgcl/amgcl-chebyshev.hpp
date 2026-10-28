@@ -26,9 +26,10 @@
  * ---------------------------------------------------------------------
  */
 /// The AMGCL hierarchies of EdelweissFE with the spectral radius estimate of amgcl-spectral-radius.hpp: a Chebyshev
-/// relaxation and a smoothed aggregation of our own, which estimate it with Arnoldi steps (spectral_radius_estimate)
+/// relaxation and a smoothed aggregation of our own, which estimate it with Arnoldi steps (SpectralRadiusEstimate)
 /// instead of AMGCL's power iteration (seeded per OpenMP thread), and the runtime selections of the relaxation and the
 /// coarsening that use them (amg_hierarchy) -- everything else, every other relaxation and coarsening, is AMGCL's.
+/// These classes are EdelweissFE's; they live in AMGCL's namespaces because AMGCL's amg takes them as its own.
 #pragma once
 
 #include "amgcl-smoothed-prolongation.hpp"
@@ -48,7 +49,7 @@ namespace amgcl {
 
     /// @brief AMGCL's Chebyshev relaxation (amgcl/relaxation/chebyshev.hpp), step for step, with the spectral radius
     /// estimate of amgcl-spectral-radius.hpp: the polynomial of the given degree that is smallest on [lower, higher] x
-    /// rho, rho estimated by Arnoldi steps (spectral_radius_estimate; of A, or with scale of D^-1 A, D its diagonal).
+    /// rho, rho estimated by Arnoldi steps (SpectralRadiusEstimate; of A, or with scale of D^-1 A, D its diagonal).
     template < class Backend >
     class chebyshev_with_estimate {
     public:
@@ -56,7 +57,7 @@ namespace amgcl {
       typedef typename Backend::vector                     vector;
       typedef typename math::scalar_of< value_type >::type scalar_type;
 
-      /// @brief The parameters, AMGCL's names and defaults, but the Arnoldi steps of spectral_radius_estimate for
+      /// @brief The parameters, AMGCL's names and defaults, but the Arnoldi steps of SpectralRadiusEstimate for
       /// power_iters, and a default margin `higher` of 1.1 instead of 1.0: AMGCL's 1.0 sits on its Gershgorin bound,
       /// which is never below rho; the Arnoldi estimate can be, slightly, and an eigenvalue above the interval is
       /// amplified, not damped.
@@ -68,7 +69,7 @@ namespace amgcl {
         /// @brief The lower end of the interval, relative to the estimate.
         float lower = 1.0f / 30;
         /// @brief How the spectral radius is estimated.
-        spectral_radius_estimate spectralRadius;
+        EdelweissFE::linsolve::SpectralRadiusEstimate spectralRadius;
         /// @brief Smooth D^-1 A instead of A.
         bool scale = false;
 
@@ -77,7 +78,7 @@ namespace amgcl {
         /// @brief From a parameter tree, rejecting what it does not know.
         params( boost::property_tree::ptree p )
         {
-          spectralRadius = spectral_radius_estimate::take( p, "relax" );
+          spectralRadius = EdelweissFE::linsolve::SpectralRadiusEstimate::take( p, "relax" );
           degree         = p.get( "degree", degree );
           higher         = p.get( "higher", higher );
           lower          = p.get( "lower", lower );
@@ -102,7 +103,7 @@ namespace amgcl {
         if ( prm.scale )
           M = Backend::copy_vector( inverseDiagonal, backend_prm );
         scalar_type hi = static_cast< scalar_type >(
-          backend::estimated_spectral_radius( A, prm.spectralRadius, inverseDiagonal.get() ) );
+          EdelweissFE::linsolve::estimatedSpectralRadius( A, prm.spectralRadius, inverseDiagonal.get() ) );
         const scalar_type lo = hi * prm.lower;
         hi *= prm.higher;
         d = 0.5 * ( hi + lo );
@@ -230,7 +231,7 @@ namespace amgcl {
 
   namespace coarsening {
 
-    /// @brief AMGCL's smoothed aggregation parameters, with the Arnoldi steps of spectral_radius_estimate for
+    /// @brief AMGCL's smoothed aggregation parameters, with the Arnoldi steps of SpectralRadiusEstimate for
     /// power_iters: the estimate of rho(D^-1 A) the prolongation smoothing weight takes when estimate_spectral_radius
     /// is set.
     template < class Backend >
@@ -238,7 +239,7 @@ namespace amgcl {
       typedef typename smoothed_aggregation< Backend >::params Base;
 
       /// @brief How rho(D^-1 A) is estimated.
-      spectral_radius_estimate spectralRadius;
+      EdelweissFE::linsolve::SpectralRadiusEstimate spectralRadius;
 
       smoothed_aggregation_estimate_params() {}
 
@@ -252,15 +253,15 @@ namespace amgcl {
 
     private:
       /// @brief How p says rho(D^-1 A) is estimated.
-      static spectral_radius_estimate estimate_of( boost::property_tree::ptree p )
+      static EdelweissFE::linsolve::SpectralRadiusEstimate estimate_of( boost::property_tree::ptree p )
       {
-        return spectral_radius_estimate::take( p, "coarsening" );
+        return EdelweissFE::linsolve::SpectralRadiusEstimate::take( p, "coarsening" );
       }
 
       /// @brief p without the keys of the estimate (AMGCL's parameters would warn about them).
       static boost::property_tree::ptree without_estimate( boost::property_tree::ptree p )
       {
-        spectral_radius_estimate::take( p, "coarsening" );
+        EdelweissFE::linsolve::SpectralRadiusEstimate::take( p, "coarsening" );
         return p;
       }
     };
