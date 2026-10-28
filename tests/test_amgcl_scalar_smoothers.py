@@ -36,6 +36,9 @@ silently falls back ILU0 to its generic, approximate triangular solve instead of
 Needs a system above AMGCL's own ``coarse_enough`` (3000 scalar rows) so a real multi-level hierarchy is
 built -- below it, AMG solves directly on the first level and never constructs a relaxation object at
 all, so a bug confined to the smoother construction/apply would pass unnoticed.
+
+The last tests check what EdelweissFE's Chebyshev smoother (``amgcl-chebyshev.hpp``) refuses, applied once as the
+preconditioner: an operator without a positive, finite spectral radius.
 """
 
 import numpy as np
@@ -106,3 +109,16 @@ def test_ilu0_is_an_exact_triangular_solve():
     solver.build(A)
     x = solver.applyPreconditioner(b)
     assert np.linalg.norm(b - A @ x) < 1e-12 * np.linalg.norm(b)
+
+
+def _chebyshevAlone(relax: dict) -> PyAMGCLSolver:
+    """EdelweissFE's Chebyshev smoother, applied once as the preconditioner, with the parameters ``relax``."""
+    return PyAMGCLSolver({"precond": {"class": "relaxation", "type": "chebyshev", **relax}})
+
+
+def test_the_chebyshev_smoother_refuses_an_operator_without_a_positive_spectral_radius():
+    # a zero operator (its diagonal stored): the polynomial would divide by its spectral radius
+    n = 50
+    zero = sp.csr_matrix((np.zeros(n), np.arange(n), np.arange(n + 1)), shape=(n, n))
+    with pytest.raises(RuntimeError, match="positive, finite spectral radius"):
+        _chebyshevAlone({}).build(zero)

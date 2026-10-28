@@ -1922,13 +1922,8 @@ protected:
     SetupStage                                         stage( *this, "fine spectral radius" );
     std::unique_ptr< TwoLevelFineLevelT< ValueType > > level( new TwoLevelFineLevelT< ValueType >() );
     level->setOperator( A );
+    // positive and finite, or the estimate throws
     fineSpectralRadius_ = level->estimateSpectralRadius( cycle_.fineSpectralRadius, isDirichlet_.data() );
-    if ( !( fineSpectralRadius_ > 0.0 ) || !std::isfinite( fineSpectralRadius_ ) ) {
-      // the Chebyshev bounds are relative to it: a zero (or non-finite) radius -- a zero block, which
-      // a DiagonalScaling already refuses -- would divide by zero in the polynomial
-      throw std::runtime_error( name_ + ": the fine operator has no positive, finite spectral radius (got " +
-                                std::to_string( fineSpectralRadius_ ) + ") -- is the field's block zero?" );
-    }
     level->setPolynomial( static_cast< unsigned >( cycle_.fineDegree ),
                           cycle_.fineLower,
                           cycle_.fineHigher,

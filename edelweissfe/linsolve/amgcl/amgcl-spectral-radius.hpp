@@ -67,6 +67,7 @@
 #include <cmath>
 #include <complex>
 #include <cstdint>
+#include <limits>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -206,6 +207,9 @@ namespace EdelweissFE {
         double columnSquared = h * h;
         for ( int i = 0; i <= j; ++i )
           columnSquared += H( i, j ) * H( i, j );
+        // a non-finite entry of A: no estimate (estimatedSpectralRadius() refuses it)
+        if ( !std::isfinite( columnSquared ) )
+          return std::numeric_limits< double >::quiet_NaN();
         const bool invariant = !( h > 1e-14 * std::sqrt( columnSquared ) );
         if ( invariant || m == maxSteps ) {
           const Eigen::MatrixXd Hm = H.topLeftCorner( m, m );
@@ -246,6 +250,8 @@ namespace EdelweissFE {
     ///
     /// The product is written out rather than AMGCL's backend::spmv, because the stored entries may be float (the
     /// float backends) while the Arnoldi vectors are double; EntryBlock reads a scalar or a block entry alike.
+    /// @throws std::runtime_error for an estimate that is not positive and finite -- a zero or non-finite operator --,
+    /// since the Chebyshev polynomial and the prolongation smoothing weight 4/3 / rho divide by it
     template < class Matrix >
     double estimatedSpectralRadius(
       const Matrix&                                                                             A,
@@ -263,7 +269,8 @@ namespace EdelweissFE {
       for ( ptrdiff_t i = 0; i < n; ++i )
         start[i] = zeroStart && zeroStart[i] ? 0.0 : rowSeededValue( static_cast< uint64_t >( i ) );
 
-      return arnoldiSpectralRadius( n, std::move( start ), estimate, [&]( const double* x, double* y ) {
+      // y <- A x, or D^-1 A x with the inverse diagonal
+      auto apply = [&]( const double* x, double* y ) {
 #pragma omp parallel for
         for ( ptrdiff_t i = 0; i < nRows; ++i ) {
           double s[EntryBlock< value_type >::rows] = {};
@@ -283,7 +290,14 @@ namespace EdelweissFE {
             y[i * B + r] = value;
           }
         }
-      } );
+      };
+      const double rho = arnoldiSpectralRadius( n, std::move( start ), estimate, apply );
+      if ( !( rho > 0.0 ) || !std::isfinite( rho ) ) {
+        throw std::runtime_error( "spectral radius estimate: got " + std::to_string( rho ) +
+                                  ", but a Chebyshev smoother and a prolongation smoothing weight need a positive, "
+                                  "finite spectral radius -- is the operator zero, or has it a non-finite entry?" );
+      }
+      return rho;
     }
 
   } // namespace linsolve
