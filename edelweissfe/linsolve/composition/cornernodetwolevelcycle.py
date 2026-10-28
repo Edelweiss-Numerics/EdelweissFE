@@ -106,17 +106,13 @@ from edelweissfe.utils import performancetiming
 class CornerNodeTwoLevelCycle(TwoLevelCycle):
     """A corner-node two-level cycle for one vector field's diagonal block, a two-level preconditioner
     (:class:`~edelweissfe.linsolve.composition.twolevelcycle.TwoLevelCycle`) whose coarse level is the P1
-    corner nodes, and whose coarse solve is a callable.
+    corner nodes, and whose coarse solve is a callable, set with :meth:`setCoarseSolve`.
 
     Parameters
     ----------
     isCorner, edgeEndpoints
         This field's midside corners (:func:`edelweissfe.numerics.p1topology.buildMidsideCorners`), in the
         field's own node order.
-    coarseSolve
-        The coarse solve, a callable ``r_c -> z_c`` with :math:`z_c \\approx A_c^{-1} r_c`, e.g. a component of the
-        composed solver once it is set up on the coarse operator :meth:`build` returns; called once per application.
-        ``None``: set it with :meth:`setCoarseSolve` after the build, before the first application.
     amgclTree, backendBlockSize, backendPrecision
         The parameters of the cycle, see
         :meth:`~edelweissfe.linsolve.composition.twolevelcycle.TwoLevelCycle.cycleParameters`: the fine
@@ -136,7 +132,6 @@ class CornerNodeTwoLevelCycle(TwoLevelCycle):
         self,
         isCorner: np.ndarray,
         edgeEndpoints: np.ndarray,
-        coarseSolve,
         amgclTree: dict,
         backendBlockSize: int = 1,
         backendPrecision: str = "double",
@@ -154,11 +149,11 @@ class CornerNodeTwoLevelCycle(TwoLevelCycle):
             fineDominantVector,
         )
         self.coarseSolve = None
-        if coarseSolve is not None:
-            self.setCoarseSolve(coarseSolve)
 
     def setCoarseSolve(self, coarseSolve) -> None:
-        """The coarse solve (see the class parameters), before or after the build; the cycle calls the one set last."""
+        """The coarse solve, a callable ``r_c -> z_c`` with :math:`z_c \\approx A_c^{-1} r_c`, e.g. a component of the
+        composed solver once it is set up on the coarse operator :meth:`build` returns; called once per application.
+        Set before or after the build, before the first application; the cycle calls the one set last."""
         self.coarseSolve = coarseSolve
         self._preconditioner.setCoarseSolve(coarseSolve)
 

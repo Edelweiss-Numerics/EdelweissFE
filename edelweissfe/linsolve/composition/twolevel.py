@@ -283,7 +283,6 @@ class CornerNodeInterpolation(CoarseSpace):
             CornerNodeTwoLevelCycle,
             isCorner,
             edgeEndpoints,
-            None,
             fineSpectralRadius=fineSpectralRadius,
             fineDominantVector=fineDominantVector,
             **cycle,

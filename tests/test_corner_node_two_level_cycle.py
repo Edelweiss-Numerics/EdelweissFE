@@ -84,8 +84,9 @@ def _built(As, scaling, isCorner, edgeEndpoints, fineTree=None, **options):
     exact coarse solve, built for ``As``; returns it, its coarse solve and the coarse operator."""
     coarse = ExactCoarseSolve()
     preconditioner = CornerNodeTwoLevelCycle(
-        isCorner, edgeEndpoints, coarse, fineTree if fineTree is not None else fineChebyshevTree(), **options
+        isCorner, edgeEndpoints, fineTree if fineTree is not None else fineChebyshevTree(), **options
     )
+    preconditioner.setCoarseSolve(coarse)
     A_c = preconditioner.build(As, scaling)
     coarse.setUp(A_c)
     return preconditioner, coarse, A_c
@@ -361,7 +362,8 @@ def test_an_exception_of_the_coarse_solve_is_raised_as_it_is(problem):
     def failingCoarseSolve(r_c):
         raise ArithmeticError("coarse solve failed")
 
-    preconditioner = CornerNodeTwoLevelCycle(isCorner, edgeEndpoints, failingCoarseSolve, fineChebyshevTree())
+    preconditioner = CornerNodeTwoLevelCycle(isCorner, edgeEndpoints, fineChebyshevTree())
+    preconditioner.setCoarseSolve(failingCoarseSolve)
     preconditioner.build(As, scaling)
     with pytest.raises(ArithmeticError, match="coarse solve failed"):
         preconditioner.applyPreconditioner(r)
@@ -372,7 +374,8 @@ def test_the_coarse_solve_set_last_is_the_one_called(problem):
     the replaced one (and its context, freed) is never called."""
     As, scaling, coords, isCorner, edgeEndpoints, r = problem
     first = ExactCoarseSolve()
-    preconditioner = CornerNodeTwoLevelCycle(isCorner, edgeEndpoints, first, fineChebyshevTree())
+    preconditioner = CornerNodeTwoLevelCycle(isCorner, edgeEndpoints, fineChebyshevTree())
+    preconditioner.setCoarseSolve(first)
     A_c = preconditioner.build(As, scaling)
     first.setUp(A_c)
     second = ExactCoarseSolve()
@@ -386,7 +389,7 @@ def test_the_coarse_solve_set_last_is_the_one_called(problem):
 
 def test_a_coarse_solve_may_be_set_after_the_build_but_must_be_set_before_the_first_application(problem):
     As, scaling, coords, isCorner, edgeEndpoints, r = problem
-    preconditioner = CornerNodeTwoLevelCycle(isCorner, edgeEndpoints, None, fineChebyshevTree())
+    preconditioner = CornerNodeTwoLevelCycle(isCorner, edgeEndpoints, fineChebyshevTree())
     A_c = preconditioner.build(As, scaling)
     with pytest.raises(RuntimeError, match="no coarse solve"):
         preconditioner.applyPreconditioner(r)
@@ -467,13 +470,11 @@ def test_a_free_midside_dof_between_two_constrained_corners_makes_its_node_a_coa
 
 
 def _unbuilt(isCorner, edgeEndpoints, fineTree=None, **options):
-    return CornerNodeTwoLevelCycle(
-        isCorner,
-        edgeEndpoints,
-        ExactCoarseSolve(),
-        fineTree if fineTree is not None else fineChebyshevTree(),
-        **options,
+    preconditioner = CornerNodeTwoLevelCycle(
+        isCorner, edgeEndpoints, fineTree if fineTree is not None else fineChebyshevTree(), **options
     )
+    preconditioner.setCoarseSolve(ExactCoarseSolve())
+    return preconditioner
 
 
 def test_an_unsupported_block_size_or_value_type_raises():
