@@ -328,10 +328,14 @@ namespace amgcl {
       typedef smoothed_aggregation< Backend >                 Base;
       typedef smoothed_aggregation_estimate_params< Backend > params;
 
-      /// @brief The parameters, with the steps of the estimate.
-      params estimatePrm;
+      /// @brief How rho(D^-1 A) is estimated for the prolongation smoothing weight; the rest of the parameters is
+      /// Base's.
+      EdelweissFE::linsolve::SpectralRadiusEstimate spectralRadius;
 
-      smoothed_aggregation_with_estimate( const params& prm = params() ) : Base( prm ), estimatePrm( prm ) {}
+      smoothed_aggregation_with_estimate( const params& prm = params() )
+        : Base( prm ), spectralRadius( prm.spectralRadius )
+      {
+      }
 
       template < class Matrix >
       std::tuple< std::shared_ptr< Matrix >, std::shared_ptr< Matrix > > transfer_operators( const Matrix& A )
@@ -347,7 +351,7 @@ namespace amgcl {
         const auto omega  = prolongation_smoothing_weight( A,
                                                           this->prm.relax,
                                                           this->prm.estimate_spectral_radius,
-                                                          estimatePrm.spectralRadius );
+                                                          spectralRadius );
         auto       P      = smoothed_prolongation( A, aggr.strong_connection, *P_tent, omega );
         return std::make_tuple( P, transpose( *P ) );
       }
