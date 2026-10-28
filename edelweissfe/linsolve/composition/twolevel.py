@@ -59,8 +59,8 @@ The cycle runs in C++ (:mod:`~edelweissfe.linsolve.composition.rigidbodymodestwo
 :mod:`~edelweissfe.linsolve.composition.cornernodetwolevelcycle`; the coarse component of
 :class:`CornerNodeInterpolation` is called back once per cycle). Its steps, written out in Python, are
 ``Multiplicative([smoother, CoarseCorrection(P, coarseSolve), smoother])``
-(:mod:`~edelweissfe.linsolve.composition.combinators`). Both ways are kept on purpose: this one is fast (about half the
-cost per application), the spelled-out one shows the steps and takes any smoother or coarse space. Why, and what would
+(:mod:`~edelweissfe.linsolve.composition.combinators`). Both ways are kept on purpose: this one is faster per
+application, the spelled-out one shows the steps and takes any smoother or coarse space. Why, and what would
 end the exception: the "two-level cycle: two ways" section of ``doc/source/documentation/composedlinsolvers.rst``.
 """
 

@@ -773,9 +773,10 @@ displacement and gives a midside node the mean of its two edge-endpoint corners.
 :math:`\hat A = D A D`, whose variables are :math:`\hat u = D^{-1} u`, not :math:`u`. Interpolating :math:`\hat u` with
 the weights :math:`\tfrac12, \tfrac12` is interpolating something else than the displacement: a scaled translation
 :math:`D^{-1} t` -- the smoothest error there is, which the coarse level exists to remove -- is reproduced at a midside
-node only where its diagonal equals its corners'. Measured on captured systems, the error of the plain weights at the
-free midside dofs is 10--15 % in the median and 22--35 % at the 95th percentile, and on the edge breakout up to a
-factor of 2000. The interpolation of :math:`u`, written in the scaled variables, is
+node only where its diagonal equals its corners'; on captured systems the plain weights missed it at most free
+midside dofs, and by far where the diagonals along an edge differ much
+(:ref:`measured-scaled-corner-node-interpolation`). The interpolation of :math:`u`, written in the scaled variables,
+is
 
 .. math::
 
@@ -786,18 +787,18 @@ for a midside dof :math:`m` on the edge :math:`(a, b)`, :math:`s` the diagonal o
 restriction to the corners. It reproduces :math:`D^{-1} t` to rounding, and the coarse operator
 :math:`A_c = P^\mathsf{T} \hat A P = D_c P_{geo}^\mathsf{T} A P_{geo} D_c` is the P1 operator of the physical problem,
 in the corners' scaled variables. There is one way to do it, so there is no switch back to the plain weights; without
-a scaling above the cycle (:math:`D = I`), :math:`P = P_{geo}`. On the tunnel lining, the former plain weights needed
-253--279 outer iterations, the scaled ones 14--21 (:ref:`measured-scaled-corner-node-interpolation`).
+a scaling above the cycle (:math:`D = I`), :math:`P = P_{geo}`. The scaled weights need far fewer outer iterations
+than the plain ones (:ref:`measured-scaled-corner-node-interpolation`).
 
-**The coarse problem is a field of its own.** :math:`A_c` is handed to the component ``coarse`` with the context of the
-corner-node field (:meth:`~edelweissfe.linsolve.composition.base.SetUpContext.ofCoarseNodes`): the same field name and
-dimension on the corner nodes, their coordinates, :math:`D_c` as its scaling, and an identity row for each Dirichlet
+**The coarse problem is a field of its own.** :math:`A_c` is handed to the component ``coarseSolve`` with the context of
+the corner-node field (:meth:`~edelweissfe.linsolve.composition.base.SetUpContext.ofCoarseNodes`): the same field name
+and dimension on the corner nodes, their coordinates, :math:`D_c` as its scaling, and an identity row for each Dirichlet
 corner dof (a zero column of :math:`P`). A midside node with a free dof whose two edge corners are both constrained in
 that component (a symmetry plane and a tie, issue #223) would get an empty row of :math:`P`, no coarse correction at
-all: it joins the coarse nodes, as a node the midside corners cannot classify becomes a corner. This is decided at the build,
-where the Dirichlet rows are known. So every component works on it unchanged: ``RigidBodyModesPerAggregate`` builds the
-rigid-body modes of the corners, ``AMG(backendBlockSize=1)`` takes them as its near null-space, ``DirectSolver()``
-solves exactly. It is called back from the C++ cycle once per application.
+all: it joins the coarse nodes, as a node the midside corners cannot classify becomes a corner. This is decided at the
+build, where the Dirichlet rows are known. So every component works on it unchanged: ``RigidBodyModesPerAggregate``
+builds the rigid-body modes of the corners, ``AMG(backendBlockSize=1)`` takes them as its near null-space,
+``DirectSolver()`` solves exactly. It is called back from the C++ cycle once per application.
 
 **Why the coarse solve scales the coarse operator once more.** Where a midside diagonal is tiny against its corners',
 the weights :math:`s_a / s_m` are large, and :math:`A_c` inherits entries of their square: a smoother on :math:`A_c`

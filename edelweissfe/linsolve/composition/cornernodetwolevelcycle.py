@@ -47,8 +47,8 @@ its two edge-endpoint corners. In the scaled variables the same interpolation is
 for a midside dof :math:`m` on the edge :math:`(a, b)`, with :math:`s` the diagonal of :math:`D` and :math:`D_c` its
 restriction to the corners. The plain weights :math:`\\tfrac{1}{2}, \\tfrac{1}{2}` would interpolate :math:`\\hat u`
 as if it were :math:`u`: a scaled translation :math:`D^{-1} t`, the smoothest error there is, would be off by the
-ratios :math:`s_a / s_m` at every midside node (12 % in the median, up to a factor of 2000 measured on one model),
-and the coarse level could not remove it. With :math:`P` the translations are reproduced exactly, and
+ratios :math:`s_a / s_m` at every midside node, and the coarse level could not remove it. With :math:`P` the
+translations are reproduced exactly, and
 
 .. math::
 
@@ -74,12 +74,11 @@ The cycle runs in C++ (``CornerNodeTwoLevelCycleT`` in ``edelweissfe/linsolve/am
 :class:`~edelweissfe.linsolve.amgcl.amgcl.PyAMGCLCornerNodeTwoLevelCycle`), OpenMP-threaded throughout, and calls the
 coarse component back once per application.
 
-**Dirichlet handling is load-bearing, do not simplify away.** A field's diagonal block still carries
-its Dirichlet identity rows (production applies Dirichlet elimination upstream of the linear solver), and
-the identity rows of multi-point-constraint slaves, which are treated alike. Both
-the fine smoothing and the Galerkin projection must act on the *free* DOFs only, with the Dirichlet
-DOFs decoupled entirely, not merely masked in place -- masking in place for the fine smoother
-alone was tried and diverged outright. A free midside node whose edge-endpoint corner is Dirichlet-constrained keeps
+**Dirichlet rows.** A field's diagonal block still carries its Dirichlet identity rows (the Dirichlet elimination runs
+before the linear solver), and the identity rows of multi-point-constraint slaves, which are treated alike. The fine
+smoothing and the Galerkin projection act on the *free* DOFs only, with the Dirichlet DOFs decoupled entirely: the
+cycle is that of the free submatrix, and a Dirichlet DOF that is only masked after a step still couples into the free
+DOFs within it. A free midside node whose edge-endpoint corner is Dirichlet-constrained keeps
 only the surviving weight of its free endpoint -- no renormalization (the constrained corner contributes exactly zero
 to a homogeneous Newton correction, which the dropped weight already encodes). A free midside dof whose *both*
 endpoint dofs are constrained (a symmetry plane and a tie on one edge, issue #223) would get an empty row of :math:`P`
