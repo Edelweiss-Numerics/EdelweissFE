@@ -70,7 +70,7 @@ _TIGHT = {
     "rigidBodyModesPerAggregate": [(13, 0, True, 418.5446467174296)],
     "translations": [(40, 0, True, 418.54464670055614)],
     "sweeps2": [(26, 0, True, 418.54464656671)],
-    "symmetric": [(30, 0, True, 418.5446466851319)],
+    "symmetric": [(29, 0, True, 418.54464666115393)],
     "sweeps2symmetric": [(20, 0, True, 418.54464669228247)],
     "drop rigidBodyModesPerAggregate": [(25, 0, True, 418.54464673746827)],
     "drop rigidBodyModesPerAggregate lumped": [(25, 0, True, 418.54464678508566)],
@@ -100,11 +100,11 @@ _SEQUENCE = {
         (37, 1, True, 418.53798485533997),
     ],
     "scaled gapCompensated": [
-        (32, 1, True, 418.53492930097934),
-        (65, 0, True, 41.322211355387054),
-        (68, 0, True, 5.625254935072965),
-        (30, 0, True, 4185.440747574256),
-        (30, 0, True, 418.5440749131303),
+        (32, 1, True, 418.5349612388638),
+        (64, 0, True, 41.32222237338024),
+        (68, 0, True, 5.625266798471703),
+        (30, 0, True, 4185.440114330617),
+        (30, 0, True, 418.5440115888844),
     ],
 }
 #: Whether BlockAMGSolver rebuilt its preconditioner, per solve of the sequence (its dumps' ``mustRefresh``).
@@ -113,7 +113,7 @@ _REBUILT = {
     "translations": [True, False, False, True, True],
 }
 #: The learnt gap between the scaled and the true residual after the sequence.
-_GAP = {"scaled": 19.24, "scaled gapCompensated": 19.26}
+_GAP = {"scaled": 19.24, "scaled gapCompensated": 18.75}
 
 
 def _beamWithDamage(seed: int = 0, couplingStrength: float = 1e-2):
