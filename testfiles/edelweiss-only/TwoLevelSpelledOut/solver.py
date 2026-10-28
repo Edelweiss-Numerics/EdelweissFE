@@ -36,6 +36,9 @@ def cornerNodeInterpolation(A, context):
     nodalP = sp.csr_matrix((weights, (rows, columns)), shape=(len(isCorner), np.count_nonzero(isCorner)))
     # each component of the displacement is interpolated alike; the dofs are numbered node by node
     P = sp.kron(nodalP, sp.identity(field.dimension), format="csr")
+    # P keeps the Dirichlet rows (the native TwoLevel cycle decouples them instead): the coarse solve then treats a
+    # Dirichlet corner dof as free, which is still a valid preconditioner. Zeroing the Dirichlet columns of P would
+    # leave empty rows in A_c = Pᵀ A P, which the DiagonalScaling of the coarse solve cannot scale.
     # the coarse dofs are the displacements of the corner nodes: a displacement field of its own, with their coordinates
     return P, context.ofCoarseNodes(field, isCorner)
 

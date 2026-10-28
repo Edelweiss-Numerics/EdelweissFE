@@ -32,9 +32,9 @@ Galerkin coarse operator -- that differ in their coarse level and coarse solve: 
 an AMGCL hierarchy of its own, the corner-node two-level cycle with a component of the composed solver. Both are built
 and applied in C++: the shared cycle is ``TwoLevelCycle`` in ``amgcl-wrapper.hpp``, wrapped as ``_PyAMGCLTwoLevelCycle``
 in ``amgcl.pyx``. :class:`TwoLevelCycle` mirrors those bases here: it creates the C++ object, which validates
-every parameter, keeps the fine spectral radius a build may start from, and passes the cycle, the fine spectral radius a
-build ends with, the timings and the report through. A derived class chooses the parameters and builds its coarse level,
-in its ``build``, from what that coarse level needs.
+every parameter, and passes the cycle, the fine spectral radius a build estimates, the timings and the report through.
+A derived class chooses the parameters and builds its coarse level, in its ``build``, from what that coarse level
+needs.
 """
 
 import numpy as np

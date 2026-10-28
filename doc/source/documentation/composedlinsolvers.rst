@@ -111,8 +111,9 @@ Components
         apply it several times
     * - ``AMG(tree, backendBlockSize, backendPrecision, blockTranslationNullspace, rigidBodyNullspace, dropTolerance,
         lumpDroppedEntries)``
-      - one AMGCL hierarchy on a field, one cycle per application. ``tree`` holds AMGCL's parameters only, forwarded
-        verbatim; the backend (scalar entries or node-wise blocks, double or float, the block translations) is chosen
+      - one AMGCL hierarchy on a field, one cycle per application. ``tree`` is AMGCL's parameter tree, plus
+        EdelweissFE's own key ``spectralRadiusSteps`` (:ref:`blockamg-chebyshev`); the backend (scalar entries or
+        node-wise blocks, double or float, the block translations) is chosen
         by the keywords, the field's default for those not given (:ref:`composed-amg-backend`); with
         ``dropTolerance`` built on the filtered block (:ref:`composed-drop-tolerance`)
     * - ``TwoLevel(coarseSpace, tree, backendBlockSize, backendPrecision, dropTolerance,
@@ -120,12 +121,12 @@ Components
       - a two-level cycle with a coarse space of its own (a ``CoarseSpace``): all rigid-body modes per aggregate,
         ``RigidBodyModesPerAggregate(prolongation, coarseHierarchyPrecision)``, or the interpolant from the corner
         nodes in the scaled variables (P1), ``CornerNodeInterpolation(coarseSolve)``, whose coarse solve is a
-        component on the corner-node field (default: the coarse field solved like any field of the ``blockAMG()``
-        preset under a diagonal scaling of its own, for a 3D displacement field
-        ``DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModesPerAggregate()))``, :ref:`blockamg-p-multigrid`). Both
-        read the fine Chebyshev smoother from the tree's ``relax``, ``npre`` and ``npost``; without a tree, the default
-        tree of the field (degree 16), and for ``CornerNodeInterpolation`` on a 3D displacement field the smoother of
-        the corner-node two-level cycle (degree 8), on both of its levels (:ref:`composed-default-field-trees`)
+        component on the corner-node field (default ``DiagonalScaling(AMG())``; the ``blockAMG()`` preset passes
+        ``DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModesPerAggregate()))`` for a 3D displacement field,
+        :ref:`blockamg-p-multigrid`). Both read the fine Chebyshev smoother from the tree's ``relax``, ``npre`` and
+        ``npost``; without a tree, the default tree of the field (degree 16), and for ``CornerNodeInterpolation`` on a
+        3D displacement field the smoother of the corner-node two-level cycle (degree 8,
+        :ref:`composed-default-field-trees`). The coarse solve has a tree of its own
     * - ``SchurComplement(condense, preconditionS, solveA_bb, approximation, dropTolerance, windowNodes, haloNodes,
         blockFactors)``
       - block LU: :math:`z_k = M_{\tilde S}^{-1}(r_k - A_{kb} A_{bb}^{-1} r_b)`,
@@ -188,9 +189,10 @@ The testfile deck ``testfiles/edelweiss-only/TwoLevelSpelledOut`` runs the spell
 quadratic elements with the P1 interpolant as the coarse space. Its prolongation callable returns :math:`P` together
 with the context of the coarse dofs, ``context.ofCoarseNodes(field, isCorner)`` -- the displacement field on the corner
 nodes, with their coordinates -- so its coarse solve is the rigid-body coarse level,
-``DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModesPerAggregate()))``, the default of ``CornerNodeInterpolation``
-for a 3D displacement field but for its smoother: this deck keeps the field's default tree (degree 16), the default
-takes the weaker smoother of the corner-node two-level cycle (degree 8, :ref:`composed-default-field-trees`). (A callable whose
+``DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModesPerAggregate()))``, the coarse solve the ``blockAMG()`` preset
+gives a 3D displacement field but for its smoother: this deck keeps the field's default tree (degree 16), the preset
+takes the weaker smoother of the corner-node two-level cycle (degree 8, :ref:`composed-default-field-trees`). (A
+callable whose
 coarse dofs are no nodes returns ``context.ofCoarseDofs(nCoarse)``, one field of scalar dofs; a fixed matrix :math:`P`
 gets that context.) :math:`P` acts on the matrix the correction is handed: the deck has no ``DiagonalScaling`` above
 the cycle, so its variables are the displacements, and the plain weights :math:`\tfrac12, \tfrac12` are right. Under a
@@ -228,11 +230,14 @@ with ``gaussSeidelOrder``. ``blockAMG(krylovOnScaledSystem=True)`` puts the scal
 (:ref:`composed-scaled-krylov`), ``continuations`` and ``gapCompensation`` go to LGMRES, and ``dropTolerance`` and
 ``lumpDroppedEntries`` to every field (:ref:`composed-drop-tolerance`).
 
-Each field gets the preconditioner measured fastest for it (``blockAMGFieldPreconditioner``):
+Each field gets the preconditioner chosen for it by measurement (``blockAMGFieldPreconditioner``,
+:ref:`measured-defaults`):
 
 * a **quadratic** 3D displacement field (one with midside nodes) the two-level cycle on its corner nodes,
-  ``TwoLevel(coarseSpace=CornerNodeInterpolation())`` (:ref:`blockamg-p-multigrid`): three levels, the quadratic field,
-  its linear part on the corner nodes, and the rigid-body modes of aggregates of those;
+  ``TwoLevel(coarseSpace=CornerNodeInterpolation(coarseSolve))`` (:ref:`blockamg-p-multigrid`), whose coarse solve,
+  under a diagonal scaling of its own, is that of the next case, with the smoother of the corner-node two-level cycle:
+  three levels, the quadratic field, its linear part on the corner nodes, and the rigid-body modes of aggregates of
+  those;
 * a **linear** 3D displacement field the rigid-body coarse level, ``TwoLevel(coarseSpace=RigidBodyModesPerAggregate())``:
   a first coarse level built from all rigid-body modes, rotations included, which a bending-dominated structure needs
   (:ref:`blockamg-rigid-body-coarse-level`);

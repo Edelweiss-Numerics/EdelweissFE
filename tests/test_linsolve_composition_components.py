@@ -353,7 +353,7 @@ def test_the_p1_coarse_problem_is_the_corner_node_field():
 
 def test_the_p1_coarse_field_includes_a_midside_node_made_a_coarse_node():
     """Issue #223: a free midside dof between two constrained corner dofs makes its node a coarse node, and the coarse
-    field the default coarse solve gets includes it: its coordinates, its scaling, its Dirichlet rows."""
+    field the coarse solve gets includes it: its coordinates, its scaling, its Dirichlet rows."""
     As, scaling, coords, isCorner, edgeEndpoints, orphan = orphanSystem()
     A = (As.multiply(1.0 / scaling[:, None]).multiply(1.0 / scaling[None, :])).tocsr()
     b = np.random.default_rng(3).standard_normal(A.shape[0])
@@ -392,11 +392,12 @@ def test_the_p1_coarse_field_includes_a_midside_node_made_a_coarse_node():
     assert _relative(A @ x, b) < 1e-8
 
 
-def test_the_corner_node_two_level_cycle_with_its_default_coarse_solve_converges():
-    """The default coarse solve, DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModesPerAggregate())), runs on the
-    corner-node field: three levels, quadratic -> linear -> rigid-body modes of aggregates."""
+def test_the_corner_node_two_level_cycle_with_the_rigid_body_coarse_solve_converges():
+    """DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModesPerAggregate())) on the corner-node field: three levels,
+    quadratic -> linear -> rigid-body modes of aggregates."""
     A, b, fields, coords, isCorner, edgeEndpoints, constrained = _p1System()
-    cornerNodeTwoLevel = TwoLevel(CornerNodeInterpolation())
+    coarse = DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModesPerAggregate()))
+    cornerNodeTwoLevel = TwoLevel(CornerNodeInterpolation(coarseSolve=coarse))
     root = LGMRES(DiagonalScaling(cornerNodeTwoLevel), tolerance=FixedTolerance(1e-8), maxIterations=300)
     x, composed = _solved(
         A,
@@ -407,16 +408,51 @@ def test_the_corner_node_two_level_cycle_with_its_default_coarse_solve_converges
         midsideCorners={"displacement": (isCorner, edgeEndpoints)},
     )
     assert _relative(A @ x, b) < 1e-8
-    coarse = dict(cornerNodeTwoLevel.children())["coarseSolve"]
-    assert isinstance(coarse, DiagonalScaling) and isinstance(coarse.inner, TwoLevel)
     assert coarse.statistics.setUps == 1
     assert coarse.statistics.applications == cornerNodeTwoLevel.statistics.applications
     assert composed.lastSolveSummary.iters <= 12
 
 
+def test_the_corner_node_two_level_cycle_with_its_default_coarse_solve_converges():
+    """coarseSolve=None is DiagonalScaling(AMG()), made with the coarse space and a child of the cycle from its
+    construction on."""
+    A, b, fields, coords, isCorner, edgeEndpoints, constrained = _p1System()
+    cornerNodeTwoLevel = TwoLevel(CornerNodeInterpolation())
+    coarse = dict(cornerNodeTwoLevel.children())["coarseSolve"]
+    assert isinstance(coarse, DiagonalScaling) and isinstance(coarse.inner, AMG)
+    root = LGMRES(DiagonalScaling(cornerNodeTwoLevel), tolerance=FixedTolerance(1e-8), maxIterations=300)
+    x, _ = _solved(
+        A,
+        b,
+        root,
+        fields,
+        nodeCoordinates={"displacement": coords},
+        midsideCorners={"displacement": (isCorner, edgeEndpoints)},
+    )
+    assert _relative(A @ x, b) < 1e-8
+    assert dict(cornerNodeTwoLevel.children())["coarseSolve"] is coarse
+    assert coarse.statistics.applications == cornerNodeTwoLevel.statistics.applications
+
+
+def test_the_coarse_solve_is_kept_across_builds_and_its_statistics_accumulate():
+    """Each build sets the one coarse solve up anew on its A_c: what the coarse solve recorded is that of every
+    build."""
+    A, b, fields, coords, isCorner, edgeEndpoints, constrained = _p1System(4)
+    coarse = _RecordingExactSolve()
+    scaling = DiagonalScaling(TwoLevel(CornerNodeInterpolation(coarseSolve=coarse)))
+    context = SetUpContext(
+        fields=tuple(fields),
+        coordinatesOf={"displacement": coords}.get,
+        midsideCornersOf={"displacement": (isCorner, edgeEndpoints)}.get,
+    )
+    for _ in range(2):
+        scaling.setUp(SystemMatrix(A), context)
+        scaling(b)
+    assert (coarse.statistics.setUps, coarse.statistics.applications) == (2, 2)
+
+
 def test_the_default_coarse_solve_of_a_scalar_quadratic_field_is_amg():
-    """coarseSolve=None solves the coarse field like any field of the blockamg preset: a scalar field, which has no
-    rigid-body modes, gets DiagonalScaling(AMG()) on its corner nodes."""
+    """coarseSolve=None is DiagonalScaling(AMG()), which works on any field: here a scalar one on the corner nodes."""
     A, b, fields, coords, isCorner, edgeEndpoints, constrained = _p1System()
     # the x-components alone: a scalar quadratic field on the same mesh
     x = np.arange(0, A.shape[0], 3)
@@ -454,25 +490,21 @@ def test_one_component_in_two_places_of_the_tree_is_refused():
         )
 
 
-def test_one_corner_node_interpolation_with_the_default_coarse_solve_in_two_places_gives_each_its_own():
-    """The default coarse solve is chosen at every build and held by the built cycle, not by the coarse space: one
-    CornerNodeInterpolation() under two TwoLevel cycles gives each cycle a coarse solve of its own."""
+def test_one_corner_node_interpolation_with_the_default_coarse_solve_in_two_places_is_refused():
+    """The default coarse solve belongs to the coarse space: one CornerNodeInterpolation() under two TwoLevel cycles
+    puts it in two places of the tree."""
     A, b, fields, coords, isCorner, edgeEndpoints, constrained = _p1System(4)
     shared = CornerNodeInterpolation()
-    first, second = TwoLevel(shared), TwoLevel(shared)
-    root = LGMRES(DiagonalScaling(Additive([first, second])), tolerance=FixedTolerance(1e-8))
-    x, _ = _solved(
-        A,
-        b,
-        root,
-        fields,
-        nodeCoordinates={"displacement": coords},
-        midsideCorners={"displacement": (isCorner, edgeEndpoints)},
-    )
-    assert _relative(A @ x, b) < 1e-8
-    firstCoarse, secondCoarse = dict(first.children())["coarseSolve"], dict(second.children())["coarseSolve"]
-    assert firstCoarse is not secondCoarse and shared.coarseSolve is None
-    assert firstCoarse.statistics.applications == first.statistics.applications
+    root = LGMRES(DiagonalScaling(Additive([TwoLevel(shared), TwoLevel(shared)])), tolerance=FixedTolerance(1e-8))
+    with pytest.raises(ValueError, match="two places"):
+        _solved(
+            A,
+            b,
+            root,
+            fields,
+            nodeCoordinates={"displacement": coords},
+            midsideCorners={"displacement": (isCorner, edgeEndpoints)},
+        )
 
 
 def test_a_correction_applied_twice_by_a_sweep_is_in_one_place():
@@ -543,6 +575,7 @@ def test_the_p1_coarse_solve_takes_any_component_and_shows_in_the_views():
     from edelweissfe.linsolve.composition.views import formula
 
     assert "AMG" in formula(root) and "corner-node interpolation" in formula(root)
+    assert "A_c^{-1} = \\mathrm{AMG}" in formula(root, latex=True)
     assert "AMG" in str(root)
 
 
@@ -551,10 +584,10 @@ def test_the_p1_coarse_solve_must_be_a_component():
         CornerNodeInterpolation(coarseSolve=AMG)
 
 
-def test_the_corner_node_two_level_cycle_smooths_both_of_its_levels_with_its_own_smoother():
-    """TwoLevel(CornerNodeInterpolation()) and the rigid-body coarse level of its default coarse solve take the tree of
-    the corner-node two-level cycle (Chebyshev of degree 8); TwoLevel(RigidBodyModesPerAggregate()) alone keeps the
-    default tree of its field, and a tree given wins over both."""
+def test_the_corner_node_two_level_cycle_smooths_its_fine_level_with_its_own_smoother():
+    """TwoLevel(CornerNodeInterpolation()) takes the tree of the corner-node two-level cycle (Chebyshev of degree 8);
+    TwoLevel(RigidBodyModesPerAggregate()) alone keeps the default tree of its field, and a tree given wins over both.
+    Each level has its own tree: the default coarse solve, DiagonalScaling(AMG()), keeps AMG's default."""
     from edelweissfe.linsolve.composition.amg import defaultCornerNodeTwoLevelTree
 
     field = FieldBlock("displacement", 0, 30, 3)
@@ -564,11 +597,8 @@ def test_the_corner_node_two_level_cycle_smooths_both_of_its_levels_with_its_own
     assert {key: value for key, value in defaultCornerNodeTwoLevelTree().items() if key != "relax"} == {
         key: value for key, value in defaultFieldTree(3).items() if key != "relax"
     }
-    # the default coarse solve, chosen for the coarse (corner-node) field at the first build
-    context = SetUpContext(fields=(field,), coordinatesOf=lambda name: np.zeros((10, 3)))
-    coarse = cornerNodeTwoLevel.coarseSpace.defaultCoarseSolve(field, context)
-    assert isinstance(coarse, DiagonalScaling) and isinstance(coarse.inner.coarseSpace, RigidBodyModesPerAggregate)
-    assert coarse.inner._cycleParameters(field)["amgclTree"] == defaultCornerNodeTwoLevelTree()
+    coarse = cornerNodeTwoLevel.coarseSpace.coarseSolve
+    assert isinstance(coarse, DiagonalScaling) and isinstance(coarse.inner, AMG) and coarse.inner.tree is None
     assert TwoLevel(RigidBodyModesPerAggregate())._cycleParameters(field)["amgclTree"] == defaultFieldTree(3)
     given = defaultFieldTree(3)
     assert TwoLevel(CornerNodeInterpolation(), tree=given)._cycleParameters(field)["amgclTree"] is given

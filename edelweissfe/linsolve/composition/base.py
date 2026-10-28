@@ -54,8 +54,8 @@ A component builds only through :meth:`~Preconditioner.setUp`, also when an upda
 ``self.setUp``). :meth:`~Preconditioner.setUp` first forgets what was built before (:meth:`~Preconditioner.forget`:
 the :meth:`~Preconditioner._forget` of the component and of its children), so that the old and the new hierarchies,
 factorizations and matrices, gigabytes for a large model, are never held at once. An update that does not rebuild
-keeps what was built, and what is reused on purpose is never forgotten: a fine spectral radius carried to the next
-build, the selection of a Schur complement's condensed dofs, a symbolic factorization, the statistics. A component
+keeps what was built, and what is reused on purpose is never forgotten: the selection of a Schur complement's
+condensed dofs, a symbolic factorization, the statistics. A component
 with nothing built builds at its next update, whatever the update says.
 """
 

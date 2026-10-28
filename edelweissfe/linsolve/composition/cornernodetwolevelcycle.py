@@ -47,8 +47,8 @@ its two edge-endpoint corners. In the scaled variables the same interpolation is
 for a midside dof :math:`m` on the edge :math:`(a, b)`, with :math:`s` the diagonal of :math:`D` and :math:`D_c` its
 restriction to the corners. The plain weights :math:`\\tfrac{1}{2}, \\tfrac{1}{2}` would interpolate :math:`\\hat u`
 as if it were :math:`u`: a scaled translation :math:`D^{-1} t`, the smoothest error there is, would be off by the
-ratios :math:`s_a / s_m` at every midside node (12 % in the median, up to a factor of 2000 measured on one model),
-and the coarse level could not remove it. With :math:`P` the translations are reproduced exactly, and
+ratios :math:`s_a / s_m` at every midside node, and the coarse level could not remove it. With :math:`P` the
+translations are reproduced exactly, and
 
 .. math::
 
@@ -63,24 +63,23 @@ The coarse problem is a field of its own
 The coarse solve is a component of the composed solver, set up on :math:`A_c` with the context of the corner-node field
 (:meth:`~edelweissfe.linsolve.composition.base.SetUpContext.ofCoarseNodes`: the same field on the coarse nodes, their
 coordinates, the scaling :math:`D_c`), so that every component works on it unchanged. Its default,
-``DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModesPerAggregate(), tree=defaultCornerNodeTwoLevelTree()))``, smooths
-with the smoother of the corner-node two-level cycle
-(:func:`~edelweissfe.linsolve.composition.amg.defaultCornerNodeTwoLevelTree`), as the fine level does, and scales
+``DiagonalScaling(AMG())``, works on any field; for a 3D displacement field
+``DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModesPerAggregate()))`` is faster
+(:ref:`measured-scaled-corner-node-interpolation`), and the ``blockamg`` preset passes it, with the smoother of the
+corner-node two-level cycle (:func:`~edelweissfe.linsolve.composition.amg.defaultCornerNodeTwoLevelTree`). Both scale
 :math:`A_c` to a unit diagonal once more: where a midside diagonal is tiny against its corners', the weights
-:math:`s_a / s_m` reach about 1000, :math:`A_c` inherits entries of that size squared, and the spectral radius the
-coarse level's own Chebyshev smoother works with was measured at :math:`1.8 \\cdot 10^5` instead of about 5. Measurements:
-:ref:`measured-scaled-corner-node-interpolation`.
+:math:`s_a / s_m` are large, :math:`A_c` inherits entries of their square, and a Chebyshev smoother on the unscaled
+:math:`A_c` would work with a spectral radius far above that of a unit-diagonal operator.
 
 The cycle runs in C++ (``CornerNodeTwoLevelCycleT`` in ``edelweissfe/linsolve/amgcl/amgcl-wrapper.hpp``, wrapped as
 :class:`~edelweissfe.linsolve.amgcl.amgcl.PyAMGCLCornerNodeTwoLevelCycle`), OpenMP-threaded throughout, and calls the
 coarse component back once per application.
 
-**Dirichlet handling is load-bearing, do not simplify away.** A field's diagonal block still carries
-its Dirichlet identity rows (production applies Dirichlet elimination upstream of the linear solver), and
-the identity rows of multi-point-constraint slaves, which are treated alike. Both
-the fine smoothing and the Galerkin projection must act on the *free* DOFs only, with the Dirichlet
-DOFs decoupled entirely, not merely masked in place -- masking in place for the fine smoother
-alone was tried and diverged outright. A free midside node whose edge-endpoint corner is Dirichlet-constrained keeps
+**Dirichlet rows.** A field's diagonal block still carries its Dirichlet identity rows (the Dirichlet elimination runs
+before the linear solver), and the identity rows of multi-point-constraint slaves, which are treated alike. The fine
+smoothing and the Galerkin projection act on the *free* DOFs only, with the Dirichlet DOFs decoupled entirely: the
+cycle is that of the free submatrix, and a Dirichlet DOF that is only masked after a step still couples into the free
+DOFs within it. A free midside node whose edge-endpoint corner is Dirichlet-constrained keeps
 only the surviving weight of its free endpoint -- no renormalization (the constrained corner contributes exactly zero
 to a homogeneous Newton correction, which the dropped weight already encodes). A free midside dof whose *both*
 endpoint dofs are constrained (a symmetry plane and a tie on one edge, issue #223) would get an empty row of :math:`P`
@@ -108,17 +107,13 @@ from edelweissfe.utils import performancetiming
 class CornerNodeTwoLevelCycle(TwoLevelCycle):
     """A corner-node two-level cycle for one vector field's diagonal block, a two-level preconditioner
     (:class:`~edelweissfe.linsolve.composition.twolevelcycle.TwoLevelCycle`) whose coarse level is the P1
-    corner nodes, and whose coarse solve is a callable.
+    corner nodes, and whose coarse solve is a callable, set with :meth:`setCoarseSolve`.
 
     Parameters
     ----------
     isCorner, edgeEndpoints
         This field's midside corners (:func:`edelweissfe.numerics.p1topology.buildMidsideCorners`), in the
         field's own node order.
-    coarseSolve
-        The coarse solve, a callable ``r_c -> z_c`` with :math:`z_c \\approx A_c^{-1} r_c`, e.g. a component of the
-        composed solver once it is set up on the coarse operator :meth:`build` returns; called once per application.
-        ``None``: set it with :meth:`setCoarseSolve` after the build, before the first application.
     amgclTree, backendBlockSize, backendPrecision
         The parameters of the cycle, see
         :meth:`~edelweissfe.linsolve.composition.twolevelcycle.TwoLevelCycle.cycleParameters`: the fine
@@ -134,7 +129,6 @@ class CornerNodeTwoLevelCycle(TwoLevelCycle):
         self,
         isCorner: np.ndarray,
         edgeEndpoints: np.ndarray,
-        coarseSolve,
         amgclTree: dict,
         backendBlockSize: int = 1,
         backendPrecision: str = "double",
@@ -147,13 +141,11 @@ class CornerNodeTwoLevelCycle(TwoLevelCycle):
             PyAMGCLCornerNodeTwoLevelCycle,
             self.cycleParameters(amgclTree, backendBlockSize, backendPrecision),
         )
-        self.coarseSolve = None
-        if coarseSolve is not None:
-            self.setCoarseSolve(coarseSolve)
 
     def setCoarseSolve(self, coarseSolve) -> None:
-        """The coarse solve (see the class parameters), before or after the build; the cycle calls the one set last."""
-        self.coarseSolve = coarseSolve
+        """The coarse solve, a callable ``r_c -> z_c`` with :math:`z_c \\approx A_c^{-1} r_c`, e.g. a component of the
+        composed solver once it is set up on the coarse operator :meth:`build` returns; called once per application.
+        Set before or after the build, before the first application; the cycle calls the one set last."""
         self._preconditioner.setCoarseSolve(coarseSolve)
 
     def build(self, A, scaling: np.ndarray) -> sp.csr_matrix:

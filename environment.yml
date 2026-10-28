@@ -34,7 +34,7 @@ dependencies:
   - make
   - libboost-devel
   - amgcl
-  # Build dependencies of Marmot.
+  # Build dependencies of Marmot; Eigen is also one of the AMGCL extension (amgcl-spectral-radius.hpp).
   - eigen
   - autodiff=1.1.2
   - fastor

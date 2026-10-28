@@ -66,8 +66,9 @@ from edelweissfe.linsolve.nullspace import (
 #:
 #: Both spectral radii -- of the smoother and of the prolongation smoothing -- are estimated by ``spectralRadiusSteps``
 #: Arnoldi steps (default 10) from a start vector seeded per row, the same at any thread count
-#: (``edelweissfe/linsolve/amgcl/amgcl-spectral-radius.hpp``, "The spectral radius estimate" in
-#: ``fieldsplitmeasurements.rst``); the trees leave the default.
+#: (``edelweissfe/linsolve/amgcl/amgcl-spectral-radius.hpp``; "The spectral radius estimate of the Chebyshev smoother"
+#: in ``fieldsplitmeasurements.rst``); the trees leave the default. ``spectralRadiusSteps`` is EdelweissFE's own key,
+#: not AMGCL's.
 _VECTOR_FIELD_TREE = {
     "coarsening": {
         "type": "smoothed_aggregation",
@@ -83,11 +84,12 @@ _SCALAR_FIELD_TREE = {
     "relax": {"type": "chebyshev"},
 }
 #: The smoother of the corner-node two-level cycle, ``TwoLevel(coarseSpace=CornerNodeInterpolation())``: Chebyshev of
-#: degree 8 on the interval from 0.03 to 1.1 times the spectral radius, on the quadratic field and on the rigid-body
-#: coarse level of its default coarse solve (:func:`defaultCornerNodeTwoLevelTree`). A sweep of degree 8 costs half the
-#: matrix products of one of degree 16, and the corner-node two-level cycle needs fewer than twice the outer iterations
-#: with it, so it is faster (:ref:`measured-corner-node-two-level-smoother`). ``AMG()`` and the rigid-body coarse level
-#: alone keep degree 16 (:data:`_VECTOR_FIELD_TREE`): there, degree 8 gains nothing.
+#: degree 8 on the interval from 0.03 to 1.1 times the spectral radius, on the quadratic field and, in the
+#: ``blockAMG()`` preset, on the rigid-body coarse level of its coarse solve (:func:`defaultCornerNodeTwoLevelTree`). A
+#: sweep of degree 8 costs half the matrix products of one of degree 16, and the corner-node two-level cycle needs
+#: fewer than twice the outer iterations with it, so it is faster (:ref:`measured-corner-node-two-level-smoother`).
+#: ``AMG()`` and the rigid-body coarse level alone keep degree 16 (:data:`_VECTOR_FIELD_TREE`): there, degree 8 gains
+#: nothing.
 _CORNER_NODE_TWO_LEVEL_SMOOTHER = {"type": "chebyshev", "degree": 8, "lower": 0.03, "higher": 1.1}
 
 
@@ -95,16 +97,17 @@ def defaultFieldTree(dimension: int) -> dict:
     """The default AMGCL preconditioner tree of a field, from its nodal dimension: :data:`_VECTOR_FIELD_TREE` for a
     vector field, a Chebyshev-smoothed smoothed aggregation with AMGCL's defaults for a scalar field (e.g.
     ``nonlocal damage``), but the smoother's margin ``higher`` 1.1 above the estimated spectral radius, the default of
-    EdelweissFE's Chebyshev smoother (see ``amgcl-chebyshev.hpp``). A copy: the trees are nested, and a caller may adapt the one it gets. The backend the tree is
-    built on (block size, precision) is chosen apart from it, see :func:`backendOf`."""
+    EdelweissFE's Chebyshev smoother (see ``amgcl-chebyshev.hpp``). A copy: the trees are nested, and a caller may adapt
+    the one it gets. The backend the tree is built on (block size, precision) is chosen apart from it, see
+    :func:`backendOf`."""
     return copy.deepcopy(_VECTOR_FIELD_TREE if dimension > 1 else _SCALAR_FIELD_TREE)
 
 
 def defaultCornerNodeTwoLevelTree() -> dict:
-    """The default AMGCL tree of the corner-node two-level cycle on a vector field,
-    ``TwoLevel(coarseSpace=CornerNodeInterpolation())``, and of the rigid-body coarse level of its default coarse solve
-    (a scalar field keeps :func:`defaultFieldTree`): the default tree of a vector field
-    (:data:`_VECTOR_FIELD_TREE`) with the smoother of the corner-node two-level cycle
+    """The default AMGCL tree of the corner-node two-level cycle on a 3D displacement field,
+    ``TwoLevel(coarseSpace=CornerNodeInterpolation())``, and the tree the ``blockAMG()`` preset gives the rigid-body
+    coarse level of its coarse solve (any other field keeps :func:`defaultFieldTree`): the default tree of a vector
+    field (:data:`_VECTOR_FIELD_TREE`) with the smoother of the corner-node two-level cycle
     (:data:`_CORNER_NODE_TWO_LEVEL_SMOOTHER`). The corner-node two-level cycle reads only the smoother of its tree
     (``relax``, ``npre``, ``npost``), the rigid-body coarse level the whole tree. A copy, as :func:`defaultFieldTree`.
     """
@@ -278,7 +281,7 @@ def buildFieldHierarchy(block, tree: dict, backend: tuple, scaling, coords, diag
     block
         The field's :class:`~edelweissfe.linsolve.base.FieldBlock`.
     tree
-        The field's AMGCL tree, forwarded verbatim.
+        The field's AMGCL tree, with EdelweissFE's own key ``spectralRadiusSteps`` (see :data:`_VECTOR_FIELD_TREE`).
     backend
         ``(backendBlockSize, backendPrecision, blockTranslationNullspace)``, see :func:`backendOf`.
     scaling
@@ -325,8 +328,8 @@ class AMG(Preconditioner):
     Parameters
     ----------
     tree
-        The AMGCL parameter tree, forwarded verbatim; ``None``: the default tree of the field's dimension
-        (:func:`defaultFieldTree`).
+        The AMGCL parameter tree, with EdelweissFE's own key ``spectralRadiusSteps`` (see
+        :data:`_VECTOR_FIELD_TREE`); ``None``: the default tree of the field's dimension (:func:`defaultFieldTree`).
     backendBlockSize, backendPrecision, blockTranslationNullspace
         The AMGCL backend: scalar entries (1) or node-wise blocks (2, 3), stored in ``"double"`` or ``"float"``, and
         on blocks whether smoothed aggregation starts from the field's translations; ``None``: the field's default,
