@@ -41,8 +41,8 @@ with :math:`A_c^{-1}` approximated. The coarse space decides what the cycle can 
   in 3D), where an AMG hierarchy on node-wise 3x3 blocks takes the translations alone; :math:`A_c^{-1}` is one V-cycle
   of an AMG hierarchy;
 - :class:`CornerNodeInterpolation`: the linear interpolant of a quadratic field from its corner nodes (P1);
-  :math:`A_c^{-1}` is a component of its own, by default
-  ``DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModesPerAggregate()))`` on the corner-node field -- three levels:
+  :math:`A_c^{-1}` is a component of its own on the corner-node field, by default ``DiagonalScaling(AMG())``. For a 3D
+  displacement field, ``DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModesPerAggregate()))`` makes three levels:
   quadratic, linear, rigid-body modes of aggregates.
 
 Why "two-level": the component is the fine level and one coarse correction, and its coarse problem is solved inexactly.
@@ -59,13 +59,14 @@ The cycle runs in C++ (:mod:`~edelweissfe.linsolve.composition.rigidbodymodestwo
 :mod:`~edelweissfe.linsolve.composition.cornernodetwolevelcycle`; the coarse component of
 :class:`CornerNodeInterpolation` is called back once per cycle). Its steps, written out in Python, are
 ``Multiplicative([smoother, CoarseCorrection(P, coarseSolve), smoother])``
-(:mod:`~edelweissfe.linsolve.composition.combinators`). Both ways are kept on purpose: this one is fast (about half the
-cost per application), the spelled-out one shows the steps and takes any smoother or coarse space. Why, and what would
+(:mod:`~edelweissfe.linsolve.composition.combinators`). Both ways are kept on purpose: this one is faster per
+application, the spelled-out one shows the steps and takes any smoother or coarse space. Why, and what would
 end the exception: the "two-level cycle: two ways" section of ``doc/source/documentation/composedlinsolvers.rst``.
 """
 
 import edelweissfe.utils.performancetiming as performancetiming
 from edelweissfe.linsolve.composition.amg import (
+    AMG,
     backendOf,
     checkBackend,
     fieldTreeOf,
@@ -78,6 +79,7 @@ from edelweissfe.linsolve.composition.base import (
     Step,
     requirePreconditioner,
 )
+from edelweissfe.linsolve.composition.diagonalscaling import DiagonalScaling
 from edelweissfe.linsolve.composition.systemmatrix import SystemMatrix
 from edelweissfe.linsolve.nullspace import carriesRigidBodyModes
 
@@ -119,10 +121,9 @@ class CoarseSpace:
         """What a built cycle reports about its coarse level (for the run statistics)."""
         return {}
 
-    def children(self, cycle) -> tuple:
-        """The ``(role, component)`` pairs of the coarse space, children of the :class:`TwoLevel` that uses it, for its
-        built ``cycle`` (``None`` before a build): its coarse solve, if that is a component
-        (:class:`CornerNodeInterpolation`); none if the cycle solves on its own."""
+    def children(self) -> tuple:
+        """The ``(role, component)`` pairs of the coarse space, children of the :class:`TwoLevel` that uses it: its
+        coarse solve, if that is a component (:class:`CornerNodeInterpolation`); none if the cycle solves on its own."""
         return ()
 
     def coarseSolveStep(self) -> Step:
@@ -235,25 +236,25 @@ class CornerNodeInterpolation(CoarseSpace):
     as its scaling, an identity row for each Dirichlet coarse dof
     (:meth:`~edelweissfe.linsolve.composition.base.SetUpContext.ofCoarseNodes`).
 
+    The coarse solve belongs to this coarse space for its whole life: each build sets it up anew on that build's
+    :math:`A_c`. So one ``CornerNodeInterpolation`` serves one :class:`TwoLevel`; under two, its coarse solve would sit
+    in two places of the tree, which the composed solver refuses.
+
     Parameters
     ----------
     coarseSolve
-        The coarse solve :math:`A_c^{-1}`, a component built on :math:`A_c` and applied once per cycle. ``None``: the
-        coarse field is solved like any field of the ``blockamg`` preset, under a diagonal scaling of its own
-        (:meth:`defaultCoarseSolve`, chosen anew at every build, for the coarse field of that build, and held by the
-        built cycle, not by this coarse space): for a 3D displacement field
-        ``DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModesPerAggregate()))``, measured fastest (see
-        :ref:`measured-scaled-corner-node-interpolation`), for any other field ``DiagonalScaling(AMG())``.
-        ``AMG(...)`` is the plain AMG hierarchy on it, ``AMG(backendBlockSize=1)`` one with the rigid-body modes of the
-        corners as its near null-space.
+        The coarse solve :math:`A_c^{-1}`, a component applied once per cycle. ``None``: ``DiagonalScaling(AMG())``,
+        which works on any field. For a 3D displacement field
+        ``DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModesPerAggregate()))`` is faster
+        (:ref:`measured-scaled-corner-node-interpolation`).
     """
 
     name = "corner-node interpolation"
 
     def __init__(self, coarseSolve: Preconditioner = None):
-        if coarseSolve is not None:
-            requirePreconditioner("CornerNodeInterpolation", "coarseSolve", coarseSolve)
-        # the coarse solve asked for; None: the default, chosen at every build (see build)
+        if coarseSolve is None:
+            coarseSolve = DiagonalScaling(AMG())
+        requirePreconditioner("CornerNodeInterpolation", "coarseSolve", coarseSolve)
         self.coarseSolve = coarseSolve
 
     def check(self, field, context: SetUpContext, cycle: dict) -> None:
@@ -266,9 +267,8 @@ class CornerNodeInterpolation(CoarseSpace):
             )
 
     def build(self, field, matrix, context: SetUpContext, cycle: dict):
-        """Build the cycle in C++, which returns :math:`A_c`, and set up the coarse component on it: the one asked for,
-        or the default for this build's coarse field. The built cycle holds it, so that one ``CornerNodeInterpolation()``
-        in two places of the tree gives each its own."""
+        """Build the cycle in C++, which returns :math:`A_c`, set up the coarse solve on it, and hand the coarse solve
+        to the cycle."""
         from edelweissfe.linsolve.composition.cornernodetwolevelcycle import (
             CornerNodeTwoLevelCycle,
         )
@@ -279,37 +279,20 @@ class CornerNodeInterpolation(CoarseSpace):
             CornerNodeTwoLevelCycle,
             isCorner,
             edgeEndpoints,
-            None,
             **cycle,
         )
         with performancetiming.timeit("{:} corner-node cycle build".format(field.name)):
             A_c = built.build(matrix, context.scalingOf(slice(None)))
         if A_c.shape[0] > 0:
-            coarseContext = context.ofCoarseNodes(field, built.coarseNodes)
-            coarseSolve = self.coarseSolve
-            if coarseSolve is None:
-                coarseSolve = self.defaultCoarseSolve(coarseContext.fields[0], coarseContext)
-            coarseSolve.setUp(SystemMatrix(A_c), coarseContext)
-            built.setCoarseSolve(coarseSolve)
+            self.coarseSolve.setUp(SystemMatrix(A_c), context.ofCoarseNodes(field, built.coarseNodes))
+            built.setCoarseSolve(self.coarseSolve)
         return built
-
-    @staticmethod
-    def defaultCoarseSolve(coarseField, coarseContext: SetUpContext) -> Preconditioner:
-        """The coarse solve of ``coarseSolve=None``: the coarse field solved like any field of the ``blockamg`` preset
-        (:func:`~edelweissfe.linsolve.composition.presets.blockAMGFieldPreconditioner`), under a diagonal scaling of
-        its own."""
-        from edelweissfe.linsolve.composition.diagonalscaling import DiagonalScaling
-        from edelweissfe.linsolve.composition.presets import blockAMGFieldPreconditioner
-
-        return DiagonalScaling(blockAMGFieldPreconditioner(coarseField, coarseContext))
 
     def sizesOf(self, cycle) -> dict:
         return {"coarse dofs": cycle.nCoarse}
 
-    def children(self, cycle) -> tuple:
-        # the coarse solve of the built cycle; before a build, the one asked for (none for the default)
-        coarseSolve = cycle.coarseSolve if cycle is not None and cycle.coarseSolve is not None else self.coarseSolve
-        return () if coarseSolve is None else (("coarseSolve", coarseSolve),)
+    def children(self) -> tuple:
+        return (("coarseSolve", self.coarseSolve),)
 
     def coarseSolveStep(self) -> Step:
         return Step("z += P A_c⁻¹ Pᵀ (r − A z),  A_c = Pᵀ A P  (corner nodes, scaled weights)", "coarseSolve")
@@ -395,6 +378,8 @@ class TwoLevel(Preconditioner):
         self.statistics.sizes.update(rows=A.shape[0], **self.coarseSpace.sizesOf(self.cycle))
 
     def _update(self, A, change) -> None:
+        # A_c is built above the coarse solve: rebuilt with it, also for reasons the coarse solve adds itself
+        change = self.withRebuildReasons(change)
         # only the values changed: the whole cycle, its coarse solve included, is kept
         if change.requiresRebuild or self.cycle is None:
             self.setUp(A, change.context)
@@ -403,7 +388,7 @@ class TwoLevel(Preconditioner):
         return self.cycle.applyPreconditioner(r)
 
     def children(self) -> tuple:
-        return self.coarseSpace.children(self.cycle)
+        return self.coarseSpace.children()
 
     def _parameters(self) -> dict:
         parameters = self.coarseSpace.describe()
@@ -415,11 +400,13 @@ class TwoLevel(Preconditioner):
 
     def describe(self) -> Description:
         name = self._field.name if self._field is not None else "A"
-        coarse = "; A_c⁻¹ = {coarseSolve}" if self.children() else ""
+        hasCoarseSolve = bool(self.children())
+        coarse = "; A_c⁻¹ = {coarseSolve}" if hasCoarseSolve else ""
+        coarseLatex = "; A_c^{-1} = {coarseSolve}" if hasCoarseSolve else ""
         return Description(
             name="TwoLevel",
             formula="TwoLevel(" + name + "; " + self.coarseSpace.name + coarse + ")⁻¹",
-            latex="\\mathrm{TL}(A_{\\text{" + name + "}})^{-1}",
+            latex="\\mathrm{TL}(A_{\\text{" + name + "}}" + coarseLatex + ")^{-1}",
             parameters=self._parameters(),
             steps=(
                 Step("z = S(0, r)   (pre-smoothing)"),

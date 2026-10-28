@@ -199,121 +199,26 @@ The corner-node two-level cycle with scaled weights and a composed coarse solve
 
 See :ref:`blockamg-p-multigrid`.
 
-Outer iterations and wall time in seconds (setup included) to a relative residual of 1e-6 on the displacement block
-alone, one cycle per outer iteration, LGMRES (restart 50), 32 threads on a two-socket workstation, from the systems of
-:ref:`measured-rigid-body-coarse-level`: the rigid-body coarse level (``TwoLevel(coarseSpace=RigidBodyModesPerAggregate())``); the
-former corner-node two-level cycle with the plain weights :math:`\tfrac12, \tfrac12` and an AMG coarse solve fused into its C++
-cycle (measured on the same machine with the code before the change); ``TwoLevel(coarseSpace=CornerNodeInterpolation())`` with its default coarse solve,
-``DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModesPerAggregate()))``, every fine spectral radius from 50 power iterations
-(as the first two columns); and the same with the default trees of the time (300 power iterations; the estimate is
-now :ref:`measured-power-iterations`).
+Offline, outer iterations and solve time (setup included) to a relative residual of 1e-6 on the displacement block
+alone, one cycle per outer iteration, on the captured systems of :ref:`measured-rigid-body-coarse-level`: the tunnel
+segment, elastic and damaged, and sequences of the damage cylinder and of the edge breakout.
 
-.. list-table::
-    :width: 100%
-    :header-rows: 1
+Against the former corner-node two-level cycle -- the plain weights :math:`\tfrac12, \tfrac12` and an AMG coarse solve
+inside its C++ cycle -- the scaled weights with the coarse solve
+``DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModesPerAggregate()))`` needed many times fewer outer iterations on the
+tunnel segment, several times fewer on the damage cylinder and fewer on the edge breakout, and less time on every
+system. They also needed fewer outer iterations than the rigid-body coarse level on the whole field on every system;
+with the fine spectral radius estimated by fewer power iterations than the default trees of the time, they were also
+faster on almost every system, while those long power iterations, on the fine level of the cycle above all, took back
+much of that gain in setup (the estimate that replaced them: :ref:`measured-power-iterations`). The iterations agree
+with those of the offline prototype the method was developed in. Calling the coarse component back from the C++ cycle,
+with the restriction and the prolongation, is a small part of an application next to the fine Chebyshev sweep.
 
-    * - system (unknowns)
-      - rigid-body coarse level
-      - former corner-node two-level cycle
-      - scaled weights, 50 power iterations
-      - scaled weights, default trees
-    * - tunnel lining, elastic (1.37 M)
-      - 22 / 9.2
-      - 279 / 72.7
-      - 14 / 6.5
-      - 14 / 10.4
-    * - tunnel lining, damaged (1.37 M)
-      - 36 / 13.9
-      - 253 / 63.5
-      - 21 / 8.7
-      - 21 / 12.9
-    * - damage cylinder, solve 2 (0.63 M)
-      - 23 / 3.9
-      - 84 / 10.8
-      - 10 / 2.1
-      - 10 / 3.7
-    * - damage cylinder, solve 16 (0.63 M)
-      - 28 / 4.0
-      - 95 / 11.3
-      - 13 / 2.5
-      - 13 / 4.1
-    * - damage cylinder, solve 22 (0.63 M)
-      - 36 / 5.1
-      - 103 / 12.3
-      - 24 / 3.2
-      - 24 / 4.9
-    * - damage cylinder, solve 26 (0.63 M)
-      - 58 / 6.7
-      - 128 / 13.8
-      - 39 / 4.2
-      - 39 / 5.7
-    * - damage cylinder, solve 30 (0.63 M)
-      - 60 / 7.3
-      - 139 / 15.5
-      - 40 / 4.5
-      - 40 / 5.9
-    * - edge breakout, solve 1 (0.81 M)
-      - 13 / 3.6
-      - 21 / 8.6
-      - 9 / 3.7
-      - 9 / 6.1
-    * - edge breakout, solve 8 (0.81 M)
-      - 20 / 4.8
-      - 24 / 9.1
-      - 13 / 4.3
-      - 13 / 6.5
-    * - edge breakout, solve 13 (0.81 M)
-      - 21 / 4.8
-      - 25 / 9.3
-      - 13 / 4.3
-      - 13 / 6.8
-    * - edge breakout, solve 20 (0.81 M)
-      - 22 / 4.9
-      - 25 / 9.0
-      - 13 / 4.2
-      - 13 / 6.6
-    * - edge breakout, solve 26 (0.81 M)
-      - 24 / 5.0
-      - 29 / 9.6
-      - 14 / 4.5
-      - 14 / 6.8
-
-The iterations are those of the offline prototype the method was developed in, on every system; the wall times are
-lower than the prototype's (its setup ran partly in single-threaded SciPy). The coarse component costs 10--45 ms per
-application (the fine Chebyshev sweep 50--160 ms), and calling it back from the C++ cycle, with the restriction and the
-prolongation, adds 1--3 ms. The 300 power iterations of the default trees cost 1.5--4 s of setup on these systems, on
-the fine level of the cycle above all.
-
-Other coarse solves, with 50 power iterations (iterations / wall s):
-
-.. list-table::
-    :width: 100%
-    :header-rows: 1
-
-    * - system
-      - default: ``DiagonalScaling(TwoLevel(RigidBodyModesPerAggregate()))``
-      - ``TwoLevel(RigidBodyModesPerAggregate())``, :math:`A_c` not scaled again
-      - ``DiagonalScaling(AMG(backendBlockSize=1))``, the rigid-body modes of the corners
-    * - tunnel lining, elastic
-      - 14 / 6.5
-      - 14 / 6.9
-      - 18 / 8.8
-    * - damage cylinder, solve 22
-      - 24 / 3.2
-      - 24 / 3.7
-      - 24 / 4.1
-    * - edge breakout, solve 1
-      - 9 / 3.7
-      - 18 / 5.3
-      - 10 / 6.0
-    * - edge breakout, solve 20
-      - 13 / 4.2
-      - 27 / 6.5
-      - 14 / 6.9
-
-Where the scaling varies little along the edges (the tunnel, the cylinder) the second scaling of :math:`A_c` changes
-nothing; on the edge breakout, where midside diagonals are up to :math:`10^6` times smaller than their corners', it
-halves the iterations.
+Other coarse solves on the corner-node field: ``TwoLevel(coarseSpace=RigidBodyModesPerAggregate())`` without the
+second scaling needed the same iterations where the scaling varies little along the edges (the tunnel, the cylinder),
+and many more on the edge breakout, where midside diagonals are far smaller than their corners';
+``DiagonalScaling(AMG(backendBlockSize=1))``, an AMG hierarchy with the rigid-body modes of the corners, needed as
+many or more iterations and more time on every system.
 
 .. _measured-defaults:
 

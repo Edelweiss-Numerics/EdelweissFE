@@ -1763,10 +1763,21 @@ protected:
   /// @param parameters the parameter tree, kept as prm for the derived class; the parameters of the cycle are read from
   /// it (TwoLevelCycleParameters::fromTree())
   /// @param name the preconditioner's name in messages
-  /// @throws std::runtime_error for cycle parameters that cannot be used
-  TwoLevelCycle( const boost::property_tree::ptree& parameters, const std::string& name )
+  /// @param keys the top-level keys of the tree the preconditioner reads: any other key is rejected
+  /// @throws std::runtime_error for an unknown key, or cycle parameters that cannot be used
+  TwoLevelCycle( const boost::property_tree::ptree& parameters,
+                 const std::string&                 name,
+                 const std::vector< std::string >&  keys )
     : prm( parameters ), name_( name ), cycle_( TwoLevelCycleParameters::fromTree( parameters, name ) )
   {
+    for ( const auto& entry : parameters ) {
+      if ( std::find( keys.begin(), keys.end(), entry.first ) == keys.end() ) {
+        std::string valid;
+        for ( const std::string& key : keys )
+          valid += ( valid.empty() ? "" : ", " ) + key;
+        throw std::runtime_error( name + ": unknown parameter \"" + entry.first + "\"; valid: " + valid );
+      }
+    }
   }
 
   /// @brief Adds the wall time of its scope to the build stage `name` (setupSeconds_, appended if it is new): a stage
@@ -1951,9 +1962,9 @@ public:
   int fineBlockSize_ = 1;
 
   /// @brief Parse the parameter tree: the cycle's parameters as TwoLevelCycleParameters::fromTree() reads them (the
-  /// field's AMGCL tree under "amgcl", backendPrecision) and backendBlockSize (the storage of the fine operator). The
-  /// parameters are validated here, so that a bad value fails before build() has spent anything on the prolongation or
-  /// the Galerkin product.
+  /// field's AMGCL tree under "amgcl", backendPrecision) and backendBlockSize (the storage of the fine operator), and
+  /// no other key. The parameters are validated here, so that a bad value fails before build() has spent anything on
+  /// the prolongation or the Galerkin product.
   CornerNodeTwoLevelCycleT( const char* json_params ) : CornerNodeTwoLevelCycleT( parseJsonParameters( json_params ) )
   {
   }
@@ -2037,7 +2048,7 @@ private:
 
   /// @brief See CornerNodeTwoLevelCycleT(const char*).
   CornerNodeTwoLevelCycleT( const boost::property_tree::ptree& parameters )
-    : TwoLevelCycle( parameters, "cornerNodeTwoLevelCycle" )
+    : TwoLevelCycle( parameters, "cornerNodeTwoLevelCycle", { "amgcl", "backendBlockSize", "backendPrecision" } )
   {
     fineBlockSize_ = prm.get( "backendBlockSize", 1 );
     if ( fineBlockSize_ < 1 || fineBlockSize_ > 3 ) {
@@ -2047,10 +2058,6 @@ private:
     if ( cycle_.fineValueType == "float" && !storableInFloat( fineBlockSize_ ) ) {
       throw std::runtime_error(
         "cornerNodeTwoLevelCycle: 2x2 blocks are stored in double only, got backendPrecision float" );
-    }
-    if ( prm.get_child_optional( "coarse" ) ) {
-      throw std::runtime_error( "cornerNodeTwoLevelCycle: the coarse solve is a component of the composed solver "
-                                "(CornerNodeInterpolation(coarseSolve=...)), not an AMGCL tree under \"coarse\"" );
     }
   }
 
@@ -2344,7 +2351,9 @@ protected:
   /// @brief Parse and check the parameters (see the class comment), so that a bad value fails before build() has
   /// spent anything.
   RigidBodyModesTwoLevelCycle( const boost::property_tree::ptree& parameters )
-    : TwoLevelCycle( parameters, "rigidBodyModesTwoLevelCycle" )
+    : TwoLevelCycle( parameters,
+                     "rigidBodyModesTwoLevelCycle",
+                     { "amgcl", "backendBlockSize", "backendPrecision", "coarseHierarchyPrecision", "prolongation" } )
   {
     blockSize_ = prm.get( "backendBlockSize", 3 );
     if ( blockSize_ != 2 && blockSize_ != 3 ) {

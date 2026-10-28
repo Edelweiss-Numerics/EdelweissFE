@@ -789,8 +789,9 @@ TwoLevel(coarseSpace=CornerNodeInterpolation()))`` (:class:`~edelweissfe.linsolv
 ``npre`` Chebyshev sweeps on the field's own scaled block :math:`\hat A = D A D`, restriction of the residual through
 :math:`P^\mathsf{T}`, the coarse solve on the Galerkin-projected coarse operator :math:`A_c = P^\mathsf{T} \hat A P`,
 prolongation through :math:`P`, and ``npost`` more Chebyshev sweeps. The coarse space is purely topological -- the
-mesh's corner nodes -- so no re-discretization is involved. Written out, the default is three levels built from
-components:
+mesh's corner nodes -- so no re-discretization is involved. The coarse solve is a component; its default,
+``DiagonalScaling(AMG())``, works on any field. On a 3D displacement field the rigid-body coarse level is faster, three
+levels built from components:
 
 .. code-block:: python
 
@@ -802,9 +803,10 @@ displacement and gives a midside node the mean of its two edge-endpoint corners.
 :math:`\hat A = D A D`, whose variables are :math:`\hat u = D^{-1} u`, not :math:`u`. Interpolating :math:`\hat u` with
 the weights :math:`\tfrac12, \tfrac12` is interpolating something else than the displacement: a scaled translation
 :math:`D^{-1} t` -- the smoothest error there is, which the coarse level exists to remove -- is reproduced at a midside
-node only where its diagonal equals its corners'. Measured on captured systems, the error of the plain weights at the
-free midside dofs is 10--15 % in the median and 22--35 % at the 95th percentile, and on the edge breakout up to a
-factor of 2000. The interpolation of :math:`u`, written in the scaled variables, is
+node only where its diagonal equals its corners'; on captured systems the plain weights missed it at most free
+midside dofs, and by far where the diagonals along an edge differ much
+(:ref:`measured-scaled-corner-node-interpolation`). The interpolation of :math:`u`, written in the scaled variables,
+is
 
 .. math::
 
@@ -815,27 +817,28 @@ for a midside dof :math:`m` on the edge :math:`(a, b)`, :math:`s` the diagonal o
 restriction to the corners. It reproduces :math:`D^{-1} t` to rounding, and the coarse operator
 :math:`A_c = P^\mathsf{T} \hat A P = D_c P_{geo}^\mathsf{T} A P_{geo} D_c` is the P1 operator of the physical problem,
 in the corners' scaled variables. There is one way to do it, so there is no switch back to the plain weights; without
-a scaling above the cycle (:math:`D = I`), :math:`P = P_{geo}`. On the tunnel lining, the former plain weights needed
-253--279 outer iterations, the scaled ones 14--21 (:ref:`measured-scaled-corner-node-interpolation`).
+a scaling above the cycle (:math:`D = I`), :math:`P = P_{geo}`. The scaled weights need far fewer outer iterations
+than the plain ones (:ref:`measured-scaled-corner-node-interpolation`).
 
-**The coarse problem is a field of its own.** :math:`A_c` is handed to the component ``coarse`` with the context of the
-corner-node field (:meth:`~edelweissfe.linsolve.composition.base.SetUpContext.ofCoarseNodes`): the same field name and
-dimension on the corner nodes, their coordinates, :math:`D_c` as its scaling, and an identity row for each Dirichlet
+**The coarse problem is a field of its own.** :math:`A_c` is handed to the component ``coarseSolve`` with the context of
+the corner-node field (:meth:`~edelweissfe.linsolve.composition.base.SetUpContext.ofCoarseNodes`): the same field name
+and dimension on the corner nodes, their coordinates, :math:`D_c` as its scaling, and an identity row for each Dirichlet
 corner dof (a zero column of :math:`P`). A midside node with a free dof whose two edge corners are both constrained in
 that component (a symmetry plane and a tie, issue #223) would get an empty row of :math:`P`, no coarse correction at
-all: it joins the coarse nodes, as a node the midside corners cannot classify becomes a corner. This is decided at the build,
-where the Dirichlet rows are known. So every component works on it unchanged: ``RigidBodyModesPerAggregate`` builds the
-rigid-body modes of the corners, ``AMG(backendBlockSize=1)`` takes them as its near null-space, ``DirectSolver()``
-solves exactly. It is called back from the C++ cycle once per application.
+all: it joins the coarse nodes, as a node the midside corners cannot classify becomes a corner. This is decided at the
+build, where the Dirichlet rows are known. So every component works on it unchanged: ``RigidBodyModesPerAggregate``
+builds the rigid-body modes of the corners, ``AMG(backendBlockSize=1)`` takes them as its near null-space,
+``DirectSolver()`` solves exactly. It is called back from the C++ cycle once per application.
 
-**Why the default scales the coarse operator once more.** Where a midside diagonal is tiny against its corners' --
-on the edge breakout some differ by a factor of :math:`10^6` -- the weights :math:`s_a / s_m` reach about 1000, and
-:math:`A_c` inherits entries of their square. A two-level cycle on it then smooths with a spectral
-radius of :math:`1.8 \cdot 10^5` instead of about 5. ``DiagonalScaling`` around the coarse solve rescales :math:`A_c`
-to a unit diagonal, :math:`D_2 A_c D_2` with :math:`D_2 = |\operatorname{diag} A_c|^{-1/2}`: without it, the edge
-breakout's solves needed twice the iterations and 40--50 % more time. The default coarse solve is the measured fastest,
-``DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModesPerAggregate()))``; an AMG hierarchy with the rigid-body modes of the corners
-(``coarseSolve=DiagonalScaling(AMG(backendBlockSize=1))``) took 25--60 % more time (:ref:`measured-scaled-corner-node-interpolation`).
+**Why the coarse solve scales the coarse operator once more.** Where a midside diagonal is tiny against its corners',
+the weights :math:`s_a / s_m` are large, and :math:`A_c` inherits entries of their square: a smoother on :math:`A_c`
+would work with a spectral radius far above that of a unit-diagonal operator. ``DiagonalScaling`` around the coarse
+solve rescales :math:`A_c` to a unit diagonal, :math:`D_2 A_c D_2` with
+:math:`D_2 = |\operatorname{diag} A_c|^{-1/2}`; on a model with such diagonals, it saves outer iterations and time. Of
+the coarse solves measured on a 3D displacement field,
+``DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModesPerAggregate()))`` was the fastest, ahead of an AMG hierarchy
+with the rigid-body modes of the corners, ``DiagonalScaling(AMG(backendBlockSize=1))``
+(:ref:`measured-scaled-corner-node-interpolation`).
 
 Its preconditioner is rebuilt exactly when the single-level hierarchies are (see the reuse rules above): while only
 the values change, the cycle and its coarse solve are both kept. Enable it per field with ``OnField(name,
@@ -854,6 +857,7 @@ for the Dirichlet corner dofs, which are identity rows of :math:`A_c`. This is t
 free submatrix, and it allows ``TwoLevel(..., backendBlockSize=3)``: the fine operator is stored in node-wise
 :math:`3\times 3` blocks even where a node is only partially constrained, which roughly halves the
 memory traffic of the fine smoother and residual -- the dominant cost of the apply.
+
 ``backendPrecision="float"`` (the default on :math:`3\times 3` blocks) halves the bytes per stored entry once more.
 Only the stored entries
 are rounded: vectors and every sum stay double (a float matrix times a double vector), and the
@@ -867,6 +871,14 @@ same spelling as for the rigid-body coarse level. It is the Chebyshev polynomial
 bounds of the vector-field default tree (``lower`` 0.01, ``higher`` 1.1 times the spectral radius; the defaults are
 1/30 and 1.1, AMGCL's 1/30 and 1 but the margin, :ref:`blockamg-chebyshev`); its estimate runs on the free rows (the
 start vector is zero on the Dirichlet rows) and is built anew with the cycle.
+
+The same cycle on the free submatrix, written out in Python: the free submatrix, the scaled :math:`P`, an exact coarse
+solve and the Chebyshev polynomial. A test checks the C++ cycle against it, to rounding, for several numbers of sweeps
+and degrees:
+
+.. literalinclude:: ../../../tests/test_corner_node_two_level_cycle.py
+   :start-after: # The reference cycle of the theory page.
+   :end-before: # End of the reference cycle of the theory page.
 
 
 .. _blockamg-rigid-body-coarse-level:
