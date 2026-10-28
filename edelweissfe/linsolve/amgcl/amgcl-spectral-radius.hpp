@@ -42,13 +42,19 @@
 /// vector at any thread count, and the inner products sum over a fixed partition of the rows in order: the estimate is
 /// the same, bit for bit, at any thread count.
 ///
-/// The estimate returned is the largest real part theta of the Ritz values plus the residual norm r of its Ritz pair,
-/// |h_{k+1,k} y_k|. For a symmetric matrix some eigenvalue lies within r of theta, and since theta is below the largest
-/// eigenvalue, theta + r is close to it from above once the largest Ritz value has converged; for a nonsymmetric
-/// matrix (theta, x) is an exact eigenpair of a matrix within r of A (in the 2-norm), which bounds the error only
-/// with the conditioning of the eigenvectors. In neither case is theta + r a guaranteed upper bound -- the Chebyshev
-/// smoother's own margin (higher, 1.1) stays -- but it lifts an unconverged estimate towards the radius instead of
-/// leaving it below.
+/// The estimate returned is the modulus |theta| of the Ritz value of largest modulus plus the residual norm r of its
+/// Ritz pair, |h_{k+1,k} y_k|: the spectral radius is the largest modulus of the eigenvalues, so a dominant eigenvalue
+/// that is negative or complex (an indefinite or strongly nonsymmetric level, which contact or softening can make) is
+/// not missed, as the largest real part would miss it. For a symmetric matrix some eigenvalue lies within r of theta,
+/// and since |theta| is below the spectral radius, |theta| + r is close to it from above once the dominant Ritz value
+/// has converged; for a nonsymmetric matrix (theta, x) is an exact eigenpair of a matrix within r of A (in the
+/// 2-norm), which bounds the error only with the conditioning of the eigenvectors. In neither case is |theta| + r a
+/// guaranteed upper bound -- the Chebyshev smoother's own margin (higher, 1.1) stays -- but it lifts an unconverged
+/// estimate towards the radius instead of leaving it below.
+///
+/// The memory: Arnoldi keeps its k basis vectors, k doubles per DOF (10 by default, 80 bytes per DOF), while the
+/// estimate runs; the power method needed two. Against the operator itself (about 80 stored entries per DOF of a 3D
+/// field) that is small, and it is freed before the hierarchy's next level is built.
 #pragma once
 
 #include <algorithm>
@@ -67,10 +73,11 @@ namespace amgcl {
 
   /// @brief How a spectral radius is estimated: Arnoldi steps from a start vector seeded per row, and either a fixed
   /// number of them (spectralRadiusSteps), or as many as the largest Ritz pair needs (spectralRadiusTolerance, at most
-  /// spectralRadiusMaxSteps): the steps stop when its residual norm r is below the tolerance times its Ritz value
-  /// theta, but not before minimumSteps. For a symmetric matrix theta + r is an upper bound of the largest eigenvalue
-  /// once theta is the Ritz value closest to it, so a tolerance below the Chebyshev margin (higher - 1) makes the
-  /// margin sufficient; for a nonsymmetric matrix r is only an indicator of convergence.
+  /// spectralRadiusMaxSteps): the steps stop when its residual norm r is below the tolerance times the modulus of its
+  /// Ritz value theta, but not before minimumSteps. For a symmetric matrix |theta| + r is an upper bound of the
+  /// spectral radius once theta is the Ritz value closest to the dominant eigenvalue, so a tolerance below the
+  /// Chebyshev margin (higher - 1) makes the margin sufficient; for a nonsymmetric matrix r is only an indicator of
+  /// convergence.
   struct spectral_radius_estimate {
     /// @brief The steps of a fixed estimate (spectralRadiusSteps), 0 for an adaptive one.
     int steps = 0;
@@ -168,10 +175,17 @@ namespace amgcl {
 
       /// @brief The eigenvalues of the upper Hessenberg matrix H (m x m, row-major), by the shifted QR algorithm with
       /// Wilkinson shifts and Givens rotations, in complex arithmetic (m is the number of Arnoldi steps: small).
+      /// A subdiagonal entry is negligible relative to its two diagonal neighbours, or to the norm of H where those are
+      /// (nearly) zero; every tenth step without a deflation takes an exceptional shift, as LAPACK does, to break the
+      /// cycles a Wilkinson shift can fall into.
       inline std::vector< complex > hessenberg_eigenvalues( const std::vector< double >& H, int m )
       {
         std::vector< complex > A( H.begin(), H.end() );
-        auto                   at = [&]( int i, int j ) -> complex& { return A[i * m + j]; };
+        auto                   at    = [&]( int i, int j ) -> complex& { return A[i * m + j]; };
+        double                 normH = 0.0;
+        for ( double h : H )
+          normH += h * h;
+        normH = std::sqrt( normH );
         std::vector< complex > eigenvalues( m );
         int                    hi = m - 1, iterations = 0;
         while ( hi >= 0 ) {
@@ -181,8 +195,9 @@ namespace amgcl {
           }
           // the start of the active block: the last negligible subdiagonal entry
           int lo = hi;
-          while ( lo > 0 && std::abs( at( lo, lo - 1 ) ) >
-                              1e-14 * ( std::abs( at( lo, lo ) ) + std::abs( at( lo - 1, lo - 1 ) ) ) )
+          while ( lo > 0 &&
+                  std::abs( at( lo, lo - 1 ) ) >
+                    std::max( 1e-14 * ( std::abs( at( lo, lo ) ) + std::abs( at( lo - 1, lo - 1 ) ) ), 1e-16 * normH ) )
             --lo;
           if ( lo == hi ) {
             eigenvalues[hi] = at( hi, hi );
@@ -197,7 +212,8 @@ namespace amgcl {
           const complex a = at( hi - 1, hi - 1 ), b = at( hi - 1, hi ), c = at( hi, hi - 1 ), d = at( hi, hi );
           const complex half = 0.5 * ( a - d ), root = std::sqrt( half * half + b * c );
           const complex mu1 = d + half - root, mu2 = d + half + root;
-          const complex mu = std::abs( mu1 - d ) < std::abs( mu2 - d ) ? mu1 : mu2;
+          const complex mu = iterations % 10 == 0 ? d + 1.5 * std::abs( c )
+                                                  : ( std::abs( mu1 - d ) < std::abs( mu2 - d ) ? mu1 : mu2 );
           // one QR step on the active block: H - mu I = Q R, H <- R Q + mu I
           std::vector< complex > cs( hi - lo ), sn( hi - lo );
           for ( int k = lo; k <= hi; ++k )
@@ -276,7 +292,7 @@ namespace amgcl {
 
     } // namespace detail
 
-    /// @brief The largest real part theta of the Ritz values of the leading m x m block of the Arnoldi matrix H (row
+    /// @brief The largest modulus |theta| of the Ritz values of the leading m x m block of the Arnoldi matrix H (row
     /// width `width`), and the residual norm r = |h_{m+1,m} y_m| of its Ritz pair, y its normalized eigenvector of H.
     inline std::pair< double, double > largest_ritz_value( const std::vector< double >& H, int width, int m )
     {
@@ -287,16 +303,16 @@ namespace amgcl {
       const std::vector< detail::complex > ritz    = detail::hessenberg_eigenvalues( Hm, m );
       detail::complex                      largest = ritz[0];
       for ( const detail::complex& value : ritz )
-        if ( value.real() > largest.real() )
+        if ( std::abs( value ) > std::abs( largest ) )
           largest = value;
       const std::vector< detail::complex > y = detail::hessenberg_eigenvector( Hm, m, largest );
-      return std::make_pair( largest.real(), std::abs( H[m * width + m - 1] * y[m - 1] ) );
+      return std::make_pair( std::abs( largest ), std::abs( H[m * width + m - 1] * y[m - 1] ) );
     }
 
     /// @brief The spectral radius estimate of the module comment on the operator `apply`, from the start vector `v`
     /// (n entries, not all zero): Arnoldi steps as `how` says -- a fixed number, or until the residual norm of the
-    /// largest Ritz pair is below a tolerance relative to its Ritz value -- and theta + r of the last step's largest
-    /// Ritz pair. Stops early, with an exact estimate, if the Krylov space becomes invariant.
+    /// dominant Ritz pair is below a tolerance relative to its Ritz value -- and |theta| + r of the last step's Ritz
+    /// pair of largest modulus. Stops early, with an exact estimate, if the Krylov space becomes invariant.
     /// @param apply y <- A x, for double arrays of n entries
     /// @param stepsTaken if not null, the Arnoldi steps taken
     template < class Apply >
@@ -389,30 +405,25 @@ namespace amgcl {
     };
 
     /// @brief The spectral radius estimate (arnoldi_spectral_radius()) of a CSR matrix A of scalar or B x B block
-    /// entries, or with scaleByDiagonal of D^-1 A, D the diagonal entries (blocks) of A, from the start vector seeded
-    /// per row; rows with zeroStart set (may be null) start at zero -- the Dirichlet rows, which a cycle keeps zero.
+    /// entries, or of D^-1 A given the inverse diagonal entries (blocks) of A, as AMGCL's backend::diagonal(A, true)
+    /// computes them for the smoother (so that the estimate is of the operator the smoother applies), from the start
+    /// vector seeded per row; rows with zeroStart set (may be null) start at zero -- the Dirichlet rows, which a cycle
+    /// keeps zero.
+    ///
+    /// The product is written out rather than AMGCL's backend::spmv, because the stored entries may be float (the
+    /// float backends) while the Arnoldi vectors are double; entry_block reads a scalar or a block entry alike.
     template < class Matrix >
-    double estimated_spectral_radius( const Matrix&                   A,
-                                      const spectral_radius_estimate& how,
-                                      bool                            scaleByDiagonal,
-                                      const char*                     zeroStart  = nullptr,
-                                      int*                            stepsTaken = nullptr )
+    double estimated_spectral_radius(
+      const Matrix&                                                      A,
+      const spectral_radius_estimate&                                    how,
+      const numa_vector< typename backend::value_type< Matrix >::type >* inverseDiagonal,
+      const char*                                                        zeroStart  = nullptr,
+      int*                                                               stepsTaken = nullptr )
     {
       typedef typename backend::value_type< Matrix >::type value_type;
       const int                                            B     = entry_block< value_type >::rows;
       const ptrdiff_t                                      nRows = static_cast< ptrdiff_t >( backend::rows( A ) );
       const ptrdiff_t                                      n     = nRows * B;
-
-      // the inverse diagonal (blocks), for D^-1 A
-      std::vector< value_type > inverseDiagonal;
-      if ( scaleByDiagonal ) {
-        inverseDiagonal.assign( nRows, math::zero< value_type >() );
-#pragma omp parallel for
-        for ( ptrdiff_t i = 0; i < nRows; ++i )
-          for ( ptrdiff_t j = A.ptr[i]; j < A.ptr[i + 1]; ++j )
-            if ( static_cast< ptrdiff_t >( A.col[j] ) == i )
-              inverseDiagonal[i] = math::inverse( A.val[j] );
-      }
 
       std::vector< double > start( n );
 #pragma omp parallel for
@@ -435,10 +446,10 @@ namespace amgcl {
             }
             for ( int r = 0; r < B; ++r ) {
               double value = s[r];
-              if ( scaleByDiagonal ) {
+              if ( inverseDiagonal ) {
                 value = 0.0;
                 for ( int c = 0; c < B; ++c )
-                  value += entry_block< value_type >::at( inverseDiagonal[i], r, c ) * s[c];
+                  value += entry_block< value_type >::at( ( *inverseDiagonal )[i], r, c ) * s[c];
               }
               y[i * B + r] = value;
             }

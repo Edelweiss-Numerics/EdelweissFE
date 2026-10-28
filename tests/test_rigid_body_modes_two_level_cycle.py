@@ -456,6 +456,21 @@ def test_coordinates_of_other_nodes_and_a_near_null_space_it_cannot_take_are_ref
         native.build(As, np.ones((As.shape[0] - 3, 6)))
 
 
+def test_the_coarsening_spectral_radius_estimate_sets_the_prolongation_weight():
+    """The prolongation smoothing weight omega = 4/3 / rho(D^-1 A) takes the estimate of the tree's coarsening: a
+    one-step estimate (a smaller rho, a larger omega) gives another P than the default ten steps."""
+    As, scaling, coordinates, constrained = _equilibratedBeam(3)
+    prolongations = []
+    for steps in (None, 1):
+        tree = defaultFieldTree(3)
+        if steps is not None:
+            tree["coarsening"] = dict(tree["coarsening"], spectralRadiusSteps=steps)
+        preconditioner = RigidBodyModesTwoLevelCycle(tree, 3, "double")
+        preconditioner.build(As, scaling, coordinates)
+        prolongations.append(preconditioner.prolongationMatrix())
+    assert _relativeDifference(prolongations[1].toarray(), prolongations[0].toarray()) > 1e-6
+
+
 @pytest.mark.parametrize(
     "tree, blockSize, backendPrecision, options, reason",
     [

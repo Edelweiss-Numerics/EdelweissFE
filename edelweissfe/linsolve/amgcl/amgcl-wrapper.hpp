@@ -72,13 +72,17 @@ inline boost::property_tree::ptree parseJsonParameters( const char* jsonParamete
 inline boost::property_tree::ptree childOrEmpty( const boost::property_tree::ptree& tree, const std::string& path );
 
 /// @brief The parameters of an AMG hierarchy (amgcl::amg_hierarchy) from a "precond" tree: its class must be amg,
-/// which is then dropped.
+/// which is then dropped. AMGCL's other classes are not offered: a relaxation alone as the preconditioner
+/// (precond.class relaxation) only on the scalar backend, where LinearSolverT takes it before this; dummy and nested
+/// not at all (the composed solver composes preconditioners itself).
 /// @throws std::runtime_error for another class
 inline boost::property_tree::ptree amgHierarchyParameters( boost::property_tree::ptree precond )
 {
   const std::string precondClass = precond.get< std::string >( "class", "amg" );
   if ( precondClass != "amg" )
-    throw std::runtime_error( "precond.class must be amg here, got " + precondClass );
+    throw std::runtime_error( "precond.class must be amg, got '" + precondClass +
+                              "' (a relaxation alone, precond.class relaxation, is taken on the scalar backend only, "
+                              "backendBlockSize 1)" );
   precond.erase( "class" );
   return precond;
 }
@@ -1187,7 +1191,7 @@ public:
   /// is that of the free rows.
   double estimateSpectralRadius( const amgcl::spectral_radius_estimate& how, const char* isDirichlet ) const
   {
-    return amgcl::backend::estimated_spectral_radius( *A_, how, /*scaleByDiagonal=*/false, isDirichlet );
+    return amgcl::backend::estimated_spectral_radius( *A_, how, /*inverseDiagonal=*/nullptr, isDirichlet );
   }
 
   /// @brief `degree_` Chebyshev steps on A x = b, continuing from the given x -- the recurrence of

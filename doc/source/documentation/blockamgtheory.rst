@@ -448,23 +448,32 @@ the prolongation smoothing -- is estimated one way (``edelweissfe/linsolve/amgcl
   at 4, :ref:`measured-power-iterations`). The start vector is computed from the row index alone, zero on the
   Dirichlet rows of a two-level cycle, and the inner products sum over a fixed partition of the rows in order: the
   estimate is the same, bit for bit, at any thread count.
-* **The Ritz value plus its residual norm**, :math:`\theta + r` with :math:`r = |h_{k+1,k} y_k|` for the eigenvector
-  :math:`y` of the Arnoldi matrix. For a symmetric matrix there is an eigenvalue within :math:`r` of :math:`\theta`, so
-  :math:`\theta + r \geq \lambda_{max}` once :math:`\theta` is the Ritz value of the largest eigenvalue. For a
+* **The Ritz value of largest modulus plus its residual norm**, :math:`|\theta| + r` with :math:`r = |h_{k+1,k} y_k|`
+  for the eigenvector :math:`y` of the Arnoldi matrix. The modulus, because the spectral radius is the largest
+  modulus of the eigenvalues: a dominant eigenvalue that is negative or complex, as an indefinite or strongly
+  nonsymmetric level (contact, softening) may have, is not missed, as the largest real part would miss it. For a
+  symmetric matrix there is an eigenvalue within :math:`r` of :math:`\theta`, so :math:`|\theta| + r \geq \rho` once
+  :math:`\theta` is the Ritz value of the dominant eigenvalue. For a
   nonsymmetric matrix :math:`(\theta, x)` is an exact eigenpair of a matrix within :math:`r` of :math:`A`, which bounds
   the error only together with the conditioning of the eigenvectors: :math:`r` is an indicator there, not a bound, and
   the smoother keeps its own margin (``higher`` 1.1).
 * **A fixed number of steps, or an adaptive one.** By default 10 steps (``spectralRadiusSteps``); on 14 operators of
   captured systems they gave :math:`1.005` to :math:`1.043\,\rho`. Instead, a tree can ask for an adaptive estimate:
-  the steps stop when :math:`r < \tau\, \theta` (``spectralRadiusTolerance``, e.g. 0.05, half the margin of
+  the steps stop when :math:`r < \tau\, |\theta|` (``spectralRadiusTolerance``, e.g. 0.05, half the margin of
   ``higher``), after at least 8 and at most ``spectralRadiusMaxSteps`` (default 30) steps -- one or the other, not
   both. For a symmetric operator a tolerance below the margin makes the margin provably sufficient; for a nonsymmetric
   one :math:`r` is only an indicator. Measured, the adaptive estimate (0.05) stopped after 8 to 11 steps on those
   operators and needed the same outer iterations as 10 fixed steps, but more setup on the small coarse AMG levels,
   where it takes more steps; so the fixed number is the default (:ref:`measured-power-iterations`).
 
+* **Its memory.** Arnoldi keeps its :math:`k` basis vectors while it runs, :math:`k` doubles per DOF (80 bytes per DOF
+  for the 10 default steps, 240 for an adaptive estimate of up to 30); the power iteration needed two. Against the
+  operator itself (about 80 stored entries per DOF of a 3D field) that is small, and it is freed before the next level
+  of a hierarchy is built.
+
 The parameters sit where AMGCL's ``power_iters`` sat: in a tree's ``relax`` for the smoother, in its ``coarsening`` for
-the prolongation smoothing (with ``estimate_spectral_radius``). A tree that sets ``power_iters`` is refused. The
+the prolongation smoothing (with ``estimate_spectral_radius``). A tree that sets ``power_iters`` is refused, also
+``power_iters`` 0, AMGCL's Gershgorin bound: there is one estimate. The
 Chebyshev relaxation and the smoothed aggregation that use the estimate are EdelweissFE's own
 (``amgcl-chebyshev.hpp``), step for step AMGCL's otherwise; every other relaxation and coarsening is AMGCL's.
 
