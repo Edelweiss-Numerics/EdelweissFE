@@ -1425,16 +1425,23 @@ public:
 /// @brief The coarse solve as a callback into Python: a component of the composed solver, e.g.
 /// DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModesPerAggregate())) on the coarse operator of the corner-node
 /// two-level cycle. The callback has the signature of the preconditioner of the outer Krylov solve (PyPrecondApplyFn):
-/// x <- M^-1 rhs.
+/// x <- M^-1 rhs. It reads the callback from the cycle at every apply(), so that a coarse solve set (again) after the
+/// build is the one called, and a replaced one never is.
 class CallbackCoarseSolve : public CoarseSolve {
 public:
-  /// @param applyFn, ctx the callback and its opaque context
+  /// @param applyFn, ctx the cycle's callback and its opaque context, read at every apply()
   /// @param n the number of coarse DOFs
-  CallbackCoarseSolve( PyPrecondApplyFn applyFn, void* ctx, int n ) : applyFn_( applyFn ), ctx_( ctx ), n_( n ) {}
+  CallbackCoarseSolve( const PyPrecondApplyFn& applyFn, void* const& ctx, int n )
+    : applyFn_( applyFn ), ctx_( ctx ), n_( n )
+  {
+  }
 
-  /// @throw std::runtime_error if the callback failed (a Python exception, which the caller keeps and re-raises)
+  /// @throw std::runtime_error if no coarse solve is set, or if the callback failed (a Python exception, which the
+  /// caller keeps and re-raises)
   void apply( const double* rhs, double* x ) override
   {
+    if ( applyFn_ == nullptr )
+      throw std::runtime_error( "two-level cycle: no coarse solve -- call setCoarseSolve() before the first apply" );
     if ( applyFn_( ctx_, n_, rhs, x ) != 0 )
       throw std::runtime_error( "two-level cycle: the coarse solve (a callback) failed" );
   }
@@ -1446,9 +1453,12 @@ public:
   }
 
 private:
-  PyPrecondApplyFn applyFn_;
-  void*            ctx_;
-  int              n_;
+  /// @brief The cycle's callback.
+  const PyPrecondApplyFn& applyFn_;
+  /// @brief The callback's opaque context.
+  void* const& ctx_;
+  /// @brief The number of coarse DOFs.
+  int n_;
 };
 
 /// @brief The hierarchy in Real: double, or float -- AMGCL's own single-precision backend, whose setup (the power
@@ -1991,7 +2001,8 @@ public:
   {
   }
 
-  /// @brief The coarse solve, x <- A_c^-1 rhs: a callback and its opaque context, called once per apply().
+  /// @brief The coarse solve, x <- A_c^-1 rhs: a callback and its opaque context, called once per apply(). It may be
+  /// set before or after build(), and replaced: apply() calls the one set last.
   void setCoarseSolve( PyPrecondApplyFn applyFn, void* ctx )
   {
     coarseSolveFn_      = applyFn;
@@ -2025,8 +2036,13 @@ public:
                                 " is not a multiple of the topology map's node count " + std::to_string( nNodes ) +
                                 " -- the map does not match this field." );
     }
-    if ( coarseSolveFn_ == nullptr )
-      throw std::runtime_error( "cornerNodeTwoLevelCycle: no coarse solve -- call setCoarseSolve() before build()" );
+    for ( ptrdiff_t i = 0; i < n; ++i ) {
+      // the weights of P divide by the scaling: a zero or non-finite entry would put Inf/NaN into P and A_c
+      if ( !std::isfinite( scaling[i] ) || scaling[i] == 0.0 ) {
+        throw std::runtime_error( "cornerNodeTwoLevelCycle: the scaling of DOF " + std::to_string( i ) +
+                                  " is zero or not finite" );
+      }
+    }
     const int nDim = nNodes > 0 ? n / nNodes : 0;
     if ( fineBlockSize_ > 1 && n > 0 && nDim != fineBlockSize_ ) {
       throw std::runtime_error( "cornerNodeTwoLevelCycle: backendBlockSize " + std::to_string( fineBlockSize_ ) +

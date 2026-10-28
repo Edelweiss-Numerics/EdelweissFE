@@ -421,7 +421,7 @@ def test_the_corner_node_two_level_cycle_with_its_default_coarse_solve_converges
         midsideCorners={"displacement": (isCorner, edgeEndpoints)},
     )
     assert _relative(A @ x, b) < 1e-8
-    coarse = cornerNodeTwoLevel.coarseSpace.coarseSolve
+    coarse = dict(cornerNodeTwoLevel.children())["coarseSolve"]
     assert isinstance(coarse, DiagonalScaling) and isinstance(coarse.inner, TwoLevel)
     assert coarse.statistics.setUps == 1
     assert coarse.statistics.applications == cornerNodeTwoLevel.statistics.applications
@@ -447,7 +447,7 @@ def test_the_default_coarse_solve_of_a_scalar_quadratic_field_is_amg():
         midsideCorners={"temperature": (isCorner, edgeEndpoints)},
     )
     assert _relative(A_x @ solution, b_x) < 1e-8
-    coarse = cornerNodeTwoLevel.coarseSpace.coarseSolve
+    coarse = dict(cornerNodeTwoLevel.children())["coarseSolve"]
     assert isinstance(coarse, DiagonalScaling) and isinstance(coarse.inner, AMG)
 
 
@@ -466,6 +466,27 @@ def test_one_component_in_two_places_of_the_tree_is_refused():
             nodeCoordinates={"displacement": coords},
             midsideCorners={"displacement": (isCorner, edgeEndpoints)},
         )
+
+
+def test_one_corner_node_interpolation_with_the_default_coarse_solve_in_two_places_gives_each_its_own():
+    """The default coarse solve is chosen at every build and held by the built cycle, not by the coarse space: one
+    CornerNodeInterpolation() under two TwoLevel cycles gives each cycle a coarse solve of its own."""
+    A, b, fields, coords, isCorner, edgeEndpoints, constrained = _p1System(4)
+    shared = CornerNodeInterpolation()
+    first, second = TwoLevel(shared), TwoLevel(shared)
+    root = LGMRES(DiagonalScaling(Additive([first, second])), tolerance=FixedTolerance(1e-8))
+    x, _ = _solved(
+        A,
+        b,
+        root,
+        fields,
+        nodeCoordinates={"displacement": coords},
+        midsideCorners={"displacement": (isCorner, edgeEndpoints)},
+    )
+    assert _relative(A @ x, b) < 1e-8
+    firstCoarse, secondCoarse = dict(first.children())["coarseSolve"], dict(second.children())["coarseSolve"]
+    assert firstCoarse is not secondCoarse and shared.coarseSolve is None
+    assert firstCoarse.statistics.applications == first.statistics.applications
 
 
 def test_a_correction_applied_twice_by_a_sweep_is_in_one_place():
@@ -515,7 +536,7 @@ def test_the_corner_node_two_level_cycle_reuses_its_coarse_solve_while_only_the_
     )
     x = composed((1.0001 * A).tocsr(), b)
     assert _relative(1.0001 * (A @ x), b) < 1e-7
-    coarse = cornerNodeTwoLevel.coarseSpace.coarseSolve
+    coarse = dict(cornerNodeTwoLevel.children())["coarseSolve"]
     assert (cornerNodeTwoLevel.statistics.setUps, coarse.statistics.setUps, coarse.inner.statistics.setUps) == (1, 1, 1)
     assert coarse.statistics.applications == cornerNodeTwoLevel.statistics.applications
 

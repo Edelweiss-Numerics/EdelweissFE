@@ -91,16 +91,6 @@ class TwoLevelCycle:
             "backendPrecision": backendPrecision,
         }
 
-    @classmethod
-    def parameterRejection(cls, *args, **kwargs) -> "str | None":
-        """Why these constructor arguments cannot be used, or ``None``. The C++ class checks its parameters as it is
-        created, so this creates one, without a build."""
-        try:
-            cls(*args, **kwargs)
-        except (TypeError, ValueError) as error:
-            return str(error)
-        return None
-
     @property
     def fineSpectralRadius(self) -> float:
         """The estimate of the fine spectral radius the smoother was built with: ``relax.spectralRadiusSteps`` Arnoldi

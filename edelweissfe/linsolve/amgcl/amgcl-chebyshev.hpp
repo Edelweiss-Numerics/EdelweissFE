@@ -57,12 +57,14 @@ namespace amgcl {
       typedef typename math::scalar_of< value_type >::type scalar_type;
 
       /// @brief The parameters, AMGCL's names and defaults, but the Arnoldi steps of spectral_radius_estimate for
-      /// power_iters.
+      /// power_iters, and a default margin `higher` of 1.1 instead of 1.0: AMGCL's 1.0 sits on its Gershgorin bound,
+      /// which is never below rho; the Arnoldi estimate can be, slightly, and an eigenvalue above the interval is
+      /// amplified, not damped.
       struct params {
         /// @brief The degree of the polynomial.
         unsigned degree = 5;
         /// @brief The upper end of the interval, relative to the estimate: a margin above it.
-        float higher = 1.0f;
+        float higher = 1.1f;
         /// @brief The lower end of the interval, relative to the estimate.
         float lower = 1.0f / 30;
         /// @brief How the spectral radius is estimated.
