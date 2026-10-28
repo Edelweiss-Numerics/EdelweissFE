@@ -323,16 +323,13 @@ switches it off. A 2D displacement field, or a 3D one with other options, gets i
 (``backendBlockSize`` 2 or 3, the default of a 2D or 3D field), and its tree must smooth with a Chebyshev polynomial
 (``relax.type`` ``chebyshev``, without ``relax.scale``, ``relax.spectralRadiusSteps`` at least 1) and coarsen by smoothed
 aggregation, as the default trees do; ``TwoLevel`` checks this when it meets its field, and the parameters of
-``RigidBodyModesPerAggregate`` at construction. The option of ``RigidBodyModesPerAggregate``:
+``RigidBodyModesPerAggregate`` at construction. The options of ``RigidBodyModesPerAggregate``:
 
 ``prolongation`` (``"smoothed"``)
     ``"smoothed"``: :math:`P = (I - \omega\, \mathrm{diag}_B(\hat A_F)^{-1} \hat A_F) P^{\mathrm{tent}}`.
     ``"tentative"``:
     :math:`P^{\mathrm{tent}}` itself -- a cheaper setup and a sparser coarse operator, for more outer iterations (32
     instead of 22 on the elastic tunnel system).
-
-and those of ``TwoLevel`` (the same for the corner-node two-level cycle):
-
 ``coarseHierarchyPrecision`` (``"double"``)
     The value type of the AMGCL hierarchy below: ``"double"``, or ``"float"`` (AMGCL's single-precision backend, its
     setup included) for half its memory, at the price of more outer iterations.

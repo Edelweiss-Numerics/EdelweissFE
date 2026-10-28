@@ -84,8 +84,8 @@ from edelweissfe.linsolve.nullspace import carriesRigidBodyModes
 
 class CoarseSpace:
     """What spans the coarse level of a :class:`TwoLevel` cycle: it checks that it can be built for a field, and builds
-    the cycle on it. The cycle's own parameters (the fine smoother of the field's tree, the backend, the precision of
-    the coarse hierarchy) come from :class:`TwoLevel`, as ``cycle``, the keywords of
+    the cycle on it. The cycle's own parameters (the fine smoother of the field's tree, the backend) come from
+    :class:`TwoLevel`, as ``cycle``, the keywords of
     :meth:`~edelweissfe.linsolve.composition.twolevelcycle.TwoLevelCycle.cycleParameters`.
     """
 
@@ -148,18 +148,27 @@ class RigidBodyModesPerAggregate(CoarseSpace):
     prolongation
         ``"smoothed"`` (:math:`P = (I - \\omega D_F^{-1} A_F) P_{\\mathrm{tent}}`) or ``"tentative"``
         (:math:`P_{\\mathrm{tent}}`, the modes orthonormalized per aggregate).
+    coarseHierarchyPrecision
+        The value type of the AMG hierarchy that solves the coarse level: ``"double"`` or ``"float"``.
     """
 
     name = "rigid-body modes per aggregate"
 
-    def __init__(self, prolongation: str = "smoothed"):
+    def __init__(self, prolongation: str = "smoothed", coarseHierarchyPrecision: str = "double"):
         if prolongation not in ("smoothed", "tentative"):
             raise ValueError(
                 "RigidBodyModesPerAggregate: prolongation must be 'smoothed' or 'tentative', got {!r}".format(
                     prolongation
                 )
             )
+        if coarseHierarchyPrecision not in ("double", "float"):
+            raise ValueError(
+                "RigidBodyModesPerAggregate: coarseHierarchyPrecision must be 'double' or 'float', got {!r}".format(
+                    coarseHierarchyPrecision
+                )
+            )
         self.prolongation = prolongation
+        self.coarseHierarchyPrecision = coarseHierarchyPrecision
 
     def check(self, field, context: SetUpContext, cycle: dict) -> None:
         """Rigid-body modes are those of a 2D or 3D displacement field with node coordinates
@@ -185,7 +194,7 @@ class RigidBodyModesPerAggregate(CoarseSpace):
             RigidBodyModesTwoLevelCycle,
         )
 
-        _rejected(field, RigidBodyModesTwoLevelCycle.parameterRejection(prolongation=self.prolongation, **cycle))
+        _rejected(field, RigidBodyModesTwoLevelCycle.parameterRejection(**self._parameters(cycle)))
 
     def build(self, field, matrix, context: SetUpContext, cycle: dict):
         from edelweissfe.linsolve.composition.rigidbodymodestwolevelcycle import (
@@ -193,18 +202,24 @@ class RigidBodyModesPerAggregate(CoarseSpace):
         )
 
         built = RigidBodyModesTwoLevelCycle(
-            prolongation=self.prolongation,
-            **cycle,
+            **self._parameters(cycle),
         )
         with performancetiming.timeit("{:} rigid-body coarse level build".format(field.name)):
             built.build(matrix, context.scalingOf(slice(None)), context.coordinates(field.name))
         return built
 
+    def _parameters(self, cycle: dict) -> dict:
+        """The keywords of the C++ cycle: the cycle's own, and this coarse space's."""
+        return dict(cycle, prolongation=self.prolongation, coarseHierarchyPrecision=self.coarseHierarchyPrecision)
+
     def sizesOf(self, cycle) -> dict:
         return {"aggregates": cycle.nAggregates, "coarse dofs": cycle.nCoarse, "dropped modes": cycle.droppedModes}
 
     def describe(self) -> dict:
-        return {"coarse space": self.name, "prolongation": self.prolongation, "coarse solve": "AMG V-cycle"}
+        settings = {"coarse space": self.name, "prolongation": self.prolongation, "coarse solve": "AMG V-cycle"}
+        if self.coarseHierarchyPrecision != "double":
+            settings["coarseHierarchyPrecision"] = self.coarseHierarchyPrecision
+        return settings
 
 
 class CornerNodeInterpolation(CoarseSpace):
@@ -222,20 +237,20 @@ class CornerNodeInterpolation(CoarseSpace):
     Parameters
     ----------
     coarseSolve
-        The coarse solve :math:`A_c^{-1}`, a component built on :math:`A_c` and applied once per cycle; ``None``:
+        The coarse solve :math:`A_c^{-1}`, a component built on :math:`A_c` and applied once per cycle. ``None``: the
+        coarse field is solved like any field of the ``blockamg`` preset, under a diagonal scaling of its own
+        (:meth:`defaultCoarseSolve`, chosen at the first build, when the field is known): for a 3D displacement field
         ``DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModesPerAggregate()))``, measured fastest (see
-        :ref:`measured-scaled-corner-node-interpolation`). ``AMG(...)`` is the plain AMG hierarchy on it,
-        ``AMG(backendBlockSize=1)`` one with the rigid-body modes of the corners as its near null-space.
+        :ref:`measured-scaled-corner-node-interpolation`), for any other field ``DiagonalScaling(AMG())``.
+        ``AMG(...)`` is the plain AMG hierarchy on it, ``AMG(backendBlockSize=1)`` one with the rigid-body modes of the
+        corners as its near null-space.
     """
 
     name = "corner-node interpolation"
 
     def __init__(self, coarseSolve: Preconditioner = None):
-        if coarseSolve is None:
-            from edelweissfe.linsolve.composition.diagonalscaling import DiagonalScaling
-
-            coarseSolve = DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModesPerAggregate()))
-        requirePreconditioner("CornerNodeInterpolation", "coarseSolve", coarseSolve)
+        if coarseSolve is not None:
+            requirePreconditioner("CornerNodeInterpolation", "coarseSolve", coarseSolve)
         self.coarseSolve = coarseSolve
 
     def check(self, field, context: SetUpContext, cycle: dict) -> None:
@@ -246,17 +261,11 @@ class CornerNodeInterpolation(CoarseSpace):
                     field.name
                 )
             )
-        if cycle["coarseHierarchyPrecision"] != "double":
-            raise ValueError(
-                "TwoLevel on the field '{:}': the coarse solve of CornerNodeInterpolation is its component "
-                "'coarseSolve', which has a precision of its own; coarseHierarchyPrecision is for "
-                "RigidBodyModesPerAggregate".format(field.name)
-            )
         from edelweissfe.linsolve.composition.cornernodetwolevelcycle import (
             CornerNodeTwoLevelCycle,
         )
 
-        _rejected(field, CornerNodeTwoLevelCycle.parameterRejection(**_withoutCoarseHierarchy(cycle)))
+        _rejected(field, CornerNodeTwoLevelCycle.parameterRejection(**cycle))
 
     def build(self, field, matrix, context: SetUpContext, cycle: dict):
         """Build the cycle in C++, which returns :math:`A_c`, and set up the coarse component on it."""
@@ -268,32 +277,44 @@ class CornerNodeInterpolation(CoarseSpace):
         built = CornerNodeTwoLevelCycle(
             isCorner,
             edgeEndpoints,
-            self.coarseSolve,
-            **_withoutCoarseHierarchy(cycle),
+            self._applyCoarseSolve,
+            **cycle,
         )
         with performancetiming.timeit("{:} corner-node cycle build".format(field.name)):
             A_c = built.build(matrix, context.scalingOf(slice(None)))
         if A_c.shape[0] > 0:
-            self.coarseSolve.setUp(SystemMatrix(A_c), context.ofCoarseNodes(field, built.coarseNodes))
+            coarseContext = context.ofCoarseNodes(field, built.coarseNodes)
+            if self.coarseSolve is None:
+                self.coarseSolve = self.defaultCoarseSolve(coarseContext.fields[0], coarseContext)
+            self.coarseSolve.setUp(SystemMatrix(A_c), coarseContext)
         return built
+
+    def _applyCoarseSolve(self, r_c):
+        """:math:`A_c^{-1} r_c`, called back by the C++ cycle: the coarse solve of the build."""
+        return self.coarseSolve(r_c)
+
+    @staticmethod
+    def defaultCoarseSolve(coarseField, coarseContext: SetUpContext) -> Preconditioner:
+        """The coarse solve of ``coarseSolve=None``: the coarse field solved like any field of the ``blockamg`` preset
+        (:func:`~edelweissfe.linsolve.composition.presets.blockAMGFieldPreconditioner`), under a diagonal scaling of
+        its own."""
+        from edelweissfe.linsolve.composition.diagonalscaling import DiagonalScaling
+        from edelweissfe.linsolve.composition.presets import blockAMGFieldPreconditioner
+
+        return DiagonalScaling(blockAMGFieldPreconditioner(coarseField, coarseContext))
 
     def sizesOf(self, cycle) -> dict:
         return {"coarse dofs": cycle.nCoarse}
 
     def children(self) -> tuple:
-        return (("coarseSolve", self.coarseSolve),)
+        # coarseSolve=None: no child until the first build chooses it
+        return () if self.coarseSolve is None else (("coarseSolve", self.coarseSolve),)
 
     def coarseSolveStep(self) -> Step:
         return Step("z += P A_c⁻¹ Pᵀ (r − A z),  A_c = Pᵀ A P  (corner nodes, scaled weights)", "coarseSolve")
 
     def describe(self) -> dict:
         return {"coarse space": self.name, "coarse solve": "component"}
-
-
-def _withoutCoarseHierarchy(cycle: dict) -> dict:
-    """The cycle's parameters without the precision of a coarse AMG hierarchy, which the corner-node two-level cycle
-    does not have."""
-    return {key: value for key, value in cycle.items() if key != "coarseHierarchyPrecision"}
 
 
 class TwoLevel(Preconditioner):
@@ -314,9 +335,6 @@ class TwoLevel(Preconditioner):
         The storage of the fine operator and of :math:`P`, :math:`P^T`, as for
         :class:`~edelweissfe.linsolve.composition.amg.AMG`; ``None``: the field's default
         (:func:`~edelweissfe.linsolve.composition.amg.backendOf`).
-    coarseHierarchyPrecision
-        The value type of the AMG hierarchy of the coarse level of :class:`RigidBodyModesPerAggregate`: ``"double"`` or
-        ``"float"`` (the coarse component of :class:`CornerNodeInterpolation` has its own).
     dropTolerance, lumpDroppedEntries
         Build the cycle (its smoother, coarse level and hierarchy) on the filtered matrix, see
         :func:`~edelweissfe.linsolve.composition.amg.droppedSmallEntries`; ``0`` (the default) builds it on the
@@ -329,7 +347,6 @@ class TwoLevel(Preconditioner):
         tree: dict = None,
         backendBlockSize: int = None,
         backendPrecision: str = None,
-        coarseHierarchyPrecision: str = "double",
         dropTolerance: float = 0.0,
         lumpDroppedEntries: bool = False,
     ):
@@ -341,18 +358,11 @@ class TwoLevel(Preconditioner):
         if not dropTolerance >= 0.0:
             raise ValueError("TwoLevel: dropTolerance must not be negative, got {!r}".format(dropTolerance))
         checkBackend("TwoLevel", backendBlockSize, backendPrecision)
-        if coarseHierarchyPrecision not in ("double", "float"):
-            raise ValueError(
-                "TwoLevel: coarseHierarchyPrecision must be 'double' or 'float', got {!r}".format(
-                    coarseHierarchyPrecision
-                )
-            )
         super().__init__()
         self.coarseSpace = coarseSpace
         self.tree = tree
         self.backendBlockSize = backendBlockSize
         self.backendPrecision = backendPrecision
-        self.coarseHierarchyPrecision = coarseHierarchyPrecision
         self.dropTolerance = dropTolerance
         self.lumpDroppedEntries = lumpDroppedEntries
 
@@ -372,7 +382,6 @@ class TwoLevel(Preconditioner):
             "amgclTree": tree,
             "backendBlockSize": backendBlockSize,
             "backendPrecision": backendPrecision,
-            "coarseHierarchyPrecision": self.coarseHierarchyPrecision,
         }
 
     def _setUp(self, A, context: SetUpContext) -> None:
@@ -399,8 +408,6 @@ class TwoLevel(Preconditioner):
         parameters = self.coarseSpace.describe()
         backend = {"backendBlockSize": self.backendBlockSize, "backendPrecision": self.backendPrecision}
         parameters.update({key: value for key, value in backend.items() if value is not None})
-        if self.coarseHierarchyPrecision != "double":
-            parameters["coarseHierarchyPrecision"] = self.coarseHierarchyPrecision
         if self.dropTolerance > 0.0:
             parameters.update(dropTolerance=self.dropTolerance, lumpDroppedEntries=self.lumpDroppedEntries)
         return parameters
