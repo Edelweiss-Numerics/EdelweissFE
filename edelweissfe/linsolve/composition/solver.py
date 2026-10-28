@@ -288,9 +288,11 @@ class ComposedLinearSolver(LinearSolver):
 
     @property
     def needsStableSparsityPattern(self) -> bool:
-        """A Krylov solver reuses its preconditioner across solves, which a new sparsity pattern defeats; a direct
-        solve factorizes anew every time."""
-        return self.root.containsKrylovSolver
+        """Whether a Krylov solver of the tree keeps its preconditioner across solves
+        (:attr:`~edelweissfe.linsolve.composition.base.Preconditioner.reusesPreconditioner`), which a new sparsity
+        pattern defeats. A Krylov solver that builds its preconditioner anew for every solve (the default), and a
+        direct solve, which factorizes anew every time, lose nothing to a new pattern."""
+        return self.root.reusesPreconditioner
 
     @property
     def reportsSolveSummary(self) -> bool:

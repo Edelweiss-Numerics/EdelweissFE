@@ -131,7 +131,9 @@ class SystemMatrix:
         return SystemMatrix(self.A, scaling, _unscaled=self if self.scaling is None else self._unscaled)
 
     def diagonal(self) -> np.ndarray:
-        """:math:`\\hat a_{ii}`, without forming :math:`\\hat A`."""
+        """:math:`\\hat a_{ii}`: the diagonal of :math:`A`, scaled, without forming :math:`\\hat A = D A D`. Of a field
+        block (:class:`FieldBlockMatrix`) it is the diagonal of the block, which is cut out of the field split once and
+        kept."""
         diagonal = self.A.diagonal()
         return diagonal if self.scaling is None else diagonal * self.scaling**2
 

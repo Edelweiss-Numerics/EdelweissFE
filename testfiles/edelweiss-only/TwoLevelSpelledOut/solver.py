@@ -3,8 +3,8 @@
 # corner nodes.
 #
 # For learning: it shows the steps. For production runs use TwoLevel(coarseSpace=CornerNodeInterpolation()), which
-# builds P in C++ and smooths with Chebyshev on a compact copy of the matrix, at about half the wall time
-# (doc: composedlinsolvers, "Which form to use: what each costs").
+# builds P in C++ and smooths with Chebyshev on a compact copy of the matrix, and is faster (doc: composedlinsolvers,
+# "Which form to use: what each costs").
 import numpy as np
 import scipy.sparse as sp
 
@@ -40,6 +40,9 @@ def cornerNodeInterpolation(A, context):
     nodalP = sp.csr_matrix((weights, (rows, columns)), shape=(len(isCorner), np.count_nonzero(isCorner)))
     # each component of the displacement is interpolated alike; the dofs are numbered node by node
     P = sp.kron(nodalP, sp.identity(field.dimension), format="csr")
+    # P keeps the Dirichlet rows (the native TwoLevel cycle decouples them instead): the coarse solve then treats a
+    # Dirichlet corner dof as free, which is still a valid preconditioner. Zeroing the Dirichlet columns of P would
+    # leave empty rows in A_c = Pᵀ A P, which the DiagonalScaling of the coarse solve cannot scale.
     # the coarse dofs are the displacements of the corner nodes: a displacement field of its own, with their coordinates
     return P, context.ofCoarseNodes(field, isCorner)
 
