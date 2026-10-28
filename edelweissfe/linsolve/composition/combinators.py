@@ -404,6 +404,9 @@ class CoarseCorrection(Preconditioner):
     :class:`~edelweissfe.linsolve.composition.diagonalscaling.DiagonalScaling` that is :math:`\\hat A = D A D`, whose
     variables are :math:`D^{-1} u`: an interpolation of displacements is then :math:`D^{-1} P_{geo} D_c` (the scaling
     is ``context.scaling``), as :class:`~edelweissfe.linsolve.composition.twolevel.CornerNodeInterpolation` builds it.
+    A :math:`P` written out keeps the Dirichlet rows, which the native cycle decouples instead: a :math:`P` with zero
+    columns for the Dirichlet dofs would leave empty rows in :math:`A_c`, which a ``DiagonalScaling`` of the coarse
+    solve cannot scale.
 
     :math:`P^T r`, :math:`P z_c` and :math:`P^T A P` are AMGCL's threaded products
     (:class:`~edelweissfe.linsolve.amgcl.amgcl.PyAMGCLProlongation`), the same as SciPy's up to the order of the sums.

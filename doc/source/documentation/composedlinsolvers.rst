@@ -48,8 +48,9 @@ and in the input file:
     linsolver=mySolver
 
 ``LGMRES``'s defaults are the production ones: an Eisenstat--Walker tolerance per solve (``EisenstatWalkerTolerance``), a
-``RebuildPolicy`` that builds the preconditioner anew for every solve (``RebuildPolicy(reusePreconditioner=True)``
-keeps it across Newton iterations, :ref:`measured-rebuild-every-solve`), and the detection of a new increment
+``RebuildPolicy`` that builds the preconditioner anew for every solve (``RebuildPolicy(reusePreconditioner=True)``, in
+an input file the ``blockamg`` data line ``reusePreconditioner=true``, keeps it across Newton iterations,
+:ref:`measured-rebuild-every-solve`), and the detection of a new increment
 through the adapter's ``residualGrowthFactor``; for a plain solve to a fixed tolerance, write
 ``LGMRES(..., tolerance=FixedTolerance(1e-8))``.
 
@@ -109,21 +110,21 @@ Components
         matrix, so one instance sits in one place of the tree (the first set-up raises otherwise); a combination may
         apply it several times
     * - ``AMG(amgclTree, backendBlockSize, backendPrecision, nearNullspace, dropTolerance, lumpDroppedEntries)``
-      - one AMGCL hierarchy on a field, one cycle per application. ``amgclTree`` holds AMGCL's parameters only,
-        forwarded verbatim; the backend (scalar entries or node-wise blocks, double or float) and the near null-space
-        (``"rigidBodyModes"``, ``"translations"`` or ``None``) are chosen by the keywords, the field's default for
-        those not given (:ref:`composed-amg-backend`); with ``dropTolerance`` built on the filtered block
-        (:ref:`composed-drop-tolerance`)
+      - one AMGCL hierarchy on a field, one cycle per application. ``amgclTree`` is AMGCL's parameter tree, plus
+        EdelweissFE's own key ``spectralRadiusSteps`` (:ref:`blockamg-chebyshev`); the backend (scalar entries or
+        node-wise blocks, double or float) and the near null-space (``"rigidBodyModes"``, ``"translations"`` or
+        ``None``) are chosen by the keywords, the field's default for those not given (:ref:`composed-amg-backend`);
+        with ``dropTolerance`` built on the filtered block (:ref:`composed-drop-tolerance`)
     * - ``TwoLevel(coarseSpace, amgclTree, backendBlockSize, backendPrecision, dropTolerance, lumpDroppedEntries)``
       - a two-level cycle with a coarse space of its own (a ``CoarseSpace``): all rigid-body modes per aggregate,
         ``RigidBodyModesPerAggregate(prolongation, coarseHierarchyPrecision)``, or the interpolant from the corner
         nodes in the scaled variables (P1), ``CornerNodeInterpolation(coarseSolve)``, whose coarse solve is a
-        component on the corner-node field (default: the coarse field solved like any field of the ``blockAMG()``
-        preset under a diagonal scaling of its own, for a 3D displacement field
-        ``DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModesPerAggregate()))``, :ref:`blockamg-p-multigrid`). Both
-        read the fine Chebyshev smoother from the tree's ``relax``, ``npre`` and ``npost``; without a tree, the default
-        tree of the field (degree 16), and for ``CornerNodeInterpolation`` on a 3D displacement field the smoother of
-        the corner-node two-level cycle (degree 8), on both of its levels (:ref:`composed-default-field-trees`)
+        component on the corner-node field (default ``DiagonalScaling(AMG())``; the ``blockAMG()`` preset passes
+        ``DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModesPerAggregate()))`` for a 3D displacement field,
+        :ref:`blockamg-p-multigrid`). Both read the fine Chebyshev smoother from the tree's ``relax``, ``npre`` and
+        ``npost``; without a tree, the default tree of the field (degree 16), and for ``CornerNodeInterpolation`` on a
+        3D displacement field the smoother of the corner-node two-level cycle (degree 8,
+        :ref:`composed-default-field-trees`). The coarse solve has a tree of its own
     * - ``SchurComplement(condensedDofMarkers, schurComplementSolve, condensedBlockSolve, approximation, dropTolerance,
         windowNodes, haloNodes, blockFactors)``
       - block LU: :math:`z_k = M_{\tilde S}^{-1}(r_k - A_{kb} A_{bb}^{-1} r_b)`,
@@ -185,9 +186,10 @@ The testfile deck ``testfiles/edelweiss-only/TwoLevelSpelledOut`` runs the spell
 quadratic elements with the P1 interpolant as the coarse space. Its prolongation callable returns :math:`P` together
 with the context of the coarse dofs, ``context.ofCoarseNodes(field, isCorner)`` -- the displacement field on the corner
 nodes, with their coordinates -- so its coarse solve is the rigid-body coarse level,
-``DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModesPerAggregate()))``, the default of ``CornerNodeInterpolation``
-for a 3D displacement field but for its smoother: this deck keeps the field's default tree (degree 16), the default
-takes the weaker smoother of the corner-node two-level cycle (degree 8, :ref:`composed-default-field-trees`). (A callable whose
+``DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModesPerAggregate()))``, the coarse solve the ``blockAMG()`` preset
+gives a 3D displacement field but for its smoother: this deck keeps the field's default tree (degree 16), the preset
+takes the weaker smoother of the corner-node two-level cycle (degree 8, :ref:`composed-default-field-trees`). (A
+callable whose
 coarse dofs are no nodes returns ``context.ofCoarseDofs(nCoarse)``, one field of scalar dofs; a fixed matrix :math:`P`
 gets that context.) :math:`P` acts on the matrix the correction is handed: the deck has no ``DiagonalScaling`` above
 the cycle, so its variables are the displacements, and the plain weights :math:`\tfrac12, \tfrac12` are right. Under a
@@ -273,11 +275,14 @@ with ``gaussSeidelOrder``. ``blockAMG(krylovOnScaledSystem=True)`` puts the scal
 (:ref:`composed-scaled-krylov`), ``trueResidualRestarts`` and ``residualGapCompensation`` go to LGMRES, and ``dropTolerance`` and
 ``lumpDroppedEntries`` to every field (:ref:`composed-drop-tolerance`).
 
-Each field gets the preconditioner measured fastest for it (``blockAMGFieldPreconditioner``):
+Each field gets the preconditioner chosen for it by measurement (``blockAMGFieldPreconditioner``,
+:ref:`measured-defaults`):
 
 * a **quadratic** 3D displacement field (one with midside nodes) the two-level cycle on its corner nodes,
-  ``TwoLevel(coarseSpace=CornerNodeInterpolation())`` (:ref:`blockamg-p-multigrid`): three levels, the quadratic field,
-  its linear part on the corner nodes, and the rigid-body modes of aggregates of those;
+  ``TwoLevel(coarseSpace=CornerNodeInterpolation(coarseSolve))`` (:ref:`blockamg-p-multigrid`), whose coarse solve,
+  under a diagonal scaling of its own, is that of the next case, with the smoother of the corner-node two-level cycle:
+  three levels, the quadratic field, its linear part on the corner nodes, and the rigid-body modes of aggregates of
+  those;
 * a **linear** 3D displacement field the rigid-body coarse level, ``TwoLevel(coarseSpace=RigidBodyModesPerAggregate())``:
   a first coarse level built from all rigid-body modes, rotations included, which a bending-dominated structure needs
   (:ref:`blockamg-rigid-body-coarse-level`);
@@ -410,8 +415,9 @@ leaf; override a method only in the case named:
   releases it here, so that no copy of the last matrix is kept while the nonlinear solver assembles the next one.
 * ``isFixedLinearOperator``: false for a component whose :math:`M^{-1} r` is not one fixed linear operator between two
   set-ups (a Krylov solve inside); ``LGMRES`` refuses such a preconditioner, ``FGMRES`` takes it.
-* ``containsKrylovSolver``: true for a Krylov solver (the nonlinear solver then keeps the sparsity pattern stable,
-  and the solve is recorded in the "linear solve" column).
+* ``containsKrylovSolver``: true for a Krylov solver (the solve is recorded in the "linear solve" column).
+* ``reusesPreconditioner``: true for a Krylov solver that keeps its preconditioner across solves
+  (``RebuildPolicy(reusePreconditioner=True)``); the nonlinear solver then keeps the sparsity pattern stable.
 * ``builtMatrices()``, ``solveRecord()``, ``condensedDofs()``: the matrices a component formed (for ``views.spy``),
   what its last Krylov solve did, and the dofs a Schur complement condensed (for the dumps).
 

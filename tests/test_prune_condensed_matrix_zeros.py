@@ -33,7 +33,7 @@ class _NISTStub:
     [
         # Unset (None): automatic, from the active solver's own needsStableSparsityPattern.
         (None, False, True),  # e.g. PARDISO: no reuse to protect, pruning is free -- prune.
-        (None, True, False),  # e.g. blockamg: pruning would churn the pattern every iteration -- don't.
+        (None, True, False),  # e.g. blockamg reusing its preconditioner: pruning would churn the pattern -- don't.
         # An explicit value always wins, in both directions, regardless of the solver in force.
         (True, True, True),
         (False, False, False),
@@ -50,18 +50,31 @@ def test_the_automatic_decision_table(explicit, needsStableSparsityPattern, expe
     assert NIST._shouldPruneCondensedMatrixZeros(stub) is expected
 
 
-def test_a_linear_solver_needs_a_stable_pattern_if_its_tree_holds_a_krylov_solver():
-    """Every linear solver is a composed one: a direct solver (one leaf, factorized anew on every solve) tolerates
-    pruning; a Krylov solver reuses its preconditioner across solves, which pruning would defeat."""
+def test_a_linear_solver_needs_a_stable_pattern_if_a_krylov_solver_of_its_tree_reuses_its_preconditioner():
+    """Every linear solver is a composed one: a direct solver (one leaf, factorized anew on every solve) and a Krylov
+    solver that builds its preconditioner anew for every solve (the default) tolerate pruning; a Krylov solver that
+    reuses its preconditioner across solves, at any depth of the tree, does not."""
     from edelweissfe.linsolve.composition import (
         AMG,
+        FGMRES,
         LGMRES,
         ComposedLinearSolver,
+        DiagonalScaling,
         DirectSolver,
+        FixedTolerance,
+        RebuildPolicy,
     )
 
-    direct = ComposedLinearSolver(DirectSolver("superlu"))
-    krylov = ComposedLinearSolver(LGMRES(AMG()))
-    for solver, expected in ((direct, True), (krylov, False)):
-        stub = _NISTStub(None, solver.needsStableSparsityPattern)
+    def reusing():
+        return LGMRES(AMG(), rebuild=RebuildPolicy(reusePreconditioner=True))
+
+    cases = (
+        (DirectSolver("superlu"), True),
+        (LGMRES(AMG()), True),
+        (reusing(), False),
+        (DiagonalScaling(reusing()), False),
+        (FGMRES(LGMRES(AMG(), tolerance=FixedTolerance(1e-2), rebuild=RebuildPolicy(reusePreconditioner=True))), False),
+    )
+    for root, expected in cases:
+        stub = _NISTStub(None, ComposedLinearSolver(root).needsStableSparsityPattern)
         assert NIST._shouldPruneCondensedMatrixZeros(stub) is expected

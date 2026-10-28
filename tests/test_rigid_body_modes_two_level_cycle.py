@@ -496,3 +496,10 @@ def test_a_tree_without_a_smoother_is_told_that_amgcls_default_is_not_chebyshev(
     tree = {key: value for key, value in defaultFieldTree(3).items() if key != "relax"}
     with pytest.raises(ValueError, match=r"relax.type must be chebyshev, got spai0 \(AMGCL's default\)"):
         RigidBodyModesTwoLevelCycle(tree, 3, "double")
+
+
+def test_an_unknown_parameter_raises_naming_the_valid_ones():
+    from edelweissfe.linsolve.amgcl.amgcl import PyAMGCLRigidBodyModesTwoLevelCycle
+
+    with pytest.raises(RuntimeError, match='unknown parameter "coarseSolve"; valid: amgcl, '):
+        PyAMGCLRigidBodyModesTwoLevelCycle({"amgcl": defaultFieldTree(3), "backendBlockSize": 3, "coarseSolve": {}})

@@ -185,12 +185,16 @@ namespace amgcl {
       /// (amgcl-chebyshev.hpp).
       typedef smoothed_aggregation_estimate_params< Backend > params;
 
-      /// @brief The parameters, with the steps of the spectral radius estimate.
-      params estimatePrm;
+      /// @brief How rho(D^-1 A) is estimated for the prolongation smoothing weight; the rest of the parameters is
+      /// Base's.
+      EdelweissFE::linsolve::SpectralRadiusEstimate spectralRadius;
 
       /// @brief Construct with smoothed_aggregation's parameters.
       /// @param prm the parameters; prm.nullspace must hold the translations of the finest level
-      smoothed_aggregation_with_translations( const params& prm = params() ) : Base( prm ), estimatePrm( prm ) {}
+      smoothed_aggregation_with_translations( const params& prm = params() )
+        : Base( prm ), spectralRadius( prm.spectralRadius )
+      {
+      }
 
       /// @brief The prolongation P = (I - omega diag_B(A_F)^-1 A_F) P_tent and the restriction R = P^T, formed as
       /// smoothed_aggregation::transfer_operators() forms them, with the tentative prolongation P_tent from the
@@ -221,7 +225,7 @@ namespace amgcl {
         const scalar_type omega = prolongation_smoothing_weight( A,
                                                                  this->prm.relax,
                                                                  this->prm.estimate_spectral_radius,
-                                                                 estimatePrm.spectralRadius );
+                                                                 spectralRadius );
         auto              P     = smoothed_prolongation( A, aggr.strong_connection, *P_tent, omega );
 
         return std::make_tuple( P, transpose( *P ) );

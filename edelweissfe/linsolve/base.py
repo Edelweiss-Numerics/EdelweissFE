@@ -140,9 +140,10 @@ class LinearSolver:
 
     #: Whether this solver benefits from the system matrix keeping the same sparsity pattern from one
     #: Newton iteration to the next -- i.e. whether it does something *across* solves that a changing
-    #: pattern defeats (a Krylov solver reuses a preconditioner built for the old pattern; a direct
-    #: factorization like PARDISO's starts from scratch on every solve regardless and has nothing to
-    #: lose). ``False`` here, inherited by every solver that does not override it. Read by
+    #: pattern defeats (a Krylov solver that reuses a preconditioner built for the old pattern; a direct
+    #: factorization like PARDISO's, or a preconditioner built anew for every solve, starts from scratch
+    #: on every solve regardless and has nothing to lose). ``False`` here, inherited by every solver
+    #: that does not override it. Read by
     #: :attr:`~edelweissfe.solvers.nonlinearimplicitstatic.NISTSchema.pruneCondensedMatrixZeros`'s
     #: "auto" default (``None``, unset in the input file) to decide whether pruning the
     #: multi-point-condensed system's explicit zeros -- which changes its pattern on almost every

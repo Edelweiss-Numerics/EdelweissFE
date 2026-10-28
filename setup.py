@@ -276,10 +276,13 @@ extensions += [
             "edelweissfe/linsolve/amgcl/amgcl-smoothed-prolongation.hpp",
             "edelweissfe/linsolve/amgcl/amgcl-spectral-radius.hpp",
         ],
-        include_dirs=[numpy.get_include(), join(native_prefix, "include"), "."],
+        # Eigen for the small dense eigenproblem of the spectral radius estimate (amgcl-spectral-radius.hpp)
+        include_dirs=[numpy.get_include(), join(native_prefix, "include"), eigen_include, "."],
+        # Eigen solves that eigenproblem on the calling thread, so that the estimate is the same at any thread count.
+        define_macros=[("EIGEN_DONT_PARALLELIZE", None)],
         language="c++",
-        # MSVC's default language standard (C++14) already covers AMGCL's C++11 requirement.
-        extra_compile_args=([] if is_windows else ["-std=c++11"]) + compile_flags(openmp=True, arch=amgcl_arch_flags),
+        # C++14 for Eigen (from Eigen 5; AMGCL needs C++11), MSVC's default language standard.
+        extra_compile_args=([] if is_windows else ["-std=c++14"]) + compile_flags(openmp=True, arch=amgcl_arch_flags),
         extra_link_args=link_flags(openmp=True),
     )
 ]

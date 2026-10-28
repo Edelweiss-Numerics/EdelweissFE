@@ -268,13 +268,19 @@ class ComposedLinearSolver(LinearSolver):
 
             try:
                 with performancetiming.timeit("midside corners"):
-                    isCorner, edgeEndpoints, warnings = buildMidsideCorners(self._model, fieldName)
+                    isCorner, edgeEndpoints, conflictingRows = buildMidsideCorners(self._model, fieldName)
             except UnsupportedElementTopology as error:
                 self._log("info", "no midside corners for the field '{:}': {:}".format(fieldName, error))
                 self._midsideCornersCache[fieldName] = None
                 return None
-            for warning in warnings:
-                self._log("warning", warning)
+            if conflictingRows.size:
+                self._log(
+                    "info",
+                    "{:} nodes of the field '{:}' get conflicting edge endpoints from different elements (e.g. at an "
+                    "AMR refinement interface): they are corners of the corner-node interpolation".format(
+                        conflictingRows.size, fieldName
+                    ),
+                )
             self._midsideCornersCache[fieldName] = (isCorner, edgeEndpoints)
         return self._midsideCornersCache[fieldName]
 
@@ -282,9 +288,11 @@ class ComposedLinearSolver(LinearSolver):
 
     @property
     def needsStableSparsityPattern(self) -> bool:
-        """A Krylov solver reuses its preconditioner across solves, which a new sparsity pattern defeats; a direct
-        solve factorizes anew every time."""
-        return self.root.containsKrylovSolver
+        """Whether a Krylov solver of the tree keeps its preconditioner across solves
+        (:attr:`~edelweissfe.linsolve.composition.base.Preconditioner.reusesPreconditioner`), which a new sparsity
+        pattern defeats. A Krylov solver that builds its preconditioner anew for every solve (the default), and a
+        direct solve, which factorizes anew every time, lose nothing to a new pattern."""
+        return self.root.reusesPreconditioner
 
     @property
     def reportsSolveSummary(self) -> bool:

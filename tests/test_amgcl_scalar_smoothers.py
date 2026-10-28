@@ -36,6 +36,9 @@ silently falls back ILU0 to its generic, approximate triangular solve instead of
 Needs a system above AMGCL's own ``coarse_enough`` (3000 scalar rows) so a real multi-level hierarchy is
 built -- below it, AMG solves directly on the first level and never constructs a relaxation object at
 all, so a bug confined to the smoother construction/apply would pass unnoticed.
+
+The last tests check what EdelweissFE's Chebyshev smoother (``amgcl-chebyshev.hpp``) refuses, applied once as the
+preconditioner: parameters it cannot use, and an operator without a positive, finite spectral radius.
 """
 
 import numpy as np
@@ -106,3 +109,36 @@ def test_ilu0_is_an_exact_triangular_solve():
     solver.build(A)
     x = solver.applyPreconditioner(b)
     assert np.linalg.norm(b - A @ x) < 1e-12 * np.linalg.norm(b)
+
+
+def _chebyshevAlone(relax: dict) -> PyAMGCLSolver:
+    """EdelweissFE's Chebyshev smoother, applied once as the preconditioner, with the parameters ``relax``."""
+    return PyAMGCLSolver({"precond": {"class": "relaxation", "type": "chebyshev", **relax}})
+
+
+def test_the_chebyshev_smoother_refuses_an_operator_without_a_positive_spectral_radius():
+    # a zero operator (its diagonal stored): the polynomial would divide by its spectral radius
+    n = 50
+    zero = sp.csr_matrix((np.zeros(n), np.arange(n), np.arange(n + 1)), shape=(n, n))
+    with pytest.raises(RuntimeError, match="positive, finite spectral radius"):
+        _chebyshevAlone({}).build(zero)
+
+
+@pytest.mark.parametrize(
+    "relax, reason",
+    [
+        ({"degree": 0}, "relax.degree must be at least 1"),
+        ({"lower": 0.0}, "needs 0 < relax.lower < 1 <= relax.higher"),
+        ({"lower": 1.0}, "needs 0 < relax.lower < 1 <= relax.higher"),
+        ({"higher": 0.9}, "needs 0 < relax.lower < 1 <= relax.higher"),
+        ({"spectralRadiusSteps": 0}, "relax.spectralRadiusSteps must be at least 1"),
+        ({"power_iters": 50}, "relax.power_iters"),
+        ({"tolerance": 0.05}, "unknown parameter of the Chebyshev smoother: tolerance"),
+    ],
+    ids=["degree", "lower 0", "lower 1", "higher", "steps", "power_iters", "unknown"],
+)
+def test_the_chebyshev_smoother_refuses_parameters_it_cannot_use(relax, reason):
+    n = 10
+    A = sp.diags([-np.ones(n - 1), 4.0 * np.ones(n), -np.ones(n - 1)], [-1, 0, 1], format="csr")
+    with pytest.raises(ValueError, match=reason):
+        _chebyshevAlone(relax).build(A)
