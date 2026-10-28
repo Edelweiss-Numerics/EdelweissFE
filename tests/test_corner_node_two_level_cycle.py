@@ -344,6 +344,44 @@ def test_an_exception_of_the_coarse_solve_is_raised_as_it_is(problem):
         preconditioner.applyPreconditioner(r)
 
 
+def test_the_coarse_solve_set_last_is_the_one_called(problem):
+    """A coarse solve set after the build replaces the one set before: the C++ cycle reads it at every application, so
+    the replaced one (and its context, freed) is never called."""
+    As, scaling, coords, isCorner, edgeEndpoints, r = problem
+    first = ExactCoarseSolve()
+    preconditioner = CornerNodeTwoLevelCycle(isCorner, edgeEndpoints, first, fineChebyshevTree())
+    A_c = preconditioner.build(As, scaling)
+    first.setUp(A_c)
+    second = ExactCoarseSolve()
+    second.setUp(A_c)
+    preconditioner.setCoarseSolve(second)
+    del first
+    z = preconditioner.applyPreconditioner(r)
+    assert second.applications == 1 and preconditioner.coarseSolve is second
+    assert np.all(np.isfinite(z))
+
+
+def test_a_coarse_solve_may_be_set_after_the_build_but_must_be_set_before_the_first_application(problem):
+    As, scaling, coords, isCorner, edgeEndpoints, r = problem
+    preconditioner = CornerNodeTwoLevelCycle(isCorner, edgeEndpoints, None, fineChebyshevTree())
+    A_c = preconditioner.build(As, scaling)
+    with pytest.raises(RuntimeError, match="no coarse solve"):
+        preconditioner.applyPreconditioner(r)
+    coarse = ExactCoarseSolve()
+    coarse.setUp(A_c)
+    preconditioner.setCoarseSolve(coarse)
+    assert np.all(np.isfinite(preconditioner.applyPreconditioner(r)))
+
+
+@pytest.mark.parametrize("bad", [0.0, np.inf, np.nan])
+def test_a_zero_or_non_finite_scaling_raises_instead_of_filling_p_with_nan(problem, bad):
+    As, scaling, coords, isCorner, edgeEndpoints, r = problem
+    broken = scaling.copy()
+    broken[len(broken) // 2] = bad
+    with pytest.raises(RuntimeError, match="zero or not finite"):
+        _unbuilt(isCorner, edgeEndpoints).build(As, broken)
+
+
 def _systemWithStoredZeros(coords, constrainedDofs):
     """The same block as :func:`latticeSystem`, but constrained by the solvers' own Dirichlet elimination,
     which keeps the eliminated entries as explicitly stored zeros, and scaled in place."""

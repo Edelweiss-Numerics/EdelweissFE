@@ -369,7 +369,12 @@ namespace amgcl {
         const double h              = std::sqrt( dot( w.data(), w.data() ) );
         H[( j + 1 ) * maxSteps + j] = h;
         m                           = j + 1;
-        const bool invariant        = !( h > 1e-14 * std::abs( H[j * maxSteps + j] ) );
+        // invariant if what is left of A v_j after the orthogonalization is rounding: compared with the whole column
+        // of H, |A v_j| -- not with H_jj alone, which is zero on an indefinite or skew part however large A v_j is
+        double columnSquared = h * h;
+        for ( int i = 0; i <= j; ++i )
+          columnSquared += H[i * maxSteps + j] * H[i * maxSteps + j];
+        const bool invariant = !( h > 1e-14 * std::sqrt( columnSquared ) );
         if ( invariant || m == maxSteps ) {
           ritz = largest_ritz_value( H, maxSteps, m );
           break;
