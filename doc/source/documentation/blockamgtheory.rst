@@ -826,6 +826,15 @@ for the Dirichlet corner dofs, which are identity rows of :math:`A_c`. This is t
 free submatrix, and it allows ``TwoLevel(..., backendBlockSize=3)``: the fine operator is stored in node-wise
 :math:`3\times 3` blocks even where a node is only partially constrained, which roughly halves the
 memory traffic of the fine smoother and residual -- the dominant cost of the apply.
+
+The same cycle on the free submatrix, written out in Python: the free submatrix, the scaled :math:`P`, an exact coarse
+solve and the Chebyshev polynomial. A test checks the C++ cycle against it, to rounding, for several numbers of sweeps
+and degrees:
+
+.. literalinclude:: ../../../tests/test_corner_node_two_level_cycle.py
+   :start-after: # The reference cycle of the theory page.
+   :end-before: # End of the reference cycle of the theory page.
+
 ``backendPrecision="float"`` (the default on :math:`3\times 3` blocks) halves the bytes per stored entry once more.
 Only the stored entries
 are rounded: vectors and every sum stay double (a float matrix times a double vector), and the

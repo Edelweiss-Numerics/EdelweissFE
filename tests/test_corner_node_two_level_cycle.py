@@ -33,7 +33,7 @@ clamped nodes on one face and a single constrained component on another (partial
 nodes), symmetric Dirichlet elimination and diagonal scaling -- the shape of the block a ``DiagonalScaling`` hands to
 the preconditioner. The coarse solve is exact (a sparse LU of the coarse operator), so that the cycle is compared, not
 a coarse hierarchy. The reference is a pure-Python cycle on the explicitly extracted free submatrix, with the fine
-spectral radius taken from the C++ build.
+spectral radius taken from the C++ build; the theory page includes it, between its marker comments.
 """
 
 import numpy as np
@@ -92,6 +92,7 @@ def _built(As, scaling, isCorner, edgeEndpoints, fineTree=None, **options):
     return preconditioner, coarse, A_c
 
 
+# The reference cycle of the theory page.
 def _geometricProlongation(isCorner, edgeEndpoints, nDim):
     """P_geo: a corner node keeps its value, a midside node takes the mean of its two edge-endpoint corners."""
     nNodes = len(isCorner)
@@ -158,6 +159,7 @@ def _referenceCycle(As, scaling, isCorner, edgeEndpoints, spectralRadius, nuPre,
     return x
 
 
+# End of the reference cycle of the theory page.
 def _relativeDifference(x, y):
     return np.linalg.norm(x - y) / np.linalg.norm(y)
 
