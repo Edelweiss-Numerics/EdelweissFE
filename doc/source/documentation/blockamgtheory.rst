@@ -733,8 +733,9 @@ Reuse across Newton iterations: ``RebuildPolicy``
 
 Building the per-field hierarchies is a large fraction of a solve, and it is avoidable when the
 Jacobian has barely moved since the last one. ``LGMRES`` can therefore keep the hierarchies below it (and the
-equilibration they were built for) standing across solves, ``RebuildPolicy(reuse=True)``; when they are rebuilt is the
-outer solve's :class:`~edelweissfe.linsolve.composition.krylov.RebuildPolicy`,
+equilibration they were built for) standing across solves, ``RebuildPolicy(reuse=True)`` (the data line
+``reusePreconditioner=true`` of ``type=blockamg``); when they are rebuilt is the outer solve's
+:class:`~edelweissfe.linsolve.composition.krylov.RebuildPolicy`,
 ``LGMRES(..., rebuild=RebuildPolicy(stalenessFactor, rebuildOnNewIncrement, reuse))``.
 
 By default it does not (``reuse=False``): every solve builds its own preconditioner. A reused hierarchy was built for

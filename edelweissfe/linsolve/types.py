@@ -40,7 +40,11 @@ from dataclasses import dataclass
 
 from edelweissfe.linsolve.composition.base import Preconditioner
 from edelweissfe.linsolve.composition.direct import DirectSolver
-from edelweissfe.linsolve.composition.krylov import FixedTolerance, GapCompensation
+from edelweissfe.linsolve.composition.krylov import (
+    FixedTolerance,
+    GapCompensation,
+    RebuildPolicy,
+)
 from edelweissfe.linsolve.composition.presets import blockAMG
 from edelweissfe.linsolve.composition.solvedumps import SolveDumps
 from edelweissfe.linsolve.composition.solver import ComposedLinearSolver
@@ -276,6 +280,14 @@ class BlockAMGSchema(LinearSolverSchema):
         default=None,
     )
     maxIterations: int = schemaField(description="The outer iteration cap.", dtype=int, default=100)
+    reusePreconditioner: bool = schemaField(
+        description=(
+            "Keep the preconditioner across solves until a new increment or a stale preconditioner asks for a rebuild "
+            "(false: a new preconditioner for every solve)."
+        ),
+        dtype=bool,
+        default=False,
+    )
     sweeps: int = schemaField(description="The block Gauss-Seidel sweeps over the fields.", dtype=int, default=1)
     symmetric: bool = schemaField(
         description="A symmetric block Gauss-Seidel sweep (forward, then backward).", dtype=bool, default=False
@@ -319,6 +331,7 @@ class BlockAMG(LinearSolverType):
             cornerNodeInterpolation=configuration.cornerNodeInterpolation,
             tolerance=None if configuration.tolerance is None else FixedTolerance(configuration.tolerance),
             maxIterations=configuration.maxIterations,
+            rebuild=RebuildPolicy(reuse=configuration.reusePreconditioner),
             sweeps=configuration.sweeps,
             symmetric=configuration.symmetric,
             krylovOnScaledSystem=configuration.krylovOnScaledSystem,

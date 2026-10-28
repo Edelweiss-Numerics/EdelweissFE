@@ -48,8 +48,9 @@ and in the input file:
     linsolver=mySolver
 
 ``LGMRES``'s defaults are the production ones: an Eisenstat--Walker tolerance per solve (``ForcingTolerance``), a
-``RebuildPolicy`` that builds the preconditioner anew for every solve (``RebuildPolicy(reuse=True)`` keeps it
-across Newton iterations, :ref:`measured-rebuild-every-solve`), and the detection of a new increment
+``RebuildPolicy`` that builds the preconditioner anew for every solve (``RebuildPolicy(reuse=True)``, in an input
+file the ``blockamg`` data line ``reusePreconditioner=true``, keeps it across Newton iterations,
+:ref:`measured-rebuild-every-solve`), and the detection of a new increment
 through the adapter's ``residualGrowthFactor``; for a plain solve to a fixed tolerance, write
 ``LGMRES(..., tolerance=FixedTolerance(1e-8))``.
 
