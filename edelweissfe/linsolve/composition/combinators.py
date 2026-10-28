@@ -426,6 +426,7 @@ class CoarseCorrection(Preconditioner):
 
     def _forget(self) -> None:
         self.P = None
+        self.products = None
         self.coarseContext = None
 
     def _setUp(self, A, context: SetUpContext) -> None:
@@ -450,6 +451,10 @@ class CoarseCorrection(Preconditioner):
                     self.P.shape[1], self.coarseContext.size
                 )
             )
+        from edelweissfe.linsolve.amgcl.amgcl import PyAMGCLProlongation
+
+        # P and Pᵀ, stored once in C++: the products below run on every thread, as in the C++ two-level cycles
+        self.products = PyAMGCLProlongation(self.P)
         A_c = self._coarseMatrix(A)
         self.coarseSolve.setUp(A_c, self.coarseContext)
         self.statistics.sizes["coarse dofs"] = A_c.shape[0]
@@ -463,10 +468,11 @@ class CoarseCorrection(Preconditioner):
 
     def _coarseMatrix(self, A) -> SystemMatrix:
         """:math:`A_c = P^T A P`."""
-        return SystemMatrix((self.P.T @ A.matrix() @ self.P).tocsr())
+        return SystemMatrix(self.products.galerkinOperator(A.matrix()))
 
     def _apply(self, r: np.ndarray) -> np.ndarray:
-        return self.P @ self.coarseSolve(self.P.T @ r)
+        """:math:`z = P A_c^{-1} P^T r`."""
+        return self.products.prolongate(self.coarseSolve(self.products.restrict(r)))
 
     def children(self) -> tuple:
         return (("coarseSolve", self.coarseSolve),)
@@ -497,18 +503,18 @@ class Jacobi(Preconditioner):
         self.omega = omega
 
     def _forget(self) -> None:
-        self.inverseDiagonal = None
+        self.dampedInverseDiagonal = None
 
     def _setUp(self, A, context: SetUpContext) -> None:
-        diagonal = A.matrix().diagonal()
+        diagonal = A.diagonal()
         if np.any(diagonal == 0.0):
             raise ValueError(
                 "Jacobi: {:} dof(s) have a zero diagonal entry".format(int(np.count_nonzero(diagonal == 0.0)))
             )
-        self.inverseDiagonal = 1.0 / diagonal
+        self.dampedInverseDiagonal = self.omega / diagonal
 
     def _apply(self, r: np.ndarray) -> np.ndarray:
-        return self.omega * self.inverseDiagonal * r
+        return self.dampedInverseDiagonal * r
 
     def describe(self) -> Description:
         return Description(

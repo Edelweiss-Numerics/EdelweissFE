@@ -92,6 +92,16 @@ cdef extern from "amgcl-wrapper.hpp":
         vector[int] col
         vector[double] val
 
+    # The products with a prolongation P given from Python (CoarseCorrection): P^T r, P z with AMGCL's threaded spmv and
+    # P^T A P with its threaded SpGEMM -- see Prolongation's own comment.
+    cdef cppclass Prolongation:
+        void build(int nFine, int nCoarse, const int* ptr, const int* col, const double* val) except +
+        int nFine()
+        int nCoarse()
+        void restrict(const double* fine, double* coarse) except +
+        void prolongate(const double* coarse, double* fine) except +
+        ScalarCsr galerkinOperator(int n, const int* ptr, const int* col, const double* val) except +
+
     # What the two-level cycles on the corner nodes and on the rigid-body modes share: the cycle itself, the fine
     # spectral radius, P and the coarse operator, the timings and the report -- see TwoLevelCycle's own comment. Arrays
     # come back as C++ vectors, which Cython copies (_copied in amgcl.pyx).

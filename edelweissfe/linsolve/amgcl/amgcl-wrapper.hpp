@@ -1356,6 +1356,92 @@ private:
   std::shared_ptr< Matrix > P_, R_;
 };
 
+/// @brief The Galerkin coarse operator P^T (A P), with AMGCL's own threaded SpGEMM and in the order AMGCL's own
+/// coarsening forms it (amgcl/coarsening/detail/galerkin.hpp), columns sorted per row.
+/// @param A the fine operator
+/// @param P the prolongation
+/// @param PT its transpose
+/// @return P^T A P
+inline std::shared_ptr< amgcl::backend::crs< double, int, int > > galerkinProduct(
+  const amgcl::backend::crs< double, int, int >& A,
+  const amgcl::backend::crs< double, int, int >& P,
+  const amgcl::backend::crs< double, int, int >& PT )
+{
+  return amgcl::backend::product( PT, *amgcl::backend::product( A, P ), true );
+}
+
+/// @brief The products with a prolongation P that Python gives (CoarseCorrection in composition/combinators.py): P and
+/// P^T stored once, the restriction P^T r and the prolongation P z with AMGCL's threaded spmv (ScalarTransferOperators,
+/// as in the two-level cycles), and the Galerkin coarse operator P^T A P with its threaded SpGEMM (galerkinProduct).
+/// The same products SciPy computes, on every thread instead of one: equal up to the order of the sums.
+class Prolongation {
+public:
+  typedef amgcl::backend::crs< double, int, int > ScalarMatrix;
+
+  /// @brief Store P, nFine x nCoarse in scalar CSR arrays, and its transpose, each copied with an OpenMP-parallel first
+  /// touch (see TwoLevelCycle::copiedFineOperator for why).
+  void build( int nFine, int nCoarse, const int* ptr, const int* col, const double* val )
+  {
+    const int nnz = ptr[nFine];
+    P_            = std::make_shared< ScalarMatrix >( nFine,
+                                           nCoarse,
+                                           amgcl::make_iterator_range( ptr, ptr + nFine + 1 ),
+                                           amgcl::make_iterator_range( col, col + nnz ),
+                                           amgcl::make_iterator_range( val, val + nnz ) );
+    PT_           = amgcl::backend::transpose( *P_ );
+    transfer_.reset( new ScalarTransferOperators( P_, PT_ ) );
+  }
+
+  /// @brief The number of fine rows of P.
+  int nFine() const { return P_ ? static_cast< int >( P_->nrows ) : 0; }
+  /// @brief The number of coarse columns of P.
+  int nCoarse() const { return P_ ? static_cast< int >( P_->ncols ) : 0; }
+
+  /// @brief coarse <- P^T fine.
+  void restrict( const double* fine, double* coarse ) const
+  {
+    checkBuilt();
+    transfer_->restrict( fine, coarse );
+  }
+
+  /// @brief fine <- P coarse.
+  void prolongate( const double* coarse, double* fine ) const
+  {
+    checkBuilt();
+    transfer_->prolongate( coarse, fine, /*addToFine=*/false );
+  }
+
+  /// @brief The Galerkin coarse operator P^T A P of A (nFine() rows), nCoarse() x nCoarse() in scalar CSR arrays.
+  ScalarCsr galerkinOperator( int n, const int* ptr, const int* col, const double* val ) const
+  {
+    checkBuilt();
+    if ( n != nFine() ) {
+      throw std::runtime_error( "Prolongation::galerkinOperator(): the matrix has " + std::to_string( n ) +
+                                " rows, P " + std::to_string( nFine() ) );
+    }
+    const int    nnz = ptr[n];
+    ScalarMatrix A( n,
+                    n,
+                    amgcl::make_iterator_range( ptr, ptr + n + 1 ),
+                    amgcl::make_iterator_range( col, col + nnz ),
+                    amgcl::make_iterator_range( val, val + nnz ) );
+    return scalarCsr( *galerkinProduct( A, *P_, *PT_ ) );
+  }
+
+private:
+  /// @brief Throw unless build() has been called.
+  void checkBuilt() const
+  {
+    if ( !P_ )
+      throw std::runtime_error( "Prolongation: no P given -- call build() first" );
+  }
+
+  /// @brief P and P^T.
+  std::shared_ptr< ScalarMatrix > P_, PT_;
+  /// @brief Their products with vectors.
+  std::unique_ptr< ScalarTransferOperators > transfer_;
+};
+
 /// @brief P and P^T of non-square blocks -- N x K blocks of P, K x N of P^T -- stored in the blocks' value type
 /// (double, or float for half the bytes), every sum in double, applied with blockMatrixVectorProduct (AMGCL's own spmv
 /// takes square blocks only): the rigid-body coarse level's.
@@ -2117,13 +2203,12 @@ private:
     return blocked;
   }
 
-  /// @brief The Galerkin coarse operator P^T (A P), with AMGCL's own threaded SpGEMM and in the order AMGCL's own
-  /// coarsening forms it (amgcl/coarsening/detail/galerkin.hpp), and an identity row (and column) for each Dirichlet
-  /// coarse DOF, whose column of P is zero: the coarse field keeps its Dirichlet rows as the fine one does.
+  /// @brief The Galerkin coarse operator P^T (A P) (galerkinProduct), and an identity row (and column) for each
+  /// Dirichlet coarse DOF, whose column of P is zero: the coarse field keeps its Dirichlet rows as the fine one does.
   ScalarCsr galerkinOperator( const ScalarMatrix& A, const ScalarMatrix& P, const ScalarMatrix& PT )
   {
     SetupStage                      stage( *this, "galerkin P^T A P" );
-    std::shared_ptr< ScalarMatrix > Ac = amgcl::backend::product( PT, *amgcl::backend::product( A, P ), true );
+    std::shared_ptr< ScalarMatrix > Ac = galerkinProduct( A, P, PT );
     ScalarCsr                       coarseOperator;
     // a Dirichlet coarse DOF's row is the identity row alone, whatever the product stores there: its column of P is
     // zero, so its row of P^T A P is too

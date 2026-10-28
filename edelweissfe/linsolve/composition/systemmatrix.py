@@ -130,6 +130,11 @@ class SystemMatrix:
         scaling = D if self.scaling is None else self.scaling * D
         return SystemMatrix(self.A, scaling, _unscaled=self if self.scaling is None else self._unscaled)
 
+    def diagonal(self) -> np.ndarray:
+        """:math:`\\hat a_{ii}`, without forming :math:`\\hat A`."""
+        diagonal = self.A.diagonal()
+        return diagonal if self.scaling is None else diagonal * self.scaling**2
+
     def absoluteDiagonal(self) -> np.ndarray:
         """:math:`\\lvert \\hat a_{ii} \\rvert`, threaded."""
         from edelweissfe.linsolve.amgcl.amgcl import PyAMGCLEquilibratedSystem

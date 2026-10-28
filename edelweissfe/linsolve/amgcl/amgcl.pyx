@@ -580,6 +580,46 @@ cdef object _scipyCsr(const ScalarCsr& csr, int nCols):
     )
 
 
+cdef class PyAMGCLProlongation:
+    """A prolongation ``P`` and its products, threaded: ``P^T r`` and ``P z`` with AMGCL's spmv, the Galerkin coarse
+    operator ``P^T A P`` with its SpGEMM -- what SciPy computes on one thread, for
+    :class:`~edelweissfe.linsolve.composition.combinators.CoarseCorrection`. See ``Prolongation`` in
+    ``amgcl-wrapper.hpp``."""
+    cdef Prolongation prolongation
+
+    def __init__(self, object P):
+        """P, a scipy.sparse matrix of fine rows and coarse columns: stored, with its transpose, on the C++ side."""
+        P, indptr, indices, data = _csrArrays(P)
+        self.prolongation.build(P.shape[0], P.shape[1], _intData(indptr), _intData(indices), _constDoubleData(data))
+
+    @property
+    def shape(self):
+        """``(fine rows, coarse columns)`` of P."""
+        return (self.prolongation.nFine(), self.prolongation.nCoarse())
+
+    def restrict(self, object r):
+        """Returns ``P^T r`` as a new float64 array."""
+        rArray = _vector(r, self.prolongation.nFine(), "r")
+        cdef np.ndarray[np.float64_t, ndim=1, mode="c"] r_c = np.empty(self.prolongation.nCoarse(), dtype=np.float64)
+        self.prolongation.restrict(_constDoubleData(rArray), _doubleData(r_c))
+        return r_c
+
+    def prolongate(self, object z_c):
+        """Returns ``P z_c`` as a new float64 array."""
+        zArray = _vector(z_c, self.prolongation.nCoarse(), "z_c")
+        cdef np.ndarray[np.float64_t, ndim=1, mode="c"] z = np.empty(self.prolongation.nFine(), dtype=np.float64)
+        self.prolongation.prolongate(_constDoubleData(zArray), _doubleData(z))
+        return z
+
+    def galerkinOperator(self, object A):
+        """Returns ``P^T A P`` of a scipy.sparse matrix ``A`` as a scipy.sparse csr_matrix, columns sorted."""
+        A, indptr, indices, data = _csrArrays(A)
+        return _scipyCsr(
+            self.prolongation.galerkinOperator(A.shape[0], _intData(indptr), _intData(indices), _constDoubleData(data)),
+            self.prolongation.nCoarse(),
+        )
+
+
 cdef class _PyAMGCLTwoLevelCycle:
     """What the two-level preconditioners share (``TwoLevelCycle`` in ``amgcl-wrapper.hpp``): the cycle, the
     fine spectral radius it was built with, the timings and the report. A derived class creates the C++ object and
