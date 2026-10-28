@@ -387,9 +387,11 @@ class CoarseCorrection(Preconditioner):
     onto the range of :math:`P`.
 
     :math:`P` is built at a set-up and kept until the next rebuild (see
-    :attr:`~edelweissfe.linsolve.composition.base.MatrixChange.requiresRebuild`); in between, the coarse solve takes
-    the new :math:`A_c` as an update, and keeps what it can (an :class:`~edelweissfe.linsolve.composition.amg.AMG` its
-    hierarchy, as :class:`~edelweissfe.linsolve.composition.twolevel.TwoLevel` does).
+    :attr:`~edelweissfe.linsolve.composition.base.MatrixChange.requiresRebuild`). On a change of the values alone it
+    recomputes :math:`A_c = P^T A P` and hands it to the coarse solve as an update, which keeps what it can (an
+    :class:`~edelweissfe.linsolve.composition.amg.AMG` its hierarchy).
+    :class:`~edelweissfe.linsolve.composition.twolevel.TwoLevel` keeps its whole cycle instead, :math:`A_c` included,
+    until a rebuild.
 
     The coarse solve is a component like any other, set up on :math:`A_c` with a context that says what the coarse
     dofs are. A callable that builds :math:`P` knows that, and returns it with :math:`P`: for the P1 interpolant,
@@ -407,7 +409,7 @@ class CoarseCorrection(Preconditioner):
     (:class:`~edelweissfe.linsolve.amgcl.amgcl.PyAMGCLProlongation`), the same as SciPy's up to the order of the sums.
 
     With smoothers around it, ``Multiplicative([smoother, CoarseCorrection(P, coarseSolve), smoother])`` is a two-level
-    cycle spelled out: any :math:`P`, any coarse solve, at about twice the wall time of the C++ cycle
+    cycle spelled out: any :math:`P`, any coarse solve, but slower than the C++ cycle
     :class:`~edelweissfe.linsolve.composition.twolevel.TwoLevel`, whose smoother reads a compact single-precision copy
     of the matrix; both are kept on purpose (see the "two-level cycle: two ways" and "which form to use" sections of
     ``doc/source/documentation/composedlinsolvers.rst``). For production runs, ``TwoLevel``.
@@ -429,7 +431,6 @@ class CoarseCorrection(Preconditioner):
         self.coarseSolve = coarseSolve
 
     def _forget(self) -> None:
-        self.P = None
         self.products = None
         self.coarseContext = None
 
@@ -446,25 +447,26 @@ class CoarseCorrection(Preconditioner):
         else:
             P = self.prolongation
             self.coarseContext = context.ofCoarseDofs(P.shape[1])
-        self.P = sp.csr_matrix(P)
-        if self.P.shape[0] != A.shape[0]:
-            raise ValueError("CoarseCorrection: P has {:} rows, but the matrix {:}".format(self.P.shape[0], A.shape[0]))
-        if self.coarseContext.size != self.P.shape[1]:
+        P = sp.csr_matrix(P)
+        if P.shape[0] != A.shape[0]:
+            raise ValueError("CoarseCorrection: P has {:} rows, but the matrix {:}".format(P.shape[0], A.shape[0]))
+        if self.coarseContext.size != P.shape[1]:
             raise ValueError(
                 "CoarseCorrection: P has {:} columns, but its coarse context {:} dofs".format(
-                    self.P.shape[1], self.coarseContext.size
+                    P.shape[1], self.coarseContext.size
                 )
             )
         from edelweissfe.linsolve.amgcl.amgcl import PyAMGCLProlongation
 
-        # P and Pᵀ, stored once in C++: the products below run on every thread, as in the C++ two-level cycles
-        self.products = PyAMGCLProlongation(self.P)
+        # P and Pᵀ, stored once in C++ and kept until the next rebuild: the products below run on every thread, as
+        # in the C++ two-level cycles
+        self.products = PyAMGCLProlongation(P)
         A_c = self._coarseMatrix(A)
         self.coarseSolve.setUp(A_c, self.coarseContext)
         self.statistics.sizes["coarse dofs"] = A_c.shape[0]
 
     def _update(self, A, change) -> None:
-        if change.requiresRebuild or self.P is None:
+        if change.requiresRebuild or self.products is None:
             self.setUp(A, change.context)
             return
         # P stays; A_c follows the matrix, and the coarse solve decides what it keeps (an AMG its hierarchy)
