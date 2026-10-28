@@ -346,7 +346,7 @@ def test_the_p1_coarse_problem_is_the_corner_node_field():
     assert np.all(A_c.diagonal()[coarseDirichlet] == 1.0)
     # the coarse dofs are the corners' dofs, and the coarse component is a child of the cycle
     assert twoLevel.cycle.nCoarse == len(cornerDofs)
-    assert twoLevel.children() == (("coarse", coarse),)
+    assert twoLevel.children() == (("coarseSolve", coarse),)
 
 
 def test_the_p1_coarse_field_includes_a_midside_node_made_a_coarse_node():
