@@ -78,3 +78,19 @@ def test_a_linear_solver_needs_a_stable_pattern_if_a_krylov_solver_of_its_tree_r
     for root, expected in cases:
         stub = _NISTStub(None, ComposedLinearSolver(root).needsStableSparsityPattern)
         assert NIST._shouldPruneCondensedMatrixZeros(stub) is expected
+
+
+@pytest.mark.parametrize("value, expected", [("false", False), ("False", False), ("true", True), ("1", True)])
+def test_the_option_can_be_set_in_the_datalines_of_the_solver_keyword(value, expected):
+    """The option has no default to take its type from (None: automatic), so its type is the schema's: a bool, parsed
+    as one (``bool("false")`` would be truthy)."""
+    stub = type("_Stub", (), {"schema": NIST.schema, "SolverSpecificOptions": NIST.SolverSpecificOptions})()
+    stub.identification = "stub"
+    stub.options = NIST.SolverSpecificOptions.copy()
+
+    class _Journal:
+        def message(self, *args, **kwargs):
+            pass
+
+    NIST._updateOptions(stub, {"pruneCondensedMatrixZeros": value}, _Journal(), strict=True)
+    assert stub.options["pruneCondensedMatrixZeros"] is expected

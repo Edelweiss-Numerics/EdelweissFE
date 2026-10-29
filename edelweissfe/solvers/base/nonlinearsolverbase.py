@@ -47,7 +47,12 @@ from edelweissfe.stepactions.base.stepactionbase import StepActionBase
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.checkpointedstate import packState, unpackState
 from edelweissfe.utils.exceptions import DivergingSolution, TopologyError
-from edelweissfe.utils.schema import OptionSchemaProvider, fieldSchemaMeta
+from edelweissfe.utils.schema import (
+    OptionSchemaProvider,
+    coerceValue,
+    fieldSchemaMeta,
+    optionNames,
+)
 
 
 class TopologyUpdate(NamedTuple):
@@ -155,6 +160,11 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
                 self.options[canonicalKey] = str(v).strip().lower() in ("true", "1", "yes", "on")
             elif isinstance(defaultValue, list):
                 self.options[canonicalKey] = self.options[canonicalKey] + [item.strip() for item in str(v).split(",")]
+            elif defaultValue is None:
+                # an option that decides for itself while unset (``bool | None``): no default to take its type from,
+                # so the schema says it
+                dtype = fieldSchemaMeta(optionNames(self.schema)[canonicalKey]).dtype
+                self.options[canonicalKey] = coerceValue(v, dtype)
             else:
                 self.options[canonicalKey] = type(defaultValue)(v)
 
