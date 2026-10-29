@@ -31,7 +31,6 @@ This module contains important classes for describing the global equation system
 """
 
 from collections import Counter
-from concurrent.futures import ThreadPoolExecutor
 from itertools import chain
 
 import numpy as np
@@ -42,7 +41,7 @@ from edelweissfe.nodecouplingentity.base.nodecouplingentity import (
     BaseNodeCouplingEntity,
 )
 from edelweissfe.numerics.dofvector import DofVector
-from edelweissfe.numerics.parallelizationutilities import getNumberOfWorkerThreads
+from edelweissfe.numerics.parallelizationutilities import mapChunksInParallel
 from edelweissfe.numerics.vijsystemmatrix import VIJSystemMatrix
 from edelweissfe.points.node import Node
 from edelweissfe.sets.nodeset import NodeSet
@@ -481,10 +480,25 @@ class DofManager:
         """Creates a dictionary containing the location (indices) of each entity (elements, ...)
         within the DofVector structure.
 
+        The location of an entity is the indices of the field variables of its nodes, node after node and, on each
+        node, field after field as the entity lists them (``fields``), reordered by its ``dofIndicesPermutation``
+        unless that is None.
+
+        An entity without a location is left out of the dictionary: one of its nodes does not have a field the entity
+        couples there, or the field variable is not part of the DofVector. Any other fault of an entity raises -- it
+        lacks ``nodes``, ``fields`` or ``dofIndicesPermutation``, or lists fewer fields than it has nodes -- whether
+        there are few entities or many.
+
+        The entities are independent of each other, so they are located in chunks on the thread pool
+        (:func:`~edelweissfe.numerics.parallelizationutilities.mapChunksInParallel`), unless there are so few of them
+        that handing them to the pool would cost more than it saves: then the calling thread locates them. The
+        dictionary holds the entities in the order they were given.
+
         Parameters
         ----------
         entities
             The list of entities to locate.
+
         Returns
         -------
         dict
@@ -493,74 +507,44 @@ class DofManager:
         if not entities:
             return {}
 
-        entities_list = list(entities)
-        nEntities = len(entities_list)
+        entities = list(entities)
 
-        numThreads = getNumberOfWorkerThreads()
+        # Looked up once: the worker below reads it for every field of every node.
+        field_var_map = self.idcsOfFieldVariablesInDofVector
 
-        # Don't spawn threads for tiny workloads
-        if nEntities < 500 or numThreads == 1:
-            return self._locate_serial_internal(entities_list)
+        def locateChunk(chunk):
+            locatedInChunk = {}
 
-        chunk_size = (nEntities + numThreads - 1) // numThreads
-        chunks = [entities_list[i : i + chunk_size] for i in range(0, nEntities, chunk_size)]
-
-        # Local names avoid attribute lookups in the hot loop below
-        global_fv_map = self.idcsOfFieldVariablesInDofVector
-
-        def processEntityChunk(chunk):
-            localMap = {}
-            fv_lookup = global_fv_map
-
-            for ent in chunk:
-                nodes = ent.nodes
-                fields_on_ent = ent.fields
-                permutation = ent.dofIndicesPermutation
+            for entity in chunk:
+                # Read outside the try: an entity that cannot tell its nodes and fields is faulty, and must raise
+                # instead of being taken for an entity without a location.
+                nodes, fieldsOnNodes, permutation = entity.nodes, entity.fields, entity.dofIndicesPermutation
 
                 try:
                     indices = [
                         idx
                         for iNode, node in enumerate(nodes)
-                        for f_name in fields_on_ent[iNode]
-                        for idx in fv_lookup[node.fields[f_name]]
+                        for nodeField in fieldsOnNodes[iNode]
+                        for idx in field_var_map[node.fields[nodeField]]
                     ]
                 except (KeyError, AttributeError):
+                    # a node without the field, or a field variable that is not part of the DofVector: no location
                     continue
 
                 destArr = np.array(indices, dtype=np.int32)
+                locatedInChunk[entity] = destArr if permutation is None else destArr[permutation]
 
-                if permutation is not None:
-                    localMap[ent] = destArr[permutation]
-                else:
-                    localMap[ent] = destArr
-            return localMap
+            return locatedInChunk
 
-        idcsOfElementsInDofVector = {}
-        with ThreadPoolExecutor(max_workers=numThreads) as executor:
-            for partial_map in executor.map(processEntityChunk, chunks):
-                idcsOfElementsInDofVector.update(partial_map)
+        # A few entities are not worth the hand-over to the thread pool.
+        if len(entities) < 500:
+            return locateChunk(entities)
 
-        return idcsOfElementsInDofVector
+        located = {}
+        for locatedInChunk in mapChunksInParallel(entities, locateChunk):
+            located.update(locatedInChunk)
 
-    def _locate_serial_internal(self, entities: list) -> dict:
-        """Fast serial fallback for small chunks to avoid thread overhead."""
-        localMap = {}
-        fv_lookup = self.idcsOfFieldVariablesInDofVector
-        for ent in entities:
-            try:
-                indices = []
-                for iNode, node in enumerate(ent.nodes):
-                    for f_name in ent.fields[iNode]:
-                        indices.extend(fv_lookup[node.fields[f_name]])
-            except (KeyError, IndexError, AttributeError, TypeError):
-                continue
-
-            destArr = np.array(indices, dtype=np.int32)
-            if ent.dofIndicesPermutation is not None:
-                localMap[ent] = destArr[ent.dofIndicesPermutation]
-            else:
-                localMap[ent] = destArr
-        return localMap
+        return located
 
     def _locateConstraintsInDofVector(self, constraints: list) -> dict:
         """Creates a dictionary containing the location (indices) of each entity (elements, constraints)
@@ -640,16 +624,17 @@ class DofManager:
         J = np.zeros(sizeVIJ, dtype=np.intc)  # noqa: E741
         idxInVIJ = 0
 
-        for (
-            entity,
-            entityIdcsInDofVector,
-        ) in self.idcsOfHigherOrderEntitiesInDofVector.items():
+        # The entities follow one another in the VIJ vectors, so where each one starts is known before any of them
+        # writes; each then fills only its own part of I and J, and they do so in chunks on the thread pool.
+        for entity in self.idcsOfHigherOrderEntitiesInDofVector:
             entitiesInVIJ[entity] = idxInVIJ
+            idxInVIJ += entity.getVIJContributionSize()
 
-            entity.initializeVIJContribution(entityIdcsInDofVector, I, J, idxInVIJ)
-            nVIJEntity = entity.getVIJContributionSize()
+        def initializeChunk(entitiesWithIndices):
+            for entity, entityIdcsInDofVector in entitiesWithIndices:
+                entity.initializeVIJContribution(entityIdcsInDofVector, I, J, entitiesInVIJ[entity])
 
-            idxInVIJ += nVIJEntity
+        mapChunksInParallel(list(self.idcsOfHigherOrderEntitiesInDofVector.items()), initializeChunk)
 
         return I, J, entitiesInVIJ
 
