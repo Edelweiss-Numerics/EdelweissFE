@@ -32,6 +32,8 @@ import numpy as np
 
 from libc.stdlib cimport free, malloc
 
+from edelweissfe.numerics.parallelizationutilities import mapChunksInParallel
+
 
 cdef class ElementResultCollector:
 
@@ -77,9 +79,15 @@ cdef class ElementResultCollector:
         self.quadraturePoints = list(quadraturePoints)
         self.nGauss = len(self.quadraturePoints)
 
-        # assemble a 2d list of all permanent result arrays (=continously updated np arrays)
-        resultsPointerList = [[el.getResultArray(result, qp, getPersistentView=True) for qp in
-                              self.quadraturePoints] for el in elements]
+        # assemble a 2d list of all permanent result arrays (=continously updated np arrays); the elements are
+        # independent, so in chunks on the thread pool, which come back in the order of the elements
+        quadraturePoints_ = self.quadraturePoints
+
+        def gatherResultArrays(chunk):
+            return [[el.getResultArray(result, qp, getPersistentView=True) for qp in quadraturePoints_]
+                    for el in chunk]
+
+        resultsPointerList = [row for chunk in mapChunksInParallel(elements, gatherResultArrays) for row in chunk]
         self.nSize = resultsPointerList[0][0].shape[0]
 
         # allocate an equivalent 2D C-array for the pointers to each elements results

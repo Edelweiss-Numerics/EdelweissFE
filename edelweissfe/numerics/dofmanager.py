@@ -42,7 +42,10 @@ from edelweissfe.nodecouplingentity.base.nodecouplingentity import (
     BaseNodeCouplingEntity,
 )
 from edelweissfe.numerics.dofvector import DofVector
-from edelweissfe.numerics.parallelizationutilities import getNumberOfWorkerThreads
+from edelweissfe.numerics.parallelizationutilities import (
+    getNumberOfWorkerThreads,
+    mapChunksInParallel,
+)
 from edelweissfe.numerics.vijsystemmatrix import VIJSystemMatrix
 from edelweissfe.points.node import Node
 from edelweissfe.sets.nodeset import NodeSet
@@ -640,16 +643,17 @@ class DofManager:
         J = np.zeros(sizeVIJ, dtype=np.intc)  # noqa: E741
         idxInVIJ = 0
 
-        for (
-            entity,
-            entityIdcsInDofVector,
-        ) in self.idcsOfHigherOrderEntitiesInDofVector.items():
+        # The entities follow one another in the VIJ vectors, so where each one starts is known before any of them
+        # writes; each then fills only its own part of I and J, and they do so in chunks on the thread pool.
+        for entity in self.idcsOfHigherOrderEntitiesInDofVector:
             entitiesInVIJ[entity] = idxInVIJ
+            idxInVIJ += entity.getVIJContributionSize()
 
-            entity.initializeVIJContribution(entityIdcsInDofVector, I, J, idxInVIJ)
-            nVIJEntity = entity.getVIJContributionSize()
+        def initializeChunk(entitiesWithIndices):
+            for entity, entityIdcsInDofVector in entitiesWithIndices:
+                entity.initializeVIJContribution(entityIdcsInDofVector, I, J, entitiesInVIJ[entity])
 
-            idxInVIJ += nVIJEntity
+        mapChunksInParallel(list(self.idcsOfHigherOrderEntitiesInDofVector.items()), initializeChunk)
 
         return I, J, entitiesInVIJ
 
