@@ -93,7 +93,8 @@ on the effective matrix without knowing it is one. For the same reason the mass 
 CSR form by the stiffness' own CSR generator. The damping :math:`\\boldsymbol{C}` is the diagonal
 each element reports through ``computeLumpedDamping``; being diagonal, it is kept only as its
 nonzero entries and their positions in the same layout, not as a full value vector. Both are
-assembled in one loop over the elements when the equation system is (re)built -- at a step's start
+assembled in one loop over the elements (in chunks of elements on the thread pool, see
+:doc:`/documentation/parallelization`) when the equation system is (re)built -- at a step's start
 and after a topology change -- not per Newton iteration. A rebuild caused only by a constraint changing
 its connectivity (a contact candidate list, which can change on every increment) leaves every
 element, and with it every element's slot in the layout, where it was: the operators are then
@@ -200,7 +201,10 @@ import edelweissfe.utils.performancetiming as performancetiming
 from edelweissfe.config.phenomena import carriesLinearMomentum
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.numerics.dofmanager import DofManager, DofVector, VIJSystemMatrix
-from edelweissfe.numerics.parallelizationutilities import forEachSliceInParallel
+from edelweissfe.numerics.parallelizationutilities import (
+    forEachSliceInParallel,
+    mapChunksInParallel,
+)
 from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
 from edelweissfe.solvers.base.conservationchecks import (
     CONSERVATION_TOLERANCE,
@@ -1222,32 +1226,35 @@ class NonlinearImplicitDynamic(NIST):
         """
 
         Mvij = self.theDofManager.constructVIJSystemMatrix()
+
+        # The elements are independent: each writes its mass into its own slice of Mvij and reports its damping, so
+        # they are done in chunks on the thread pool. The chunks come back in the order of the elements, which makes
+        # the concatenated damping the one of a serial loop.
+        def assembleChunk(elements):
+            dampingIndices, dampingValues = [], []
+            for el in elements:
+                try:
+                    el.computeConsistentInertia(Mvij[el])
+                except NotImplementedError as error:
+                    raise NotImplementedError(
+                        "{:} needs a consistent mass matrix, which element {:} ({:}) does not provide; "
+                        "use elements that implement computeConsistentInertia (the Marmot elements), or "
+                        "the explicit solver NED, which needs only a lumped mass.".format(
+                            self.identification, el.elNumber, type(el).__name__
+                        )
+                    ) from error
+
+                indices, values = self._lumpedDampingOfElement(el)
+                dampingIndices.append(indices)
+                dampingValues.append(values)
+            return dampingIndices, dampingValues
+
+        chunks = mapChunksInParallel([el for el in model.elements.values() if el.hasKernels], assembleChunk)
+
         # Seeded with empty arrays, so that a model without any damping still concatenates to
-        # empty arrays of the right dtype below.
-        dampingVIJIndices = [np.zeros(0, dtype=np.int64)]
-        dampingVIJValues = [np.zeros(0)]
-
-        for el in model.elements.values():
-            if not el.hasKernels:
-                continue
-
-            try:
-                el.computeConsistentInertia(Mvij[el])
-            except NotImplementedError as error:
-                raise NotImplementedError(
-                    "{:} needs a consistent mass matrix, which element {:} ({:}) does not provide; "
-                    "use elements that implement computeConsistentInertia (the Marmot elements), or "
-                    "the explicit solver NED, which needs only a lumped mass.".format(
-                        self.identification, el.elNumber, type(el).__name__
-                    )
-                ) from error
-
-            indices, values = self._lumpedDampingOfElement(el)
-            dampingVIJIndices.append(indices)
-            dampingVIJValues.append(values)
-
-        dampingVIJIndices = np.concatenate(dampingVIJIndices)
-        dampingVIJValues = np.concatenate(dampingVIJValues)
+        # empty arrays of the right dtype.
+        dampingVIJIndices = np.concatenate([np.zeros(0, dtype=np.int64)] + [i for chunk in chunks for i in chunk[0]])
+        dampingVIJValues = np.concatenate([np.zeros(0)] + [v for chunk in chunks for v in chunk[1]])
 
         nDof = self.theDofManager.nDof
         I = self.theDofManager.I  # noqa: E741
@@ -1255,10 +1262,24 @@ class NonlinearImplicitDynamic(NIST):
 
         isDynamic = np.zeros(nDof, dtype=bool)
         isDynamic[dynamicDofs] = True
-        couplesDynamicOnly = isDynamic[I] & isDynamic[J]
+
+        # The three passes over the VIJ entries below are as long as the system matrix has entries (hundreds of
+        # millions on a large model): in slices on the thread pool, each slice as the pass over the whole would do it.
+        couplesDynamicOnly = np.empty(len(I), dtype=bool)
+
+        def markCouplingOfDynamicDofs(s: slice):
+            couplesDynamicOnly[s] = isDynamic[I[s]] & isDynamic[J[s]]
+
+        forEachSliceInParallel(markCouplingOfDynamicDofs, len(I))
         self._warnAboutDiscardedInertia(Mvij, dampingVIJIndices, couplesDynamicOnly)
+
         # Mass and damping on the quasi-static fields are discarded, see the warning above.
-        Mvij[~couplesDynamicOnly] = 0.0
+        massValues = np.asarray(Mvij)
+
+        def zeroMassOfQuasiStaticDofs(s: slice):
+            massValues[s][~couplesDynamicOnly[s]] = 0.0
+
+        forEachSliceInParallel(zeroMassOfQuasiStaticDofs, len(I))
         keptDamping = couplesDynamicOnly[dampingVIJIndices]
         dampingVIJIndices = dampingVIJIndices[keptDamping]
         dampingVIJValues = dampingVIJValues[keptDamping]
@@ -1339,8 +1360,15 @@ class NonlinearImplicitDynamic(NIST):
             Per VIJ entry, whether it couples two time-integrated degrees of freedom.
         """
 
-        discarded = np.flatnonzero(~couplesDynamicOnly & (np.asarray(Mvij) != 0.0))
-        discarded = np.concatenate([discarded, dampingVIJIndices[~couplesDynamicOnly[dampingVIJIndices]]])
+        massValues = np.asarray(Mvij)
+
+        def discardedMassInSlice(s: slice) -> np.ndarray:
+            return np.flatnonzero(~couplesDynamicOnly[s] & (massValues[s] != 0.0)) + s.start
+
+        discarded = np.concatenate(
+            forEachSliceInParallel(discardedMassInSlice, len(massValues))
+            + [dampingVIJIndices[~couplesDynamicOnly[dampingVIJIndices]]]
+        )
         if not discarded.size:
             return
 

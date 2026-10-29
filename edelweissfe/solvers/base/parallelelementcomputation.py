@@ -35,6 +35,7 @@ from edelweissfe.numerics.parallelizationutilities import (
     chunked_iterable,
     getNumberOfWorkerThreads,
     getThreadPool,
+    mapChunksInParallel,
 )
 from edelweissfe.timesteppers.timestep import TimeStep
 
@@ -88,17 +89,7 @@ def computeElementsInParallel(
             Ke = K[element]
             element.computeKernels(Ke, Pe, Ue, dUe, time, dT)
 
-    numThreads = getNumberOfWorkerThreads()
-
-    if numThreads == 1:
-        # avoid ThreadPoolExecutor/task dispatch overhead when there is nothing to parallelize
-        computeElementsWorker(elements.values())
-    else:
-        chunkSize = max(1, len(elements) // (numThreads * 4))
-        chunks = chunked_iterable(elements.values(), chunkSize)
-
-        executor = getThreadPool(numThreads)
-        list(executor.map(computeElementsWorker, chunks))
+    mapChunksInParallel(elements.values(), computeElementsWorker)
 
     scatter_P.assembleInto(P)
     scatter_P.assembleInto(F, absolute=True)
