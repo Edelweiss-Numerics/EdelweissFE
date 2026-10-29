@@ -25,8 +25,8 @@
 #  ---------------------------------------------------------------------
 """Regression guard for the scalar double AMGCL backend (``PyAMGCLSolver`` with the default
 ``backendBlockSize = 1``, ``backendPrecision = "double"``): ``relax.type = "gauss_seidel"`` and
-``"ilu0"`` must build and apply, which was briefly broken for every ``PyAMGCLSolver`` user (the registered
-``linsolver = amgcl`` included) while level matrices were stored with
+``"ilu0"`` must build and apply, which was briefly broken for every ``PyAMGCLSolver`` user while level matrices were
+stored with
 AMGCL's ``builtin_stored_matrices`` instead of plain ``builtin<double>``: that derived backend makes AMGCL
 reject ``gauss_seidel`` outright (``relaxation_is_supported`` keys off ``provides_row_iterator``) and
 silently falls back ILU0 to its generic, approximate triangular solve instead of the exact one plain
@@ -36,12 +36,15 @@ silently falls back ILU0 to its generic, approximate triangular solve instead of
 Needs a system above AMGCL's own ``coarse_enough`` (3000 scalar rows) so a real multi-level hierarchy is
 built -- below it, AMG solves directly on the first level and never constructs a relaxation object at
 all, so a bug confined to the smoother construction/apply would pass unnoticed.
+
+The last tests check what EdelweissFE's Chebyshev smoother (``amgcl-chebyshev.hpp``) refuses, applied once as the
+preconditioner: parameters it cannot use, and an operator without a positive, finite spectral radius.
 """
 
 import numpy as np
 import pytest
 import scipy.sparse as sp
-from _blockamgsystems import gridLaplacian
+from _linsolvesystems import gridLaplacian
 
 pytest.importorskip("edelweissfe.linsolve.amgcl.amgcl")
 
@@ -73,16 +76,24 @@ def test_scalar_backend_builds_and_applies(system, relaxationType):
 
 
 @pytest.mark.parametrize("relaxationType", ["gauss_seidel", "ilu0"])
-def test_scalar_backend_solves(system, relaxationType):
-    A, b = system
-    solver = PyAMGCLSolver(
-        {
-            "solver": {"type": "bicgstab", "tol": 1e-8},
-            "precond": {"coarsening": {"type": "smoothed_aggregation"}, "relax": {"type": relaxationType}},
-        }
+def test_scalar_backend_preconditions_a_krylov_solve(system, relaxationType):
+    from edelweissfe.linsolve.base import FieldBlock
+    from edelweissfe.linsolve.composition import (
+        AMG,
+        LGMRES,
+        ComposedLinearSolver,
+        FixedTolerance,
     )
-    x = solver.solve(A, b)
-    assert solver.lastError < 1.0001e-8
+
+    A, b = system
+    tree = {"coarsening": {"type": "smoothed_aggregation"}, "relax": {"type": relaxationType}}
+    solver = ComposedLinearSolver(
+        LGMRES(AMG(amgclTree=tree, backendBlockSize=1), tolerance=FixedTolerance(1e-8), maxIterations=300),
+        verbosity="silent",
+    )
+    solver.setFieldStructure([FieldBlock("u", 0, A.shape[0], 1)])
+    x = solver(A, b)
+    assert solver.lastSolveSummary is None or solver.lastSolveSummary.residualMet
     assert np.linalg.norm(b - A @ x) < 1e-6 * np.linalg.norm(b)
 
 
@@ -94,7 +105,40 @@ def test_ilu0_is_an_exact_triangular_solve():
     n = 1000
     A = sp.diags([-np.ones(n - 1), 4.0 * np.ones(n), -np.ones(n - 1)], [-1, 0, 1], format="csr")
     b = np.random.default_rng(12).standard_normal(n)
-    solver = PyAMGCLSolver({"precond": {"class": "relaxation", "type": "ilu0"}, "solver": {"type": "preonly"}})
+    solver = PyAMGCLSolver({"precond": {"class": "relaxation", "type": "ilu0"}})
     solver.build(A)
     x = solver.applyPreconditioner(b)
     assert np.linalg.norm(b - A @ x) < 1e-12 * np.linalg.norm(b)
+
+
+def _chebyshevAlone(relax: dict) -> PyAMGCLSolver:
+    """EdelweissFE's Chebyshev smoother, applied once as the preconditioner, with the parameters ``relax``."""
+    return PyAMGCLSolver({"precond": {"class": "relaxation", "type": "chebyshev", **relax}})
+
+
+def test_the_chebyshev_smoother_refuses_an_operator_without_a_positive_spectral_radius():
+    # a zero operator (its diagonal stored): the polynomial would divide by its spectral radius
+    n = 50
+    zero = sp.csr_matrix((np.zeros(n), np.arange(n), np.arange(n + 1)), shape=(n, n))
+    with pytest.raises(RuntimeError, match="positive, finite spectral radius"):
+        _chebyshevAlone({}).build(zero)
+
+
+@pytest.mark.parametrize(
+    "relax, reason",
+    [
+        ({"degree": 0}, "relax.degree must be at least 1"),
+        ({"lower": 0.0}, "needs 0 < relax.lower < 1 <= relax.higher"),
+        ({"lower": 1.0}, "needs 0 < relax.lower < 1 <= relax.higher"),
+        ({"higher": 0.9}, "needs 0 < relax.lower < 1 <= relax.higher"),
+        ({"spectralRadiusSteps": 0}, "relax.spectralRadiusSteps must be at least 1"),
+        ({"power_iters": 50}, "relax.power_iters"),
+        ({"tolerance": 0.05}, "unknown parameter of the Chebyshev smoother: tolerance"),
+    ],
+    ids=["degree", "lower 0", "lower 1", "higher", "steps", "power_iters", "unknown"],
+)
+def test_the_chebyshev_smoother_refuses_parameters_it_cannot_use(relax, reason):
+    n = 10
+    A = sp.diags([-np.ones(n - 1), 4.0 * np.ones(n), -np.ones(n - 1)], [-1, 0, 1], format="csr")
+    with pytest.raises(ValueError, match=reason):
+        _chebyshevAlone(relax).build(A)

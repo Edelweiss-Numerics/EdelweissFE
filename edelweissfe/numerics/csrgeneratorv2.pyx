@@ -28,8 +28,11 @@ import numpy as np
 from scipy.sparse import csr_matrix
 
 cimport numpy as np
-from libc.stdint cimport int64_t
+from cpython.ref cimport Py_INCREF
+from libc.stdint cimport int32_t, int64_t
 from libcpp.vector cimport vector
+
+np.import_array()
 
 
 class AliasedCSRMatrix(csr_matrix):
@@ -113,6 +116,8 @@ cdef extern from "_csrcore.h":
 
         void update(const double* V_data, double* csr_data) nogil
         void releaseGatherMap()
+        void addEntries(const int64_t* extraPtr, const int32_t* extraIdx, vector[int]& retiredIndptr,
+                        vector[int]& retiredIndices) except +
         bint gatherMapReleased
         int64_t memoryBytes()
 
@@ -128,6 +133,48 @@ cdef extern from "_csrcore.h":
         void setNumBuffers(int n) except +
         int64_t memoryBytes()
         int nBuffers
+
+cdef class _CSRCoreOwner:
+    """Owns the C++ core of a :class:`CSRGenerator`, its CSR pattern and its gather map, and frees it when it goes.
+
+    The generator holds it, and so does the owner of the core's current pattern (:class:`_CSRPattern`), the base
+    object of the pattern arrays of the generator's matrix. So the pattern lives as long as the generator or the
+    matrix, whichever goes last, the gather map only as long as the generator. Neither of the two refers to the
+    other: a reference cycle would leave both to the cyclic garbage collector, which does not see the size of the core.
+    """
+
+    cdef CSRCore* core
+
+    def __dealloc__(self):
+        if self.core != NULL:
+            del self.core
+
+
+cdef class _CSRPattern:
+    """The NumPy base object of one pattern's arrays (``indptr``, ``indices``): they stay valid as long as any of
+    them is kept, with or without its matrix.
+
+    While this pattern is the core's current one, its memory is the core's, kept alive by ``coreOwner``. When
+    :meth:`CSRGenerator.addToPattern` replaces it, the old vectors are moved here (their memory stays where it is)
+    and ``coreOwner`` is dropped.
+    """
+
+    cdef _CSRCoreOwner coreOwner
+    cdef vector[int] retiredIndptr
+    cdef vector[int] retiredIndices
+
+
+cdef np.ndarray _intArrayOwnedBy(_CSRPattern owner, int* data, np.npy_intp n):
+    """The ``n`` ints at ``data``, memory of the pattern of ``owner``, as a NumPy array whose base is ``owner``."""
+    if n == 0:
+        # an empty vector of the core may have no memory at all
+        return np.empty(0, dtype=np.intc)
+    cdef np.ndarray array = np.PyArray_SimpleNewFromData(1, &n, np.NPY_INT, data)
+    # PyArray_SetBaseObject takes over a reference
+    Py_INCREF(owner)
+    np.PyArray_SetBaseObject(array, owner)
+    return array
+
 
 cdef class CSRGenerator:
     """
@@ -148,14 +195,20 @@ cdef class CSRGenerator:
         :class:`DirectCSRAssembler` and nothing will gather.
     """
 
+    # the owner of the core, the owner of its current pattern (the base of csrMatrix's pattern arrays), and the core
+    # itself, for the calls below
+    cdef _CSRCoreOwner coreOwner
+    cdef _CSRPattern pattern
     cdef CSRCore* core
     cdef public object csrMatrix
     cdef double[:] data_view
     cdef int64_t nCooPairs
 
     def __dealloc__(self):
-        if self.core != NULL:
-            del self.core
+        # Only this generator gathers: its gather map goes with it, also while the matrix keeps the pattern alive.
+        # A cyclic collection may have cleared coreOwner (to None) first, and freed the core with it.
+        if self.coreOwner is not None:
+            self.coreOwner.core.releaseGatherMap()
 
     def __init__(self, systemMatrix, bint patternOnly=False):
         # Ensure int32 dtype regardless of the source array's dtype.
@@ -167,30 +220,63 @@ cdef class CSRGenerator:
         cdef int nDof = int(systemMatrix.nDof)
 
         # 1. Run C++ Core
+        cdef CSRCore* core
         with nogil:
-            self.core = new CSRCore(&I[0], &J[0], self.nCooPairs, nDof, patternOnly)
+            core = new CSRCore(&I[0], &J[0], self.nCooPairs, nDof, patternOnly)
+        self.coreOwner = _CSRCoreOwner()
+        self.coreOwner.core = core
+        self.core = core
 
-        cdef int* ptr_indptr = self.core.indptr.data()
-        cdef int* ptr_indices = self.core.indices.data()
+        self._wrapPattern()
 
+    cdef _wrapPattern(self):
+        """(Re)create :attr:`csrMatrix` as a view of the core's pattern, with a zeroed data array."""
+        cdef int nDof = self.core.nDof
         cdef int nnz = self.core.nnz
 
-        cdef int[::1] view_indptr = <int[:nDof+1]> ptr_indptr
-        cdef int[::1] view_indices = <int[:nnz]> ptr_indices
-
-        cdef np.ndarray nd_indptr = np.asarray(view_indptr)
-        cdef np.ndarray nd_indices = np.asarray(view_indices)
+        # the pattern arrays point into the core and keep it alive (see _CSRPattern); the values are NumPy's own
+        self.pattern = _CSRPattern()
+        self.pattern.coreOwner = self.coreOwner
+        cdef np.ndarray nd_indptr = _intArrayOwnedBy(self.pattern, self.core.indptr.data(), nDof + 1)
+        cdef np.ndarray nd_indices = _intArrayOwnedBy(self.pattern, self.core.indices.data(), nnz)
 
         cdef np.ndarray[double, ndim=1] data = np.zeros(nnz, dtype=np.double)
         self.csrMatrix = AliasedCSRMatrix((data, nd_indices, nd_indptr), shape=(nDof, nDof))
-
-        # Keep this CSRGenerator alive as long as csrMatrix is referenced (_parent is SciPy-internal).
-        self.csrMatrix._parent = self
 
         self.data_view = self.csrMatrix.data
 
         # Construction (incl. scipy's internal prune) is done; forbid structural mutation from now on.
         self.csrMatrix._locked = True
+
+    def addToPattern(self, entries):
+        """Add entries to the CSR pattern that no COO pair contributes to; they are assembled as stored zeros.
+
+        Makes room for values written into :attr:`csrMatrix` after the assembly, such as the
+        multi-point-constraint condensation's (see
+        :meth:`~edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation.condensedPatternFillIn`).
+
+        :attr:`csrMatrix` is replaced by a new matrix with the extended pattern (and zero values). A matrix or
+        pattern array obtained before keeps the old pattern and stays valid, but the generator no longer updates it.
+
+        Parameters
+        ----------
+        entries
+            The entries to add (CSR, ``nDof x nDof``), with sorted rows and none of them already in the pattern; only
+            the pattern is read.
+        """
+        cdef int64_t[::1] extraPtr
+        cdef int32_t[::1] extraIdx
+        if entries.shape != self.csrMatrix.shape:
+            raise ValueError("CSRGenerator.addToPattern: shape {:} differs from {:}.".format(
+                entries.shape, self.csrMatrix.shape))
+        if entries.nnz == 0:
+            return
+        extraPtr = np.ascontiguousarray(entries.indptr, dtype=np.int64)
+        extraIdx = np.ascontiguousarray(entries.indices, dtype=np.int32)
+        # the old pattern moves to the owner its arrays already have, and no longer needs the core
+        self.core.addEntries(&extraPtr[0], &extraIdx[0], self.pattern.retiredIndptr, self.pattern.retiredIndices)
+        self.pattern.coreOwner = None
+        self._wrapPattern()
 
     @property
     def memoryBytes(self):

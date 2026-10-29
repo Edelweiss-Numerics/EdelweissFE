@@ -142,7 +142,7 @@ def test_a_vector_of_the_wrong_length_raises(system):
 
 
 def test_a_failing_preconditioner_is_called_once_and_its_exception_raised(system):
-    from edelweissfe.linsolve.amgcl.amgcl import PyAMGCLLGMRESSolver
+    from edelweissfe.linsolve.amgcl.amgcl import PyAMGCLKrylovSolver
 
     A, As, dinv, equilibrated = system
     calls = []
@@ -151,7 +151,7 @@ def test_a_failing_preconditioner_is_called_once_and_its_exception_raised(system
         calls.append(1)
         raise RuntimeError("preconditioner failed")
 
-    solver = PyAMGCLLGMRESSolver(A.shape[0], {"M": 10, "K": 2})
+    solver = PyAMGCLKrylovSolver(A.shape[0], "lgmres", {"M": 10, "K": 2})
     with pytest.raises(RuntimeError, match="preconditioner failed"):
         solver.solve(equilibrated, np.ones(A.shape[0]), failing, 1e-10, 50)
     assert len(calls) == 1
@@ -170,10 +170,10 @@ def test_a_diagonal_block_product_is_the_scipy_one_bit_for_bit(system):
 
 
 def test_the_outer_solver_rejects_a_right_hand_side_of_the_wrong_length(system):
-    from edelweissfe.linsolve.amgcl.amgcl import PyAMGCLLGMRESSolver
+    from edelweissfe.linsolve.amgcl.amgcl import PyAMGCLKrylovSolver
 
     A, As, dinv, equilibrated = system
-    solver = PyAMGCLLGMRESSolver(A.shape[0], {"M": 10})
+    solver = PyAMGCLKrylovSolver(A.shape[0], "lgmres", {"M": 10})
     with pytest.raises(ValueError, match="length"):
         solver.solve(equilibrated, np.ones(A.shape[0] - 1), lambda r: r, 1e-8, 20)
 
@@ -215,10 +215,10 @@ def test_the_blocks_are_the_same_whichever_operator_is_stored(system):
 def test_a_tiny_right_hand_side_is_solved_like_any_other(system):
     # AMGCL's lgmres returns x = 0 for ||rhs|| < 4.4e-16; the wrapper solves for rhs scaled by a power of two,
     # which is exact, so the solution is the scaled one bit for bit
-    from edelweissfe.linsolve.amgcl.amgcl import PyAMGCLLGMRESSolver
+    from edelweissfe.linsolve.amgcl.amgcl import PyAMGCLKrylovSolver
 
     A, As, dinv, equilibrated = system
-    solver = PyAMGCLLGMRESSolver(A.shape[0], {"M": 30})
+    solver = PyAMGCLKrylovSolver(A.shape[0], "lgmres", {"M": 30})
     rhs = np.random.default_rng(9).standard_normal(A.shape[0])
     x = solver.solve(equilibrated, rhs, lambda r: r, 1e-8, 200)
     tiny = solver.solve(equilibrated, np.ldexp(rhs, -80), lambda r: r, 1e-8, 200)

@@ -29,7 +29,6 @@
 
 # @author: Matthias Neuner
 
-import json
 from dataclasses import dataclass
 from time import perf_counter
 
@@ -37,7 +36,7 @@ import numpy as np
 from scipy.sparse import csr_matrix
 
 import edelweissfe.utils.performancetiming as performancetiming
-from edelweissfe.config.linsolve import getDefaultLinSolver, getLinSolverByName
+from edelweissfe.config.linsolve import createLinearSolver
 from edelweissfe.constraints.base.constraintbase import ConstraintBase
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.numerics.csrgeneratorv2 import CSRGenerator
@@ -111,9 +110,13 @@ class NISTSchema:
         dtype=bool,
         default=False,
     )
-    linsolver: str | None = schemaField(description="The linear solver to be used.", dtype=str, default="pardiso")
-    linsolverConfigFile: str | None = schemaField(
-        description="A JSON configuration file for the linear solver.", dtype=str, default=""
+    linsolver: str | None = schemaField(
+        description=(
+            "The linear solver: the name of a *linearSolver block, or a type of linear solver with its defaults (e.g. "
+            "pardiso, superlu, blockamg)."
+        ),
+        dtype=str,
+        default="pardiso",
     )
     pruneCondensedMatrixZeros: bool | None = schemaField(
         description=(
@@ -138,15 +141,12 @@ class NISTSchema:
     )
     useThreadedMPCCondensation: bool | None = schemaField(
         description=(
-            "Condense the multi-point-constraint system matrix, T^T K T + C, with an OpenMP-threaded "
-            "kernel instead of SciPy's single-threaded CSR routines: every row of the result is computed "
-            "directly from the rows of K it combines, with no intermediate matrix, and rows of K that no "
-            "constraint touches are copied unchanged. The result does not depend on the number of "
-            "threads. Leaves more raw nnz than the "
-            "plain expression (explicit zeros are kept, SciPy's products drop exact-cancellation "
-            "zeros); applyDirichletToStiffness prunes them right after, gated by "
-            "pruneCondensedMatrixZeros (default auto: pruned for PARDISO, kept for blockamg, whose "
-            "hierarchy reuse needs a stable pattern). Off by default."
+            "Condense the multi-point-constraint system matrix, T^T K T + C, in place, with an "
+            "OpenMP-threaded kernel, instead of with SciPy's single-threaded CSR routines, which build a "
+            "second matrix. The CSR pattern of K gains, once per equation system, the entries where a "
+            "master collects the couplings of its slaves; the result does not depend on the number of "
+            "threads. Explicit zeros (the slave columns among them) are pruned from a copy according to "
+            "pruneCondensedMatrixZeros. Off by default."
         ),
         dtype=bool,
         default=False,
@@ -236,7 +236,6 @@ class NIST(NonlinearSolverBase):
         "extrapolateAfterModelChange": True,
         "equilibrateAfterModelChange": False,
         "linsolver": "",
-        "linsolverConfigFile": "",
         "pruneCondensedMatrixZeros": None,
         "useThreadedMPCCondensation": False,
         "report-performance-frequency": 0,
@@ -267,11 +266,41 @@ class NIST(NonlinearSolverBase):
         self.options = self.SolverSpecificOptions.copy()
         # the *solver datalines belong only to this solver: unknown entries are typos
         self._updateOptions(kwargs, journal, strict=True)
+        #: The ``*linearSolver`` blocks of the input file by name, which linsolver= may name (none without an input file).
+        self.linearSolverDefinitions = jobInfo.get("linearSolvers", {})
+        #: The linear solver, and the ``linsolver`` it was made for (see :meth:`selectLinearSolverForStep`).
+        self.linSolver = None
+        self.linSolverName = None
 
         #: The last accepted increment, from which the predictor extrapolates (None: no extrapolation).
         self.prevTimeStep = None
         #: The solution increment of the last accepted increment.
         self.dU = None
+
+    def selectLinearSolverForStep(self) -> None:
+        """Make :attr:`linSolver` the linear solver the step about to begin names (``linsolver``): the one of the
+        previous step if it names the same, else a new one.
+
+        A kept solver builds anew for the step's equation system (``setModel``) and frees what it built before. A new
+        solver per step would leave the previous one to Python's cyclic garbage collector whenever its tree refers
+        back to itself (a function in a solver script, whose globals hold the tree), and the steps' matrices would
+        pile up."""
+        if self.linSolver is not None and self.options["linsolver"] == self.linSolverName:
+            return
+        # the previous one goes before the new one is made
+        self.linSolver = None
+        self.linSolver = createLinearSolver(self.options["linsolver"], self.linearSolverDefinitions)
+        self.linSolverName = self.options["linsolver"]
+        self.linSolver.setJournal(self.journal)
+
+    def forgetEquationSystem(self) -> None:
+        """Drop the equation system of the last build -- the DOF manager, the system matrix and its CSR generator,
+        the multi-point-constraint condensation, the DOF vectors -- so that it is gone before the next one is built,
+        never both at once."""
+        self.theDofManager = None
+        self.csrGenerator = None
+        self.mpcTransformation = None
+        self._U = self._dU = self._P = self._K = None
 
     def beginStep(
         self,
@@ -296,24 +325,15 @@ class NIST(NonlinearSolverBase):
         """
 
         # self.options already reflects every >>options block applied so far (see applyOptionsOverride).
-        linsolverOptions = self.options["linsolverConfigFile"]
-        linsolverOptionDict = json.load(open(linsolverOptions, "r")) if linsolverOptions else ""
-        self.linSolver = (
-            getLinSolverByName(self.options["linsolver"], linsolverOptionDict)
-            if self.options["linsolver"]
-            else getDefaultLinSolver()
-        )
-        self.linSolver.setJournal(self.journal)
+        self.selectLinearSolverForStep()
 
         convergenceCriterion = self.createConvergenceCriterion()
         convergenceCriterion.startStep(self.convergenceCriterion)
         self.convergenceCriterion = convergenceCriterion
 
-        # The equation system is (re)built lazily in the first increment, and whenever the topology
-        # update reports a change of the mesh or of a constraint's DOF footprint.
-        self.theDofManager = None
-        self.mpcTransformation = None
-        self._U = self._dU = self._P = self._K = None
+        # The equation system (DofManager, VIJ pattern, CSR structure) is (re)built lazily in the first increment,
+        # and whenever the topology update reports a change of the mesh or of a constraint's DOF footprint.
+        self.forgetEquationSystem()
 
         # A step starts without a predictor state; a resumed step takes over the checkpointed one.
         self.prevTimeStep = None
@@ -380,7 +400,6 @@ class NIST(NonlinearSolverBase):
         cutbackFactor = step.cutbackFactor
         modelHasChanged = self._modelHasChanged
         connectivityHasChanged = self._connectivityHasChanged
-        U, dU, P, K = self._U, self._dU, self._P, self._K
 
         # The header of this increment's block; all messages below are nested one level deeper.
         self.journal.message(
@@ -403,6 +422,7 @@ class NIST(NonlinearSolverBase):
 
         if modelHasChanged or connectivityHasChanged or self.theDofManager is None:
             with performancetiming.timeit("equation system rebuild"):
+                self.forgetEquationSystem()
                 with performancetiming.timeit("dof manager"):
                     self.theDofManager = DofManager(
                         model.nodeFields.values(),
@@ -463,6 +483,12 @@ class NIST(NonlinearSolverBase):
                     self.mpcTransformation = self.buildMPCTransformation(model, step.actions)
                 with performancetiming.timeit("mpc dirichlet conflict check"):
                     self.checkMPCDirichletConflicts(self.mpcTransformation, step.actions)
+                if self.mpcTransformation is not None:
+                    # Room in the CSR pattern for the entries the condensation adds, so that it can be done in place
+                    with performancetiming.timeit("mpc condensed pattern"):
+                        self.csrGenerator.addToPattern(
+                            self.mpcTransformation.condensedPatternFillIn(self.csrGenerator.csrMatrix)
+                        )
 
                 # After a topology change, the last dU belongs to a different DOF layout: do not
                 # extrapolate this increment.
@@ -471,6 +497,8 @@ class NIST(NonlinearSolverBase):
                 elif self.dU is not None:
                     dU[:] = self.dU
                 self._U, self._dU, self._P, self._K = U, dU, P, K
+        # the equation system of this increment, just built or kept from the last one
+        U, dU, P, K = self._U, self._dU, self._P, self._K
 
         self.incrementStatus = {
             "step": step.number,
@@ -482,7 +510,7 @@ class NIST(NonlinearSolverBase):
             "notes": "",
         }
 
-        self.journal.preformatted(self.convergenceTable.headerLines(), self.identification, level=2)
+        self.tableHeaderWritten = False
 
         if modelHasChanged and equilibrateAfterModelChange:
             # Settle the refined mesh at the LAST converged load: a time step with zero step-progress
@@ -907,11 +935,16 @@ class NIST(NonlinearSolverBase):
         :func:`edelweissfe.solvers.base.dirichlet.applyDirichletToStiffness`."""
         K = applyDirichletToStiffness(K, dirichlets, rhs)
 
-        # Pruning zeros is only safe on the disposable MPC-condensed matrix: without MPC, K is the
-        # CSRGenerator's persistent buffer, which a fixed assembly map writes into every iteration.
-        # PARDISO needs the pruning on condensed systems; solvers that reuse a stable pattern do not
-        # (see _shouldPruneCondensedMatrixZeros).
+        # Compacting the explicit zeros out of a condensed K (see _shouldPruneCondensedMatrixZeros): PARDISO's
+        # reordering of these poorly conditioned, path-dependent (contact/friction) systems is sensitive enough to
+        # the extra structural entries to drift from the reference path; but the pattern then changes from one
+        # Newton iteration to the next, so a solver like blockamg, which reuses its hierarchy, keeps them.
+        #
+        # The CSR generator's own matrix (the threaded condensation works in place on it) must never be compacted:
+        # the generator scatters every update into its full-length buffer via a fixed map. A copy is pruned instead.
         if self.mpcTransformation is not None and self._shouldPruneCondensedMatrixZeros():
+            if K is self.csrGenerator.csrMatrix:
+                K = K.copy()
             K.eliminate_zeros()
 
         return K

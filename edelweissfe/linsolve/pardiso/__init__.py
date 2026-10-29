@@ -26,81 +26,47 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 
-"""Registry-facing factory for the Intel MKL PARDISO solver.
+"""Intel MKL PARDISO as a direct solver backend.
 
-The implementation lives in the Cython extension :mod:`edelweissfe.linsolve.pardiso.pardiso`, which
-is optional -- it needs MKL at build time. The factory below therefore imports it lazily; see
-:func:`createSolver`.
+The binding is the optional Cython extension :mod:`edelweissfe.linsolve.pardiso.pardiso` (it needs MKL at build time),
+imported when a backend is created: an install without it raises :class:`ImportError` there, which
+:func:`~edelweissfe.config.linsolve.getDefaultLinSolver` catches to fall back to SuperLU.
 """
 
-from collections.abc import Callable, Mapping
+import numpy as np
 
-from edelweissfe.linsolve.base import LinearSolver
-
-
-class PardisoLinearSolver(LinearSolver):
-    """Thin wrapper giving the Cython :class:`~edelweissfe.linsolve.pardiso.pardiso.PardisoSolver`
-    extension type the common :class:`~edelweissfe.linsolve.base.LinearSolver` interface
-    (``setJournal``/``setFieldStructure``) without touching the ``.pyx`` itself -- a plain Python
-    subclass keeps the Cython extension's build untouched and this wrapper trivially testable without
-    a rebuild.
-
-    Also forwards ``factorize``/``solveFactorized``, the phase-split contract used instead of the
-    plain ``(A, b) -> x`` call by a caller that wants to reuse one factorization across several
-    right-hand sides -- today ``scripts/benchmark_linsolve.py``'s ``lagged`` subcommand, which
-    resolves its PARDISO instance through this same registry seam (deliberately, so there is exactly
-    one place that knows how a pardiso solver is built). This wrapper therefore satisfies both
-    contracts, not just the ``LinearSolver`` one.
-    """
-
-    def __init__(self, delegate):
-        self._delegate = delegate
-
-    def __call__(self, A, b):
-        return self._delegate(A, b)
-
-    def factorize(self, A):
-        return self._delegate.factorize(A)
-
-    def solveFactorized(self, b):
-        return self._delegate.solveFactorized(b)
+from edelweissfe.linsolve.base import DirectSolverBackend
 
 
-def createSolver(opts) -> Callable:
-    """Create a PARDISO-backed linear solver.
-
-    The factory the ``linsolver`` registry category resolves for the name ``pardiso``: every ``linsolve`` subpackage
-    exposes this one signature, so that a third party can contribute a linear solver through an entry point.
+class PardisoBackend(DirectSolverBackend):
+    """PARDISO through :class:`~edelweissfe.linsolve.pardiso.pardiso.PardisoSolver`: reordering and symbolic
+    factorization (phase 11), numeric factorization (phase 22) in :meth:`factorize`, back substitution (phase 33) in
+    :meth:`solveFactorized`.
 
     Parameters
     ----------
-    opts
-        The linear-solver options parsed from the solver's ``linsolverConfigFile``. Only
-        ``opts["reuseSymbolicFactorization"]`` is consulted, defaulting to ``False``; ``opts`` is
-        tolerated as any non-mapping (the implicit-static solver passes ``""`` when no configuration
-        file is given), in which case that default applies.
-
-    Returns
-    -------
-    Callable
-        A :class:`PardisoLinearSolver` wrapping a
-        :class:`~edelweissfe.linsolve.pardiso.pardiso.PardisoSolver` instance, callable as
-        ``(A, b) -> x``.
-
-    Raises
-    ------
-    ImportError
-        If the optional ``pardiso`` extension was not built.
-        :func:`~edelweissfe.config.linsolve.getDefaultLinSolver` catches this to fall back to SciPy.
+    reuseSymbolicFactorization
+        Keep the reordering and symbolic factorization while the sparsity pattern stays the same, so that a new matrix
+        costs only its numeric factorization. Off by default: the reuse has been observed to silently produce wrong
+        (but not NaN, so undetected) results for some coupled-dof problems; opt in once it has been verified for the
+        problem at hand.
     """
 
-    # Imported lazily: the extension is optional (needs MKL), and getDefaultLinSolver catches the ImportError.
-    from edelweissfe.linsolve.pardiso.pardiso import PardisoSolver
+    def __init__(self, reuseSymbolicFactorization: bool = False):
+        from edelweissfe.linsolve.pardiso.pardiso import PardisoSolver
 
-    # Reusing the symbolic factorization is only correct if the sparsity pattern stays stable for the solver's
-    # lifetime; otherwise it can silently give wrong results. Off by default.
-    reuseSymbolicFactorization = (
-        bool(opts.get("reuseSymbolicFactorization", False)) if isinstance(opts, Mapping) else False
-    )
+        self._solver = PardisoSolver(reuseSymbolicFactorization=reuseSymbolicFactorization)
 
-    return PardisoLinearSolver(PardisoSolver(reuseSymbolicFactorization=reuseSymbolicFactorization))
+    def factorize(self, A) -> None:
+        try:
+            # a copy: PARDISO reads the values again in the back substitution (iterative refinement), which must see
+            # the matrix it factorized, also after the assembly overwrote it in place
+            self._solver.factorize(A.copy())
+        except RuntimeError as error:
+            raise np.linalg.LinAlgError(str(error)) from error
+
+    def solveFactorized(self, b):
+        return self._solver.solveFactorized(b)
+
+    def releaseFactorization(self) -> None:
+        self._solver.releaseFactorization()

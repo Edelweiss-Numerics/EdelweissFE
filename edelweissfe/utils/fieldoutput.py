@@ -189,6 +189,8 @@ class _FieldOutputBase:
         self.journal = journal
         self.appendResults = saveHistory
         self.result = [] if self.appendResults else None
+        # bumped on every change of the result, see resultVersion
+        self._version = 0
         self.f = f_x
         self.f_export = fExport_x
         self.timeHistory = []
@@ -199,6 +201,29 @@ class _FieldOutputBase:
         self._exportedBytes = 0
         self._exportFileTruncated = False
         self._reshape_to_dimensions = reshape_to_dimensions
+
+    def hasResult(self) -> bool:
+        """Whether a result was computed yet: ``False`` before the first converged increment.
+
+        Returns
+        -------
+        bool
+            ``True`` once :meth:`getLastResult` has something to return.
+        """
+
+        return bool(self.result) if self.appendResults else self.result is not None
+
+    @property
+    def resultVersion(self) -> int:
+        """The number of changes of :attr:`result` so far -- its updates and a restart's load: the key of whatever is
+        derived from the result and kept until it changes (e.g. a marker's
+        :meth:`~edelweissfe.adaptivity.marking.MarkerBase.selectionStamp`).
+
+        A cache key, not state: a resumed run counts from its restart, not from the start of the analysis. It is backed
+        by the change counter ``_version``, which, like the ``_version`` of a set, a surface or a node field, a
+        restart need not reproduce.
+        """
+        return self._version
 
     def getLastResult(
         self,
@@ -279,6 +304,7 @@ class _FieldOutputBase:
             self.result.append(result.copy())
         else:
             self.result = result
+        self._version += 1
 
     def _resultTableForExport(self) -> np.ndarray:
         """Assemble the result table that ``f_export`` is applied to.
@@ -384,6 +410,7 @@ class _FieldOutputBase:
                 offset += size
         else:
             self.result = np.array(data["result"]) if "result" in data else None
+        self._version += 1
 
     def initializeStep(self, step):
         """Write the current (just-updated) result as the first row of this step.

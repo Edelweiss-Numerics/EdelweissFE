@@ -26,58 +26,29 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 
-"""Registry-facing factory for the MUMPS solver.
+"""MUMPS as a direct solver backend.
 
-The implementation lives in :mod:`edelweissfe.linsolve.mumps.mumps`, which is pure Python but
-imports the ``mumps`` bindings at module scope -- an optional dependency. The factory below
-therefore imports it lazily; see :func:`createSolver`.
+The binding, :mod:`edelweissfe.linsolve.mumps.mumps`, imports the optional ``mumps`` bindings when a backend is
+created: an install without them raises :class:`ImportError` there.
 """
 
-from collections.abc import Callable
-
-from edelweissfe.linsolve.base import LinearSolver
+from edelweissfe.linsolve.base import DirectSolverBackend
 
 
-class MumpsSolver(LinearSolver):
-    """The MUMPS direct solver. Callable as ``(A, b) -> x``.
+class MumpsBackend(DirectSolverBackend):
+    """MUMPS through :class:`~edelweissfe.linsolve.mumps.mumps.MumpsFactorization`: analysis and factorization in
+    :meth:`factorize`, the solves in :meth:`solveFactorized`. Takes no options."""
 
-    Takes no options; ``setJournal``/``setFieldStructure`` are inherited no-ops (this solver has no
-    field-split structure and does not log).
-    """
+    def __init__(self):
+        from edelweissfe.linsolve.mumps.mumps import MumpsFactorization
 
-    def __init__(self, solveFunction):
-        self._solveFunction = solveFunction
+        self._factorization = MumpsFactorization()
 
-    def __call__(self, A, b):
-        return self._solveFunction(A, b)
+    def factorize(self, A) -> None:
+        self._factorization.factorize(A)
 
+    def solveFactorized(self, b):
+        return self._factorization.solve(b)
 
-def createSolver(opts) -> Callable:
-    """Create a MUMPS-backed linear solver.
-
-    The factory the ``linsolver`` registry category resolves for the name ``mumps``: every ``linsolve`` subpackage
-    exposes this one signature, so that a third party can contribute a linear solver through an entry point.
-
-    Parameters
-    ----------
-    opts
-        The linear-solver options parsed from the solver's ``linsolverConfigFile``. Not consulted:
-        this backend takes no options. It is still accepted so that every ``createSolver`` presents
-        the identical signature.
-
-    Returns
-    -------
-    Callable
-        A :class:`MumpsSolver`, callable as ``(A, b) -> x``, delegating to
-        :func:`~edelweissfe.linsolve.mumps.mumps.mumpsSolve`.
-
-    Raises
-    ------
-    ImportError
-        If the optional ``mumps`` dependency is not installed -- raised here, at construction time
-        (matching the pre-refactor behaviour), not deferred to the first solve.
-    """
-    # Imported lazily: the `mumps` bindings are an optional dependency.
-    from edelweissfe.linsolve.mumps.mumps import mumpsSolve
-
-    return MumpsSolver(mumpsSolve)
+    def releaseFactorization(self) -> None:
+        self._factorization.release()

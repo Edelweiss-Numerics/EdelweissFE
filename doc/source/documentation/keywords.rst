@@ -160,6 +160,24 @@
       - ``float``
       - (optional) start time of job, standard = 0.0
 
+.. list-table:: ``*linearsolver`` : define a linear solver
+    :width: 100%
+    :widths: 25 25 40
+    :header-rows: 1
+
+    * - Option
+      - Type
+      - Description
+    * - ``name``
+      - ``string``
+      - name of the linear solver, named by a ``*solver``'s ``linsolver=``
+    * - ``type``
+      - ``string``
+      - type of the linear solver: custom, blockamg, pardiso, superlu, umfpack, klu, petsclu, mumps, panuapardiso
+    * - ``data``
+      - ``string``
+      - (optional) the options of the type, one key=value per line (see :doc:`linsolvers`)
+
 .. list-table:: ``*material`` : definition of a material
     :width: 100%
     :widths: 25 25 40

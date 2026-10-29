@@ -26,49 +26,37 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 
-"""Registry-facing factory for SciPy's own sparse LU solver (SuperLU).
+"""SciPy's own sparse LU (SuperLU) as a direct solver backend.
 
-There is no extension to build and no optional dependency behind it (SciPy is a hard requirement),
-so unlike its siblings this one is always importable, which is also what makes it the fallback of
+There is no extension to build and no optional dependency behind it (SciPy is a hard requirement), so it is always
+available, which is also what makes ``type=superlu`` the fallback of
 :func:`~edelweissfe.config.linsolve.getDefaultLinSolver`.
 """
 
-from collections.abc import Callable
+import numpy as np
 
-from edelweissfe.linsolve.base import LinearSolver
-
-
-class SuperLUSolver(LinearSolver):
-    """SciPy's SuperLU-backed direct solver. Callable as ``(A, b) -> x``.
-
-    Takes no options; ``setJournal``/``setFieldStructure`` are inherited no-ops (this solver has no
-    field-split structure and does not log).
-    """
-
-    def __call__(self, A, b):
-        # Imported lazily, like the optional backends of the other factories.
-        from scipy.sparse.linalg import spsolve
-
-        return spsolve(A.copy(), b, use_umfpack=False)
+from edelweissfe.linsolve.base import DirectSolverBackend
 
 
-def createSolver(opts) -> Callable:
-    """Create a SuperLU-backed linear solver.
+class SuperLUBackend(DirectSolverBackend):
+    """SuperLU through :func:`scipy.sparse.linalg.splu`, with SciPy's defaults. Takes no options."""
 
-    The factory the ``linsolver`` registry category resolves for the name ``superlu``: every ``linsolve`` subpackage
-    exposes this one signature, so that a third party can contribute a linear solver through an entry point.
+    def __init__(self):
+        # the factorization of the last factorize(), for solveFactorized()
+        self._factorization = None
 
-    Parameters
-    ----------
-    opts
-        The linear-solver options parsed from the solver's ``linsolverConfigFile``. Not consulted:
-        SuperLU is used with SciPy's defaults and takes no options here. It is still accepted so
-        that every ``createSolver`` presents the identical signature.
+    def factorize(self, A) -> None:
+        from scipy.sparse.linalg import splu
 
-    Returns
-    -------
-    Callable
-        A :class:`SuperLUSolver`, callable as ``(A, b) -> x``, solving ``A x = b`` via
-        :func:`scipy.sparse.linalg.spsolve` with ``use_umfpack=False``.
-    """
-    return SuperLUSolver()
+        # A is CSR, i.e. the CSC arrays of A^T: factorize A^T and solve transposed, as scipy's spsolve does for CSR,
+        # which also gives bitwise its results (factorizing A.tocsc() instead differs in the round-off)
+        try:
+            self._factorization = splu(A.T)
+        except RuntimeError as error:  # SuperLU's "Factor is exactly singular"
+            raise np.linalg.LinAlgError(str(error)) from error
+
+    def solveFactorized(self, b):
+        return self._factorization.solve(b, trans="T")
+
+    def releaseFactorization(self) -> None:
+        self._factorization = None

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""BlockAMGSolver on a system constrained by the solvers' own Dirichlet elimination, which keeps the eliminated
+"""The blockamg linear solver on a system constrained by the solvers' own Dirichlet elimination, which keeps the eliminated
 entries as explicitly stored zeros: the solve must be the one of the same system without them -- bitwise on one
 thread; with several, AMGCL's own power iterations sum in thread order, so even two identical solves differ in
 the last bits -- while the hierarchy-reuse pattern gate still sees the input's own nonzero count.
@@ -8,9 +8,9 @@ the last bits -- while the hierarchy-reuse pattern gate still sees the input's o
 
 import numpy as np
 import scipy.sparse as sp
-from _blockamgsystems import DirichletStub, displacementDamageSystem
+from _linsolvesystems import DirichletStub, displacementDamageSystem
 
-from edelweissfe.linsolve.blockamg import createSolver
+from edelweissfe.config.linsolve import getLinSolverByName
 from edelweissfe.solvers.base.dirichlet import applyDirichletToStiffness
 
 
@@ -24,7 +24,7 @@ def _system(n=14):
 
 
 def _solve(A, b, blocks):
-    solver = createSolver({"outerTol": 1e-8, "verbosity": "silent"})
+    solver = getLinSolverByName("blockamg", {"tolerance": 1e-8, "verbosity": "silent"})
     solver.setFieldStructure(blocks)
     return solver(A, b), solver
 
@@ -38,8 +38,8 @@ def test_stored_zeros_change_nothing_but_the_pattern_gate_input():
     x, solver = _solve(withZeros, b, blocks)
     y, reference = _solve(withoutZeros, b, blocks)
     assert np.linalg.norm(x - y) <= 1e-12 * np.linalg.norm(y)
-    assert solver._lastOuterIters == reference._lastOuterIters
-    assert solver._lastNnz == withZeros.nnz
+    assert solver.lastSolveSummary.iters == reference.lastSolveSummary.iters
+    assert solver.lastNnz == withZeros.nnz
 
 
 def test_a_non_canonical_matrix_is_solved_as_its_canonical_form():

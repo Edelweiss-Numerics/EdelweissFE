@@ -26,51 +26,43 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 
-"""Registry-facing factory for the UMFPACK sparse LU solver, through SciPy.
+"""The UMFPACK sparse LU, through SciPy, as a direct solver backend.
 
-``use_umfpack=True`` is a *request*, not a guarantee: SciPy silently falls back to SuperLU when
-``scikit-umfpack`` is not installed, so this name never fails to produce a working solver -- it
-just may not produce an UMFPACK-backed one.
+SciPy uses UMFPACK where ``scikit-umfpack`` is installed, and silently falls back to SuperLU where it is not: this
+backend never fails to solve -- it just may not be UMFPACK.
 """
 
-from collections.abc import Callable
+import warnings
 
-from edelweissfe.linsolve.base import LinearSolver
+import numpy as np
 
-
-class UMFPACKSolver(LinearSolver):
-    """SciPy's UMFPACK-backed direct solver. Callable as ``(A, b) -> x``.
-
-    Takes no options; ``setJournal``/``setFieldStructure`` are inherited no-ops (this solver has no
-    field-split structure and does not log).
-    """
-
-    def __call__(self, A, b):
-        # Imported inside the call, not at module scope -- see the note in the `superlu` sibling for
-        # why every one of the factories does it this way.
-        from scipy.sparse.linalg import spsolve
-
-        return spsolve(A.copy(), b, use_umfpack=True)
+from edelweissfe.linsolve.base import DirectSolverBackend
 
 
-def createSolver(opts) -> Callable:
-    """Create an UMFPACK-backed linear solver.
+class UMFPACKBackend(DirectSolverBackend):
+    """UMFPACK through :func:`scipy.sparse.linalg.factorized`, which factorizes once and returns the solve with the
+    factors. Takes no options."""
 
-    The factory the ``linsolver`` registry category resolves for the name ``umfpack``: every ``linsolve``
-    subpackage exposes this one signature, so that a third party can contribute a linear solver through an
-    entry point.
+    def __init__(self):
+        # the solve with the factors of the last factorize(), for solveFactorized()
+        self._solve = None
 
-    Parameters
-    ----------
-    opts
-        The linear-solver options parsed from the solver's ``linsolverConfigFile``. Not consulted:
-        UMFPACK is used with SciPy's defaults and takes no options here. It is still accepted so
-        that every ``createSolver`` presents the identical signature.
+    def factorize(self, A) -> None:
+        from scipy.sparse.linalg import factorized
 
-    Returns
-    -------
-    Callable
-        A :class:`UMFPACKSolver`, callable as ``(A, b) -> x``, solving ``A x = b`` via
-        :func:`scipy.sparse.linalg.spsolve` with ``use_umfpack=True``.
-    """
-    return UMFPACKSolver()
+        try:
+            # UMFPACK reports a singular matrix by a warning, SuperLU by an error: both raise here
+            with warnings.catch_warnings():
+                warnings.simplefilter("error", UserWarning)
+                self._solve = factorized(A.tocsc())
+        except (RuntimeError, UserWarning) as error:
+            raise np.linalg.LinAlgError(str(error)) from error
+
+    def releaseFactorization(self) -> None:
+        self._solve = None
+
+    def solveFactorized(self, b):
+        b = np.asarray(b, dtype=float)
+        if b.ndim == 1:
+            return self._solve(b)
+        return np.column_stack([self._solve(np.ascontiguousarray(column)) for column in b.T])

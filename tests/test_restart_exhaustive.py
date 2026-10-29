@@ -652,9 +652,12 @@ def _reader(checkpoint: Path) -> str:
 
 
 #: Attributes that legitimately differ between a resumed and an uninterrupted run: wall-clock time,
-#: and change counters that only invalidate caches -- how far they count depends on how many
-#: separate mutations a replay bundles into one, not on the state they guard.
-_NOT_STATE = {"_stepWallClockTic", "_version", "_seenParentVersion"}
+#: change counters that only invalidate caches -- how far they count depends on how many
+#: separate mutations a replay bundles into one, not on the state they guard -- and the linear solver,
+#: which a nonlinear solver creates afresh at the start of every step: what it learns across solves
+#: (its solve count, the residual history, a preconditioner it reuses) is not checkpointed, so a
+#: resume starts it afresh as a step does. For a direct solver (these scenarios) it changes nothing.
+_NOT_STATE = {"_stepWallClockTic", "_version", "_seenParentVersion", "linSolver"}
 
 
 def _plainValue(value, directory: str, depth: int = 0):

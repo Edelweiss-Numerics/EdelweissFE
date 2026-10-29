@@ -26,65 +26,10 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 
-"""Registry-facing factory for the AMGCL algebraic-multigrid solver.
+"""The AMGCL algebraic-multigrid library, as the Cython extension :mod:`edelweissfe.linsolve.amgcl.amgcl` (optional,
+it needs the AMGCL headers at build time).
 
-The implementation lives in the Cython extension :mod:`edelweissfe.linsolve.amgcl.amgcl`, which is
-optional -- it needs the AMGCL headers at build time. The factory below therefore imports it lazily;
-see :func:`createSolver`.
+Not a linear solver of its own: the composed solvers use it in their leaves and matrix operations
+(:class:`~edelweissfe.linsolve.composition.amg.AMG`, the two-level cycles, the Krylov solvers, the threaded field split
+of :class:`~edelweissfe.linsolve.composition.systemmatrix.SystemMatrix`).
 """
-
-from collections.abc import Callable, Mapping
-
-from edelweissfe.linsolve.base import LinearSolver
-
-
-class AMGCLLinearSolver(LinearSolver):
-    """Thin wrapper giving the Cython :class:`~edelweissfe.linsolve.amgcl.amgcl.PyAMGCLSolver`
-    extension type the common :class:`~edelweissfe.linsolve.base.LinearSolver` interface
-    (``setJournal``/``setFieldStructure``), for standalone use as a registered ``linsolver`` (e.g. a
-    direct ``linsolver=amgcl`` in an input file). Not used internally by ``blockamg``, which imports
-    and drives ``PyAMGCLSolver`` itself directly (via ``build``/``applyPreconditioner``, not this
-    one-shot ``solve``) -- this wrapper only affects the top-level ``amgcl`` registry entry.
-    """
-
-    def __init__(self, delegate):
-        self._delegate = delegate
-
-    def __call__(self, A, b):
-        return self._delegate.solve(A, b)
-
-
-def createSolver(opts) -> Callable:
-    """Create an AMGCL-backed linear solver.
-
-    The factory the ``linsolver`` registry category resolves for the name ``amgcl``: every ``linsolve`` subpackage
-    exposes this one signature, so that a third party can contribute a linear solver through an entry point.
-
-    Parameters
-    ----------
-    opts
-        The linear-solver options parsed from the solver's ``linsolverConfigFile``. Copied into a
-        plain ``dict`` and handed to :class:`~edelweissfe.linsolve.amgcl.amgcl.PyAMGCLSolver`, which
-        forwards it to AMGCL's own runtime parameter tree (solver/preconditioner selection and their
-        tolerances). A non-mapping ``opts`` -- e.g. the ``""`` the implicit-static solver passes when
-        no configuration file is given -- becomes an empty ``dict``, i.e. AMGCL's defaults.
-
-    Returns
-    -------
-    Callable
-        A :class:`AMGCLLinearSolver` wrapping a
-        :class:`~edelweissfe.linsolve.amgcl.amgcl.PyAMGCLSolver` configured from ``opts``, callable as
-        ``(A, b) -> x``.
-
-    Raises
-    ------
-    ImportError
-        If the optional ``amgcl`` extension was not built.
-    """
-
-    # Imported here, not at module scope: this extension is optional.
-    from edelweissfe.linsolve.amgcl.amgcl import PyAMGCLSolver
-
-    amgclOpts = dict(opts) if isinstance(opts, Mapping) else {}
-
-    return AMGCLLinearSolver(PyAMGCLSolver(amgclOpts))

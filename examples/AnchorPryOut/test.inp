@@ -6,22 +6,25 @@
 ** Marmot material, steel fastener parts, 5 *TIE constraints, 2 penalty contact pairs, and
 ** geometry-driven AMR -- used here to demonstrate this repo's currently best-known linear-solver
 ** setup for exactly this kind of hard, ill-conditioned, path-dependent problem
-** (`linsolver=blockamg`, `blockamg.json` in this directory):
+** (`*linearSolver, type=blockamg` below):
 **
-**  - blockamg's own defaults: `blockamg.json` sets only the log verbosity. The defaults (outer solve
-**    by AMGCL's LGMRES on the unscaled system, 3x3 float-block hierarchy for the displacement field,
-**    built from the translations of its equilibrated block, adaptive Eisenstat-Walker tolerance
-**    between 1e-4 and 1e-3, an outer-iteration cap of 100) are
-**    explained in doc/source/documentation/blockamgtheory.rst, "Why the defaults are what they are".
+**  - the defaults of the blockamg preset: the block only sets the log verbosity. The defaults (outer
+**    solve by AMGCL's LGMRES on the unscaled system, block Gauss-Seidel over the fields of the diagonally
+**    scaled matrix, a two-level cycle for the displacement field (see below), a new preconditioner for every
+**    solve, adaptive Eisenstat-Walker tolerance between 1e-4 and 1e-3, an outer-iteration cap of 100) are explained in
+**    doc/source/documentation/composedlinsolvers.rst and blockamgtheory.rst.
 **  - `useThreadedMPCCondensation=True` (`>>options` on the loading step below): computes the multi-
 **    point-constraint condensation this model's 5 ties require (`T^T K T + C`, every solve) with
 **    the OpenMP-threaded kernel instead of single-threaded SciPy CSR routines.
-**  - Deliberately *not* enabled: p-two-grid (`p1FieldNames`) -- measured at parity with the
-**    single-level hierarchy on this model (not a real margin), not worth the added complexity here.
+**  - The concrete is quadratic (C3D20R), so the blockamg preset gives the displacement field the corner-node
+**    two-level cycle (`TwoLevel(CornerNodeInterpolation())`, the default for a quadratic 3D displacement field;
+**    `cornerNodeInterpolation=false` switches back to the two-level cycle on the rigid-body modes). In its former
+**    form -- the plain 1/2, 1/2 weights and an AMG coarse solve -- it was at parity with one AMG hierarchy on the
+**    translations on this model; the current form has not been measured on this model yet.
 **
-** An earlier version of this file set a fixed, tight `outerTol=1e-8` on the theory that it was just an
+** An earlier version of this file set a fixed, tight tolerance of 1e-8 on the theory that it was just an
 ** accuracy choice: a live smoke test on this exact model caught that it was not -- the first real cutback
-** needed far more outer iterations than it should and did not converge. `outerTol` stays unset (adaptive
+** needed far more outer iterations than it should and did not converge. `tolerance` stays unset (adaptive
 ** forcing). If your own model needs a tighter fixed tolerance, re-verify the load path against a
 ** reference run.
 **
@@ -349,9 +352,11 @@ minMarkedElements=10
 ** JOB / SOLVER
 **=================================================================================================
 *job, name=anchorPryOut, domain=3d
+*linearSolver, name=anchorSolver, type=blockamg
+verbosity=info
+
 *solver, solver=NISTParallel, name=theSolver
-linsolver=blockamg
-linsolverConfigFile=blockamg.json
+linsolver=anchorSolver
 
 **=================================================================================================
 ** FIELD OUTPUTS

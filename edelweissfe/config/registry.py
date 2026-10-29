@@ -359,21 +359,34 @@ for _materialName, _materialDotted in {
 }.items():
     _BUILTINS[("material", _materialName)] = _materialDotted
 
-# The linsolver category: every `linsolve/*` subpackage exposes a module-level
-# `createSolver(opts) -> Callable[[A, b], x]` factory.
-for _linsolverName in [
-    "superlu",
-    "umfpack",
-    "pardiso",
-    "panuapardiso",
-    "klu",
-    "petsclu",
-    "mumps",
-    "amgcl",
-    "blockamg",
-    "matrixdump",
-]:
-    _BUILTINS[("linsolver", _linsolverName)] = f"edelweissfe.linsolve.{_linsolverName}:createSolver"
+# The linsolver category: the types of *linearSolver (and of a *solver's linsolver=), each a class with the schema
+# of its data lines and the composed solver they define; see edelweissfe/linsolve/types.py and
+# doc/source/documentation/linsolvers.rst.
+for _linsolverName, _linsolverClass in {
+    "superlu": "SuperLU",
+    "umfpack": "UMFPACK",
+    "pardiso": "Pardiso",
+    "panuapardiso": "PanuaPardiso",
+    "klu": "KLU",
+    "petsclu": "PetscLU",
+    "mumps": "Mumps",
+    "blockamg": "BlockAMG",
+    "custom": "Custom",
+}.items():
+    _BUILTINS[("linsolver", _linsolverName)] = f"edelweissfe.linsolve.types:{_linsolverClass}"
+
+# The directsolver category: the sparse direct solver libraries a DirectSolver leaf of a composed solver applies
+# (edelweissfe.linsolve.base.DirectSolverBackend), one linsolve/<name> subpackage each.
+for _directSolverName, _directSolverClass in {
+    "superlu": "SuperLUBackend",
+    "umfpack": "UMFPACKBackend",
+    "pardiso": "PardisoBackend",
+    "panuapardiso": "PanuaPardisoBackend",
+    "klu": "KLUBackend",
+    "petsclu": "PetscLUBackend",
+    "mumps": "MumpsBackend",
+}.items():
+    _BUILTINS[("directsolver", _directSolverName)] = f"edelweissfe.linsolve.{_directSolverName}:{_directSolverClass}"
 
 
 # The "keyword" category: each top-level keyword is its own module with its own class name.
@@ -392,6 +405,7 @@ for _keywordName, _keywordDotted in {
     "fieldOutput": "edelweissfe.keywords.fieldoutput:FieldOutputKeyword",
     "analyticalField": "edelweissfe.keywords.analyticalfield:AnalyticalFieldKeyword",
     "solver": "edelweissfe.keywords.solver:SolverKeyword",
+    "linearSolver": "edelweissfe.keywords.linearsolver:LinearSolverKeyword",
     "step": "edelweissfe.keywords.step:StepKeyword",
     "output": "edelweissfe.keywords.output:OutputKeyword",
     "updateConfiguration": "edelweissfe.keywords.updateconfiguration:UpdateConfigurationKeyword",

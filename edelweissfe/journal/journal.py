@@ -35,8 +35,14 @@ which can be used troughout EdelweissFE.
 
 import math
 import textwrap
+import unicodedata
 
 from prettytable import PrettyTable
+
+
+def displayWidth(text: str) -> int:
+    """The columns a text takes on the terminal: a combining character (the tilde of ``S̃``) takes none."""
+    return sum(1 for character in text if not unicodedata.combining(character))
 
 
 class Journal:
@@ -125,8 +131,7 @@ class Journal:
             Level of message.
         """
 
-        # Maximum allowed characters for the line based on leveledOutput indentations
-        wrap_width = Journal.leftColumn - {0: 0, 1: 2, 2: 4}.get(level, 0)
+        wrap_width = Journal._messageWidth(level)
 
         wrapped_lines = []
         for line in message.splitlines():
@@ -136,6 +141,60 @@ class Journal:
                 wrapped_lines.append(line)
 
         self._writeLines(wrapped_lines, senderIdentification, level, senderOnEveryLine=False)
+
+    @staticmethod
+    def _messageWidth(level: int) -> int:
+        """The characters a line of the given level may have before it is wrapped: the message column, less the
+        indentation of the level (see :attr:`leveledOutput`)."""
+        return Journal.leftColumn - {0: 0, 1: 2, 2: 4}.get(level, 0)
+
+    def framedMessage(self, message: str, senderIdentification: str, title: str, level: int = 1):
+        """Write a message inside a frame, a block that stands apart from the lines around it. The frame is as wide as
+        the message column. A line longer than the frame is wrapped below itself, its continuation indented under its
+        own text, and the ``│`` of a tree drawn with ``├─`` and ``└─`` carried on, so that such a tree stays readable.
+        The sender is on the first line only.
+
+        Parameters
+        ----------
+        message
+            The message; a line break starts a new line of the frame.
+        senderIdentification
+            The name of the sender.
+        title
+            The title in the upper border of the frame.
+        level
+            Level of message.
+        """
+
+        frameWidth = Journal._messageWidth(level)
+        innerWidth = frameWidth - 4
+
+        lines = []
+        for line in message.splitlines():
+            lines.extend(Journal._wrapHanging(line, innerWidth))
+
+        upperBorder = "+- {:} ".format(title).ljust(frameWidth - 1, "-") + "+"
+        lowerBorder = "+" + "-" * (frameWidth - 2) + "+"
+        framedLines = [upperBorder]
+        for line in lines:
+            padding = " " * (innerWidth - displayWidth(line))
+            framedLines.append("| " + line + padding + " |")
+        framedLines.append(lowerBorder)
+
+        self._writeLines(framedLines, senderIdentification, level, senderOnEveryLine=False)
+
+    @staticmethod
+    def _wrapHanging(line: str, width: int) -> list[str]:
+        """The line wrapped to the width, its continuation lines indented by two more characters than the text of the
+        line starts at. What leads a line of a tree (spaces and ``│├└─``) continues as spaces, and as ``│`` where the
+        tree goes on below."""
+        if displayWidth(line) <= width:
+            return [line]
+        leading = line[: len(line) - len(line.lstrip(" │├└─"))]
+        continuation = "".join("│" if character in "│├" else " " for character in leading) + "  "
+        return textwrap.wrap(
+            line, width=width, subsequent_indent=continuation, break_long_words=False, break_on_hyphens=False
+        ) or [""]
 
     def preformatted(self, lines: list[str], senderIdentification: str, level: int = 1):
         """Write lines whose layout must be kept, such as the rows of a table, to log. They are never wrapped:

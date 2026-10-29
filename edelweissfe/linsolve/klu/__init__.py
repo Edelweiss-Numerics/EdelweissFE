@@ -26,59 +26,29 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 
-"""Registry-facing factory for the KLU (SuiteSparse) solver.
+"""SuiteSparse's KLU as a direct solver backend.
 
-The implementation lives in the Cython extension :mod:`edelweissfe.linsolve.klu.klu`, which is
-optional -- it needs SuiteSparse at build time. The factory below therefore imports it lazily; see
-:func:`createSolver`.
+The binding is the optional Cython extension :mod:`edelweissfe.linsolve.klu.klu` (it needs SuiteSparse at build time),
+imported when a backend is created: an install without it raises :class:`ImportError` there.
 """
 
-from collections.abc import Callable
-
-from edelweissfe.linsolve.base import LinearSolver
+from edelweissfe.linsolve.base import DirectSolverBackend
 
 
-class KLUSolver(LinearSolver):
-    """SuiteSparse's KLU direct solver. Callable as ``(A, b) -> x``.
+class KLUBackend(DirectSolverBackend):
+    """KLU through :class:`~edelweissfe.linsolve.klu.klu.KLUFactorization`: ordering and LU factors in
+    :meth:`factorize`, the triangular solves in :meth:`solveFactorized`. Takes no options."""
 
-    A plain Python wrapper around the bare Cython function :func:`~edelweissfe.linsolve.klu.klu.kluSolve`
-    -- not touching the ``.pyx`` itself keeps this trivially testable without a rebuild.
-    """
+    def __init__(self):
+        from edelweissfe.linsolve.klu.klu import KLUFactorization
 
-    def __init__(self, solveFunction):
-        self._solveFunction = solveFunction
+        self._factorization = KLUFactorization()
 
-    def __call__(self, A, b):
-        return self._solveFunction(A, b)
+    def factorize(self, A) -> None:
+        self._factorization.factorize(A)
 
+    def solveFactorized(self, b):
+        return self._factorization.solve(b)
 
-def createSolver(opts) -> Callable:
-    """Create a KLU-backed linear solver.
-
-    The factory the ``linsolver`` registry category resolves for the name ``klu``: every ``linsolve`` subpackage
-    exposes this one signature, so that a third party can contribute a linear solver through an entry point.
-
-    Parameters
-    ----------
-    opts
-        The linear-solver options parsed from the solver's ``linsolverConfigFile``. Not consulted:
-        this backend takes no options. It is still accepted so that every ``createSolver`` presents
-        the identical signature.
-
-    Returns
-    -------
-    Callable
-        A :class:`KLUSolver` wrapping :func:`~edelweissfe.linsolve.klu.klu.kluSolve`, callable as
-        ``(A, b) -> x``.
-
-    Raises
-    ------
-    ImportError
-        If the optional ``klu`` extension was not built -- raised here, at construction time
-        (matching the pre-refactor behaviour), not deferred to the first solve.
-    """
-
-    # Imported lazily: this extension is optional.
-    from edelweissfe.linsolve.klu.klu import kluSolve
-
-    return KLUSolver(kluSolve)
+    def releaseFactorization(self) -> None:
+        self._factorization.release()

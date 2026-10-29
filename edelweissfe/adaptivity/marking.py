@@ -148,10 +148,17 @@ class RefineableElements:
         self._elementsAtNode = None
 
 
-class MarkerBase(OptionSchemaProvider):
-    """Base class for AMR refinement markers.
+#: The :meth:`~MarkerBase.selectionStamp` of a marker whose selection changes only with the model: its sets and
+#: surfaces, which a new model replaces. (``None``, by contrast, is the stamp of a marker that cannot tell.)
+STABLE_FOR_THE_MODEL = ()
 
-    A marker decides which elements to refine. It is resolved by ``type`` through the L3 registry
+
+class MarkerBase(OptionSchemaProvider):
+    """Base class for markers.
+
+    A marker selects elements: those to refine for adaptive mesh refinement, or those whose interior nodes
+    a Schur complement condenses (:mod:`~edelweissfe.linsolve.composition.schurcomplement`). It is resolved by
+    ``type`` through the L3 registry
     (category ``marker``; see :mod:`edelweissfe.config.markerlibrary`) and constructed from its
     ``>>marker`` block options via :meth:`fromOptions`, so *any* adaptivity mechanism -- not only the
     HEX20 h-adaptivity model modifier -- can reuse the same marker library, and third-party packages
@@ -166,22 +173,60 @@ class MarkerBase(OptionSchemaProvider):
     def __init__(self, initialOnly=False):
         self.initialOnly = initialOnly
 
-    def mark(self, model, refineElements: RefineableElements, mesh):
-        """Decide which elements to refine.
+    def checkReferences(self, model):
+        """Raise if a set, surface or fieldOutput this marker reads does not exist in ``model``.
+
+        For a caller that knows all of them must exist when the run starts (e.g. the Schur
+        complement of a composed solver, see :mod:`edelweissfe.linsolve.composition.schurcomplement`), so that a typo fails at setup
+        instead of silently marking nothing. Nothing to check by default.
+
+        Parameters
+        ----------
+        model
+            The FEModel.
+        """
+
+    def isReady(self, model) -> bool:
+        """Whether the marker has what it decides on, e.g. a fieldOutput result, which exists only after the first
+        converged increment. Always, by default.
+
+        Parameters
+        ----------
+        model
+            The FEModel.
+        """
+        return True
+
+    def selectionStamp(self, model):
+        """A value that changes whenever what :meth:`isReady` and :meth:`mark` read can change, other than the model
+        itself (its elements, sets and surfaces, which change only with a new model): :data:`STABLE_FOR_THE_MODEL`
+        for a marker that reads nothing else, or ``None`` if the marker cannot tell. A caller may keep a selection
+        while the stamp stays the same (the Schur complement of a composed solver does); ``None``, the default,
+        means: mark again.
+
+        Parameters
+        ----------
+        model
+            The FEModel.
+        """
+        return None
+
+    def mark(self, model, candidateElements: RefineableElements, mesh):
+        """Select elements: those to refine, for adaptive mesh refinement.
 
         Parameters
         ----------
         model
             The FEModel, for the sets, surfaces, fields and fieldOutputs a marker reads.
-        refineElements
-            The elements eligible for refinement, with their node adjacency.
+        candidateElements
+            The elements the marker may select (e.g. the refineable ones), with their node adjacency.
         mesh
-            The adaptivity mechanism's mesh mirror.
+            The adaptivity mechanism's mesh mirror; ``None`` outside adaptive refinement (no marker here reads it).
 
         Returns
         -------
         set
-            The elements to refine.
+            The selected elements.
         """
         raise NotImplementedError()
 
@@ -197,6 +242,27 @@ class MarkerBase(OptionSchemaProvider):
         raise NotImplementedError()
 
 
+def _perElementFieldOutput(model, fieldOutputName):
+    """The ``perElement`` fieldOutput ``fieldOutputName`` of ``model``; raises with an actionable message if it
+    is not defined or is not a ``perElement`` one."""
+    fieldOutputController = model.fieldOutputController
+    if fieldOutputController is None or fieldOutputName not in fieldOutputController.fieldOutputs:
+        raise KeyError(
+            f"marker references fieldOutput {fieldOutputName!r}, which is not "
+            "defined. Declare it under '*fieldOutput' (before the increment loop starts) so the "
+            "marker can look it up by name."
+        )
+    fieldOutput = fieldOutputController.fieldOutputs[fieldOutputName]
+
+    if not isinstance(fieldOutput, ElementFieldOutput):
+        raise TypeError(
+            f"marker references fieldOutput {fieldOutputName!r}, which is a "
+            f"{type(fieldOutput).__name__}; only a 'perElement' fieldOutput exposes one result "
+            "row per element, as required for marking."
+        )
+    return fieldOutput
+
+
 def _perElementFieldOutputResult(model, fieldOutputName):
     """Resolve an already-declared ``perElement`` fieldOutput and return ``(elements, values)`` --
     the element list (its associated set) and the last per-element result array ``(nElem, ...)``.
@@ -209,29 +275,14 @@ def _perElementFieldOutputResult(model, fieldOutputName):
     the fieldOutput is missing, is not a ``perElement`` one, or reports a row count that does not match
     its element set. Shared by every marker that drives refinement off a fieldOutput.
     """
-    fieldOutputController = model.fieldOutputController
-    if fieldOutputController is None or fieldOutputName not in fieldOutputController.fieldOutputs:
-        raise KeyError(
-            f"hAdaptivity marker references fieldOutput {fieldOutputName!r}, which is not "
-            "defined. Declare it under '*fieldOutput' (before the increment loop starts) so the "
-            "marker can look it up by name."
-        )
-    fieldOutput = fieldOutputController.fieldOutputs[fieldOutputName]
-
-    if not isinstance(fieldOutput, ElementFieldOutput):
-        raise TypeError(
-            f"hAdaptivity marker references fieldOutput {fieldOutputName!r}, which is a "
-            f"{type(fieldOutput).__name__}; only a 'perElement' fieldOutput exposes one result "
-            "row per element, as required for marking."
-        )
-
+    fieldOutput = _perElementFieldOutput(model, fieldOutputName)
     elements = list(fieldOutput.associatedSet)
     values = np.asarray(fieldOutput.getLastResult())
 
     if values.ndim < 1 or values.shape[0] != len(elements):
         rowCount = values.shape[0] if values.ndim >= 1 else 0
         raise ValueError(
-            f"hAdaptivity marker: fieldOutput {fieldOutputName!r} reports {rowCount} "
+            f"marker: fieldOutput {fieldOutputName!r} reports {rowCount} "
             f"result row(s) (shape {values.shape}) for {len(elements)} element(s) in its associated set; refusing to mark "
             "against a mismatched fieldOutput."
         )
@@ -276,9 +327,10 @@ class FieldOutputMarkerSchema(MarkerOptionsBase):
     )
     halo: int = schemaField(
         description=(
-            "Number of rings of node-adjacent elements to add around the thresholded set (a "
-            "refinement buffer), e.g. to keep a localization band's flanks conforming with an "
-            "interior that has not yet crossed the threshold. Grows only within refineable elements. "
+            "Number of rings of node-adjacent elements to add around the thresholded set (a buffer: "
+            "for refinement, e.g. to keep a localization band's flanks conforming with an interior that "
+            "has not yet crossed the threshold; for a Schur complement condensation, so that the nodes of "
+            "the thresholded zone become interior). Grows only within the candidate elements. "
             "0 (default) disables."
         ),
         dtype=int,
@@ -336,7 +388,18 @@ class FieldOutputMarker(MarkerBase):
             initialOnly=opts.initialOnly,
         )
 
-    def mark(self, model, refineElements, mesh):
+    def checkReferences(self, model):
+        _perElementFieldOutput(model, self.fieldOutputName)
+
+    def isReady(self, model) -> bool:
+        return _perElementFieldOutput(model, self.fieldOutputName).hasResult()
+
+    def selectionStamp(self, model):
+        # the fieldOutput's result, which changes when the fieldOutput is updated (after a converged increment)
+        fieldOutput = _perElementFieldOutput(model, self.fieldOutputName)
+        return (id(fieldOutput), fieldOutput.resultVersion)
+
+    def mark(self, model, candidateElements, mesh):
         elements, values = _perElementFieldOutputResult(model, self.fieldOutputName)
         if not elements:
             return set()
@@ -344,7 +407,7 @@ class FieldOutputMarker(MarkerBase):
         entryHolds = self._compare(values.reshape(len(elements), -1), self.threshold)
         marked = {elements[i] for i in np.flatnonzero(entryHolds.any(axis=1))}
         if self.halo > 0 and marked:
-            marked = _growByNeighbors(marked, refineElements, self.halo)
+            marked = _growByNeighbors(marked, candidateElements, self.halo)
         return marked
 
 
@@ -360,22 +423,64 @@ class ElementSetMarkerSchema(MarkerOptionsBase):
     )
 
 
-class ElementSetMarker(MarkerBase):
-    schema = ElementSetMarkerSchema
+class ModelEntityMarker(MarkerBase):
+    """A marker of a named set or surface of the model, which changes only with the model: so its selection does,
+    and it can check up front that the model has the entity it names.
 
-    def __init__(self, elSetName, initialOnly=False):
+    Parameters
+    ----------
+    entityName
+        The name of the set or surface.
+    """
+
+    #: What the marker names, in messages: ``"element set"``, ``"node set"`` or ``"surface"``.
+    entityKind = None
+
+    def __init__(self, entityName, initialOnly=False):
         super().__init__(initialOnly)
-        self.elSetName = elSetName
+        self.entityName = entityName
+
+    def _entities(self, model):
+        """The model's entities of this kind, by name (e.g. ``model.elementSets``)."""
+        raise NotImplementedError()
+
+    def _markEntity(self, entity, candidateElements) -> set:
+        """The elements :meth:`mark` selects for the entity ``entity``."""
+        raise NotImplementedError()
+
+    def checkReferences(self, model):
+        if self.entityName not in self._entities(model):
+            raise KeyError(
+                f"marker references the {self.entityKind} {self.entityName!r}, which the model does not have"
+            )
+
+    def selectionStamp(self, model):
+        return STABLE_FOR_THE_MODEL
+
+    def mark(self, model, candidateElements, mesh):
+        entities = self._entities(model)
+        if self.entityName not in entities:
+            # adaptive refinement checks no references (checkReferences): a name the model lacks marks nothing
+            return set()
+        return self._markEntity(entities[self.entityName], candidateElements)
+
+
+class ElementSetMarker(ModelEntityMarker):
+    """Marks the elements of an element set."""
+
+    schema = ElementSetMarkerSchema
+    entityKind = "element set"
 
     @classmethod
     def fromOptions(cls, options):
         opts = buildSchemaFromOptions(cls.schema, options)
         return cls(opts.elSet, initialOnly=opts.initialOnly)
 
-    def mark(self, model, refineElements, mesh):
-        if self.elSetName not in model.elementSets:
-            return set()
-        return set(model.elementSets[self.elSetName])
+    def _entities(self, model):
+        return model.elementSets
+
+    def _markEntity(self, entity, candidateElements) -> set:
+        return set(entity)
 
 
 @dataclass(frozen=True)
@@ -390,24 +495,24 @@ class NodeSetMarkerSchema(MarkerOptionsBase):
     )
 
 
-class NodeSetMarker(MarkerBase):
-    schema = NodeSetMarkerSchema
+class NodeSetMarker(ModelEntityMarker):
+    """Marks the candidate elements that touch a node of a node set."""
 
-    def __init__(self, nSetName, initialOnly=False):
-        super().__init__(initialOnly)
-        self.nSetName = nSetName
+    schema = NodeSetMarkerSchema
+    entityKind = "node set"
 
     @classmethod
     def fromOptions(cls, options):
         opts = buildSchemaFromOptions(cls.schema, options)
         return cls(opts.nSet, initialOnly=opts.initialOnly)
 
-    def mark(self, model, refineElements, mesh):
-        if self.nSetName not in model.nodeSets:
-            return set()
-        ns_nodes = set(model.nodeSets[self.nSetName].nodes)
+    def _entities(self, model):
+        return model.nodeSets
+
+    def _markEntity(self, entity, candidateElements) -> set:
+        ns_nodes = set(entity.nodes)
         marked = set()
-        for el in refineElements:
+        for el in candidateElements:
             if any(n in ns_nodes for n in el.nodes):
                 marked.add(el)
         return marked
@@ -425,24 +530,24 @@ class SurfaceMarkerSchema(MarkerOptionsBase):
     )
 
 
-class SurfaceMarker(MarkerBase):
-    schema = SurfaceMarkerSchema
+class SurfaceMarker(ModelEntityMarker):
+    """Marks the elements of a surface."""
 
-    def __init__(self, surfaceName, initialOnly=False):
-        super().__init__(initialOnly)
-        self.surfaceName = surfaceName
+    schema = SurfaceMarkerSchema
+    entityKind = "surface"
 
     @classmethod
     def fromOptions(cls, options):
         opts = buildSchemaFromOptions(cls.schema, options)
         return cls(opts.surface, initialOnly=opts.initialOnly)
 
-    def mark(self, model, refineElements, mesh):
-        if self.surfaceName not in model.surfaces:
-            return set()
+    def _entities(self, model):
+        return model.surfaces
+
+    def _markEntity(self, entity, candidateElements) -> set:
         marked = set()
-        # model.surfaces[name] is a dict of faceID -> list of elements
-        for elements in model.surfaces[self.surfaceName].values():
+        # a surface is a dict of faceID -> list of elements
+        for elements in entity.values():
             for el in elements:
                 marked.add(el)
         return marked
@@ -830,7 +935,7 @@ class RecoveryErrorMarker(MarkerBase):
         self.recovery = recovery
         self.entry = entry
 
-    def mark(self, model, refineElements, mesh):
+    def mark(self, model, candidateElements, mesh):
         if model.nodeFields is None or self.nodeFieldName not in model.nodeFields:
             raise KeyError(
                 f"hAdaptivity recoveryError marker references nodeField {self.nodeFieldName!r}, "
@@ -849,7 +954,7 @@ class RecoveryErrorMarker(MarkerBase):
         valuesList = []
         connectivity = []
         nodeToIndex = {}
-        for element in refineElements:
+        for element in candidateElements:
             if len(element.nodes) != N_NODES:
                 continue
             rows = [indexOf.get(node, -1) for node in element.nodes]
@@ -909,5 +1014,5 @@ class RecoveryErrorMarker(MarkerBase):
 
         # optional halo: bridge the flank-marked rows across the band core
         if self.halo > 0 and marked:
-            marked = _growByNeighbors(marked, refineElements, self.halo)
+            marked = _growByNeighbors(marked, candidateElements, self.halo)
         return marked

@@ -1,0 +1,42 @@
+** Regression test for the rigid-body coarse level of the blockamg linear solver (rigidBodyModesPerAggregate), on a
+** slender 3D linear-elastic cantilever of quadratic hexahedra (C3D20, 3663 displacement dofs): a bending-dominated
+** structure, whose slowly converging error rotates every aggregate of nodes almost as a rigid body. Exercises the
+** option end-to-end through the Newton loop: the node coordinates read from the model, the coarse level of all
+** rigid-body modes built for the displacement field, the outer Krylov solve. With it, every linear solve reaches
+** its tolerance (some 20 outer iterations), and Newton converges in 2 iterations on this linear problem. Without it, every
+** solve stops at the iteration cap of 100 with a relative residual of about 1e-2, and Newton needs 5: maxIter=3 makes
+** the deck fail if the rigid-body coarse level is not in effect. The reference solution is that of a direct solver
+** (pardiso). Requires the optional amgcl extension; skipped where it is not built.
+*material, name=linearelastic, id=linearelastic, provider=edelweiss
+30000.0, 0.2
+
+*job, name=c3d20job, domain=3d
+*linearSolver, name=rigidBodySolver, type=blockamg
+tolerance=1e-8
+rigidBodyModesPerAggregate=true
+cornerNodeInterpolation=false
+
+*solver, solver=NIST, name=theSolver
+linsolver=rigidBodySolver
+
+*modelGenerator, generator=boxGen, name=gen
+nX=40
+nY=2
+nZ=2
+lX=2000
+lY=100
+lZ=100
+elProvider=edelweiss
+elType=C3D20
+
+*section, name=section1, material=linearelastic, type=solid
+all
+
+*fieldOutput
+>>perNode, elSet=all, field=displacement, result=U, name=displacement
+
+*step, solver=theSolver
+maxInc=1, minInc=1e-8, maxNumInc=10, maxIter=3, stepLength=1
+>>options, name=theSolver, extrapolation=off
+>>dirichlet, name=left, nSet=gen_left, field=displacement, 1=0, 2=0, 3=0
+>>nodeforces, name=tip, nSet=gen_right, components='0,-10,0', field=displacement

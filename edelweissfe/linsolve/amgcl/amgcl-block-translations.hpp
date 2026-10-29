@@ -1,10 +1,11 @@
 /*
  * Smoothed aggregation on a block backend with the translations of the block as its near null-space
- * (EdelweissFE blockamg, fieldPreconds key blockTranslationNullspace).
+ * (EdelweissFE, AMG(nearNullspace="translations") of edelweissfe/linsolve/composition/amg.py).
  *
  * smoothed_aggregation_with_translations::transfer_operators() is the one of
  * amgcl/coarsening/smoothed_aggregation.hpp (AMGCL 1.4.x) except for the tentative prolongation and the minimum
- * aggregate size. The license of AMGCL, which that code is taken from, follows verbatim.
+ * aggregate size; its prolongation smoothing is shared with the rigid-body coarse level
+ * (amgcl-smoothed-prolongation.hpp). The license of AMGCL, which that code is taken from, follows verbatim.
  *
  * The MIT License
  *
@@ -30,6 +31,8 @@
  */
 #pragma once
 
+#include "amgcl-chebyshev.hpp"
+#include "amgcl-smoothed-prolongation.hpp"
 #include <amgcl/backend/builtin.hpp>
 #include <amgcl/coarsening/smoothed_aggregation.hpp>
 #include <amgcl/util.hpp>
@@ -178,14 +181,22 @@ namespace amgcl {
     struct smoothed_aggregation_with_translations : public smoothed_aggregation< Backend > {
       /// @brief AMGCL's smoothed aggregation: the parameters, the aggregates and the coarse operator.
       typedef smoothed_aggregation< Backend > Base;
+      /// @brief smoothed_aggregation's parameters, with the spectral radius estimate for power_iters
+      /// (amgcl-chebyshev.hpp).
+      typedef smoothed_aggregation_estimate_params< Backend > params;
+
+      /// @brief How rho(D^-1 A) is estimated for the prolongation smoothing weight; the rest of the parameters is
+      /// Base's.
+      EdelweissFE::linsolve::SpectralRadiusEstimate spectralRadius;
 
       /// @brief Construct with smoothed_aggregation's parameters.
       /// @param prm the parameters; prm.nullspace must hold the translations of the finest level
-      smoothed_aggregation_with_translations( const typename Base::params& prm = typename Base::params() ) : Base( prm )
+      smoothed_aggregation_with_translations( const params& prm = params() )
+        : Base( prm ), spectralRadius( prm.spectralRadius )
       {
       }
 
-      /// @brief The prolongation P = (I - omega D_F^-1 A_F) P_tent and the restriction R = P^T, formed as
+      /// @brief The prolongation P = (I - omega diag_B(A_F)^-1 A_F) P_tent and the restriction R = P^T, formed as
       /// smoothed_aggregation::transfer_operators() forms them, with the tentative prolongation P_tent from the
       /// translations (which this replaces by the coarse level's).
       /// @tparam Matrix the block CSR type of the hierarchy build
@@ -210,88 +221,12 @@ namespace amgcl {
         auto P_tent = translation_tentative_prolongation< Matrix >( n, aggr.count, aggr.id, this->prm.nullspace );
         AMGCL_TOC( "tentative" );
 
-        // from here on smoothed_aggregation::transfer_operators()
-        auto P = std::make_shared< Matrix >();
-        P->set_size( backend::rows( *P_tent ), backend::cols( *P_tent ), true );
-
-        scalar_type omega = this->prm.relax;
-        if ( this->prm.estimate_spectral_radius ) {
-          omega *= static_cast< scalar_type >( 4.0 / 3 ) / backend::spectral_radius< true >( A, this->prm.power_iters );
-        }
-        else {
-          omega *= static_cast< scalar_type >( 2.0 / 3 );
-        }
-
-        AMGCL_TIC( "smoothing" );
-#pragma omp parallel
-        {
-          std::vector< ptrdiff_t > marker( P->ncols, -1 );
-
-          // the number of entries of every row of P
-#pragma omp for
-          for ( ptrdiff_t i = 0; i < static_cast< ptrdiff_t >( n ); ++i ) {
-            for ( ptrdiff_t ja = A.ptr[i], ea = A.ptr[i + 1]; ja < ea; ++ja ) {
-              ptrdiff_t ca = A.col[ja];
-              // weak off-diagonal connections are filtered out
-              if ( ca != i && !aggr.strong_connection[ja] )
-                continue;
-              for ( ptrdiff_t jp = P_tent->ptr[ca], ep = P_tent->ptr[ca + 1]; jp < ep; ++jp ) {
-                ptrdiff_t cp = P_tent->col[jp];
-                if ( marker[cp] != i ) {
-                  marker[cp] = i;
-                  ++( P->ptr[i + 1] );
-                }
-              }
-            }
-          }
-        }
-
-        P->scan_row_sizes();
-        P->set_nonzeros();
-
-#pragma omp parallel
-        {
-          std::vector< ptrdiff_t > marker( P->ncols, -1 );
-
-#pragma omp for
-          for ( ptrdiff_t i = 0; i < static_cast< ptrdiff_t >( n ); ++i ) {
-            // the diagonal of the filtered matrix: the diagonal minus the weak connections
-            value_type dia = math::zero< value_type >();
-            for ( ptrdiff_t j = A.ptr[i], e = A.ptr[i + 1]; j < e; ++j ) {
-              if ( A.col[j] == i || !aggr.strong_connection[j] )
-                dia += A.val[j];
-            }
-            if ( !math::is_zero( dia ) )
-              dia = -omega * math::inverse( dia );
-
-            ptrdiff_t row_beg = P->ptr[i];
-            ptrdiff_t row_end = row_beg;
-            for ( ptrdiff_t ja = A.ptr[i], ea = A.ptr[i + 1]; ja < ea; ++ja ) {
-              ptrdiff_t ca = A.col[ja];
-              if ( ca != i && !aggr.strong_connection[ja] )
-                continue;
-
-              value_type va = ( ca == i ) ? static_cast< value_type >( static_cast< scalar_type >( 1 - omega ) *
-                                                                       math::identity< value_type >() )
-                                          : dia * A.val[ja];
-
-              for ( ptrdiff_t jp = P_tent->ptr[ca], ep = P_tent->ptr[ca + 1]; jp < ep; ++jp ) {
-                ptrdiff_t  cp = P_tent->col[jp];
-                value_type vp = P_tent->val[jp];
-                if ( marker[cp] < row_beg ) {
-                  marker[cp]      = row_end;
-                  P->col[row_end] = cp;
-                  P->val[row_end] = va * vp;
-                  ++row_end;
-                }
-                else {
-                  P->val[marker[cp]] += va * vp;
-                }
-              }
-            }
-          }
-        }
-        AMGCL_TOC( "smoothing" );
+        // from here on smoothed_aggregation::transfer_operators(): P = (I - omega diag_B(A_F)^-1 A_F) P_tent
+        const scalar_type omega = prolongation_smoothing_weight( A,
+                                                                 this->prm.relax,
+                                                                 this->prm.estimate_spectral_radius,
+                                                                 spectralRadius );
+        auto              P     = smoothed_prolongation( A, aggr.strong_connection, *P_tent, omega );
 
         return std::make_tuple( P, transpose( *P ) );
       }

@@ -268,12 +268,21 @@ extensions += [
         "*",
         sources=["edelweissfe/linsolve/amgcl/amgcl.pyx"],
         # Reached only through an #include in amgcl-wrapper.hpp, which neither Cython's dependency scan nor
-        # setuptools follows: without this entry, a header-only edit leaves the up-to-date-looking extension stale.
-        depends=["edelweissfe/linsolve/amgcl/amgcl-block-translations.hpp"],
-        include_dirs=[numpy.get_include(), join(native_prefix, "include"), "."],
+        # setuptools follows: without these entries, a header-only edit leaves the up-to-date-looking extension stale.
+        depends=[
+            "edelweissfe/linsolve/amgcl/amgcl-block-translations.hpp",
+            "edelweissfe/linsolve/amgcl/amgcl-chebyshev.hpp",
+            "edelweissfe/linsolve/amgcl/amgcl-rigid-body-coarse-level.hpp",
+            "edelweissfe/linsolve/amgcl/amgcl-smoothed-prolongation.hpp",
+            "edelweissfe/linsolve/amgcl/amgcl-spectral-radius.hpp",
+        ],
+        # Eigen for the small dense eigenproblem of the spectral radius estimate (amgcl-spectral-radius.hpp)
+        include_dirs=[numpy.get_include(), join(native_prefix, "include"), eigen_include, "."],
+        # Eigen solves that eigenproblem on the calling thread, so that the estimate is the same at any thread count.
+        define_macros=[("EIGEN_DONT_PARALLELIZE", None)],
         language="c++",
-        # MSVC's default language standard (C++14) already covers AMGCL's C++11 requirement.
-        extra_compile_args=([] if is_windows else ["-std=c++11"]) + compile_flags(openmp=True, arch=amgcl_arch_flags),
+        # C++14 for Eigen (from Eigen 5; AMGCL needs C++11), MSVC's default language standard.
+        extra_compile_args=([] if is_windows else ["-std=c++14"]) + compile_flags(openmp=True, arch=amgcl_arch_flags),
         extra_link_args=link_flags(openmp=True),
     )
 ]
@@ -284,7 +293,6 @@ extensions += [
         "*",
         sources=[
             "edelweissfe/linsolve/klu/klu.pyx",
-            "edelweissfe/linsolve/klu/kluInterface.c",
         ],
         include_dirs=[
             numpy.get_include(),

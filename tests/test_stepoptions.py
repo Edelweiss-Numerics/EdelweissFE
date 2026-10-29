@@ -139,7 +139,6 @@ def _parsedBlock(name: str, **written) -> dict:
         "extrapolateAfterModelChange": None,
         "equilibrateAfterModelChange": None,
         "linsolver": None,
-        "linsolverConfigFile": None,
         "inputFile": "/some/path/test.inp",
         "datalines": [],
     }

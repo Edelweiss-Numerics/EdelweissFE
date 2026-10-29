@@ -26,58 +26,29 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 
-"""Registry-facing factory for PETSc's LU solver.
+"""PETSc's LU as a direct solver backend.
 
-The implementation lives in :mod:`edelweissfe.linsolve.petsclu.petsclu`, which is pure Python but
-imports ``petsc4py`` at module scope -- an optional dependency. The factory below therefore imports
-it lazily; see :func:`createSolver`.
+The binding, :mod:`edelweissfe.linsolve.petsclu.petsclu`, imports the optional ``petsc4py`` when a backend is created:
+an install without it raises :class:`ImportError` there.
 """
 
-from collections.abc import Callable
-
-from edelweissfe.linsolve.base import LinearSolver
+from edelweissfe.linsolve.base import DirectSolverBackend
 
 
-class PetscLUSolver(LinearSolver):
-    """PETSc's LU direct solver. Callable as ``(A, b) -> x``.
+class PetscLUBackend(DirectSolverBackend):
+    """PETSc's LU through :class:`~edelweissfe.linsolve.petsclu.petsclu.PetscLUFactorization`: the factorization in
+    :meth:`factorize`, the solves in :meth:`solveFactorized`. Takes no options."""
 
-    Takes no options; ``setJournal``/``setFieldStructure`` are inherited no-ops (this solver has no
-    field-split structure and does not log).
-    """
+    def __init__(self):
+        from edelweissfe.linsolve.petsclu.petsclu import PetscLUFactorization
 
-    def __init__(self, solveFunction):
-        self._solveFunction = solveFunction
+        self._factorization = PetscLUFactorization()
 
-    def __call__(self, A, b):
-        return self._solveFunction(A, b)
+    def factorize(self, A) -> None:
+        self._factorization.factorize(A)
 
+    def solveFactorized(self, b):
+        return self._factorization.solve(b)
 
-def createSolver(opts) -> Callable:
-    """Create a PETSc-LU-backed linear solver.
-
-    The factory the ``linsolver`` registry category resolves for the name ``petsclu``: every ``linsolve`` subpackage
-    exposes this one signature, so that a third party can contribute a linear solver through an entry point.
-
-    Parameters
-    ----------
-    opts
-        The linear-solver options parsed from the solver's ``linsolverConfigFile``. Not consulted:
-        this backend takes no options. It is still accepted so that every ``createSolver`` presents
-        the identical signature.
-
-    Returns
-    -------
-    Callable
-        A :class:`PetscLUSolver`, callable as ``(A, b) -> x``, delegating to
-        :func:`~edelweissfe.linsolve.petsclu.petsclu.petscluSolve`.
-
-    Raises
-    ------
-    ImportError
-        If the optional ``petsc4py`` dependency is not installed -- raised here, at construction
-        time (matching the pre-refactor behaviour), not deferred to the first solve.
-    """
-    # Imported lazily: petsc4py is optional.
-    from edelweissfe.linsolve.petsclu.petsclu import petscluSolve
-
-    return PetscLUSolver(petscluSolve)
+    def releaseFactorization(self) -> None:
+        self._factorization.release()

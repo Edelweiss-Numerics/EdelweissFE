@@ -37,6 +37,7 @@ The rows are written with :meth:`~edelweissfe.journal.journal.Journal.preformatt
 however many columns the model has.
 """
 
+from edelweissfe.journal.journal import displayWidth
 from edelweissfe.linsolve.base import LinearSolveSummary
 from edelweissfe.solvers.base.convergencecriteria import FieldConvergence
 
@@ -124,12 +125,12 @@ class ConvergenceTable:
         return row
 
     def linearSolveDetailLine(self, text: str) -> str:
-        """A line of linear solver detail, right-aligned inside the "linear solve" column.
+        """A line of linear solver detail, right-aligned inside the "linear solve" column, ending where the rows end.
 
         Parameters
         ----------
         text
-            The detail, at most one column wide to stay inside the column.
+            The detail, at most one column less one character wide to stay inside the column.
 
         Returns
         -------
@@ -138,4 +139,5 @@ class ConvergenceTable:
         """
 
         fieldColumnsWidth = self.columnWidth * len(self.columnNames)
-        return " " * fieldColumnsWidth + self.linearSolveGap + "{:>{:}}".format(text, self.columnWidth)
+        padding = " " * (self.columnWidth - 1 - displayWidth(text))
+        return " " * fieldColumnsWidth + self.linearSolveGap + padding + text + " "

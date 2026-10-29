@@ -26,17 +26,26 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 """blockamg, step by step: the field-split preconditioned Krylov solve written out with NumPy and SciPy on a small
-displacement / damage system, and the same solve with :class:`~edelweissfe.linsolve.blockamg.blockamg.BlockAMGSolver`.
+displacement / damage system, and the same solve as a composed solver (the tree of the ``blockamg`` preset, with the
+field trees of this example).
 The theory page includes this file as its worked example, from the marker comment below on.
 """
 
 # The worked example of the theory page.
 import numpy as np
 import scipy.sparse as sp
-from _blockamgsystems import ExactFieldSolve, displacementDamageSystem, hierarchyLevels
+from _linsolvesystems import ExactFieldSolve, displacementDamageSystem, hierarchyLevels
 from scipy.sparse.linalg import LinearOperator, gmres
 
-from edelweissfe.linsolve.blockamg import createSolver
+from edelweissfe.linsolve.composition import (
+    AMG,
+    LGMRES,
+    ComposedLinearSolver,
+    DiagonalScaling,
+    FixedTolerance,
+    Multiplicative,
+    OnField,
+)
 
 #: One AMGCL hierarchy per field: smoothed aggregation, Chebyshev smoothing.
 FIELD_AMG = {"coarsening": {"type": "smoothed_aggregation"}, "relax": {"type": "chebyshev"}}
@@ -50,8 +59,8 @@ def test_the_algorithm_step_by_step():
     # rigid-body modes.
     A, b, fieldBlocks = displacementDamageSystem(15, coupling="symmetric", rowScaling=True)
     fields = [slice(block.start, block.stop) for block in fieldBlocks]
-    # The steps are numbered as on the theory page and in BlockAMGSolver.__call__. Steps (1) and (7) carry state from
-    # one Newton iteration to the next and have no part in a single solve.
+    # The steps are numbered as in "The solve pipeline" of the theory page. Steps (1) and (7) carry state from one
+    # Newton iteration to the next and have no part in a single solve.
 
     # (2) Equilibrate: solve (D A D) z = D b with D = diag(scaling), scaling = 1 / sqrt|a_ii|, then x = D z.
     scaling = 1.0 / np.sqrt(np.abs(A.diagonal()))
@@ -137,22 +146,19 @@ def test_the_algorithm_step_by_step():
     assert unpreconditioned > 5 * iterations(blockGaussSeidel)
     assert iterations(lambda y: blockGaussSeidel(y, exact)) < iterations(lambda y: blockGaussSeidel(y, exact, False))
 
-    # The same solve with BlockAMGSolver: the same method in threaded C++, with AMGCL's right-preconditioned LGMRES
-    # as the outer solver (5b), on the unscaled system by default (krylovOnScaledSystem = false) and on the scaled
-    # one with krylovOnScaledSystem = true. It adds the reuse of the hierarchies across Newton iterations, an
-    # adaptive (Eisenstat--Walker) tolerance when outerTol is unset, and a near null-space for the displacement
-    # field: its translations here, given only the field layout, and all rigid-body modes given the model
-    # (setModel).
-    settings = {
-        "outerTol": 1e-10,
-        "sweeps": 1,
-        "symmetric": False,
-        "fieldPreconds": {"displacement": FIELD_AMG, "nonlocal damage": FIELD_AMG},
-        "verbosity": "silent",
-    }
-    solver = createSolver({**settings, "krylovOnScaledSystem": True})
-    solver.setFieldStructure(fieldBlocks)
-    assert np.linalg.norm(solver(A, b) - x) <= 1e-6 * np.linalg.norm(x)
-    solver = createSolver(settings)  # the default, krylovOnScaledSystem = false
-    solver.setFieldStructure(fieldBlocks)
-    assert np.linalg.norm(solver(A, b) - x) <= 1e-6 * np.linalg.norm(x)
+    # The same solve as a composed solver: the same method, with the field split in threaded C++ and AMGCL's
+    # right-preconditioned LGMRES as the outer solver (5b), on the unscaled system, LGMRES(DiagonalScaling(...)) as
+    # the blockamg preset builds it, or on the scaled one, DiagonalScaling(LGMRES(...)). The preset adds the reuse of
+    # the hierarchies across Newton iterations, an adaptive (Eisenstat--Walker) tolerance, and a near null-space for
+    # the displacement field: its translations here, given only the field layout, and all rigid-body modes given the
+    # model (setModel).
+    def blockGaussSeidelTree():
+        return Multiplicative([OnField(field.name, AMG(amgclTree=dict(FIELD_AMG))) for field in fieldBlocks])
+
+    for tree in (
+        LGMRES(DiagonalScaling(blockGaussSeidelTree()), tolerance=FixedTolerance(1e-10)),
+        DiagonalScaling(LGMRES(blockGaussSeidelTree(), tolerance=FixedTolerance(1e-10))),
+    ):
+        solver = ComposedLinearSolver(tree, verbosity="silent")
+        solver.setFieldStructure(fieldBlocks)
+        assert np.linalg.norm(solver(A, b) - x) <= 1e-6 * np.linalg.norm(x)

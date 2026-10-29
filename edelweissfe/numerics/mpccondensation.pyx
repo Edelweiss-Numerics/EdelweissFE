@@ -28,7 +28,7 @@ import numpy as np
 from scipy.sparse import csr_matrix
 
 cimport numpy as np
-from libc.stdint cimport int32_t, int64_t, uint8_t
+from libc.stdint cimport int32_t, int64_t
 
 
 cdef extern from "_mpccondensation.h":
@@ -37,10 +37,10 @@ cdef extern from "_mpccondensation.h":
                             const int32_t* Ttp, const int32_t* Tti, const double* Ttv,
                             const int32_t* Cp, const int32_t* Ci, const double* Cv) except +
 
-        int64_t countPattern(const int32_t* Kp, const int32_t* Ki, int32_t* outPtr, uint8_t* rowIsCopy,
-                             int numThreads) except +
-        void fill(const int32_t* Kp, const int32_t* Ki, const double* Kv, const int32_t* outPtr,
-                  const uint8_t* rowIsCopy, int32_t* outIdx, double* outVal, int numThreads) except +
+        int64_t countFillIn(const int32_t* Kp, const int32_t* Ki, int64_t* fillPtr, int numThreads) except +
+        void writeFillIn(const int32_t* Kp, const int32_t* Ki, const int64_t* fillPtr, int32_t* fillIdx,
+                         int numThreads) except +
+        void condenseInPlace(const int32_t* Kp, const int32_t* Ki, double* Kv, int numThreads) except +
 
 
 def _csrArrays32(A, name):
@@ -59,13 +59,17 @@ def _csrArrays32(A, name):
 
 cdef class MPCCondensation:
     """The multi-point-constraint condensation :math:`\\tilde{K} = T^T K \\, T + C` of a system matrix, computed
-    in one OpenMP-threaded pass over the rows of the result, with no intermediate matrix.
+    in place -- the values of :math:`\\tilde{K}` overwrite those of :math:`K`, in the pattern of :math:`K` -- in one
+    OpenMP-threaded pass over the rows that change.
 
-    Each row of the result is built by one thread, which sums the rows of :math:`K` that row of
-    :math:`T^T` selects, each multiplied into :math:`T`. The sums are taken in the fixed order of evaluating
-    :math:`T^T (K T) + C` row by row, so the result does not depend on the number of threads. Rows of
-    :math:`K` that no constraint touches are copied unchanged. The column indices of the result are sorted;
-    explicit zeros are kept (the pattern is the structural pattern of :math:`T^T K T + C`).
+    The pattern of :math:`K` must hold the structural pattern of :math:`T^T K T + C`. Its rows gain entries where a
+    master collects the couplings of its slaves; :meth:`condensedPatternFillIn` returns them, to be added to the
+    pattern once (as stored zeros) before the first :meth:`condenseInPlace`. Entries of :math:`K` that the condensed
+    matrix does not have (the slave columns, and the slave rows apart from their diagonal) become stored zeros.
+
+    Each changed row is built by one thread, which sums the rows of :math:`K` that row of :math:`T^T` selects, each
+    multiplied into :math:`T`. The sums are taken in the fixed order of evaluating :math:`T^T (K T) + C` row by row,
+    so the result does not depend on the number of threads. Rows that no constraint touches are left as they are.
 
     Parameters
     ----------
@@ -114,49 +118,74 @@ cdef class MPCCondensation:
             &Cp[0], &Ci[0] if Ci.shape[0] else &emptyIdx, &Cv[0] if Cv.shape[0] else &emptyVal,
         )
 
-    def condense(self, K, int numThreads=0) -> csr_matrix:
-        """Compute :math:`T^T K \\, T + C`.
+    def _checkMatrix(self, K):
+        """K is read and written through its own arrays, never a converted copy: their types must fit."""
+        if K.format != "csr":
+            raise TypeError("MPC condensation: K must be CSR, not {:}.".format(K.format))
+        if K.shape != (self.n, self.n):
+            raise ValueError("MPC condensation: K has shape {:}, expected {:}.".format(K.shape, (self.n, self.n)))
+        if K.indptr.dtype != np.int32 or K.indices.dtype != np.int32:
+            raise TypeError("MPC condensation: K must have 32-bit indices, not {:}.".format(K.indices.dtype))
+        if K.data.dtype != np.float64 or not K.data.flags.c_contiguous:
+            raise TypeError("MPC condensation: K must have contiguous float64 values, not {:}.".format(K.data.dtype))
+
+    def condensedPatternFillIn(self, K, int numThreads=0) -> csr_matrix:
+        """The entries of the structural pattern of :math:`T^T K T + C` that the pattern of :math:`K` lacks.
 
         Parameters
         ----------
         K
-            The system matrix (CSR, ``nDof x nDof``). Its rows need not be sorted, duplicates are summed.
+            The system matrix (CSR, ``nDof x nDof``, 32-bit indices); only its pattern is read.
         numThreads
             The number of OpenMP threads; 0 for the OpenMP default (``OMP_NUM_THREADS``).
 
         Returns
         -------
         csr_matrix
-            The condensed matrix, with sorted column indices.
+            The missing entries, as stored zeros, with sorted column indices.
         """
-        if K.shape != (self.n, self.n):
-            raise ValueError("MPC condensation: K has shape {:}, expected {:}.".format(K.shape, (self.n, self.n)))
+        self._checkMatrix(K)
+        cdef int32_t[::1] Kp = K.indptr, Ki = K.indices
+        cdef int32_t emptyIdx = 0
+        cdef const int32_t* KiPtr = &Ki[0] if Ki.shape[0] else &emptyIdx
 
-        Kp_, Ki_, Kv_ = _csrArrays32(K, "K")
-        cdef int32_t[::1] Kp = Kp_, Ki = Ki_
-        cdef double[::1] Kv = Kv_
+        fillPtr_ = np.empty(self.n + 1, dtype=np.int64)
+        cdef int64_t[::1] fillPtr = fillPtr_
+        cdef int64_t nFill
+        with nogil:
+            nFill = self.core.countFillIn(&Kp[0], KiPtr, &fillPtr[0], numThreads)
+
+        if nFill > np.iinfo(np.int32).max:
+            raise OverflowError("MPC condensation: the fill-in has more than 2^31 - 1 entries.")
+        fillIdx_ = np.empty(max(nFill, 1), dtype=np.int32)
+        cdef int32_t[::1] fillIdx = fillIdx_
+        with nogil:
+            self.core.writeFillIn(&Kp[0], KiPtr, &fillPtr[0], &fillIdx[0], numThreads)
+
+        fillIn = csr_matrix(
+            (np.zeros(nFill), fillIdx_[:nFill], fillPtr_.astype(np.int32)), shape=(self.n, self.n)
+        )
+        fillIn.has_canonical_format = True
+        return fillIn
+
+    def condenseInPlace(self, K, int numThreads=0):
+        """Overwrite the values of :math:`K` with those of :math:`T^T K T + C`, in the pattern of :math:`K`.
+
+        Parameters
+        ----------
+        K
+            The system matrix (CSR, ``nDof x nDof``, 32-bit indices, float64 values), with sorted rows without
+            duplicates and a pattern that holds the one of :math:`T^T K T + C` (see :meth:`condensedPatternFillIn`).
+            Its values are overwritten; they are undefined if this raises.
+        numThreads
+            The number of OpenMP threads; 0 for the OpenMP default (``OMP_NUM_THREADS``).
+        """
+        self._checkMatrix(K)
+        cdef int32_t[::1] Kp = K.indptr, Ki = K.indices
+        cdef double[::1] Kv = K.data
         cdef int32_t emptyIdx = 0
         cdef double emptyVal = 0.0
         cdef const int32_t* KiPtr = &Ki[0] if Ki.shape[0] else &emptyIdx
-        cdef const double* KvPtr = &Kv[0] if Kv.shape[0] else &emptyVal
-
-        outPtr_ = np.empty(self.n + 1, dtype=np.int32)
-        rowIsCopy_ = np.empty(max(self.n, 1), dtype=np.uint8)
-        cdef int32_t[::1] outPtr = outPtr_
-        cdef uint8_t[::1] rowIsCopy = rowIsCopy_
-        cdef int64_t nnz
-
+        cdef double* KvPtr = &Kv[0] if Kv.shape[0] else &emptyVal
         with nogil:
-            nnz = self.core.countPattern(&Kp[0], KiPtr, &outPtr[0], &rowIsCopy[0], numThreads)
-
-        outIdx_ = np.empty(max(nnz, 1), dtype=np.int32)
-        outVal_ = np.empty(max(nnz, 1), dtype=np.float64)
-        cdef int32_t[::1] outIdx = outIdx_
-        cdef double[::1] outVal = outVal_
-
-        with nogil:
-            self.core.fill(&Kp[0], KiPtr, KvPtr, &outPtr[0], &rowIsCopy[0], &outIdx[0], &outVal[0], numThreads)
-
-        Kt = csr_matrix((outVal_[:nnz], outIdx_[:nnz], outPtr_), shape=(self.n, self.n))
-        Kt.has_canonical_format = True
-        return Kt
+            self.core.condenseInPlace(&Kp[0], KiPtr, KvPtr, numThreads)

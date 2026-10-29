@@ -94,6 +94,11 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
     #: by the solver whenever it (re)builds its equation system.
     convergenceTable: ConvergenceTable | None = None
 
+    #: Whether the header of the iteration table is written in this attempt of the increment: it comes with the
+    #: first row, so that what the linear solver reports while it solves for the first time (e.g. its set-up) stands
+    #: above the table, not inside it.
+    tableHeaderWritten: bool = False
+
     def __init__(self, jobInfo, journal, **kwargs):
         pass
 
@@ -637,6 +642,10 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
         summary = self.linSolver.lastSolveSummary if self.linSolver.reportsSolveSummary else None
         # ddU is None on the first iteration of an increment: no solve yet, so the column stays blank.
         thisIterationsSolve = summary if ddU is not None else None
+
+        if not self.tableHeaderWritten:
+            self.journal.preformatted(self.convergenceTable.headerLines(), self.identification, level=2)
+            self.tableHeaderWritten = True
 
         self.journal.preformatted(
             [self.convergenceTable.row(tableColumns, thisIterationsSolve)], self.identification, level=2

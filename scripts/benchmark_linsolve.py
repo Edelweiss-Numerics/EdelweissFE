@@ -25,8 +25,8 @@
 
 """Offline benchmark of linear-solver strategies on a captured sequence of equation systems.
 
-Reads what the ``matrixdump`` linear solver wrote (see
-:mod:`edelweissfe.linsolve.matrixdump.matrixdump`) and replays it, so solver variants are compared
+Reads the systems a linear solver dumped (data line ``dumps=every`` or ``dumps=<solve numbers>``, see
+:mod:`edelweissfe.linsolve.composition.solvedumps`) and replays them, so solver variants are compared
 on byte-identical input instead of by rerunning the simulation. Each check is a separate subcommand
 because they cost wildly different amounts of time: ``pattern`` is seconds, ``reuse`` and ``threads``
 are minutes, and ``lagged`` involves a SuperLU factorization of the whole system and can run much
@@ -63,6 +63,10 @@ def loadManifest(dumpDir: str) -> list[dict]:
     with open(manifestPath) as manifestFile:
         records = [json.loads(line) for line in manifestFile if line.strip()]
 
+    for record in records:
+        # the file names are A_<instance>_<solve>.npz
+        record["instance"] = int(record["matrixFile"].split("_")[1])
+        record["ordinal"] = record["solveCount"]
     records.sort(key=lambda record: (record["instance"], record["ordinal"]))
     return records
 
@@ -118,8 +122,8 @@ def commandPattern(args):
                 record["instance"],
                 record["ordinal"],
                 A.nnz,
-                record["rhsNorm"],
-                record["diagonalNorm"],
+                np.linalg.norm(b),
+                np.linalg.norm(A.diagonal()),
                 nnzDelta,
                 patternNote,
             )
@@ -452,262 +456,9 @@ def commandLagged(args):
         )
 
 
-#: AMGCL configurations to try, in rough order of how plausible they are for this system. All run on
-#: AMGCL's OpenMP `builtin` backend, so unlike the SciPy path the matvec, the smoother and the
-#: orthogonalization are all threaded.
-#:
-#: The system is a poor fit for classical AMG and it is worth being explicit about why, so that a
-#: failure here is not mistaken for a configuration mistake: it is non-symmetric with 52% of its
-#: entries structurally asymmetric, it couples two fields with no constant nodal block size (nonlocal
-#: damage lives on corner nodes only, so point-block smoothing does not apply), penalty contact and
-#: the MPC/Dirichlet row replacements give it a ~1e8 dynamic range, and rows replaced by constraint
-#: equations are not an elliptic operator at all. Single-level ILU0 is included precisely because it
-#: makes none of AMG's smoothness assumptions.
-_AMGCL_CONFIGURATIONS = [
-    (
-        "bicgstab + AMG(SA, ilu0)  [wrapper default]",
-        {
-            "solver": {"type": "bicgstab", "tol": 1e-8, "maxiter": 500},
-            "precond": {"coarsening": {"type": "smoothed_aggregation"}, "relax": {"type": "ilu0"}},
-        },
-    ),
-    (
-        "gmres(100) + AMG(SA, ilu0)",
-        {
-            "solver": {"type": "gmres", "M": 100, "tol": 1e-8, "maxiter": 500},
-            "precond": {"coarsening": {"type": "smoothed_aggregation"}, "relax": {"type": "ilu0"}},
-        },
-    ),
-    (
-        "gmres(100) + ILU0 only (no AMG)",
-        {
-            "solver": {"type": "gmres", "M": 100, "tol": 1e-8, "maxiter": 500},
-            "precond": {"class": "relaxation", "type": "ilu0"},
-        },
-    ),
-    (
-        "fgmres(100) + AMG(SA, spai0)",
-        {
-            "solver": {"type": "fgmres", "M": 100, "tol": 1e-8, "maxiter": 500},
-            "precond": {"coarsening": {"type": "smoothed_aggregation"}, "relax": {"type": "spai0"}},
-        },
-    ),
-    (
-        "idrs(4) + ILU0 only",
-        {
-            "solver": {"type": "idrs", "s": 4, "tol": 1e-8, "maxiter": 500},
-            "precond": {"class": "relaxation", "type": "ilu0"},
-        },
-    ),
-]
-
-
-def commandAmgcl(args):
-    """Try AMGCL's own OpenMP-parallel Krylov solvers on the captured systems.
-
-    AMGCL is the one option here that is threaded end to end -- its matvec, smoother and
-    orthogonalization all run on the builtin OpenMP backend -- so it is the fair test of "would a
-    properly parallel iterative solver win?", which the SciPy-based `lagged` benchmark cannot answer
-    (SciPy's matvec is serial, though it turns out to be only ~7% of that scheme's cost).
-
-    Reported per configuration: AMGCL's own iteration count and error estimate, the *true* relative
-    residual recomputed independently, and wall time -- against the direct solve it has to beat.
-    Recomputing the residual matters: AMGCL's error estimate is what its stopping rule looked at, and
-    a solver that stops early on a misleading estimate would otherwise look like a winner.
-
-    Note the wrapper rebuilds the AMG hierarchy on every call, so these times include setup. That is
-    the production-relevant number rather than a handicap: the sparsity pattern changes every Newton
-    iteration on this model (see the `pattern` subcommand), so a cached hierarchy could never be
-    reused anyway.
-    """
-
-    from edelweissfe.linsolve.amgcl.amgcl import PyAMGCLSolver
-    from edelweissfe.linsolve.pardiso.pardiso import PardisoSolver
-
-    records = loadManifest(args.dumpDir)
-    A, b = loadSystem(args.dumpDir, records[0])
-
-    print(
-        "MKL/OMP threads: {:}   system: {:} dof, {:} nnz\n".format(
-            os.environ.get("OMP_NUM_THREADS", "(unset)"), A.shape[0], A.nnz
-        )
-    )
-
-    referenceSolver = PardisoSolver(reuseSymbolicFactorization=True)
-    reference = referenceSolver(A, b)
-    start = perf_counter()
-    referenceSolver(A, b)
-    directTime = perf_counter() - start
-    print(
-        "PARDISO direct solve with reused symbolic factorization: {:.2f} s  (the target to beat)\n".format(directTime)
-    )
-
-    bNorm = max(np.linalg.norm(b), 1.0e-300)
-    referenceNorm = max(np.linalg.norm(reference), 1.0e-300)
-
-    # Swept, not fixed at 1e-8: a Newton step does not need a tight linear solve, and judging an
-    # iterative solver only at 1e-8 is what produced a wrong verdict in the `lagged` benchmark.
-    tolerances = [float(value) for value in args.tolerances.split(",")]
-
-    def runConfiguration(description, configured, nullspace):
-        """Build a solver for one configuration (optionally with a near null-space), solve, print."""
-        try:
-            solver = PyAMGCLSolver(configured)
-            if nullspace is not None:
-                solver.set_nullspace(nullspace)
-            start = perf_counter()
-            x = solver.solve(A, b)
-            elapsed = perf_counter() - start
-        except Exception as failure:  # noqa: BLE001 - a rejected config should not abort the sweep
-            print("{:<44} {:>8}   {:}".format(description, "ERROR", failure))
-            return None
-        trueResidual = np.linalg.norm(A @ x - b) / bNorm
-        deviation = np.linalg.norm(x - reference) / referenceNorm
-        hitCap = solver.lastIterations >= args.maxiter
-        print(
-            "{:<44} {:>8} {:>12.2e} {:>13.2e} {:>8.2f} s  {:}{:}".format(
-                description,
-                solver.lastIterations,
-                solver.lastError,
-                trueResidual,
-                elapsed,
-                "dev {:.1e}".format(deviation),
-                (
-                    "  <-- HIT MAXITER, did not converge"
-                    if hitCap
-                    else ("  <-- beats direct" if elapsed < directTime else "")
-                ),
-            )
-        )
-        return not hitCap
-
-    if args.nullspace == "translations":
-        # The cheap, no-geometry partial test of PERF_LINSOLVE_INVESTIGATION.md section 4, step 1:
-        # does supplying smoothed aggregation the three rigid-body *translations* of the displacement
-        # block (its default is a single constant vector) improve monolithic AMG at all? Translations
-        # dominate the elasticity near null-space, and they are constructible from the DOF layout
-        # alone -- the displacement block is node-major with 3 components per node -- so no nodal
-        # coordinates are needed. If three translations do not help over the default one constant,
-        # the six rigid body modes will not rescue it and block-unaware AMG is a dead end here.
-        n = A.shape[0]
-        dispDofs = min(args.dispDofs, n)
-        rowIndex = np.arange(dispDofs)
-
-        # Pure translations: 1 on each displacement component, zero on the coupled (damage) block.
-        translations = np.zeros((n, 3), dtype=np.float64)
-        translations[rowIndex, rowIndex % 3] = 1.0
-
-        # Block-structured variant: the same three translations on the displacement block, plus a
-        # fourth vector that is constant on the coupled block and zero on displacement -- so the
-        # coupled rows are not left with a degenerate (all-zero) near null-space. This isolates
-        # whether the pure-translations result above is an artefact of the zero coupled block rather
-        # than a genuine verdict on monolithic AMG.
-        blockTranslations = np.zeros((n, 4), dtype=np.float64)
-        blockTranslations[rowIndex, rowIndex % 3] = 1.0
-        blockTranslations[dispDofs:, 3] = 1.0
-
-        print(
-            "near null-space test: {:} displacement dofs (3 components, node-major) + {:} coupled "
-            "dofs, of {:} total\n".format(dispDofs, n - dispDofs, n)
-        )
-
-        tolerance = tolerances[0]
-        print(
-            "{:<44} {:>8} {:>12} {:>13} {:>10}   rtol={:.0e}\n".format(
-                "configuration", "iters", "amgcl err", "true rel.res", "wall", tolerance
-            )
-        )
-        candidates = [
-            ("1 constant", None),
-            ("3 translations", translations),
-            ("3 transl + coupled const", blockTranslations),
-        ]
-        smootherByName = {"ilu0": {"type": "ilu0"}, "spai0": {"type": "spai0"}}
-        for smootherName, smoother in smootherByName.items():
-            configured = {
-                "solver": {"type": "gmres", "M": 100, "tol": tolerance, "maxiter": args.maxiter},
-                "precond": {"coarsening": {"type": "smoothed_aggregation"}, "relax": smoother},
-            }
-            for label, nullspace in candidates:
-                runConfiguration("gmres(100) + AMG(SA, {:}), {:}".format(smootherName, label), configured, nullspace)
-        return
-
-    print(
-        "{:<40} {:>8} {:>8} {:>12} {:>13} {:>10}".format(
-            "configuration", "rtol", "iters", "amgcl err", "true rel.res", "wall"
-        )
-    )
-
-    for description, parameters in _AMGCL_CONFIGURATIONS:
-        for tolerance in tolerances:
-            configured = {
-                "solver": dict(parameters["solver"], tol=tolerance, maxiter=args.maxiter),
-                "precond": parameters["precond"],
-            }
-
-            try:
-                solver = PyAMGCLSolver(configured)
-                start = perf_counter()
-                x = solver.solve(A, b)
-                elapsed = perf_counter() - start
-            except Exception as failure:  # noqa: BLE001 - a rejected config should not abort the sweep
-                print("{:<40} {:>8.0e} {:>8}   {:}".format(description, tolerance, "ERROR", failure))
-                continue
-
-            trueResidual = np.linalg.norm(A @ x - b) / bNorm
-            deviation = np.linalg.norm(x - reference) / referenceNorm
-            hitCap = solver.lastIterations >= args.maxiter
-
-            print(
-                "{:<40} {:>8.0e} {:>8} {:>12.2e} {:>13.2e} {:>8.2f} s  {:}{:}".format(
-                    description,
-                    tolerance,
-                    solver.lastIterations,
-                    solver.lastError,
-                    trueResidual,
-                    elapsed,
-                    "dev {:.1e}".format(deviation),
-                    (
-                        "  <-- HIT MAXITER, did not converge"
-                        if hitCap
-                        else ("  <-- beats direct" if elapsed < directTime else "")
-                    ),
-                )
-            )
-
-            # No point tightening a tolerance this configuration could not even reach.
-            if hitCap:
-                break
-
-
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     subparsers = parser.add_subparsers(dest="command", required=True)
-
-    amgclParser = subparsers.add_parser("amgcl", help="AMGCL's OpenMP-parallel Krylov solvers")
-    amgclParser.add_argument("dumpDir")
-    amgclParser.add_argument(
-        "--tolerances",
-        default="1e-2,1e-4,1e-8",
-        help="loosest first: the sweep stops tightening once a configuration fails to converge",
-    )
-    amgclParser.add_argument("--maxiter", type=int, default=500)
-    amgclParser.add_argument(
-        "--nullspace",
-        choices=["none", "translations"],
-        default="none",
-        help="feed smoothed aggregation a near null-space: 'translations' supplies the 3 rigid-body "
-        "translations of the displacement block (constructible from the DOF layout alone), and runs "
-        "each SA configuration both with and without it for a direct comparison",
-    )
-    amgclParser.add_argument(
-        "--dispDofs",
-        type=int,
-        default=214659,
-        help="size of the leading displacement block (3 components per node, node-major); the "
-        "translational near null-space is nonzero only on it. Default matches the reference model.",
-    )
-    amgclParser.set_defaults(function=commandAmgcl)
 
     patternParser = subparsers.add_parser("pattern", help="report sparsity-pattern evolution")
     patternParser.add_argument("dumpDir")

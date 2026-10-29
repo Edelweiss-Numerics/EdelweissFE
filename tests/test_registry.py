@@ -551,8 +551,8 @@ def test_isRegistered_sees_all_three_registration_mechanisms():
 def test_keyword_category_covers_all_23_top_level_keywords_after_u2b():
     """U2b completed ``"keyword"`` with all 21 top-level keywords -- U2a's six structural mesh/job
     keywords plus the fifteen pluggable-module/type-dispatch keywords -- matching the full
-    ``printKeywords()`` surface exactly. U3/U4 added no further names; ``elementproperty`` and
-    ``restart`` are the two keywords added after that gate.
+    ``printKeywords()`` surface exactly. U3/U4 added no further names; ``elementproperty``,
+    ``restart`` and ``linearsolver`` are the keywords added after that gate.
     """
     assert registry.availableNames("keyword") == [
         "advancedmaterial",
@@ -566,6 +566,7 @@ def test_keyword_category_covers_all_23_top_level_keywords_after_u2b():
         "fieldoutput",
         "include",
         "job",
+        "linearsolver",
         "material",
         "modelgenerator",
         "modelmodifier",

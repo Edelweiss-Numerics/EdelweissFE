@@ -1,129 +1,152 @@
 Linear solvers
 ==============
 
-Linear solvers are defined in EdelweissFE after the ``*solver`` keyword using ``linsolver`` and an optional configuration file ``linsolverConfigFile`` as a data line.
-The ``linsolverConfigFile`` needs to be in ``.json`` format.
-
-Choose a linsolver after the ``*solver`` keyword:
+A nonlinear solver solves one linear system per Newton iteration. Which linear solver it uses is its ``linsolver``
+option: the name of a ``*linearSolver`` block, or a type of linear solver with its defaults.
 
 .. code-block:: edelweiss
 
     *solver, solver=NIST, name=theSolver
     linsolver=pardiso
 
-.. list-table:: Currently available linear solvers
-    :width: 100%
-    :widths: 15 1 25
-    :header-rows: 1
-
-    * - Name
-      - Direct solver
-      - Relevant module
-    * - ``superlu``
-      - ✓
-      - ``scipy.sparse.linalg.spsolve``
-    * - ``umfpack``
-      - ✓
-      - ``scipy.sparse.linalg.spsolve``
-    * - ``pardiso``
-      - ✓
-      - ``edelweissfe.linsolve.pardiso.pardiso``
-    * - ``panuapardiso``
-      - ✓
-      - ``edelweissfe.linsolve.panuapardiso.panuapardiso``
-    * - ``klu``
-      - ✓
-      - ``edelweissfe.linsolve.klu.klu``
-    * - ``petsclu``
-      - ✓
-      - ``edelweissfe.linsolve.petsclu.petsclu``
-    * - ``mumps``
-      - ✓
-      - ``edelweissfe.linsolve.mumps.mumps``
-    * - ``amgcl``
-      - ✗
-      - ``edelweissfe.linsolve.amgcl.amgcl``
-    * - ``blockamg``
-      - ✗
-      - ``edelweissfe.linsolve.blockamg.blockamg``
-    * - ``matrixdump``
-      - —
-      - ``edelweissfe.linsolve.matrixdump.matrixdump``
-
-How the available solvers relate
---------------------------------
-
-Every entry in the table above is selected the same way (``linsolver=<name>``) and presents the same
-``(A, b) -> x`` interface, but they fall into three groups that differ in what they actually do:
-
-**Direct solvers** factorize the matrix and back-substitute: ``superlu`` and ``umfpack`` (SciPy,
-always available), ``pardiso`` (Intel MKL, the production default), ``panuapardiso``, ``klu``,
-``petsclu`` and ``mumps``. They ignore ``linsolverConfigFile`` (except ``pardiso``, which reads a
-single ``reuseSymbolicFactorization`` flag). Pick one of these unless the factorization has become
-the run's bottleneck or exceeds available memory.
-
-**Iterative solvers** never factorize the full matrix, trading exactness for O(n) memory:
-
-* ``amgcl`` -- the AMGCL library's own solver/preconditioner combinations, configured through its
-  JSON parameter tree.
-* ``blockamg`` -- a *field-split* variant for coupled multi-field models: one AMG hierarchy per
-  physical field (e.g. displacement, nonlocal damage), combined by a block Gauss--Seidel sweep to
-  precondition an outer GMRES/LGMRES. This is the route to problem sizes a direct factorization
-  cannot reach at all.
-
-**A diagnostic wrapper**, which does not solve anything itself:
-
-* ``matrixdump`` -- writes every :math:`(A, b)` pair it is handed to disk, then hands the solve to
-  a real solver chosen with its ``delegate`` option, so the simulation proceeds normally. The point
-  is to lift solver comparisons out of the finite element run: rerunning a simulation per solver
-  variant is slow and not like-for-like (a variant that changes the Newton iterates changes the
-  *sequence* of matrices being compared). Dump one authentic sequence once, then replay it offline
-  with ``scripts/benchmark_linsolve.py`` so every variant sees byte-identical input. Use it to
-  investigate solver performance, never in a production run.
-
-Several linsolvers accept an optional configuration file ``linsolverConfigFile`` (a ``.json`` file), among them ``amgcl``, ``blockamg`` and ``matrixdump``; the direct solvers ignore it (``pardiso`` additionally reads a single ``reuseSymbolicFactorization`` flag). See each solver's own section below for its configuration format.
-
-
-The ``blockamg`` solver
------------------------
-
-``blockamg`` is a field-split block-AMG solver for **large coupled multi-field systems** (e.g. displacement + gradient-enhanced damage). It is the O(n)-memory route to problem sizes a direct factorization cannot reach -- past roughly a million DOFs its fill-in exceeds memory, whereas algebraic multigrid stays linear.
-
-Applied *monolithically*, AMG is ineffective on such a coupled system (a single hierarchy cannot represent the disparate fields at once -- their physical scales and near-null-spaces differ). ``blockamg`` instead builds **one AMGCL algebraic-multigrid hierarchy per field** and combines them with a **block Gauss--Seidel** sweep to precondition an outer Krylov solve. Per solve it equilibrates the system, splits it into field blocks, builds or reuses the per-field hierarchies, and preconditions the outer solve with the block sweep.
-
-The block structure -- which DOFs belong to which field, and each field's dimension -- is **discovered automatically** from the ``DofManager`` and the live ``FEModel``, both handed to the solver via ``setModel()`` whenever the equation system is (re)built. A ``linsolverConfigFile`` is therefore optional and carries only solver knobs. Requires the optional ``amgcl`` extension.
+A ``*linearSolver`` block defines a linear solver with options, as ``*material`` defines a material: the keyword line
+holds only its identity, ``name`` and ``type``; the data lines are the options of that type, one ``key=value`` per line
+(an option the type does not have is an error):
 
 .. code-block:: edelweiss
 
+    *linearSolver, name=fast, type=blockamg
+    cornerNodeInterpolation=false
+    verbosity=info
+
     *solver, solver=NIST, name=theSolver
-    linsolver=blockamg
-    linsolverConfigFile=blockamg.json
+    linsolver=fast
 
-.. code-block:: json
+A type name in ``linsolver=`` means that type with its defaults, so a block must not be named like a type.
+``linsolver`` unset means ``pardiso`` if it was built, else ``superlu``. From Python, the same linear solver is
+``getLinSolverByName("blockamg", {"rigidBodyModesPerAggregate": False})`` (:mod:`edelweissfe.config.linsolve`).
 
-    {
-        "outerSolver": "amgcl_lgmres",
-        "sweeps": 1,
-        "symmetric": false
-    }
+.. list-table:: The types of linear solver
+    :width: 100%
+    :widths: 15 10 45
+    :header-rows: 1
 
-The method, the near-null-space construction, the adaptive outer tolerance, hierarchy reuse, every configuration key with its default, and the experimental p-multigrid variant are documented in detail on their own page:
+    * - Type
+      - Direct
+      - What it is
+    * - ``superlu``
+      - ✓
+      - SciPy's sparse LU (SuperLU), always available
+    * - ``umfpack``
+      - ✓
+      - UMFPACK through SciPy (SuperLU if ``scikit-umfpack`` is missing)
+    * - ``pardiso``
+      - ✓
+      - Intel MKL PARDISO (``edelweissfe.linsolve.pardiso.pardiso``), the default
+    * - ``panuapardiso``
+      - ✓
+      - Panua PARDISO (``edelweissfe.linsolve.panuapardiso.panuapardiso``)
+    * - ``klu``
+      - ✓
+      - SuiteSparse's KLU (``edelweissfe.linsolve.klu.klu``)
+    * - ``petsclu``
+      - ✓
+      - PETSc's LU, through ``petsc4py``
+    * - ``mumps``
+      - ✓
+      - MUMPS, through its Python bindings
+    * - ``blockamg``
+      - ✗
+      - the preset ``blockAMG()``: LGMRES around a block Gauss--Seidel sweep over the fields, with one AMG hierarchy
+        (or two-level cycle) per field
+    * - ``custom``
+      - —
+      - a composed solver defined by you, in a Python script (see :doc:`composedlinsolvers`)
+
+Direct or iterative
+-------------------
+
+**Direct solvers** factorize the matrix and back-substitute: ``superlu`` and ``umfpack`` (SciPy, always available),
+``pardiso`` (Intel MKL, the production default), ``panuapardiso``, ``klu``, ``petsclu`` and ``mumps``. Pick one of
+these unless the factorization has become the run's bottleneck or exceeds available memory. A direct solver keeps its
+backend for the whole step: PARDISO with ``reuseSymbolicFactorization=true`` keeps its reordering and symbolic
+factorization while only the values of the matrix change. A singular matrix gives NaN, which the nonlinear solver
+turns into a cutback.
+
+**Iterative solvers** never factorize the full matrix, trading exactness for O(n) memory: past roughly a million DOFs
+the fill-in of a direct factorization exceeds memory, whereas algebraic multigrid stays linear. ``blockamg`` is the
+field-split solver for **large coupled multi-field systems** (e.g. displacement + gradient-enhanced damage): one AMG
+hierarchy per physical field, combined by a block Gauss--Seidel sweep to precondition an outer LGMRES. The block
+structure -- which DOFs belong to which field, and each field's dimension -- is discovered automatically from the
+model. It requires the optional ``amgcl`` extension.
+
+.. code-block:: edelweiss
+
+    *linearSolver, name=fieldSplit, type=blockamg
+    sweeps=1
+    symmetric=false
+
+    *solver, solver=NIST, name=theSolver
+    linsolver=fieldSplit
+
+A ``custom`` solver script composes any other tree: a Schur complement that condenses the dofs on which AMG alone
+stalls (bars tied to their host elements by bond springs, a softening zone), other smoothers, other coarse spaces.
+How to write one, and the tree of ``blockamg``, are on :doc:`composedlinsolvers`; why the field-split method works,
+and each of its steps, on :doc:`blockamgtheory`.
+
+One adapter for every type
+--------------------------
+
+Every type is a composed solver (:doc:`composedlinsolvers`) behind one adapter,
+:class:`~edelweissfe.linsolve.composition.solver.ComposedLinearSolver`: ``blockamg`` is the tree of the ``blockAMG()``
+preset, and a direct solver is a tree of one leaf, ``type=pardiso`` being ``DirectSolver("pardiso")``. What the adapter
+does therefore works the same for every type, with the same data lines
+(:class:`~edelweissfe.linsolve.types.LinearSolverSchema`, described in :ref:`composed-adapter`):
+
+.. list-table:: The data lines of every type
+    :width: 100%
+    :widths: 25 20 55
+    :header-rows: 1
+
+    * - Data line
+      - Default
+      - What it sets
+    * - ``verbosity``
+      - ``warning``
+      - ``silent``, ``warning``, ``info`` or ``debug`` (:ref:`composed-verbosity`)
+    * - ``warningOuterIterations``
+      - 100
+      - a Krylov solve with more outer iterations is warned about, and is a slow solve
+    * - ``residualGrowthFactor``
+      - 4
+      - a right-hand side this many times larger than the previous one marks a new increment
+    * - ``dumps``, ``dumpDirectory``, ``maxDumps``, ``dumpContextSolves``
+      - ``none``, ``linsolveDumps``, 10, 0
+      - which solves are written to disk, as a sequence of authentic systems for an offline replay
+        (:ref:`composed-solve-dumps`)
+
+The options of each type
+------------------------
+
+.. pprint:: linsolver:pardiso
+    :caption: ``pardiso``:
+
+The other direct solvers take only the common data lines above.
+
+.. pprint:: linsolver:blockamg
+    :caption: ``blockamg``:
+
+.. pprint:: linsolver:custom
+    :caption: ``custom``:
+
+The pages on linear solvers
+---------------------------
 
 .. toctree::
    :maxdepth: 1
 
+   composedlinsolvers
+   composedlinsolversreference
    blockamgtheory
-
-
-The ``amgcl`` solver
---------------------
-
-``amgcl`` is an iterative solver (Krylov method plus algebraic-multigrid or single-level preconditioner) built on the `AMGCL <https://github.com/ddemidov/amgcl>`_ library. Its ``linsolverConfigFile`` is forwarded as an AMGCL parameter tree; note that AMGCL silently ignores unknown parameter keys (warning only on stderr), so check its stderr if a configuration behaves unexpectedly.
-
-
-The ``matrixdump`` diagnostic solver
-------------------------------------
-
-``matrixdump`` is not a solver but a diagnostic wrapper: it writes the equation systems it is handed to disk and then delegates the actual solve to a real linear solver, so a sequence of authentic ``(A, b)`` pairs can be replayed offline instead of by rerunning the simulation. Its ``linsolverConfigFile`` selects the ``delegate`` solver, the dump ``directory``, and which solves to capture (``dumpAt`` / ``skipFirst`` / ``maxDumps`` / ``instances``).
-
-Its instance/dump-ordinal counters are process-wide and not part of a ``*restart`` checkpoint, so a resumed run starts them back at zero -- point a resumed analysis using ``matrixdump`` at a fresh ``directory`` if you need both runs' dumps kept, rather than the resumed run silently overwriting the interrupted one's.
+   fieldsplitmeasurements
+   linsolveapi

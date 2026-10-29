@@ -23,10 +23,10 @@
 #  The full text of the license can be found in the file LICENSE.md at
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
-"""Correctness tests for the threaded T^T K T + C condensation
+"""Correctness tests for the threaded, in-place T^T K T + C condensation
 (``MultiPointConstraintTransformation(..., useThreadedCondensation=True)``, the kernel of
-:mod:`edelweissfe.numerics.mpccondensation`) against the plain SciPy expression it is an opt-in
-alternative to (default ``False``).
+:mod:`edelweissfe.numerics.mpccondensation`): against the plain SciPy expression it is an opt-in
+alternative to (default ``False``), and bitwise against a reference of its documented order of summation.
 """
 
 import os
@@ -75,6 +75,164 @@ def _assertIdentical(A, B):
     assert np.array_equal(A.data, B.data)
 
 
+def _condensedThreaded(records, n, K):
+    """The threaded condensation of (a copy of) K, given the fill-in it needs."""
+    mpc = MultiPointConstraintTransformation(records, n, useThreadedCondensation=True)
+    withFillIn = mpc.withCondensedPattern(K)
+    return mpc.transformSystemMatrix(withFillIn.copy() if withFillIn is K else withFillIn)
+
+
+def _referenceRows(mpc, K):
+    """Row i of T^T (K T) + C as {column: value}, summed in the kernel's documented order: the inner sum over b in
+    the stored order of row a of K, the outer sum over a in the stored order of row i of T^T, the first term of each
+    sum assigned and the following ones added."""
+    T, Tt, C = mpc._T, mpc._T.T.tocsr(), mpc._C
+
+    def entries(A, i):
+        return zip(A.indices[A.indptr[i] : A.indptr[i + 1]], A.data[A.indptr[i] : A.indptr[i + 1]])
+
+    def add(row, c, v):
+        row[c] = row[c] + v if c in row else v
+
+    rows = []
+    for i in range(K.shape[0]):
+        row = {}
+        tRow = list(entries(Tt, i))
+        if len(tRow) == 1 and tRow[0][1] == 1.0:
+            for b, kab in entries(K, tRow[0][0]):
+                for c, tbc in entries(T, b):
+                    add(row, c, kab * tbc)
+        else:
+            for a, w in tRow:
+                kT = {}
+                for b, kab in entries(K, a):
+                    for c, tbc in entries(T, b):
+                        add(kT, c, kab * tbc)
+                for c, v in kT.items():
+                    add(row, c, w * v)
+        for c, v in entries(C, i):
+            add(row, c, v)
+        rows.append(row)
+    return rows
+
+
+@pytest.mark.parametrize("seed", range(3))
+def test_bitwise_against_the_documented_order_of_summation(seed):
+    n = 200
+    K = _randomSparseK(n, density=0.05, seed=seed)
+    records = _randomRecords(n, 40, seed)
+    mpc = MultiPointConstraintTransformation(records, n, useThreadedCondensation=True)
+    reference = _referenceRows(mpc, K)
+
+    Kt = _condensedThreaded(records, n, K)
+    for i in range(n):
+        stored = dict(zip(Kt.indices[Kt.indptr[i] : Kt.indptr[i + 1]], Kt.data[Kt.indptr[i] : Kt.indptr[i + 1]]))
+        assert set(reference[i]) <= set(stored)
+        for c, v in stored.items():
+            # bitwise, and entries outside the condensed pattern are stored zeros
+            assert np.array_equal(v, reference[i].get(c, 0.0))
+
+
+def test_condensed_in_place():
+    """The threaded condensation overwrites K and returns it: the system matrix is held once."""
+    n = 100
+    records = [(5, [(0, 0.5), (1, 0.5)])]
+    mpc = MultiPointConstraintTransformation(records, n, useThreadedCondensation=True)
+    K = mpc.withCondensedPattern(_randomSparseK(n, seed=2))
+    indices = K.indices.copy()
+    assert mpc.transformSystemMatrix(K) is K
+    assert np.array_equal(K.indices, indices)
+
+
+def test_missing_fill_in_and_unsorted_rows_are_rejected():
+    n = 100
+    records = [(5, [(0, 0.5), (1, 0.5)])]
+    mpc = MultiPointConstraintTransformation(records, n, useThreadedCondensation=True)
+    K = _randomSparseK(n, density=0.05, seed=5)
+    assert mpc.condensedPatternFillIn(K).nnz > 0
+    with pytest.raises(RuntimeError, match="misses entries"):
+        mpc.transformSystemMatrix(K.copy())
+
+    K = mpc.withCondensedPattern(K)
+    s, e = K.indptr[0], K.indptr[1]
+    K.indices[s:e] = K.indices[s:e][::-1].copy()
+    K.data[s:e] = K.data[s:e][::-1].copy()
+    with pytest.raises(RuntimeError, match="not sorted"):
+        mpc.transformSystemMatrix(K)
+
+
+def test_plain_expression_needs_no_fill_in():
+    n = 100
+    mpc = MultiPointConstraintTransformation([(5, [(0, 0.5), (1, 0.5)])], n)
+    K = _randomSparseK(n, seed=8)
+    assert mpc.condensedPatternFillIn(K).nnz == 0
+    assert mpc.withCondensedPattern(K) is K
+
+
+def test_fill_in_added_to_the_csr_generator_pattern():
+    """The CSR generator assembles the fill-in as stored zeros, and its matrix condenses in place."""
+    from types import SimpleNamespace
+
+    csrgeneratorv2 = pytest.importorskip("edelweissfe.numerics.csrgeneratorv2")
+    n = 150
+    K = _randomSparseK(n, density=0.05, seed=9).tocoo()
+    # every entry split into two COO pairs, as overlapping elements give
+    rows = np.concatenate([K.row, K.row]).astype(np.intc)
+    columns = np.concatenate([K.col, K.col]).astype(np.intc)
+    V = np.concatenate([0.25 * K.data, 0.75 * K.data])
+    generator = csrgeneratorv2.CSRGenerator(SimpleNamespace(I=rows, J=columns, nDof=n))
+    reference = generator.updateCSR(V)
+
+    records = _randomRecords(n, 30, 9)
+    mpc = MultiPointConstraintTransformation(records, n, useThreadedCondensation=True)
+    fillIn = mpc.condensedPatternFillIn(generator.csrMatrix)
+    generator.addToPattern(fillIn)
+    assert generator.nnz == reference.nnz + fillIn.nnz
+    assert mpc.condensedPatternFillIn(generator.csrMatrix).nnz == 0
+
+    for _ in range(2):  # the values of each update are fresh, the fill-in assembled as zeros
+        assembled = generator.updateInPlace(V)
+        assert (assembled - reference).nnz == 0
+        assert assembled.nnz == reference.nnz + fillIn.nnz
+        Kt = mpc.transformSystemMatrix(assembled)
+        assert _maxRelDiff(Kt, MultiPointConstraintTransformation(records, n).transformSystemMatrix(reference)) < 1e-14
+
+    with pytest.raises(ValueError, match="already in the pattern"):
+        generator.addToPattern(fillIn)
+
+
+def test_a_matrix_obtained_before_add_to_pattern_keeps_its_pattern():
+    from types import SimpleNamespace
+
+    csrgeneratorv2 = pytest.importorskip("edelweissfe.numerics.csrgeneratorv2")
+    n = 150
+    K = _randomSparseK(n, density=0.05, seed=10).tocoo()
+    generator = csrgeneratorv2.CSRGenerator(SimpleNamespace(I=K.row.astype(np.intc), J=K.col.astype(np.intc), nDof=n))
+    old = generator.updateInPlace(K.data)
+    reference = old.copy()
+    mpc = MultiPointConstraintTransformation(_randomRecords(n, 30, 10), n, useThreadedCondensation=True)
+    generator.addToPattern(mpc.condensedPatternFillIn(old))
+    del generator
+    _assertIdentical(old, reference)
+
+
+def test_a_pattern_array_obtained_before_add_to_pattern_stays_valid_without_its_matrix():
+    from types import SimpleNamespace
+
+    csrgeneratorv2 = pytest.importorskip("edelweissfe.numerics.csrgeneratorv2")
+    n = 150
+    K = _randomSparseK(n, density=0.05, seed=11).tocoo()
+    generator = csrgeneratorv2.CSRGenerator(SimpleNamespace(I=K.row.astype(np.intc), J=K.col.astype(np.intc), nDof=n))
+    old = generator.updateInPlace(K.data)
+    indptr, indices = old.indptr, old.indices
+    referenceIndptr, referenceIndices = indptr.copy(), indices.copy()
+    mpc = MultiPointConstraintTransformation(_randomRecords(n, 30, 11), n, useThreadedCondensation=True)
+    generator.addToPattern(mpc.condensedPatternFillIn(old))
+    del old, generator
+    np.testing.assert_array_equal(indptr, referenceIndptr)
+    np.testing.assert_array_equal(indices, referenceIndices)
+
+
 def test_threaded_matches_plain_expression():
     n = 200
     records = [
@@ -86,7 +244,7 @@ def test_threaded_matches_plain_expression():
     K = _randomSparseK(n, seed=1)
 
     plain = MultiPointConstraintTransformation(records, n).transformSystemMatrix(K)
-    threaded = MultiPointConstraintTransformation(records, n, useThreadedCondensation=True).transformSystemMatrix(K)
+    threaded = _condensedThreaded(records, n, K)
     assert _maxRelDiff(plain, threaded) < 1e-14
     assert threaded.has_sorted_indices
 
@@ -98,61 +256,32 @@ def test_threaded_matches_plain_expression_random_records(seed):
     records = _randomRecords(n, 60, seed)
 
     plain = MultiPointConstraintTransformation(records, n).transformSystemMatrix(K)
-    threaded = MultiPointConstraintTransformation(records, n, useThreadedCondensation=True).transformSystemMatrix(K)
+    threaded = _condensedThreaded(records, n, K)
     assert _maxRelDiff(plain, threaded) < 1e-14
 
 
 def test_result_independent_of_thread_count():
     n = 400
-    K = _randomSparseK(n, density=0.05, seed=7)
-    mpc = MultiPointConstraintTransformation(_randomRecords(n, 80, 7), n)
+    mpc = MultiPointConstraintTransformation(_randomRecords(n, 80, 7), n, useThreadedCondensation=True)
+    K = mpc.withCondensedPattern(_randomSparseK(n, density=0.05, seed=7))
     condensation = mpccondensation.MPCCondensation(mpc._T, mpc._T.T.tocsr(), mpc._C)
 
-    reference = condensation.condense(K, 1)
+    reference = K.copy()
+    condensation.condenseInPlace(reference, 1)
     for numThreads in (2, 3, 8):
-        _assertIdentical(reference, condensation.condense(K, numThreads))
-
-
-def test_unsorted_and_duplicate_entries_in_K():
-    """K's rows need not be sorted, and duplicate entries are summed, as in the plain expression."""
-    n = 150
-    K = _randomSparseK(n, density=0.05, seed=4)
-    r = np.random.default_rng(4)
-    indices, data = K.indices.copy(), K.data.copy()
-    for i in range(n):
-        s, e = K.indptr[i], K.indptr[i + 1]
-        p = r.permutation(e - s)
-        indices[s:e], data[s:e] = indices[s:e][p], data[s:e][p]
-    unsorted = sp.csr_matrix((data, indices, K.indptr.copy()), shape=K.shape)
-    unsorted.has_sorted_indices = False
-    # the same matrix with every entry of row 3 split into two halves
-    s, e = K.indptr[3], K.indptr[4]
-    rows = np.concatenate([np.repeat(np.arange(n), np.diff(K.indptr)), np.full(e - s, 3)])
-    cols = np.concatenate([K.indices, K.indices[s:e]])
-    vals = K.data.copy()
-    vals[s:e] *= 0.5
-    vals = np.concatenate([vals, K.data[s:e] * 0.5])
-    order = np.argsort(rows, kind="stable")
-    duplicates = sp.csr_matrix(
-        (vals[order], cols[order], np.concatenate([[0], np.cumsum(np.bincount(rows, minlength=n))])), shape=K.shape
-    )
-
-    records = _randomRecords(n, 30, 4)
-    plain = MultiPointConstraintTransformation(records, n).transformSystemMatrix(K)
-    for variant in (unsorted, duplicates):
-        threaded = MultiPointConstraintTransformation(records, n, useThreadedCondensation=True).transformSystemMatrix(
-            variant
-        )
-        assert _maxRelDiff(plain, threaded) < 1e-14
+        condensed = K.copy()
+        condensation.condenseInPlace(condensed, numThreads)
+        _assertIdentical(reference, condensed)
 
 
 def test_repeated_condensation_reuses_the_kernel():
     """The kernel is built once per transformation; later calls (every Newton iteration) give the same result."""
     n = 300
     mpc = MultiPointConstraintTransformation(_randomRecords(n, 60, 11), n, useThreadedCondensation=True)
-    first = mpc.transformSystemMatrix(_randomSparseK(n, density=0.05, seed=11))
+    K = mpc.withCondensedPattern(_randomSparseK(n, density=0.05, seed=11))
+    first = mpc.transformSystemMatrix(K.copy())
     kernel = mpc._threadedCondensation
-    _assertIdentical(first, mpc.transformSystemMatrix(_randomSparseK(n, density=0.05, seed=11)))
+    _assertIdentical(first, mpc.transformSystemMatrix(K.copy()))
     assert mpc._threadedCondensation is kernel
 
 
@@ -163,9 +292,21 @@ def test_non_csr_matrices_are_rejected(matrixFormat):
     mpc = MultiPointConstraintTransformation([(5, [(0, 0.5), (1, 0.5)])], n)
     condensation = mpccondensation.MPCCondensation(mpc._T, mpc._T.T.tocsr(), mpc._C)
     with pytest.raises(TypeError, match="must be CSR"):
-        condensation.condense(_randomSparseK(n, seed=12).asformat(matrixFormat))
+        condensation.condenseInPlace(_randomSparseK(n, seed=12).asformat(matrixFormat))
     with pytest.raises(TypeError, match="must be CSR"):
         mpccondensation.MPCCondensation(mpc._T.tocsc(), mpc._T.T.tocsr(), mpc._C)
+
+
+def test_64_bit_indices_are_rejected():
+    """K is condensed through its own arrays, so they are checked, not converted."""
+    n = 50
+    mpc = MultiPointConstraintTransformation([(5, [(0, 0.5), (1, 0.5)])], n, useThreadedCondensation=True)
+    K = mpc.withCondensedPattern(_randomSparseK(n, seed=13))
+    K.indptr, K.indices = K.indptr.astype(np.int64), K.indices.astype(np.int64)
+    with pytest.raises(TypeError, match="32-bit indices"):
+        mpc.condensedPatternFillIn(K)
+    with pytest.raises(TypeError, match="32-bit indices"):
+        mpc.transformSystemMatrix(K)
 
 
 def test_explicit_zeros_are_kept():
@@ -174,8 +315,7 @@ def test_explicit_zeros_are_kept():
     n = 4
     K = sp.csr_matrix(np.array([[2.0, 1.0, -1.0, 0.0], [1.0, 2.0, 0.0, 0.0], [-1.0, 0.0, 2.0, 0.0], [0, 0, 0, 1.0]]))
     # u_2 = u_1: K[0,1] + K[0,2] = 0 is stored in the condensed row 0
-    mpc = MultiPointConstraintTransformation([(2, [(1, 1.0)])], n, useThreadedCondensation=True)
-    Kt = mpc.transformSystemMatrix(K)
+    Kt = _condensedThreaded([(2, [(1, 1.0)])], n, K)
     assert Kt[0, 1] == 0.0
     assert 1 in Kt.indices[Kt.indptr[0] : Kt.indptr[1]]
 
@@ -203,7 +343,7 @@ def test_zero_slave_dofs_regression():
     K = _randomSparseK(n, seed=6)
 
     plain = MultiPointConstraintTransformation([], n).transformSystemMatrix(K)
-    threaded = MultiPointConstraintTransformation([], n, useThreadedCondensation=True).transformSystemMatrix(K)
+    threaded = _condensedThreaded([], n, K)
     assert _maxRelDiff(plain, K) < 1e-9
     _assertIdentical(threaded, K)
 
@@ -212,7 +352,7 @@ def test_assert_exact_env_var_passes_on_a_correct_computation():
     n = 200
     records = [(5, [(0, 0.5), (1, 0.5)])]
     mpc = MultiPointConstraintTransformation(records, n, useThreadedCondensation=True)
-    K = _randomSparseK(n, seed=3)
+    K = mpc.withCondensedPattern(_randomSparseK(n, seed=3))
 
     os.environ["EDELWEISS_MPC_ASSERT_EXACT"] = "1"
     try:
