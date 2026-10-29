@@ -144,6 +144,9 @@ the `edelweissfe` CLI and `run_tests_edelweissfe`):
   (`edelweissfe/numerics/parallelizationutilities.py::getThreadPool`). `ScatterDofVector` uses precomputed layout
   templates (`ScatterDofVectorTemplate`) and `np.bincount` for lock-free parallel accumulation. Third-party C
   extensions lacking free-threading tags (e.g. `gstools`) are imported lazily to keep the GIL disabled.
+  Loops over independent entities use `mapChunksInParallel`, array passes use `forEachSliceInParallel` (same module),
+  and tests choose their thread count with the `workerThreads` fixture of `tests/conftest.py`, as without free
+  threading the helpers run serially whatever `OMP_NUM_THREADS` says.
 - **CSR Matrix Assembly**: High-performance assembly via `CSRGenerator` and OpenMP-accelerated `CSRGeneratorV2`
   (`edelweissfe/numerics/`). In-place assembly (`updateInPlace`) avoids reallocating sparsity patterns across iterations.
 - **Dirichlet BC Enforcement**: Optimized in `edelweissfe/solvers/base/dirichlet.pyx`. Off-diagonal entries are

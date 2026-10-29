@@ -39,6 +39,9 @@ environment alone: what they check is the chunking and the order of the results,
 free threading.
 """
 
+import threading
+import time
+
 import numpy as np
 import pytest
 from scipy.sparse import csr_matrix
@@ -108,6 +111,47 @@ def test_the_first_exception_of_the_chunks_is_the_one_of_the_serial_loop(workerT
         mapChunksInParallel(list(range(1000)), work)
 
     assert error.value.args == (37,)
+
+
+def _twoHundredChunks(work):
+    """``work(item)`` for the first item of each of 200 chunks of 4 items (800 items, 4 threads, 50 chunks per thread),
+    through ``mapChunksInParallel``: the first call gets 0, the next ones 4, 8, ..."""
+    return mapChunksInParallel(list(range(800)), lambda chunk: work(chunk[0]), chunksPerThread=50)
+
+
+def _twoHundredSlices(work):
+    """``work(entry)`` for each of 200 entries, in a slice of its own, through ``forEachSliceInParallel``: the first
+    call gets 0, the next ones 1, 2, ..."""
+    return forEachSliceInParallel(lambda s: work(s.start), 200, sliceLength=1)
+
+
+@pytest.mark.parametrize("runTwoHundredCalls", [_twoHundredChunks, _twoHundredSlices])
+def test_a_raising_call_stops_the_unstarted_calls_and_waits_for_the_running_ones(runTwoHundredCalls, workerThreads):
+    """Of 200 calls on four threads, call 0 raises while three other calls are running. Afterwards no call is still
+    running (``list(pool.map(...))`` returned the exception while they were), and the calls that had not started were
+    not made (waiting for every call, without cancelling the rest, would run all 200: about a second)."""
+    workerThreads(4)
+    started, finished = [], []
+    othersStarted = threading.Event()
+
+    def work(call):
+        started.append(call)
+        if call == 0:
+            # Raise only once three other calls are running: they cannot be stopped, they have to be waited for.
+            assert othersStarted.wait(timeout=10), "the pool did not start three other calls beside call 0"
+            raise ValueError(call)
+        if sum(1 for other in started if other != 0) >= 3:  # call 0 is waiting for this, and is not counted
+            othersStarted.set()
+        time.sleep(0.02)  # still busy when call 0 raises
+        finished.append(call)
+
+    with pytest.raises(ValueError):
+        runTwoHundredCalls(work)
+
+    assert (
+        set(finished) == set(started) - {0} and len(finished) == len(started) - 1
+    ), "a call was still running when the exception was raised"
+    assert len(started) < 100, "the calls that had not started were made"
 
 
 def test_the_mass_row_blocks_multiply_bitwise_like_the_whole_matrix():

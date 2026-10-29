@@ -29,6 +29,11 @@ chunks per thread let the pool balance chunks of unequal cost, and the results c
 so what is assembled from them is what the serial loop assembles. The three passes over the entries of the mass
 (which of them couple only time-integrated dofs, the warning about the inertia that is discarded, zeroing it) are
 array operations in slices, as above.
+Both helpers return, or raise, only when no call is running anymore: if a call raises, the calls that have not started
+are not made, the running ones are waited for, and what is raised is the exception of the first failing call in order,
+the one a serial loop meets first, so that a caller that retries -- the solver repeats an increment with a smaller time
+step when an element asks for it -- never has workers of the failed attempt still computing the elements it is about to
+compute again.
 
 SciPy's sparse matrix-vector product is single-threaded as well, so the implicit dynamic solvers
 multiply by the mass matrix (the inertia forces, the momentum and the kinetic energy) the same way:
