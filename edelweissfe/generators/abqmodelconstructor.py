@@ -194,8 +194,10 @@ class AbqModelConstructor:
                 for line in data:
                     for elSet in line:
                         els += list(elementSets[elSet])
-                # Must be a proper (hashable) ElementSet, as consumers cache by set identity.
-                elementSets[name] = ElementSet(name, set(els))
+                # Must be a proper (hashable) ElementSet, as consumers cache by set identity. Deduplicated in
+                # first-occurrence order: a set() of elements iterates in memory-address order, which differs from run
+                # to run, and so would the numbering of everything a generator creates while looping over this set.
+                elementSets[name] = ElementSet(name, list(dict.fromkeys(els)))
 
         # generate dictionary of nodeObjects belonging to a specified nodeset
         # or generate nodeset by generate definition in inputfile
