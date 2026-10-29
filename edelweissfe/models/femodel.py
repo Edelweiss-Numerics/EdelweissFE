@@ -41,9 +41,8 @@ from edelweissfe.journal.journal import Journal
 from edelweissfe.models.modelchange import TopologyRecord
 from edelweissfe.models.topologypipeline import TopologyPipeline
 from edelweissfe.numerics.parallelizationutilities import (
-    chunked_iterable,
     getNumberOfWorkerThreads,
-    getThreadPool,
+    mapChunksInParallel,
 )
 from edelweissfe.utils.checkpoint import readRestartDataInto, writeRestartDataOf
 from edelweissfe.utils.exceptions import RestartError, TopologyError
@@ -441,24 +440,15 @@ class FEModel:
         """
 
         elements = self.elements
-        numThreads = getNumberOfWorkerThreads()
-
-        if numThreads == 1 or len(elements) < numThreads:
-            for element in elements.values():
-                element.acceptLastState()
-            return
 
         def acceptChunk(chunk):
             for element in chunk:
                 element.acceptLastState()
 
-        # Four chunks per thread, as in the parallel element computation, to balance cheap and expensive elements.
-        chunkSize = max(1, len(elements) // (numThreads * 4))
-        chunks = chunked_iterable(elements.values(), chunkSize)
-
-        # list(), not a bare call: Executor.map is lazy, and leaving the iterator unconsumed would
-        # return here with workers still writing element state.
-        list(getThreadPool(numThreads).map(acceptChunk, chunks))
+        if len(elements) < getNumberOfWorkerThreads():  # too few to be worth handing to the pool
+            acceptChunk(elements.values())
+        else:
+            mapChunksInParallel(elements.values(), acceptChunk)
 
     def writeRestart(self, restartFile: h5py.File):
         """Write the current (converged) state of the model to a restart checkpoint.
