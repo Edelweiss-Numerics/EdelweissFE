@@ -172,29 +172,33 @@ def test_the_blockamg_preset_gives_the_corner_node_coarse_level_its_options(rigi
         assert (level.dropTolerance, level.lumpDroppedEntries) == (1e-3, True)
 
 
-def test_a_field_on_elements_of_an_unknown_topology_gets_the_rigid_body_cycle():
-    """A quadratic element the corner-node interpolation does not know (a Tet10, 10 nodes in 3D): the solver finds no
-    midside corners for its field, says so once in the log, and the preset gives the rigid-body cycle (it raised before
-    #246's review)."""
+def test_a_field_on_elements_of_an_unknown_shape_is_an_error_unless_the_corner_node_interpolation_is_off():
+    """A quadratic element the corner-node interpolation does not know (a Tet10): the preset raises, naming the
+    element and the way out; with ``cornerNodeInterpolation=False`` the field gets the rigid-body cycle, and the
+    topology of its elements is never asked for."""
+    from edelweissfe.numerics.p1topology import UnsupportedElementTopology
 
     class Node:
         """A node as the topology pass reads it (a dict key, so hashable)."""
 
         fields = {"displacement": True}
         coordinates = np.zeros(3)
+        label = 0
 
     nodes = [Node() for _ in range(10)]
-    tet10 = SimpleNamespace(nodes=nodes, fields=[["displacement"]] * 10, nSpatialDimensions=3)
+    tet10 = SimpleNamespace(
+        nodes=nodes, fields=[["displacement"]] * 10, ensightType="tetra10", elNumber=1, elType="C3D10"
+    )
     model = SimpleNamespace(nodeFields={"displacement": SimpleNamespace(nodes=nodes, dimension=3)}, elements={1: tet10})
     solver, journal = _driven(blockAMG(), [], verbosity="info")
     solver.setModel(model, SimpleNamespace(idcsOfFieldsInDofVector={"displacement": range(0, 30)}))
-    assert solver.midsideCornersOf("displacement") is None
-    assert "no midside corners for the field 'displacement'" in journal.take()
     field = FieldBlock("displacement", 0, 30, 3)
     context = SetUpContext(
         fields=(field,), coordinatesOf=solver.coordinatesOf, midsideCornersOf=solver.midsideCornersOf
     )
-    preconditioner = blockAMGFieldPreconditioner(field, context)
+    with pytest.raises(UnsupportedElementTopology, match="cornerNodeInterpolation=False"):
+        blockAMGFieldPreconditioner(field, context)
+    preconditioner = blockAMGFieldPreconditioner(field, context, cornerNodeInterpolation=False)
     assert isinstance(preconditioner, TwoLevel) and isinstance(preconditioner.coarseSpace, RigidBodyModesPerAggregate)
 
 

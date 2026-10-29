@@ -39,8 +39,8 @@ constrained dofs of its edge's corners becomes a coarse node of its own (issue #
 
 import numpy as np
 
-#: ``(nSpatialDimensions, nNodes) -> (cornerLocalIndices, [(midsideLocal, cornerALocal, cornerBLocal), ...])``
-#: for the quadratic-serendipity element families carrying exclusive midside nodes.
+#: ``(cornerLocalIndices, [(midsideLocal, cornerALocal, cornerBLocal), ...])`` of the quadratic shapes
+_BAR3_TOPOLOGY = ([0, 1], [(2, 0, 1)])
 _QUAD8_TOPOLOGY = ([0, 1, 2, 3], [(4, 0, 1), (5, 1, 2), (6, 2, 3), (7, 3, 0)])
 _HEXA20_TOPOLOGY = (
     list(range(8)),
@@ -59,56 +59,70 @@ _HEXA20_TOPOLOGY = (
         (19, 3, 7),
     ],
 )
-_QUADRATIC_TOPOLOGY = {(2, 8): _QUAD8_TOPOLOGY, (3, 20): _HEXA20_TOPOLOGY}
 
-#: node counts that carry no midside nodes outside the quadratic families above, e.g. ``C3D8`` (3, 8),
-#: ``GCPS4`` (2, 4), ``T2D2`` (2, 2). A contact facet (no ``nSpatialDimensions``) is always pure-corner.
-_KNOWN_LINEAR_NODE_COUNTS = {1, 2, 3, 4, 6, 8}
+#: The corner/midside topology of every element shape this module knows, by the shape an element declares
+#: (``element.ensightType``, Ensight Gold notation, whose node order Marmot's and EdelweissFE's elements follow).
+_SHAPE_TOPOLOGY = {
+    "point": ([0], []),
+    "bar2": ([0, 1], []),
+    "bar3": _BAR3_TOPOLOGY,
+    "tria3": ([0, 1, 2], []),
+    "quad4": ([0, 1, 2, 3], []),
+    "quad8": _QUAD8_TOPOLOGY,
+    "tetra4": ([0, 1, 2, 3], []),
+    "penta6": (list(range(6)), []),
+    "hexa8": (list(range(8)), []),
+    "hexa20": _HEXA20_TOPOLOGY,
+}
 
 
 class UnsupportedElementTopology(ValueError):
-    """An element whose corner/midside topology this module does not know (e.g. a Tet10): the field it carries has no
-    midside corners to build a corner-node interpolation from."""
+    """An element whose corner/midside topology this module does not know (e.g. a Tet10), or whose nodes do not fit
+    the shape it declares: its field has no midside corners to build a corner-node interpolation from."""
 
 
-def classifyElementTopology(nSpatialDimensions, nNodes: int):
-    """Return ``(cornerLocalIndices, edgeEndpointsLocal)`` for one element's local node numbering.
+def classifyElementTopology(element):
+    """The corner/midside topology of one element, from the shape it declares (``element.ensightType``).
+
+    An element may have more nodes than its shape: a bond element has the nodes of its bar (its shape), then those of
+    the host element it couples the bar to. The nodes after its shape's are nodes it couples to, which
+    :func:`buildMidsideCorners` requires to be nodes of the shape of another element.
 
     Parameters
     ----------
-    nSpatialDimensions
-        The element's spatial dimension, or ``None`` if unavailable (e.g. a contact facet, always
-        treated as pure-corner regardless of node count).
-    nNodes
-        The element's node count.
+    element
+        The element.
 
     Returns
     -------
     tuple
-        ``cornerLocalIndices`` (list of int) and ``edgeEndpointsLocal`` (list of
-        ``(midsideLocalIndex, cornerALocalIndex, cornerBLocalIndex)``, empty for a pure-corner
-        element).
+        ``cornerLocalIndices`` (list of int), ``edgeEndpointsLocal`` (list of
+        ``(midsideLocalIndex, cornerALocalIndex, cornerBLocalIndex)``, empty for a pure-corner shape) and the number
+        of nodes of the shape.
 
     Raises
     ------
     UnsupportedElementTopology
-        If ``nNodes`` is neither a recognized quadratic-serendipity count for
-        ``nSpatialDimensions`` nor among the verified pure-corner node counts -- silently
-        misclassifying an unrecognized element's midside nodes as corners would quietly degrade
-        the resulting P1 operator, so this fails loudly instead.
+        If the shape is not one of :data:`_SHAPE_TOPOLOGY`, or the element has fewer nodes than its shape.
     """
-    key = (nSpatialDimensions, nNodes)
-    if key in _QUADRATIC_TOPOLOGY:
-        return _QUADRATIC_TOPOLOGY[key]
-    if nSpatialDimensions is None or nNodes in _KNOWN_LINEAR_NODE_COUNTS:
-        return list(range(nNodes)), []
-    raise UnsupportedElementTopology(
-        "p1topology: unrecognized element topology (nSpatialDimensions={:}, nNodes={:}) -- neither "
-        "a known quadratic-serendipity family ((2, 8) Quad8, (3, 20) Hexa20) nor a verified linear "
-        "node count. Add its corner/midside topology before including it in the midside corners.".format(
-            nSpatialDimensions, nNodes
+    shape = element.ensightType
+    if shape not in _SHAPE_TOPOLOGY:
+        raise UnsupportedElementTopology(
+            "element {:} ({:}) has the shape '{:}', whose corner/midside topology the corner-node interpolation does "
+            "not know (known: {:}). Switch the corner-node interpolation off for its field (blockamg: "
+            "cornerNodeInterpolation=False), or add the topology of '{:}' to edelweissfe.numerics.p1topology.".format(
+                element.elNumber, element.elType, shape, ", ".join(_SHAPE_TOPOLOGY), shape
+            )
         )
-    )
+    cornersLocal, edgesLocal = _SHAPE_TOPOLOGY[shape]
+    nShapeNodes = len(cornersLocal) + len(edgesLocal)
+    if len(element.nodes) < nShapeNodes:
+        raise UnsupportedElementTopology(
+            "element {:} ({:}) has {:} nodes, fewer than its shape '{:}' ({:})".format(
+                element.elNumber, element.elType, len(element.nodes), shape, nShapeNodes
+            )
+        )
+    return cornersLocal, edgesLocal, nShapeNodes
 
 
 def buildMidsideCorners(model, fieldName: str):
@@ -116,11 +130,13 @@ def buildMidsideCorners(model, fieldName: str):
     or an exclusive midside, in the same order as ``model.nodeFields[fieldName].nodes`` (the
     field's own DOF-vector row order, see ``DofManager._reserveSpaceForNodeFields``).
 
-    A node is a corner iff it is a corner node of *at least one* element it belongs to, if it belongs to
-    no element at all (e.g. the reference point of a rigid body, which carries the field through a
-    constraint), **or** if two elements disagree about its edge endpoints (see below) -- both cases are load-bearing
-    under AMR, and every element's own contribution only ever sets ``isCorner`` to ``True``, never
-    clears it.
+    Every element of the field is classified by the shape it declares (:func:`classifyElementTopology`); an element of
+    a shape this module does not know is an error, never skipped. A node is a corner iff it is a corner node of *at
+    least one* element's shape, if it belongs to no element at all (e.g. the reference point of a rigid body, which
+    carries the field through a constraint), **or** if two elements disagree about its edge endpoints (see below) --
+    both cases are load-bearing under AMR, and every element's own contribution only ever sets ``isCorner`` to
+    ``True``, never clears it. A node an element only couples to (one after its shape's nodes, e.g. a host node of a
+    bond element) must be a node of the shape of another element; else it is an error.
 
     **Why a disagreement falls back to "corner", rather than erroring.** A node classified as a
     midside by the coarse side of a 2:1-balanced non-conforming refinement boundary can
@@ -154,6 +170,12 @@ def buildMidsideCorners(model, fieldName: str):
     conflictingRows : np.ndarray
         Int, sorted: the rows to which two elements give different edge endpoints; they are corners
         (empty on an ordinary, conforming mesh).
+
+    Raises
+    ------
+    UnsupportedElementTopology
+        If an element of the field has a shape this module does not know or does not fit its shape, or a node an
+        element couples to is a node of no element's shape.
     """
     field = model.nodeFields[fieldName]
     nodeRows = {node: i for i, node in enumerate(field.nodes)}
@@ -163,20 +185,19 @@ def buildMidsideCorners(model, fieldName: str):
     # collected over all elements first and resolved afterward.
     provisionalEdges: dict[int, frozenset] = {}
     conflictingRows: set[int] = set()
-    inSomeElement = np.zeros(nNodes, dtype=bool)
+    inSomeShape = np.zeros(nNodes, dtype=bool)
+    coupledBy: dict[int, object] = {}
 
     for element in model.elements.values():
         if not any(fieldName in nodeFields for nodeFields in element.fields):
             continue
 
-        try:
-            dim = element.nSpatialDimensions
-        except AttributeError:
-            dim = None
-        elNodes = element.nodes
-        cornersLocal, edgesLocal = classifyElementTopology(dim, len(elNodes))
-        elRows = [nodeRows.get(node) for node in elNodes]
-        inSomeElement[[row for row in elRows if row is not None]] = True
+        cornersLocal, edgesLocal, nShapeNodes = classifyElementTopology(element)
+        elRows = [nodeRows.get(node) for node in element.nodes]
+        inSomeShape[[row for row in elRows[:nShapeNodes] if row is not None]] = True
+        for row in elRows[nShapeNodes:]:
+            if row is not None:
+                coupledBy[row] = element
 
         for c in cornersLocal:
             row = elRows[c]
@@ -194,23 +215,23 @@ def buildMidsideCorners(model, fieldName: str):
                 continue
             provisionalEdges[row] = candidate
 
+    for row, element in coupledBy.items():
+        if not inSomeShape[row]:
+            raise UnsupportedElementTopology(
+                "element {:} ({:}, shape '{:}') couples to node {:} of the field '{:}', which is a node of no "
+                "element's shape: its corner/midside topology is unknown".format(
+                    element.elNumber, element.elType, element.ensightType, field.nodes[row].label, fieldName
+                )
+            )
+
     conflictingRows = np.array(sorted(conflictingRows), dtype=int)
     isCorner[conflictingRows] = True
 
     # a node of no element (e.g. the reference point of a rigid body) is a corner: identity in P1
-    isCorner[~inSomeElement] = True
+    isCorner[~inSomeShape] = True
     edgeEndpoints = -np.ones((nNodes, 2), dtype=int)
-    for row in range(nNodes):
-        if isCorner[row]:
-            continue
-        candidate = provisionalEdges.get(row)
-        if candidate is None:
-            raise AssertionError(
-                "p1topology: node {:} of field '{:}' is neither a corner of any element nor has "
-                "recorded edge endpoints -- every non-corner node must be an exclusive midside of "
-                "at least one element.".format(row, fieldName)
-            )
-        edgeEndpoints[row] = tuple(sorted(candidate))
+    for row in np.nonzero(~isCorner)[0]:
+        edgeEndpoints[row] = tuple(sorted(provisionalEdges[row]))
 
     return isCorner, edgeEndpoints, conflictingRows
 
