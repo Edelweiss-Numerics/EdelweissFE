@@ -58,7 +58,11 @@ extensions = [
     "sphinx.ext.napoleon",
     "sphinx.ext.autosectionlabel",
     "numpydoc",
+    "sphinxcontrib.bibtex",
 ]
+
+bibtex_bibfiles = ["publications.bib"]
+bibtex_default_style = "unsrt"
 
 templates_path = ["_templates"]
 exclude_patterns = []

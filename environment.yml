@@ -44,6 +44,7 @@ dependencies:
   - sphinx
   - sphinx_rtd_theme>=3.1.0
   - numpydoc
+  - sphinxcontrib-bibtex
   - docutils
   # Intel MKL enables the PARDISO solver (Linux, Windows); it does not exist for macOS, where PARDISO is not built.
   - mkl  # [linux64]
