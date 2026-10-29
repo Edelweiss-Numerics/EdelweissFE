@@ -33,6 +33,10 @@ back in the order of the elements, so the result must be bitwise the serial one 
 mass row block, so the solvers run them serially; here both are shrunk until the same live-refining
 deck takes the threaded path. SuperLU solves the linear systems: it is serial and deterministic, so
 the two runs can only differ through the operations under test.
+
+The tests choose their number of threads with the ``workerThreads`` fixture (``conftest.py``) and not with the
+environment alone: what they check is the chunking and the order of the results, which has to hold with or without
+free threading.
 """
 
 import numpy as np
@@ -67,17 +71,17 @@ def test_the_slices_cover_every_entry_once():
     assert np.all(visits == 1)
 
 
-def test_the_slices_return_what_the_work_returns_in_the_order_of_the_slices(monkeypatch):
-    monkeypatch.setenv("OMP_NUM_THREADS", "4")
+def test_the_slices_return_what_the_work_returns_in_the_order_of_the_slices(workerThreads):
+    workerThreads(4)
 
     starts = forEachSliceInParallel(lambda s: s.start, 1000, sliceLength=64)
 
     assert starts == list(range(0, 1000, 64))
 
 
-def test_the_chunks_cover_every_item_once_and_come_back_in_order(monkeypatch):
+def test_the_chunks_cover_every_item_once_and_come_back_in_order(workerThreads):
     items = list(range(1000))
-    monkeypatch.setenv("OMP_NUM_THREADS", "4")
+    workerThreads(4)
 
     chunks = mapChunksInParallel(items, lambda chunk: list(chunk))
 
@@ -85,15 +89,15 @@ def test_the_chunks_cover_every_item_once_and_come_back_in_order(monkeypatch):
     assert [item for chunk in chunks for item in chunk] == items
 
 
-def test_the_chunks_are_one_serial_chunk_for_one_thread(monkeypatch):
+def test_the_chunks_are_one_serial_chunk_for_one_thread(workerThreads):
     items = list(range(1000))
-    monkeypatch.setenv("OMP_NUM_THREADS", "1")
+    workerThreads(1)
 
     assert mapChunksInParallel(items, lambda chunk: list(chunk)) == [items]
 
 
-def test_the_first_exception_of_the_chunks_is_the_one_of_the_serial_loop(monkeypatch):
-    monkeypatch.setenv("OMP_NUM_THREADS", "4")
+def test_the_first_exception_of_the_chunks_is_the_one_of_the_serial_loop(workerThreads):
+    workerThreads(4)
 
     def work(chunk):
         for item in chunk:
@@ -119,11 +123,11 @@ def test_the_mass_row_blocks_multiply_bitwise_like_the_whole_matrix():
     assert np.concatenate([block @ x for block in blocks]).tobytes() == (M @ x).tobytes()
 
 
-def test_the_threaded_path_reproduces_the_serial_one_bitwise(tmp_path, monkeypatch):
+def test_the_threaded_path_reproduces_the_serial_one_bitwise(tmp_path, monkeypatch, workerThreads):
     deck = _deck(modifier=_REFINE_THE_FIXED_END_TWICE, nX=2, lX=4.0, steps=_CANTILEVER_STEP).replace(
         "*solver, solver=NID, name=theSolver", "*solver, solver=NID, name=theSolver\nlinsolver=superlu"
     )
-    monkeypatch.setenv("OMP_NUM_THREADS", "4")
+    workerThreads(4)
     serialModel, _ = _run(tmp_path, "serial", deck)
 
     # Slices of 8 entries, and mass row blocks of 8 rows to match them.
@@ -145,7 +149,9 @@ def test_the_threaded_path_reproduces_the_serial_one_bitwise(tmp_path, monkeypat
         assert threaded.tobytes() == serial.tobytes(), name
 
 
-def test_the_mass_and_the_damping_assembled_on_the_thread_pool_are_the_serial_ones_bitwise(tmp_path, monkeypatch):
+def test_the_mass_and_the_damping_assembled_on_the_thread_pool_are_the_serial_ones_bitwise(
+    tmp_path, monkeypatch, workerThreads
+):
     """Every assembly of the mass and the damping of the live-refining deck, once with one thread, and once with four
     threads, the elements in chunks and the passes over the entries of the mass in slices of 8."""
     deck = _deck(modifier=_REFINE_THE_FIXED_END_TWICE, nX=2, lX=4.0, steps=_CANTILEVER_STEP).replace(
@@ -163,7 +169,7 @@ def test_the_mass_and_the_damping_assembled_on_the_thread_pool_are_the_serial_on
         return assemble
 
     serialAssemblies, threadedAssemblies = [], []
-    monkeypatch.setenv("OMP_NUM_THREADS", "1")
+    workerThreads(1)
     monkeypatch.setattr(NonlinearImplicitDynamic, "_assembleMassAndDamping", recordingAssemblies(serialAssemblies))
     _run(tmp_path, "serial", deck)
 
@@ -177,7 +183,7 @@ def test_the_mass_and_the_damping_assembled_on_the_thread_pool_are_the_serial_on
     def inSlicesOfEight(work, length, sliceLength=None):
         return forEachSliceInParallel(work, length, 8)
 
-    monkeypatch.setenv("OMP_NUM_THREADS", "4")
+    workerThreads(4)
     monkeypatch.setattr(nonlinearimplicitdynamic, "mapChunksInParallel", inChunks)
     monkeypatch.setattr(nonlinearimplicitdynamic, "forEachSliceInParallel", inSlicesOfEight)
     monkeypatch.setattr(nonlinearimplicitdynamic, "_MASS_ROWS_PER_BLOCK", 8)  # the slices of 8 take blocks of 8 rows
