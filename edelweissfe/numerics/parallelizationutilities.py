@@ -180,9 +180,47 @@ def chunked_iterable(iterable, size):
         yield chunk
 
 
-def forEachSliceInParallel(work, length: int, sliceLength: int = 1 << 20):
+def mapChunksInParallel(items, work, chunksPerThread: int = 4) -> list:
+    """Call ``work(chunk)`` for consecutive chunks of ``items`` on the persistent thread pool, and return what the calls
+    returned, in the order of the chunks.
+
+    Meant for a loop over entities (the elements) whose iterations are independent: each call handles a whole chunk, so
+    that the cost of handing out tasks stays negligible against the work, and there are several chunks per thread, so
+    that the pool balances chunks of unequal cost. The results come in the order of ``items``: what is assembled from
+    them is what the serial loop assembles.
+
+    Runs serially in the calling thread, as one chunk holding all ``items``, if free threading is not available or one
+    thread is asked for.
+
+    Parameters
+    ----------
+    items
+        The entities, a sized iterable (a list, a dictionary view).
+    work
+        Called once per chunk, with a tuple of consecutive items; a worker must write only to what belongs to its items.
+    chunksPerThread
+        How many chunks each thread is handed.
+
+    Returns
+    -------
+    list
+        What ``work`` returned for each chunk, in order.
+    """
+
+    numThreads = getNumberOfWorkerThreads()
+
+    if numThreads == 1:
+        return [work(items)]
+
+    chunkSize = max(1, len(items) // (numThreads * chunksPerThread))
+
+    # list() waits for every chunk, and re-raises the first exception of any of them.
+    return list(getThreadPool(numThreads).map(work, chunked_iterable(items, chunkSize)))
+
+
+def forEachSliceInParallel(work, length: int, sliceLength: int = 1 << 20) -> list:
     """Call ``work(s)`` for consecutive slices ``s`` that together cover ``range(length)``, on the
-    persistent thread pool.
+    persistent thread pool, and return what the calls returned, in the order of the slices.
 
     Meant for the simple array operations on arrays as long as the system matrix -- zeroing it,
     adding a scaled mass matrix to it -- which numpy runs on a single thread, and which on a large
@@ -196,20 +234,24 @@ def forEachSliceInParallel(work, length: int, sliceLength: int = 1 << 20):
     Parameters
     ----------
     work
-        Called once per slice, with a :class:`slice` of ``range(length)``.
+        Called once per slice, with a :class:`slice` of ``range(length)``; what it returns (e.g. the indices found in
+        the slice) is collected.
     length
         The length of the arrays ``work`` operates on.
     sliceLength
         The length of the slices; the last one may be shorter.
+
+    Returns
+    -------
+    list
+        What ``work`` returned for each slice, in order.
     """
 
     slices = [slice(start, min(start + sliceLength, length)) for start in range(0, length, sliceLength)]
     numThreads = getNumberOfWorkerThreads()
 
     if numThreads == 1 or len(slices) <= 1:
-        for s in slices:
-            work(s)
-        return
+        return [work(s) for s in slices]
 
     # list() waits for every slice, and re-raises the first exception of any of them.
-    list(getThreadPool(numThreads).map(work, slices))
+    return list(getThreadPool(numThreads).map(work, slices))

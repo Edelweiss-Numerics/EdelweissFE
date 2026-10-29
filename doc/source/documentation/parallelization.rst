@@ -22,6 +22,14 @@ on a single thread. :func:`~edelweissfe.numerics.parallelizationutilities.forEac
 splits such an operation into slices of the arrays, one call per slice; the result is bitwise the
 serial one.
 
+A loop over independent entities, such as the elements that assemble the mass and the damping of the implicit
+dynamic solvers, runs in chunks of consecutive entities,
+:func:`~edelweissfe.numerics.parallelizationutilities.mapChunksInParallel`: each call handles a whole chunk, several
+chunks per thread let the pool balance chunks of unequal cost, and the results come back in the order of the entities,
+so what is assembled from them is what the serial loop assembles. The three passes over the entries of the mass
+(which of them couple only time-integrated dofs, the warning about the inertia that is discarded, zeroing it) are
+array operations in slices, as above.
+
 SciPy's sparse matrix-vector product is single-threaded as well, so the implicit dynamic solvers
 multiply by the mass matrix (the inertia forces, the momentum and the kinetic energy) the same way:
 one call per block of consecutive rows of the mass matrix, each block a CSR matrix sharing the mass
