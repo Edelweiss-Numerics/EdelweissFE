@@ -261,8 +261,11 @@ class EnsightUnstructuredPart:
             if printElementLabels:
                 writeCInt(f, np.asarray([elNumber for elNumber in elements.keys()], np.int32))
 
-            for nodeIndices in elements.values():
-                writeCInt(f, np.asarray(nodeIndices, np.int32)[:] + 1)
+            # The connectivity table of the whole shape in ONE write (every element of a shape has the same number of nodes, so this is the
+            # same byte stream as writing the elements one by one). ndarray.tofile on a file object flushes, duplicates the descriptor and
+            # synchronizes the file position at every call, about 100 microseconds on a network file system: one call per element made the
+            # time of the geometry write proportional to the number of elements, and it is repeated after every mesh change.
+            writeCInt(f, np.asarray(list(elements.values()), np.int32) + 1)
 
 
 class EnsightTimeSet:
