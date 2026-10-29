@@ -279,12 +279,13 @@ class ComposedLinearSolver(LinearSolver):
     # ----- the solve -----
 
     @property
-    def needsStableSparsityPattern(self) -> bool:
-        """Whether a Krylov solver of the tree keeps its preconditioner across solves
-        (:attr:`~edelweissfe.linsolve.composition.base.Preconditioner.reusesPreconditioner`), which a new sparsity
-        pattern defeats. A Krylov solver that builds its preconditioner anew for every solve (the default), and a
-        direct solve, which factorizes anew every time, lose nothing to a new pattern."""
-        return self.root.reusesPreconditioner
+    def needsPrunedSystemMatrix(self) -> bool:
+        """Whether the tree factorizes (a block of) the system matrix directly
+        (:attr:`~edelweissfe.linsolve.composition.base.Preconditioner.containsDirectSolver`), whose reordering is
+        sensitive to explicitly stored zeros, and no Krylov solver of the tree keeps its preconditioner across solves
+        (:attr:`~edelweissfe.linsolve.composition.base.Preconditioner.reusesPreconditioner`), which a pattern pruned
+        anew in every iteration would defeat. A tree of Krylov solvers and AMG, the default, does not need it."""
+        return self.root.containsDirectSolver and not self.root.reusesPreconditioner
 
     @property
     def reportsSolveSummary(self) -> bool:

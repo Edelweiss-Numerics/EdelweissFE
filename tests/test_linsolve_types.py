@@ -59,7 +59,7 @@ def test_a_direct_solver_is_one_leaf_behind_the_adapter():
     A, b = _system()
     solver = getLinSolverByName("superlu", {})
     assert isinstance(solver, ComposedLinearSolver) and isinstance(solver.root, DirectSolver)
-    assert not solver.needsStableSparsityPattern and not solver.reportsSolveSummary
+    assert solver.needsPrunedSystemMatrix and not solver.reportsSolveSummary
     x = solver(A, b)
     assert np.linalg.norm(A @ x - b) < 1e-12 * np.linalg.norm(b)
     assert solver.lastSolveSummary is None

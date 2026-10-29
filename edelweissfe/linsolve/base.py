@@ -131,12 +131,14 @@ class LinearSolver:
     #: nonlinear solver right after each call.
     lastSolveSummary: "LinearSolveSummary | None" = None
 
-    #: Whether this solver does something across solves that a changing sparsity pattern defeats (e.g.
-    #: ``BlockAMGSolver`` reusing its AMG hierarchy); a direct factorization or a preconditioner rebuilt for every
-    #: solve has nothing to lose. Read by the "auto" default of
-    #: :attr:`~edelweissfe.solvers.nonlinearimplicitstatic.NISTSchema.pruneCondensedMatrixZeros`: zeros are pruned
-    #: unless the solver needs the pattern stable. An explicit ``true``/``false`` in the input file overrides it.
-    needsStableSparsityPattern = False
+    #: Whether this solver wants the explicitly stored zeros compacted out of the multi-point-condensed system matrix
+    #: before it solves. A direct factorization does (its reordering is sensitive to the extra structural entries); a
+    #: Krylov solver with an AMG preconditioner does not (a stored zero is no strong connection: the same iterations,
+    #: and the compaction costs a copy of the matrix and a pass over it in every Newton iteration); one that reuses its
+    #: preconditioner must not have it (the pruned pattern changes on almost every iteration). Read by the "auto"
+    #: default of :attr:`~edelweissfe.solvers.nonlinearimplicitstatic.NISTSchema.pruneCondensedMatrixZeros`; an
+    #: explicit ``true``/``false`` in the input file overrides it.
+    needsPrunedSystemMatrix = False
 
     def setJournal(self, journal) -> None:
         """Receive the shared :class:`~edelweissfe.journal.journal.Journal` instance.

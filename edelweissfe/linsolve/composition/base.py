@@ -460,11 +460,19 @@ class Preconditioner:
         return any(child.containsKrylovSolver for _, child in self.children())
 
     @property
+    def containsDirectSolver(self) -> bool:
+        """Whether this component is, or has among its children, a direct solver (a sparse LU factorization). Such a
+        factorization wants the explicitly stored zeros pruned out of the system matrix
+        (:attr:`~edelweissfe.linsolve.base.LinearSolver.needsPrunedSystemMatrix`)."""
+        return any(child.containsDirectSolver for _, child in self.children())
+
+    @property
     def reusesPreconditioner(self) -> bool:
         """Whether this component is, or has among its children, a Krylov solver that keeps its preconditioner across
         solves (:class:`~edelweissfe.linsolve.composition.krylov.RebuildPolicy` with ``reuse``). A new sparsity
-        pattern forces a rebuild that such a solver would have saved, so the nonlinear solver then keeps the pattern
-        stable (:attr:`~edelweissfe.linsolve.base.LinearSolver.needsStableSparsityPattern`)."""
+        pattern forces a rebuild that such a solver would have saved, so the nonlinear solver then does not prune the
+        system matrix (:attr:`~edelweissfe.linsolve.base.LinearSolver.needsPrunedSystemMatrix`), which changes its
+        pattern on almost every iteration."""
         return any(child.reusesPreconditioner for _, child in self.children())
 
     def setModel(self, model, dofManager) -> None:
