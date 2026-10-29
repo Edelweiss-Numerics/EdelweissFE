@@ -52,6 +52,13 @@ from edelweissfe.linsolve.composition.twolevel import (
 from edelweissfe.linsolve.nullspace import carriesRigidBodyModes
 
 
+def isQuadratic(field, context) -> bool:
+    """Whether a field has midside nodes (:meth:`~edelweissfe.linsolve.composition.base.SetUpContext.midsideCorners`);
+    an element whose topology the corner-node interpolation does not know raises."""
+    midsideCorners = context.midsideCorners(field.name)
+    return midsideCorners is not None and not midsideCorners[0].all()
+
+
 def blockAMGFieldPreconditioner(
     field,
     context,
@@ -73,8 +80,9 @@ def blockAMGFieldPreconditioner(
 
     ``amgclTree`` is the field's AMGCL tree (``None``: the component's default); ``dropTolerance`` and
     ``lumpDroppedEntries`` reach every level. A field is quadratic if it has midside nodes
-    (:meth:`~edelweissfe.linsolve.composition.base.SetUpContext.midsideCorners`); a field on elements whose topology the
-    corner-node interpolation does not know (e.g. Tet10) has none, and gets the rigid-body cycle."""
+    (:func:`isQuadratic`, asked only with ``cornerNodeInterpolation``); an element whose topology the corner-node
+    interpolation does not know (e.g. a Tet10) is an error then, ``cornerNodeInterpolation=False`` gives its field the
+    rigid-body cycle."""
     isDisplacement3D = field.dimension == 3 and carriesRigidBodyModes(field)
     filtering = dict(dropTolerance=dropTolerance, lumpDroppedEntries=lumpDroppedEntries)
     if not isDisplacement3D or not (rigidBodyModesPerAggregate or cornerNodeInterpolation):
@@ -86,9 +94,7 @@ def blockAMGFieldPreconditioner(
             "AMG() on the translations instead of a two-level cycle".format(field.name),
         )
         return AMG(amgclTree=amgclTree, **filtering)
-    midsideCorners = context.midsideCorners(field.name)
-    isQuadratic = midsideCorners is not None and not midsideCorners[0].all()
-    if cornerNodeInterpolation and isQuadratic:
+    if cornerNodeInterpolation and isQuadratic(field, context):
         coarseSolve = DiagonalScaling(
             linearDisplacementFieldPreconditioner(
                 rigidBodyModesPerAggregate, amgclTreeOfTwoLevel=defaultCornerNodeTwoLevelTree(), **filtering

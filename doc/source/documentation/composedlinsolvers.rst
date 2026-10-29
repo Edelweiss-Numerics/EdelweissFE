@@ -283,6 +283,12 @@ Each field gets the preconditioner chosen for it by measurement (``blockAMGField
   under a diagonal scaling of its own, is that of the next case, with the smoother of the corner-node two-level cycle:
   three levels, the quadratic field, its linear part on the corner nodes, and the rigid-body modes of aggregates of
   those;
+  the corner and midside nodes come from the shape each element declares (``ensightType``: ``hexa20``, ``quad8`` and
+  ``bar3`` have midside nodes; ``point``, ``bar2``, ``tria3``, ``quad4``, ``tetra4``, ``penta6`` and ``hexa8`` corners
+  only). An element of any other shape (e.g. ``tetra10``) is an error, never skipped: switch the corner-node
+  interpolation off for such a model (``cornerNodeInterpolation=False``). An element may have more nodes than its
+  shape -- a bond element has the nodes of its bar, then those of the host element it couples to --; each node after
+  its shape's must be a node of another element's shape, else that is an error too;
 * a **linear** 3D displacement field the rigid-body coarse level, ``TwoLevel(coarseSpace=RigidBodyModesPerAggregate())``:
   a first coarse level built from all rigid-body modes, rotations included, which a bending-dominated structure needs
   (:ref:`blockamg-rigid-body-coarse-level`);
