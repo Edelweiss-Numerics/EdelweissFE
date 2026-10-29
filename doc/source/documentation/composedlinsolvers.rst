@@ -416,8 +416,12 @@ leaf; override a method only in the case named:
 * ``isFixedLinearOperator``: false for a component whose :math:`M^{-1} r` is not one fixed linear operator between two
   set-ups (a Krylov solve inside); ``LGMRES`` refuses such a preconditioner, ``FGMRES`` takes it.
 * ``containsKrylovSolver``: true for a Krylov solver (the solve is recorded in the "linear solve" column).
+* ``containsDirectSolver``: true for a direct solver (a sparse LU factorization); the nonlinear solver then prunes the
+  explicitly stored zeros out of the multi-point-condensed system matrix (``pruneCondensedMatrixZeros``), which such
+  a factorization wants, unless the tree reuses its preconditioner.
 * ``reusesPreconditioner``: true for a Krylov solver that keeps its preconditioner across solves
-  (``RebuildPolicy(reusePreconditioner=True)``); the nonlinear solver then keeps the sparsity pattern stable.
+  (``RebuildPolicy(reusePreconditioner=True)``); the nonlinear solver then does not prune, which would change the
+  sparsity pattern in almost every iteration.
 * ``builtMatrices()``, ``solveRecord()``, ``condensedDofs()``: the matrices a component formed (for ``views.spy``),
   what its last Krylov solve did, and the dofs a Schur complement condensed (for the dumps).
 

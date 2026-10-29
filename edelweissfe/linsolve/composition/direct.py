@@ -71,6 +71,10 @@ class DirectSolver(Preconditioner):
         # after the backend: what this component builds is the backend's factorization (see _forget)
         super().__init__()
 
+    @property
+    def containsDirectSolver(self) -> bool:
+        return True
+
     def _forget(self) -> None:
         self.solver.releaseFactorization()
 

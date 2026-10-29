@@ -351,8 +351,9 @@ contact anchor model with many multi-point-constraint slaves):
   the true-residual restarts of the scaled system have nothing to do and are left at their own, otherwise
   inert, defaults.
 * ``pruneCondensedMatrixZeros`` (a nonlinear-solver option, not a component's) now defaults to
-  "off for a solver that needs the pattern stable", and a solver whose Krylov solve reuses its preconditioner reports
-  exactly that -- so on a model with multi-point constraints the hierarchies can be reused
+  "pruned only for a solver that needs it": a direct factorization does, a tree of Krylov solvers and AMG does not
+  (same iterations with and without the stored zeros), and one whose Krylov solve reuses its preconditioner never has
+  it -- so on a model with multi-point constraints the hierarchies can be reused
   (``reusePreconditioner=True``) without more settings; the former setup needed this set by hand (see the reuse rules
   on :doc:`blockamgtheory`).
 

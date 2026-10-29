@@ -125,15 +125,16 @@ class NISTSchema:
             "this particular iteration, so the pattern changes on almost every Newton iteration -- "
             "which defeats any linear solver that relies on a stable pattern across iterations (e.g. "
             "blockamg reusing a per-field AMG hierarchy built for the old one). Left unset (the "
-            "default), the choice is automatic: pruned unless the linear solver in force reports that "
-            "it needs the pattern stable "
-            "(:attr:`~edelweissfe.linsolve.base.LinearSolver.needsStableSparsityPattern`), in which "
-            "case pruning is skipped so that solver's own reuse can engage. An explicit True/False "
-            "here always wins over the automatic choice. Pruning exists in the first place because it "
-            "was needed for PARDISO: its reordering is sensitive to the extra structural entries on "
-            "these path-dependent condensed systems, and keeping them has been observed to drift from "
-            "the converged reference path -- only turn it off for a solver that does not share that "
-            "sensitivity, and verify the load path against a reference run."
+            "default), the choice is automatic: pruned if the linear solver in force reports that it "
+            "needs it "
+            "(:attr:`~edelweissfe.linsolve.base.LinearSolver.needsPrunedSystemMatrix`), which a "
+            "direct factorization does -- PARDISO's reordering is sensitive to the extra structural "
+            "entries on these path-dependent condensed systems, and keeping them has been observed to "
+            "drift from the converged reference path -- and a Krylov solver with an AMG preconditioner "
+            "does not: it gives the same iterations with and without the stored zeros, and pruning "
+            "costs it a copy of the matrix and a pass over it in every Newton iteration. An explicit "
+            "True/False here always wins over the automatic choice; turn pruning off for a direct "
+            "solver only after verifying the load path against a reference run."
         ),
         dtype=bool,
         default=None,
@@ -921,12 +922,11 @@ class NIST(NonlinearSolverBase):
         solve -- see ``pruneCondensedMatrixZeros`` (:class:`NISTSchema`). An explicit True/False in
         the input file always wins; left unset (``None``), the currently active ``self.linSolver``
         decides, polymorphically, via
-        :attr:`~edelweissfe.linsolve.base.LinearSolver.needsStableSparsityPattern`: pruned unless that
-        solver says it needs the pattern stable across iterations."""
+        :attr:`~edelweissfe.linsolve.base.LinearSolver.needsPrunedSystemMatrix`."""
         explicit = self.options["pruneCondensedMatrixZeros"]
         if explicit is not None:
             return explicit
-        return not self.linSolver.needsStableSparsityPattern
+        return self.linSolver.needsPrunedSystemMatrix
 
     @performancetiming.timeit("dirichlet K on CSR")
     def applyDirichletToStiffness(self, K: csr_matrix, dirichlets: list[StepActionBase], rhs=None) -> csr_matrix:
