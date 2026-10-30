@@ -32,14 +32,4 @@
 Analytical fields define values for spatial coordinates, e.g., for spatially varying material properties.
 """
 
-import importlib
-
-
-def getAnalyticalFieldByName(name):
-    module = importlib.import_module("edelweissfe.analyticalfields." + name.lower())
-    return module.AnalyticalField
-
-
-def getAnalyticalFieldFactoryByName(name):
-    module = importlib.import_module("edelweissfe.analyticalfields." + name.lower())
-    return module.analyticalFieldFactory
+# No code here (see :mod:`edelweissfe.config.registry`); the docstring is rendered by Sphinx, do not delete.

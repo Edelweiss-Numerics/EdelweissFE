@@ -27,51 +27,66 @@
 #  ---------------------------------------------------------------------
 
 """
-This module provides an interface to the MUMPS solver.
+MUMPS, a parallel sparse direct solver: :class:`MumpsFactorization` runs its analysis and factorization once (jobs 1
+and 2) and its solve (job 3) for as many right-hand sides as needed.
 """
 import numpy as np
 from mumps import DMumpsContext
 
 
-def mumpsSolve(A, b):
-    """
-    Solve the linear system Ax = b using the MUMPS solver.
+class MumpsFactorization:
+    """The MUMPS factorization of the last :meth:`factorize`, for :meth:`solve`. Owns the MUMPS instance, which it
+    destroys when it factorizes again or goes."""
 
-    Parameters
-    ----------
-    A : scipy.sparse.csr_matrix
-        The matrix A.
-    b : numpy.ndarray
-        The right-hand side vector b.
+    def __init__(self):
+        self._context = None
+        # the matrix the factorization belongs to: MUMPS keeps pointers to its arrays
+        self._A = None
 
-    Returns
-    -------
-    numpy.ndarray
-        The solution vector x.
-    """
+    def release(self) -> None:
+        """Destroy the MUMPS instance, and with it the factorization (nothing to destroy before the first)."""
+        if self._context is not None:
+            self._context.destroy()
+            self._context = None
+        self._A = None
 
-    ctx = DMumpsContext()
-    ctx.set_silent()
+    def __del__(self):
+        self.release()
 
-    # analysis step
-    if ctx.myid == 0:
-        ctx.set_centralized_sparse(A)  # 1-based indexing
-    ctx.run(job=1)
+    def factorize(self, A) -> None:
+        """Analyse and factorize the square sparse matrix ``A``.
 
-    # factorization step
-    if ctx.myid == 0:
-        ctx.set_centralized_assembled_values(A.data)
-    ctx.run(job=2)
+        Raises
+        ------
+        numpy.linalg.LinAlgError
+            If MUMPS reports an error (e.g. a singular matrix): the bindings raise it as a ``RuntimeError`` with
+            MUMPS's error code.
+        """
+        self.release()
+        self._A = A.tocsr(copy=True)
+        context = DMumpsContext()
+        context.set_silent()
+        try:
+            if context.myid == 0:
+                context.set_centralized_sparse(self._A)
+            context.run(job=1)
+            if context.myid == 0:
+                context.set_centralized_assembled_values(self._A.data)
+            context.run(job=2)
+        except RuntimeError as error:
+            context.destroy()
+            raise np.linalg.LinAlgError("MUMPS: {:}".format(error)) from error
+        self._context = context
 
-    x = np.reshape(b.copy(), (A.shape[0], -1), order="F")
-    # solve for multiple right-hand sides
-    for i in range(x.shape[1]):
-        rhs = x[:, i].copy()
-        if ctx.myid == 0:
-            ctx.set_rhs(rhs)
-        ctx.run(job=3)
-        x[:, i] = rhs
-
-    ctx.destroy()  # Cleanup
-
-    return np.reshape(x, b.shape)
+    def solve(self, b):
+        """``A^-1 b`` with the factorization of the last :meth:`factorize`, for one right-hand side (a vector) or
+        several (the columns of a matrix); ``b`` is not changed."""
+        x = np.reshape(np.array(b, dtype=float, copy=True), (self._A.shape[0], -1), order="F")
+        for i in range(x.shape[1]):
+            # MUMPS overwrites the right-hand side with the solution
+            rhs = x[:, i].copy()
+            if self._context.myid == 0:
+                self._context.set_rhs(rhs)
+            self._context.run(job=3)
+            x[:, i] = rhs
+        return np.reshape(x, np.shape(b), order="F")

@@ -49,6 +49,22 @@ class CutbackRequest(Exception):
         self.cutbackSize = float(cutbackSize)
 
 
+class IncrementFailed(Exception):
+    """An increment could not be solved; it is retried smaller by ``cutbackFactor``.
+
+    Parameters
+    ----------
+    message
+        Why the increment failed.
+    cutbackFactor
+        The factor the time stepper scales the increment size by for the retry.
+    """
+
+    def __init__(self, message, cutbackFactor):
+        super().__init__(message)
+        self.cutbackFactor = float(cutbackFactor)
+
+
 class ReachedMaxIterations(Exception):
     """The maximum number of nonlinear iterations as attained."""
 
@@ -63,6 +79,17 @@ class ReachedMinIncrementSize(Exception):
 
 class DivergingSolution(Exception):
     """The solutions seems to be diverging within the nonlinear solving scheme."""
+
+
+class RestartError(Exception):
+    """A checkpoint cannot be restored into this model: an unsupported format version, or a replayed
+    topology that does not match the one the checkpoint was written from."""
+
+
+class TopologyError(Exception):
+    """An illegal attempt to change the model topology: creating or deleting an entity outside a
+    :meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.changes` window, or claiming an element
+    number that is already in use."""
 
 
 class ConditionalStop(Exception):

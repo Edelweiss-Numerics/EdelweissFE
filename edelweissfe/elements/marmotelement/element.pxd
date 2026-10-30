@@ -37,6 +37,21 @@ from libcpp.vector cimport vector
 import numpy as np
 
 
+# Marmot's warning channel, discarded until pointed somewhere; see setMSGOutputDirection in element.pyx.
+cdef extern from "<ostream>" namespace "std":
+    cdef cppclass ostream
+
+
+cdef extern from "<iostream>" namespace "std":
+    ostream cout
+
+
+cdef extern from "Marmot/MarmotJournal.h":
+    cdef cppclass MarmotJournal:
+        @staticmethod
+        void setMSGOutputDirection(ostream&)
+
+
 cdef extern from "Marmot/MarmotElement.h" namespace "MarmotElement":
     cdef enum StateTypes:
         Sigma11,
@@ -84,24 +99,26 @@ cdef extern from "Marmot/MarmotElement.h":
 
         void assignProperty(const MarmotMaterialSection& property) except +ValueError
 
+        void assignProperty(const string& propertyName, const double* properties, int nProperties) except +ValueError
+
+        vector[string] getPropertyNames() const
+
         void assignNodeCoordinates(const double* elementCoordinates)
 
         void initializeYourself()
 
-        void computeYourself(const double* QTotal,
-                             const double* dQ,
-                             double* Pe,
-                             double* Ke,
-                             const double* time,
-                             double dT,
-                             double& pNewdT) except +ValueError
+        void computeKernels(const double* QTotal,
+                            const double* dQ,
+                            double* Pe,
+                            double* Ke,
+                            double time,
+                            double dT) except +
 
-        void computeYourselfExplicit(const double* QTotal,
-                                     const double* dQ,
-                                     double* Pe,
-                                     const double* time,
-                                     double dT,
-                                     double& pNewdT) except +ValueError
+        void computeKernelsExplicit(const double* QTotal,
+                                    const double* dQ,
+                                    double* Pe,
+                                    double time,
+                                    double dT) except +
 
         void setInitialConditions(StateTypes state,
                                   const double* values)
@@ -113,7 +130,7 @@ cdef extern from "Marmot/MarmotElement.h":
                                 int faceID,
                                 const double* load,
                                 const double* QTotal,
-                                const double* time,
+                                double time,
                                 double dT)
 
         void computeBodyForce(
@@ -121,12 +138,20 @@ cdef extern from "Marmot/MarmotElement.h":
                         double* K,
                         const double* load,
                         const double* QTotal,
-                        const double* time,
+                        double time,
                         double dT)
 
-        void computeLumpedInertia(double* M)
+        # `except +`: the material may throw when asked for its coefficients (too few properties, or a
+        # micro-inertia above the eta^2/4 its viscosity admits); unhandled, that would reach std::terminate.
+        void computeLumpedInertia(double* M) except +ValueError
+        void computeLumpedDamping(double* C) except +ValueError
 
-        void computeCriticalTimeStepForExplicitDynamics(double& criticalTimeStep, const double* QTotal)
+        # The full (nDof x nDof) mass matrix, in the same flat layout as the stiffness of computeKernels.
+        void computeConsistentInertia(double* M) except +ValueError
+
+        void computeCriticalTimeStepForExplicitDynamics(
+                        double& criticalTimeStep,
+                        const double* QTotal) except +ValueError
 
         void computeInternalEnergy(double& internalEnergy)
 
@@ -160,6 +185,7 @@ cdef class MarmotElementWrapper:
     cdef list _fields
     cdef str _ensightType
     cdef int _hasMaterial
+    cdef str _materialName
     cdef np.ndarray _dofIndicesPermutation
 
     cdef public double[::1] _stateVars, nodeCoordinates
@@ -172,17 +198,17 @@ cdef class MarmotElementWrapper:
 
     cpdef void _initializeStateVarsTemp(self, ) noexcept  nogil
 
-    cpdef void computeYourself(self,
-                               double[::1] Ke,
-                               double[::1] Pe,
-                               const double[::1] U,
-                               const double[::1] dU,
-                               const double[::1] time,
-                               double dTime) except * nogil
+    cpdef void computeKernels(self,
+                              double[::1] Ke,
+                              double[::1] Pe,
+                              const double[::1] U,
+                              const double[::1] dU,
+                              double time,
+                              double dTime) except *
 
-    cpdef void computeYourselfExplicit(self,
-                                       double[::1] Pe,
-                                       const double[::1] U,
-                                       const double[::1] dU,
-                                       const double[::1] time,
-                                       double dTime) except * nogil
+    cpdef void computeKernelsExplicit(self,
+                                      double[::1] Pe,
+                                      const double[::1] U,
+                                      const double[::1] dU,
+                                      double time,
+                                      double dTime) except *

@@ -52,6 +52,35 @@ phenomena = {
     "concentration": "scalar",
     "chemical potential": "scalar",
     "strain symmetric": "symmetric tensor second order",
+    "plastic multiplier": "scalar",
+    "pressure": "scalar",
+    "jacobi": "scalar",
+}
+
+
+# field                  kind of inertia
+#
+# The coefficient of a field's SECOND time derivative is not always a mass. Reporting a momentum or an
+# energy needs to know which inertia entries may be added to which:
+#
+#  * ``"mass"``               -- m*v is a linear momentum, 0.5*m*v^2 an energy.
+#  * ``"rotational inertia"`` -- 0.5*I*w^2 is an energy, but I*w is an ANGULAR momentum and must
+#                                not be added to a linear one (in 3d both have three components).
+#  * ``"non-mechanical"``     -- neither, e.g. the non-local micro-inertia (a time squared).
+#                                Also used for fields without any inertia.
+inertiaKind = {
+    "displacement": "mass",
+    "rotation": "rotational inertia",
+    "micro rotation": "rotational inertia",
+    "thermal": "non-mechanical",
+    "nonlocal damage": "non-mechanical",
+    "nonlocal damage 2": "non-mechanical",
+    "concentration": "non-mechanical",
+    "chemical potential": "non-mechanical",
+    "strain symmetric": "non-mechanical",
+    "plastic multiplier": "non-mechanical",
+    "pressure": "non-mechanical",
+    "jacobi": "non-mechanical",
 }
 
 
@@ -66,6 +95,9 @@ fieldCorrectionTolerance = {
     "chemical potential": 1e-1,
     "strain symmetric": 1e-7,
     "scalar variables": 1e-3,
+    "plastic multiplier": 1e-8,
+    "pressure": 1e-8,
+    "jacobi": 1e-8,
 }
 
 fluxResidualTolerance = {
@@ -78,6 +110,9 @@ fluxResidualTolerance = {
     "chemical potential": 1e-2,
     "strain symmetric": 1e-8,
     "scalar variables": 1e-8,
+    "plastic multiplier": 1e-8,
+    "pressure": 1e-8,
+    "jacobi": 1e-8,
 }
 
 fluxResidualToleranceAlternative = {
@@ -90,6 +125,9 @@ fluxResidualToleranceAlternative = {
     "chemical potential": 5e-2,
     "strain symmetric": 5e-3,
     "scalar variables": 1e-8,
+    "plastic multiplier": 5e-3,
+    "pressure": 5e-3,
+    "jacobi": 5e-3,
 }
 
 # domain                 dimensions
@@ -101,6 +139,74 @@ domainMapping = {
 }
 
 
+def getInertiaKind(field: str) -> str:
+    """The kind of inertia a field carries; see :data:`inertiaKind`.
+
+    Parameters
+    ----------
+    field
+        The name of the physical field.
+
+    Returns
+    -------
+    str
+        One of ``"mass"``, ``"rotational inertia"``, ``"non-mechanical"``.
+
+    Raises
+    ------
+    NotImplementedError
+        If the field is not registered here.
+    """
+
+    try:
+        return inertiaKind[field]
+    except KeyError:
+        raise NotImplementedError(
+            "Physical field {:} has no registered inertia kind. Add it to inertiaKind in "
+            "edelweissfe/config/phenomena.py, alongside its entry in phenomena.".format(field)
+        )
+
+
+def carriesLinearMomentum(field: str) -> bool:
+    """Whether a field's inertia times its rate is a linear momentum, i.e. whether the field may
+    enter a linear-momentum balance and be summed with the other fields in it.
+
+    Parameters
+    ----------
+    field
+        The name of the physical field.
+
+    Returns
+    -------
+    bool
+        True only for a field whose inertia is a mass.
+    """
+
+    return getInertiaKind(field) == "mass"
+
+
+def carriesKineticEnergy(field: str) -> bool:
+    """Whether a field's ``0.5 * inertia * rate**2`` is a mechanical energy, i.e. whether the field
+    may enter the energy balance and be summed with the other fields in it.
+
+    Work done at a prescribed degree of freedom of such a field -- a force through a displacement,
+    a moment through a rotation -- is an energy by the same token, which is why the external work
+    is accumulated over exactly these fields as well.
+
+    Parameters
+    ----------
+    field
+        The name of the physical field.
+
+    Returns
+    -------
+    bool
+        True for a field whose inertia is a mass or a rotational inertia.
+    """
+
+    return getInertiaKind(field) in ("mass", "rotational inertia")
+
+
 def getFieldSize(field, domainSize):
     fType = phenomena[field]
     if fType == "scalar":
@@ -108,7 +214,9 @@ def getFieldSize(field, domainSize):
     if fType == "vector":
         return domainSize
     if fType == "rotation vector":
-        if domainSize == 2:
+        # Called for every declared phenomenon, used or not. 2D has a single out-of-plane rotation axis;
+        # for 1D, 1 is a placeholder that keeps every 1D model buildable, not a physical claim.
+        if domainSize in (1, 2):
             return 1
         elif domainSize == 3:
             return 3

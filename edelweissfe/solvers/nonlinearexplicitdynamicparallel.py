@@ -35,7 +35,10 @@ Parallel implementation of the NED solver.
 
 import edelweissfe.utils.performancetiming as performancetiming
 from edelweissfe.numerics.dofmanager import DofVector
-from edelweissfe.numerics.parallelizationutilities import getNumberOfThreads
+from edelweissfe.numerics.parallelizationutilities import (
+    getNumberOfThreads,
+    reportThreadAvailability,
+)
 from edelweissfe.solvers.base.parallelelementcomputation import (
     computeElementsInParallelForExplicit,
 )
@@ -46,9 +49,9 @@ from edelweissfe.timesteppers.timestep import TimeStep
 class NEDParallel(NED):
     identification = "NEDPSolver"
 
-    def solveStep(self, step, model, fieldOutputController, outputmanagers):
-        self.journal.message("Using {:} threads".format(getNumberOfThreads()), self.identification)
-        return super().solveStep(step, model, fieldOutputController, outputmanagers)
+    def beginStep(self, step, model, fieldOutputController, outputmanagers):
+        reportThreadAvailability(getNumberOfThreads(), self.journal, self.identification)
+        return super().beginStep(step, model, fieldOutputController, outputmanagers)
 
     @performancetiming.timeit("elements")
     def computeElements(

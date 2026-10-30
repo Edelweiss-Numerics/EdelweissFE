@@ -1,0 +1,442 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+#  ---------------------------------------------------------------------
+#
+#  _____    _      _              _         _____ _____
+# | ____|__| | ___| |_      _____(_)___ ___|  ___| ____|
+# |  _| / _` |/ _ \ \ \ /\ / / _ \ / __/ __| |_  |  _|
+# | |__| (_| |  __/ |\ V  V /  __/ \__ \__ \  _| | |___
+# |_____\__,_|\___|_| \_/\_/ \___|_|___/___/_|   |_____|
+#
+#
+#  Unit of Strength of Materials and Structural Analysis
+#  University of Innsbruck,
+#  2017 - today
+#
+#  Matthias Neuner matthias.neuner@uibk.ac.at
+#
+#  This file is part of EdelweissFE.
+#
+#  This library is free software; you can redistribute it and/or
+#  modify it under the terms of the GNU Lesser General Public
+#  License as published by the Free Software Foundation; either
+#  version 2.1 of the License, or (at your option) any later version.
+#
+#  The full text of the license can be found in the file LICENSE.md at
+#  the top level directory of EdelweissFE.
+#  ---------------------------------------------------------------------
+"""A two-level cycle with a coarse space of its own: :class:`TwoLevel`.
+
+One cycle, for :math:`z \\approx A^{-1} r` with a prolongation :math:`P` from the coarse space:
+
+.. math::
+
+    z &\\leftarrow S^{\\nu_1}(0, r)                       && \\text{pre-smoothing (Chebyshev)} \\\\
+    z &\\leftarrow z + P \\, A_c^{-1} P^T (r - A z)       && \\text{coarse correction}, \\quad A_c = P^T A P \\\\
+    z &\\leftarrow S^{\\nu_2}(z, r)                       && \\text{post-smoothing}
+
+with :math:`A_c^{-1}` approximated. The coarse space decides what the cycle can correct:
+
+- :class:`RigidBodyModesPerAggregate`: all rigid-body modes of each aggregate of nodes (3 translations and 3 rotations
+  in 3D), where an AMG hierarchy on node-wise 3x3 blocks takes the translations alone; :math:`A_c^{-1}` is one V-cycle
+  of an AMG hierarchy;
+- :class:`CornerNodeInterpolation`: the linear interpolant of a quadratic field from its corner nodes (P1);
+  :math:`A_c^{-1}` is a component of its own on the corner-node field, by default ``DiagonalScaling(AMG())``. For a 3D
+  displacement field, ``DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModesPerAggregate()))`` makes three levels:
+  quadratic, linear, rigid-body modes of aggregates. On such a field the fine level smooths with the smoother of the
+  corner-node two-level cycle, a Chebyshev polynomial of degree 8 instead of 16
+  (:func:`~edelweissfe.linsolve.composition.amg.defaultCornerNodeTwoLevelTree`), and the ``blockamg`` preset gives the
+  coarse level the same.
+
+Why "two-level": the component is the fine level and one coarse correction, and its coarse problem is solved inexactly.
+The coarse space need not be a coarser mesh. With :class:`RigidBodyModesPerAggregate` it is
+spanned by aggregates of nodes, and the whole cycle is smoothed aggregation with all rigid-body modes on every level,
+the method Trilinos ML and MueLu use for elasticity (Vaněk, Mandel and Brezina, Computing 56, 1996). The first coarse
+level is built here, on the node-wise blocks of the fine level, with the modes scaled by the diagonal scaling and zero
+on the Dirichlet rows. The levels below are built by AMGCL, which takes the coefficients of the modes in the coarse
+space as its near null-space. ``prolongation="tentative"`` makes the first level plain aggregation. With
+:class:`CornerNodeInterpolation` the coarse level is a coarser grid, the corner nodes (p-multigrid): a field of its own,
+which its coarse component solves like any field (:mod:`~edelweissfe.linsolve.composition.cornernodetwolevelcycle`).
+
+The cycle runs in C++ (:mod:`~edelweissfe.linsolve.composition.rigidbodymodestwolevelcycle`,
+:mod:`~edelweissfe.linsolve.composition.cornernodetwolevelcycle`; the coarse component of
+:class:`CornerNodeInterpolation` is called back once per cycle). Its steps, written out in Python, are
+``Multiplicative([smoother, CoarseCorrection(P, coarseSolve), smoother])``
+(:mod:`~edelweissfe.linsolve.composition.combinators`). Both ways are kept on purpose: this one is faster per
+application, the spelled-out one shows the steps and takes any smoother or coarse space. Why, and what would
+end the exception: the "two-level cycle: two ways" section of ``doc/source/documentation/composedlinsolvers.rst``.
+"""
+
+import edelweissfe.utils.performancetiming as performancetiming
+from edelweissfe.linsolve.composition.amg import (
+    AMG,
+    backendOf,
+    checkBackend,
+    defaultCornerNodeTwoLevelTree,
+    defaultFieldTree,
+    fieldTreeOf,
+    preconditionerMatrix,
+)
+from edelweissfe.linsolve.composition.base import (
+    Description,
+    Preconditioner,
+    SetUpContext,
+    Step,
+    requirePreconditioner,
+)
+from edelweissfe.linsolve.composition.diagonalscaling import DiagonalScaling
+from edelweissfe.linsolve.composition.systemmatrix import SystemMatrix
+from edelweissfe.linsolve.nullspace import carriesRigidBodyModes
+
+
+class CoarseSpace:
+    """What spans the coarse level of a :class:`TwoLevel` cycle: it checks that it can be built for a field, and builds
+    the cycle on it. The cycle's own parameters (the fine smoother of the field's tree, the backend) come from
+    :class:`TwoLevel`, as ``cycle``, the keywords of
+    :meth:`~edelweissfe.linsolve.composition.twolevelcycle.TwoLevelCycle.cycleParameters`.
+    """
+
+    #: The name of the coarse space in the views.
+    name = None
+
+    def defaultTree(self, field) -> dict:
+        """The AMGCL tree of a :class:`TwoLevel` cycle on this coarse space that is given none: the default tree of the
+        field's dimension (:func:`~edelweissfe.linsolve.composition.amg.defaultFieldTree`)."""
+        return defaultFieldTree(field.dimension)
+
+    def check(self, field, context: SetUpContext, cycle: dict) -> None:
+        """Raise, naming the field, if the cycle cannot be built on this coarse space for the field: before anything is
+        built."""
+        raise NotImplementedError
+
+    def build(self, field, matrix, context: SetUpContext, cycle: dict):
+        """The two-level cycle on this coarse space for a field's matrix (SciPy CSR), built: a
+        :class:`~edelweissfe.linsolve.composition.twolevelcycle.TwoLevelCycle`.
+
+        Parameters
+        ----------
+        field
+            The field.
+        matrix
+            Its (scaled) matrix.
+        context
+            Its context: the node coordinates, the midside corners, the scaling.
+        cycle
+            The cycle's parameters, see
+            :meth:`~edelweissfe.linsolve.composition.twolevelcycle.TwoLevelCycle.cycleParameters`.
+        """
+        raise NotImplementedError
+
+    def sizesOf(self, cycle) -> dict:
+        """What a built cycle reports about its coarse level (for the run statistics)."""
+        return {}
+
+    def children(self) -> tuple:
+        """The ``(role, component)`` pairs of the coarse space, children of the :class:`TwoLevel` that uses it: its
+        coarse solve, if that is a component (:class:`CornerNodeInterpolation`); none if the cycle solves on its own."""
+        return ()
+
+    def coarseSolveStep(self) -> Step:
+        """The coarse correction of the cycle, for the data-flow view."""
+        return Step("z += P A_c⁻¹ Pᵀ (r − A z),  A_c = Pᵀ A P,  A_c⁻¹ ≈ one AMG V-cycle")
+
+    def describe(self) -> dict:
+        """The settings of the coarse space, for the views."""
+        return {"coarse space": self.name, "coarse solve": "AMG V-cycle"}
+
+
+def _cycleFor(field, cycleClass, *args, **kwargs):
+    """The C++ cycle of the field, which checks its parameters as it is created, before the build has spent anything:
+    a rejection names the cycle in its message, and here the field too."""
+    try:
+        return cycleClass(*args, **kwargs)
+    except (TypeError, ValueError) as error:
+        raise ValueError("TwoLevel on the field '{:}': {:}".format(field.name, error)) from error
+
+
+class RigidBodyModesPerAggregate(CoarseSpace):
+    """The coarse space of all rigid-body modes per aggregate of nodes:
+    ``TwoLevel(coarseSpace=RigidBodyModesPerAggregate())``.
+
+    Parameters
+    ----------
+    prolongation
+        ``"smoothed"`` (:math:`P = (I - \\omega D_F^{-1} A_F) P_{\\mathrm{tent}}`) or ``"tentative"``
+        (:math:`P_{\\mathrm{tent}}`, the modes orthonormalized per aggregate).
+    coarseHierarchyPrecision
+        The value type of the AMG hierarchy that solves the coarse level: ``"double"`` or ``"float"``.
+    """
+
+    name = "rigid-body modes per aggregate"
+
+    def __init__(self, prolongation: str = "smoothed", coarseHierarchyPrecision: str = "double"):
+        if prolongation not in ("smoothed", "tentative"):
+            raise ValueError(
+                "RigidBodyModesPerAggregate: prolongation must be 'smoothed' or 'tentative', got {!r}".format(
+                    prolongation
+                )
+            )
+        if coarseHierarchyPrecision not in ("double", "float"):
+            raise ValueError(
+                "RigidBodyModesPerAggregate: coarseHierarchyPrecision must be 'double' or 'float', got {!r}".format(
+                    coarseHierarchyPrecision
+                )
+            )
+        self.prolongation = prolongation
+        self.coarseHierarchyPrecision = coarseHierarchyPrecision
+
+    def check(self, field, context: SetUpContext, cycle: dict) -> None:
+        """Rigid-body modes are those of a 2D or 3D displacement field with node coordinates
+        (:func:`~edelweissfe.linsolve.nullspace.carriesRigidBodyModes`), on a block backend (the scalar backend takes
+        them as the near null-space of its hierarchy itself, ``AMG()``)."""
+        if not carriesRigidBodyModes(field):
+            raise ValueError(
+                "TwoLevel: the rigid-body modes are those of a 2D or 3D displacement field, but the field '{:}' is "
+                "another field (or has {:} component(s) per node): its near null-space is its translations, which "
+                "AMG() takes".format(field.name, field.dimension)
+            )
+        if context.coordinates(field.name) is None:
+            raise ValueError(
+                "TwoLevel: the rigid-body modes of the field '{:}' need its node coordinates".format(field.name)
+            )
+        if cycle["backendBlockSize"] == 1:
+            raise ValueError(
+                "TwoLevel: the field '{:}' is on the scalar backend (backendBlockSize 1), which takes the rigid-body "
+                "modes as the near null-space of AMG() itself; the rigid-body coarse level is for the block backends, "
+                "backendBlockSize 2 or 3".format(field.name)
+            )
+
+    def build(self, field, matrix, context: SetUpContext, cycle: dict):
+        from edelweissfe.linsolve.composition.rigidbodymodestwolevelcycle import (
+            RigidBodyModesTwoLevelCycle,
+        )
+
+        built = _cycleFor(
+            field,
+            RigidBodyModesTwoLevelCycle,
+            **self._parameters(cycle),
+        )
+        with performancetiming.timeit("{:} rigid-body coarse level build".format(field.name)):
+            built.build(matrix, context.scalingOf(slice(None)), context.coordinates(field.name))
+        return built
+
+    def _parameters(self, cycle: dict) -> dict:
+        """The keywords of the C++ cycle: the cycle's own, and this coarse space's."""
+        return dict(cycle, prolongation=self.prolongation, coarseHierarchyPrecision=self.coarseHierarchyPrecision)
+
+    def sizesOf(self, cycle) -> dict:
+        return {"aggregates": cycle.nAggregates, "coarse dofs": cycle.nCoarse, "dropped modes": cycle.droppedModes}
+
+    def describe(self) -> dict:
+        settings = {"coarse space": self.name, "prolongation": self.prolongation, "coarse solve": "AMG V-cycle"}
+        if self.coarseHierarchyPrecision != "double":
+            settings["coarseHierarchyPrecision"] = self.coarseHierarchyPrecision
+        return settings
+
+
+class CornerNodeInterpolation(CoarseSpace):
+    """The coarse space of the linear interpolant of a quadratic field from its corner nodes (P1):
+    ``TwoLevel(coarseSpace=CornerNodeInterpolation(coarseSolve))``. Needs the field's corner/midside topology.
+
+    The prolongation interpolates the scaled variables of the field, :math:`P = D^{-1} P_{geo} D_c`, so that the
+    coarse operator :math:`A_c = P^T \\hat A P` is the P1 operator of the corner-node field, scaled by :math:`D_c` (see
+    :mod:`~edelweissfe.linsolve.composition.cornernodetwolevelcycle`). The coarse problem is set up as that field: the
+    same field on the coarse nodes -- the corner nodes, and a midside node with a free dof between two constrained ones
+    of its edge's corners (issue #223), which no interpolation from them could correct -- their coordinates, :math:`D_c`
+    as its scaling, an identity row for each Dirichlet coarse dof
+    (:meth:`~edelweissfe.linsolve.composition.base.SetUpContext.ofCoarseNodes`).
+
+    The coarse solve belongs to this coarse space for its whole life: each build sets it up anew on that build's
+    :math:`A_c`. So one ``CornerNodeInterpolation`` serves one :class:`TwoLevel`; under two, its coarse solve would sit
+    in two places of the tree, which the composed solver refuses.
+
+    Each level has its own tree. A :class:`TwoLevel` on this coarse space that is given no tree smooths a 3D
+    displacement field with a weaker Chebyshev polynomial than an AMG hierarchy (:meth:`defaultTree`, degree 8 instead
+    of 16); any other field keeps the default tree of its dimension. The coarse solve has the tree of its own
+    component; the ``blockamg`` preset gives it the same smoother
+    (:func:`~edelweissfe.linsolve.composition.presets.blockAMGFieldPreconditioner`).
+
+    Parameters
+    ----------
+    coarseSolve
+        The coarse solve :math:`A_c^{-1}`, a component applied once per cycle. ``None``: ``DiagonalScaling(AMG())``,
+        which works on any field. For a 3D displacement field
+        ``DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModesPerAggregate()))`` is faster
+        (:ref:`measured-scaled-corner-node-interpolation`).
+    """
+
+    name = "corner-node interpolation"
+
+    def __init__(self, coarseSolve: Preconditioner = None):
+        if coarseSolve is None:
+            coarseSolve = DiagonalScaling(AMG())
+        requirePreconditioner("CornerNodeInterpolation", "coarseSolve", coarseSolve)
+        self.coarseSolve = coarseSolve
+
+    def defaultTree(self, field) -> dict:
+        """For a 3D displacement field, the smoother of the corner-node two-level cycle
+        (:func:`~edelweissfe.linsolve.composition.amg.defaultCornerNodeTwoLevelTree`), where it was measured; any other
+        field keeps the default tree of its dimension, as on any coarse space."""
+        if field.dimension == 3 and carriesRigidBodyModes(field):
+            return defaultCornerNodeTwoLevelTree()
+        return super().defaultTree(field)
+
+    def check(self, field, context: SetUpContext, cycle: dict) -> None:
+        """It needs the field's midside corners."""
+        if context.midsideCorners(field.name) is None:
+            raise ValueError(
+                "TwoLevel: the corner-node interpolation of the field '{:}' needs its midside corners: from the "
+                "model, or given (midsideCorners) for a solve without one".format(field.name)
+            )
+
+    def build(self, field, matrix, context: SetUpContext, cycle: dict):
+        """Build the cycle in C++, which returns :math:`A_c`, set up the coarse solve on it, and hand the coarse solve
+        to the cycle."""
+        from edelweissfe.linsolve.composition.cornernodetwolevelcycle import (
+            CornerNodeTwoLevelCycle,
+        )
+
+        isCorner, edgeEndpoints = context.midsideCorners(field.name)
+        built = _cycleFor(
+            field,
+            CornerNodeTwoLevelCycle,
+            isCorner,
+            edgeEndpoints,
+            **cycle,
+        )
+        with performancetiming.timeit("{:} corner-node cycle build".format(field.name)):
+            A_c = built.build(matrix, context.scalingOf(slice(None)))
+        if A_c.shape[0] > 0:
+            self.coarseSolve.setUp(SystemMatrix(A_c), context.ofCoarseNodes(field, built.coarseNodes))
+            built.setCoarseSolve(self.coarseSolve)
+        return built
+
+    def sizesOf(self, cycle) -> dict:
+        return {"coarse dofs": cycle.nCoarse}
+
+    def children(self) -> tuple:
+        return (("coarseSolve", self.coarseSolve),)
+
+    def coarseSolveStep(self) -> Step:
+        return Step("z += P A_c⁻¹ Pᵀ (r − A z),  A_c = Pᵀ A P  (corner nodes, scaled weights)", "coarseSolve")
+
+    def describe(self) -> dict:
+        return {"coarse space": self.name, "coarse solve": "component"}
+
+
+class TwoLevel(Preconditioner):
+    """A two-level cycle on a field's matrix with the coarse space ``coarseSpace``; see the module documentation.
+
+    Reused while only the values of the matrix change, like :class:`~edelweissfe.linsolve.composition.amg.AMG`.
+
+    Parameters
+    ----------
+    coarseSpace
+        A :class:`CoarseSpace`: :class:`RigidBodyModesPerAggregate` or :class:`CornerNodeInterpolation`.
+    amgclTree
+        The field's AMGCL tree: its ``relax`` (a Chebyshev polynomial), ``npre`` and ``npost`` are the fine smoother;
+        with :class:`RigidBodyModesPerAggregate` its coarsening also builds the coarse level, and the whole tree the AMG
+        hierarchy below. ``None``: the coarse space's default (:meth:`CoarseSpace.defaultTree`), the default tree of the
+        field's dimension (:func:`~edelweissfe.linsolve.composition.amg.defaultFieldTree`) for
+        :class:`RigidBodyModesPerAggregate`, and for :class:`CornerNodeInterpolation` on a 3D displacement field the
+        smoother of the corner-node two-level cycle
+        (:func:`~edelweissfe.linsolve.composition.amg.defaultCornerNodeTwoLevelTree`).
+    backendBlockSize, backendPrecision
+        The storage of the fine operator and of :math:`P`, :math:`P^T`, as for
+        :class:`~edelweissfe.linsolve.composition.amg.AMG`; ``None``: the field's default
+        (:func:`~edelweissfe.linsolve.composition.amg.backendOf`).
+    dropTolerance, lumpDroppedEntries
+        Build the cycle (its smoother, coarse level and hierarchy) on the filtered matrix, see
+        :func:`~edelweissfe.linsolve.composition.amg.droppedSmallEntries`; ``0`` (the default) builds it on the
+        matrix itself.
+    """
+
+    def __init__(
+        self,
+        coarseSpace: CoarseSpace,
+        amgclTree: dict = None,
+        backendBlockSize: int = None,
+        backendPrecision: str = None,
+        dropTolerance: float = 0.0,
+        lumpDroppedEntries: bool = False,
+    ):
+        if not isinstance(coarseSpace, CoarseSpace):
+            raise TypeError(
+                "TwoLevel: coarseSpace must be a CoarseSpace such as RigidBodyModesPerAggregate() or "
+                "CornerNodeInterpolation(), got {!r}".format(coarseSpace)
+            )
+        if not dropTolerance >= 0.0:
+            raise ValueError("TwoLevel: dropTolerance must not be negative, got {!r}".format(dropTolerance))
+        checkBackend("TwoLevel", backendBlockSize, backendPrecision)
+        super().__init__()
+        self.coarseSpace = coarseSpace
+        self.amgclTree = amgclTree
+        self.backendBlockSize = backendBlockSize
+        self.backendPrecision = backendPrecision
+        self.dropTolerance = dropTolerance
+        self.lumpDroppedEntries = lumpDroppedEntries
+
+    def _forget(self) -> None:
+        self.cycle = None
+        self._field = None
+
+    def _cycleParameters(self, field) -> dict:
+        """The cycle's parameters for the field: the tree and the backend, the defaults for what is not given
+        (see :meth:`~edelweissfe.linsolve.composition.twolevelcycle.TwoLevelCycle.cycleParameters`)."""
+        amgclTree = fieldTreeOf("TwoLevel", self.amgclTree, field, self.coarseSpace.defaultTree)
+        # the near null-space belongs to AMG's hierarchy; a coarse space is its own
+        backendBlockSize, backendPrecision, _ = backendOf(
+            "TwoLevel", field, amgclTree, self.backendBlockSize, self.backendPrecision, nearNullspace=None
+        )
+        return {
+            "amgclTree": amgclTree,
+            "backendBlockSize": backendBlockSize,
+            "backendPrecision": backendPrecision,
+        }
+
+    def _setUp(self, A, context: SetUpContext) -> None:
+        field = context.onlyField("TwoLevel")
+        cycle = self._cycleParameters(field)
+        self.coarseSpace.check(field, context, cycle)
+        self._field = field
+        matrix = preconditionerMatrix(A, self.dropTolerance, self.lumpDroppedEntries, self.statistics)
+        self.cycle = self.coarseSpace.build(field, matrix, context, cycle)
+        self.statistics.sizes.update(rows=A.shape[0], **self.coarseSpace.sizesOf(self.cycle))
+
+    def _update(self, A, change) -> None:
+        # A_c is built above the coarse solve: rebuilt with it, also for reasons the coarse solve adds itself
+        change = self.withRebuildReasons(change)
+        # only the values changed: the whole cycle, its coarse solve included, is kept
+        if change.requiresRebuild or self.cycle is None:
+            self.setUp(A, change.context)
+
+    def _apply(self, r):
+        return self.cycle.applyPreconditioner(r)
+
+    def children(self) -> tuple:
+        return self.coarseSpace.children()
+
+    def _parameters(self) -> dict:
+        parameters = self.coarseSpace.describe()
+        backend = {"backendBlockSize": self.backendBlockSize, "backendPrecision": self.backendPrecision}
+        parameters.update({key: value for key, value in backend.items() if value is not None})
+        if self.dropTolerance > 0.0:
+            parameters.update(dropTolerance=self.dropTolerance, lumpDroppedEntries=self.lumpDroppedEntries)
+        return parameters
+
+    def describe(self) -> Description:
+        name = self._field.name if self._field is not None else "A"
+        hasCoarseSolve = bool(self.children())
+        coarse = "; A_c⁻¹ = {coarseSolve}" if hasCoarseSolve else ""
+        coarseLatex = "; A_c^{-1} = {coarseSolve}" if hasCoarseSolve else ""
+        return Description(
+            name="TwoLevel",
+            formula="TwoLevel(" + name + "; " + self.coarseSpace.name + coarse + ")⁻¹",
+            latex="\\mathrm{TL}(A_{\\text{" + name + "}}" + coarseLatex + ")^{-1}",
+            parameters=self._parameters(),
+            steps=(
+                Step("z = S(0, r)   (pre-smoothing)"),
+                self.coarseSpace.coarseSolveStep(),
+                Step("z = S(z, r)   (post-smoothing)"),
+            ),
+        )

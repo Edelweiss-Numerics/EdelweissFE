@@ -37,7 +37,8 @@ A ``*job`` definition consists of multiple ``*steps``, associated with that job.
 from time import time as getCurrentTime
 
 from edelweissfe.config.configurator import loadConfiguration, updateConfiguration
-from edelweissfe.config.phenomena import domainMapping
+from edelweissfe.config.linsolve import linearSolverDefinitionsFromInputFile
+from edelweissfe.config.phenomena import carriesLinearMomentum, domainMapping
 from edelweissfe.config.solvers import getSolverByName
 from edelweissfe.helpers.inputfilehelpers import (
     createFieldOutputFromInputFile,
@@ -49,7 +50,9 @@ from edelweissfe.helpers.inputfilehelpers import (
 )
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel, printPrettyModelSummary
-from edelweissfe.utils.exceptions import StepFailed
+from edelweissfe.utils import performancetiming
+from edelweissfe.utils.checkpoint import ResumeCheckpoint
+from edelweissfe.utils.exceptions import RestartError, StepFailed
 from edelweissfe.utils.fieldoutput import FieldOutputController
 
 
@@ -132,16 +135,46 @@ def finiteElementSimulation(
     for updateConfig in inputfile["updateConfiguration"]:
         updateConfiguration(updateConfig, jobInfo, journal)
 
-    # Create the default entries 'U' (flux) and 'P' (effort)
+    # Create the entries 'U' (flux) and 'P' (effort) on every node field, and 'V' (velocity) and 'A'
+    # (acceleration) on the mass-carrying ones (zero unless a dynamic solver writes them). Must happen
+    # before the field outputs are initialized, so that ``result=V``/``result=A`` outputs are valid.
     for nodeField in model.nodeFields.values():
         nodeField.createFieldValueEntry("U")
         nodeField.createFieldValueEntry("P")
+        if carriesLinearMomentum(nodeField.name):
+            nodeField.createFieldValueEntry("V")
+            nodeField.createFieldValueEntry("A")
 
     model._linkFieldVariableObjects(model.nodeSets["all"])
+
+    # *restart, readFrom=...: the model rebuilt from the .inp file gets its converged state and
+    # model.time overwritten from the checkpoint. Must run after the node field entries are created
+    # and after advanceToTime (which would reset model.time). Steps before the checkpoint's step are
+    # skipped; AMR topology changes are replayed; resuming past a `modelupdate` is refused.
+    restartDefinitions = inputfile["restart"]
+    resumeCheckpoint = None
+    resumeStepNumber = None
+    if restartDefinitions and restartDefinitions[0].get("readFrom"):
+        resumeCheckpoint = ResumeCheckpoint(restartDefinitions[0]["readFrom"])
+        resumeStepNumber = resumeCheckpoint.stepNumber
+        tic = getCurrentTime()
+        resumeCheckpoint.restoreModel(model, journal)
+        restoreTime = getCurrentTime() - tic
+        journal.message(
+            "Resuming from restart checkpoint {:} (step {:}, time {:})".format(
+                resumeCheckpoint.fileName, resumeStepNumber, model.time
+            ),
+            identification,
+            0,
+        )
+        # Report the timing of the topology replay here; the step's timers start from zero later.
+        if model.topology.history:
+            journal.printPrettyTable(performancetiming.makePrettyTable(wallTime=restoreTime), identification)
 
     plotter = createPlotterFromInputFile(inputfile, journal)
     stepManager = createStepManagerFromInputFile(inputfile)
     fieldOutputController = createFieldOutputFromInputFile(inputfile, model, journal)
+    model.fieldOutputController = fieldOutputController
     fieldOutputController.initializeJob()
 
     outputManagers = createOutputManagersFromInputFile(
@@ -150,6 +183,8 @@ def finiteElementSimulation(
     for outputManager in outputManagers:
         outputManager.initializeJob()
 
+    # the *linearSolver blocks, which a *solver's linsolver= may name; checked here, created per step by each solver
+    jobInfo["linearSolvers"] = linearSolverDefinitionsFromInputFile(inputfile)
     solvers = createSolversFromInputFile(inputfile, jobInfo, journal)
 
     if not solvers:
@@ -164,29 +199,58 @@ def finiteElementSimulation(
     defaultSolver = getSolverByName(job["solver"])
     solvers["default"] = defaultSolver(jobInfo, journal)
 
-    try:
-        for step in stepManager.dequeueStep(jobInfo, model, fieldOutputController, journal, solvers, outputManagers):
-            tic = getCurrentTime()
-            step.solve()
-            toc = getCurrentTime()
-            stepTime = toc - tic
-            jobInfo["computationTime"] += stepTime
+    # Looked up by name from a >>options block (edelweissfe.stepactions.options).
+    model.solvers = solvers
+    model.outputManagers = {outputManager.name: outputManager for outputManager in outputManagers}
 
-            journal.printTable(
-                [
-                    ("Step computation time", "{:10.4f}s".format(stepTime)),
-                ],
+    try:
+        for step in stepManager.generateSteps(jobInfo, model, fieldOutputController, journal, solvers, outputManagers):
+            if resumeStepNumber is not None:
+                if step.actions["modelupdate"]:
+                    raise RestartError(
+                        "step {:} has a modelupdate, whose effect is not recorded in a checkpoint, so "
+                        "the run cannot be resumed after it".format(step.number)
+                    )
+                if step.number < resumeStepNumber:
+                    # Constructed (so its step actions exist) but not solved: it ran before the checkpoint.
+                    continue
+            resumeFrom = None
+            if step.number == resumeStepNumber:
+                resumeFrom, resumeStepNumber = resumeCheckpoint, None
+
+            tic = getCurrentTime()
+            try:
+                step.solve(resumeFrom)
+            finally:
+                # In finally, so a failing step still counts its elapsed time.
+                toc = getCurrentTime()
+                stepTime = toc - tic
+                jobInfo["computationTime"] += stepTime
+
+                journal.printTable(
+                    [
+                        ("Step computation time", "{:10.4f}s".format(stepTime)),
+                    ],
+                    identification,
+                    level=0,
+                )
+
+        if resumeStepNumber is not None:
+            journal.errorMessage(
+                "Restart checkpoint's step {:} was never reached -- nothing was resumed".format(resumeStepNumber),
                 identification,
-                level=0,
             )
 
     except KeyboardInterrupt:
         print("")
         journal.errorMessage("Interrupted by user", identification)
 
-    except StepFailed:
+    except StepFailed as e:
         print("")
-        journal.errorMessage("Simulation failed", identification)
+        message = str(e)
+        journal.errorMessage(
+            "Simulation failed: {:}".format(message) if message else "Simulation failed", identification
+        )
 
     except Exception as e:
         print("")
@@ -213,5 +277,8 @@ def finiteElementSimulation(
         plotter.finalize()
         if not suppressPlots:
             plotter.show()
+
+        if resumeCheckpoint is not None:
+            resumeCheckpoint.close()
 
     return model, fieldOutputController

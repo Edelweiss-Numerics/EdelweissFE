@@ -1,4 +1,3 @@
-import gstools
 import numpy as np
 
 from edelweissfe.utils.math import createFunction
@@ -7,6 +6,15 @@ from edelweissfe.utils.misc import convertLinesToStringDictionary
 
 class Section:
     def __init__(self, name, options, materialName, t, model):
+        # Lazy import: importing gstools re-enables the GIL process-wide (no free-threading support).
+        try:
+            import gstools
+        except ModuleNotFoundError as e:
+            raise ModuleNotFoundError(
+                "the 'planeRandomThickness' section requires the 'gstools' package "
+                "(install via 'pip install gstools' or 'mamba install -c conda-forge gstools')"
+            ) from e
+
         self.options = convertLinesToStringDictionary(options)
         options = self.options
 

@@ -1,0 +1,31 @@
+** A composed linear solver with a component written in the solver script itself (see solver.py): a symmetric
+** Gauss-Seidel smoother, a subclass of Preconditioner, before and after one AMG cycle, accelerated by LGMRES. The
+** model is a plane-strain cantilever (CPE4, 6834 displacement dofs: on a much smaller model, AMG solves directly)
+** of von Mises steel, loaded into the plastic range in two increments: within an increment, the smoother is
+** reused for the new values of the matrix; at a new increment, it is built anew. Requires the optional amgcl
+** extension; skipped where it is not built.
+*material, name=vonmises, id=vonmises, provider=edelweiss
+210000.0, 0.15, 355, 1000, 200, 1400
+
+*section, name=section1, thickness=40.0, material=vonmises, type=plane
+all
+
+*job, name=cpe4job, domain=2d
+*linearSolver, name=ownSmoother, type=custom
+script=solver.py
+
+*solver, solver=NIST, name=theSolver
+linsolver=ownSmoother
+
+*modelGenerator, generator=planeRectQuad, name=gen
+x0=0, l=1000
+y0=0, h=100
+elType=CPE4
+elProvider=edelweiss
+nX=200
+nY=16
+
+*step, solver=theSolver
+maxInc=5e-1, minInc=1e-8, maxNumInc=100, maxIter=25, stepLength=1
+>>dirichlet, name=left, nSet=gen_left, field=displacement, 1=0, 2=0
+>>nodeforces, name=cloadTop, nSet=gen_rightTop, components='0,-32000', field=displacement

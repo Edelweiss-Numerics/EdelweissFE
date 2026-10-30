@@ -28,10 +28,10 @@
 #  ---------------------------------------------------------------------
 
 from edelweissfe.points.node import Node
-from edelweissfe.sets.orderedset import ImmutableOrderedSet
+from edelweissfe.sets.orderedset import OrderedSet
 
 
-class NodeSet(ImmutableOrderedSet):
+class NodeSet(OrderedSet):
     """A basic node set.
     It has a label, and a list containing the unique nodes.
 

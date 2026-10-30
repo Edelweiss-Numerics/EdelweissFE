@@ -24,14 +24,125 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 
+from libc.stddef cimport ptrdiff_t
+from libcpp.pair cimport pair
+from libcpp.string cimport string
+from libcpp.vector cimport vector
+
+
 cdef extern from "amgcl-wrapper.hpp":
-    cdef cppclass LinearSolver:
-        LinearSolver(const char* json_params) except +
-        void solve(int n,
-                   const int* ptr,
-                   const int* col,
-                   const double* val,
+    # The interface of every AMGCL solver backend (scalar or block, double or float); values are double
+    # at this boundary. On a block backend set_nullspace() takes the translations only.
+    cdef cppclass AMGCLSolverInterface:
+        void set_nullspace(const double* B, int rows, int cols) except +
+        void build(int n, const int* ptr, const int* col, const double* val) except +
+        void applyPreconditioner(int n, const double* rhs, double* x) except +
+        string report() except +
+
+    # The backend for a block size (1, 2 or 3) and value type (float: builtin<float> for scalars,
+    # 3x3 blocks set up in double and stored in float), owned by the caller.
+    AMGCLSolverInterface* makeAMGCLSolver(const char* json_params, int blockSize, bint isFloat) except +
+
+    # The diagonally scaled, field-split system As = D A D of a composed solve: the outer Krylov operator, the
+    # coupling blocks between fields and, on demand, the diagonal blocks -- built in one threaded
+    # pass, see EquilibratedSystemT's own comment.
+    cdef cppclass EquilibratedSystem:
+        EquilibratedSystem() except +
+
+        @staticmethod
+        void absoluteDiagonal(int n, const int* ptr, const int* col, const double* val, double* out) except +
+        void build(int n, const int* ptr, const int* col, const double* val, const double* scaling,
+                   int nFields, const int* fieldBounds, bint unscaled) except +
+        void buildOperator(int n, const int* ptr, const int* col, const double* val) except +
+        int diagonalBlockSize(int f) except +
+        int diagonalBlockNnz(int f) except +
+        void fillDiagonalBlock(int f, int* ptr, int* col, double* val) except +
+        void matvec(const double* x, double* y, bint unscaled) except +
+        void residual(const double* rhs, const double* x, double* r, bint unscaled) except +
+        void couplingMatvec(int f, int g, const double* x, double* y) except +
+        void diagonalBlockMatvec(int f, const double* x, double* y) except +
+
+    # Callback signature bridging AMGCL's native lgmres Krylov loop back into a Python-level
+    # preconditioner -- see amgcl-wrapper.hpp's own comment on PyPrecondApplyFn/
+    # PyKrylovPrecondT for why this is a bare function pointer + opaque context rather than a
+    # Cython-overridden C++ virtual method.
+    ctypedef int (*PyPrecondApplyFn)(void* ctx, int n, const double* rhs, double* x)
+
+    # AMGCL's own native outer Krylov solve (lgmres or fgmres), in place of scipy.sparse.linalg.gmres; one instance
+    # per system size, no subspace carried across calls -- see OuterKrylovSolverT.
+    cdef cppclass OuterKrylovSolver:
+        void solve(const EquilibratedSystem& system,
                    const double* rhs,
                    double* x,
+                   double tol,
+                   int maxiter,
+                   PyPrecondApplyFn applyFn,
+                   void* ctx,
                    int& iters,
-                   double& error) except +
+                   double& error,
+                   bint onUnscaledOperator) except +
+
+    OuterKrylovSolver* makeOuterKrylovSolver(const string& method, int n, const char* json_params) except +
+
+    # The arrays of a scalar CSR matrix, an operator of a two-level cycle as Python inspects it.
+    cdef cppclass ScalarCsr:
+        vector[int] ptr
+        vector[int] col
+        vector[double] val
+
+    # The products with a prolongation P given from Python (CoarseCorrection): P^T r, P z with AMGCL's threaded spmv and
+    # P^T A P with its threaded SpGEMM -- see Prolongation's own comment.
+    cdef cppclass Prolongation:
+        void build(int nFine, int nCoarse, const int* ptr, const int* col, const double* val) except +
+        int nFine()
+        int nCoarse()
+        void restrict(const double* fine, double* coarse) except +
+        void prolongate(const double* coarse, double* fine) except +
+        ScalarCsr galerkinOperator(int n, const int* ptr, const int* col, const double* val) except +
+
+    # What the two-level cycles on the corner nodes and on the rigid-body modes share: the cycle itself, the fine
+    # spectral radius, P and the coarse operator, the timings and the report -- see TwoLevelCycle's own comment. Arrays
+    # come back as C++ vectors, which Cython copies (_copied in amgcl.pyx).
+    cdef cppclass TwoLevelCycle:
+        void apply(int n, const double* r, double* x) except +
+        double fineSpectralRadius()
+        int nCoarse()
+        ScalarCsr prolongationCsr() except +
+        ScalarCsr coarseOperatorCsr() except +
+        string report() except +
+        vector[pair[string, double]] setupSeconds_
+        double applyFineSeconds_
+        double applyCoarseSeconds_
+
+    # The corner-node two-level cycle of edelweissfe/linsolve/composition/cornernodetwolevelcycle.py: the cycle in C++
+    # (OpenMP), its coarse solve a callback into a component of the composed solver -- see CornerNodeTwoLevelCycleT's
+    # own comment.
+    cdef cppclass CornerNodeTwoLevelCycle(TwoLevelCycle):
+        CornerNodeTwoLevelCycle(const char* json_params) except +
+
+        @staticmethod
+        void dirichletRowMask(int n, const int* ptr, const int* col, const double* val, char* isDirichlet) except +
+        void setCoarseSolve(PyPrecondApplyFn applyFn, void* ctx)
+        const vector[signed char]& coarseNodes()
+        ScalarCsr build(int n, const int* ptr, const int* col, const double* val, const double* scaling,
+                        int nNodes, const signed char* isCorner, const int* edgeEndpoints) except +
+
+    # The two-level cycle on the rigid-body modes per aggregate of
+    # edelweissfe/linsolve/composition/rigidbodymodestwolevelcycle.py, built and applied entirely in C++ (OpenMP) on the
+    # near null-space Python hands it -- see RigidBodyModesTwoLevelCycle's own comment, and
+    # amgcl-rigid-body-coarse-level.hpp for its steps.
+    cdef cppclass RigidBodyModesTwoLevelCycle(TwoLevelCycle):
+        void build(int n, const int* ptr, const int* col, const double* val,
+                   const double* nullspace, int nullspaceRows, int nullspaceCols) except +
+        int blockSize()
+        int modesPerAggregate()
+        int nAggregates()
+        int droppedModes()
+        double prolongationSmoothingWeight()
+        int coarseNullspaceColumns()
+        const vector[ptrdiff_t]& aggregateOfNode()
+        const vector[double]& coarseNullspace()
+
+    # The two-level cycle on the rigid-body modes per aggregate for the field's backendBlockSize (2 or 3), owned by the
+    # caller.
+    RigidBodyModesTwoLevelCycle* makeRigidBodyModesTwoLevelCycle(const char* json_params) except +

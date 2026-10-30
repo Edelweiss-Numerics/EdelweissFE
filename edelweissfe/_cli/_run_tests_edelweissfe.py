@@ -74,21 +74,35 @@ def main():
     testsDirs = sorted(testsDirs, key=str.casefold)
 
     if "all" not in tests:
-        testsDirs = list(set(testsDirs).intersection(set(tests)))
+        # keep the sorted order: a test case may consume a file another one produces
+        requested = set(tests)
+        testsDirs = [directory for directory in testsDirs if directory in requested]
 
     failedTests = 0
+    skippedTests = 0
+    directoriesWithoutTest = []
 
     for directory in testsDirs:
         os.chdir(os.path.join(testfilesDir, directory))
 
-        # no test.inp file is found
+        # directories without a test.inp are listed at the end, so that no deck silently drops out
         if not os.path.exists(testfile):
+            directoriesWithoutTest.append(directory)
             continue
 
         try:
             inputFile = parseInputFile(testfile)
             print("Test {:50}".format(directory), end="\r")
         except ValueError as e:
+            print("Test {:50} [red]FAILED DURING PARSING[/]: ".format(directory) + str(e))
+            failedTests += 1
+            continue
+        except (NotImplementedError, ModuleNotFoundError) as e:
+            # e.g. an unbuilt optional Cython extension, or a *include of a file from a skipped test
+            print("Test {:50} [grey]SKIPPED[/]: ".format(directory) + str(e))
+            skippedTests += 1
+            continue
+        except Exception as e:
             print("Test {:50} [red]FAILED DURING PARSING[/]: ".format(directory) + str(e))
             failedTests += 1
             continue
@@ -104,10 +118,16 @@ def main():
             U = np.hstack(u + sv).flatten()
 
             if not args.create:
-                UReference = np.loadtxt(referenceSolutionFile)
-                residual = U - UReference
+                UReference = np.atleast_1d(np.loadtxt(referenceSolutionFile))
 
-                if (np.max(np.abs(residual))) < 1e-6:
+                if U.shape != UReference.shape:
+                    print(
+                        "Test {:50} [red]FAILED[/]: {} values, but the reference has {}".format(
+                            directory, U.size, UReference.size
+                        )
+                    )
+                    failedTests += 1
+                elif np.max(np.abs(U - UReference)) < 1e-6:
                     print("Test {:50} [green]PASSED[/] [{:2.1f}]".format(directory, toc - tic))
                 else:
                     print("Test {:50} [red]FAILED[/]".format(directory))
@@ -117,12 +137,9 @@ def main():
                 print("")
                 np.savetxt(referenceSolutionFile, U)
 
-        except NotImplementedError as e:
+        except (NotImplementedError, ModuleNotFoundError) as e:
             print("Test {:50} [grey]SKIPPED[/]: ".format(directory) + str(e))
-            continue
-
-        except ModuleNotFoundError as e:
-            print("Test {:50} [grey]SKIPPED[/]: ".format(directory) + str(e))
+            skippedTests += 1
             continue
 
         except Exception as e:
@@ -130,6 +147,9 @@ def main():
             failedTests += 1
             continue
 
+    if directoriesWithoutTest:
+        print("[grey]Directories without a {}: {}[/]".format(testfile, ", ".join(directoriesWithoutTest)))
+    print("[blue]Tests skipped: {:3}[/]".format(skippedTests))
     print("[blue]Tests failed: {:3}[/]".format(failedTests))
     if failedTests > 0:
         sys.exit(1)

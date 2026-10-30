@@ -1,0 +1,66 @@
+# Run the full test suite on macOS / arm64 (Apple Silicon).
+#
+# Mirrors run_tests_with_marmot.yml. Its purpose is to keep Apple Silicon support from
+# regressing: it exercises environment creation, the Marmot build, the Cython build and both
+# test suites on arm64 with clang/libc++, none of which the ubuntu-latest jobs cover.
+#
+# Every dependency is cloned into the parent directory, never into the checkout. Marmot ships
+# a committed symlink, _codeql_detected_source_root -> ., so a Marmot clone inside the
+# checkout makes `pip install .` follow that symlink into itself indefinitely while collecting
+# files for the wheel:
+#
+#     error: could not create 'build/.../Marmot/_codeql_detected_source_root/
+#     _codeql_detected_source_root/...': File name too long
+#
+# Linux tolerates this only because its path limit is four times macOS's; the recursion is
+# there either way, and the dependency sources do not belong in the wheel regardless.
+name: Run tests with Marmot (macOS/arm64)
+
+on:
+  # Pushes to the long-lived branches only: a branch with an open pull request is tested by the
+  # pull_request event, and testing every push as well would run each workflow twice.
+  push:
+    branches: [master, next_v26.11]
+  pull_request:
+  workflow_dispatch:
+
+# A newer push to the same branch or pull request supersedes the run in progress.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Fixed thread count, so that a result does not depend on the runner's core count.
+env:
+  OMP_NUM_THREADS: 2
+
+jobs:
+  build:
+    # macos-latest is arm64 (Apple Silicon); macos-13 would be an Intel runner.
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Installs exactly what conda-lock.yml pins (conda packages, no solving).
+      - uses: ./.github/actions/setup-locked-env
+
+      # Branch selection, caching and MARMOT_INSTALL_DIR: see .github/actions/build-marmot.
+      - uses: ./.github/actions/build-marmot
+
+      - name: Build EdelweissFE
+        shell: bash -leo pipefail {0}
+        run: |
+          pip install -v --no-deps --no-build-isolation .
+
+      - name: Check the Marmot extension
+        shell: bash -leo pipefail {0}
+        working-directory: ${{ runner.temp }}
+        run: |
+          # A failed Marmot extension would not fail the build, and its test cases would merely be skipped: import it.
+          python -c "import edelweissfe.elements.marmotelement.element"
+
+      - name: Run tests
+        shell: bash -leo pipefail {0}
+        run: |
+          run_tests_edelweissfe ./testfiles/marmot/
+          run_tests_edelweissfe ./testfiles/edelweiss-only/

@@ -1,0 +1,66 @@
+# Run the Marmot test suites on Windows (x64, MSVC), with Marmot built as a DLL.
+#
+# Mirrors run_tests_with_marmot.yml; see run_tests_windows.yml for the Windows specifics of the environment and the
+# EdelweissFE build.
+name: Run tests with Marmot (Windows)
+
+on:
+  # Pushes to the long-lived branches only: a branch with an open pull request is tested by the
+  # pull_request event, and testing every push as well would run each workflow twice.
+  push:
+    branches: [master, next_v26.11]
+  pull_request:
+  workflow_dispatch:
+
+# A newer push to the same branch or pull request supersedes the run in progress.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Fixed thread count, so that a result does not depend on the runner's core count.
+env:
+  OMP_NUM_THREADS: 2
+
+jobs:
+  build:
+    runs-on: windows-latest
+    # A hung install step (e.g. a package's post-link script) must fail fast, not block CI for hours.
+    timeout-minutes: 120
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Installs exactly what conda-lock.yml pins for win-64.
+      - uses: ./.github/actions/setup-locked-env
+        with:
+          init-shell: cmd.exe bash
+
+      # Branch selection, caching and MARMOT_INSTALL_DIR: see .github/actions/build-marmot.
+      - uses: ./.github/actions/build-marmot
+
+      # cmd.exe, because only its activation runs the environment's MSVC setup (vs2022_compiler_vars.bat).
+      - name: Build EdelweissFE
+        shell: cmd /C CALL {0}
+        run: |
+          pip install -v --no-deps --no-build-isolation .
+
+      - name: Built extensions
+        shell: bash -leo pipefail {0}
+        # Outside the checkout, whose uncompiled edelweissfe/ source tree would shadow the installed package.
+        working-directory: ${{ runner.temp }}
+        run: |
+          # Extension build failures are tolerated by setup.py (optional_build_ext); list what was built.
+          python -c "import edelweissfe, pathlib; print((pathlib.Path(edelweissfe.__file__).parent / 'built_extensions.log').read_text())"
+          # The Marmot installation baked in at build time, whose bin/ edelweissfe adds to the DLL search path.
+          python -c "import edelweissfe, pathlib; print((pathlib.Path(edelweissfe.__file__).parent / 'marmot_install_dir.txt').read_text())"
+          # A failed Marmot extension would not fail the build, and its test cases would merely be skipped: import it.
+          python -c "import edelweissfe.elements.marmotelement.element"
+
+      - name: Run tests with Marmot
+        shell: bash -leo pipefail {0}
+        env:
+          PYTHON_GIL: "0"
+        run: |
+          # Invoke the installed console scripts directly, not `python -m ...`, so that the repository's
+          # uncompiled edelweissfe/ source tree does not shadow the installed package (see run_tests_with_marmot.yml).
+          "$(command -v run_tests_edelweissfe)" ./testfiles/marmot/

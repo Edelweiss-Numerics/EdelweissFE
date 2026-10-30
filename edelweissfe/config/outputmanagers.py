@@ -40,27 +40,5 @@ They are defined globally:
         create=perElement, elSet=all, fieldOutput=Strain
 
 """
-import importlib
 
-
-def getOutputManagerClass(name: str) -> type:
-    """Get the class type of the requested output manager.
-
-    Parameters
-    ----------
-    name
-        The name of the output manager to load.
-
-    Returns
-    -------
-    type
-        The output manager class type.
-    """
-
-    module = importlib.import_module("edelweissfe.outputmanagers." + name.lower())
-    return module.OutputManager
-
-
-def getOutputManagerFactoryByName(name):
-    module = importlib.import_module("edelweissfe.outputmanagers." + name.lower())
-    return module.outputManagerFactory
+# No code here (see :mod:`edelweissfe.config.registry`); the docstring is rendered by Sphinx, do not delete.
