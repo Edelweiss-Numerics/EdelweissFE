@@ -1335,8 +1335,10 @@ private:
   std::shared_ptr< Matrix > P_, R_;
 };
 
-/// @brief The Galerkin coarse operator P^T (A P), with AMGCL's own threaded SpGEMM and in the order AMGCL's own
-/// coarsening forms it (amgcl/coarsening/detail/galerkin.hpp), columns sorted per row.
+/// @brief The Galerkin coarse operator P^T (A P), in the order AMGCL's own coarsening forms it
+/// (amgcl/coarsening/detail/galerkin.hpp), columns sorted per row. Both products are AMGCL's threaded Saad SpGEMM at
+/// every thread count: amgcl::backend::product switches to its row-merge SpGEMM above 16 threads, which is slower than
+/// the Saad one on the operators of the two-level cycles.
 /// @param A the fine operator
 /// @param P the prolongation
 /// @param PT its transpose
@@ -1346,7 +1348,12 @@ inline std::shared_ptr< amgcl::backend::crs< double, int, int > > galerkinProduc
   const amgcl::backend::crs< double, int, int >& P,
   const amgcl::backend::crs< double, int, int >& PT )
 {
-  return amgcl::backend::product( PT, *amgcl::backend::product( A, P ), true );
+  typedef amgcl::backend::crs< double, int, int > Matrix;
+  Matrix                                          AP;
+  amgcl::backend::spgemm_saad( A, P, AP, false );
+  auto PTAP = std::make_shared< Matrix >();
+  amgcl::backend::spgemm_saad( PT, AP, *PTAP, true );
+  return PTAP;
 }
 
 /// @brief The products with a prolongation P that Python gives (CoarseCorrection in composition/combinators.py): P and
