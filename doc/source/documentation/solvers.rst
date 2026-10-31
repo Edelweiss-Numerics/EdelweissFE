@@ -161,6 +161,38 @@ momentum and kinetic energy in that case.
 
 .. pprint:: solver:NIDParallel
 
+Prediction of an increment in the implicit solvers
+--------------------------------------------------
+
+Newton's method starts each increment from a prediction of its solution increment. The solver option
+``extrapolation`` chooses it:
+
+* ``off``: from zero, i.e., from the last converged state.
+* ``linear`` (default): the last accepted increment, scaled to the size of the new one. The path of the solution is
+  continued along its last secant.
+* ``quadratic``: the parabola through the last three accepted states, evaluated at the end of the new increment, which
+  continues the path along its curvature, too. For a solution that grows quadratically with the load, the prediction
+  is exact, and the increment converges without a correction. While only one increment of the step has been accepted,
+  the prediction is linear.
+
+Sizes are measured in step progress. The prescribed degrees of freedom take their prescribed increment, so the first
+iteration of a predicted increment already checks convergence. Not available yet under an arc length controller,
+which extrapolates its load parameter linearly.
+
+A prediction can lead Newton's method astray, e.g., when the path turns sharply. Two options decide what happens then
+and around rebuilds of the equation system, both off by default:
+
+* ``retryWithoutExtrapolation``: if an extrapolated increment fails, it is attempted once more from a zero prediction
+  before it is cut back. A failed increment then keeps the accepted history, and the smaller increment after the
+  cutback is extrapolated from it as well. Without this option, a failed increment drops the prediction, and the
+  increments up to the next accepted one start from zero.
+* ``extrapolateAcrossConnectivityChange``: a change of the connectivity, e.g., a contact search that couples other
+  nodes, rebuilds the equation system, and the increment starts from zero. With this option, it is extrapolated
+  nevertheless, as long as the rebuilt system numbers the degrees of freedom exactly as the last one
+  (:meth:`~edelweissfe.numerics.dofmanager.DofManager.dofNumbering`): the last accepted increments are vectors of the
+  same degrees of freedom then. A change of the topology, e.g., a mesh refinement, always starts from zero (see
+  ``extrapolateAfterModelChange`` for the increment that follows it).
+
 Convergence criteria of the implicit solvers
 --------------------------------------------
 

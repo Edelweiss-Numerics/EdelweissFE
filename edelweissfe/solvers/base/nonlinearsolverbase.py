@@ -707,47 +707,6 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
         KCsr = self.csrGenerator.updateInPlace(K)
         return KCsr
 
-    def extrapolateLastIncrement(
-        self,
-        extrapolation: str,
-        timeStep: TimeStep,
-        dU: DofVector,
-        dirichlets: list,
-        prevTimeStep: TimeStep,
-        model,
-    ) -> tuple[DofVector, bool]:
-        """Depending on the current setting, extrapolate the solution of the last increment.
-
-        Parameters
-        ----------
-        extrapolation
-            The type of extrapolation.
-        timeStep
-            The current time step.
-        dU
-            The last solution increment.
-        dirichlets
-            The list of active dirichlet boundary conditions.
-        lastIncrementSize
-            The size of the last increment.
-
-        Returns
-        -------
-        tuple[DofVector,bool]
-            - The extrapolated solution increment.
-            - True if an extrapolation was performed.
-        """
-
-        if extrapolation == "linear" and prevTimeStep and prevTimeStep.timeIncrement:
-            dU *= timeStep.stepProgressIncrement / prevTimeStep.stepProgressIncrement
-            dU = self.applyDirichletToResidual(timeStep, dU, dirichlets)
-            isExtrapolatedIncrement = True
-        else:
-            isExtrapolatedIncrement = False
-            dU[:] = 0.0
-
-        return dU, isExtrapolatedIncrement
-
     def printResidualOutlierNodes(self, residualOutliers: dict):
         """Print which nodes have the largest residuals.
 
