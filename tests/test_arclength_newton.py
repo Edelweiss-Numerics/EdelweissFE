@@ -33,6 +33,7 @@
   load parameter.
 - The prediction extrapolates both with the same weights, quadratically, too, and a failed extrapolated increment is
   retried without it.
+- The load parameter is part of the model, so the next step continues from it.
 
 Most decks are the cantilever of ``testfiles/edelweiss-only/ArcLengthPenaltyConstraint``, bent down onto a rigid floor
 (a quadratic penalty, so the path is nonlinear) by a tip load whose load parameter follows the tip displacement. Its end
@@ -264,6 +265,7 @@ def test_an_arc_length_step_built_from_python_objects_alone():
     reaction = sum(field["P"][field.indexOfNode(node), 1] for node in model.nodeSets["left"])
     np.testing.assert_allclose(reaction, solver.Lambda * 1.0, rtol=1e-10)
     assert solver.Lambda > 0.0
+    assert model.additionalParameters["arc length parameter"] == solver.Lambda
 
 
 def test_a_redeclared_controller_counts_its_absolute_target_from_the_quantity_reached():
@@ -448,3 +450,31 @@ def test_a_failed_extrapolated_increment_is_retried_without_extrapolation(tmp_pa
         # cut back, and the prediction is dropped
         assert attemptsOfThird[:2] == [(3, INCREMENT, True), (3, 0.25 * INCREMENT, False)]
     assertSameEndState(result, reference)
+
+
+# --- the load parameter across steps -----------------------------------------------------------------------------------
+
+
+def test_the_next_step_continues_from_the_load_parameter_of_the_model(tmp_path):
+    """The load parameter is written to the model under the name it is read from: a second solver, which takes over
+    the step after an arc length controlled one, starts from it."""
+
+    text = (
+        "*include, input={:}\n".format(_MODEL)
+        + "*solver, solver=NISTPArcLength, name=theSolver\n*solver, solver=NISTPArcLength, name=holdingSolver\n"
+        + _STEP.format(
+            solver="theSolver", increment=INCREMENT, stepOptions="", controller="tipDisplacement", solverOptions=""
+        )
+        + """
+*step, solver=holdingSolver
+startInc=0.5, maxInc=0.5, minInc=1e-6, maxNumInc=100, maxIter=25, stepLength=1
+>>options, name=holdingSolver, arcLengthController=off
+>>dirichlet, name=clamp, nSet=gen_left, field=displacement, 1=0.0, 2=0.0
+"""
+    )
+    model = run(tmp_path, text)
+
+    loadParameter = model.solvers["theSolver"].Lambda
+    assert loadParameter > 0.0
+    assert model.additionalParameters["arc length parameter"] == loadParameter
+    assert model.solvers["holdingSolver"].Lambda == loadParameter

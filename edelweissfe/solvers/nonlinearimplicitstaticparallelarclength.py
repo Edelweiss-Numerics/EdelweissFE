@@ -149,8 +149,12 @@ class NISTPArcLength(NISTParallel):
         fieldOutputController: FieldOutputController,
         outputmanagers: dict[str, OutputManagerBase],
     ):
-        """Take the controller of the step, and start the step; see
+        """Take the controller of the step, and the load parameter reached so far, and start the step; see
         :meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.beginStep`.
+
+        The load parameter is part of the state of the model: every converged increment writes it to
+        ``model.additionalParameters["arc length parameter"]``. So a step continues from the load parameter the steps
+        before it reached.
 
         Parameters
         ----------
@@ -431,7 +435,7 @@ class NISTPArcLength(NISTParallel):
         self._dLambda = dLambda
 
         self.arcLengthController.finishIncrement(U_n, dU, dLambda, timeStep, self.theDofManager)
-        model.additionalParameters["additionalParameters"] = self.Lambda
+        model.additionalParameters["arc length parameter"] = self.Lambda
 
         for stepActionType in stepActions.values():
             for action in stepActionType.values():
