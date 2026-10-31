@@ -1,0 +1,108 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+#  ---------------------------------------------------------------------
+#
+#  _____    _      _              _         _____ _____
+# | ____|__| | ___| |_      _____(_)___ ___|  ___| ____|
+# |  _| / _` |/ _ \ \ \ /\ / / _ \ / __/ __| |_  |  _|
+# | |__| (_| |  __/ |\ V  V /  __/ \__ \__ \  _| | |___
+# |_____\__,_|\___|_| \_/\_/ \___|_|___/___/_|   |_____|
+#
+#
+#  Unit of Strength of Materials and Structural Analysis
+#  University of Innsbruck,
+#  2017 - today
+#
+#  Matthias Neuner matthias.neuner@uibk.ac.at
+#
+#  This file is part of EdelweissFE.
+#
+#  This library is free software; you can redistribute it and/or
+#  modify it under the terms of the GNU Lesser General Public
+#  License as published by the Free Software Foundation; either
+#  version 2.1 of the License, or (at your option) any later version.
+#
+#  The full text of the license can be found in the file LICENSE.md at
+#  the top level directory of EdelweissFE.
+#  ---------------------------------------------------------------------
+"""A constraint that is switched off (``ConstraintBase.active``) is not part of the equation system: it gets no degrees
+of freedom, the solver does not evaluate it, and its Lagrange multipliers leave the equation system with it.
+
+A Lagrange multiplier constraint is the sharp case: if its multipliers stayed in the equation system without the
+constraint that gives them an equation, the system matrix would be singular. Switched off by a ``modelupdate``, the
+constraint below lets the loaded corner of a plate move freely; switched on in the next step, it pulls the top edge
+back to one common displacement.
+"""
+
+import numpy as np
+
+from edelweissfe.drivers.inputfiledrivensimulation import finiteElementSimulation
+from edelweissfe.utils.inputfileparser import parseInputFile
+
+DECK = """
+*material, name=LinearElastic, id=linearelastic, provider=edelweiss
+100.0, 0.3
+
+*job, name=job, domain=2d
+*solver, solver=NIST, name=theSolver
+
+*modelGenerator, generator=planeRectQuad, name=gen
+x0=0, y0=0, l=1.0, h=1.0, nX=2, nY=2, elType=CPE4, elProvider=edelweiss
+
+*section, name=section1, thickness=1.0, material=linearelastic, type=plane
+gen_all
+
+*constraint, type=equalValueLagrangian, name=topEqual
+nSet=gen_top
+field=displacement
+component=1
+
+*step, solver=theSolver
+maxInc=1e0, minInc=1e0, maxNumInc=1, maxIter=5, stepLength=1
+>>modelupdate, update='model.constraints["topEqual"].active=False'
+>>dirichlet, name=bottom, nSet=gen_bottom, field=displacement, 1=0, 2=0
+>>nodeforces, name=pull, nSet=gen_rightTop, field=displacement, components='0, 1'
+{secondStep}
+"""
+
+SECOND_STEP = """
+*step, solver=theSolver
+maxInc=1e0, minInc=1e0, maxNumInc=1, maxIter=5, stepLength=1
+>>modelupdate, update='model.constraints["topEqual"].active=True'
+"""
+
+
+def _run(tmp_path, secondStep: str):
+    path = tmp_path / "deck.inp"
+    path.write_text(DECK.format(secondStep=secondStep))
+    model, _ = finiteElementSimulation(parseInputFile(str(path)), verbose=False, suppressPlots=True)
+    return model
+
+
+def _verticalDisplacementOfTopEdge(model) -> np.ndarray:
+    return model.nodeFields["displacement"].subset(model.nodeSets["gen_top"])["U"][:, 1]
+
+
+def test_switched_off_lagrange_constraint_leaves_no_singular_rows(tmp_path):
+    model = _run(tmp_path, secondStep="")
+
+    assert not model.constraints["topEqual"].active
+    assert model.activeConstraints() == []
+
+    uTop = _verticalDisplacementOfTopEdge(model)
+    assert np.all(np.isfinite(uTop))
+    # without the constraint, the loaded corner runs ahead of the rest of the top edge
+    assert np.ptp(uTop) > 1e-3
+
+    # the multipliers were not part of the equation system, so they kept their initial value
+    assert all(model.scalarVariables[name].value == 0.0 for name in model.scalarVariables)
+
+
+def test_switched_on_again_the_constraint_takes_part_again(tmp_path):
+    model = _run(tmp_path, secondStep=SECOND_STEP)
+
+    assert model.activeConstraints() == [model.constraints["topEqual"]]
+
+    uTop = _verticalDisplacementOfTopEdge(model)
+    assert np.ptp(uTop) < 1e-10 * np.abs(uTop).max()
+    assert any(model.scalarVariables[name].value != 0.0 for name in model.scalarVariables)

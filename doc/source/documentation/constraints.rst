@@ -546,6 +546,14 @@ as well:
 .. automodule:: edelweissfe.utils.residualtangentcheck
     :members:
 
+A constraint can be **switched off** through its ``active`` attribute. A constraint that is switched off is not
+part of the equation system: it gets no degrees of freedom, the solvers do not evaluate it, and its scalar variables
+-- the Lagrange multipliers of ``equalvaluelagrangian``, say -- leave the equation system with it, so that they leave
+no unknowns without an equation behind. A ``modelupdate`` step action switches a constraint off for a step, as in
+``testfiles/marmot/PenaltyBasedIndirectControl``; a constraint may also switch itself off in its
+``updateConnectivity``, e.g. a contact constraint whose partner is out of reach, and then reports a change of its
+connectivity, so that the solver rebuilds its equation system.
+
 .. automodule:: edelweissfe.constraints.base.constraintbase
     :members:
 

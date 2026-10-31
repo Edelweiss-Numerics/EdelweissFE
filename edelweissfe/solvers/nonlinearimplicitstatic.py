@@ -40,7 +40,7 @@ from edelweissfe.config.linsolve import createLinearSolver
 from edelweissfe.constraints.base.constraintbase import ConstraintBase
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.numerics.csrgeneratorv2 import CSRGenerator
-from edelweissfe.numerics.dofmanager import DofManager, DofVector, VIJSystemMatrix
+from edelweissfe.numerics.dofmanager import DofVector, VIJSystemMatrix
 from edelweissfe.numerics.parallelizationutilities import forEachSliceInParallel
 from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
 from edelweissfe.solvers.base.convergencecriteria import (
@@ -642,13 +642,7 @@ class NIST(NonlinearSolverBase):
             with performancetiming.timeit("equation system rebuild"):
                 self.forgetEquationSystem()
                 with performancetiming.timeit("dof manager"):
-                    self.theDofManager = DofManager(
-                        model.nodeFields.values(),
-                        model.scalarVariables.values(),
-                        model.elements.values(),
-                        model.constraints.values(),
-                        model.nodeSets.values(),
-                    )
+                    self.theDofManager = self.createDofManager(model)
                 # the cache is keyed on the DofManager; drop it so the old manager can be freed
                 self._dirichletIndicesCache = None
                 self.journal.message(
@@ -694,8 +688,7 @@ class NIST(NonlinearSolverBase):
                 for fieldName, field in model.nodeFields.items():
                     U = self.theDofManager.writeNodeFieldToDofVector(U, field, "U")
 
-                for variable in model.scalarVariables.values():
-                    U[self.theDofManager.idcsOfScalarVariablesInDofVector[variable]] = variable.value
+                U = self.theDofManager.writeScalarVariablesToDofVector(U)
 
                 with performancetiming.timeit("mpc transformation build"):
                     self.mpcTransformation = self.buildMPCTransformation(model, step.actions)
@@ -777,8 +770,7 @@ class NIST(NonlinearSolverBase):
                 self.theDofManager.writeDofVectorToNodeField(U, field, "U")
                 self.theDofManager.writeDofVectorToNodeField(P, field, "P")
                 self.theDofManager.writeDofVectorToNodeField(dU, field, "dU")
-            for variable in model.scalarVariables.values():
-                variable.value = U[self.theDofManager.idcsOfScalarVariablesInDofVector[variable]]
+            self.theDofManager.writeDofVectorToScalarVariables(U)
             model.advanceToTime(equilibrationTimeStep.totalTime)
             self._U, self._dU, self._P = U, dU, P
 
@@ -891,8 +883,7 @@ class NIST(NonlinearSolverBase):
                 self.theDofManager.writeDofVectorToNodeField(P, field, "P")
                 self.theDofManager.writeDofVectorToNodeField(dU, field, "dU")
 
-            for variable in model.scalarVariables.values():
-                variable.value = U[self.theDofManager.idcsOfScalarVariablesInDofVector[variable]]
+            self.theDofManager.writeDofVectorToScalarVariables(U)
 
         self.updateRigidBodies(model, timeStep)
 
@@ -1692,9 +1683,11 @@ class NIST(NonlinearSolverBase):
         timeStep: TimeStep,
         FConstraints: DofVector = None,
     ) -> tuple[DofVector, VIJSystemMatrix]:
-        """Loop over all constraints, and evaluate them: each adds its residual contribution and the
+        """Loop over all constraints, and evaluate the active ones: each adds its residual contribution and the
         tangent of it, see :meth:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernels`.
-        Is called by solveIncrement() in each iteration.
+        A constraint that is switched off (see
+        :attr:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.active`) is not part of the equation
+        system and is skipped. Is called by solveIncrement() in each iteration.
 
         Parameters
         ----------
@@ -1721,6 +1714,10 @@ class NIST(NonlinearSolverBase):
         """
 
         for constraint in constraints.values():
+            # a constraint that is switched off has no place in the equation system
+            if not constraint.active:
+                continue
+
             Kc = K[constraint]
             Pc = np.zeros(constraint.nDof)
 

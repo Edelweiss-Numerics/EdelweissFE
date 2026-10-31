@@ -161,8 +161,6 @@ class Constraint(ConstraintBase, MeshDependent):
 
         self._nDim = model.domainSize
 
-        self.active = True
-
         self.constrainedValue = 0.0
 
         self._lastSeenTopologyVersion = model.topology.version
@@ -239,9 +237,6 @@ class Constraint(ConstraintBase, MeshDependent):
         return True
 
     def computeKernels(self, U_np, dU, P, K, timeStep: TimeStep):
-        if not self.active:
-            return
-
         sBL = self.startBlock_loadNodes
         eBL = self.endBlock_loadNodes
         sBC = self.startBlock_constrainedNodes
