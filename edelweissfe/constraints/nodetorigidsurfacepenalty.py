@@ -150,8 +150,6 @@ class Constraint(ConstraintBase, MeshDependent):
         self._nodes = nSet
         self._rebuildFromNodes()
 
-        self.active = True
-
         self.journal.message(
             f"{self._nNodes} nodes, field={self._field}, component={self.component}, "
             f"type={self.type}, direction={self.direction:+.1f}",
@@ -207,9 +205,6 @@ class Constraint(ConstraintBase, MeshDependent):
         K: np.ndarray,
         timeStep: TimeStep,
     ):
-        if not self.active:
-            return
-
         values = U_np[self.indices_component]
         gap = (values - self.value) * self.direction
 

@@ -128,7 +128,7 @@ import edelweissfe.utils.performancetiming as performancetiming
 from edelweissfe.config.phenomena import carriesKineticEnergy, carriesLinearMomentum
 from edelweissfe.constraints.base.constraintbase import ConstraintBase
 from edelweissfe.models.femodel import FEModel
-from edelweissfe.numerics.dofmanager import DofManager, DofVector
+from edelweissfe.numerics.dofmanager import DofVector
 from edelweissfe.numerics.mpctransformation import MultiPointConstraintTransformation
 from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
 from edelweissfe.solvers.base.conservationchecks import (
@@ -1114,8 +1114,7 @@ class NED(NonlinearSolverBase):
             self.theDofManager.writeDofVectorToNodeField(P, field, "P")
             self.theDofManager.writeDofVectorToNodeField(V, field, "V")
 
-        for variable in model.scalarVariables.values():
-            variable.value = U[self.theDofManager.idcsOfScalarVariablesInDofVector[variable]]
+        self.theDofManager.writeDofVectorToScalarVariables(U)
 
     @performancetiming.timeit("constraint connectivity")
     def updateConstraintConnectivity(self, model: FEModel) -> bool:
@@ -1416,18 +1415,12 @@ class NED(NonlinearSolverBase):
                 self.identification,
                 verbosity,
             )
-            self.theDofManager.refreshConstraintIndices(model.constraints.values())
+            self.theDofManager.refreshConstraintIndices(model.activeConstraints())
         else:
             self.journal.message("Creating monolithic equation system", self.identification, verbosity)
             # No system matrix, so neither the VIJ pattern nor the index-to-host-object map is needed.
-            self.theDofManager = DofManager(
-                model.nodeFields.values(),
-                model.scalarVariables.values(),
-                model.elements.values(),
-                model.constraints.values(),
-                model.nodeSets.values(),
-                initializeVIJPattern=False,
-                determiningIndexToHostObjectMapping=False,
+            self.theDofManager = self.createDofManager(
+                model, initializeVIJPattern=False, determiningIndexToHostObjectMapping=False
             )
         self.journal.message(
             "total size of eq. system: {:}".format(self.theDofManager.nDof),
@@ -1478,8 +1471,7 @@ class NED(NonlinearSolverBase):
                 if "V" in field:
                     V = self.theDofManager.writeNodeFieldToDofVector(V, field, "V")
 
-            for variable in model.scalarVariables.values():
-                U[self.theDofManager.idcsOfScalarVariablesInDofVector[variable]] = variable.value
+            U = self.theDofManager.writeScalarVariablesToDofVector(U)
         else:
             if previous.U.shape != U.shape:
                 raise RuntimeError(
@@ -1524,7 +1516,9 @@ class NED(NonlinearSolverBase):
         P: DofVector,
         timeStep: TimeStep,
     ) -> DofVector:
-        """Evaluate every constraint and add its residual contribution to the given vector.
+        """Evaluate every active constraint and add its residual contribution to the given vector; a constraint
+        that is switched off (see :attr:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.active`) is
+        skipped.
 
         The explicit counterpart of
         :meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.assembleConstraints`, with the same
@@ -1561,6 +1555,10 @@ class NED(NonlinearSolverBase):
         PPlain = P.asPlainArray()
 
         for name, constraint in constraints.items():
+            # a constraint that is switched off has no place in the equation system
+            if not constraint.active:
+                continue
+
             plan = self._constraintForcePlans.get(name)
             if plan is None:
                 indices = P.entitiesInDofVector[constraint]

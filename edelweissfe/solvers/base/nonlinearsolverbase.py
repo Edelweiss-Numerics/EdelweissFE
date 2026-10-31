@@ -36,7 +36,7 @@ from scipy.sparse import csr_matrix
 
 import edelweissfe.utils.performancetiming as performancetiming
 from edelweissfe.models.femodel import FEModel
-from edelweissfe.numerics.dofmanager import DofVector, VIJSystemMatrix
+from edelweissfe.numerics.dofmanager import DofManager, DofVector, VIJSystemMatrix
 from edelweissfe.numerics.mpctransformation import (
     MultiPointConstraintTransformation,
     _flattenChainedRecords,
@@ -202,6 +202,46 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
             [constraint.updateConnectivity(model) for constraint in model.constraints.values()]
         )
         return TopologyUpdate(topologyChanged, meshDependentsRefreshed, constraintConnectivityChanged)
+
+    def createDofManager(
+        self,
+        model: FEModel,
+        initializeVIJPattern: bool = True,
+        determiningIndexToHostObjectMapping: bool = True,
+    ) -> DofManager:
+        """Number the degrees of freedom of the model's equation system.
+
+        The equation system holds the node fields, the elements, and the active constraints with their scalar
+        variables (e.g. Lagrange multipliers). A constraint that is switched off (see
+        :attr:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.active`) is left out together with its
+        scalar variables, which would otherwise be unknowns without an equation.
+
+        Parameters
+        ----------
+        model
+            The model tree.
+        initializeVIJPattern
+            Whether to build the pattern of the system matrix; a solver without one does not need it.
+        determiningIndexToHostObjectMapping
+            Whether to map each degree of freedom back to its node; only needed to report nodes by index.
+
+        Returns
+        -------
+        DofManager
+            The DOF manager of the equation system.
+        """
+
+        constraints = model.activeConstraints()
+
+        return DofManager(
+            model.nodeFields.values(),
+            [scalarVariable for constraint in constraints for scalarVariable in constraint.scalarVariables],
+            model.elements.values(),
+            constraints,
+            model.nodeSets.values(),
+            initializeVIJPattern=initializeVIJPattern,
+            determiningIndexToHostObjectMapping=determiningIndexToHostObjectMapping,
+        )
 
     @performancetiming.timeit("distributed loads")
     def computeDistributedLoads(

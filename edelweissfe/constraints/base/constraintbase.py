@@ -49,6 +49,15 @@ class ConstraintBase(OptionSchemaProvider, ABC, VIJEntityBase):
     #: none) or overrides :meth:`getRestartData` and :meth:`setRestartData`.
     checkpointedState: dict | None = None
 
+    #: Whether this constraint takes part in the equation system. A constraint that is switched off gets no
+    #: degrees of freedom and adds nothing to the residual or the tangent; its scalar variables (e.g. Lagrange
+    #: multipliers) leave the equation system with it, so that they leave no empty rows behind. It is switched
+    #: off either from outside, e.g. by a ``modelupdate`` step action at the start of a step, or by the
+    #: constraint itself in :meth:`updateConnectivity`, e.g. a contact constraint whose partner is out of reach.
+    #: A constraint that switches itself on or off reports that as a change of its connectivity, so that the
+    #: solver rebuilds its equation system.
+    active: bool = True
+
     @classmethod
     def fromConstraintDefinition(
         cls, name: str, definition: dict, model: FEModel, journal: "Journal" = None

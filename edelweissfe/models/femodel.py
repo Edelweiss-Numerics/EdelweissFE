@@ -403,6 +403,18 @@ class FEModel:
         self._prepareElements(journal)
         self.topology.recordSetupFingerprint()
 
+    def activeConstraints(self) -> list:
+        """The constraints that take part in the equation system: all constraints, in their order, except those
+        switched off (see :attr:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.active`).
+
+        Returns
+        -------
+        list[ConstraintBase]
+            The active constraints.
+        """
+
+        return [constraint for constraint in self.constraints.values() if constraint.active]
+
     def advanceToTime(self, time: float):
         """Accept the current state of the model and sub instances, and
         set the new time.
