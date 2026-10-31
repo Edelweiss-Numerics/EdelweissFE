@@ -764,9 +764,7 @@ class NED(NonlinearSolverBase):
         # only the entities that have kernels to evaluate; see buildEquationSystem()
         elements = self._kernelElements
         dirichlets = stepActions["dirichlet"].values()
-        nodeforces = stepActions["nodeforces"].values()
-        distributedLoads = stepActions["distributedload"].values()
-        bodyForces = stepActions["bodyforce"].values()
+        loads = self.collectLoads(stepActions)
 
         # Find which global DOFs the Dirichlet BCs constrain, once up front.
         self.locateConstrainedDofs(dirichlets)
@@ -842,7 +840,7 @@ class NED(NonlinearSolverBase):
         # accelerates the nodes is the negative of their sum, f_ext - f_int.
         P[:] = 0.0
         P, psi = self.computeElements(elements, U_n, dU, P, timeStep)
-        P, _ = self.assembleLoads(nodeforces, distributedLoads, bodyForces, U_n, P, None, timeStep)
+        P, _ = self.assembleLoads(loads, U_n, dU, P, None, timeStep)
         P = self.assembleConstraintForces(model.constraints, U_n, dU, P, timeStep)
         P[:] = -P[:]
 

@@ -1284,13 +1284,7 @@ class NIST(NonlinearSolverBase):
         # The elements' sum P is kept apart: it is the reaction force this increment reports.
         P, K, F = self.computeElements(model.elements, U_np, dU, P, K, F, timeStep)
         PLoadsAndConstraints, K = self.assembleLoads(
-            stepActions["nodeforces"].values(),
-            stepActions["distributedload"].values(),
-            stepActions["bodyforce"].values(),
-            U_np,
-            PLoadsAndConstraints,
-            K,
-            timeStep,
+            self.collectLoads(stepActions), U_np, dU, PLoadsAndConstraints, K, timeStep
         )
         PLoadsAndConstraints, K = self.assembleConstraints(
             model.constraints, U_np, dU, PLoadsAndConstraints, K, timeStep, FConstraints

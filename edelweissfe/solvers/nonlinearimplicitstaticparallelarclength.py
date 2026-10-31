@@ -269,9 +269,7 @@ class NISTPArcLength(NISTParallel):
         incrementResidualHistory = {field: [] for field in self.theDofManager.idcsOfFieldsInDofVector}
 
         dirichlets = stepActions["dirichlet"].values()
-        nodeForces = stepActions["nodeforces"].values()
-        distributedLoads = stepActions["distributedload"].values()
-        bodyForces = stepActions["bodyforce"].values()
+        loads = self.collectLoads(stepActions)
 
         with performancetiming.timeit("step actions at increment start"):
             # Find which global DOFs the Dirichlet BCs constrain, once up front.
@@ -332,16 +330,8 @@ class NISTPArcLength(NISTParallel):
                 model.constraints, U_np, dU, PConstraints, K, timeStep, FConstraints
             )
 
-            P_0, K_0 = self.assembleLoads(nodeForces, distributedLoads, bodyForces, U_np, P_0, K_0, zeroTimeStep)
-            P_f, K_f = self.assembleLoads(
-                nodeForces,
-                distributedLoads,
-                bodyForces,
-                U_np,
-                P_f,
-                K_f,
-                referenceTimeStep,
-            )
+            P_0, K_0 = self.assembleLoads(loads, U_np, dU, P_0, K_0, zeroTimeStep)
+            P_f, K_f = self.assembleLoads(loads, U_np, dU, P_f, K_f, referenceTimeStep)
 
             P_f -= P_0  # and subtract the dead part, since we are only interested in the homogeneous linear part
             K_f -= K_0
@@ -489,11 +479,7 @@ class NISTPArcLength(NISTParallel):
         """
 
         if self.arcLengthController is not None:
-            for stepAction in stepActions["nodeforces"].values():
-                stepAction.applyAtStepEnd(model, stepMagnitude=self.Lambda)
-            for stepAction in stepActions["distributedload"].values():
-                stepAction.applyAtStepEnd(model, stepMagnitude=self.Lambda)
-            for stepAction in stepActions["bodyforce"].values():
-                stepAction.applyAtStepEnd(model, stepMagnitude=self.Lambda)
+            for load in self.collectLoads(stepActions):
+                load.applyAtStepEnd(model, stepMagnitude=self.Lambda)
 
         return super().applyStepActionsAtStepEnd(model, stepActions)
