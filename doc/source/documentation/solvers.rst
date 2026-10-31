@@ -150,6 +150,10 @@ The options of Newton's method act on the pair of the solution increment and the
   unsatisfied, is enforced again in the next iteration.
 * ``fallBackToQuasiNewton``: the tangent of the first iteration serves both right-hand sides.
 
+The load parameter is part of the state of the model: every converged increment writes it to
+``model.additionalParameters["arc length parameter"]``, where a later step continues from it, also with another
+solver.
+
 ``NID`` - Nonlinear Implicit Dynamic (Newmark-beta)
 ----------------------------------------------------
 
