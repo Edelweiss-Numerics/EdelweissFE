@@ -43,6 +43,7 @@ from edelweissfe.drivers.inputfiledrivensimulation import finiteElementSimulatio
 from edelweissfe.journal.journal import Journal
 from edelweissfe.solvers.nonlinearimplicitstatic import NIST
 from edelweissfe.solvers.nonlinearimplicitstaticparallelarclength import NISTPArcLength
+from edelweissfe.stepactions.base.arclengthcontrollerbase import ArcLengthControllerBase
 from edelweissfe.utils.exceptions import DivergingSolution
 from edelweissfe.utils.inputfileparser import parseInputFile
 
@@ -260,10 +261,24 @@ def test_the_fallback_continues_with_the_tangent_of_the_first_iteration(tmp_path
     np.testing.assert_allclose(U, UReference, rtol=0.0, atol=1e-6 * np.max(np.abs(UReference)))
 
 
+class _Controller(ArcLengthControllerBase):
+    """An arc length controller named theController, which the refusal never lets act."""
+
+    def __init__(self):
+        self.name = "theController"
+
+    def computeDDLambda(self, dU, ddU_0, ddU_f, timeStep, dofManager):
+        raise AssertionError("not called")
+
+    def finishIncrement(self, U, dU, dLambda, timeStep, dofManager):
+        raise AssertionError("not called")
+
+
 def test_neither_is_available_under_an_arc_length_controller():
     for option in ("lineSearch", "fallBackToQuasiNewton"):
-        solver = NISTPArcLength(loadConfiguration({}), Journal(verbose=False), **{option: "True"})
-        solver._arcLengthOptions = {"arcLengthController": "theController"}
+        solver = NISTPArcLength(
+            loadConfiguration({}), Journal(verbose=False), arcLengthController="theController", **{option: "True"}
+        )
 
         class Model:
             multiPointConstraints = {}
@@ -271,7 +286,7 @@ def test_neither_is_available_under_an_arc_length_controller():
             additionalParameters = {}
 
         class Step:
-            actions = {"indirectcontrol": {"theController": object()}}
+            actions = {"indirectcontrol": {"theController": _Controller()}}
 
         with pytest.raises(NotImplementedError, match="arc length controller"):
             solver.beginStep(Step(), Model(), None, {})

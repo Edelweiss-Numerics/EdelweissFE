@@ -96,6 +96,49 @@ reaction force. ``NED`` reports its net force :math:`\boldsymbol{R}` there.
 
 .. pprint:: solver:NISTPArcLength
 
+.. _arc-length-control:
+
+Arc length control
+~~~~~~~~~~~~~~~~~~
+
+A load-controlled analysis cannot pass a limit point: beyond the peak of the load, no larger load is in equilibrium.
+A displacement-controlled one cannot follow a path that snaps back, where the controlled displacement decreases
+again. The arc length method (here the indirect displacement control of Jirásek and Bažant) controls neither the load
+nor a displacement directly. The external load of a step becomes
+
+.. math::
+
+    \boldsymbol{f}_\mathrm{ext} = \boldsymbol{f}_0 + \lambda \, \boldsymbol{f}_\mathrm{ref},
+
+the loads at the start of the step (the dead load :math:`\boldsymbol{f}_0`) plus the change of the loads over the
+step (the reference load :math:`\boldsymbol{f}_\mathrm{ref}`) scaled by a load parameter :math:`\lambda`, which is an
+unknown of every increment besides the solution. A controller adds the equation that determines it, typically that a
+combination of displacements -- a crack opening, the mean contraction of a tunnel ring -- grows steadily over the
+step. Every Newton iteration solves the linearized system for two right-hand sides at once, the out-of-balance force
+and the reference load, and the controller combines the two corrections into the correction of the solution and of
+the load parameter. Prescribed displacements are scaled by the load parameter like the loads.
+
+The controller is a step action of the step, e.g. an ``indirectcontrol``, and the solver option
+``arcLengthController`` names it (``off``, the default, solves the step without arc length control):
+
+.. code-block:: edelweiss
+
+    *step, solver=theSolver
+    maxInc=1e-2, startInc=1e-2, minInc=1e-6, maxNumInc=1000, maxIter=25
+    >>options, name=theSolver, arcLengthController=opening
+    >>indirectcontrol, name=opening, dof1='model.nodeSets["IDC1"][0].fields["displacement"]', cVector1='-1, 0', dof2='model.nodeSets["IDC2"][0].fields["displacement"]', cVector2='1, 0', L=0.01
+
+From Python, without an input file, the controller is a step action built through its typed constructor, and the
+option is a constructor argument of the solver:
+
+.. code-block:: python
+
+    stepActions["indirectcontrol"]["opening"] = IndirectControl("opening", dof1, dof2, [-1.0, 0.0], [1.0, 0.0], 0.01, model, journal)
+    solver = NISTPArcLength(jobInfo, journal, arcLengthController="opening")
+
+Every controller derives from :class:`~edelweissfe.stepactions.base.arclengthcontrollerbase.ArcLengthControllerBase`,
+which states what the solver asks of it.
+
 ``NID`` - Nonlinear Implicit Dynamic (Newmark-beta)
 ----------------------------------------------------
 

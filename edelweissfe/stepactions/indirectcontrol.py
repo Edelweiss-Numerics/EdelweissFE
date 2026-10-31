@@ -36,7 +36,7 @@ import numpy as np
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.numerics.dofmanager import DofManager
-from edelweissfe.stepactions.base.stepactionbase import StepActionBase
+from edelweissfe.stepactions.base.arclengthcontrollerbase import ArcLengthControllerBase
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
 from edelweissfe.utils.math import evalModelAccessibleExpression
@@ -54,13 +54,23 @@ class IndirectControlSchema:
     """The scalar options of the ``indirectcontrol`` keyword, owned by this module and never
     mutated from outside it.
 
-    None of ``dof1``/``dof2``/``cVector1``/``cVector2`` is structural in the usual sense (a model
-    dict lookup by a fixed key): each is a model-access *expression*, evaluated by
+    ``name`` is a ``structuralOnly`` field: it is popped by ``helpers/inputfilehelpers.py`` before
+    the schema is built, and declared here so that the rendered grammar surface documents it; the
+    solver option ``arcLengthController`` selects the controller by it. None of
+    ``dof1``/``dof2``/``cVector1``/``cVector2`` is structural in the usual sense (a model dict lookup
+    by a fixed key): each is a model-access *expression*, evaluated by
     :func:`~edelweissfe.utils.math.evalModelAccessibleExpression`/``eval`` in
     :meth:`~StepAction._dofFromDefinition`/:meth:`~StepAction._cVectorFromDefinition`, so all four
     stay plain string schema fields, exactly like ``modelupdate``'s ``update``.
     """
 
+    name: str | None = schemaField(
+        description="Name of the step action, by which the solver option arcLengthController selects it.",
+        dtype=str,
+        default=None,
+        required=True,
+        structuralOnly=True,
+    )
     dof1: str | None = schemaField(
         description="Degree of freedom for the constraint (model access expression).",
         dtype=str,
@@ -82,7 +92,7 @@ class IndirectControlSchema:
     absolute: bool | None = schemaField(description="Use absolute formulation", dtype=bool, default=True)
 
 
-class StepAction(StepActionBase):
+class StepAction(ArcLengthControllerBase):
     """Indirect (displacement) controller for the NISTPArcLength solver, based on two field
     variables and the pair of c vectors weighting their components.
 
@@ -155,7 +165,8 @@ class StepAction(StepActionBase):
     @classmethod
     def fromStepActionDefinition(cls, name, definition, jobInfo, model, fieldOutputController, journal):
         """Build this controller from a parsed ``>>indirectcontrol`` definition. See
-        :class:`StepActionBase` for why this is separate from ``__init__``.
+        :class:`~edelweissfe.stepactions.base.stepactionbase.StepActionBase` for why this is separate from
+        ``__init__``.
 
         ``name`` and the parser's bookkeeping keys are stripped before the remaining options are
         validated against :class:`IndirectControlSchema`; there is nothing structural to pop, since
@@ -178,20 +189,8 @@ class StepAction(StepActionBase):
         )
 
     def updateStepActionFromDefinition(self, definition, jobInfo, model, fieldOutputController, journal):
-        """Update from a parsed ``>>indirectcontrol`` definition re-declared in a later step.
-
-        **Unreachable from an input file today**, which is worth knowing before relying on it. This
-        module declares no ``name`` field in its schema, so ``helpers/inputfilehelpers.py`` gives
-        every declaration an auto-generated unique name (``indirectcontrol-0``,
-        ``indirectcontrol-1``, ...). ``StepManager`` therefore matches no existing action and takes
-        the *create* branch every time, and the arc-length solver then picks ``[...][0]`` out of the
-        accumulated collection, i.e. the first controller ever declared. So a per-step re-declared
-        ``L`` never takes effect, and ``currentL0`` together with the whole ``absolute`` formulation
-        is inert via the ``.inp`` front-end. The hook is implemented regardless, because it *is*
-        reachable programmatically. Whether to fix the reachability (e.g. declare a ``name``, or
-        have the solver honour the ``arcLengthController`` option's value) is an open product
-        decision. Its sibling ``indirectcontractioncontrol`` does declare ``name`` and is not
-        affected.
+        """Update from a parsed ``>>indirectcontrol`` definition re-declared, under the same ``name``,
+        in a later step: the normal way to give the controller a new target ``L`` per step.
 
         ``absolute`` is deliberately not re-read: the formulation is fixed by the first declaration
         (see the ``absolute`` entry in the class docstring), and re-reading it would alter the
@@ -305,7 +304,7 @@ class StepAction(StepActionBase):
         )
 
     def applyAtStepEnd(self, model):
-        """Remember the control target reached in this step, so that the absolute formulation of a
+        """Remember the controlled quantity reached in this step, so that the absolute formulation of a
         subsequent step accounts for it.
 
         Parameters
@@ -314,8 +313,7 @@ class StepAction(StepActionBase):
             The current state of the model.
         """
 
-        # self.currentL0 = self.c1.dot(self.dof1.values) + self.c2.dot(self.dof2.values)
-        self.currentL0 = self.L
+        self.currentL0 = self.c1.dot(self.dof1.values) + self.c2.dot(self.dof2.values)
 
     @staticmethod
     def _dofFromExpression(expression: str, model: FEModel) -> FieldVariable:
