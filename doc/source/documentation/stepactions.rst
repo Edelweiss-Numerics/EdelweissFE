@@ -67,6 +67,9 @@ Relevant module: ``edelweissfe.stepactions.geostatic``
 
 Relevant module: ``edelweissfe.stepactions.indirectcontrol``
 
+An arc length controller (see :ref:`arc-length-control`): the solver option ``arcLengthController`` of
+``NISTPArcLength`` selects it by its ``name``.
+
 .. automodule:: edelweissfe.stepactions.indirectcontrol
     :members: __doc__
 
@@ -81,7 +84,10 @@ Relevant module: ``edelweissfe.stepactions.indirectcontrol``
 ``indirectcontractioncontrol`` - Indirect displacement -- contraction ring control
 ----------------------------------------------------------------------------------
 
-Relevant module: ``edelweissfe.stepactions.indirectcontrol``
+Relevant module: ``edelweissfe.stepactions.indirectcontractioncontrol``
+
+An arc length controller (see :ref:`arc-length-control`): the solver option ``arcLengthController`` of
+``NISTPArcLength`` selects it by its ``name``.
 
 .. automodule:: edelweissfe.stepactions.indirectcontractioncontrol
     :members: __doc__

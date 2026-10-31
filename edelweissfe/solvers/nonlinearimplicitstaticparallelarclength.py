@@ -41,6 +41,7 @@ from edelweissfe.numerics.dofmanager import DofVector, VIJSystemMatrix
 from edelweissfe.numerics.parallelizationutilities import forEachSliceInParallel
 from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
 from edelweissfe.solvers.nonlinearimplicitstaticparallel import NISTParallel
+from edelweissfe.stepactions.base.arclengthcontrollerbase import ArcLengthControllerBase
 from edelweissfe.stepactions.base.stepactionbase import StepActionBase
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.exceptions import (
@@ -55,29 +56,53 @@ from edelweissfe.utils.schema import schemaField
 
 @dataclass(frozen=True)
 class NISTPArcLengthSchema(NISTParallel.schema):
-    """:class:`~edelweissfe.solvers.nonlinearimplicitstatic.NISTSchema`'s options, plus the two
-    bespoke fields this solver reads from an ``>>options`` block under the (mismatched)
-    ``category=NISTArcLength`` -- not ``category=NISTPArcLength``, this solver's own
-    :attr:`identification`. Neither is a ``*solver`` dataline option (there is no
-    ``SolverSpecificOptions`` entry for either; see :meth:`NISTPArcLength.beginStep`), so both are
-    added here only, not to the parent schema.
+    """:class:`~edelweissfe.solvers.nonlinearimplicitstatic.NISTSchema`'s options, plus the two of the arc length
+    method; like every option of this solver, they are ``*solver`` datalines, ``>>options`` and constructor keyword
+    arguments alike.
     """
 
     arcLengthController: str | None = schemaField(
-        description="The step action module serving as the arc length controller.", dtype=str, default=None
+        description=(
+            "The name of the step action of the step that controls the load parameter (an arc length controller, "
+            "e.g. an indirectcontrol), or off: the step is solved without arc length control."
+        ),
+        dtype=str,
+        default="off",
     )
     stopCondition: str | None = schemaField(
-        description="A model accessible expression defining a conditional stop.", dtype=str, default=None
+        description="A model accessible expression; the step ends once it is true (under arc length control).",
+        dtype=str,
+        default=None,
     )
 
 
 class NISTPArcLength(NISTParallel):
+    """The arc length method (Jirásek/Bažant 2001): a step's reference load is scaled by a load parameter
+    :math:`\\lambda`, which is an unknown of every increment besides the solution, and which a controller step action
+    determines, e.g. such that a crack opening grows steadily. Paths with snap-back or snap-through, which neither a
+    prescribed load nor a prescribed displacement can follow, are traced this way.
+
+    The controller is the step action of the step that the option ``arcLengthController`` names (see
+    :class:`~edelweissfe.stepactions.base.arclengthcontrollerbase.ArcLengthControllerBase`); without one
+    (``arcLengthController=off``), the step is solved as by
+    :class:`~edelweissfe.solvers.nonlinearimplicitstaticparallel.NISTParallel`.
+
+    Parameters
+    ----------
+    jobInfo
+        A dictionary containing the job information.
+    journal
+        The journal instance for logging.
+    """
+
     identification = "NISTPArcLength"
 
     supportsMPC = False
 
     #: Option schema for this solver, per OptionSchemaProvider.
     schema = NISTPArcLengthSchema
+
+    SolverSpecificOptions = NISTParallel.SolverSpecificOptions | {"arcLengthController": "off", "stopCondition": None}
 
     #: Not restartable: the arc-length parameter is not checkpointed, so a resumed step would restart
     #: the load factor from zero.
@@ -86,96 +111,51 @@ class NISTPArcLength(NISTParallel):
     def __init__(self, jobInfo, journal, **kwargs):
         self.Lambda = 0.0
         self.dLambda = 0.0
+        #: The controller of the current step, or None.
         self.arcLengthController = None
-        # arcLengthController/stopCondition, read by beginStep (see applyOptionsOverride).
-        self._arcLengthOptions = {}
 
         return super().__init__(jobInfo, journal, **kwargs)
 
-    def applyOptionsOverride(self, fieldValues: dict) -> None:
-        """Split a validated ``>>options`` override between the two storage locations this solver
-        actually consults: ``arcLengthController``/``stopCondition`` are read directly out of
-        :attr:`_arcLengthOptions` by :meth:`beginStep` (never through ``self.options``, and not
-        every step -- only when present), while every inherited ``NISTSchema`` field goes through
-        the ordinary ``self.options`` dict via the base implementation.
-
-        The pair is replaced *together*, not merged in individually, whenever either is mentioned:
-        ``arcLengthController``/``stopCondition`` live on their own step-action object (category
-        ``"NISTArcLength"``, distinct from the solver's own ``"NISTSolver"``/``"NISTPSolver"``
-        category), and a re-declaration of that object replaces its *entire* option set rather than
-        adding to it -- confirmed against ``testfiles/marmot/IndirectDisplacementControl2``, whose
-        later steps write ``arcLengthController=off`` alone, omitting ``stopCondition`` from an
-        earlier step's declaration specifically to clear it, not to leave it in effect.
-
-        Parameters
-        ----------
-        fieldValues
-            Maps schema field name to its new, already-coerced value.
-        """
-
-        arcLengthFieldNames = ("arcLengthController", "stopCondition")
-        if any(fieldName in fieldValues for fieldName in arcLengthFieldNames):
-            self._arcLengthOptions = {
-                fieldName: fieldValues[fieldName] for fieldName in arcLengthFieldNames if fieldName in fieldValues
-            }
-
-        inheritedFieldValues = {
-            fieldName: value for fieldName, value in fieldValues.items() if fieldName not in arcLengthFieldNames
-        }
-        if inheritedFieldValues:
-            super().applyOptionsOverride(inheritedFieldValues)
-
     def beginStep(
         self,
-        step: dict,
+        step,
         model: FEModel,
         fieldOutputController: FieldOutputController,
         outputmanagers: dict[str, OutputManagerBase],
     ):
+        """Take the controller of the step, and start the step; see
+        :meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.beginStep`.
+
+        Parameters
+        ----------
+        step
+            The step to be solved.
+        model
+            The model tree.
+        fieldOutputController
+            The field output controller.
+        outputmanagers
+            The output managers.
+        """
+
         self.validateModelCapabilities(model)
 
-        self.arcLengthController = None
-        self.checkConditionalStop = lambda: False
+        self.arcLengthController = self.arcLengthControllerOfStep(step)
+        if self.arcLengthController is not None:
+            self.dLambda = 0.0
+        else:
+            self.journal.message("No ArcLengthController specified in current step", self.identification)
+            self.dLambda = None
+
+        stopCondition = self.options["stopCondition"]
+        self.checkConditionalStop = (
+            createModelAccessibleFunction(stopCondition, model=model, fieldOutputs=fieldOutputController.fieldOutputs)
+            if stopCondition
+            else lambda: False
+        )
 
         if "arc length parameter" in model.additionalParameters:
             self.Lambda = model.additionalParameters["arc length parameter"]
-
-        # Sticky: set by the last >>options block, not reset if a later step omits it.
-        arcLengthControllerOptions = self._arcLengthOptions
-
-        if arcLengthControllerOptions:
-            arcLengthController = arcLengthControllerOptions.get("arcLengthController")
-            if arcLengthController:
-                try:
-                    arcLengthControllerStepAction = [action for action in step.actions["indirectcontrol"].values()][0]
-                    self.arcLengthController = arcLengthControllerStepAction
-                    self.dLambda = 0.0
-                except (KeyError, IndexError):
-                    self.journal.errorMessage(
-                        f'Arc length controller "{arcLengthController}" not found in current step or not configured correctly',
-                        self.identification,
-                    )
-                    raise KeyError(f'Arc length controller "{arcLengthController}" not found in current step')
-            else:
-                self.journal.message(
-                    "No ArcLengthController specified in current step",
-                    self.identification,
-                )
-                self.arcLengthController = None
-                self.dLambda = None
-
-            stopCondition = arcLengthControllerOptions.get("stopCondition")
-            if stopCondition:
-                # self.journal.message("St", self.identification)
-                self.checkConditionalStop = createModelAccessibleFunction(
-                    stopCondition,
-                    model=model,
-                    fieldOutputs=fieldOutputController.fieldOutputs,
-                )
-        else:
-            self.journal.message("No ArcLengthController specified in current step", self.identification)
-            self.arcLengthController = None
-            self.dLambda = None
 
         if self.arcLengthController is not None and self.options["extrapolation"] == "quadratic":
             raise NotImplementedError(
@@ -192,6 +172,45 @@ class NISTPArcLength(NISTParallel):
             )
 
         return super().beginStep(step, model, fieldOutputController, outputmanagers)
+
+    def arcLengthControllerOfStep(self, step) -> ArcLengthControllerBase | None:
+        """The arc length controller the option ``arcLengthController`` names among the step actions of the step.
+
+        Parameters
+        ----------
+        step
+            The step to be solved.
+
+        Returns
+        -------
+        ArcLengthControllerBase | None
+            The controller, or None for ``arcLengthController=off``.
+
+        Raises
+        ------
+        ValueError
+            If the step has no arc length controller of this name, or more than one.
+        """
+
+        name = self.options["arcLengthController"]
+        if name == "off":
+            return None
+
+        controllers = [
+            action
+            for actions in step.actions.values()
+            for action in actions.values()
+            if isinstance(action, ArcLengthControllerBase)
+        ]
+        named = [controller for controller in controllers if controller.name == name]
+        if len(named) != 1:
+            raise ValueError(
+                "arcLengthController={:}: the step has {:} arc length controller(s) of this name; its arc length "
+                "controllers are: {:}".format(
+                    name, len(named), ", ".join(controller.name for controller in controllers) or "none"
+                )
+            )
+        return named[0]
 
     def solveIncrement(
         self,
