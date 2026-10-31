@@ -171,6 +171,42 @@ criterion of their Newton iterations with the solver option ``convergenceCriteri
 
     >>options, name=theSolver, convergenceCriterion=abaqus
 
+The ``legacy`` criterion is configured by tolerances per field and by solver options. EdelweissMeshfree's parameter
+set, for instance, reads for a model with a displacement field
+
+.. code-block:: edelweiss
+
+    *updateConfiguration, configuration=fluxResidualTolerance
+    displacement=1e-4
+    *updateConfiguration, configuration=fluxResidualToleranceAlternative
+    displacement=1e-3
+    *updateConfiguration, configuration=absoluteFluxResidualTolerance
+    displacement=1e-14
+    *updateConfiguration, configuration=fieldCorrectionTolerance
+    displacement=1e-14
+    *updateConfiguration, configuration=relativeFieldCorrectionTolerance
+    displacement=1e-3
+
+together with
+
+.. code-block:: edelweiss
+
+    >>options, name=theSolver, iterationsForAlternativeTolerance=5, zeroFluxThreshold=1e-9, zeroIncrementThreshold=1e-13, minimumIterations=1, countFirstResidualAsGrowth=False, countGrowthOfConvergedFields=False
+
+The last two options belong to the test for a diverging Newton iteration, which holds for either criterion: an
+increment is abandoned, and retried smaller, once the flux residual of a field has grown more than ``maxGrowIter`` (a
+step option) times in it. A growth is a flux residual larger than that of the previous checked iteration, and the two
+options decide what else counts:
+
+* ``countFirstResidualAsGrowth`` (default True): the residual history of a field starts at zero, so the first checked
+  residual of an increment is a growth already. This is EdelweissFE's original counting; with False, counting starts
+  with the second checked iteration.
+* ``countGrowthOfConvergedFields`` (default True): a growth counts even in an iteration in which the field is
+  converged, and only another field keeps the iterations going. With False, such growths are ignored: the residual of
+  a converged field fluctuates at the level of its round-off, which says nothing about divergence.
+
+Independent of the criterion, a residual that contains a NaN ends the increment at once.
+
 .. automodule:: edelweissfe.solvers.base.convergencecriteria
    :members:
 
