@@ -155,7 +155,8 @@ class PointMass(BaseElement):
         **kwargs,
     ):
         """
-        Apply a body force (e.g., gravity) to the point mass.
+        Add the residual contribution of a body force (e.g., gravity) on the point mass, the negative
+        of the force it applies.
 
         Unlike continuum elements, where ``load`` is a force *per unit volume* that gets integrated
         over the element, a point mass has no volume: ``load`` is interpreted as a force *per unit
@@ -164,7 +165,7 @@ class PointMass(BaseElement):
         without a Dirichlet BC on its reference point ("free") settle to quasi-static equilibrium
         under self-weight and contact reaction.
         """
-        P[: self.domainSize] += self.mass * load[: self.domainSize]
+        P[: self.domainSize] -= self.mass * load[: self.domainSize]
 
     def computeCriticalTimeStepForExplicitDynamics(self, Q=None, *args, **kwargs) -> float:
         return np.inf

@@ -273,6 +273,7 @@ class NISTPArcLength(NISTParallel):
         F = self.theDofManager.constructDofVector()  # accumulated Flux vector
         FConstraints = self.theDofManager.constructDofVector()  # accumulated constraint Flux vector
 
+        PConstraints = self.theDofManager.constructDofVector()
         P_0 = self.theDofManager.constructDofVector()
         P_f = self.theDofManager.constructDofVector()
         K_f = self.theDofManager.constructVIJSystemMatrix()
@@ -302,7 +303,7 @@ class NISTPArcLength(NISTParallel):
                 U_np[:] = U_n
                 U_np += dU
 
-                P[:] = F[:] = FConstraints[:] = P_0[:] = P_f[:] = 0.0
+                P[:] = F[:] = FConstraints[:] = PConstraints[:] = P_0[:] = P_f[:] = 0.0
 
                 # the tangents hold the entries of all element matrices, far too many to zero on a single thread
                 def zeroTangents(s):
@@ -310,12 +311,14 @@ class NISTPArcLength(NISTParallel):
 
                 forEachSliceInParallel(zeroTangents, len(K))
 
+            # Every element, load and constraint adds its residual contribution and the tangent of it; the loads
+            # twice: once at the start of the step (the dead load P_0) and once at its end (the reference load).
             P, K, F = self.computeElements(model.elements, U_np, dU, P, K, F, timeStep)
-            P, K = self.assembleConstraints(model.constraints, U_np, dU, P, K, timeStep, FConstraints)
+            PConstraints, K = self.assembleConstraints(
+                model.constraints, U_np, dU, PConstraints, K, timeStep, FConstraints
+            )
 
-            P_0, K_0 = self.assembleLoads(
-                nodeForces, distributedLoads, bodyForces, U_np, P_0, K_0, zeroTimeStep
-            )  # compute 'dead' deadloads, like gravity
+            P_0, K_0 = self.assembleLoads(nodeForces, distributedLoads, bodyForces, U_np, P_0, K_0, zeroTimeStep)
             P_f, K_f = self.assembleLoads(
                 nodeForces,
                 distributedLoads,
@@ -324,14 +327,16 @@ class NISTPArcLength(NISTParallel):
                 P_f,
                 K_f,
                 referenceTimeStep,
-            )  # compute 'dead' deadloads, like gravity
+            )
 
             P_f -= P_0  # and subtract the dead part, since we are only interested in the homogeneous linear part
             K_f -= K_0
 
-            # Dead and Reference load ..
-            R_0[:] = P_0 + (Lambda + dLambda) * P_f - P
-            R_f[:] = P_f
+            # The right-hand sides are the negative of the summed contributions: for the dead load and the reference
+            # load scaled by the load parameter, R_0 = f_ext,0 + (Lambda + dLambda) f_ref - f_int, and for the
+            # reference load alone, R_f = f_ref.
+            R_0[:] = -(P_0 + (Lambda + dLambda) * P_f + P + PConstraints)
+            R_f[:] = -P_f
 
             # add stiffness contribution
             K[:] += K_0
@@ -366,10 +371,8 @@ class NISTPArcLength(NISTParallel):
             # identity rows, and the columns eliminated into both right-hand sides R_0 and R_f
             K_ = self.applyDirichletToStiffness(K_, dirichlets, R_)
 
-            # solve 2 eq. systems at once:
+            # solve 2 eq. systems at once: ddU_0 = K⁻¹ R_0 and ddU_f = K⁻¹ R_f
             ddU_ = self.linearSolve(K_, R_)
-            # q_0 = K⁻¹ * (  Pext_0  + dLambda * Pext_Ref - PInt  )
-            # q_f = K⁻¹ * (  Pext_Ref  )
             ddU_0, ddU_f = ddU_[:, 0], ddU_[:, 1]
 
             # compute the increment of the load parameter. Method depends on the employed arc length controller

@@ -269,9 +269,12 @@ class Constraint(ConstraintBase):
     def getNumberOfAdditionalNeededScalarVariables(self):
         return self.nConstraints
 
-    def applyConstraint(self, U_np, dU, PExt, K, timeStep):
+    def computeKernels(self, U_np, dU, P, K, timeStep):
         LambdaN1 = U_np[-self.nConstraints :]
 
-        PExt[: -self.nConstraints] -= LambdaN1.dot(self.dG_dU)
+        # lambda^T dg/du on the nodes. The rows of the multipliers receive nothing: g = dG_dU u is linear and
+        # zero initially, and every Newton correction solves dG_dU ddU = 0, so g stays zero as long as the
+        # linear solves are exact.
+        P[: -self.nConstraints] += LambdaN1.dot(self.dG_dU)
 
         K += self.K

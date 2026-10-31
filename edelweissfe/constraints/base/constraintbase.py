@@ -40,7 +40,7 @@ from edelweissfe.variables.scalarvariable import ScalarVariable
 
 
 class ConstraintBase(OptionSchemaProvider, ABC, VIJEntityBase):
-    #: Scratch buffer for the tangent that :meth:`applyConstraintExplicit` computes and discards;
+    #: Scratch buffer for the tangent that :meth:`computeKernelsExplicit` computes and discards;
     #: re-allocated only when the DOF footprint changes.
     _discardedTangentScratch = None
 
@@ -85,8 +85,8 @@ class ConstraintBase(OptionSchemaProvider, ABC, VIJEntityBase):
         :func:`~ConstraintBase.getNumberOfAdditionalNeededScalarVariables` and
         :func:`~ConstraintBase.assignAdditionalScalarVariables`, which are called at the beginning of an analysis.
 
-        If scalar variables are used, EdelweissFE expects the layout of the external load vector PExt
-        (and the stiffness) to be of the form
+        If scalar variables are used, EdelweissFE expects the layout of the residual contribution ``P``
+        (and of the tangent) to be of the form
 
         .. code-block:: console
 
@@ -211,21 +211,20 @@ class ConstraintBase(OptionSchemaProvider, ABC, VIJEntityBase):
 
         self.scalarVariables = scalarVariables
 
-    def applyConstraintExplicit(
+    def computeKernelsExplicit(
         self,
         U_np: np.ndarray,
         dU: np.ndarray,
-        PExt: np.ndarray,
+        P: np.ndarray,
         timeStep: TimeStep,
     ):
-        """Evaluate this constraint without producing a tangent matrix.
+        """Add this constraint's contribution to the residual, without a tangent.
 
-        Used by explicit solvers where no system tangent matrix is assembled. The default
-        implementation forwards to :meth:`applyConstraint` with a dummy tangent contribution
-        so existing constraints remain functional without modification.
-
-        Constraints where tangent computation is costly should override this method to evaluate
-        only the residual / force vector directly.
+        The counterpart of :meth:`computeKernels` for an explicit solver, which solves no linear
+        system and so has no use for a tangent. This default calls :meth:`computeKernels` with a
+        scratch tangent that is thrown away, so that every constraint also works in an explicit
+        analysis. A constraint whose tangent is costly overrides it, e.g. through
+        :class:`~edelweissfe.constraints.base.forcesonlyexplicitevaluation.ForcesOnlyExplicitEvaluation`.
 
         Parameters
         ----------
@@ -233,8 +232,8 @@ class ConstraintBase(OptionSchemaProvider, ABC, VIJEntityBase):
             The current solution, restricted to this constraint's degrees of freedom.
         dU
             The current solution increment, likewise restricted.
-        PExt
-            The local residual / force vector to augment.
+        P
+            The residual contribution to augment, with the sign described in :meth:`computeKernels`.
         timeStep
             The current time step.
         """
@@ -248,31 +247,52 @@ class ConstraintBase(OptionSchemaProvider, ABC, VIJEntityBase):
             scratch[:] = 0.0
 
         K = self.shapeVIJContribution(scratch)
-        self.applyConstraint(U_np, dU, PExt, K, timeStep)
+        self.computeKernels(U_np, dU, P, K, timeStep)
 
     @abstractmethod
-    def applyConstraint(
+    def computeKernels(
         self,
         U_np: np.ndarray,
         dU: np.ndarray,
-        PExt: np.ndarray,
-        V: np.ndarray,
+        P: np.ndarray,
+        K: np.ndarray,
         timeStep: TimeStep,
     ):
-        """Apply the constraint.  Add the contributions to the external load vector and the system matrix.
+        """Add this constraint's contribution ``P`` to the residual, and its tangent ``K = dP/dU``.
+
+        A constraint follows the rule every element and every load follows (see
+        :ref:`residual-and-tangent-convention`): ``P`` is the force the constraint needs at its
+        degrees of freedom, i.e. the *negative* of the force it exerts on the nodes, exactly as an
+        element of the same mechanics would add its internal force. A penalty spring of stiffness
+        :math:`k` that pulls a degree of freedom :math:`u` towards :math:`\\bar{u}`, for example, adds
+
+        .. math::
+
+            P \\mathrel{+}= k\\,(u - \\bar{u}), \\qquad K \\mathrel{+}= k .
+
+        A Lagrange multiplier constraint :math:`g(\\boldsymbol{u}) = 0` adds
+        :math:`\\boldsymbol{\\lambda}^T \\partial g / \\partial \\boldsymbol{u}` to the rows of its nodes
+        and :math:`g` to the rows of its multipliers.
+
+        Both ``P`` and ``K`` are augmented, never overwritten. ``K`` must be the derivative of what is
+        added to ``P``: a test can then check it by finite differences, which also catches a ``P``
+        of the wrong sign.
 
         Parameters
         ----------
         U_np
-            The current total solution vector.
+            The current solution, restricted to this constraint's degrees of freedom; its own scalar
+            variables (e.g. Lagrange multipliers) come last.
         dU
-            The current increment since the last time the constraint was applied.
-        PExt
-            The external load vector.
+            The solution increment since the last converged state, likewise restricted.
+        P
+            The residual contribution to augment.
         K
-            The system (stiffness) matrix.
-        dT
-            The time increment.
-        time
-            The current step and total time.
+            The tangent ``dP/dU`` to augment, in the shape :meth:`shapeVIJContribution` gives it (a
+            dense ``nDof x nDof`` view unless the constraint declares a sparser pattern). A
+            constraint that inherits
+            :class:`~edelweissfe.constraints.base.forcesonlyexplicitevaluation.ForcesOnlyExplicitEvaluation`
+            is also called with ``K=None`` and must then skip the tangent.
+        timeStep
+            The current time step.
         """

@@ -66,8 +66,11 @@ class BaseElement(BaseNodeCouplingEntity, VIJEntityBase):
         """Finite elements in EdelweissFE should be derived from this
         base class in order to follow the general interface.
 
-        EdelweissFE expects the layout of the internal and external load vectors, P, PExt, (and the stiffness)
-        to be of the form
+        Every method that computes a residual contribution ``P`` with its tangent ``K = dP/dU``
+        follows one rule (see :ref:`residual-and-tangent-convention`): :meth:`computeKernels` adds
+        the internal forces, the load methods :meth:`computeDistributedLoad` and
+        :meth:`computeBodyForce` add the *negative* of the external load. EdelweissFE expects the
+        layout of ``P`` (and of ``K``) to be of the form
 
         .. code-block:: console
 
@@ -203,16 +206,18 @@ class BaseElement(BaseNodeCouplingEntity, VIJEntityBase):
         time: float,
         dT: float,
     ):
-        """Evaluate residual and stiffness for given time, field, and field increment due to a surface load.
+        """Add the residual contribution of a surface load, the negative of the external load
+        :math:`-\\boldsymbol{f}_\\mathrm{ext}`, and its tangent, which is nonzero only for a load that
+        follows the deformation (e.g. a pressure on the current surface).
 
         Parameters
         ----------
         loadType
             The type of load.
         P
-            The external load vector to be defined.
+            The residual contribution to augment, :math:`-\\boldsymbol{f}_\\mathrm{ext}`.
         K
-            The stiffness matrix to be defined.
+            The tangent ``dP/dU`` to augment.
         faceID
             The number of the elements face this load acts on.
         load
@@ -235,14 +240,15 @@ class BaseElement(BaseNodeCouplingEntity, VIJEntityBase):
         time: float,
         dT: float,
     ):
-        """Evaluate the internal forces and stiffness for given time, field, and field increment.
+        """Add the internal forces to the residual, and their tangent, for given time, field, and field
+        increment.
 
         Parameters
         ----------
         P
-            The internal load vector to be defined.
+            The residual contribution to augment, the internal forces :math:`\\boldsymbol{f}_\\mathrm{int}`.
         K
-            The stiffness matrix to be defined.
+            The tangent ``dP/dU`` to augment, the stiffness matrix.
         U
             The current solution vector.
         dU
@@ -262,12 +268,13 @@ class BaseElement(BaseNodeCouplingEntity, VIJEntityBase):
         time: float,
         dT: float,
     ):
-        """Evaluate the internal forces for given time, field, and field increment.
+        """Add the internal forces to the residual for given time, field, and field increment, without a
+        tangent.
 
         Parameters
         ----------
         P
-            The internal load vector to be defined.
+            The residual contribution to augment, the internal forces :math:`\\boldsymbol{f}_\\mathrm{int}`.
         U
             The current solution vector.
         dU
@@ -420,14 +427,15 @@ class BaseElement(BaseNodeCouplingEntity, VIJEntityBase):
         time: float,
         dTime: float,
     ):
-        """Evaluate residual and stiffness for given time, field, and field increment due to a body force load.
+        """Add the residual contribution of a body force, the negative of the external load
+        :math:`-\\boldsymbol{f}_\\mathrm{ext}`, and its tangent, which is zero for a dead load.
 
         Parameters
         ----------
         P
-            The external load vector to be defined.
+            The residual contribution to augment, :math:`-\\boldsymbol{f}_\\mathrm{ext}`.
         K
-            The stiffness matrix to be defined.
+            The tangent ``dP/dU`` to augment.
         load
             The magnitude (or vector) describing the load.
         U

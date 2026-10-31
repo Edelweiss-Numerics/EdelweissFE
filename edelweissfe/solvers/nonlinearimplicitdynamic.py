@@ -60,7 +60,7 @@ so that the effective residual and tangent handed to the Newton loop are
 
 .. math::
 
-    \\boldsymbol{R} &= \\boldsymbol{P}_\\mathrm{ext} - \\boldsymbol{P}_\\mathrm{int}
+    \\boldsymbol{R} &= \\boldsymbol{f}_\\mathrm{ext} - \\boldsymbol{f}_\\mathrm{int}
         - \\boldsymbol{M} \\ddot{\\boldsymbol{u}}_{n+1} - \\boldsymbol{C} \\dot{\\boldsymbol{u}}_{n+1}, \\\\
     \\boldsymbol{K}_\\mathrm{eff} &= \\boldsymbol{K} + \\frac{1}{\\beta \\, \\Delta t^2} \\boldsymbol{M}
         + \\frac{\\gamma}{\\beta \\, \\Delta t} \\boldsymbol{C}.
@@ -70,7 +70,7 @@ Dirichlet handling, the convergence test, cutbacks and the linear solver -- is t
 solver runs :meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.solveIncrement` itself and
 enters it only through its three hooks -- :meth:`NonlinearImplicitDynamic.initializeIncrement`
 (mass, damping, dynamic stiffness, initial acceleration), :meth:`NonlinearImplicitDynamic.assembleAdditionalTerms`
-(two terms in the residual and two in the tangent, where the parent forms ``R = P_ext - P_int``
+(two terms in the residual and two in the tangent, where the parent forms ``R = f_ext - f_int``
 and before the tangent is converted to CSR) and :meth:`NonlinearImplicitDynamic.finalizeIncrement`
 (the converged velocity and acceleration become the state).
 
@@ -1397,7 +1397,7 @@ class NonlinearImplicitDynamic(NIST):
     ):
         """Compute the acceleration from equilibrium at the start of an increment, and commit it.
 
-        Solves :math:`M a_0 = P_\\mathrm{ext}(t_0) - P_\\mathrm{int}(u_0) - C v_0` on the dynamic,
+        Solves :math:`M a_0 = f_\\mathrm{ext}(t_0) - f_\\mathrm{int}(u_0) - C v_0` on the dynamic,
         free degrees of freedom. The loads are evaluated with a synthetic time step at the start of
         the increment passed in (zero step-progress increment and zero time increment -- an ``f(t)``
         amplitude at that instant), the elements with a zero displacement increment, which leaves
@@ -1440,17 +1440,22 @@ class NonlinearImplicitDynamic(NIST):
 
         P = self.theDofManager.constructDofVector()
         F = self.theDofManager.constructDofVector()
-        PExt = self.theDofManager.constructDofVector()
+        PLoadsAndConstraints = self.theDofManager.constructDofVector()
         dU0 = self.theDofManager.constructDofVector()
         K = self.theDofManager.constructVIJSystemMatrix()
 
         P, K, F = self.computeElements(model.elements, U_n, dU0, P, K, F, startTimeStep)
-        PExt, K = self.assembleLoads(nodeforces, distributedLoads, bodyForces, U_n, PExt, K, startTimeStep)
-        PExt, K = self.assembleConstraints(model.constraints, U_n, dU0, PExt, K, startTimeStep)
+        PLoadsAndConstraints, K = self.assembleLoads(
+            nodeforces, distributedLoads, bodyForces, U_n, PLoadsAndConstraints, K, startTimeStep
+        )
+        PLoadsAndConstraints, K = self.assembleConstraints(
+            model.constraints, U_n, dU0, PLoadsAndConstraints, K, startTimeStep
+        )
 
+        # f_ext - f_int is the negative of the summed residual contributions, as in solveIncrement
         R = self.theDofManager.constructDofVector()
-        R[:] = PExt
-        R -= P
+        R[:] = -P
+        R -= PLoadsAndConstraints
         R -= system.C @ np.asarray(system.V)
 
         nDof = self.theDofManager.nDof

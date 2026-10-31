@@ -38,6 +38,10 @@ from _hexa20cube import (  # noqa: E402  (tests/ is on sys.path)
     _YMIN,
     _hexa20Coordinates,
 )
+from _residualtangent import (  # noqa: E402  (tests/ is on sys.path)
+    finiteDifferenceTangent,
+    residualContributionAndTangent,
+)
 
 import edelweissfe.utils.inputfileparser  # noqa: F401 bootstrap input language
 from edelweissfe.constraints.surfacetodiscreterigidbodypenalty import (
@@ -153,29 +157,14 @@ class TestSurfaceToDiscreteRigidBodyContact(unittest.TestCase):
         return constraint
 
     def _forces(self, constraint, U) -> np.ndarray:
-        PExt = np.zeros(constraint.nDof)
-        constraint.applyConstraint(U, np.zeros_like(U), PExt, None, None)
-        return PExt
+        """The contact forces on the nodes, the negative of the constraint's residual contribution."""
 
-    def _assembledTangent(self, constraint, U) -> np.ndarray:
-        """The tangent as one dense ``nDof x nDof`` matrix, scattered from the shared-RP layout."""
+        P = np.zeros(constraint.nDof)
+        constraint.computeKernels(U, np.zeros_like(U), P, None, None)
+        return -P
 
-        flat = np.zeros(constraint.getVIJContributionSize())
-        view = constraint.shapeVIJContribution(flat)
-        constraint.applyConstraint(U, np.zeros_like(U), np.zeros(constraint.nDof), view, None)
-
-        K = np.zeros((constraint.nDof, constraint.nDof))
-        rp = np.arange(constraint.nSlaveDof, constraint.nDof)
-        K[np.ix_(rp, rp)] += view.K_rprp
-        for f, (first, m) in enumerate(constraint._slaveBlockOffsets()):
-            slave = np.arange(first, first + m)
-            K[np.ix_(slave, slave)] += view.K_ss[f]
-            K[np.ix_(slave, rp)] += view.K_srp[f]
-            K[np.ix_(rp, slave)] += view.K_rps[f]
-        return K
-
-    def test_tangent_is_the_negative_force_jacobian(self):
-        """``K == -dPExt/dU`` by central differences, for a moved and rotated rigid body and both
+    def test_tangent_is_the_derivative_of_the_residual_contribution(self):
+        """``K == dP/dU`` by central differences, for a moved and rotated rigid body and both
         penalty laws -- except for the documented, omitted rotation-rotation block of the RP."""
 
         for contactType in ("linear", "quadratic"):
@@ -186,23 +175,16 @@ class TestSurfaceToDiscreteRigidBodyContact(unittest.TestCase):
             U = 1e-3 * rng.standard_normal(constraint.nDof)
             U[-3:] = [0.01, -0.005, 0.008]
 
-            K = self._assembledTangent(constraint, U)
-
-            h = 1e-7
-            KNumeric = np.zeros_like(K)
-            for i in range(constraint.nDof):
-                UPlus, UMinus = U.copy(), U.copy()
-                UPlus[i] += h
-                UMinus[i] -= h
-                KNumeric[:, i] = -(self._forces(constraint, UPlus) - self._forces(constraint, UMinus)) / (2.0 * h)
+            _, K = residualContributionAndTangent(constraint, U, np.zeros_like(U))
+            dP_dU = finiteDifferenceTangent(constraint, U, np.zeros_like(U), h=1e-7)
 
             rotation = slice(constraint.nDof - 3, constraint.nDof)
             K[rotation, rotation] = 0.0
-            KNumeric[rotation, rotation] = 0.0
+            dP_dU[rotation, rotation] = 0.0
 
             self.assertTrue(np.all(constraint.getGaps() < 0.0), "every contact point must stay closed")
             scale = np.abs(K).max()
-            np.testing.assert_allclose(K, KNumeric, rtol=0, atol=1e-6 * scale, err_msg=f"type={contactType}")
+            np.testing.assert_allclose(K, dP_dU, rtol=0, atol=1e-6 * scale, err_msg=f"type={contactType}")
 
     def test_forces_balance_and_corners_are_pulled(self):
         """The contact forces on the block and on the rigid body are in equilibrium, and the corner
@@ -210,10 +192,10 @@ class TestSurfaceToDiscreteRigidBodyContact(unittest.TestCase):
 
         model, slaveSurface, rigidBody = self._blockOnRigidSupport(penetration=0.01)
         constraint = self._constraint(model, slaveSurface, rigidBody)
-        PExt = self._forces(constraint, np.zeros(constraint.nDof))
+        forces = self._forces(constraint, np.zeros(constraint.nDof))
 
-        slaveForce = PExt[: constraint.nSlaveDof].reshape((-1, 3)).sum(axis=0)
-        rigidBodyForce = PExt[constraint.nSlaveDof : constraint.nSlaveDof + 3]
+        slaveForce = forces[: constraint.nSlaveDof].reshape((-1, 3)).sum(axis=0)
+        rigidBodyForce = forces[constraint.nSlaveDof : constraint.nSlaveDof + 3]
         np.testing.assert_allclose(slaveForce + rigidBodyForce, 0.0, rtol=0, atol=1e-10)
 
         # A uniform penetration of 0.01 on a face of area 4: total force penalty * 0.01 * 4. STL files

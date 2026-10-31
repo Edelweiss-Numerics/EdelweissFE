@@ -238,7 +238,7 @@ class Constraint(ConstraintBase, MeshDependent):
         self._rebuildDerivedState()
         return True
 
-    def applyConstraint(self, U_np, dU, PExt, K, timeStep: TimeStep):
+    def computeKernels(self, U_np, dU, P, K, timeStep: TimeStep):
         if not self.active:
             return
 
@@ -260,5 +260,6 @@ class Constraint(ConstraintBase, MeshDependent):
 
         t = self.unitResidual
 
-        PExt[sBL:eBL] = -t * loadFactor
-        K[sBL:eBL, sBC:eBC] = np.outer(t, dLoadFactor_ddU)
+        # the controlled load acts on the load nodes as -t * loadFactor; P is its negative
+        P[sBL:eBL] += t * loadFactor
+        K[sBL:eBL, sBC:eBC] += np.outer(t, dLoadFactor_ddU)

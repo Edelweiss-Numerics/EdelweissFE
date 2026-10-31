@@ -754,7 +754,7 @@ class NIST(NonlinearSolverBase):
         R = self.theDofManager.constructDofVector()
         F = self.theDofManager.constructDofVector()
         FConstraints = self.theDofManager.constructDofVector()
-        PExt = self.theDofManager.constructDofVector()
+        PLoadsAndConstraints = self.theDofManager.constructDofVector()
         U_np = self.theDofManager.constructDofVector()
         ddU = None
 
@@ -784,16 +784,24 @@ class NIST(NonlinearSolverBase):
                 U_np[:] = U_n
                 U_np += dU
 
-                P[:] = F[:] = FConstraints[:] = PExt[:] = 0.0
+                P[:] = F[:] = FConstraints[:] = PLoadsAndConstraints[:] = 0.0
                 # K holds the entries of all element matrices, far too many to zero on a single thread
                 forEachSliceInParallel(lambda s: K[s].fill(0.0), len(K))
 
+            # Every element, load and constraint adds its residual contribution and the tangent of it.
+            # The elements' sum P is kept apart: it is the reaction force this increment reports.
             P, K, F = self.computeElements(elements, U_np, dU, P, K, F, timeStep)
-            PExt, K = self.assembleLoads(nodeforces, distributedLoads, bodyForces, U_np, PExt, K, timeStep)
-            PExt, K = self.assembleConstraints(constraints, U_np, dU, PExt, K, timeStep, FConstraints)
+            PLoadsAndConstraints, K = self.assembleLoads(
+                nodeforces, distributedLoads, bodyForces, U_np, PLoadsAndConstraints, K, timeStep
+            )
+            PLoadsAndConstraints, K = self.assembleConstraints(
+                constraints, U_np, dU, PLoadsAndConstraints, K, timeStep, FConstraints
+            )
 
+            # The right-hand side of K ddU = R is the negative of the summed contributions: the out-of-balance
+            # force R = f_ext - f_int.
             R[:] = -P
-            R += PExt
+            R -= PLoadsAndConstraints
 
             self.assembleAdditionalTerms(dU, R, F, K, timeStep)
 
@@ -880,10 +888,11 @@ class NIST(NonlinearSolverBase):
     ):
         """Assemble terms of the equation system beyond the internal and external forces. Called
         by :meth:`solveIncrement` in every Newton iteration, next to :meth:`computeElements`,
-        :meth:`assembleLoads` and :meth:`assembleConstraints`: right after the residual
-        :math:`R = P_\\mathrm{ext} - P_\\mathrm{int}` is formed, and before the
-        multi-point-constraint condensation, the Dirichlet handling, the convergence test and the
-        linear solve -- which therefore all act on what is added here.
+        :meth:`assembleLoads` and :meth:`assembleConstraints`: right after the right-hand side
+        :math:`R = f_\\mathrm{ext} - f_\\mathrm{int}` is formed (see
+        :ref:`residual-and-tangent-convention`), and before the multi-point-constraint condensation,
+        the Dirichlet handling, the convergence test and the linear solve -- which therefore all act
+        on what is added here.
 
         A static analysis has no such terms. A dynamic one, for example, subtracts the inertia force
         :math:`M \\ddot{u}` from the residual and adds the corresponding mass term to the stiffness
@@ -1008,12 +1017,13 @@ class NIST(NonlinearSolverBase):
         constraints: list[ConstraintBase],
         U_np: DofVector,
         dU: DofVector,
-        PExt: DofVector,
+        P: DofVector,
         K: VIJSystemMatrix,
         timeStep: TimeStep,
         FConstraints: DofVector = None,
     ) -> tuple[DofVector, VIJSystemMatrix]:
-        """Loop over all constraints, and evaluate them.
+        """Loop over all constraints, and evaluate them: each adds its residual contribution and the
+        tangent of it, see :meth:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernels`.
         Is called by solveIncrement() in each iteration.
 
         Parameters
@@ -1024,8 +1034,8 @@ class NIST(NonlinearSolverBase):
             The current solution vector.
         dU
             The current solution increment vector.
-        PExt
-            The external load vector.
+        P
+            The residual contribution vector to assemble into.
         K
             The system matrix.
         timeStep
@@ -1036,7 +1046,7 @@ class NIST(NonlinearSolverBase):
         Returns
         -------
         tuple[DofVector,VIJSystemMatrix]
-            - The modified external load vector.
+            - The modified residual contribution vector.
             - The modified system matrix.
         """
 
@@ -1044,11 +1054,11 @@ class NIST(NonlinearSolverBase):
             Kc = K[constraint]
             Pc = np.zeros(constraint.nDof)
 
-            constraint.applyConstraint(U_np[constraint], dU[constraint], Pc, Kc, timeStep)
+            constraint.computeKernels(U_np[constraint], dU[constraint], Pc, Kc, timeStep)
 
-            # instead of PExt[constraint] += Pe, np.add.at allows for repeated indices
-            np.add.at(PExt, PExt.entitiesInDofVector[constraint], Pc)
+            # instead of P[constraint] += Pc, np.add.at allows for repeated indices
+            np.add.at(P, P.entitiesInDofVector[constraint], Pc)
             if FConstraints is not None:
                 np.add.at(FConstraints, FConstraints.entitiesInDofVector[constraint], np.abs(Pc))
 
-        return PExt, K
+        return P, K
