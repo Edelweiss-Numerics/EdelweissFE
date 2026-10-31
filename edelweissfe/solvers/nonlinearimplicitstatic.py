@@ -29,6 +29,7 @@
 
 # @author: Matthias Neuner
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from time import perf_counter
 
@@ -61,6 +62,26 @@ from edelweissfe.utils.exceptions import (
 )
 from edelweissfe.utils.fieldoutput import FieldOutputController
 from edelweissfe.utils.schema import schemaField
+
+
+class QuasiNewtonFallback:
+    """The quasi-Newton fallback of one attempt of an increment (solver option ``fallBackToQuasiNewton``): once the
+    residual has grown more often than the step option ``maxGrowIter`` allows, the increment continues with the tangent
+    of its first iteration instead of being cut back. A tangent that is not updated converges only linearly, but it
+    cannot switch abruptly either, as a tangent of materials switching between loading and unloading does.
+
+    Parameters
+    ----------
+    isEnabled
+        Whether the option is on; only then is the tangent of the first iteration kept.
+    """
+
+    def __init__(self, isEnabled: bool):
+        self.isEnabled = isEnabled
+        #: True once the increment continues with the tangent of its first iteration.
+        self.isEngaged = False
+        #: The tangent of the first iteration, in CSR layout and condensed, without the Dirichlet rows and columns.
+        self.tangentOfFirstIteration = None
 
 
 @dataclass(frozen=True)
@@ -983,20 +1004,55 @@ class NIST(NonlinearSolverBase):
             dU[:] = 0.0
             return dU, False
 
+        weightOfLast, weightOfBeforeLast = self.extrapolationWeights(extrapolation, timeStep, prevTimeStep)
+        np.multiply(self.dU, weightOfLast, out=dU)
+        if weightOfBeforeLast is not None:
+            dU += weightOfBeforeLast * self.dUBeforePrev
+
+        dU = self.applyDirichletToResidual(timeStep, dU, dirichlets)
+
+        return dU, True
+
+    def extrapolationWeights(
+        self, extrapolation: str, timeStep: TimeStep, prevTimeStep: TimeStep
+    ) -> tuple[float, float | None]:
+        """The weights of the last accepted increment and of the one before it in the prediction of
+        :meth:`extrapolateLastIncrement`: :math:`\\Delta U = w_n \\, \\Delta U_n + w_{n-1} \\, \\Delta U_{n-1}`, with
+
+        .. math::
+
+            w_n = \\frac{h}{h_n} + \\frac{c}{h_n}, \\qquad w_{n-1} = -\\frac{c}{h_{n-1}}, \\qquad
+            c = \\frac{h \\, (h + h_n)}{h_{n-1} + h_n}
+
+        for a quadratic extrapolation, and :math:`w_n = h / h_n` alone for a linear one. Every quantity that follows
+        the path of the solution is predicted with these weights, e.g. the load parameter of the arc length method,
+        too.
+
+        Parameters
+        ----------
+        extrapolation
+            The type of extrapolation, ``linear`` or ``quadratic``.
+        timeStep
+            The new increment.
+        prevTimeStep
+            The last accepted increment, which the prediction extrapolates.
+
+        Returns
+        -------
+        tuple[float,float|None]
+            - The weight of the last accepted increment.
+            - The weight of the accepted increment before it, None for a linear prediction.
+        """
+
         h = timeStep.stepProgressIncrement
         h_n = prevTimeStep.stepProgressIncrement
 
         if extrapolation == "quadratic" and self.extrapolates(extrapolation, self.timeStepBeforePrev):
             h_nm1 = self.timeStepBeforePrev.stepProgressIncrement
             curvatureFactor = h * (h + h_n) / (h_nm1 + h_n)
-            np.multiply(self.dU, h / h_n + curvatureFactor / h_n, out=dU)
-            dU -= (curvatureFactor / h_nm1) * self.dUBeforePrev
-        else:
-            np.multiply(self.dU, h / h_n, out=dU)
+            return h / h_n + curvatureFactor / h_n, -(curvatureFactor / h_nm1)
 
-        dU = self.applyDirichletToResidual(timeStep, dU, dirichlets)
-
-        return dU, True
+        return h / h_n, None
 
     def solveIncrement(
         self,
@@ -1077,11 +1133,7 @@ class NIST(NonlinearSolverBase):
                 extrapolation, timeStep, dU, dirichlets, prevTimeStep, model
             )
 
-        fallBackToQuasiNewton = self.options["fallBackToQuasiNewton"]
-        # Set once the residual grew too often, if fallBackToQuasiNewton: the increment continues with the tangent of
-        # its first iteration, tangentOfFirstIteration.
-        quasiNewton = False
-        tangentOfFirstIteration = None
+        quasiNewton = QuasiNewtonFallback(self.options["fallBackToQuasiNewton"])
 
         while True:
             P, K, F = self.assembleResidualAndTangent(
@@ -1111,35 +1163,15 @@ class NIST(NonlinearSolverBase):
                 if converged:
                     break
 
-                if not quasiNewton and self.checkDivergingSolution(incrementResidualHistory, maxGrowingIter):
-                    self.printResidualOutlierNodes(nodesWithLargestResidual)
-                    if not fallBackToQuasiNewton:
-                        raise DivergingSolution("Residual grew {:} times, cutting back".format(maxGrowingIter))
-                    self.journal.message(
-                        "Residual grew {:} times, continuing with the tangent of the first iteration".format(
-                            maxGrowingIter
-                        ),
-                        self.identification,
-                        1,
-                    )
-                    quasiNewton = True
+                self.checkDivergingSolutionOrFallBack(
+                    quasiNewton, incrementResidualHistory, maxGrowingIter, nodesWithLargestResidual
+                )
 
                 if iterationCounter == maxIter:
                     self.printResidualOutlierNodes(nodesWithLargestResidual)
                     raise ReachedMaxIterations("Reached max. iterations in current increment, cutting back")
 
-            if quasiNewton and tangentOfFirstIteration is not None:
-                # Kept without the Dirichlet rows and columns: they are imposed anew, as they eliminate into this R.
-                K_ = tangentOfFirstIteration.copy()
-            else:
-                K_ = self.assembleStiffnessCSR(K)
-
-                if self.mpcTransformation is not None:
-                    K_ = self.mpcTransformation.transformSystemMatrix(K_)
-
-                # the first tangent of the increment: the one of iteration 0
-                if fallBackToQuasiNewton and tangentOfFirstIteration is None:
-                    tangentOfFirstIteration = K_.copy()
+            K_ = self.assembleSystemMatrix(K, quasiNewton)
 
             # identity rows, and the columns eliminated into R
             K_ = self.applyDirichletToStiffness(K_, dirichlets, R)
@@ -1151,9 +1183,28 @@ class NIST(NonlinearSolverBase):
                 ddU = self.mpcTransformation.recoverSlaveSolution(ddU)
 
             if self.lineSearchIsDue(iterationCounter):
-                ddU = self.quadraticLineSearch(
-                    ddU, U_n, dU, U_np, R, P, PLoadsAndConstraints, F, FConstraints, K, stepActions, model, timeStep
-                )
+
+                def largestResidualAt(stepLength):
+                    # the trial solution increment along the correction, without the Dirichlet degrees of freedom
+                    self.assembleResidualAndTangent(
+                        U_n,
+                        dU + stepLength * ddU,
+                        U_np,
+                        R,
+                        P,
+                        PLoadsAndConstraints,
+                        F,
+                        FConstraints,
+                        K,
+                        stepActions,
+                        model,
+                        timeStep,
+                    )
+                    for dirichlet in dirichlets:
+                        R[dirichlet.constrainedDofIndices] = 0.0
+                    return np.linalg.norm(R, np.inf)
+
+                ddU = self.quadraticLineSearch(largestResidualAt) * ddU
 
             dU += ddU
             iterationCounter += 1
@@ -1179,9 +1230,11 @@ class NIST(NonlinearSolverBase):
     ) -> tuple[DofVector, VIJSystemMatrix, DofVector]:
         """Evaluate the model at the trial solution :math:`U_{n+1} = U_n + \\Delta U`: the right-hand side
         :math:`R = f_\\mathrm{ext} - f_\\mathrm{int}` (see :ref:`residual-and-tangent-convention`) with the terms of
-        :meth:`assembleAdditionalTerms`, condensed by the multi-point constraints, and the tangent. Called by
-        :meth:`solveIncrement` once per Newton iteration, and by :meth:`quadraticLineSearch` once per trial step
-        length. The Dirichlet boundary conditions are imposed by the callers.
+        :meth:`assembleAdditionalTerms`, condensed by the multi-point constraints, and the tangent. The one place
+        where the model is evaluated during the Newton iterations: called by :meth:`solveIncrement` -- and by the
+        arc length method's -- once per iteration, and by their line searches once per trial step length. The loads
+        are those at the end of the increment, see :meth:`assembleLoadsAtIncrementEnd`. The Dirichlet boundary
+        conditions are imposed by the callers.
 
         Parameters
         ----------
@@ -1230,8 +1283,8 @@ class NIST(NonlinearSolverBase):
         # Every element, load and constraint adds its residual contribution and the tangent of it.
         # The elements' sum P is kept apart: it is the reaction force this increment reports.
         P, K, F = self.computeElements(model.elements, U_np, dU, P, K, F, timeStep)
-        PLoadsAndConstraints, K = self.assembleLoads(
-            self.collectLoads(stepActions), U_np, dU, PLoadsAndConstraints, K, timeStep
+        PLoadsAndConstraints, K = self.assembleLoadsAtIncrementEnd(
+            stepActions, U_np, dU, PLoadsAndConstraints, K, timeStep
         )
         PLoadsAndConstraints, K = self.assembleConstraints(
             model.constraints, U_np, dU, PLoadsAndConstraints, K, timeStep, FConstraints
@@ -1250,6 +1303,45 @@ class NIST(NonlinearSolverBase):
             R[:] = self.mpcTransformation.transformResidual(R, dU)
 
         return P, K, F
+
+    def assembleLoadsAtIncrementEnd(
+        self,
+        stepActions: dict,
+        U_np: DofVector,
+        dU: DofVector,
+        P: DofVector,
+        K: VIJSystemMatrix,
+        timeStep: TimeStep,
+    ) -> tuple[DofVector, VIJSystemMatrix]:
+        """Assemble the residual contributions of the loads acting at the end of the increment, and their tangents;
+        called by :meth:`assembleResidualAndTangent`. Here, these are the loads of the step at the time of the end of
+        the increment (see
+        :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.assembleLoads`). The arc length method
+        replaces them by the dead load plus the reference load scaled by its load parameter, see
+        :class:`~edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength`.
+
+        Parameters
+        ----------
+        stepActions
+            The active step actions.
+        U_np
+            The trial solution.
+        dU
+            The trial solution increment.
+        P
+            The residual contribution vector to assemble into.
+        K
+            The tangent in VIJ layout to assemble into.
+        timeStep
+            The time step.
+
+        Returns
+        -------
+        tuple[DofVector,VIJSystemMatrix]
+            The updated residual contribution vector and tangent.
+        """
+
+        return self.assembleLoads(self.collectLoads(stepActions), U_np, dU, P, K, timeStep)
 
     #: The step lengths a line search may choose from: a shorter step would hardly move the iterate, a longer one would
     #: trust the fitted parabola far beyond the trial step lengths.
@@ -1289,29 +1381,14 @@ class NIST(NonlinearSolverBase):
         return [float(stepLength) for stepLength in self.options["lineSearchStepLengths"].split(",")]
 
     @performancetiming.timeit("line search")
-    def quadraticLineSearch(
-        self,
-        ddU: DofVector,
-        U_n: DofVector,
-        dU: DofVector,
-        U_np: DofVector,
-        R: DofVector,
-        P: DofVector,
-        PLoadsAndConstraints: DofVector,
-        F: DofVector,
-        FConstraints: DofVector,
-        K: VIJSystemMatrix,
-        stepActions: dict,
-        model: FEModel,
-        timeStep: TimeStep,
-    ) -> DofVector:
-        """Scale the Newton correction :math:`\\Delta\\Delta U` by a step length :math:`\\alpha`, for a Newton
-        iteration that overshoots or oscillates (e.g., materials switching between loading and unloading).
+    def quadraticLineSearch(self, largestResidualAt: Callable[[float], float]) -> float:
+        """The step length :math:`\\alpha` by which a Newton correction is scaled, for a Newton iteration that
+        overshoots or oscillates (e.g., materials switching between loading and unloading).
 
-        The largest residual :math:`\\| R(\\Delta U + \\alpha \\, \\Delta\\Delta U) \\|_\\infty`, with the
-        Dirichlet degrees of freedom left out, is evaluated at the trial step lengths ``lineSearchStepLengths``, and a
-        parabola is fitted to these values (least squares for more than three). The step length minimizes the parabola
-        on :attr:`lineSearchStepLengthRange`: it is the vertex of a parabola that opens upwards, limited to that range,
+        The largest residual along the correction, :math:`\\| R(\\alpha) \\|_\\infty` with the Dirichlet degrees of
+        freedom left out, is evaluated at the trial step lengths ``lineSearchStepLengths``, and a parabola is fitted to
+        these values (least squares for more than three). The step length minimizes the parabola on
+        :attr:`lineSearchStepLengthRange`: it is the vertex of a parabola that opens upwards, limited to that range,
         and otherwise the end of the range where the parabola is smaller. Each trial costs one evaluation of the model;
         the next Newton iteration evaluates the chosen one.
 
@@ -1323,39 +1400,21 @@ class NIST(NonlinearSolverBase):
         * Trial residuals that are equal to round-off, which do not tell the step lengths apart: the correction is
           taken in full, the step length is 1.
 
+        What the correction is, the caller says: :meth:`solveIncrement` scales the solution correction
+        :math:`\\Delta\\Delta U`, and the arc length method the pair of the solution correction and the correction of
+        the load parameter, with the same step length, so that the trial states stay on the Newton direction of the
+        coupled problem.
+
         Parameters
         ----------
-        ddU
-            The Newton correction.
-        U_n
-            The solution at the start of the increment.
-        dU
-            The current solution increment.
-        U_np
-            The trial solution, overwritten.
-        R
-            The residual, overwritten.
-        P
-            The internal forces, overwritten.
-        PLoadsAndConstraints
-            The residual contributions of the loads and the constraints, overwritten.
-        F
-            The accumulated absolute element fluxes, overwritten.
-        FConstraints
-            The accumulated absolute constraint fluxes, overwritten.
-        K
-            The tangent in VIJ layout, overwritten.
-        stepActions
-            The active step actions.
-        model
-            The model tree.
-        timeStep
-            The time step.
+        largestResidualAt
+            Evaluates the model at the trial state of a step length, and returns its largest residual, without the
+            Dirichlet degrees of freedom.
 
         Returns
         -------
-        DofVector
-            The scaled correction.
+        float
+            The step length.
 
         Raises
         ------
@@ -1367,24 +1426,7 @@ class NIST(NonlinearSolverBase):
         largestResiduals = []
 
         for stepLength in stepLengths:
-            self.assembleResidualAndTangent(
-                U_n,
-                dU + stepLength * ddU,
-                U_np,
-                R,
-                P,
-                PLoadsAndConstraints,
-                F,
-                FConstraints,
-                K,
-                stepActions,
-                model,
-                timeStep,
-            )
-            for dirichlet in stepActions["dirichlet"].values():
-                R[dirichlet.constrainedDofIndices] = 0.0
-
-            largestResiduals.append(np.linalg.norm(R, np.inf))
+            largestResiduals.append(largestResidualAt(stepLength))
             self.journal.message(
                 "line search: step length {:7.4f}, largest residual {:11.4e}".format(stepLength, largestResiduals[-1]),
                 self.identification,
@@ -1417,7 +1459,7 @@ class NIST(NonlinearSolverBase):
 
         self.journal.message("line search: step length {:7.4f}".format(stepLength), self.identification, 2)
 
-        return stepLength * ddU
+        return stepLength
 
     def checkDivergingSolution(self, incrementResidualHistory: dict, maxGrowingIter: int) -> bool:
         """Check if the iterative solution scheme is diverging: if the flux residual of a field grew, from one
@@ -1464,6 +1506,82 @@ class NIST(NonlinearSolverBase):
 
         return False
 
+    def checkDivergingSolutionOrFallBack(
+        self,
+        quasiNewton: QuasiNewtonFallback,
+        incrementResidualHistory: dict,
+        maxGrowingIter: int,
+        nodesWithLargestResidual: dict,
+    ):
+        """Cut an increment back whose residual grew more often than ``maxGrowingIter`` allows (see
+        :meth:`checkDivergingSolution`) -- or, with the option ``fallBackToQuasiNewton``, let it continue with the tangent
+        of its first iteration (a quasi-Newton method), see :meth:`assembleSystemMatrix`. Called by the Newton loops after
+        every check that does not converge.
+
+        Parameters
+        ----------
+        quasiNewton
+            The quasi-Newton fallback of this attempt of the increment.
+        incrementResidualHistory
+            The convergence state of every field in each checked iteration of the increment.
+        maxGrowingIter
+            The maximum allowed number of growths of a residual.
+        nodesWithLargestResidual
+            The nodes with the largest residual, per field, reported if the increment diverges.
+
+        Raises
+        ------
+        DivergingSolution
+            If the residual grew too often, and the increment does not fall back to the quasi-Newton method.
+        """
+
+        if quasiNewton.isEngaged or not self.checkDivergingSolution(incrementResidualHistory, maxGrowingIter):
+            return
+
+        self.printResidualOutlierNodes(nodesWithLargestResidual)
+        if not quasiNewton.isEnabled:
+            raise DivergingSolution("Residual grew {:} times, cutting back".format(maxGrowingIter))
+
+        self.journal.message(
+            "Residual grew {:} times, continuing with the tangent of the first iteration".format(maxGrowingIter),
+            self.identification,
+            1,
+        )
+        quasiNewton.isEngaged = True
+
+    def assembleSystemMatrix(self, K: VIJSystemMatrix, quasiNewton: QuasiNewtonFallback) -> csr_matrix:
+        """The system matrix of this Newton iteration, before the Dirichlet boundary conditions are imposed: the
+        tangent in CSR layout, condensed by the multi-point constraints -- or, once the increment has fallen back to the
+        quasi-Newton method, the tangent of its first iteration.
+
+        Parameters
+        ----------
+        K
+            The tangent of this iteration in VIJ layout.
+        quasiNewton
+            The quasi-Newton fallback of this attempt of the increment, which keeps the tangent of the first iteration.
+
+        Returns
+        -------
+        csr_matrix
+            The system matrix.
+        """
+
+        if quasiNewton.isEngaged and quasiNewton.tangentOfFirstIteration is not None:
+            # Kept without the Dirichlet rows and columns: they are imposed anew, as they eliminate into this R.
+            return quasiNewton.tangentOfFirstIteration.copy()
+
+        K_ = self.assembleStiffnessCSR(K)
+
+        if self.mpcTransformation is not None:
+            K_ = self.mpcTransformation.transformSystemMatrix(K_)
+
+        # the first tangent of the increment: the one of iteration 0
+        if quasiNewton.isEnabled and quasiNewton.tangentOfFirstIteration is None:
+            quasiNewton.tangentOfFirstIteration = K_.copy()
+
+        return K_
+
     def initializeIncrement(self, U_n: DofVector, stepActions: dict, model: FEModel, timeStep: TimeStep):
         """Prepare what :meth:`assembleAdditionalTerms` needs during this increment's Newton
         iterations. Called by :meth:`solveIncrement` once per increment, after the step actions have
@@ -1489,8 +1607,8 @@ class NIST(NonlinearSolverBase):
         self, dU: DofVector, R: DofVector, F: DofVector, K: VIJSystemMatrix, timeStep: TimeStep
     ):
         """Assemble terms of the equation system beyond the internal and external forces. Called
-        by :meth:`solveIncrement` in every Newton iteration, next to :meth:`computeElements`,
-        :meth:`assembleLoads` and :meth:`assembleConstraints`: right after the right-hand side
+        by :meth:`assembleResidualAndTangent` in every evaluation of the model, next to :meth:`computeElements`,
+        :meth:`assembleLoadsAtIncrementEnd` and :meth:`assembleConstraints`: right after the right-hand side
         :math:`R = f_\\mathrm{ext} - f_\\mathrm{int}` is formed (see
         :ref:`residual-and-tangent-convention`), and before the multi-point-constraint condensation,
         the Dirichlet handling, the convergence test and the linear solve -- which therefore all act

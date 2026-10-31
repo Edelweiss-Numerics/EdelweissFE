@@ -42,8 +42,6 @@ from edelweissfe.config.configurator import loadConfiguration
 from edelweissfe.drivers.inputfiledrivensimulation import finiteElementSimulation
 from edelweissfe.journal.journal import Journal
 from edelweissfe.solvers.nonlinearimplicitstatic import NIST
-from edelweissfe.solvers.nonlinearimplicitstaticparallelarclength import NISTPArcLength
-from edelweissfe.stepactions.base.arclengthcontrollerbase import ArcLengthControllerBase
 from edelweissfe.utils.exceptions import DivergingSolution
 from edelweissfe.utils.inputfileparser import parseInputFile
 
@@ -105,10 +103,10 @@ def solves(monkeypatch):
         Solves.matricesPerAttempt[-1].append(A.toarray())
         return originalLinearSolve(self, A, b)
 
-    def quadraticLineSearch(self, ddU, *args):
-        scaled = originalLineSearch(self, ddU, *args)
-        Solves.stepLengths.append(float(np.max(np.abs(scaled))) / float(np.max(np.abs(ddU))))
-        return scaled
+    def quadraticLineSearch(self, largestResidualAt):
+        stepLength = originalLineSearch(self, largestResidualAt)
+        Solves.stepLengths.append(stepLength)
+        return stepLength
 
     monkeypatch.setattr(NIST, "solveIncrement", solveIncrement)
     monkeypatch.setattr(NIST, "linearSolve", linearSolve)
@@ -122,30 +120,7 @@ def solves(monkeypatch):
 def lineSearchStepLength(largestResidualOf, stepLengths: str = "0.8, 1.0, 1.2") -> float:
     """The step length the line search chooses if the largest residual at step length a is largestResidualOf(a)."""
     solver = NIST(loadConfiguration({}), Journal(verbose=False), lineSearchStepLengths=stepLengths)
-
-    # one degree of freedom, with zero increment so far and the correction 1: the trial increment is the step length
-    def assembleResidualAndTangent(U_n, dU, U_np, R, *args):
-        R[:] = largestResidualOf(dU[0])
-        return None, None, None
-
-    solver.assembleResidualAndTangent = assembleResidualAndTangent
-    vector = np.zeros(1)
-    scaled = solver.quadraticLineSearch(
-        np.ones(1),
-        vector,
-        vector,
-        vector.copy(),
-        np.zeros(1),
-        None,
-        None,
-        None,
-        None,
-        None,
-        {"dirichlet": {}},
-        None,
-        None,
-    )
-    return float(scaled[0])
+    return solver.quadraticLineSearch(largestResidualOf)
 
 
 def test_the_line_search_takes_the_minimum_of_the_parabola():
@@ -259,34 +234,3 @@ def test_the_fallback_continues_with_the_tangent_of_the_first_iteration(tmp_path
     U = fallBack.nodeFields["displacement"]["U"]
     UReference = reference.nodeFields["displacement"]["U"]
     np.testing.assert_allclose(U, UReference, rtol=0.0, atol=1e-6 * np.max(np.abs(UReference)))
-
-
-class _Controller(ArcLengthControllerBase):
-    """An arc length controller named theController, which the refusal never lets act."""
-
-    def __init__(self):
-        self.name = "theController"
-
-    def computeDDLambda(self, dU, ddU_0, ddU_f, timeStep, dofManager):
-        raise AssertionError("not called")
-
-    def finishIncrement(self, U, dU, dLambda, timeStep, dofManager):
-        raise AssertionError("not called")
-
-
-def test_neither_is_available_under_an_arc_length_controller():
-    for option in ("lineSearch", "fallBackToQuasiNewton"):
-        solver = NISTPArcLength(
-            loadConfiguration({}), Journal(verbose=False), arcLengthController="theController", **{option: "True"}
-        )
-
-        class Model:
-            multiPointConstraints = {}
-            modelModifiers = {}
-            additionalParameters = {}
-
-        class Step:
-            actions = {"indirectcontrol": {"theController": _Controller()}}
-
-        with pytest.raises(NotImplementedError, match="arc length controller"):
-            solver.beginStep(Step(), Model(), None, {})
