@@ -25,8 +25,14 @@
 #  The full text of the license can be found in the file LICENSE.md at
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
-"""Arc length control (``NISTPArcLength``): the controller is the step action the solver option
-``arcLengthController`` names, from an input file or from Python alone.
+"""Newton's method under arc length control (``NISTPArcLength``).
+
+- The controller is the step action the solver option ``arcLengthController`` names, from an input file or from
+  Python alone.
+- The line search and the quasi-Newton fallback act on the pair of the solution increment and the increment of the
+  load parameter.
+- The prediction extrapolates both with the same weights, quadratically, too, and a failed extrapolated increment is
+  retried without it.
 
 Most decks are the cantilever of ``testfiles/edelweiss-only/ArcLengthPenaltyConstraint``, bent down onto a rigid floor
 (a quadratic penalty, so the path is nonlinear) by a tip load whose load parameter follows the tip displacement. Its end
@@ -55,6 +61,7 @@ from edelweissfe.stepactions.indirectcontrol import StepAction as IndirectContro
 from edelweissfe.stepactions.nodeforces import StepAction as NodeForcesStepAction
 from edelweissfe.steps.adaptivestep import AdaptiveStep
 from edelweissfe.steps.stepmanager import StepActionCollection
+from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.exceptions import ReachedMaxIterations
 from edelweissfe.utils.fieldoutput import FieldOutputController
 from edelweissfe.utils.inputfileparser import parseInputFile
@@ -283,3 +290,161 @@ def test_a_redeclared_controller_counts_its_absolute_target_from_the_quantity_re
     controller.applyAtStepEnd(None)
     controller.updateStepAction(dof1, dof2, *opening, 0.5)
     assert controller.L == pytest.approx(0.2)
+
+
+# --- line search and quasi-Newton fallback -----------------------------------------------------------------------------
+
+
+def test_the_line_search_scales_the_load_parameter_with_the_solution(tmp_path, monkeypatch):
+    reference = run(tmp_path, deck())
+
+    loadParameters = []
+    lineSearches = []
+    originalAssembleLoads = NISTPArcLength.assembleLoadsAtIncrementEnd
+    originalLineSearch = NIST.quadraticLineSearch
+
+    def assembleLoadsAtIncrementEnd(self, *args):
+        loadParameters.append(self.arcLengthLoads.loadParameter)
+        return originalAssembleLoads(self, *args)
+
+    def quadraticLineSearch(self, largestResidualAt):
+        before = len(loadParameters)
+        stepLength = originalLineSearch(self, largestResidualAt)
+        lineSearches.append((before, len(loadParameters), stepLength))
+        return stepLength
+
+    monkeypatch.setattr(NISTPArcLength, "assembleLoadsAtIncrementEnd", assembleLoadsAtIncrementEnd)
+    monkeypatch.setattr(NIST, "quadraticLineSearch", quadraticLineSearch)
+    searched = run(
+        tmp_path, deck(solverOptions=", lineSearch=True, lineSearchAfterIterations=0, lineSearchEveryIterations=1")
+    )
+
+    assertSameEndState(searched, reference)
+    assert lineSearches
+    trialStepLengths = searched.solvers["theSolver"].lineSearchStepLengths()
+    for first, last, stepLength in lineSearches:
+        # the trials move the load parameter along the correction of the pair: an affine function of the step length
+        trials = loadParameters[first:last]
+        assert len(trials) == len(trialStepLengths)
+        slope = (trials[-1] - trials[0]) / (trialStepLengths[-1] - trialStepLengths[0])
+        np.testing.assert_allclose(
+            trials, trials[0] + slope * (np.array(trialStepLengths) - trialStepLengths[0]), rtol=1e-12, atol=1e-15
+        )
+        # and the next iteration takes the load parameter at the chosen step length
+        if last < len(loadParameters):
+            np.testing.assert_allclose(
+                loadParameters[last], trials[0] + slope * (stepLength - trialStepLengths[0]), rtol=1e-12, atol=1e-15
+            )
+
+
+def test_the_fallback_continues_with_the_tangent_of_the_first_iteration(tmp_path, attempts):
+    """With maxGrowIter=0, an increment counts as diverging at its first check that does not converge: once the
+    cantilever touches the floor, the increments are cut back until the step fails -- unless they fall back to the
+    tangent of their first iteration, the same matrix in every linear solve of an attempt, for both right-hand
+    sides."""
+
+    reference = run(tmp_path, deck())
+
+    assert run(tmp_path, deck(stepOptions=", maxGrowIter=0")).time < 1.0
+
+    attempts.matrices.clear()
+    fallBack = run(tmp_path, deck(stepOptions=", maxGrowIter=0", solverOptions=", fallBackToQuasiNewton=True"))
+
+    assert fallBack.time == pytest.approx(1.0)
+    assert any(len(matrices) > 1 for matrices in attempts.matrices)
+    for matrices in attempts.matrices:
+        for matrix in matrices[1:]:
+            np.testing.assert_array_equal(matrix, matrices[0])
+    assertSameEndState(fallBack, reference)
+
+
+# --- prediction --------------------------------------------------------------------------------------------------------
+
+
+def solverWithHistory(extrapolation: str, sizes: list, dLambdas: list) -> NISTPArcLength:
+    """An arc length solver whose accepted history are increments of the given sizes and load parameter increments."""
+    solver = NISTPArcLength(loadConfiguration({}), Journal(verbose=False), extrapolation=extrapolation)
+    timeSteps = [TimeStep(i + 1, size, 0.0, size, 0.0, 0.0) for i, size in enumerate(sizes)]
+    solver.prevTimeStep, solver.dLambda = timeSteps[-1], dLambdas[-1]
+    if len(sizes) > 1:
+        solver.timeStepBeforePrev, solver.dLambdaBeforePrev = timeSteps[-2], dLambdas[-2]
+    return solver
+
+
+def test_quadratic_prediction_continues_a_parabolic_load_parameter_exactly():
+    def loadParameter(s):
+        return 3.0 * s**2 - s + 1.0
+
+    # nonuniform sizes: 0.1 to 0.3, 0.3 to 0.35, then 0.35 to 0.6
+    solver = solverWithHistory(
+        "quadratic", [0.2, 0.05], [loadParameter(0.3) - loadParameter(0.1), loadParameter(0.35) - loadParameter(0.3)]
+    )
+    timeStep = TimeStep(9, 0.25, 0.0, 0.25, 0.0, 0.0)
+
+    predicted = solver.extrapolateLoadParameterIncrement("quadratic", timeStep, solver.prevTimeStep)
+    np.testing.assert_allclose(predicted, loadParameter(0.6) - loadParameter(0.35), rtol=1e-13)
+
+    # bit for bit the original linear prediction: the last increment times the ratio of the sizes
+    linear = solverWithHistory("linear", [0.3], [0.7])
+    assert linear.extrapolateLoadParameterIncrement("linear", timeStep, linear.prevTimeStep) == 0.7 * (0.25 / 0.3)
+    # no prediction without a last increment, or when off
+    assert linear.extrapolateLoadParameterIncrement("linear", timeStep, None) == 0.0
+    assert linear.extrapolateLoadParameterIncrement("off", timeStep, linear.prevTimeStep) == 0.0
+
+
+def test_the_load_parameter_is_predicted_with_the_weights_of_the_solution():
+    """Solution and load parameter lie on one predicted path: the same weights for both."""
+    dUs = [np.array([1.0, -2.0]), np.array([1.5, -2.5])]
+    dLambdas = [0.4, 0.55]
+    solver = solverWithHistory("quadratic", [0.2, 0.1], dLambdas)
+    solver.dUBeforePrev, solver.dU = dUs
+    timeStep = TimeStep(9, 0.15, 0.0, 0.15, 0.0, 0.0)
+
+    weightOfLast, weightOfBeforeLast = solver.extrapolationWeights("quadratic", timeStep, solver.prevTimeStep)
+    dU, extrapolated = solver.extrapolateLastIncrement(
+        "quadratic", timeStep, np.zeros(2), (), solver.prevTimeStep, None
+    )
+    dLambda = solver.extrapolateLoadParameterIncrement("quadratic", timeStep, solver.prevTimeStep)
+
+    assert extrapolated
+    np.testing.assert_allclose(dU, weightOfLast * dUs[1] + weightOfBeforeLast * dUs[0], rtol=1e-15)
+    np.testing.assert_allclose(dLambda, weightOfLast * dLambdas[1] + weightOfBeforeLast * dLambdas[0], rtol=1e-15)
+
+
+def test_quadratic_prediction_under_arc_length_control(tmp_path, monkeypatch):
+    reference = run(tmp_path, deck())
+
+    quadraticPredictions = []
+    originalPrediction = NISTPArcLength.extrapolateLoadParameterIncrement
+
+    def extrapolateLoadParameterIncrement(self, extrapolation, timeStep, prevTimeStep):
+        if self.extrapolates(extrapolation, prevTimeStep):
+            quadraticPredictions.append(self.extrapolationWeights(extrapolation, timeStep, prevTimeStep)[1] is not None)
+        return originalPrediction(self, extrapolation, timeStep, prevTimeStep)
+
+    monkeypatch.setattr(NISTPArcLength, "extrapolateLoadParameterIncrement", extrapolateLoadParameterIncrement)
+    quadratic = run(tmp_path, deck(solverOptions=", extrapolation=quadratic"))
+
+    assertSameEndState(quadratic, reference)
+    # the first prediction is linear, the later ones quadratic
+    assert quadraticPredictions[0] is False and quadraticPredictions.count(True) >= 3
+
+
+@pytest.mark.parametrize("retry", [False, True])
+def test_a_failed_extrapolated_increment_is_retried_without_extrapolation(tmp_path, attempts, retry):
+    reference = run(tmp_path, deck())
+    referenceAttempts = list(attempts.made)
+    attempts.made.clear()
+
+    attempts.fail = {(3, INCREMENT, True)}
+    result = run(tmp_path, deck(solverOptions=", retryWithoutExtrapolation={:}".format(retry)))
+    attemptsOfThird = [attempt for attempt in attempts.made if attempt[0] == 3]
+
+    if retry:
+        # the same increment, from a zero prediction of the solution and of the load parameter: no cutback
+        assert attemptsOfThird == [(3, INCREMENT, True), (3, INCREMENT, False)]
+        assert [attempt for attempt in attempts.made if attempt != (3, INCREMENT, False)] == referenceAttempts
+    else:
+        # cut back, and the prediction is dropped
+        assert attemptsOfThird[:2] == [(3, INCREMENT, True), (3, 0.25 * INCREMENT, False)]
+    assertSameEndState(result, reference)

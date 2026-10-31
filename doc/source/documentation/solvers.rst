@@ -139,6 +139,17 @@ option is a constructor argument of the solver:
 Every controller derives from :class:`~edelweissfe.stepactions.base.arclengthcontrollerbase.ArcLengthControllerBase`,
 which states what the solver asks of it.
 
+The options of Newton's method act on the pair of the solution increment and the increment of the load parameter
+:math:`(\Delta U, \Delta\lambda)`:
+
+* ``extrapolation``: both are predicted from the same accepted increments with the same weights, linearly or
+  quadratically, so that the prediction stays on one extrapolated path; ``retryWithoutExtrapolation`` retries a failed
+  increment from a zero prediction of both.
+* ``lineSearch``: a line search scales both corrections with the same step length, so that the trial states stay on
+  the Newton direction of the coupled problem. The controller's equation, which a shorter step leaves partly
+  unsatisfied, is enforced again in the next iteration.
+* ``fallBackToQuasiNewton``: the tangent of the first iteration serves both right-hand sides.
+
 ``NID`` - Nonlinear Implicit Dynamic (Newmark-beta)
 ----------------------------------------------------
 
@@ -222,8 +233,8 @@ Newton's method starts each increment from a prediction of its solution incremen
   been accepted, the prediction is linear.
 
 Sizes are measured in step progress. The prescribed degrees of freedom take their prescribed increment, so the first
-iteration of a predicted increment already checks convergence. Not available yet under an arc length controller,
-which extrapolates its load parameter linearly.
+iteration of a predicted increment already checks convergence. Under arc length control, the increment of the load
+parameter is predicted from the same accepted increments with the same weights, see :ref:`arc-length-control`.
 
 A prediction can lead Newton's method astray, e.g., when the path turns sharply. Two options decide what happens then
 and around rebuilds of the equation system, both off by default:
@@ -247,8 +258,8 @@ Line search and quasi-Newton fallback of the implicit solvers
 
 Newton's method converges quadratically close to the solution, but far from it, or where the tangent changes abruptly
 (e.g., material points switching between loading and unloading), a full correction can overshoot, and the iterations
-oscillate or diverge. Two remedies, solver options of ``NIST``, ``NISTParallel``, ``NID`` and ``NIDParallel``, are off by
-default; neither is available yet under an arc length controller.
+oscillate or diverge. Two remedies, solver options of the implicit solvers, are off by default. Under arc length
+control, both act on the pair of the solution and the load parameter, see :ref:`arc-length-control`.
 
 **Line search** (``lineSearch``). The correction :math:`\Delta\Delta U` is scaled by a step length :math:`\alpha`:
 the largest residual :math:`\| R(\Delta U + \alpha \, \Delta\Delta U) \|_\infty` (without the Dirichlet degrees of

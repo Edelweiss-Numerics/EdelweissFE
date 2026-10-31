@@ -44,8 +44,6 @@ from edelweissfe.journal.journal import Journal
 from edelweissfe.numerics.dofmanager import DofManager
 from edelweissfe.solvers.base.nonlinearsolverbase import TopologyUpdate
 from edelweissfe.solvers.nonlinearimplicitstatic import NIST
-from edelweissfe.solvers.nonlinearimplicitstaticparallelarclength import NISTPArcLength
-from edelweissfe.stepactions.base.arclengthcontrollerbase import ArcLengthControllerBase
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.exceptions import ReachedMaxIterations
 from edelweissfe.utils.inputfileparser import parseInputFile
@@ -344,33 +342,3 @@ def test_the_history_of_a_quadratic_extrapolation_is_checkpointed():
     # a linear extrapolation keeps no older history: its checkpoint is what it always was
     linear = solverWithHistory("linear", [0.1], [[3.0, 4.0]])
     assert set(linear.getRestartData()) == {"prevTimeStep", "dU"}
-
-
-class _Controller(ArcLengthControllerBase):
-    """An arc length controller named theController, which the refusal never lets act."""
-
-    def __init__(self):
-        self.name = "theController"
-
-    def computeDDLambda(self, dU, ddU_0, ddU_f, timeStep, dofManager):
-        raise AssertionError("not called")
-
-    def finishIncrement(self, U, dU, dLambda, timeStep, dofManager):
-        raise AssertionError("not called")
-
-
-def test_quadratic_extrapolation_is_refused_under_an_arc_length_controller():
-    solver = NISTPArcLength(
-        loadConfiguration({}), Journal(verbose=False), extrapolation="quadratic", arcLengthController="theController"
-    )
-
-    class Model:
-        multiPointConstraints = {}
-        modelModifiers = {}
-        additionalParameters = {}
-
-    class Step:
-        actions = {"indirectcontrol": {"theController": _Controller()}}
-
-    with pytest.raises(NotImplementedError, match="quadratic"):
-        solver.beginStep(Step(), Model(), None, {})
