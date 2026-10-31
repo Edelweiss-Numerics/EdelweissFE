@@ -42,6 +42,7 @@ from edelweissfe.numerics.mpctransformation import (
     _flattenChainedRecords,
 )
 from edelweissfe.solvers.base.convergencetable import ConvergenceTable
+from edelweissfe.stepactions.base.loadbase import LoadBase
 from edelweissfe.stepactions.base.stepactionbase import StepActionBase
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.checkpointedstate import packState, unpackState
@@ -243,128 +244,52 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
             determiningIndexToHostObjectMapping=determiningIndexToHostObjectMapping,
         )
 
-    @performancetiming.timeit("distributed loads")
-    def computeDistributedLoads(
-        self,
-        distributedLoads: list[StepActionBase],
-        U_np: DofVector,
-        P: DofVector,
-        K: VIJSystemMatrix | None,
-        timeStep: TimeStep,
-    ) -> tuple[DofVector, VIJSystemMatrix]:
-        """Loop over all distributed loads acting on elements, and evaluate them.
-        Assembles their residual contributions, the negative of the external loads, into the given
-        vector and, if given, their tangents into the system matrix; see
-        :ref:`residual-and-tangent-convention`.
+    @staticmethod
+    def collectLoads(stepActions: dict) -> list[LoadBase]:
+        """The loads among a step's actions, in the order in which their contributions are summed: the node
+        forces, then the distributed loads, then the body forces. A fixed order makes the residual the same sum in
+        every run.
 
         Parameters
         ----------
-        distributedLoads
-            The list of distributed loads.
-        U_np
-            The current solution vector.
-        P
-            The residual contribution vector to assemble into.
-        K
-            The system matrix to assemble into; None for an explicit solver, which needs no tangent.
-        timeStep
-            The current time step.
+        stepActions
+            The step actions, by module.
 
         Returns
         -------
-        tuple[DofVector,VIJSystemMatrix]
-            The updated residual contribution vector and system matrix.
+        list[LoadBase]
+            The loads.
         """
 
-        time = timeStep.totalTime
-        dT = timeStep.timeIncrement
-
-        for dLoad in distributedLoads:
-            load = dLoad.getCurrentLoad(timeStep)
-            for faceID, elementSet in dLoad.surface.items():
-                for el in elementSet:
-                    Ke = K[el] if K is not None else np.zeros(el.nDof * el.nDof)
-                    Pe = np.zeros(el.nDof)
-
-                    el.computeDistributedLoad(dLoad.loadType, Pe, Ke, faceID, load, U_np[el], time, dT)
-
-                    P[el] += Pe
-
-        return P, K
-
-    @performancetiming.timeit("body forces")
-    def computeBodyForces(
-        self,
-        bodyForces: list[StepActionBase],
-        U_np: DofVector,
-        P: DofVector,
-        K: VIJSystemMatrix | None,
-        timeStep: TimeStep,
-    ) -> tuple[DofVector, VIJSystemMatrix]:
-        """Loop over all body forces loads acting on elements, and evaluate them.
-        Assembles their residual contributions, the negative of the external loads, into the given
-        vector and, if given, their tangents into the system matrix; see
-        :ref:`residual-and-tangent-convention`.
-
-        Parameters
-        ----------
-        bodyForces
-            The list of body forces.
-        U_np
-            The current solution vector.
-        P
-            The residual contribution vector to assemble into.
-        K
-            The system matrix to assemble into; None for an explicit solver, which needs no tangent.
-        timeStep
-            The current time step.
-
-        Returns
-        -------
-        tuple[DofVector,VIJSystemMatrix]
-            The updated residual contribution vector and system matrix.
-        """
-
-        time = timeStep.totalTime
-        dT = timeStep.timeIncrement
-
-        for bForce in bodyForces:
-            force = bForce.getCurrentLoad(timeStep)
-            for el in bForce.elementSet:
-                Pe = np.zeros(el.nDof)
-                Ke = K[el] if K is not None else np.zeros(el.nDof * el.nDof)
-
-                el.computeBodyForce(Pe, Ke, force, U_np[el], time, dT)
-
-                P[el] += Pe
-
-        return P, K
+        return [
+            *stepActions["nodeforces"].values(),
+            *stepActions["distributedload"].values(),
+            *stepActions["bodyforce"].values(),
+        ]
 
     @performancetiming.timeit("assemble loads")
     def assembleLoads(
         self,
-        nodeForces: list[StepActionBase],
-        distributedLoads: list[StepActionBase],
-        bodyForces: list[StepActionBase],
+        loads: list[LoadBase],
         U_np: DofVector,
+        dU: DofVector,
         P: DofVector,
         K: VIJSystemMatrix | None,
         timeStep: TimeStep,
     ) -> tuple[DofVector, VIJSystemMatrix]:
-        """Assemble the residual contributions of all loads: each adds the negative of the external
-        load it applies, and the tangent of that contribution, which is nonzero only for a load that
-        follows the deformation; see :ref:`residual-and-tangent-convention`.
+        """Assemble the residual contributions of all loads: each adds the negative of the external load it
+        applies, and the tangent of that contribution, which is nonzero only for a load that follows the
+        deformation; see :ref:`residual-and-tangent-convention`. Every load knows where it acts, see
+        :meth:`~edelweissfe.stepactions.base.loadbase.LoadBase.assembleLoad`, so this only loops over them.
 
         Parameters
         ----------
-        nodeForces
-            The list of concentrated (nodal) loads.
-        distributedLoads
-            The list of distributed (surface) loads.
-        bodyForces
-            The list of body (volumetric) loads.
+        loads
+            The loads, see :meth:`collectLoads`.
         U_np
             The current solution vector.
+        dU
+            The current solution increment.
         P
             The residual contribution vector to assemble into.
         K
@@ -378,11 +303,9 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
             - The updated residual contribution vector.
             - The updated system matrix.
         """
-        for cLoad in nodeForces:
-            dofIndices = self.theDofManager.idcsOfFieldsOnNodeSetsInDofVector[cLoad.field][cLoad.nodeSet]
-            P[dofIndices] -= cLoad.getCurrentLoad(timeStep).flatten()
-        P, K = self.computeDistributedLoads(distributedLoads, U_np, P, K, timeStep)
-        P, K = self.computeBodyForces(bodyForces, U_np, P, K, timeStep)
+
+        for load in loads:
+            load.assembleLoad(P, K, U_np, dU, timeStep, self.theDofManager)
 
         return P, K
 

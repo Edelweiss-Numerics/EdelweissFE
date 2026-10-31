@@ -26,7 +26,10 @@ vector :math:`\boldsymbol{P}` to the residual, and its tangent
   :math:`\boldsymbol{\lambda}^T \partial \boldsymbol{g} / \partial \boldsymbol{u}` to the rows of the nodes and
   :math:`\boldsymbol{g}` to the rows of the multipliers. See :doc:`constraints` for writing one.
 
-Summed over all entities,
+A solver sums the contributions in three loops of every iteration: ``computeElements`` over the elements,
+``assembleLoads`` over the loads -- every load assembles its own contribution, wherever it acts (see
+:class:`~edelweissfe.stepactions.base.loadbase.LoadBase`) -- and ``assembleConstraints`` over the constraints that
+are not switched off (see :doc:`constraints`). Summed over all entities,
 
 .. math::
 

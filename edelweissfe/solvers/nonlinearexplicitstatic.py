@@ -476,9 +476,7 @@ class NEST(NIST):
         err[:] = 0.0
 
         dirichlets = stepActions["dirichlet"].values()
-        nodeforces = stepActions["nodeforces"].values()
-        distributedLoads = stepActions["distributedload"].values()
-        bodyForces = stepActions["bodyforce"].values()
+        loads = self.collectLoads(stepActions)
 
         # Find which global DOFs the Dirichlet BCs constrain, once up front.
         self.locateConstrainedDofs(dirichlets)
@@ -505,9 +503,7 @@ class NEST(NIST):
             P[:] = K[:] = F[:] = PLoadsAndConstraints[:] = 0.0
 
             P, K, F = self.computeElements(elements, U_np, dU_[k], P, K, F, timeStep)
-            PLoadsAndConstraints, K = self.assembleLoads(
-                nodeforces, distributedLoads, bodyForces, U_np, PLoadsAndConstraints, K, timeStep
-            )
+            PLoadsAndConstraints, K = self.assembleLoads(loads, U_np, dU_[k], PLoadsAndConstraints, K, timeStep)
             PLoadsAndConstraints, K = self.assembleConstraints(
                 constraints, U_np, dU_[k], PLoadsAndConstraints, K, timeStep
             )
