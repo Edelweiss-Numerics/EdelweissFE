@@ -185,6 +185,37 @@ class NISTSchema:
         default=0,
         optionName="report-performance-frequency",
     )
+    lineSearch: bool | None = schemaField(
+        description=(
+            "Scale the Newton correction by the step length at which a parabola, fitted to the largest residual "
+            "evaluated at the trial step lengths lineSearchStepLengths, is smallest (a quadratic line search)."
+        ),
+        dtype=bool,
+        default=False,
+    )
+    lineSearchAfterIterations: int | None = schemaField(
+        description="The line search starts after this many iterations of an increment.",
+        dtype=int,
+        default=5,
+    )
+    lineSearchEveryIterations: int | None = schemaField(
+        description="From then on, the line search is done in every iteration whose number is a multiple of this.",
+        dtype=int,
+        default=2,
+    )
+    lineSearchStepLengths: str | None = schemaField(
+        description="The trial step lengths of the line search, comma-separated, at least three.",
+        dtype=str,
+        default="0.8, 1.0, 1.2",
+    )
+    fallBackToQuasiNewton: bool | None = schemaField(
+        description=(
+            "Instead of cutting an increment back once the residual grew more often than maxGrowIter allows, "
+            "continue it with the tangent of its first iteration (a quasi-Newton method); maxIter still applies."
+        ),
+        dtype=bool,
+        default=False,
+    )
     convergenceCriterion: str | None = schemaField(
         description=(
             "The convergence criterion of the Newton iterations, legacy (the original EdelweissFE one) or abaqus "
@@ -316,6 +347,11 @@ class NIST(NonlinearSolverBase):
         "pruneCondensedMatrixZeros": None,
         "useThreadedMPCCondensation": False,
         "report-performance-frequency": 0,
+        "lineSearch": False,
+        "lineSearchAfterIterations": 5,
+        "lineSearchEveryIterations": 2,
+        "lineSearchStepLengths": "0.8, 1.0, 1.2",
+        "fallBackToQuasiNewton": False,
         "convergenceCriterion": "legacy",
         "iterationsForAlternativeTolerance": 15,
         "zeroFluxThreshold": None,
@@ -435,6 +471,16 @@ class NIST(NonlinearSolverBase):
             raise ValueError(
                 "Unknown extrapolation '{:}', use off, linear or quadratic".format(self.options["extrapolation"])
             )
+
+        if self.options["lineSearch"]:
+            stepLengths = self.lineSearchStepLengths()
+            if len(set(stepLengths)) < 3 or min(stepLengths) <= 0.0:
+                raise ValueError(
+                    "lineSearchStepLengths: a parabola needs at least three different positive step lengths, got "
+                    "{:}".format(stepLengths)
+                )
+            if self.options["lineSearchEveryIterations"] < 1:
+                raise ValueError("lineSearchEveryIterations must be at least 1")
 
         # A step starts without a predictor state; a resumed step takes over the checkpointed one.
         self.prevTimeStep = None
@@ -1012,9 +1058,6 @@ class NIST(NonlinearSolverBase):
         iterationCounter = 0
         incrementResidualHistory = {field: [] for field in self.theDofManager.idcsOfFieldsInDofVector}
 
-        elements = model.elements
-        constraints = model.constraints
-
         R = self.theDofManager.constructDofVector()
         F = self.theDofManager.constructDofVector()
         FConstraints = self.theDofManager.constructDofVector()
@@ -1023,9 +1066,6 @@ class NIST(NonlinearSolverBase):
         ddU = None
 
         dirichlets = stepActions["dirichlet"].values()
-        nodeforces = stepActions["nodeforces"].values()
-        distributedLoads = stepActions["distributedload"].values()
-        bodyForces = stepActions["bodyforce"].values()
 
         with performancetiming.timeit("step actions at increment start"):
             # Find which global DOFs the Dirichlet BCs constrain, once up front.
@@ -1040,39 +1080,16 @@ class NIST(NonlinearSolverBase):
                 extrapolation, timeStep, dU, dirichlets, prevTimeStep, model
             )
 
+        fallBackToQuasiNewton = self.options["fallBackToQuasiNewton"]
+        # Set once the residual grew too often, if fallBackToQuasiNewton: the increment continues with the tangent of
+        # its first iteration, tangentOfFirstIteration.
+        quasiNewton = False
+        tangentOfFirstIteration = None
+
         while True:
-            for geostatic in stepActions["geostatic"].values():
-                geostatic.applyAtIterationStart()
-
-            with performancetiming.timeit("reset residual and tangent"):
-                U_np[:] = U_n
-                U_np += dU
-
-                P[:] = F[:] = FConstraints[:] = PLoadsAndConstraints[:] = 0.0
-                # K holds the entries of all element matrices, far too many to zero on a single thread
-                forEachSliceInParallel(lambda s: K[s].fill(0.0), len(K))
-
-            # Every element, load and constraint adds its residual contribution and the tangent of it.
-            # The elements' sum P is kept apart: it is the reaction force this increment reports.
-            P, K, F = self.computeElements(elements, U_np, dU, P, K, F, timeStep)
-            PLoadsAndConstraints, K = self.assembleLoads(
-                nodeforces, distributedLoads, bodyForces, U_np, PLoadsAndConstraints, K, timeStep
+            P, K, F = self.assembleResidualAndTangent(
+                U_n, dU, U_np, R, P, PLoadsAndConstraints, F, FConstraints, K, stepActions, model, timeStep
             )
-            PLoadsAndConstraints, K = self.assembleConstraints(
-                constraints, U_np, dU, PLoadsAndConstraints, K, timeStep, FConstraints
-            )
-
-            # The right-hand side of K ddU = R is the negative of the summed contributions: the out-of-balance
-            # force R = f_ext - f_int.
-            R[:] = -P
-            R -= PLoadsAndConstraints
-
-            self.assembleAdditionalTerms(dU, R, F, K, timeStep)
-
-            # Condense BEFORE the Dirichlet handling: T^T folds slave rows into master rows, which may
-            # carry a prescribed delta.
-            if self.mpcTransformation is not None:
-                R[:] = self.mpcTransformation.transformResidual(R, dU)
 
             # --- Impose the Dirichlet (prescribed-value) boundary conditions ---
             # For each constrained DOF i we overwrite its row of the linearized system
@@ -1097,18 +1114,35 @@ class NIST(NonlinearSolverBase):
                 if converged:
                     break
 
-                if self.checkDivergingSolution(incrementResidualHistory, maxGrowingIter):
+                if not quasiNewton and self.checkDivergingSolution(incrementResidualHistory, maxGrowingIter):
                     self.printResidualOutlierNodes(nodesWithLargestResidual)
-                    raise DivergingSolution("Residual grew {:} times, cutting back".format(maxGrowingIter))
+                    if not fallBackToQuasiNewton:
+                        raise DivergingSolution("Residual grew {:} times, cutting back".format(maxGrowingIter))
+                    self.journal.message(
+                        "Residual grew {:} times, continuing with the tangent of the first iteration".format(
+                            maxGrowingIter
+                        ),
+                        self.identification,
+                        1,
+                    )
+                    quasiNewton = True
 
                 if iterationCounter == maxIter:
                     self.printResidualOutlierNodes(nodesWithLargestResidual)
                     raise ReachedMaxIterations("Reached max. iterations in current increment, cutting back")
 
-            K_ = self.assembleStiffnessCSR(K)
+            if quasiNewton and tangentOfFirstIteration is not None:
+                # Kept without the Dirichlet rows and columns: they are imposed anew, as they eliminate into this R.
+                K_ = tangentOfFirstIteration.copy()
+            else:
+                K_ = self.assembleStiffnessCSR(K)
 
-            if self.mpcTransformation is not None:
-                K_ = self.mpcTransformation.transformSystemMatrix(K_)
+                if self.mpcTransformation is not None:
+                    K_ = self.mpcTransformation.transformSystemMatrix(K_)
+
+                # the first tangent of the increment: the one of iteration 0
+                if fallBackToQuasiNewton and tangentOfFirstIteration is None:
+                    tangentOfFirstIteration = K_.copy()
 
             # identity rows, and the columns eliminated into R
             K_ = self.applyDirichletToStiffness(K_, dirichlets, R)
@@ -1119,12 +1153,252 @@ class NIST(NonlinearSolverBase):
             if self.mpcTransformation is not None:
                 ddU = self.mpcTransformation.recoverSlaveSolution(ddU)
 
+            if self.lineSearchIsDue(iterationCounter):
+                ddU = self.quadraticLineSearch(
+                    ddU, U_n, dU, U_np, R, P, PLoadsAndConstraints, F, FConstraints, K, stepActions, model, timeStep
+                )
+
             dU += ddU
             iterationCounter += 1
 
         self.finalizeIncrement(model)
 
         return U_np, dU, P, iterationCounter, incrementResidualHistory
+
+    def assembleResidualAndTangent(
+        self,
+        U_n: DofVector,
+        dU: DofVector,
+        U_np: DofVector,
+        R: DofVector,
+        P: DofVector,
+        PLoadsAndConstraints: DofVector,
+        F: DofVector,
+        FConstraints: DofVector,
+        K: VIJSystemMatrix,
+        stepActions: dict,
+        model: FEModel,
+        timeStep: TimeStep,
+    ) -> tuple[DofVector, VIJSystemMatrix, DofVector]:
+        """Evaluate the model at the trial solution :math:`U_{n+1} = U_n + \\Delta U`: the right-hand side
+        :math:`R = f_\\mathrm{ext} - f_\\mathrm{int}` (see :ref:`residual-and-tangent-convention`) with the terms of
+        :meth:`assembleAdditionalTerms`, condensed by the multi-point constraints, and the tangent. Called by
+        :meth:`solveIncrement` once per Newton iteration, and by :meth:`quadraticLineSearch` once per trial step
+        length. The Dirichlet boundary conditions are imposed by the callers.
+
+        Parameters
+        ----------
+        U_n
+            The solution at the start of the increment.
+        dU
+            The trial solution increment.
+        U_np
+            The trial solution, overwritten.
+        R
+            The residual, overwritten.
+        P
+            The internal forces (the reaction), overwritten.
+        PLoadsAndConstraints
+            The residual contributions of the loads and the constraints, overwritten.
+        F
+            The accumulated absolute element fluxes, the reference of the convergence test, overwritten.
+        FConstraints
+            The accumulated absolute constraint fluxes, overwritten.
+        K
+            The tangent in VIJ layout, overwritten.
+        stepActions
+            The active step actions.
+        model
+            The model tree.
+        timeStep
+            The time step.
+
+        Returns
+        -------
+        tuple[DofVector,VIJSystemMatrix,DofVector]
+            The internal forces, the tangent and the accumulated element fluxes.
+        """
+
+        for geostatic in stepActions["geostatic"].values():
+            geostatic.applyAtIterationStart()
+
+        with performancetiming.timeit("reset residual and tangent"):
+            U_np[:] = U_n
+            U_np += dU
+
+            P[:] = F[:] = FConstraints[:] = PLoadsAndConstraints[:] = 0.0
+            # K holds the entries of all element matrices, far too many to zero on a single thread
+            forEachSliceInParallel(lambda s: K[s].fill(0.0), len(K))
+
+        # Every element, load and constraint adds its residual contribution and the tangent of it.
+        # The elements' sum P is kept apart: it is the reaction force this increment reports.
+        P, K, F = self.computeElements(model.elements, U_np, dU, P, K, F, timeStep)
+        PLoadsAndConstraints, K = self.assembleLoads(
+            stepActions["nodeforces"].values(),
+            stepActions["distributedload"].values(),
+            stepActions["bodyforce"].values(),
+            U_np,
+            PLoadsAndConstraints,
+            K,
+            timeStep,
+        )
+        PLoadsAndConstraints, K = self.assembleConstraints(
+            model.constraints, U_np, dU, PLoadsAndConstraints, K, timeStep, FConstraints
+        )
+
+        # The right-hand side of K ddU = R is the negative of the summed contributions: the out-of-balance
+        # force R = f_ext - f_int.
+        R[:] = -P
+        R -= PLoadsAndConstraints
+
+        self.assembleAdditionalTerms(dU, R, F, K, timeStep)
+
+        # Condense BEFORE the Dirichlet handling: T^T folds slave rows into master rows, which may
+        # carry a prescribed delta.
+        if self.mpcTransformation is not None:
+            R[:] = self.mpcTransformation.transformResidual(R, dU)
+
+        return P, K, F
+
+    #: The step lengths a line search may choose from: a shorter step would hardly move the iterate, a longer one would
+    #: trust the fitted parabola far beyond the trial step lengths.
+    lineSearchStepLengthRange = (0.1, 1.5)
+
+    def lineSearchIsDue(self, iterationCounter: int) -> bool:
+        """Whether the correction of this iteration is scaled by a line search (``lineSearch``): after
+        ``lineSearchAfterIterations`` iterations, in every iteration whose number is a multiple of
+        ``lineSearchEveryIterations``.
+
+        Parameters
+        ----------
+        iterationCounter
+            The current iteration number.
+
+        Returns
+        -------
+        bool
+            True if a line search is due.
+        """
+
+        return (
+            self.options["lineSearch"]
+            and iterationCounter > self.options["lineSearchAfterIterations"]
+            and iterationCounter % self.options["lineSearchEveryIterations"] == 0
+        )
+
+    def lineSearchStepLengths(self) -> list[float]:
+        """The trial step lengths of the line search, from the option ``lineSearchStepLengths``.
+
+        Returns
+        -------
+        list[float]
+            The trial step lengths.
+        """
+
+        return [float(stepLength) for stepLength in self.options["lineSearchStepLengths"].split(",")]
+
+    @performancetiming.timeit("line search")
+    def quadraticLineSearch(
+        self,
+        ddU: DofVector,
+        U_n: DofVector,
+        dU: DofVector,
+        U_np: DofVector,
+        R: DofVector,
+        P: DofVector,
+        PLoadsAndConstraints: DofVector,
+        F: DofVector,
+        FConstraints: DofVector,
+        K: VIJSystemMatrix,
+        stepActions: dict,
+        model: FEModel,
+        timeStep: TimeStep,
+    ) -> DofVector:
+        """Scale the Newton correction :math:`\\Delta\\Delta U` by a step length :math:`\\alpha`, for a Newton
+        iteration that overshoots or oscillates (e.g., materials switching between loading and unloading).
+
+        The largest residual :math:`\\| R(\\Delta U + \\alpha \\, \\Delta\\Delta U) \\|_\\infty`, with the
+        Dirichlet degrees of freedom left out, is evaluated at the trial step lengths ``lineSearchStepLengths``, and a
+        parabola is fitted to these values (least squares for more than three). The step length minimizes the parabola
+        on :attr:`lineSearchStepLengthRange`: it is the vertex of a parabola that opens upwards, limited to that range,
+        and otherwise the end of the range where the parabola is smaller. Each trial costs one evaluation of the model;
+        the next Newton iteration evaluates the chosen one.
+
+        Parameters
+        ----------
+        ddU
+            The Newton correction.
+        U_n
+            The solution at the start of the increment.
+        dU
+            The current solution increment.
+        U_np
+            The trial solution, overwritten.
+        R
+            The residual, overwritten.
+        P
+            The internal forces, overwritten.
+        PLoadsAndConstraints
+            The residual contributions of the loads and the constraints, overwritten.
+        F
+            The accumulated absolute element fluxes, overwritten.
+        FConstraints
+            The accumulated absolute constraint fluxes, overwritten.
+        K
+            The tangent in VIJ layout, overwritten.
+        stepActions
+            The active step actions.
+        model
+            The model tree.
+        timeStep
+            The time step.
+
+        Returns
+        -------
+        DofVector
+            The scaled correction.
+        """
+
+        stepLengths = self.lineSearchStepLengths()
+        largestResiduals = []
+
+        for stepLength in stepLengths:
+            self.assembleResidualAndTangent(
+                U_n,
+                dU + stepLength * ddU,
+                U_np,
+                R,
+                P,
+                PLoadsAndConstraints,
+                F,
+                FConstraints,
+                K,
+                stepActions,
+                model,
+                timeStep,
+            )
+            for dirichlet in stepActions["dirichlet"].values():
+                R[dirichlet.constrainedDofIndices] = 0.0
+
+            largestResiduals.append(np.linalg.norm(R, np.inf))
+            self.journal.message(
+                "line search: step length {:7.4f}, largest residual {:11.4e}".format(stepLength, largestResiduals[-1]),
+                self.identification,
+                2,
+            )
+
+        # the minimum of the parabola on the allowed range: its vertex if it opens upwards, else an end of the range
+        parabola = np.polyfit(stepLengths, largestResiduals, 2)
+        curvature, slope, _ = parabola
+        smallest, largest = self.lineSearchStepLengthRange
+        if curvature > 0.0:
+            stepLength = min(max(-slope / (2.0 * curvature), smallest), largest)
+        else:
+            stepLength = smallest if np.polyval(parabola, smallest) <= np.polyval(parabola, largest) else largest
+
+        self.journal.message("line search: step length {:7.4f}".format(stepLength), self.identification, 2)
+
+        return stepLength * ddU
 
     def checkDivergingSolution(self, incrementResidualHistory: dict, maxGrowingIter: int) -> bool:
         """Check if the iterative solution scheme is diverging: if the flux residual of a field grew, from one

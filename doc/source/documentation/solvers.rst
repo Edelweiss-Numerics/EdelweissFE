@@ -193,6 +193,33 @@ and around rebuilds of the equation system, both off by default:
   same degrees of freedom then. A change of the topology, e.g., a mesh refinement, always starts from zero (see
   ``extrapolateAfterModelChange`` for the increment that follows it).
 
+Line search and quasi-Newton fallback of the implicit solvers
+-------------------------------------------------------------
+
+Newton's method converges quadratically close to the solution, but far from it, or where the tangent changes abruptly
+(e.g., material points switching between loading and unloading), a full correction can overshoot, and the iterations
+oscillate or diverge. Two remedies, solver options of ``NIST``, ``NISTParallel``, ``NID`` and ``NIDParallel``, are off by
+default; neither is available yet under an arc length controller.
+
+**Line search** (``lineSearch``). The correction :math:`\Delta\Delta U` is scaled by a step length :math:`\alpha`:
+the largest residual :math:`\| R(\Delta U + \alpha \, \Delta\Delta U) \|_\infty` (without the Dirichlet degrees of
+freedom) is evaluated at the trial step lengths ``lineSearchStepLengths`` (default ``0.8, 1.0, 1.2``), a parabola is
+fitted to these values, and :math:`\alpha` minimizes the parabola on :math:`[0.1, 1.5]`: its vertex, limited to that
+range, or, for a parabola that does not open upwards, the end of the range where it is smaller. Each trial costs one
+evaluation of the model, so the line search is done only after ``lineSearchAfterIterations`` iterations (default 5),
+and then in every iteration whose number is a multiple of ``lineSearchEveryIterations`` (default 2). Small trial step
+lengths, e.g. ``lineSearchStepLengths='0.15, 0.4, 0.7, 1.0'``, damp an iteration that cycles between two states.
+
+**Quasi-Newton fallback** (``fallBackToQuasiNewton``). An increment whose residual grew more often than the step
+option ``maxGrowIter`` allows is cut back. With this option, it continues instead with the tangent of its first
+iteration, i.e., of the converged state at the start of the increment, or of the prediction if the increment is
+extrapolated. The convergence becomes linear, but a tangent that is not updated cannot switch abruptly either;
+``maxIter`` still ends an increment that does not converge.
+
+.. code-block:: edelweiss
+
+    >>options, name=theSolver, lineSearch=True, lineSearchAfterIterations=2, lineSearchEveryIterations=1, fallBackToQuasiNewton=True
+
 Convergence criteria of the implicit solvers
 --------------------------------------------
 
