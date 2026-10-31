@@ -177,6 +177,12 @@ class NISTPArcLength(NISTParallel):
             self.arcLengthController = None
             self.dLambda = None
 
+        if self.arcLengthController is not None and self.options["extrapolation"] == "quadratic":
+            raise NotImplementedError(
+                "extrapolation=quadratic is not available under an arc length controller, which extrapolates the load "
+                "parameter linearly only"
+            )
+
         return super().beginStep(step, model, fieldOutputController, outputmanagers)
 
     def solveIncrement(

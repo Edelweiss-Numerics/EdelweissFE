@@ -245,6 +245,25 @@ class DofManager:
             self._sizeVIJ = self._accumulatedElementVIJSize + self._accumulatedConstraintVIJSize
             self.I, self.J, self.idcsOfHigherOrderEntitiesInVIJ = self._initializeVIJPattern()
 
+    def dofNumbering(self) -> tuple:
+        """What decides the index of every degree of freedom: the fields with their slices in the DofVector, the field
+        variables (the nodes' entries of each field) in the order they are numbered, and the scalar variables in the
+        order they are numbered. Two managers whose numberings compare equal give every degree of freedom the same
+        index, so a DofVector of one is a DofVector of the other -- e.g., before and after a rebuild caused by a
+        contact search, which changes the coupling of the degrees of freedom but not their numbering.
+
+        Returns
+        -------
+        tuple
+            The numbering, to be compared with ``==``; field and scalar variables compare by identity.
+        """
+
+        return (
+            tuple(self.idcsOfFieldsInDofVector.items()),
+            tuple(self.idcsOfFieldVariablesInDofVector),
+            tuple(self.idcsOfScalarVariablesInDofVector),
+        )
+
     def _reserveSpaceForNodeFields(
         self,
         idxStart: int,
