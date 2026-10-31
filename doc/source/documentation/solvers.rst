@@ -152,7 +152,9 @@ The options of Newton's method act on the pair of the solution increment and the
 
 The load parameter is part of the state of the model: every converged increment writes it to
 ``model.additionalParameters["arc length parameter"]``, where a later step continues from it, also with another
-solver.
+solver, and where a restart checkpoint stores it. The solver checkpoints the increments of the load parameter its
+predictor extrapolates, and the controller what it carries from step to step, so an arc length controlled run
+resumes exactly where it stopped.
 
 ``NID`` - Nonlinear Implicit Dynamic (Newmark-beta)
 ----------------------------------------------------
