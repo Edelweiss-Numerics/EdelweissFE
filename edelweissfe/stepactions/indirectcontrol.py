@@ -138,8 +138,9 @@ class StepAction(ArcLengthControllerBase):
     #: Option schema for this step action, consumed by OptionSchemaProvider's registry.
     schema = IndirectControlSchema
 
-    #: The controlled quantity at the end of the previous step.
-    checkpointedState = {"currentL0": float}
+    #: The controlled quantity at the end of the previous step, and the target of this step, which the absolute
+    #: formulation derives from it when the action is declared.
+    checkpointedState = {"currentL0": float, "L": float}
 
     def __init__(
         self,

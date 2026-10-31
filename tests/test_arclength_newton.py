@@ -271,7 +271,7 @@ def test_an_arc_length_step_built_from_python_objects_alone():
 def test_a_redeclared_controller_counts_its_absolute_target_from_the_quantity_reached():
     """indirectcontrol, absolute formulation: re-declared under its name in a later step, the controller aims at the
     absolute value of the controlled quantity, so the target of the step counts from the value the steps before
-    reached."""
+    reached -- which a restart checkpoint therefore holds, with the target."""
 
     class FieldVariableValues:
         def __init__(self):
@@ -292,6 +292,8 @@ def test_a_redeclared_controller_counts_its_absolute_target_from_the_quantity_re
     controller.applyAtStepEnd(None)
     controller.updateStepAction(dof1, dof2, *opening, 0.5)
     assert controller.L == pytest.approx(0.2)
+
+    assert set(controller.getRestartData()) == {"currentL0", "L"}
 
 
 # --- line search and quasi-Newton fallback -----------------------------------------------------------------------------

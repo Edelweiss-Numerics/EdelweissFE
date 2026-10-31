@@ -122,9 +122,9 @@ class NISTPArcLength(NISTParallel):
 
     SolverSpecificOptions = NISTParallel.SolverSpecificOptions | {"arcLengthController": "off", "stopCondition": None}
 
-    #: Not restartable: the arc-length parameter is not checkpointed, so a resumed step would restart
-    #: the load factor from zero.
-    checkpointedState = None
+    #: The predictor's state between increments, NIST's plus the increments of the load parameter that belong to its
+    #: accepted increments. The load parameter itself is part of the model, see :meth:`beginStep`.
+    checkpointedState = NISTParallel.checkpointedState | {"dLambda": float, "dLambdaBeforePrev": float}
 
     def __init__(self, jobInfo, journal, **kwargs):
         #: The load parameter reached by the last converged increment.
@@ -153,8 +153,8 @@ class NISTPArcLength(NISTParallel):
         :meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.beginStep`.
 
         The load parameter is part of the state of the model: every converged increment writes it to
-        ``model.additionalParameters["arc length parameter"]``. So a step continues from the load parameter the steps
-        before it reached.
+        ``model.additionalParameters["arc length parameter"]``, which a restart checkpoint stores with the model. So
+        a step continues from the load parameter the steps before it reached -- in a resumed run, too.
 
         Parameters
         ----------
@@ -184,7 +184,7 @@ class NISTPArcLength(NISTParallel):
         if "arc length parameter" in model.additionalParameters:
             self.Lambda = model.additionalParameters["arc length parameter"]
 
-        # A step starts without a predictor state.
+        # A step starts without a predictor state; a resumed step takes over the checkpointed one.
         self.dLambda = None
         self.dLambdaBeforePrev = None
 

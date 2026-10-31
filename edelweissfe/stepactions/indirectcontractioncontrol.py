@@ -121,8 +121,9 @@ class StepAction(ArcLengthControllerBase):
     #: Option schema for this step action, consumed by OptionSchemaProvider's registry.
     schema = IndirectContractionControlSchema
 
-    #: The controlled quantity at the end of the previous step, and its current value.
-    checkpointedState = {"currentL0": float, "_currentL": float}
+    #: The controlled quantity at the end of the previous step, its current value, and the target of this step, which
+    #: the absolute formulation derives from it when the action is declared.
+    checkpointedState = {"currentL0": float, "_currentL": float, "L": float}
 
     def __init__(
         self,
