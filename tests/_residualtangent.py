@@ -104,6 +104,32 @@ def residualContributionAndTangent(
     return P, K
 
 
+def centralDifferences(function, x: np.ndarray, h: float = 1e-7) -> np.ndarray:
+    """The Jacobian of ``function`` at ``x`` by central differences.
+
+    Parameters
+    ----------
+    function
+        Maps a vector to a vector.
+    x
+        Where to differentiate.
+    h
+        The perturbation.
+
+    Returns
+    -------
+    np.ndarray
+        The matrix ``d function / d x``.
+    """
+
+    columns = []
+    for i in range(x.size):
+        perturbation = np.zeros(x.size)
+        perturbation[i] = h
+        columns.append((function(x + perturbation) - function(x - perturbation)) / (2.0 * h))
+    return np.column_stack(columns)
+
+
 def finiteDifferenceTangent(constraint, U: np.ndarray, dU: np.ndarray, timeStep=None, h: float = 1e-7) -> np.ndarray:
     """The derivative of a constraint's residual contribution by central differences.
 
@@ -129,12 +155,7 @@ def finiteDifferenceTangent(constraint, U: np.ndarray, dU: np.ndarray, timeStep=
         The dense ``nDof x nDof`` matrix ``dP/dU``.
     """
 
-    nDof = constraint.nDof
-    dP_dU = np.zeros((nDof, nDof))
-    for i in range(nDof):
-        perturbation = np.zeros(nDof)
-        perturbation[i] = h
-        PPlus, _ = residualContributionAndTangent(constraint, U + perturbation, dU + perturbation, timeStep)
-        PMinus, _ = residualContributionAndTangent(constraint, U - perturbation, dU - perturbation, timeStep)
-        dP_dU[:, i] = (PPlus - PMinus) / (2.0 * h)
-    return dP_dU
+    def residualContribution(perturbation):
+        return residualContributionAndTangent(constraint, U + perturbation, dU + perturbation, timeStep)[0]
+
+    return centralDifferences(residualContribution, np.zeros(constraint.nDof), h)
