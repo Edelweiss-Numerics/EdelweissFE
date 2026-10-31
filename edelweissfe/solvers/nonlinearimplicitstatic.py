@@ -170,6 +170,57 @@ class NISTSchema:
         dtype=str,
         default="legacy",
     )
+    iterationsForAlternativeTolerance: int | None = schemaField(
+        description=(
+            "legacy criterion: I, the iteration from which on the flux residual is checked against "
+            "fluxResidualToleranceAlternative instead of fluxResidualTolerance."
+        ),
+        dtype=int,
+        default=15,
+    )
+    zeroFluxThreshold: float | None = schemaField(
+        description=(
+            "legacy criterion: a field whose spatial average flux does not exceed this value carries no flux its "
+            "residual could be compared with, so its flux residual counts as converged; needs minimumIterations >= 1. "
+            "Off if not set."
+        ),
+        dtype=float,
+        default=None,
+        documentedDefault="off",
+    )
+    zeroIncrementThreshold: float | None = schemaField(
+        description=(
+            "legacy criterion: a field whose largest increment does not exceed this value has not moved, so there is "
+            "no increment to relate its correction to, and its correction counts as converged. Off if not set."
+        ),
+        dtype=float,
+        default=None,
+        documentedDefault="off",
+    )
+    minimumIterations: int | None = schemaField(
+        description=(
+            "legacy criterion: no flux residual counts as converged before this iteration, so an increment takes at "
+            "least this many Newton iterations; 0 accepts a prediction that already satisfies the criterion."
+        ),
+        dtype=int,
+        default=0,
+    )
+    countFirstResidualAsGrowth: bool | None = schemaField(
+        description=(
+            "Residual growths (the step option maxGrowIter): the residual history of a field starts from zero, so the "
+            "first checked residual of an increment counts as a growth; if False, counting starts with the second."
+        ),
+        dtype=bool,
+        default=True,
+    )
+    countGrowthOfConvergedFields: bool | None = schemaField(
+        description=(
+            "Residual growths (the step option maxGrowIter): count a growth of the flux residual of a field also in "
+            "an iteration in which this field is converged and only other fields keep the iterations going."
+        ),
+        dtype=bool,
+        default=True,
+    )
     abaqusResidualTolerance: float | None = schemaField(
         description="abaqus criterion: R_n, the flux residual tolerance relative to the time average flux.",
         dtype=float,
@@ -241,6 +292,12 @@ class NIST(NonlinearSolverBase):
         "useThreadedMPCCondensation": False,
         "report-performance-frequency": 0,
         "convergenceCriterion": "legacy",
+        "iterationsForAlternativeTolerance": 15,
+        "zeroFluxThreshold": None,
+        "zeroIncrementThreshold": None,
+        "minimumIterations": 0,
+        "countFirstResidualAsGrowth": True,
+        "countGrowthOfConvergedFields": True,
         "abaqusResidualTolerance": 5e-3,
         "abaqusCorrectionTolerance": 1e-2,
         "abaqusResidualToleranceAlternative": 2e-2,
@@ -260,9 +317,12 @@ class NIST(NonlinearSolverBase):
     def __init__(self, jobInfo, journal, **kwargs):
         self.journal = journal
 
-        self.fieldCorrectionTolerances = jobInfo["fieldCorrectionTolerance"]
+        # the tolerances of the legacy criterion per field, see edelweissfe.solvers.base.convergencecriteria
         self.fluxResidualTolerances = jobInfo["fluxResidualTolerance"]
-        self.fluxResidualTolerancesAlt = jobInfo["fluxResidualToleranceAlternative"]
+        self.fluxResidualTolerancesAlternative = jobInfo["fluxResidualToleranceAlternative"]
+        self.absoluteFluxResidualTolerances = jobInfo["absoluteFluxResidualTolerance"]
+        self.fieldCorrectionTolerances = jobInfo["fieldCorrectionTolerance"]
+        self.relativeFieldCorrectionTolerances = jobInfo["relativeFieldCorrectionTolerance"]
 
         self.options = self.SolverSpecificOptions.copy()
         # the *solver datalines belong only to this solver: unknown entries are typos
@@ -672,13 +732,24 @@ class NIST(NonlinearSolverBase):
         """
         criterion = self.options["convergenceCriterion"]
 
+        legacyCriterion = LegacyConvergenceCriterion(
+            fluxResidualTolerances=self.fluxResidualTolerances,
+            fluxResidualTolerancesAlternative=self.fluxResidualTolerancesAlternative,
+            absoluteFluxResidualTolerances=self.absoluteFluxResidualTolerances,
+            fieldCorrectionTolerances=self.fieldCorrectionTolerances,
+            relativeFieldCorrectionTolerances=self.relativeFieldCorrectionTolerances,
+            iterationsForAlternativeTolerance=self.options["iterationsForAlternativeTolerance"],
+            zeroFluxThreshold=self.options["zeroFluxThreshold"],
+            zeroIncrementThreshold=self.options["zeroIncrementThreshold"],
+            minimumIterations=self.options["minimumIterations"],
+        )
+
         if criterion == "legacy":
-            return LegacyConvergenceCriterion(
-                self.fluxResidualTolerances, self.fluxResidualTolerancesAlt, self.fieldCorrectionTolerances
-            )
+            return legacyCriterion
 
         if criterion == "abaqus":
             return AbaqusConvergenceCriterion(
+                scalarVariableCriterion=legacyCriterion,
                 residualTolerance=self.options["abaqusResidualTolerance"],
                 correctionTolerance=self.options["abaqusCorrectionTolerance"],
                 residualToleranceAlternative=self.options["abaqusResidualToleranceAlternative"],
@@ -746,7 +817,7 @@ class NIST(NonlinearSolverBase):
         """
 
         iterationCounter = 0
-        incrementResidualHistory = dict.fromkeys(self.theDofManager.idcsOfFieldsInDofVector, (0.0, 0))
+        incrementResidualHistory = {field: [] for field in self.theDofManager.idcsOfFieldsInDofVector}
 
         elements = model.elements
         constraints = model.constraints
