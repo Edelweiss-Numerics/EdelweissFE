@@ -116,7 +116,9 @@ unknown of every increment besides the solution. A controller adds the equation 
 combination of displacements -- a crack opening, the mean contraction of a tunnel ring -- grows steadily over the
 step. Every Newton iteration solves the linearized system for two right-hand sides at once, the out-of-balance force
 and the reference load, and the controller combines the two corrections into the correction of the solution and of
-the load parameter.
+the load parameter. Every arc length step scales its own reference load: its load parameter starts from zero, where
+the external load is the dead load -- the loads the steps before it ended with. An analysis that continues under arc
+length control in a later step declares there the change of the loads it applies on top of them.
 
 Prescribed displacements belong to the reference loading of the step, like the loads: a Dirichlet boundary condition
 that prescribes a change :math:`\Delta\bar{\boldsymbol{u}}` over the step moves its degrees of freedom by
@@ -167,11 +169,10 @@ The options of Newton's method act on the pair of the solution increment and the
   unsatisfied, is enforced again in the next iteration.
 * ``fallBackToQuasiNewton``: the tangent of the first iteration serves both right-hand sides.
 
-The load parameter is part of the state of the model: every converged increment writes it to
-``model.additionalParameters["arc length parameter"]``, where a later step continues from it, also with another
-solver, and where a restart checkpoint stores it. The solver checkpoints the increments of the load parameter its
-predictor extrapolates, and the controller what it carries from step to step, so an arc length controlled run
-resumes exactly where it stopped.
+Every converged increment publishes the load parameter of its step as
+``model.additionalParameters["arc length parameter"]``, e.g. for a load-displacement curve. The solver checkpoints the
+load parameter of the step and the increments of it its predictor extrapolates, the loads what they keep from step to
+step, and the controller its target, so an arc length controlled run resumes exactly where it stopped.
 
 ``NID`` - Nonlinear Implicit Dynamic (Newmark-beta)
 ----------------------------------------------------
