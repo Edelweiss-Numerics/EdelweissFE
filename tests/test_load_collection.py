@@ -70,7 +70,7 @@ class _Load(LoadBase):
     def assembleLoad(self, P, K, U_np, dU, timeStep, dofManager):
         pass
 
-    def applyAtStepEnd(self, model, stepMagnitude=None):
+    def applyAtStepEnd(self, model, loadParameter: float | None = None):
         pass
 
 

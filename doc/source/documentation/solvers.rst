@@ -128,6 +128,13 @@ out-of-balance solve leaves them where they are. So the prescribed degrees of fr
 method, and their rows, which hold no equation, are left out of the convergence check, as in ``NIST``. A predicted
 increment places them where the predicted load parameter puts them.
 
+At the end of an arc length step, every load keeps the value the step applied, :math:`f(0) + \lambda \, (f(1) - f(0))`,
+from which the next step starts. With its amplitude :math:`a(t)`, a load keeps the change it declared for the step
+scaled by :math:`a(0) + \lambda \, (a(1) - a(0))` (see :class:`~edelweissfe.stepactions.base.loadbase.LoadBase`): a
+load ramped linearly over the step keeps :math:`\lambda` times its change, and a load the step holds at a constant
+amplitude, such as a self-weight declared with ``f(t)='1'``, is part of the dead load and keeps its full value,
+whatever the load parameter.
+
 The controller is a step action of the step, e.g. an ``indirectcontrol``, and the solver option
 ``arcLengthController`` names it (``off``, the default, solves the step without arc length control):
 

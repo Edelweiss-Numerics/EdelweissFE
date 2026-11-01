@@ -30,6 +30,8 @@ length control").
 
 - The prescribed displacements of a step follow the load parameter, like its loads: a prescribed degree of freedom
   moves with the load parameter, and only with it.
+- At the end of an arc length step, every load keeps the value the step applied, f(0) + lambda (f(1) - f(0)) with its
+  own amplitude, and the next step starts from it.
 
 The model is the cantilever of ``testfiles/edelweiss-only/ArcLengthPenaltyConstraint``: linear elastic, bent down onto
 a rigid floor (an elastic penalty), by loads that do not follow the deformation. Its state depends only on the
@@ -74,6 +76,14 @@ startInc=0.1, maxInc=0.1, minInc=1e-6, maxNumInc=100, maxIter=25, stepLength=1
 """
 
 
+#: A step without arc length control that declares no change: it holds every load.
+_HOLDING_STEP = """
+*step, solver=theSolver
+startInc=0.5, maxInc=0.5, minInc=1e-6, maxNumInc=100, maxIter=25, stepLength=1
+>>options, name=theSolver, arcLengthController=off
+"""
+
+
 def solve(inputFile: Path):
     model, _ = finiteElementSimulation(parseInputFile(str(inputFile)), verbose=False, suppressPlots=True)
     return model
@@ -90,6 +100,18 @@ def solveWithNIST(tmp_path, settlement: float, tip: float):
 def nodeRows(model, nodeSetName: str) -> list:
     field = model.nodeFields["displacement"]
     return [field.indexOfNode(node) for node in model.nodeSets[nodeSetName]]
+
+
+def arcLengthPenaltyConstraintDeck() -> str:
+    """The deck ``ArcLengthPenaltyConstraint``, to be written elsewhere: its arc length step bends the cantilever down
+    by the tip load, ramped linearly, under the self-weight, which the step holds at a constant amplitude."""
+    deck = (_DECKS / "ArcLengthPenaltyConstraint" / "test.inp").read_text()
+    return deck.replace("*include, input=model.inp", "*include, input={:}".format(_MODEL))
+
+
+def assertSameExternalLoad(load, reference):
+    """The same external load, up to the order in which its parts were summed."""
+    np.testing.assert_allclose(load, reference, rtol=0.0, atol=1e-12 * np.max(np.abs(reference)))
 
 
 def assertReachesTheReferenceState(model, reference, tipLoadFactor: float):
@@ -175,3 +197,56 @@ def test_a_prescribed_displacement_follows_the_load_parameter(tmp_path, monkeypa
 
     reference = solveWithNIST(tmp_path, settlement=loadParameter * SETTLEMENT, tip=TIP_DISPLACEMENT)
     assertReachesTheReferenceState(model, reference, tipLoadFactor=loadParameter)
+
+
+@pytest.fixture
+def steps(monkeypatch):
+    """Per step of a run: the external load at every evaluation of the model (the negative of the residual
+    contribution of the loads), and the displacements and the load parameter at the end of the step."""
+
+    class Steps:
+        externalLoads = []
+        endDisplacements = []
+        endLoadParameters = []
+
+    originalBeginStep = NISTPArcLength.beginStep
+    originalAssembleLoads = NISTPArcLength.assembleLoadsAtIncrementEnd
+    originalStepEnd = NISTPArcLength.applyStepActionsAtStepEnd
+
+    def beginStep(self, *args):
+        Steps.externalLoads.append([])
+        return originalBeginStep(self, *args)
+
+    def assembleLoadsAtIncrementEnd(self, stepActions, U_np, dU, P, K, timeStep):
+        before = np.array(P)
+        result = originalAssembleLoads(self, stepActions, U_np, dU, P, K, timeStep)
+        Steps.externalLoads[-1].append(before - np.array(P))
+        return result
+
+    def applyStepActionsAtStepEnd(self, model, stepActions):
+        Steps.endDisplacements.append(model.nodeFields["displacement"]["U"].copy())
+        Steps.endLoadParameters.append(self.Lambda)
+        return originalStepEnd(self, model, stepActions)
+
+    monkeypatch.setattr(NISTPArcLength, "beginStep", beginStep)
+    monkeypatch.setattr(NISTPArcLength, "assembleLoadsAtIncrementEnd", assembleLoadsAtIncrementEnd)
+    monkeypatch.setattr(NISTPArcLength, "applyStepActionsAtStepEnd", applyStepActionsAtStepEnd)
+    return Steps
+
+
+def test_a_step_after_an_arc_length_step_holds_the_loads_it_ended_with(tmp_path, monkeypatch, steps):
+    """At the end of an arc length step, every load keeps the value the step applied, f(0) + lambda (f(1) - f(0)) with
+    its own amplitude: in ``ArcLengthPenaltyConstraint``, the tip load, declared in the step and ramped linearly,
+    keeps lambda times its change, and the self-weight, which the step holds at a constant amplitude (a dead load),
+    keeps its full value, whatever the load parameter. A step that holds every load then starts from the external load
+    the arc length step ended with, and leaves the model where it is."""
+
+    monkeypatch.chdir(tmp_path)
+    path = tmp_path / "test.inp"
+    path.write_text(arcLengthPenaltyConstraintDeck() + _HOLDING_STEP)
+    solve(path)
+
+    arcLengthStep, holdingStep = steps.externalLoads
+    assert 0.0 < steps.endLoadParameters[0] < 1.0
+    assertSameExternalLoad(holdingStep[0], arcLengthStep[-1])
+    np.testing.assert_allclose(steps.endDisplacements[1], steps.endDisplacements[0], rtol=0.0, atol=1e-8)

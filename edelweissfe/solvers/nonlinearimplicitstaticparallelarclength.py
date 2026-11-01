@@ -592,13 +592,10 @@ class NISTPArcLength(NISTParallel):
         self.dLambda, self._dLambda = self._dLambda, None
 
     def applyStepActionsAtStepEnd(self, model, stepActions: dict[str, StepActionBase]):
-        """Called when all step actions should finish a step.
-
-        For the arc length controlled simulation,
-        external loads at the end of a step depend on the arc length parameter.
-        Hence, for subsequent steps, the new reference loads depend on this parameter.
-        We communicate this to the step actions before the parent solver tells them that the
-        step is finished.
+        """Finish the step actions at the end of a step. Under arc length control, every load keeps the value the step
+        applied at the load parameter it ended at, :math:`f(0) + \\lambda \\, (f(1) - f(0))` with its own amplitude
+        (see :meth:`~edelweissfe.stepactions.base.loadbase.LoadBase.applyAtStepEnd`), before the other step actions
+        finish as in any step: the next step starts from these loads.
 
         Parameters
         ----------
@@ -610,6 +607,6 @@ class NISTPArcLength(NISTParallel):
 
         if self.arcLengthController is not None:
             for load in self.collectLoads(stepActions):
-                load.applyAtStepEnd(model, stepMagnitude=self.Lambda)
+                load.applyAtStepEnd(model, loadParameter=self.Lambda)
 
         return super().applyStepActionsAtStepEnd(model, stepActions)
