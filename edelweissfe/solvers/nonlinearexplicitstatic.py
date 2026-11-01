@@ -35,7 +35,11 @@ from edelweissfe.config.timing import createTimingDict
 from edelweissfe.constraints.base.constraintbase import ConstraintBase
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.numerics.csrgeneratorv2 import CSRGenerator
-from edelweissfe.numerics.dofmanager import DofVector, VIJSystemMatrix
+from edelweissfe.numerics.dofmanager import DofVector
+from edelweissfe.numerics.systemmatrixassembly import (
+    SystemMatrixAssembly,
+    VIJSystemMatrixAssembly,
+)
 from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
 from edelweissfe.solvers.nonlinearimplicitstatic import NIST
 from edelweissfe.timesteppers.timestep import TimeStep
@@ -207,6 +211,9 @@ class NEST(NIST):
     supportsMPC = False
     supportsModelModifiers = False
 
+    #: The VIJ assembly of the system matrix; NEST has no option to choose.
+    systemMatrixAssemblies = {"vij": VIJSystemMatrixAssembly}
+
     #: Option schema for this solver, per OptionSchemaProvider.
     schema = NESTSchema
 
@@ -298,8 +305,8 @@ class NEST(NIST):
         U = self.theDofManager.constructDofVector()
         P = self.theDofManager.constructDofVector()
         dU = self.theDofManager.constructDofVector()
-        K = self.theDofManager.constructVIJSystemMatrix()
-        self.csrGenerator = CSRGenerator(K)
+        self.csrGenerator = CSRGenerator(self.theDofManager)
+        K = self.createSystemMatrixAssembly(VIJSystemMatrixAssembly)
 
         U = self.equationSystemLayout.writeSolutionToDofVector(U)
 
@@ -417,7 +424,7 @@ class NEST(NIST):
         U_n: DofVector,
         dU: DofVector,
         P: DofVector,
-        K: VIJSystemMatrix,
+        K: SystemMatrixAssembly,
         stepActions: list,
         model: FEModel,
         timeStep: TimeStep,
@@ -491,7 +498,8 @@ class NEST(NIST):
 
             U_np += dU_[k]
 
-            P[:] = K[:] = F[:] = PLoadsAndConstraints[:] = 0.0
+            P[:] = F[:] = PLoadsAndConstraints[:] = 0.0
+            K.beginAssembly()
 
             P, K, F = self.assembleInternalForces(U_np, dU_[k], P, K, F, timeStep)
             PLoadsAndConstraints, K = self.assembleLoads(loads, U_np, dU_[k], PLoadsAndConstraints, K, timeStep)
@@ -529,7 +537,8 @@ class NEST(NIST):
             raise CutbackRequest("Estimated error too high!", np.sqrt(self.tol / normErr) * 0.9)
 
         # compute elements once more to get the final reaction
-        P[:] = K[:] = F[:] = 0.0
+        P[:] = F[:] = 0.0
+        K.beginAssembly()
         P, K, F = self.assembleInternalForces(U_np, dU, P, K, F, timeStep)
 
         # compute new increment size scale factor

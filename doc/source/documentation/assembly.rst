@@ -1,3 +1,5 @@
+.. _system-matrix-assembly:
+
 System matrix assembly
 ======================
 
@@ -59,6 +61,52 @@ they produce. Their size is set by the number of COO pairs; the CSR pattern's is
 discretisation where many entities contribute to the same entries (a wide stencil, or overlapping
 supports) can have the staging array and gather map dwarf the actual result by a wide margin.
 
+In the implicit solvers
+-----------------------
+
+The implicit solvers assemble their tangent through one interface,
+:class:`~edelweissfe.numerics.systemmatrixassembly.SystemMatrixAssembly`, so that neither the solver nor
+an element, constraint or load knows which path is in use. Every entity asks for its block --
+``Ke = K[element]`` -- and writes it; the solver then asks for the assembled matrix. The solver option
+``systemMatrixAssembly`` selects the path:
+
+.. code-block:: edelweiss
+
+    *solver, solver=NISTParallel, name=theSolver
+        systemMatrixAssembly=direct
+
+``vij`` (the default) is :class:`~edelweissfe.numerics.systemmatrixassembly.VIJSystemMatrixAssembly`,
+stage then gather; ``direct`` is
+:class:`~edelweissfe.numerics.systemmatrixassembly.DirectCSRSystemMatrixAssembly`, scatter directly.
+``NIST``, ``NISTParallel`` and ``NISTPArcLength`` support both. ``NonlinearImplicitDynamic`` (and
+``NIDParallel``) assemble on the VIJ path only, since they add the mass entry by entry to the VIJ value
+array, and so does ``NEST``.
+
+What the direct path has to know about the entities and the solvers:
+
+- **Sparse blocks.** An entity may declare a VIJ pattern of its own, sparser than its dense
+  ``nDof x nDof`` block (see :class:`~edelweissfe.numerics.vijentitybase.VIJEntityBase`): a constraint
+  that couples only some of its degrees of freedom. Its block is then the list of values of its own
+  ``(I, J)`` pairs, which the scatter places entry by entry.
+- **Worker threads.** Each thread of the parallel element loop writes through blocks of its own
+  (:meth:`~edelweissfe.numerics.systemmatrixassembly.SystemMatrixAssembly.blocksOfWorker`), a scratch
+  array and a private CSR copy, see `Private copies, or atomics`_. The loop deals the elements out to the
+  workers in a fixed way (:func:`~edelweissfe.numerics.parallelizationutilities.mapChunksOnWorkers`), so
+  every copy is summed in the same order in every run, and the result is reproducible for a given number
+  of threads.
+- **More than one matrix.** The arc length method needs the tangents of its dead load and its reference
+  load besides the tangent of the elements. It adds them to the tangent of the increment as blocks
+  scaled by :math:`1 - \lambda` and :math:`\lambda`
+  (:meth:`~edelweissfe.numerics.systemmatrixassembly.SystemMatrixAssembly.scaledBy`), on both paths, so
+  that no further matrix is held.
+- **The complete pattern.** The multi-point-constraint condensation adds entries to the CSR pattern. The
+  assembly is built after them, on the complete pattern, whenever the equation system is (re)built.
+
+Every block of the direct path is a zeroed scratch array, so an entity that is handed its block twice in
+one assembly (an element, and a body load on it) has each scattered on its own; on the VIJ path the
+second adds to the first in the same slice. Either way, an entity only adds to or overwrites its block,
+and never reads it.
+
 Why the direct path is also faster
 ----------------------------------
 
@@ -116,8 +164,9 @@ Private copies, or atomics
 --------------------------
 
 Threads scattering into one CSR array must not collide. The default is one private copy of the CSR data
-per thread, summed at the end: no synchronisation, a fixed summation order, and therefore
-bit-reproducible results -- at ``nThreads`` x ``nnz`` x 8 bytes.
+per thread, summed at the end: no synchronisation, and -- as long as every thread meets the same
+entities in the same order -- a fixed summation order and therefore bit-reproducible results, at
+``nThreads`` x ``nnz`` x 8 bytes.
 :meth:`~edelweissfe.numerics.csrgeneratorv2.DirectCSRAssembler.setNumBuffers` trades that memory for
 atomics: fewer private copies means threads share one and synchronise the scatter with atomics
 instead, down to a single, fully atomic copy at ``n == 1``.
@@ -157,6 +206,9 @@ values with the physics held fixed.
 
 Reference
 ---------
+
+.. automodule:: edelweissfe.numerics.systemmatrixassembly
+   :members:
 
 :class:`~edelweissfe.numerics.csrgeneratorv2.CSRGenerator` and the C++ engine behind it are described
 under :doc:`utils`; only the direct-scatter side is documented here.

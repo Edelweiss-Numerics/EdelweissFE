@@ -429,8 +429,6 @@ def test_every_trial_state_of_the_line_search_satisfies_the_controllers_equation
         referenceTimeStep=TimeStep(3, 1.0, 1.0, 0.0, 0.0, 0.0),
         deadLoad=None,
         referenceLoad=None,
-        deadLoadTangent=None,
-        referenceLoadTangent=None,
         rightHandSides=None,
         referenceCorrection=np.array([0.0, -0.1, 0.05, 0.3]),
     )

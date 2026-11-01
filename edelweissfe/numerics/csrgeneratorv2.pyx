@@ -126,7 +126,8 @@ cdef extern from "_csrcore.h":
                            const int* I, const int* J, int64_t nPairs, int nThreads) except +
 
         void assembleFromVIJ(const double* V, const int* I, double* csr_data) nogil
-        void registerEntities(const int64_t* mapStarts, const int* nDofs, int nEntities, const int* I)
+        void registerEntities(const int64_t* mapStarts, const int* nDofs, const int64_t* vijSizes, int nEntities,
+                              const int* I)
         void beginAssembly() nogil
         void scatterBlock(int tid, int entity, const double* block) nogil
         void reduce(double* csr_data) nogil
@@ -466,19 +467,25 @@ cdef class DirectCSRAssembler:
             self.asm_.assembleFromVIJ(&V[0], &I[0], &out[0])
         return self.csrMatrix
 
-    def registerEntities(self, int64_t[::1] mapStarts, int[::1] nDofs):
+    def registerEntities(self, int64_t[::1] mapStarts, int[::1] nDofs, int64_t[::1] vijSizes):
         """Give each entity its slice of the offset map, once per connectivity change.
 
         ``mapStarts[e]`` is entity e's offset into the VIJ ordering -- the same value the DofManager
-        already records in ``idcsOfHigherOrderEntitiesInVIJ`` -- and ``nDofs[e]`` its local DOF count.
+        already records in ``idcsOfHigherOrderEntitiesInVIJ`` --, ``nDofs[e]`` its local DOF count, and
+        ``vijSizes[e]`` the number of entries it contributes
+        (:meth:`~edelweissfe.numerics.vijentitybase.VIJEntityBase.getVIJContributionSize`). An entity with
+        ``vijSizes[e] == nDofs[e]**2`` writes a dense block, column-major; any other entity a sparse one, the
+        values of the (I, J) pairs it declared, which :meth:`scatterBlock` scatters entry by entry.
         """
-        if mapStarts.shape[0] != nDofs.shape[0]:
+        if mapStarts.shape[0] != nDofs.shape[0] or mapStarts.shape[0] != vijSizes.shape[0]:
             raise ValueError(
-                "registerEntities: mapStarts and nDofs must have the same length (one entry per "
-                "entity), got {:} and {:}".format(mapStarts.shape[0], nDofs.shape[0])
+                "registerEntities: mapStarts, nDofs and vijSizes must have the same length (one entry per "
+                "entity), got {:}, {:} and {:}".format(mapStarts.shape[0], nDofs.shape[0], vijSizes.shape[0])
             )
+        if mapStarts.shape[0] == 0:
+            return
         cdef int[::1] I = self._I
-        self.asm_.registerEntities(&mapStarts[0], &nDofs[0], mapStarts.shape[0], &I[0])
+        self.asm_.registerEntities(&mapStarts[0], &nDofs[0], &vijSizes[0], mapStarts.shape[0], &I[0])
 
     @property
     def corePointer(self):
@@ -499,11 +506,13 @@ cdef class DirectCSRAssembler:
             self.asm_.beginAssembly()
 
     def scatterBlock(self, int tid, int entity, double[::1] block):
-        """Scatter one entity's dense block from a scratch buffer into thread ``tid``'s private CSR.
+        """Scatter one entity's block -- dense or sparse, as registered -- from a scratch buffer into the private CSR
+        copy of worker ``tid``.
 
-        Race-free by construction. Intended to be called from inside a threaded entity loop; this
-        Python-level binding exists for testing and for the constraint contributions, which are
-        assembled sequentially and account for under 2% of runtime.
+        Race-free as long as no two concurrent callers pass the same ``tid`` (with :meth:`setNumBuffers` below the
+        number of threads, workers share a copy and the scatter is atomic). Releases the GIL, so the workers of a
+        threaded entity loop scatter side by side; see
+        :class:`~edelweissfe.numerics.systemmatrixassembly.DirectCSRSystemMatrixAssembly`.
         """
         with nogil:
             self.asm_.scatterBlock(tid, entity, &block[0])

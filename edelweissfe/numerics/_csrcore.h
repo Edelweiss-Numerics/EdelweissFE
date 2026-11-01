@@ -571,40 +571,56 @@ struct CSRDirectAssembler {
 
   // ---- fused path -------------------------------------------------------------------------
   //
-  // beginAssembly() / scatterBlock() per entity / reduce(). The entity writes its dense nDof x nDof
-  // block into a small thread-local scratch buffer -- which stays in cache -- and scatterBlock
-  // pushes it straight into that thread's private CSR copy. No sizeVIJ-sized value array is ever
-  // materialized, which is the entire point: at 43k DOF that array alone is 12.15 GB.
+  // beginAssembly() / scatterBlock() per entity / reduce(). The entity writes its block into a small
+  // thread-local scratch buffer -- which stays in cache -- and scatterBlock pushes it straight into
+  // that thread's private CSR copy. No sizeVIJ-sized value array is ever materialized, which is the
+  // entire point: at 43k DOF that array alone is 12.15 GB.
   //
-  // Registration gives each entity its slice of the map. rowsOfEntity is derived from I: for local
-  // row a, every pair (a, b) shares the same global row, so the row is I[mapStart + a * nDofE] and
-  // only nDofE values per entity need keeping rather than nDofE^2.
+  // Registration gives each entity its slice of the map. Two layouts of a block are supported:
+  //
+  //   dense    the nDofE x nDofE block, column-major (vijSize == nDofE^2), as every element writes
+  //            it. For local row a, every pair (a, b) shares the same global row, so the row is
+  //            I[mapStart + a] and only nDofE rows per entity need keeping rather than nDofE^2.
+  //   sparse   any other vijSize: the entity declared its own list of (I, J) pairs (a constraint
+  //            coupling only some of its degrees of freedom), and its block is the list of values
+  //            of these pairs. Each entry is scattered on its own, so each keeps its global row.
   std::vector< int64_t >            entityMapStart;  // into offsets
-  std::vector< int64_t >            entityDofStart;  // into entityRows
+  std::vector< int64_t >            entityRowStart;  // into entityRows
   std::vector< int >                entityNDof;
-  std::vector< int >                entityRows;      // global row per local row, concatenated
+  std::vector< int64_t >            entityVIJSize;   // nDofE^2 for a dense block, else the number of pairs
+  std::vector< int >                entityRows;      // per entity: the row of each local row (dense) or entry (sparse)
   std::vector< std::vector< int > > rowStartScratch; // per thread, size maxNDof
 
-  void registerEntities( const int64_t* mapStarts, const int* nDofs, int nEntities, const int* I )
+  bool isDense( int entity ) const
+  {
+    return entityVIJSize[entity] == static_cast< int64_t >( entityNDof[entity] ) * entityNDof[entity];
+  }
+
+  void registerEntities( const int64_t* mapStarts,
+                         const int*     nDofs,
+                         const int64_t* vijSizes,
+                         int            nEntities,
+                         const int*     I )
   {
     entityMapStart.assign( mapStarts, mapStarts + nEntities );
     entityNDof.assign( nDofs, nDofs + nEntities );
-    entityDofStart.resize( nEntities );
+    entityVIJSize.assign( vijSizes, vijSizes + nEntities );
+    entityRowStart.resize( nEntities );
     int64_t total = 0;
     for ( int e = 0; e < nEntities; ++e ) {
-      entityDofStart[e] = total;
-      total += nDofs[e];
+      entityRowStart[e] = total;
+      total += isDense( e ) ? nDofs[e] : vijSizes[e];
     }
     entityRows.resize( total );
-    // The entity block is stored COLUMN-major: initializeVIJContribution writes
-    // I[k] = idcs[k % nDof] and J[k] = idcs[k / nDof], so the row index varies fastest and the
-    // first nDof entries of I are exactly the entity's global row list.
+    // A dense block is stored COLUMN-major: initializeVIJContribution writes I[k] = idcs[k % nDof]
+    // and J[k] = idcs[k / nDof], so the row index varies fastest and the first nDof entries of I are
+    // exactly the entity's global row list. A sparse block keeps the row of every entry.
 #pragma omp parallel for schedule( static )
     for ( int e = 0; e < nEntities; ++e ) {
-      const int64_t ms = entityMapStart[e];
-      const int     nd = entityNDof[e];
-      for ( int a = 0; a < nd; ++a )
-        entityRows[entityDofStart[e] + a] = I[ms + a];
+      const int64_t ms   = entityMapStart[e];
+      const int64_t rows = isDense( e ) ? entityNDof[e] : entityVIJSize[e];
+      for ( int64_t a = 0; a < rows; ++a )
+        entityRows[entityRowStart[e] + a] = I[ms + a];
     }
 
     int maxNDof = 0;
@@ -644,9 +660,18 @@ struct CSRDirectAssembler {
   // writes are made atomic instead (see setNumBuffers).
   void scatterBlock( int tid, int entity, const double* block ) noexcept
   {
+    if ( isDense( entity ) )
+      scatterDenseBlock( tid, entity, block );
+    else
+      scatterEntries( tid, entity, block );
+  }
+
+private:
+  void scatterDenseBlock( int tid, int entity, const double* block ) noexcept
+  {
     double*       myBuf = priv[bufferOfThread[tid]].data();
     const int64_t ms    = entityMapStart[entity];
-    const int64_t ds    = entityDofStart[entity];
+    const int64_t rs    = entityRowStart[entity];
     const int     nd    = entityNDof[entity];
 
     // indptr[row] for each local row, resolved once per entity into a small cache-resident array:
@@ -654,7 +679,7 @@ struct CSRDirectAssembler {
     // be hoisted out of it directly.
     int* __restrict rowStart = rowStartScratch[tid].data();
     for ( int a = 0; a < nd; ++a )
-      rowStart[a] = indptr[entityRows[ds + a]];
+      rowStart[a] = indptr[entityRows[rs + a]];
 
     // Traverse by ROW even though the block is stored column-major. Iterating rows outer confines
     // all writes of an inner loop to a single CSR row (~8-16 kB, cache-resident once touched) and
@@ -697,6 +722,28 @@ struct CSRDirectAssembler {
     }
   }
 
+  // A sparse block: the values of the entity's own (I, J) pairs, each scattered on its own.
+  void scatterEntries( int tid, int entity, const double* block ) noexcept
+  {
+    double*         myBuf = priv[bufferOfThread[tid]].data();
+    const int64_t   rs    = entityRowStart[entity];
+    const int64_t   size  = entityVIJSize[entity];
+    const uint16_t* off0  = offsets.data() + entityMapStart[entity];
+
+    if ( !useAtomics ) {
+      for ( int64_t k = 0; k < size; ++k )
+        myBuf[indptr[entityRows[rs + k]] + off0[k]] += block[k];
+    }
+    else {
+      for ( int64_t k = 0; k < size; ++k ) {
+        double* dst = myBuf + indptr[entityRows[rs + k]] + off0[k];
+#pragma omp atomic
+        *dst += block[k];
+      }
+    }
+  }
+
+public:
   void reduce( double* csr_data )
   {
     const int nT = nBuffers;
@@ -714,6 +761,6 @@ struct CSRDirectAssembler {
   int64_t memoryBytes() const
   {
     return static_cast< int64_t >( offsets.size() ) * 2 + static_cast< int64_t >( nBuffers ) * nnz * 8 +
-           static_cast< int64_t >( entityRows.size() ) * 4;
+           static_cast< int64_t >( entityRows.size() ) * 4 + static_cast< int64_t >( entityMapStart.size() ) * 28;
   }
 };

@@ -33,7 +33,8 @@ from abc import abstractmethod
 
 import numpy as np
 
-from edelweissfe.numerics.dofmanager import DofManager, DofVector, VIJSystemMatrix
+from edelweissfe.numerics.dofmanager import DofManager, DofVector
+from edelweissfe.numerics.systemmatrixassembly import SystemMatrixBlocks
 from edelweissfe.stepactions.base.loadbase import LoadBase
 from edelweissfe.timesteppers.timestep import TimeStep
 
@@ -77,7 +78,7 @@ class DistributedLoadBase(LoadBase):
     def assembleLoad(
         self,
         P: DofVector,
-        K: VIJSystemMatrix | None,
+        K: SystemMatrixBlocks | None,
         U_np: DofVector,
         dU: DofVector,
         timeStep: TimeStep,

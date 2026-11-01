@@ -41,8 +41,12 @@ from edelweissfe.config.linsolve import createLinearSolver
 from edelweissfe.constraints.base.constraintbase import ConstraintBase
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.numerics.csrgeneratorv2 import CSRGenerator
-from edelweissfe.numerics.dofmanager import DofVector, VIJSystemMatrix
-from edelweissfe.numerics.parallelizationutilities import forEachSliceInParallel
+from edelweissfe.numerics.dofmanager import DofVector
+from edelweissfe.numerics.systemmatrixassembly import (
+    DirectCSRSystemMatrixAssembly,
+    SystemMatrixAssembly,
+    VIJSystemMatrixAssembly,
+)
 from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
 from edelweissfe.solvers.base.convergencecriteria import (
     AbaqusConvergenceCriterion,
@@ -183,6 +187,15 @@ class NISTSchema:
         dtype=bool,
         default=None,
         documentedDefault="auto",
+    )
+    systemMatrixAssembly: str | None = schemaField(
+        description=(
+            "How the blocks of the elements, constraints and loads are summed into the system matrix (vij|direct): "
+            "staged in a value array of the VIJ pattern's length and gathered into CSR, or scattered into CSR right "
+            "away, without that array. See the documentation page on the system matrix assembly."
+        ),
+        dtype=str,
+        default="vij",
     )
     useThreadedMPCCondensation: bool | None = schemaField(
         description=(
@@ -355,6 +368,10 @@ class NIST(NonlinearSolverBase):
     supportsMPC = True
     supportsModelModifiers = True
 
+    #: The ways of summing the system matrix (option ``systemMatrixAssembly``) this solver supports, see
+    #: :meth:`createSystemMatrixAssembly`.
+    systemMatrixAssemblies = {"vij": VIJSystemMatrixAssembly, "direct": DirectCSRSystemMatrixAssembly}
+
     #: Option schema for this solver, per OptionSchemaProvider.
     schema = NISTSchema
 
@@ -369,6 +386,7 @@ class NIST(NonlinearSolverBase):
         "equilibrateAfterModelChange": False,
         "linsolver": "",
         "pruneCondensedMatrixZeros": None,
+        "systemMatrixAssembly": "vij",
         "useThreadedMPCCondensation": False,
         "report-performance-frequency": 0,
         "lineSearch": False,
@@ -455,7 +473,7 @@ class NIST(NonlinearSolverBase):
 
     def forgetEquationSystem(self) -> None:
         """Drop the equation system of the last build -- the model's layout of it with the DOF manager, the system
-        matrix and its CSR generator, the multi-point-constraint condensation, the DOF vectors -- so that it is gone
+        matrix assembly and its CSR pattern, the multi-point-constraint condensation, the DOF vectors -- so that it is gone
         before the next one is built, never both at once."""
         self.equationSystemLayout = None
         self.theDofManager = None
@@ -492,9 +510,17 @@ class NIST(NonlinearSolverBase):
         convergenceCriterion.startStep(self.convergenceCriterion)
         self.convergenceCriterion = convergenceCriterion
 
-        # The equation system (DofManager, VIJ pattern, CSR structure) is (re)built lazily in the first increment,
-        # and whenever the topology update reports a change of the mesh or of a constraint's DOF footprint.
+        # The equation system (DofManager, VIJ pattern, CSR pattern, system matrix assembly) is (re)built lazily in the
+        # first increment, and whenever the topology update reports a change of the mesh or of a constraint's DOF
+        # footprint.
         self.forgetEquationSystem()
+
+        if self.options["systemMatrixAssembly"] not in self.systemMatrixAssemblies:
+            raise ValueError(
+                "{:} supports systemMatrixAssembly={:}, not '{:}'".format(
+                    self.identification, "|".join(self.systemMatrixAssemblies), self.options["systemMatrixAssembly"]
+                )
+            )
 
         if self.options["extrapolation"] not in ("off", "linear", "quadratic"):
             raise ValueError(
@@ -649,9 +675,9 @@ class NIST(NonlinearSolverBase):
 
                 self.convergenceTable = ConvergenceTable(presentVariableNames, self.linSolver.reportsSolveSummary)
 
+                assemblyType = self.systemMatrixAssemblies[self.options["systemMatrixAssembly"]]
                 with performancetiming.timeit("system matrix pattern"):
-                    K = self.theDofManager.constructVIJSystemMatrix()
-                    self.csrGenerator = CSRGenerator(K)
+                    self.csrGenerator = CSRGenerator(self.theDofManager, patternOnly=not assemblyType.needsGatherMap)
 
                 U = self.theDofManager.constructDofVector()
                 P = self.theDofManager.constructDofVector()
@@ -669,6 +695,11 @@ class NIST(NonlinearSolverBase):
                         self.csrGenerator.addToPattern(
                             self.mpcTransformation.condensedPatternFillIn(self.csrGenerator.csrMatrix)
                         )
+
+                # Built on the complete pattern, the entries the condensation adds included: the assembly writes the
+                # matrix of the pattern it is built on.
+                with performancetiming.timeit("system matrix assembly setup"):
+                    K = self.createSystemMatrixAssembly(assemblyType)
 
                 # After a topology change, the last dU belongs to a different DOF layout: do not extrapolate this
                 # increment. After a change of the connectivity alone, it may still fit.
@@ -782,6 +813,52 @@ class NIST(NonlinearSolverBase):
 
         self._U, self._dU, self._P = U, dU, P
         self._iterationCounter = iterationCounter
+
+    def createSystemMatrixAssembly(self, assemblyType: type) -> SystemMatrixAssembly:
+        """The assembly of the system matrix of the equation system just built (option ``systemMatrixAssembly``), on
+        the complete CSR pattern of :attr:`csrGenerator`, with :meth:`numberOfAssemblyWorkers` workers.
+
+        Parameters
+        ----------
+        assemblyType
+            The type of the assembly, one of :attr:`systemMatrixAssemblies`.
+
+        Returns
+        -------
+        SystemMatrixAssembly
+            The assembly.
+        """
+
+        return assemblyType(self.csrGenerator, self.theDofManager, self.numberOfAssemblyWorkers())
+
+    def forEachChunk(self, entities: list, work: Callable[[list], None]):
+        """Call ``work(chunk)`` for chunks that together hold all ``entities``: the solver's loop over independent
+        entities, other than the elements, that the model's equation system layout evaluates, e.g. the material points
+        of a meshfree model (see
+        :meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.updateMaterialPoints`). Here, one chunk of
+        all entities, in the calling thread, as the elements are computed.
+
+        Parameters
+        ----------
+        entities
+            The entities, a list.
+        work
+            Called for each chunk; it must write only to what belongs to the entities of its chunk.
+        """
+
+        work(entities)
+
+    def numberOfAssemblyWorkers(self) -> int:
+        """How many threads write blocks of the system matrix at the same time: one, the elements are computed in the
+        calling thread.
+
+        Returns
+        -------
+        int
+            The number of workers.
+        """
+
+        return 1
 
     def predictionSurvivesRebuild(self, numberingBeforeRebuild: tuple | None) -> bool:
         """Whether the last accepted increment still fits the equation system rebuilt after a change of the
@@ -1051,7 +1128,7 @@ class NIST(NonlinearSolverBase):
         U_n: DofVector,
         dU: DofVector,
         P: DofVector,
-        K: VIJSystemMatrix,
+        K: SystemMatrixAssembly,
         stepActions: dict,
         model: FEModel,
         timeStep: TimeStep,
@@ -1330,11 +1407,11 @@ class NIST(NonlinearSolverBase):
         PLoadsAndConstraints: DofVector,
         F: DofVector,
         FConstraints: DofVector,
-        K: VIJSystemMatrix,
+        K: SystemMatrixAssembly,
         stepActions: dict,
         model: FEModel,
         timeStep: TimeStep,
-    ) -> tuple[DofVector, VIJSystemMatrix, DofVector]:
+    ) -> tuple[DofVector, SystemMatrixAssembly, DofVector]:
         """Evaluate the model at the trial solution :math:`U_{n+1} = U_n + \\Delta U`: the right-hand side
         :math:`R = f_\\mathrm{ext} - f_\\mathrm{int}` (see :ref:`residual-and-tangent-convention`) with the terms of
         :meth:`assembleAdditionalTerms`, condensed by the multi-point constraints, and the tangent. The one place
@@ -1364,7 +1441,7 @@ class NIST(NonlinearSolverBase):
         FConstraints
             The accumulated absolute constraint fluxes, overwritten.
         K
-            The tangent in VIJ layout, overwritten.
+            The tangent being assembled, assembled anew.
         stepActions
             The active step actions.
         model
@@ -1374,7 +1451,7 @@ class NIST(NonlinearSolverBase):
 
         Returns
         -------
-        tuple[DofVector,VIJSystemMatrix,DofVector]
+        tuple[DofVector,SystemMatrixAssembly,DofVector]
             The internal forces, the tangent and the accumulated element fluxes.
         """
 
@@ -1386,8 +1463,7 @@ class NIST(NonlinearSolverBase):
             U_np += dU
 
             P[:] = F[:] = FConstraints[:] = PLoadsAndConstraints[:] = 0.0
-            # K holds the entries of all element matrices, far too many to zero on a single thread
-            forEachSliceInParallel(lambda s: K[s].fill(0.0), len(K))
+            K.beginAssembly()
 
         # Every element, load and constraint adds its residual contribution and the tangent of it.
         # The elements' sum P is kept apart: it is the reaction force this increment reports.
@@ -1419,9 +1495,9 @@ class NIST(NonlinearSolverBase):
         U_np: DofVector,
         dU: DofVector,
         P: DofVector,
-        K: VIJSystemMatrix,
+        K: SystemMatrixAssembly,
         timeStep: TimeStep,
-    ) -> tuple[DofVector, VIJSystemMatrix]:
+    ) -> tuple[DofVector, SystemMatrixAssembly]:
         """Assemble the residual contributions of the loads acting at the end of the increment, and their tangents;
         called by :meth:`assembleResidualAndTangent`. Here, these are the loads of the step at the time of the end of
         the increment (see
@@ -1440,13 +1516,13 @@ class NIST(NonlinearSolverBase):
         P
             The residual contribution vector to assemble into.
         K
-            The tangent in VIJ layout to assemble into.
+            The tangent being assembled.
         timeStep
             The time step.
 
         Returns
         -------
-        tuple[DofVector,VIJSystemMatrix]
+        tuple[DofVector,SystemMatrixAssembly]
             The updated residual contribution vector and tangent.
         """
 
@@ -1658,7 +1734,7 @@ class NIST(NonlinearSolverBase):
         )
         quasiNewton.isEngaged = True
 
-    def assembleSystemMatrix(self, K: VIJSystemMatrix, quasiNewton: QuasiNewtonFallback) -> csr_matrix:
+    def assembleSystemMatrix(self, K: SystemMatrixAssembly, quasiNewton: QuasiNewtonFallback) -> csr_matrix:
         """The system matrix of this Newton iteration, before the Dirichlet boundary conditions are imposed: the
         tangent in CSR layout, condensed by the multi-point constraints -- or, once the increment has fallen back to the
         quasi-Newton method, the tangent of its first iteration.
@@ -1666,7 +1742,7 @@ class NIST(NonlinearSolverBase):
         Parameters
         ----------
         K
-            The tangent of this iteration in VIJ layout.
+            The tangent of this iteration, assembled.
         quasiNewton
             The quasi-Newton fallback of this attempt of the increment, which keeps the tangent of the first iteration.
 
@@ -1713,7 +1789,7 @@ class NIST(NonlinearSolverBase):
         """
 
     def assembleAdditionalTerms(
-        self, dU: DofVector, R: DofVector, F: DofVector, K: VIJSystemMatrix, timeStep: TimeStep
+        self, dU: DofVector, R: DofVector, F: DofVector, K: SystemMatrixAssembly, timeStep: TimeStep
     ):
         """Assemble terms of the equation system beyond the internal and external forces. Called
         by :meth:`assembleResidualAndTangent` in every evaluation of the model, next to :meth:`computeElements`,
@@ -1736,7 +1812,7 @@ class NIST(NonlinearSolverBase):
         F
             The reference flux scale of the convergence test, to be augmented in place.
         K
-            The tangent in VIJ layout, to be augmented in place.
+            The tangent being assembled, to be augmented.
         timeStep
             The time step.
         """
@@ -1788,8 +1864,8 @@ class NIST(NonlinearSolverBase):
         return K
 
     def assembleInternalForces(
-        self, U_np: DofVector, dU: DofVector, P: DofVector, K: VIJSystemMatrix, F: DofVector, timeStep: TimeStep
-    ) -> tuple[DofVector, VIJSystemMatrix, DofVector]:
+        self, U_np: DofVector, dU: DofVector, P: DofVector, K: SystemMatrixAssembly, F: DofVector, timeStep: TimeStep
+    ) -> tuple[DofVector, SystemMatrixAssembly, DofVector]:
         """Assemble the internal forces of the model at a trial state, and their tangent: those of the elements of its
         equation system, see :meth:`computeElements`. First, the model updates the material points that belong to no
         element, whose state the elements integrate (see
@@ -1818,11 +1894,12 @@ class NIST(NonlinearSolverBase):
 
         Returns
         -------
-        tuple[DofVector,VIJSystemMatrix,DofVector]
+        tuple[DofVector,SystemMatrixAssembly,DofVector]
             The internal forces, the tangent and the accumulated element fluxes.
         """
 
-        self.equationSystemLayout.updateMaterialPoints(dU, timeStep)
+        with performancetiming.timeit("material points"):
+            self.equationSystemLayout.updateMaterialPoints(dU, timeStep, self.forEachChunk)
 
         return self.computeElements(self.equationSystemLayout.elements, U_np, dU, P, K, F, timeStep)
 
@@ -1833,10 +1910,10 @@ class NIST(NonlinearSolverBase):
         U_np: DofVector,
         dU: DofVector,
         P: DofVector,
-        K: VIJSystemMatrix,
+        K: SystemMatrixAssembly,
         F: DofVector,
         timeStep: TimeStep,
-    ) -> tuple[DofVector, VIJSystemMatrix, DofVector]:
+    ) -> tuple[DofVector, SystemMatrixAssembly, DofVector]:
         """Loop over all elements, and evalute them: each adds its internal forces and their tangent, see
         :meth:`~edelweissfe.elements.base.baseelement.BaseElement.computeKernels`. Is called by
         :meth:`assembleResidualAndTangent` in each iteration.
@@ -1864,7 +1941,7 @@ class NIST(NonlinearSolverBase):
 
         Returns
         -------
-        tuple[DofVector,VIJSystemMatrix,DofVector]
+        tuple[DofVector,SystemMatrixAssembly,DofVector]
             - The modified reaction vector.
             - The modified system matrix.
             - The modified accumulated flux vector.
@@ -1882,6 +1959,9 @@ class NIST(NonlinearSolverBase):
             P[el] += Pe
             F[el] += abs(Pe)
 
+        # the block of the last element
+        K.flush()
+
         return P, K, F
 
     @performancetiming.timeit("assemble constraints")
@@ -1891,10 +1971,10 @@ class NIST(NonlinearSolverBase):
         U_np: DofVector,
         dU: DofVector,
         P: DofVector,
-        K: VIJSystemMatrix,
+        K: SystemMatrixAssembly,
         timeStep: TimeStep,
         FConstraints: DofVector = None,
-    ) -> tuple[DofVector, VIJSystemMatrix]:
+    ) -> tuple[DofVector, SystemMatrixAssembly]:
         """Loop over all constraints, and evaluate the active ones: each adds its residual contribution and the
         tangent of it, see :meth:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernels`.
         A constraint that is switched off (see
@@ -1920,7 +2000,7 @@ class NIST(NonlinearSolverBase):
 
         Returns
         -------
-        tuple[DofVector,VIJSystemMatrix]
+        tuple[DofVector,SystemMatrixAssembly]
             - The modified residual contribution vector.
             - The modified system matrix.
         """
@@ -1939,5 +2019,8 @@ class NIST(NonlinearSolverBase):
             np.add.at(P, P.entitiesInDofVector[constraint], Pc)
             if FConstraints is not None:
                 np.add.at(FConstraints, FConstraints.entitiesInDofVector[constraint], np.abs(Pc))
+
+        # the block of the last constraint
+        K.flush()
 
         return P, K

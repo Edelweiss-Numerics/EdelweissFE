@@ -29,7 +29,8 @@
 from abc import abstractmethod
 from collections.abc import Callable
 
-from edelweissfe.numerics.dofmanager import DofManager, DofVector, VIJSystemMatrix
+from edelweissfe.numerics.dofmanager import DofManager, DofVector
+from edelweissfe.numerics.systemmatrixassembly import SystemMatrixBlocks
 from edelweissfe.stepactions.base.stepactionbase import StepActionBase
 from edelweissfe.timesteppers.timestep import TimeStep
 
@@ -56,7 +57,7 @@ class LoadBase(StepActionBase):
     def assembleLoad(
         self,
         P: DofVector,
-        K: VIJSystemMatrix | None,
+        K: SystemMatrixBlocks | None,
         U_np: DofVector,
         dU: DofVector,
         timeStep: TimeStep,
@@ -71,8 +72,10 @@ class LoadBase(StepActionBase):
         P
             The global residual contribution vector to augment.
         K
-            The global system matrix to augment, which hands out the block of an entity (an element, a cell, a
-            particle) by ``K[entity]``; None for an explicit solver, which needs no tangent.
+            The blocks of the global system matrix to augment: ``K[entity]`` hands out the block of an entity (an
+            element, a cell, a particle) to add to, see
+            :class:`~edelweissfe.numerics.systemmatrixassembly.SystemMatrixBlocks`; the solver commits the last one.
+            None for an explicit solver, which needs no tangent.
         U_np
             The current global solution.
         dU
