@@ -250,10 +250,12 @@ class NISTPArcLength(NISTParallel):
         out-of-balance force :math:`R_0`, and the reference load :math:`R_f`. The controller combines the two
         corrections, :math:`\\Delta\\Delta U = \\Delta\\Delta U_0 + \\Delta\\Delta\\lambda \\, \\Delta\\Delta U_f`, and
         returns the correction of the load parameter :math:`\\Delta\\Delta\\lambda`. The prescribed degrees of freedom
-        follow the load parameter, like the loads. The options of Newton's method apply to the pair
-        :math:`(\\Delta U, \\Delta\\lambda)`: the prediction extrapolates both with the same weights, a line search
-        scales both corrections with the same step length, and the quasi-Newton fallback keeps the tangent of the
-        first iteration for both right-hand sides.
+        follow the load parameter, like the loads: the reference solve carries their prescribed change over the step,
+        so every correction of the load parameter moves them along, while the out-of-balance solve leaves them where
+        they are -- they are no unknowns, and their rows are left out of the convergence check. The options of
+        Newton's method apply to the pair :math:`(\\Delta U, \\Delta\\lambda)`: the prediction extrapolates both with
+        the same weights, a line search scales both corrections with the same step length, and the quasi-Newton
+        fallback keeps the tangent of the first iteration for both right-hand sides.
 
         Parameters
         ----------
@@ -339,15 +341,21 @@ class NISTPArcLength(NISTParallel):
 
         Lambda = self.Lambda
 
+        # The whole step as one time step: at it, the Dirichlet boundary conditions give the change of their prescribed
+        # values over the step, which the load parameter scales like the reference load.
+        referenceTimeStep = TimeStep(timeStep.number, 1.0, 1.0, 0.0, 0.0, 0.0)
+
         with performancetiming.timeit("predictor"):
-            # The prescribed degrees of freedom follow the load parameter, so they are extrapolated with all others.
             dU, isExtrapolatedIncrement = self.extrapolateLastIncrement(
                 extrapolation, timeStep, dU, (), prevTimeStep, model
             )
             dLambda = self.extrapolateLoadParameterIncrement(extrapolation, timeStep, prevTimeStep)
-
-        referenceTimeStep = TimeStep(timeStep.number, 1.0, 1.0, 0.0, 0.0, 0.0)
-        zeroTimeStep = TimeStep(timeStep.number, 0.0, 0.0, 0.0, 0.0, 0.0)
+            # the prescribed degrees of freedom where the predicted load parameter puts them: their prescribed change
+            # over the step, scaled by it
+            for dirichlet in dirichlets:
+                dU[dirichlet.constrainedDofIndices] = (
+                    dLambda * dirichlet.getPrescribedIncrement(referenceTimeStep).flatten()
+                )
 
         quasiNewton = QuasiNewtonFallback(self.options["fallBackToQuasiNewton"])
 
@@ -358,14 +366,13 @@ class NISTPArcLength(NISTParallel):
             )
             R_f[:] = -self.arcLengthLoads.referenceLoad
 
-            # The prescribed degrees of freedom move with the load parameter: the reference solve carries their full
-            # prescribed increment, and R_0 their increment up to the current load parameter.
-            if isExtrapolatedIncrement and iterationCounter == 0:
-                R_0 = self.applyDirichletToResidual(zeroTimeStep, R_0, dirichlets)
-            else:
-                modifiedTimeStep = TimeStep(timeStep.number, dLambda, Lambda + dLambda, 0.0, 0.0, 0.0)
-                R_0 = self.applyDirichletToResidual(modifiedTimeStep, R_0, dirichlets)
-
+            # The prescribed degrees of freedom move with the load parameter, and only with it: the reference solve
+            # carries their prescribed change over the step, so a correction ddLambda moves them by ddLambda times that
+            # change, as it scales the reference load. The out-of-balance solve leaves them where they are, at the
+            # place the load parameter of this iterate puts them -- so they are no unknowns, and their rows are left
+            # out of the convergence check, as in NIST's later iterations.
+            for dirichlet in dirichlets:
+                R_0[dirichlet.constrainedDofIndices] = 0.0
             R_f = self.applyDirichletToResidual(referenceTimeStep, R_f, dirichlets)
 
             if iterationCounter > 0 or isExtrapolatedIncrement:
