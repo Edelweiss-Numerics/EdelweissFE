@@ -116,7 +116,17 @@ unknown of every increment besides the solution. A controller adds the equation 
 combination of displacements -- a crack opening, the mean contraction of a tunnel ring -- grows steadily over the
 step. Every Newton iteration solves the linearized system for two right-hand sides at once, the out-of-balance force
 and the reference load, and the controller combines the two corrections into the correction of the solution and of
-the load parameter. Prescribed displacements are scaled by the load parameter like the loads.
+the load parameter.
+
+Prescribed displacements belong to the reference loading of the step, like the loads: a Dirichlet boundary condition
+that prescribes a change :math:`\Delta\bar{\boldsymbol{u}}` over the step moves its degrees of freedom by
+:math:`\lambda \, \Delta\bar{\boldsymbol{u}}`. They move with the load parameter, and only with it. The reference solve
+carries :math:`\Delta\bar{\boldsymbol{u}}` in their rows, so a correction :math:`\Delta\Delta\lambda` moves them by
+:math:`\Delta\Delta\lambda \, \Delta\bar{\boldsymbol{u}}`; eliminating their columns turns
+:math:`\Delta\bar{\boldsymbol{u}}` into the forces it takes to impose it, which join the reference load. The
+out-of-balance solve leaves them where they are. So the prescribed degrees of freedom are no unknowns of Newton's
+method, and their rows, which hold no equation, are left out of the convergence check, as in ``NIST``. A predicted
+increment places them where the predicted load parameter puts them.
 
 The controller is a step action of the step, e.g. an ``indirectcontrol``, and the solver option
 ``arcLengthController`` names it (``off``, the default, solves the step without arc length control):

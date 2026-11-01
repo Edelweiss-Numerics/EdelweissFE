@@ -1,0 +1,177 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+#  ---------------------------------------------------------------------
+#
+#  _____    _      _              _         _____ _____
+# | ____|__| | ___| |_      _____(_)___ ___|  ___| ____|
+# |  _| / _` |/ _ \ \ \ /\ / / _ \ / __/ __| |_  |  _|
+# | |__| (_| |  __/ |\ V  V /  __/ \__ \__ \  _| | |___
+# |_____\__,_|\___|_| \_/\_/ \___|_|___/___/_|   |_____|
+#
+#
+#  Unit of Strength of Materials and Structural Analysis
+#  University of Innsbruck,
+#  2017 - today
+#
+#  Matthias Neuner matthias.neuner@uibk.ac.at
+#
+#  This file is part of EdelweissFE.
+#
+#  This library is free software; you can redistribute it and/or
+#  modify it under the terms of the GNU Lesser General Public
+#  License as published by the Free Software Foundation; either
+#  version 2.1 of the License, or (at your option) any later version.
+#
+#  The full text of the license can be found in the file LICENSE.md at
+#  the top level directory of EdelweissFE.
+#  ---------------------------------------------------------------------
+"""What the load parameter of the arc length method scales (``NISTPArcLength``; see the solver documentation, "Arc
+length control").
+
+- The prescribed displacements of a step follow the load parameter, like its loads: a prescribed degree of freedom
+  moves with the load parameter, and only with it.
+
+The model is the cantilever of ``testfiles/edelweiss-only/ArcLengthPenaltyConstraint``: linear elastic, bent down onto
+a rigid floor (an elastic penalty), by loads that do not follow the deformation. Its state depends only on the
+prescribed displacements and the loads it ends with, not on the path that led there, so NIST, with the same values
+prescribed, is an independent reference for every end state.
+"""
+
+from pathlib import Path
+
+import numpy as np
+import pytest
+
+from edelweissfe.drivers.inputfiledrivensimulation import finiteElementSimulation
+from edelweissfe.solvers.nonlinearimplicitstaticparallelarclength import NISTPArcLength
+from edelweissfe.timesteppers.timestep import TimeStep
+from edelweissfe.utils.inputfileparser import parseInputFile
+
+_DECKS = Path(__file__).resolve().parent.parent / "testfiles" / "edelweiss-only"
+_MODEL = _DECKS / "ArcLengthPenaltyConstraint" / "model.inp"
+
+#: The vertical displacement of the tip at the end of the decks' arc length steps.
+TIP_DISPLACEMENT = -0.25
+
+#: The change of the clamp's vertical displacement that ``ArcLengthPrescribedDisplacement`` prescribes for its step.
+SETTLEMENT = -0.2
+
+#: The weight of a quarter of a square element of edge 0.5 under the body force (0, -0.005): what the self-weight puts on
+#: the tip, a corner node of the mesh.
+SELF_WEIGHT_ON_THE_TIP = -0.005 * 0.5 * 0.5 / 4.0
+
+#: The model solved by NIST with the end state prescribed: the clamp's settlement, and the tip displacement.
+_NIST_REFERENCE = """
+*include, input={model}
+
+*solver, solver=NIST, name=theSolver
+
+*step, solver=theSolver
+startInc=0.1, maxInc=0.1, minInc=1e-6, maxNumInc=100, maxIter=25, stepLength=1
+>>dirichlet, name=clamp, nSet=gen_left, field=displacement, 1=0.0, 2={settlement}
+>>dirichlet, name=tipDisplacement, nSet=gen_rightTop, field=displacement, 2={tip}
+>>bodyforce, name=selfWeight, elSet=gen_all, forceVector='0.0, -0.005', f(t)='1'
+"""
+
+
+def solve(inputFile: Path):
+    model, _ = finiteElementSimulation(parseInputFile(str(inputFile)), verbose=False, suppressPlots=True)
+    return model
+
+
+def solveWithNIST(tmp_path, settlement: float, tip: float):
+    """The reference: NIST with the clamp's settlement and the tip displacement prescribed."""
+    path = tmp_path / "reference.inp"
+    # repr of a float: the shortest text that reads back as the same number
+    path.write_text(_NIST_REFERENCE.format(model=_MODEL, settlement=repr(float(settlement)), tip=repr(float(tip))))
+    return solve(path)
+
+
+def nodeRows(model, nodeSetName: str) -> list:
+    field = model.nodeFields["displacement"]
+    return [field.indexOfNode(node) for node in model.nodeSets[nodeSetName]]
+
+
+def assertReachesTheReferenceState(model, reference, tipLoadFactor: float):
+    """The same displacements and internal forces as the reference, and a tip load that the reference's internal force
+    at the tip balances: at the tip, f_int = -1 * tipLoadFactor + the self-weight on the tip."""
+
+    U, P = model.nodeFields["displacement"]["U"], model.nodeFields["displacement"]["P"]
+    UReference, PReference = reference.nodeFields["displacement"]["U"], reference.nodeFields["displacement"]["P"]
+    np.testing.assert_allclose(U, UReference, rtol=0.0, atol=1e-8)
+    np.testing.assert_allclose(P, PReference, rtol=0.0, atol=1e-8)
+
+    (tip,) = nodeRows(reference, "gen_rightTop")
+    np.testing.assert_allclose(tipLoadFactor, SELF_WEIGHT_ON_THE_TIP - PReference[tip, 1], rtol=1e-7)
+
+
+@pytest.fixture
+def clampHistory(monkeypatch):
+    """What the clamp of ``ArcLengthPrescribedDisplacement`` sees in the iterations of every increment: per evaluation of
+    the model, the increment of the load parameter of the trial state, the clamp's increment, and its prescribed change
+    over the step; per convergence check, the clamp's rows of the out-of-balance force."""
+
+    class ClampHistory:
+        evaluations = []
+        checkedResiduals = []
+        constrainedDofIndices = None
+
+    originalAssembleLoads = NISTPArcLength.assembleLoadsAtIncrementEnd
+    originalCheckConvergence = NISTPArcLength.checkConvergence
+
+    def assembleLoadsAtIncrementEnd(self, stepActions, U_np, dU, P, K, timeStep):
+        clamp = stepActions["dirichlet"]["clamp"]
+        ClampHistory.constrainedDofIndices = clamp.constrainedDofIndices
+        changeOverTheStep = clamp.getPrescribedIncrement(TimeStep(timeStep.number, 1.0, 1.0, 0.0, 0.0, 0.0)).flatten()
+        result = originalAssembleLoads(self, stepActions, U_np, dU, P, K, timeStep)
+        loadParameterIncrement = self.arcLengthLoads.loadParameter - self.Lambda
+        ClampHistory.evaluations.append(
+            (loadParameterIncrement, np.array(dU[clamp.constrainedDofIndices]), changeOverTheStep)
+        )
+        return result
+
+    def checkConvergence(self, R, *args):
+        ClampHistory.checkedResiduals.append(np.array(R[ClampHistory.constrainedDofIndices]))
+        return originalCheckConvergence(self, R, *args)
+
+    monkeypatch.setattr(NISTPArcLength, "assembleLoadsAtIncrementEnd", assembleLoadsAtIncrementEnd)
+    monkeypatch.setattr(NISTPArcLength, "checkConvergence", checkConvergence)
+    return ClampHistory
+
+
+def test_the_prescribed_degrees_of_freedom_are_no_unknowns_of_the_iterations(tmp_path, monkeypatch, clampHistory):
+    """In every iteration, the clamp of ``ArcLengthPrescribedDisplacement`` stands where the load parameter of the
+    iterate puts it: its increment is the increment of the load parameter times its prescribed change over the step.
+    Its rows of the out-of-balance force hold no equation of the problem, and are zero where the convergence is
+    checked."""
+
+    monkeypatch.chdir(tmp_path)
+    solve(_DECKS / "ArcLengthPrescribedDisplacement" / "test.inp")
+
+    assert clampHistory.evaluations and clampHistory.checkedResiduals
+    for loadParameterIncrement, clampIncrement, changeOverTheStep in clampHistory.evaluations:
+        assert np.any(changeOverTheStep != 0.0)
+        np.testing.assert_allclose(clampIncrement, loadParameterIncrement * changeOverTheStep, rtol=1e-12, atol=1e-15)
+    for clampResidual in clampHistory.checkedResiduals:
+        np.testing.assert_array_equal(clampResidual, 0.0)
+
+
+def test_a_prescribed_displacement_follows_the_load_parameter(tmp_path, monkeypatch):
+    """``ArcLengthPrescribedDisplacement``: the clamp settles by its prescribed change scaled by the load parameter, while
+    the tip load grows with it. Where the step ends, the settlement is the load parameter times the prescribed change --
+    whichever path the iterations took -- and the state is the one NIST reaches with that settlement prescribed."""
+
+    monkeypatch.chdir(tmp_path)
+    model = solve(_DECKS / "ArcLengthPrescribedDisplacement" / "test.inp")
+    loadParameter = model.solvers["theSolver"].Lambda
+    U = model.nodeFields["displacement"]["U"]
+
+    (tip,) = nodeRows(model, "gen_rightTop")
+    np.testing.assert_allclose(U[tip, 1], TIP_DISPLACEMENT, rtol=1e-12, err_msg="the end of the step")
+    assert loadParameter > 0.0
+    clamp = nodeRows(model, "gen_left")
+    np.testing.assert_allclose(U[clamp, 1], loadParameter * SETTLEMENT, rtol=1e-12)
+    np.testing.assert_array_equal(U[clamp, 0], 0.0)
+
+    reference = solveWithNIST(tmp_path, settlement=loadParameter * SETTLEMENT, tip=TIP_DISPLACEMENT)
+    assertReachesTheReferenceState(model, reference, tipLoadFactor=loadParameter)
