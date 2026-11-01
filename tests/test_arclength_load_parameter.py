@@ -32,6 +32,8 @@ length control").
   moves with the load parameter, and only with it.
 - At the end of an arc length step, every load keeps the value the step applied, f(0) + lambda (f(1) - f(0)) with its
   own amplitude, and the next step starts from it.
+- Every arc length step scales its own reference load -- the change of the loads over the step -- from the load
+  parameter zero.
 
 The model is the cantilever of ``testfiles/edelweiss-only/ArcLengthPenaltyConstraint``: linear elastic, bent down onto
 a rigid floor (an elastic penalty), by loads that do not follow the deformation. Its state depends only on the
@@ -202,10 +204,12 @@ def test_a_prescribed_displacement_follows_the_load_parameter(tmp_path, monkeypa
 @pytest.fixture
 def steps(monkeypatch):
     """Per step of a run: the external load at every evaluation of the model (the negative of the residual
-    contribution of the loads), and the displacements and the load parameter at the end of the step."""
+    contribution of the loads), the load parameter at the first evaluation of an arc length step, and the displacements
+    and the load parameter at the end of the step."""
 
     class Steps:
         externalLoads = []
+        startLoadParameters = []
         endDisplacements = []
         endLoadParameters = []
 
@@ -220,6 +224,8 @@ def steps(monkeypatch):
     def assembleLoadsAtIncrementEnd(self, stepActions, U_np, dU, P, K, timeStep):
         before = np.array(P)
         result = originalAssembleLoads(self, stepActions, U_np, dU, P, K, timeStep)
+        if not Steps.externalLoads[-1] and self.arcLengthLoads is not None:
+            Steps.startLoadParameters.append(self.arcLengthLoads.loadParameter)
         Steps.externalLoads[-1].append(before - np.array(P))
         return result
 
@@ -250,3 +256,32 @@ def test_a_step_after_an_arc_length_step_holds_the_loads_it_ended_with(tmp_path,
     assert 0.0 < steps.endLoadParameters[0] < 1.0
     assertSameExternalLoad(holdingStep[0], arcLengthStep[-1])
     np.testing.assert_allclose(steps.endDisplacements[1], steps.endDisplacements[0], rtol=0.0, atol=1e-8)
+
+
+def test_every_arc_length_step_scales_its_own_reference_load_from_zero(tmp_path, monkeypatch, steps):
+    """``ArcLengthTwoSteps``: the second arc length step scales its own change of the tip load from the load parameter
+    zero, so it starts from the external load the first step ended with -- as the step after it, which holds every
+    load, starts from the external load the second ended with."""
+
+    monkeypatch.chdir(tmp_path)
+    solve(_DECKS / "ArcLengthTwoSteps" / "test.inp")
+
+    first, second, holding = steps.externalLoads
+    assertSameExternalLoad(second[0], first[-1])
+    assertSameExternalLoad(holding[0], second[-1])
+    assert steps.startLoadParameters == [0.0, 0.0]
+
+
+def test_two_arc_length_steps_reach_the_state_of_one(tmp_path, monkeypatch, steps):
+    """``ArcLengthTwoSteps`` ends where NIST takes the model with the tip displacement prescribed. Its tip load is the
+    change the two steps declared, each scaled by the load parameter its step ended at, and the model publishes the
+    load parameter of the second step; the step that holds every load at the end keeps the state."""
+
+    monkeypatch.chdir(tmp_path)
+    model = solve(_DECKS / "ArcLengthTwoSteps" / "test.inp")
+    first, second, holding = steps.endLoadParameters
+    assert first > 0.0 and second > 0.0 and holding == 0.0
+
+    reference = solveWithNIST(tmp_path, settlement=0.0, tip=TIP_DISPLACEMENT)
+    assertReachesTheReferenceState(model, reference, tipLoadFactor=first + second)
+    assert model.additionalParameters["arc length parameter"] == second

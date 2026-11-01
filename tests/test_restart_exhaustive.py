@@ -315,6 +315,13 @@ _LOADS_HOLD_WITHOUT_ARC_LENGTH = """
 >>dirichlet, name=clamp, nSet=beam_left, field=displacement, 1=0, 2=0, 3=0
 """
 
+#: A second arc length step bends the right end back to its initial position: it declares the same change of the push
+#: on top of the load reached, and scales it by its own load parameter, from zero, which turns negative.
+_LOADS_ARC_LENGTH_BACK = """
+>>indirectcontrol, name=bendControl, dof1='model.nodeSets["beam_right"][0].fields["displacement"]', cVector1='0, 1, 0', dof2='model.nodeSets["beam_left"][0].fields["displacement"]', cVector2='0, 0, 0', L=0.0
+>>nodeforces, name=push, components='0,-1,0'
+"""
+
 _LOADS_SLIDE = """
 >>dirichlet, name=clamp, nSet=beam_left, field=displacement, 1=0, 2=0, 3=0
 >>dirichlet, name=slidePlate, nSet=plate_rp, field=displacement, 1=0.0, 2={amplitude}, 3={amplitude}
@@ -514,7 +521,7 @@ _SCENARIOS = {
         steps=[_LOADS_PRESS_AND_DRAG],
         check=_frictionalContact,
     ),
-    # (p) Arc length control: the load parameter, part of the model, and the predictor's history of its increments,
+    # (p) Arc length control: the load parameter of the step, and the predictor's history of its increments,
     # with the quadratic prediction, which keeps the increments before the last one, too.
     "arcLength": dict(
         solvers=["arcLength"],
@@ -523,11 +530,19 @@ _SCENARIOS = {
         steps=[_LOADS_ARC_LENGTH],
         check=_loadParameterChanged,
     ),
-    # (q) Two steps: resumes in the second must continue from the load parameter the first reached.
+    # (q) Two steps: resumes in the second must hold the loads the arc length controlled first one ended with.
     "arcLengthTwoSteps": dict(
         solvers=["arcLength"],
         blocks=[_BEAM_GEOMETRY],
         steps=[_LOADS_ARC_LENGTH, _LOADS_HOLD_WITHOUT_ARC_LENGTH],
+        check=_loadParameterChanged,
+    ),
+    # (r) Two arc length steps: the second scales its own change of the push from the load parameter zero, so resumes
+    # in it must continue from the load parameter of the second step, and from the loads the first one ended with.
+    "twoArcLengthSteps": dict(
+        solvers=["arcLength"],
+        blocks=[_BEAM_GEOMETRY],
+        steps=[_LOADS_ARC_LENGTH, _LOADS_ARC_LENGTH_BACK],
         check=_loadParameterChanged,
     ),
     # (o) A modelupdate executed at the start of step 1 changes the model by an arbitrary expression

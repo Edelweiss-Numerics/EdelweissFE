@@ -86,8 +86,8 @@ The model is first rebuilt from the same input file, then restored in this order
        performance table of its own, before the resumed step's table
    * - ties, contact surfaces
      - catch up with the replayed mesh, as they had in the uninterrupted run
-   * - node fields, scalar variables, element state, additional parameters (e.g. the load parameter of the arc
-       length method)
+   * - node fields, scalar variables, element state, additional parameters (e.g. the load parameter the arc length
+       method publishes)
      - read
    * - rigid bodies
      - their surface nodes are moved to the restored configuration
@@ -100,8 +100,8 @@ The model is first rebuilt from the same input file, then restored in this order
        of the next increment, the enforced time increment, and whether the zero increment was done
    * - solver
      - its state between increments: the implicit solver's predictor (the last accepted increments
-       and their ``dU``, under arc length control also their increments of the load parameter), the
-       explicit solver's last increment and accumulated external work
+       and their ``dU``, under arc length control also their increments of the load parameter, and the
+       load parameter of the step), the explicit solver's last increment and accumulated external work
 
 Adding something that carries state between increments
 -------------------------------------------------------
