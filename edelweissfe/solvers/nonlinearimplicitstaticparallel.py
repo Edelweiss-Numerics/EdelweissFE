@@ -42,6 +42,16 @@ from edelweissfe.solvers.nonlinearimplicitstatic import NIST
 
 
 class NISTParallel(NIST):
+    """:class:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST`, with the elements computed on the available threads
+    (:meth:`computeElements`).
+
+    Parameters
+    ----------
+    jobInfo
+        A dictionary containing the job information.
+    journal
+        The journal instance for logging.
+    """
 
     identification = "NISTPSolver"
 
@@ -52,4 +62,7 @@ class NISTParallel(NIST):
 
     @performancetiming.timeit("elements")
     def computeElements(self, elements, Un1, dU, P, K, F, timeStep):
+        """Compute the elements on the available threads, see
+        :func:`~edelweissfe.solvers.base.parallelelementcomputation.computeElementsInParallel`; otherwise as
+        :meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.computeElements`."""
         return computeElementsInParallel(elements, Un1, dU, P, K, F, timeStep)

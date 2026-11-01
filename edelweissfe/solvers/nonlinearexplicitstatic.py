@@ -269,7 +269,8 @@ class NEST(NIST):
 
         self.journal.message("Creating monolithic equation system", self.identification, 0)
         self.forgetEquationSystem()
-        self.theDofManager = self.createDofManager(model)
+        self.equationSystemLayout = model.buildEquationSystem()
+        self.theDofManager = self.equationSystemLayout.dofManager
         self.journal.message(
             "total size of eq. system: {:}".format(self.theDofManager.nDof),
             self.identification,
@@ -292,7 +293,7 @@ class NEST(NIST):
         # derive anything beyond the plain (A, b) call -- a field-split solver such as blockamg raises
         # without the field structure setModel supplies. NEST's equation system is built once per step here
         # rather than being rebuilt on connectivity changes, so one call per step is enough.
-        self.linSolver.setModel(model, self.theDofManager)
+        self.linSolver.setModel(self.equationSystemLayout.modelForLinearSolver, self.theDofManager)
 
         U = self.theDofManager.constructDofVector()
         P = self.theDofManager.constructDofVector()
@@ -300,10 +301,7 @@ class NEST(NIST):
         K = self.theDofManager.constructVIJSystemMatrix()
         self.csrGenerator = CSRGenerator(K)
 
-        for fieldName, field in model.nodeFields.items():
-            U = self.theDofManager.writeNodeFieldToDofVector(U, field, "U")
-
-        U = self.theDofManager.writeScalarVariablesToDofVector(U)
+        U = self.equationSystemLayout.writeSolutionToDofVector(U)
 
         self._U, self._dU, self._P, self._K = U, dU, P, K
 
@@ -393,13 +391,7 @@ class NEST(NIST):
         step.timeStepper.changeIncrementSize(self._incScaleFactor)
         self.prevTimeStep = timeStep
 
-        # write results to nodes:
-        for fieldName, field in model.nodeFields.items():
-            self.theDofManager.writeDofVectorToNodeField(U, field, "U")
-            self.theDofManager.writeDofVectorToNodeField(P, field, "P")
-            self.theDofManager.writeDofVectorToNodeField(dU, field, "dU")
-
-        self.theDofManager.writeDofVectorToScalarVariables(U)
+        self.equationSystemLayout.writeResultsToModel(U, dU, P)
 
         self.updateRigidBodies(model, timeStep)
 
@@ -464,7 +456,7 @@ class NEST(NIST):
                 - the scale factor for the next increment size
         """
 
-        elements = model.elements
+        elements = self.equationSystemLayout.elements
         constraints = model.constraints
 
         R = self.theDofManager.constructDofVector()
@@ -502,6 +494,7 @@ class NEST(NIST):
 
             P[:] = K[:] = F[:] = PLoadsAndConstraints[:] = 0.0
 
+            self.equationSystemLayout.updateMaterialPoints(dU_[k], timeStep)
             P, K, F = self.computeElements(elements, U_np, dU_[k], P, K, F, timeStep)
             PLoadsAndConstraints, K = self.assembleLoads(loads, U_np, dU_[k], PLoadsAndConstraints, K, timeStep)
             PLoadsAndConstraints, K = self.assembleConstraints(
@@ -539,6 +532,7 @@ class NEST(NIST):
 
         # compute elements once more to get the final reaction
         P[:] = K[:] = F[:] = 0.0
+        self.equationSystemLayout.updateMaterialPoints(dU, timeStep)
         P, K, F = self.computeElements(elements, U_np, dU, P, K, F, timeStep)
 
         # compute new increment size scale factor

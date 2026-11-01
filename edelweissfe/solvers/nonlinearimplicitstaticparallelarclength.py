@@ -462,8 +462,8 @@ class NISTPArcLength(NISTParallel):
         )
         dLambda = self.extrapolateLoadParameterIncrement(extrapolation, timeStep, prevTimeStep)
         for dirichlet in dirichlets:
-            dU[dirichlet.constrainedDofIndices] = (
-                dLambda * dirichlet.getPrescribedIncrement(increment.referenceTimeStep).flatten()
+            dU[dirichlet.constrainedDofIndices] = dLambda * dirichlet.getPrescribedIncrementOfConstrainedDofs(
+                increment.referenceTimeStep
             )
 
         increment.loadParameterIncrement = dLambda

@@ -44,6 +44,7 @@ from edelweissfe.journal.journal import Journal
 from edelweissfe.numerics.dofmanager import DofManager
 from edelweissfe.solvers.base.nonlinearsolverbase import TopologyUpdate
 from edelweissfe.solvers.nonlinearimplicitstatic import NIST
+from edelweissfe.stepactions.base.dirichletbase import DirichletBase
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.exceptions import ReachedMaxIterations
 from edelweissfe.utils.inputfileparser import parseInputFile
@@ -193,8 +194,13 @@ def test_no_extrapolation_without_a_nonzero_last_increment_or_when_off():
 
 
 def test_the_prescribed_degrees_of_freedom_take_their_prescribed_increment():
-    class Dirichlet:
+    class Dirichlet(DirichletBase):
+        components = [0]
         constrainedDofIndices = np.array([1])
+        constrainedNodePositions = np.array([0])
+
+        def __init__(self):
+            pass
 
         def getPrescribedIncrement(self, timeStep):
             return np.array([[0.75]])

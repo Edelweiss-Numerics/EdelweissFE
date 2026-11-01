@@ -51,12 +51,12 @@ class NodalLoadBase(LoadBase):
 
     @abstractmethod
     def getCurrentLoad(self, timeStep: TimeStep) -> np.ndarray:
-        """Return the current magnitude for this body load.
+        """Return the current loads of the nodes.
 
         Returns
         -------
         np.ndarray
-            The magnitude.
+            The loads, one row per node of the set, in its order, with the components of the field.
         """
 
     def assembleLoad(
@@ -71,6 +71,10 @@ class NodalLoadBase(LoadBase):
         """Subtract the current node loads from the residual contribution at the degrees of freedom of the field
         on the node set; a dead load, so without a tangent. See
         :meth:`~edelweissfe.stepactions.base.loadbase.LoadBase.assembleLoad`.
+
+        Only the nodes of the set that are part of the equation system are loaded (see
+        :meth:`~edelweissfe.numerics.dofmanager.DofManager.locateFieldOnNodeSet`): every node of the set in a finite
+        element model, those in the active domain in a meshfree one.
 
         Parameters
         ----------
@@ -88,5 +92,6 @@ class NodalLoadBase(LoadBase):
             The DOF manager of the equation system, which locates the degrees of freedom of the node set.
         """
 
-        dofIndices = dofManager.idcsOfFieldsOnNodeSetsInDofVector[self.field][self.nodeSet]
-        P[dofIndices] -= self.getCurrentLoad(timeStep).flatten()
+        dofIndices, nodePositions = dofManager.locateFieldOnNodeSet(self.field, self.nodeSet)
+        # one row of the load per node of the set: those of the nodes in the equation system
+        P[dofIndices] -= self.getCurrentLoad(timeStep)[nodePositions].flatten()

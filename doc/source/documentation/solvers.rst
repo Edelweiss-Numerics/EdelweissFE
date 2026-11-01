@@ -70,6 +70,68 @@ The elements' sum alone, :math:`\boldsymbol{f}_\mathrm{int}`, is what the implic
 nodal result ``P`` of a field output: at a degree of freedom with a Dirichlet boundary condition and no load, it is the
 reaction force. ``NED`` reports its net force :math:`\boldsymbol{R}` there.
 
+.. _model-equation-system:
+
+What the solver asks the model
+------------------------------
+
+A solver solves; what the equation system is made of, the model says. ``NIST``, ``NISTParallel`` and
+``NISTPArcLength`` ask the model three questions, and know nothing of their own about what a model consists of:
+
+1. **Has the coupling of the degrees of freedom changed?** At the start of every increment, and of every retry after a
+   cutback, the topology update calls :meth:`~edelweissfe.models.femodel.FEModel.updateConnectivity`, before the
+   increment is proposed. If a coupling changed, the solver rebuilds its equation system before it solves the
+   increment. A change of the coupling is not a change of the mesh: no node moves or appears, so the solver does not
+   re-equilibrate after it (``equilibrateAfterModelChange``), and it keeps its prediction if the rebuilt system numbers
+   the degrees of freedom as before (``extrapolateAcrossConnectivityChange``).
+
+2. **What is the equation system made of?** Whenever the solver (re)builds its equation system, it calls
+   :meth:`~edelweissfe.models.femodel.FEModel.buildEquationSystem`, which returns the layout of the system, an
+   :class:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout`. The solver keeps it as long as the numbering
+   of the degrees of freedom it holds -- until the next rebuild -- and takes from it:
+
+   * the numbering of the degrees of freedom (the :class:`~edelweissfe.numerics.dofmanager.DofManager`). It also
+     locates the degrees of freedom of a field on a node set, those a Dirichlet boundary condition prescribes or a node
+     force loads (:meth:`~edelweissfe.numerics.dofmanager.DofManager.locateFieldOnNodeSet`);
+   * the elements, a list of everything the solver computes like an element (``computeElements``);
+   * where the solution vector starts from after a rebuild, and where the results of a converged increment go;
+   * the model the linear solver is set up for.
+
+3. **Is anything to be updated before the elements are computed?** In every evaluation of the model -- every Newton
+   iteration, every trial state of a line search -- the solver calls
+   :meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.updateMaterialPoints`, right before it computes
+   the elements.
+
+The loop over the elements stays with the solver: ``NIST`` computes them one after the other, ``NISTParallel`` on all
+threads, each element into its own part of the residual and its own block of the system matrix.
+
+The other solvers ask a part of these questions. ``NID`` and ``NEST`` derive from ``NIST``, and build, fill and write
+back their equation systems through the layout; ``NEST`` builds its system once per step and has no topology update,
+and ``NID`` assembles its mass matrix from the model's finite elements. ``NED`` takes only the numbering of the
+degrees of freedom from the layout, and evaluates the model's finite elements in its own loop.
+
+A finite element model answers as follows: its constraints update the nodes they couple (a contact constraint
+searches for the surface it touches); its equation system numbers all nodes and the active constraints with their
+scalar variables; its elements are the finite elements; every node carries its total solution from increment to
+increment; and nothing is to be updated before the elements, which evaluate the material at their quadrature points
+themselves.
+
+A model of EdelweissMeshfree answers differently, with the same solvers:
+
+* Its material points move through a fixed background grid of cells, and its particles carry their kernel functions
+  along. When asked for the coupling, it first assigns the material points to the cells they lie in and the particles
+  to the kernel functions they reach, then lets its constraints follow.
+* Only the part of the grid that holds material points, and the nodes in reach of the particles, form the equation
+  system (the active domain). So a node set of the grid may reach beyond the equation system: a Dirichlet boundary
+  condition then prescribes, and a node force loads, the nodes of the set in the active domain.
+* Its elements are its finite elements, the active cells, and the particles.
+* Only finite element nodes carry a total solution from increment to increment. The material point method and RKPM
+  are incremental on the current configuration -- the cells are reset and the kernel functions move with their
+  particles, while the state lives in the material points and particles -- so the values at the nodes of the grid and
+  of the kernel functions are coefficients of one increment, and start every rebuilt equation system at zero.
+* Before the cells are computed, each cell interpolates the solution increment to its material points, and the
+  material points evaluate their material; the cells then integrate the result.
+
 
 ``NIST`` - Nonlinear Implicit Static
 ------------------------------------
