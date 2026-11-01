@@ -41,8 +41,8 @@ import pytest
 import edelweissfe.solvers.nonlinearimplicitstatic as nonlinearimplicitstatic
 from edelweissfe.drivers.inputfiledrivensimulation import finiteElementSimulation
 from edelweissfe.linsolve.composition import AMG
+from edelweissfe.models.femodel import FEModel
 from edelweissfe.numerics.csrgeneratorv2 import CSRGenerator
-from edelweissfe.solvers.base.nonlinearsolverbase import NonlinearSolverBase
 from edelweissfe.utils.inputfileparser import parseInputFile
 
 pytest.importorskip("edelweissfe.linsolve.amgcl.amgcl")
@@ -142,13 +142,13 @@ def test_the_steps_that_name_a_linear_solver_share_it_and_leave_no_tree_behind(t
 
 def test_a_new_step_drops_the_last_equation_system_before_it_builds_the_next(tmp_path, monkeypatch):
     generatorsAtBuild = []
-    original = NonlinearSolverBase.createDofManager
+    original = FEModel.buildEquationSystem
 
-    def createDofManager(self, *args, **kwargs):
+    def buildEquationSystem(self, *args, **kwargs):
         generatorsAtBuild.append(sum(isinstance(obj, CSRGenerator) for obj in gc.get_objects()))
         return original(self, *args, **kwargs)
 
-    monkeypatch.setattr(NonlinearSolverBase, "createDofManager", createDofManager)
+    monkeypatch.setattr(FEModel, "buildEquationSystem", buildEquationSystem)
     _simulate(tmp_path, monkeypatch, ["", ""])
     assert len(generatorsAtBuild) == 2 and generatorsAtBuild[1] == generatorsAtBuild[0]
 

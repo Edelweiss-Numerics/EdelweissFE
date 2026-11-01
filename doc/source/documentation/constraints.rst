@@ -561,8 +561,8 @@ behind. Two states decide it, and ``active`` is true while both are:
   within reach.
 
 So a constraint switched off from outside stays off, whatever it finds in reach; switched on again, it takes part
-while it is within reach. Switched off from outside, a constraint rests: the solvers do not locate it anew
-(``updateConnectivity``), which they do for every constraint that is switched on, those out of reach included, so that
+while it is within reach. Switched off from outside, a constraint rests: the model does not locate it anew in
+``updateConnectivity``, which it does for every constraint that is switched on, those out of reach included, so that
 they can find themselves within reach again. A constraint that is not active accepts no state either
 (``acceptLastState``): a contact switched off for a step keeps its multipliers and its frictional history as they
 were. A solver that cannot handle a constraint, e.g. ``NEST`` a contact, refuses it only while it is switched on.

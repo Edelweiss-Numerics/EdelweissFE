@@ -399,6 +399,10 @@ class NIST(NonlinearSolverBase):
     #: The convergence criterion of the current step.
     convergenceCriterion = None
 
+    #: What the model's current equation system is made of (see
+    #: :meth:`~edelweissfe.models.femodel.FEModel.buildEquationSystem`), rebuilt with it; None until it is built.
+    equationSystemLayout = None
+
     #: The predictor's state between increments: the last accepted increment and its dU, and, for a quadratic
     #: extrapolation, the accepted increment before it and its dU.
     checkpointedState = {
@@ -506,9 +510,10 @@ class NIST(NonlinearSolverBase):
         self.linSolver.setJournal(self.journal)
 
     def forgetEquationSystem(self) -> None:
-        """Drop the equation system of the last build -- the DOF manager, the system matrix and its CSR generator,
-        the multi-point-constraint condensation, the DOF vectors -- so that it is gone before the next one is built,
-        never both at once."""
+        """Drop the equation system of the last build -- the model's layout of it with the DOF manager, the system
+        matrix and its CSR generator, the multi-point-constraint condensation, the DOF vectors -- so that it is gone
+        before the next one is built, never both at once."""
+        self.equationSystemLayout = None
         self.theDofManager = None
         self.csrGenerator = None
         self.mpcTransformation = None
@@ -599,9 +604,7 @@ class NIST(NonlinearSolverBase):
 
         topologyUpdate = self.updateTopologyAndConnectivity(model, step, offerModelModifiers=not isRetry)
         self._modelHasChanged = topologyUpdate.topologyChanged
-        self._connectivityHasChanged = (
-            topologyUpdate.meshDependentsRefreshed or topologyUpdate.constraintConnectivityChanged
-        )
+        self._connectivityHasChanged = topologyUpdate.meshDependentsRefreshed or topologyUpdate.connectivityChanged
 
     def attemptIncrement(self, step, model: FEModel, timeStep: TimeStep):
         """Solve the increment by Newton's method, rebuilding the equation system first if the topology
@@ -665,8 +668,11 @@ class NIST(NonlinearSolverBase):
             )
             with performancetiming.timeit("equation system rebuild"):
                 self.forgetEquationSystem()
+                # The model says what its equation system is made of: the numbering of the degrees of freedom, the
+                # elements to compute, how the solution passes between the model and the vectors below.
                 with performancetiming.timeit("dof manager"):
-                    self.theDofManager = self.createDofManager(model)
+                    self.equationSystemLayout = model.buildEquationSystem()
+                self.theDofManager = self.equationSystemLayout.dofManager
                 # the cache is keyed on the DofManager; drop it so the old manager can be freed
                 self._dirichletIndicesCache = None
                 self.journal.message(
@@ -690,7 +696,7 @@ class NIST(NonlinearSolverBase):
 
                 # Re-pushed on every (re)build so the linear solver tracks the mesh across AMR.
                 with performancetiming.timeit("linear solver setup"):
-                    self.linSolver.setModel(model, self.theDofManager)
+                    self.linSolver.setModel(self.equationSystemLayout.modelForLinearSolver, self.theDofManager)
 
                 presentVariableNames = list(self.theDofManager.idcsOfFieldsInDofVector.keys())
 
@@ -709,10 +715,7 @@ class NIST(NonlinearSolverBase):
                 P = self.theDofManager.constructDofVector()
                 dU = self.theDofManager.constructDofVector()
 
-                for fieldName, field in model.nodeFields.items():
-                    U = self.theDofManager.writeNodeFieldToDofVector(U, field, "U")
-
-                U = self.theDofManager.writeScalarVariablesToDofVector(U)
+                U = self.equationSystemLayout.writeSolutionToDofVector(U)
 
                 with performancetiming.timeit("mpc transformation build"):
                     self.mpcTransformation = self.buildMPCTransformation(model, step.actions)
@@ -790,11 +793,7 @@ class NIST(NonlinearSolverBase):
 
             # Commit the settled state as a converged sub-increment (no output): elements integrate
             # incrementally from the committed state, so otherwise U and the internal state disagree.
-            for fieldName, field in model.nodeFields.items():
-                self.theDofManager.writeDofVectorToNodeField(U, field, "U")
-                self.theDofManager.writeDofVectorToNodeField(P, field, "P")
-                self.theDofManager.writeDofVectorToNodeField(dU, field, "dU")
-            self.theDofManager.writeDofVectorToScalarVariables(U)
+            self.equationSystemLayout.writeResultsToModel(U, dU, P)
             model.advanceToTime(equilibrationTimeStep.totalTime)
             self._U, self._dU, self._P = U, dU, P
 
@@ -902,12 +901,7 @@ class NIST(NonlinearSolverBase):
             step.timeStepper.preventIncrementIncrease()
 
         with performancetiming.timeit("write results to nodes"):
-            for fieldName, field in model.nodeFields.items():
-                self.theDofManager.writeDofVectorToNodeField(U, field, "U")
-                self.theDofManager.writeDofVectorToNodeField(P, field, "P")
-                self.theDofManager.writeDofVectorToNodeField(dU, field, "dU")
-
-            self.theDofManager.writeDofVectorToScalarVariables(U)
+            self.equationSystemLayout.writeResultsToModel(U, dU, P)
 
         self.updateRigidBodies(model, timeStep)
 
@@ -1406,6 +1400,10 @@ class NIST(NonlinearSolverBase):
         iteration, and by its line search once per trial step length. The loads are those at the end of the increment,
         see :meth:`assembleLoadsAtIncrementEnd`. The Dirichlet boundary conditions are imposed by the caller.
 
+        Before the elements are computed, the model updates the material points that belong to no element (see
+        :meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.updateMaterialPoints`; nothing to do in
+        a finite element model).
+
         Parameters
         ----------
         U_n
@@ -1452,7 +1450,8 @@ class NIST(NonlinearSolverBase):
 
         # Every element, load and constraint adds its residual contribution and the tangent of it.
         # The elements' sum P is kept apart: it is the reaction force this increment reports.
-        P, K, F = self.computeElements(model.elements, U_np, dU, P, K, F, timeStep)
+        self.equationSystemLayout.updateMaterialPoints(dU, timeStep)
+        P, K, F = self.computeElements(self.equationSystemLayout.elements, U_np, dU, P, K, F, timeStep)
         PLoadsAndConstraints, K = self.assembleLoadsAtIncrementEnd(
             stepActions, U_np, dU, PLoadsAndConstraints, K, timeStep
         )
@@ -1859,13 +1858,18 @@ class NIST(NonlinearSolverBase):
         F: DofVector,
         timeStep: TimeStep,
     ) -> tuple[DofVector, VIJSystemMatrix, DofVector]:
-        """Loop over all elements, and evalute them.
-        Is called by solveIncrement() in each iteration.
+        """Loop over all elements, and evalute them: each adds its internal forces and their tangent, see
+        :meth:`~edelweissfe.elements.base.baseelement.BaseElement.computeKernels`. Is called by
+        :meth:`assembleResidualAndTangent` in each iteration.
+
+        The elements are those of the model's equation system
+        (:attr:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.elements`): the finite elements, and
+        whatever else contributes like an element -- in a meshfree model, its cells and particles.
 
         Parameters
         ----------
         elements
-            The list of finite elements.
+            The list of elements.
         U_np
             The current solution vector.
         dU
@@ -1890,7 +1894,7 @@ class NIST(NonlinearSolverBase):
         time = timeStep.totalTime
         dT = timeStep.timeIncrement
 
-        for el in elements.values():
+        for el in elements:
             Ke = K[el]
             Pe = np.zeros(el.nDof)
 

@@ -1442,7 +1442,8 @@ class NonlinearImplicitDynamic(NIST):
         dU0 = self.theDofManager.constructDofVector()
         K = self.theDofManager.constructVIJSystemMatrix()
 
-        P, K, F = self.computeElements(model.elements, U_n, dU0, P, K, F, startTimeStep)
+        self.equationSystemLayout.updateMaterialPoints(dU0, startTimeStep)
+        P, K, F = self.computeElements(self.equationSystemLayout.elements, U_n, dU0, P, K, F, startTimeStep)
         PLoadsAndConstraints, K = self.assembleLoads(loads, U_n, dU0, PLoadsAndConstraints, K, startTimeStep)
         PLoadsAndConstraints, K = self.assembleConstraints(
             model.constraints, U_n, dU0, PLoadsAndConstraints, K, startTimeStep
