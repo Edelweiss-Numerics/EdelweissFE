@@ -30,6 +30,7 @@
 equation system, see :meth:`~edelweissfe.models.femodel.FEModel.buildEquationSystem` and
 :ref:`model-equation-system`."""
 
+from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 from edelweissfe.numerics.dofmanager import DofManager, DofVector
@@ -120,13 +121,18 @@ class EquationSystemLayout:
 
         self.dofManager.writeDofVectorToScalarVariables(U)
 
-    def updateMaterialPoints(self, dU: DofVector, timeStep: TimeStep):
+    def updateMaterialPoints(self, dU: DofVector, timeStep: TimeStep, forEachChunk: Callable[[list, Callable], None]):
         """Bring the material points that belong to no element up to date with the trial solution increment, right
         before the solver computes the elements. Called whenever ``NIST``, or a solver derived from it (``NEST``,
         ``NID``), evaluates the elements (see
         :meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.assembleInternalForces`), e.g. in every Newton
         iteration and for every trial state of a line search. The explicit dynamic solver ``NED`` evaluates the
         elements of a finite element model itself, and does not call it.
+
+        The loops over the entities belong to the solver, as the loop over the elements does: ``forEachChunk(entities,
+        work)`` calls ``work(chunk)`` for chunks that together hold all ``entities``, in the calling thread or on the
+        threads of a parallel solver (see :meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.forEachChunk`). A
+        layout loops through it over entities that are independent of each other.
 
         A finite element model has no such material points: every element evaluates the material at its own quadrature
         points, in :meth:`~edelweissfe.elements.base.baseelement.BaseElement.computeKernels`, so there is nothing to do
@@ -140,4 +146,6 @@ class EquationSystemLayout:
             The trial solution increment.
         timeStep
             The time step.
+        forEachChunk
+            The solver's loop over chunks of independent entities.
         """

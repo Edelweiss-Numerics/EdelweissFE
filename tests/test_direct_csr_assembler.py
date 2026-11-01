@@ -78,8 +78,8 @@ def test_assembleFromVIJ_matches_the_staged_generator_bit_for_bit():
     np.testing.assert_array_equal(directResult.toarray(), staged.toarray())
 
 
-def test_registerEntities_rejects_mismatched_mapStarts_and_nDofs_lengths():
-    """Both arrays are read by raw pointer on the C++ side, indexed by the same entity count -- a
+def test_registerEntities_rejects_mismatched_lengths():
+    """The arrays are read by raw pointer on the C++ side, indexed by the same entity count -- a
     length mismatch would read past the end of the shorter one rather than raising."""
 
     systemMatrix, V = _syntheticSystem()
@@ -88,7 +88,9 @@ def test_registerEntities_rejects_mismatched_mapStarts_and_nDofs_lengths():
     direct = DirectCSRAssembler(generator, systemMatrix, numThreads=1)
 
     with pytest.raises(ValueError):
-        direct.registerEntities(np.array([0, 4, 8], dtype=np.int64), np.array([2, 2], dtype=np.intc))
+        direct.registerEntities(
+            np.array([0, 4, 8], dtype=np.int64), np.array([2, 2], dtype=np.intc), np.array([4, 4], dtype=np.int64)
+        )
 
 
 def test_fused_scatter_reduce_path_matches_the_staged_generator():
@@ -108,7 +110,7 @@ def test_fused_scatter_reduce_path_matches_the_staged_generator():
     # mapStarts[e]: entity e's offset into the VIJ ordering above; nDofs[e]: its local DOF count.
     mapStarts = np.array([0, 4, 8], dtype=np.int64)
     nDofs = np.array([2, 2, 1], dtype=np.intc)
-    direct.registerEntities(mapStarts, nDofs)
+    direct.registerEntities(mapStarts, nDofs, np.array([4, 4, 1], dtype=np.int64))
 
     direct.beginAssembly()
     direct.scatterBlock(0, 0, V[0:4].copy())
@@ -117,6 +119,31 @@ def test_fused_scatter_reduce_path_matches_the_staged_generator():
     fusedResult = direct.reduce()
 
     np.testing.assert_array_equal(fusedResult.toarray(), staged.toarray())
+
+
+def test_sparse_entity_is_scattered_entry_by_entry():
+    """An entity with a sparse VIJ pattern of its own -- a constraint coupling only some of its DOFs -- registers as
+    many pairs as it declares, not nDof**2, and its block is the list of their values, in any order of rows."""
+
+    # a dense 2x2 element on DOFs {0, 1}, then a "constraint" with nDof 3 on DOFs {0, 1, 2} that couples only
+    # (2, 0), (0, 2) and (1, 1): three pairs instead of nine
+    I = [0, 1, 0, 1, 2, 0, 1]  # noqa: E741
+    J = [0, 0, 1, 1, 0, 2, 1]
+    V = np.array([4.0, 1.0, 1.0, 5.0, -2.0, -2.0, 3.0])
+    systemMatrix = _SystemMatrix(I, J, 3)
+
+    generator = CSRGenerator(systemMatrix)
+    staged = generator.updateCSR(V)
+
+    direct = DirectCSRAssembler(CSRGenerator(systemMatrix, patternOnly=True), systemMatrix, numThreads=2)
+    direct.registerEntities(
+        np.array([0, 4], dtype=np.int64), np.array([2, 3], dtype=np.intc), np.array([4, 3], dtype=np.int64)
+    )
+
+    direct.beginAssembly()
+    direct.scatterBlock(0, 0, V[0:4].copy())
+    direct.scatterBlock(1, 1, V[4:7].copy())
+    np.testing.assert_array_equal(direct.reduce().toarray(), staged.toarray())
 
 
 def test_releaseGatherMap_leaves_the_pattern_usable_but_forbids_further_gathering():

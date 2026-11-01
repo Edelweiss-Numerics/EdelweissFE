@@ -36,10 +36,14 @@ from scipy.sparse import csr_matrix
 
 import edelweissfe.utils.performancetiming as performancetiming
 from edelweissfe.models.femodel import FEModel
-from edelweissfe.numerics.dofmanager import DofVector, VIJSystemMatrix
+from edelweissfe.numerics.dofmanager import DofVector
 from edelweissfe.numerics.mpctransformation import (
     MultiPointConstraintTransformation,
     _flattenChainedRecords,
+)
+from edelweissfe.numerics.systemmatrixassembly import (
+    SystemMatrixAssembly,
+    SystemMatrixBlocks,
 )
 from edelweissfe.solvers.base.convergencetable import ConvergenceTable
 from edelweissfe.stepactions.base.loadbase import LoadBase
@@ -245,9 +249,9 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
         U_np: DofVector,
         dU: DofVector,
         P: DofVector,
-        K: VIJSystemMatrix | None,
+        K: SystemMatrixBlocks | None,
         timeStep: TimeStep,
-    ) -> tuple[DofVector, VIJSystemMatrix]:
+    ) -> tuple[DofVector, SystemMatrixBlocks]:
         """Assemble the residual contributions of all loads: each adds the negative of the external load it
         applies, and the tangent of that contribution, which is nonzero only for a load that follows the
         deformation; see :ref:`residual-and-tangent-convention`. Every load knows where it acts, see
@@ -270,13 +274,17 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
 
         Returns
         -------
-        tuple[DofVector,VIJSystemMatrix]
+        tuple[DofVector,SystemMatrixBlocks]
             - The updated residual contribution vector.
             - The updated system matrix.
         """
 
         for load in loads:
             load.assembleLoad(P, K, U_np, dU, timeStep, self.theDofManager)
+
+        if K is not None:
+            # the block of the last load
+            K.flush()
 
         return P, K
 
@@ -624,22 +632,23 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
         return ddU
 
     @performancetiming.timeit("assemble stiffness CSR")
-    def assembleStiffnessCSR(self, K: VIJSystemMatrix) -> csr_matrix:
-        """Construct a CSR matrix from VIJ format.
+    def assembleStiffnessCSR(self, K: SystemMatrixAssembly) -> csr_matrix:
+        """The assembled system matrix in CSR format, see
+        :meth:`~edelweissfe.numerics.systemmatrixassembly.SystemMatrixAssembly.assembledMatrix`.
 
         Parameters
         ----------
         K
-            The system matrix in VIJ format.
+            The system matrix being assembled.
+
         Returns
         -------
         csr_matrix
-            The system matrix in compressed sparse row format.
+            The system matrix in compressed sparse row format; the assembly's own, which the next assembly
+            overwrites. Safe, since no solver keeps it across iterations, and the Dirichlet boundary conditions only
+            overwrite values.
         """
-        # In-place update: the returned matrix is the generator's internal CSR matrix. Safe, since no solver
-        # keeps it across iterations and the Dirichlet application only overwrites values.
-        KCsr = self.csrGenerator.updateInPlace(K)
-        return KCsr
+        return K.assembledMatrix()
 
     def printResidualOutlierNodes(self, residualOutliers: dict):
         """Print which nodes have the largest residuals.
