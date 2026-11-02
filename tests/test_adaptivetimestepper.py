@@ -30,6 +30,8 @@ advances the step, a rejected one is retried smaller from exactly where the step
 import pytest
 
 from edelweissfe.journal.journal import Journal
+from edelweissfe.models.femodel import FEModel
+from edelweissfe.steps.adaptivestep import AdaptiveStep
 from edelweissfe.timesteppers.adaptivetimestepper import AdaptiveTimeStepper
 from edelweissfe.utils.exceptions import ReachedMaxIncrements, ReachedMinIncrementSize
 
@@ -46,6 +48,27 @@ def _timeStepper(**overrides) -> AdaptiveTimeStepper:
     )
     kwargs.update(overrides)
     return AdaptiveTimeStepper(**kwargs)
+
+
+@pytest.mark.parametrize("makeZeroIncrementFirst", [True, False])
+def test_an_adaptive_step_begins_with_a_zero_increment_unless_told_otherwise(makeZeroIncrementFirst):
+    step = AdaptiveStep(
+        0,
+        FEModel(2),
+        None,
+        Journal(verbose=False),
+        {},
+        None,
+        [],
+        {},
+        startInc=0.25,
+        maxInc=0.25,
+        makeZeroIncrementFirst=makeZeroIncrementFirst,
+    )
+
+    first = step.timeStepper.proposeTimeStep()
+
+    assert first.timeIncrement == (0.0 if makeZeroIncrementFirst else 0.25)
 
 
 def test_the_first_increment_is_a_zero_increment():
