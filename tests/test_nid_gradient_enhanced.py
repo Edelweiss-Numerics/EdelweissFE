@@ -105,13 +105,12 @@ def test_displacement_is_dynamic_nonlocal_damage_stays_quasistatic(tmp_path):
     displacementField = model.nodeFields["displacement"]
     nonlocalField = model.nodeFields["nonlocal damage"]
 
-    # the mechanical field is time-integrated: it has V/A entries, and the tip actually moved
-    assert "V" in displacementField and "A" in displacementField
+    # the mechanical field is time-integrated: the tip actually moved
     assert np.max(np.abs(displacementField["V"])) > 0.0
 
     # the nonlocal field carries no Newmark state at all -- carriesLinearMomentum is False for it,
-    # so the input-file driver never pre-creates V/A there in the first place
-    assert "V" not in nonlocalField and "A" not in nonlocalField
+    # so its V/A entries stay at rest
+    assert not np.any(nonlocalField["V"]) and not np.any(nonlocalField["A"])
 
     # near-elastic regime: unlike GCDP, AT2PhaseField's phase field has no yield-like threshold, so
     # it is never bit-exactly zero once any strain energy exists -- but the applied force is far too

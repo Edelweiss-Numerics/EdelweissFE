@@ -515,7 +515,8 @@ class NodeFieldOutput(_FieldOutputBase):
     nodeField
         The NodeField, on which this FieldOutput operates.
     result
-        The name of the result entry in the NodeField.
+        The name of the result entry in the NodeField, one of
+        :attr:`~edelweissfe.fields.nodefield.NodeField.ENTRIES`.
     model
         The model tree instance.
     journal
@@ -528,6 +529,11 @@ class NodeFieldOutput(_FieldOutputBase):
         Export the results to a file.
     fExport_x
         Apply a math function on the results before exporting.
+
+    Raises
+    ------
+    KeyError
+        If the result is not an entry a node field holds.
     """
 
     def __init__(
@@ -542,6 +548,12 @@ class NodeFieldOutput(_FieldOutputBase):
         export: str = None,
         fExport_x: Callable = None,
     ):
+        if result not in NodeField.ENTRIES:
+            raise KeyError(
+                "field output {:}: a node field holds the results {:}, not '{:}'".format(
+                    name, ", ".join(NodeField.ENTRIES), result
+                )
+            )
         self.entry = result
         self.fieldName = nodeField.name
         self._nodeField = nodeField

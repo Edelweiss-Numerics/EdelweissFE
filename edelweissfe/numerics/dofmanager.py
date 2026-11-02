@@ -171,7 +171,7 @@ class DofManager:
     def _determineDofsAndTheirIndices(self, nodeFields: list, scalarVariables: list):
 
         nodeFields = list(nodeFields)
-        #: The NodeFields this DofManager numbers, by name.
+        #: The NodeFields this DofManager numbers, by name: the only ones it reads from and writes to as a whole.
         self.numberedNodeFields = {nodeField.name: nodeField for nodeField in nodeFields}
 
         (
@@ -764,6 +764,43 @@ class DofManager:
 
         return self.indexToHostObjectMapping[index]
 
+    def _checkNodeFieldAccess(self, nodeField: NodeField, resultName: str, wholeField: bool):
+        """Refuse an access to a node field entry this DofManager cannot serve: an entry no node field holds, a field
+        it does not number, or -- for an access to the field as a whole, which addresses its rows by position -- a
+        node field other than the one it numbers, even of the same name (e.g. the node field of the model, while
+        this DofManager numbers that of an active domain).
+
+        Parameters
+        ----------
+        nodeField
+            The NodeField accessed.
+        resultName
+            The entry accessed.
+        wholeField
+            Whether the field is accessed as a whole, rather than on the nodes of a node set.
+
+        Raises
+        ------
+        KeyError
+            If the entry is not one of :attr:`NodeField.ENTRIES <edelweissfe.fields.nodefield.NodeField.ENTRIES>`.
+        ValueError
+            If this DofManager does not number the field, or, for an access as a whole, numbers another node field
+            of that name.
+        """
+
+        if resultName not in NodeField.ENTRIES:
+            raise KeyError(
+                "a node field holds the entries {:}, not '{:}'".format(", ".join(NodeField.ENTRIES), resultName)
+            )
+        numberedNodeField = self.numberedNodeFields.get(nodeField.name)
+        if numberedNodeField is None:
+            raise ValueError("this equation system does not number the node field '{:}'".format(nodeField.name))
+        if wholeField and nodeField is not numberedNodeField:
+            raise ValueError(
+                "this equation system numbers another node field '{:}' than the one given: a node field is read or "
+                "written as a whole only by the DofManager that numbers it".format(nodeField.name)
+            )
+
     def writeDofVectorToNodeField(self, dofVector, nodeField, resultName):
         """Write the current values of an entire NodeField from the respective locations in a given DofVector.
 
@@ -773,18 +810,25 @@ class DofManager:
         dofVector
             The source DofVector.
         nodeField
-            The NodeField to get the updated values.
-        resultname
-            The name of the value entries held by the NodeField.
+            The NodeField to get the updated values: one this DofManager numbers, see :attr:`numberedNodeFields`.
+        resultName
+            The entry of the NodeField to write, one of
+            :attr:`NodeField.ENTRIES <edelweissfe.fields.nodefield.NodeField.ENTRIES>`.
 
         Returns
         -------
         NodeField
             The updated NodeField.
+
+        Raises
+        ------
+        KeyError
+            If the entry is not one a node field holds.
+        ValueError
+            If this DofManager does not number the NodeField.
         """
 
-        if resultName not in nodeField:
-            nodeField.createFieldValueEntry(resultName)
+        self._checkNodeFieldAccess(nodeField, resultName, wholeField=True)
 
         indices = self.idcsOfNodeFieldsInDofVector[nodeField.name]
         data = dofVector[indices]
@@ -803,9 +847,12 @@ class DofManager:
         dofVector
             The result DofVector.
         nodeField
-            The NodeField holding the values.
-        resultname
-            The name of the value entries held by the NodeField.
+            The NodeField holding the values. Read as a whole, it must be the one this DofManager numbers (see
+            :attr:`numberedNodeFields`); read on a node set, any node field of a field this DofManager numbers, since
+            its rows are then found by node.
+        resultName
+            The entry of the NodeField to read, one of
+            :attr:`NodeField.ENTRIES <edelweissfe.fields.nodefield.NodeField.ENTRIES>`.
         NodeSet
             The NodeSet to consider: its nodes whose field is part of this equation system (see
             :meth:`locateFieldOnNodeSet`). If None, all nodes of the NodeField are considered.
@@ -814,7 +861,16 @@ class DofManager:
         -------
         DofVector
             The DofVector.
+
+        Raises
+        ------
+        KeyError
+            If the entry is not one a node field holds.
+        ValueError
+            If this DofManager does not number the field, or, read as a whole, numbers another NodeField of that name.
         """
+
+        self._checkNodeFieldAccess(nodeField, resultName, wholeField=nodeSet is None)
 
         if nodeSet is not None:
             indices, nodePositions = self.locateFieldOnNodeSet(nodeField.name, nodeSet)

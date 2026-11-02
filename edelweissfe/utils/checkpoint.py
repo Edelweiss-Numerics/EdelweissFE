@@ -55,7 +55,7 @@ from edelweissfe.utils.exceptions import RestartError
 
 #: The layout of a checkpoint. Raise it whenever a checkpoint gains or changes state: a run resumes
 #: only from checkpoints of its own layout.
-CHECKPOINT_FORMAT_VERSION = 10
+CHECKPOINT_FORMAT_VERSION = 11
 
 
 def writeRestartDataOf(group: h5py.Group, entities: dict):
@@ -176,7 +176,8 @@ class ResumeCheckpoint:
             self._file.close()
             raise RestartError(
                 "checkpoint {:} has format version {:}, this version of EdelweissFE reads version {:} "
-                "only".format(fileName, formatVersion, CHECKPOINT_FORMAT_VERSION)
+                "only: resume it with the version of EdelweissFE that wrote it, or run the analysis "
+                "from its start".format(fileName, formatVersion, CHECKPOINT_FORMAT_VERSION)
             )
         #: The step the checkpointed run was in; the steps before it are not solved again.
         self.stepNumber = int(self._file.attrs["stepNumber"])

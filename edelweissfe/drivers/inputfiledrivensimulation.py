@@ -38,7 +38,7 @@ from time import time as getCurrentTime
 
 from edelweissfe.config.configurator import loadConfiguration, updateConfiguration
 from edelweissfe.config.linsolve import linearSolverDefinitionsFromInputFile
-from edelweissfe.config.phenomena import carriesLinearMomentum, domainMapping
+from edelweissfe.config.phenomena import domainMapping
 from edelweissfe.config.solvers import getSolverByName
 from edelweissfe.helpers.inputfilehelpers import (
     createFieldOutputFromInputFile,
@@ -135,22 +135,12 @@ def finiteElementSimulation(
     for updateConfig in inputfile["updateConfiguration"]:
         updateConfiguration(updateConfig, jobInfo, journal)
 
-    # Create the entries 'U' (flux) and 'P' (effort) on every node field, and 'V' (velocity) and 'A'
-    # (acceleration) on the mass-carrying ones (zero unless a dynamic solver writes them). Must happen
-    # before the field outputs are initialized, so that ``result=V``/``result=A`` outputs are valid.
-    for nodeField in model.nodeFields.values():
-        nodeField.createFieldValueEntry("U")
-        nodeField.createFieldValueEntry("P")
-        if carriesLinearMomentum(nodeField.name):
-            nodeField.createFieldValueEntry("V")
-            nodeField.createFieldValueEntry("A")
-
     model._linkFieldVariableObjects(model.nodeSets["all"])
 
     # *restart, readFrom=...: the model rebuilt from the .inp file gets its converged state and
-    # model.time overwritten from the checkpoint. Must run after the node field entries are created
-    # and after advanceToTime (which would reset model.time). Steps before the checkpoint's step are
-    # skipped; AMR topology changes are replayed; resuming past a `modelupdate` is refused.
+    # model.time overwritten from the checkpoint. Must run after advanceToTime (which would reset
+    # model.time). Steps before the checkpoint's step are skipped; AMR topology changes are replayed;
+    # resuming past a `modelupdate` is refused.
     restartDefinitions = inputfile["restart"]
     resumeCheckpoint = None
     resumeStepNumber = None

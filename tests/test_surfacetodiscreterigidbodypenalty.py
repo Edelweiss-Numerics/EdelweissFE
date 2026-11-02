@@ -141,7 +141,6 @@ class TestSurfaceToDiscreteRigidBodyContact(unittest.TestCase):
         rigidBody.rpNode.fields["rotation"] = 3
         for fieldName in ("displacement", "rotation"):
             field = NodeField(fieldName, 3, NodeSet("all", nodes + [rigidBody.rpNode]))
-            field.createFieldValueEntry("U")
             model.nodeFields[fieldName] = field
 
         return model, model.elementSets[slaveSetName], rigidBody
