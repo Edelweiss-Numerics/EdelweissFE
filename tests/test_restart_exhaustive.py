@@ -683,7 +683,7 @@ def _state(model) -> dict:
         "topology history modifiers": np.array([str(record.modifier) for record in history]),
     }
     for name, field in model.nodeFields.items():
-        for entry in field._values:
+        for entry in field.ENTRIES:
             state["{:}/{:}".format(name, entry)] = np.array(field[entry])
     for name in sorted(model.scalarVariables):
         state["scalar variable {:}".format(name)] = np.array([model.scalarVariables[name].value])

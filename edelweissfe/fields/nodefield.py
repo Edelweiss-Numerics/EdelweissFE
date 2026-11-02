@@ -146,9 +146,6 @@ class NodeField:
     def __getitem__(self, key):
         return self._values[key]
 
-    def __contains__(self, key):
-        return key in self._values
-
     def indexOfNode(self, node) -> int:
         """
         The row index of a node's entries within this field's value arrays.
