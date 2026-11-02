@@ -104,6 +104,28 @@ def test_a_dof_manager_reads_and_writes_as_a_whole_only_the_node_fields_it_numbe
     np.testing.assert_array_equal(numbered["dU"], [[1.0, 2.0], [3.0, 4.0]])
 
 
+def test_a_dof_manager_writes_a_node_field_of_the_model_on_a_node_set():
+    nodes = _nodes(3)
+    numbered = NodeField(_FIELD, 2, NodeSet("numbered", nodes[1:]))
+    ofTheModel = NodeField(_FIELD, 2, NodeSet("all", nodes))
+    dofManager = DofManager([numbered])
+    vector = dofManager.constructDofVector()
+    vector[:] = [1.0, 2.0, 3.0, 4.0]
+
+    # the rows are found by node: written where the field is numbered, the other rows keep their values
+    ofTheModel["P"][:] = -1.0
+    dofManager.writeDofVectorToNodeField(vector, ofTheModel, "P", NodeSet("all", nodes))
+    np.testing.assert_array_equal(ofTheModel["P"], [[-1.0, -1.0], [1.0, 2.0], [3.0, 4.0]])
+
+    # the counterpart of the read on the node set
+    readBack = dofManager.constructDofVector()
+    dofManager.writeNodeFieldToDofVector(readBack, ofTheModel, "P", NodeSet("all", nodes))
+    np.testing.assert_array_equal(np.asarray(readBack), np.asarray(vector))
+
+    with pytest.raises(KeyError, match="'Q'"):
+        dofManager.writeDofVectorToNodeField(vector, ofTheModel, "Q", NodeSet("all", nodes))
+
+
 def test_a_checkpoint_holds_every_entry_of_every_node_field(tmp_path):
     model, _ = _buildSingleElementModel()
     for index, entry in enumerate(NodeField.ENTRIES):
