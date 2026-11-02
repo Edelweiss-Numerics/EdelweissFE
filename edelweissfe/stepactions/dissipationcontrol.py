@@ -137,6 +137,16 @@ class StepAction(ArcLengthControllerBase):
     #: A zero prediction after a cutback may follow an elastic unloading branch.
     extrapolatesAfterCutback = True
 
+    #: Carried from one increment to the next: the dissipation at the start of the increment and the last accepted
+    #: increment (predictor, increment size); F and dLambda are set again in every iteration by setSystemState.
+    checkpointedState = {
+        "D_n": float,
+        "dLambdaLast": float,
+        "dDLast": float,
+        "dUNormLast": float,
+        "dULast": np.ndarray,
+    }
+
     def __init__(
         self,
         name: str,
