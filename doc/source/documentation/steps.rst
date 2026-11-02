@@ -23,6 +23,10 @@ with ``criticalIter`` keeping the increment from growing while Newton struggles,
     *step, solver=theSolver
     maxInc=5e-3, minInc=1e-6, maxIter=25, criticalIter=10, increaseFactor=1.5, goodIncrementsBeforeIncrease=1
 
+An adaptive step begins with an increment of size zero, which brings the model into equilibrium with the state the
+step starts from before time advances. ``makeZeroIncrementFirst=False`` leaves it out, e.g. for a model whose entities
+integrate in time and cannot be evaluated over a time increment of zero.
+
 ``AdaptiveStep`` - A classical adpative step for transient simulations
 ----------------------------------------------------------------------
 

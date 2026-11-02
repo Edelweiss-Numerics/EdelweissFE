@@ -94,6 +94,14 @@ class StepIncrementationSchema:
         dtype=int,
         default=3,
     )
+    makeZeroIncrementFirst: bool = schemaField(
+        description=(
+            "Begin the step with an increment of size zero, which brings the model into equilibrium with the state the "
+            "step starts from before time advances (adaptive steps only)."
+        ),
+        dtype=bool,
+        default=True,
+    )
 
 
 class StepBase(ABC):
@@ -158,6 +166,7 @@ class StepBase(ABC):
         self.cutbackFactor = options.cutbackFactor
         self.increaseFactor = options.increaseFactor
         self.goodIncrementsBeforeIncrease = options.goodIncrementsBeforeIncrease
+        self.makeZeroIncrementFirst = options.makeZeroIncrementFirst
 
         self.timeStepper = self._createTimeStepper()
 
