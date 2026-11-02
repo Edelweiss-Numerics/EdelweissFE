@@ -109,6 +109,10 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
     #: above the table, not inside it.
     tableHeaderWritten: bool = False
 
+    #: The force buffer and the DOF indices of each constraint, by name, that :meth:`assembleConstraintForces` reuses
+    #: from increment to increment; None (or empty) whenever the DofManager they index has been rebuilt.
+    _constraintForcePlans: dict | None = None
+
     def __init__(self, jobInfo, journal, **kwargs):
         pass
 
@@ -278,6 +282,86 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
             K.flush()
 
         return P, K
+
+    @performancetiming.timeit("assemble constraints")
+    def assembleConstraintForces(
+        self,
+        constraints: dict,
+        U_np: DofVector,
+        dU: DofVector,
+        P: DofVector,
+        timeStep: TimeStep,
+    ) -> DofVector:
+        """Evaluate every active constraint and add its residual contribution to the given vector; a constraint
+        that is switched off (see :attr:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.active`) is
+        skipped.
+
+        The explicit counterpart of
+        :meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.assembleConstraints`, with the same
+        sign: a constraint adds the negative of the force it exerts on the nodes, like an element its
+        internal force, see :ref:`residual-and-tangent-convention`.
+
+        No tangent is requested. An explicit increment solves no linear system, so a constraint's
+        stiffness enters nothing, and
+        :meth:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernelsExplicit`
+        is the entry point that evaluates the constraint forces directly without assembling a tangent.
+        A constraint that could act *only* through its tangent would contribute nothing here; an explicit solver
+        refuses it in its ``validateModelCapabilities``.
+
+        The force buffer and the DOF indices of each constraint are kept in :attr:`_constraintForcePlans` (by
+        constraint name) and reused in every increment. They are indexed by the DofManager, so a solver that calls
+        this empties them whenever it rebuilds or refreshes its DofManager.
+
+        Parameters
+        ----------
+        constraints
+            The constraints of the model, by name.
+        U_np
+            The current solution vector.
+        dU
+            The current solution increment.
+        P
+            The residual contribution vector to be augmented.
+        timeStep
+            The current time step.
+
+        Returns
+        -------
+        DofVector
+            The augmented residual contribution vector.
+        """
+
+        # Per-constraint buffers and index plans, built once per equation system.
+        if self._constraintForcePlans is None:
+            self._constraintForcePlans = {}
+        PPlain = P.asPlainArray()
+
+        for name, constraint in constraints.items():
+            # a constraint that is switched off has no place in the equation system
+            if not constraint.active:
+                continue
+
+            plan = self._constraintForcePlans.get(name)
+            if plan is None:
+                indices = P.entitiesInDofVector[constraint]
+                # np.add.at only if a DOF appears more than once (e.g. a slave node in its own master
+                # facet), since fancy-indexed += would drop repeated contributions.
+                plan = (np.zeros(constraint.nDof), indices, len(np.unique(indices)) != len(indices))
+                self._constraintForcePlans[name] = plan
+
+            Pc, indices, namesDofMoreThanOnce = plan
+
+            # Reused, so it must be cleared: computeKernelsExplicit augments what it is handed.
+            Pc[:] = 0.0
+
+            constraint.computeKernelsExplicit(U_np[constraint], dU[constraint], Pc, timeStep)
+
+            if namesDofMoreThanOnce:
+                np.add.at(PPlain, indices, Pc)
+            else:
+                PPlain[indices] += Pc
+
+        return P
 
     def getRestartData(self) -> dict[str, np.ndarray]:
         """The state this solver carries from one increment to the next, as it is; see

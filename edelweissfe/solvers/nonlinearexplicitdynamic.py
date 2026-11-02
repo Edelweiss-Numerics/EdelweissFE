@@ -1011,7 +1011,8 @@ class NED(NonlinearSolverBase):
         indirect-control unknown). Those DOFs carry no inertia, so their inverse lumped mass is zero
         and the explicit update leaves them untouched forever -- the constraint would appear active
         and enforce nothing. Penalty-type constraints, which act through nodal forces alone, are
-        supported: see :meth:`assembleConstraintForces`.
+        supported: see
+        :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.assembleConstraintForces`.
         A constraint that is switched off
         (:attr:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.active`) is not refused: it takes no
         part in the equation system, and its scalar variables leave it with it.
@@ -1509,80 +1510,6 @@ class NED(NonlinearSolverBase):
             P=P,
             criticalTimeStep=criticalTimeStep,
         )
-
-    @performancetiming.timeit("assemble constraints")
-    def assembleConstraintForces(
-        self,
-        constraints: dict,
-        U_np: DofVector,
-        dU: DofVector,
-        P: DofVector,
-        timeStep: TimeStep,
-    ) -> DofVector:
-        """Evaluate every active constraint and add its residual contribution to the given vector; a constraint
-        that is switched off (see :attr:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.active`) is
-        skipped.
-
-        The explicit counterpart of
-        :meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.assembleConstraints`, with the same
-        sign: a constraint adds the negative of the force it exerts on the nodes, like an element its
-        internal force, see :ref:`residual-and-tangent-convention`.
-
-        No tangent is requested. An explicit increment solves no linear system, so a constraint's
-        stiffness enters nothing, and
-        :meth:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernelsExplicit`
-        is the entry point that evaluates the constraint forces directly without assembling a tangent.
-        A constraint that could act *only* through its tangent would contribute nothing here; that is
-        precisely the class :meth:`validateModelCapabilities` refuses.
-
-        Parameters
-        ----------
-        constraints
-            The constraints of the model, by name.
-        U_np
-            The current solution vector.
-        dU
-            The current solution increment.
-        P
-            The residual contribution vector to be augmented.
-        timeStep
-            The current time step.
-
-        Returns
-        -------
-        DofVector
-            The augmented residual contribution vector.
-        """
-
-        # Per-constraint buffers and index plans, built once per equation system.
-        PPlain = P.asPlainArray()
-
-        for name, constraint in constraints.items():
-            # a constraint that is switched off has no place in the equation system
-            if not constraint.active:
-                continue
-
-            plan = self._constraintForcePlans.get(name)
-            if plan is None:
-                indices = P.entitiesInDofVector[constraint]
-                # np.add.at only if a DOF appears more than once (e.g. a slave node in its own master
-                # facet), since fancy-indexed += would drop repeated contributions.
-                plan = (np.zeros(constraint.nDof), indices, len(np.unique(indices)) != len(indices))
-                self._constraintForcePlans[name] = plan
-
-            Pc, indices, namesDofMoreThanOnce = plan
-
-            # Reused, so it must be cleared: computeKernelsExplicit augments what it is handed.
-            Pc[:] = 0.0
-
-            constraint.computeKernelsExplicit(U_np[constraint], dU[constraint], Pc, timeStep)
-
-            if namesDofMoreThanOnce:
-                np.add.at(PPlain, indices, Pc)
-            else:
-                PPlain[indices] += Pc
-
-        return P
 
     def secondOrderMomentum(self, mass: DofVector, V: DofVector, model: FEModel) -> np.ndarray:
         """The linear momentum of the fields whose inertia is a mass, per spatial component; see
