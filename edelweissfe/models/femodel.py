@@ -48,7 +48,11 @@ from edelweissfe.numerics.parallelizationutilities import (
     mapChunksInParallel,
 )
 from edelweissfe.utils.checkpoint import readRestartDataInto, writeRestartDataOf
-from edelweissfe.utils.exceptions import RestartError, TopologyError
+from edelweissfe.utils.exceptions import (
+    MeshChangedSinceCheckpoint,
+    RestartError,
+    TopologyError,
+)
 from edelweissfe.variables.fieldvariable import FieldVariable
 from edelweissfe.variables.scalarvariable import ScalarVariable
 
@@ -597,8 +601,12 @@ class FEModel:
     def readRestart(self, restartFile: h5py.File, journal: Journal = None):
         """Read the state of the model from a restart checkpoint written by :meth:`writeRestart`.
 
-        The model must already have been rebuilt from the original ``.inp`` file (same topology)
-        and :meth:`prepareYourself` called, before this is called.
+        Either the model has been rebuilt from the original ``.inp`` file and :meth:`prepareYourself`
+        called -- a resumed run -- or it is the very model the checkpoint was written from, going back
+        to it within the run (see :meth:`~edelweissfe.steps.base.stepbase.StepBase.fallBackToCheckpoint`).
+        Of the recorded topology decisions, those the model has not applied yet are replayed: all of
+        them for a rebuilt model, none for a model going back. A model whose mesh has changed since
+        the checkpoint cannot go back to it, since a mesh change cannot be undone.
 
         Parameters
         ----------
@@ -606,32 +614,49 @@ class FEModel:
             An open, readable :class:`h5py.File` (or group) to read the checkpoint from.
         journal
             Optional Journal for the progress messages of the topology replay.
+
+        Raises
+        ------
+        RestartError
+            If the model is not the one the checkpoint was written from, before anything is restored.
+        MeshChangedSinceCheckpoint
+            If the model's mesh has changed since the checkpoint was written, before anything is restored.
         """
 
         f = restartFile
 
-        self.time = f.attrs["time"]
-
-        # Must run before every restore below: the replay materializes elements/nodes (e.g. AMR-refined
-        # children) which those restores address by label.
+        # Checked before anything is restored, so that a refused checkpoint leaves the model as it is.
         historyGroup = f["topologyHistory"]
         if self.topology.setupFingerprint() != historyGroup.attrs["setupFingerprint"]:
             raise RestartError(
                 "the model rebuilt from the input file is not the one the checkpoint was written from: "
                 "its mesh (nodes, elements, coordinates, numbering) differs"
             )
-        records = []
-        for index in range(int(historyGroup.attrs["count"])):
-            recordGroup = historyGroup["{:06d}".format(index)]
-            records.append(
-                TopologyRecord(
-                    modifier=str(recordGroup.attrs["modifier"]),
-                    roundNumber=int(recordGroup.attrs["roundNumber"]),
-                    time=float(recordGroup.attrs["time"]),
-                    plan={entryName: values[:] for entryName, values in recordGroup.items()},
-                    fingerprint=str(recordGroup.attrs["fingerprint"]),
-                )
+        recordGroups = [historyGroup["{:06d}".format(index)] for index in range(int(historyGroup.attrs["count"]))]
+        appliedRecords = self.topology.history
+        if any(
+            (applied.modifier, applied.roundNumber, applied.fingerprint)
+            != (str(group.attrs["modifier"]), int(group.attrs["roundNumber"]), str(group.attrs["fingerprint"]))
+            for applied, group in zip(appliedRecords, recordGroups)
+        ):
+            raise RestartError("the topology decisions of the model differ from those the checkpoint records")
+        if len(appliedRecords) > len(recordGroups):
+            raise MeshChangedSinceCheckpoint(appliedRecords[len(recordGroups)])
+
+        self.time = f.attrs["time"]
+
+        # Must run before every restore below: the replay materializes elements/nodes (e.g. AMR-refined
+        # children) which those restores address by label.
+        records = [
+            TopologyRecord(
+                modifier=str(recordGroup.attrs["modifier"]),
+                roundNumber=int(recordGroup.attrs["roundNumber"]),
+                time=float(recordGroup.attrs["time"]),
+                plan={entryName: values[:] for entryName, values in recordGroup.items()},
+                fingerprint=str(recordGroup.attrs["fingerprint"]),
             )
+            for recordGroup in recordGroups[len(appliedRecords) :]
+        ]
         self.topology.replayHistory(records, journal)
         readRestartDataInto(f["modelModifiers"], self.modelModifiers)
         # Bring the mesh-dependent consumers (ties, contact surfaces) up to date with the replayed mesh, as

@@ -100,3 +100,23 @@ def test_crash_resume_chain_never_overwrites_a_checkpoint_before_its_slot_is_due
     newProcessGeneration(2)
     assert all(os.path.exists(f) for f in liveFiles)
     assert {_readSerial(f) for f in liveFiles} == {2, 3, 4}, "the rotation did not replace the oldest first"
+
+
+def test_checkpoints_are_taken_newest_first_and_each_once(tmp_path):
+    """A step falling back takes the latest checkpoint; falling back again takes the one before it."""
+
+    buffer = _RestartFileRingBuffer(str(tmp_path / "restart"), maxsize=3)
+    written = [buffer.nextCheckpoint()[0] for _ in range(2)]
+
+    assert buffer.takeLatestCheckpoint() == written[1]
+    assert buffer.takeLatestCheckpoint() == written[0]
+    assert buffer.takeLatestCheckpoint() is None
+
+
+def test_an_overwritten_checkpoint_cannot_be_taken(tmp_path):
+    """Once the ring wraps, a slot's former checkpoint is gone: only the newest three can be taken."""
+
+    buffer = _RestartFileRingBuffer(str(tmp_path / "restart"), maxsize=3)
+    written = [buffer.nextCheckpoint()[0] for _ in range(4)]
+
+    assert [buffer.takeLatestCheckpoint() for _ in range(4)] == [written[3], written[2], written[1], None]
