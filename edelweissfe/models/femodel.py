@@ -565,8 +565,8 @@ class FEModel:
         nodeFieldsGroup = f.create_group("nodeFields")
         for nf in self.nodeFields.values():
             nodeFieldGroup = nodeFieldsGroup.create_group(nf.name)
-            for entryName, entryValues in nf._values.items():
-                nodeFieldGroup.create_dataset(entryName, data=entryValues)
+            for entryName in NodeField.ENTRIES:
+                nodeFieldGroup.create_dataset(entryName, data=nf[entryName])
 
         scalarVariablesGroup = f.create_group("scalarVariables")
         for name, scalarVariable in self.scalarVariables.items():
@@ -618,7 +618,9 @@ class FEModel:
         Raises
         ------
         RestartError
-            If the model is not the one the checkpoint was written from, before anything is restored.
+            If the model is not the one the checkpoint was written from, before anything is restored, or
+            if the checkpoint does not hold every entry of a node field (see
+            :attr:`~edelweissfe.fields.nodefield.NodeField.ENTRIES`).
         MeshChangedSinceCheckpoint
             If the model's mesh has changed since the checkpoint was written, before anything is restored.
         """
@@ -642,6 +644,13 @@ class FEModel:
             raise RestartError("the topology decisions of the model differ from those the checkpoint records")
         if len(appliedRecords) > len(recordGroups):
             raise MeshChangedSinceCheckpoint(appliedRecords[len(recordGroups)])
+        for fieldName, storedField in f["nodeFields"].items():
+            if set(storedField.keys()) != set(NodeField.ENTRIES):
+                raise RestartError(
+                    "the checkpoint holds the entries {:} of node field {:}, not {:}".format(
+                        ", ".join(sorted(storedField.keys())), fieldName, ", ".join(NodeField.ENTRIES)
+                    )
+                )
 
         self.time = f.attrs["time"]
 
@@ -668,12 +677,8 @@ class FEModel:
             if storedField is None:
                 raise RestartError("the checkpoint holds no node field {:}".format(nf.name))
 
-            # Iterate the checkpoint's entries, not the model's -- entries created only later by a
-            # solver (e.g. the explicit solver's 'V') would otherwise never be restored.
-            for entryName, storedValues in storedField.items():
-                if entryName not in nf:
-                    nf.createFieldValueEntry(entryName)
-                storedValues.read_direct(nf[entryName])
+            for entryName in NodeField.ENTRIES:
+                storedField[entryName].read_direct(nf[entryName])
 
         for name, scalarVariable in self.scalarVariables.items():
             scalarVariable.value = f["scalarVariables"].attrs[name]

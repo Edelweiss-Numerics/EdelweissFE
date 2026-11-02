@@ -43,7 +43,10 @@ class NodeFieldSubset:
 class NodeField:
     """
     This class represents a node field.
-    A node field associates every node with multiple entries (e.g., flux and effort) of a field variable.
+    A node field associates every node with the entries of a field variable listed in :attr:`ENTRIES`:
+    the solution ``U``, its increment ``dU``, the nodal force ``P``, and the rates ``V`` and ``A``. Every
+    node field holds all of them, from its construction on; their meaning is defined once, in
+    :doc:`/documentation/nodefieldresults`.
     Furthermore, for convencience, it allows to get fast access to values for individual nodes or node sets.
 
     The purpose is to store field data in an efficient, contiguos manner rather than distributing it across
@@ -80,6 +83,11 @@ class NodeField:
         The associated nodes. Only nodes with active fields are considered.
     """
 
+    #: The entries every node field holds, see :doc:`/documentation/nodefieldresults`: the solution ``U``,
+    #: the increment ``dU`` of the last accepted increment, the nodal force ``P``, and the rate ``V`` and
+    #: second rate ``A`` of the solution. There are no others.
+    ENTRIES = ("U", "dU", "P", "V", "A")
+
     def __init__(self, fieldName: str, dimension: int, nodeSet: NodeSet):
         self.name = fieldName
         self.associatedSet = nodeSet
@@ -87,7 +95,7 @@ class NodeField:
         self.dimension = dimension
         self._indicesOfNodesInArray = {n: i for i, n in enumerate(self.nodes)}
         self._subsetCache = dict()
-        self._values = dict()
+        self._values = {entry: np.zeros((len(self.nodes), dimension), dtype=float) for entry in self.ENTRIES}
         self._version = 0  #: bumped on every in-place mutation (resize); stable identity for AMR
 
     def resize(self, nodes) -> None:
@@ -157,24 +165,6 @@ class NodeField:
         """
         return self._indicesOfNodesInArray[node]
 
-    def createFieldValueEntry(self, name: str) -> np.ndarray:
-        """
-        Add an empty entry with given name for the field, e.g, 'U' or 'P' for flux or effort entries.
-
-        Parameters
-        ----------
-        name
-            The name of the entry.
-
-        Returns
-        -------
-        np.ndarray
-            The new entry
-        """
-        self._values[name] = np.zeros((len(self.nodes), self.dimension), dtype=float)
-
-        return self[name]
-
     def subset(self, subset) -> NodeFieldSubset:
         """
         Get a view on a subset of the field.
@@ -216,18 +206,18 @@ class NodeField:
     def copyEntriesFromOther(self, other, fieldValueEntries: list[str] = None):
         """
         Copy values from another NodeField.
-        If the fields differ, the intersection is considered.
+        Of the nodes, the intersection is considered; the other nodes of this field get zero.
 
         Parameters
         ----------
-        subset
-            The sub NodeField.
+        other
+            The NodeField to copy from.
         fieldValueEntries
             The list of entries which should be copied. Default: all entries are copied.
         """
 
         if not fieldValueEntries:
-            fieldValueEntries = self._values.keys() & other._values.keys()
+            fieldValueEntries = self.ENTRIES
 
         commonNodes = self._indicesOfNodesInArray.keys() & other._indicesOfNodesInArray.keys()
 
@@ -240,21 +230,21 @@ class NodeField:
     def addEntriesFromOther(self, other, fieldValueEntries: list[str] | dict[str, str] = None):
         """
         Add values from another NodeField.
-        If the fields differ, the intersection is considered.
+        Of the nodes, the intersection is considered.
 
         Parameters
         ----------
-        subset
-            The sub NodeField.
+        other
+            The NodeField to add from.
         fieldValueEntries
-            The entries which should be added. Default: all common entries are added.
+            The entries which should be added. Default: all entries are added.
             May be a list of entry names shared by both fields, or a dict mapping an
             entry name on ``other`` to the (possibly differently named) entry name on
             ``self`` it should be accumulated into.
         """
 
         if not fieldValueEntries:
-            fieldValueEntries = self._values.keys() & other._values.keys()
+            fieldValueEntries = self.ENTRIES
         if not isinstance(fieldValueEntries, dict):
             fieldValueEntries = {entry: entry for entry in fieldValueEntries}
 
@@ -302,9 +292,6 @@ class NodeFieldSubset(NodeField):
     def __contains__(self, key):
         self._healIfParentResized()
         return key in self.nodes
-
-    def createFieldValueEntry(self, name):
-        raise Exception("Invalid operation on subset of a NodeField")
 
     def subset(self, subset):
         raise Exception("Subsets of subsets are not yet implemented!")

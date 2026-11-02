@@ -1469,11 +1469,9 @@ class NED(NonlinearSolverBase):
             for fieldName, field in model.nodeFields.items():
                 U = self.theDofManager.writeNodeFieldToDofVector(U, field, "U")
                 P = self.theDofManager.writeNodeFieldToDofVector(P, field, "P")
-
                 # After an h-adaptivity event, the velocity interpolated onto the new nodes is read back
-                # here (see hadaptivity.WARM_STARTED_NODE_FIELD_ENTRIES); it exists from the second build on.
-                if "V" in field:
-                    V = self.theDofManager.writeNodeFieldToDofVector(V, field, "V")
+                # here (see hadaptivity.WARM_STARTED_NODE_FIELD_ENTRIES).
+                V = self.theDofManager.writeNodeFieldToDofVector(V, field, "V")
 
             U = self.theDofManager.writeScalarVariablesToDofVector(U)
         else:

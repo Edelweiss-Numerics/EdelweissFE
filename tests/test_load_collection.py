@@ -117,9 +117,6 @@ def _solve(tmp_path, loadModule: str) -> np.ndarray:
     model = fillFEModelFromInputFile(FEModel(2), parseInputFile(str(path)), journal)
     model.prepareYourself(journal)
     model.advanceToTime(0.0)
-    for nodeField in model.nodeFields.values():
-        nodeField.createFieldValueEntry("U")
-        nodeField.createFieldValueEntry("P")
     model._linkFieldVariableObjects(model.nodeSets["all"])
 
     jobInfo = loadConfiguration(dict())

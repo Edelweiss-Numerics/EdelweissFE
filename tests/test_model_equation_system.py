@@ -244,9 +244,6 @@ def _solve(model: FEModel, solverClass, journal: Journal) -> FEModel:
     model.prepareYourself(journal)
     model.advanceToTime(0.0)
     jobInfo = loadConfiguration(dict())
-    for nodeField in model.nodeFields.values():
-        nodeField.createFieldValueEntry("U")
-        nodeField.createFieldValueEntry("P")
     model._linkFieldVariableObjects(model.nodeSets["all"])
 
     fieldOutputController = FieldOutputController(model, journal)

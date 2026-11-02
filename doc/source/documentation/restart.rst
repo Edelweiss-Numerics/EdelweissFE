@@ -88,7 +88,7 @@ The model is first rebuilt from the same input file, then restored in this order
      - catch up with the replayed mesh, as they had in the uninterrupted run
    * - node fields, scalar variables, element state, additional parameters (e.g. the load parameter the arc length
        method publishes)
-     - read
+     - read; a node field with all its entries (see :doc:`nodefieldresults`), a checkpoint lacking one is refused
    * - rigid bodies
      - their surface nodes are moved to the restored configuration
    * - constraint state (e.g. a frozen contact search)
