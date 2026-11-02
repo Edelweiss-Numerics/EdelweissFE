@@ -35,7 +35,7 @@ module docstring states.
 
 Uses ``AT2PHASEFIELD`` because it is part of every public Marmot build, and it declares the optional
 ``density``/``nonlocalViscosity``/``microInertia`` material properties (idx 4/5/6) through
-``MarmotMaterialGeneralGradientEnhancedHypoElastic``, the base class every gradient-enhanced
+``Marmot::Materials::MaterialGradientEnhancedHypoElastic``, the base class every gradient-enhanced
 hypoelastic material shares -- so the multi-field bookkeeping it exercises is that of all of them.
 
 ``AT2PHASEFIELD`` requires ``density`` and ``nonlocalViscosity`` (idx 4/5) under ``NID``, which a

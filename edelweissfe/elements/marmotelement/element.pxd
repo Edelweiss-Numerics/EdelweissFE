@@ -47,12 +47,12 @@ cdef extern from "<iostream>" namespace "std":
 
 
 cdef extern from "Marmot/MarmotJournal.h":
-    cdef cppclass MarmotJournal:
+    cdef cppclass MarmotJournal "Marmot::Utilities::Journal":
         @staticmethod
         void setMSGOutputDirection(ostream&)
 
 
-cdef extern from "Marmot/MarmotElement.h" namespace "MarmotElement":
+cdef extern from "Marmot/MarmotElement.h" namespace "Marmot::Discretizations::Elements::Element":
     cdef enum StateTypes:
         Sigma11,
         Sigma22,
@@ -67,35 +67,32 @@ cdef extern from "Marmot/MarmotElement.h" namespace "MarmotElement":
         SurfaceTraction
         SurfaceTorsion
 
-cdef extern from "Marmot/MarmotElementFactory.h" namespace "MarmotLibrary" nogil:
-    cdef cppclass MarmotElementFactory:
+cdef extern from "Marmot/MarmotElementFactory.h" nogil:
+    cdef cppclass MarmotElementFactory "Marmot::Registry::ElementFactory":
         @staticmethod
         MarmotElement* createElement(const string& elementName, int noEl, ) except +ValueError
 
 cdef extern from "Marmot/MarmotElementProperty.h":
-    cdef cppclass MarmotElementProperty nogil:
-        pass
-
-    cdef cppclass MarmotMaterialSection(MarmotElementProperty) nogil:
+    cdef cppclass MarmotMaterialSection "Marmot::Discretizations::MaterialSection" nogil:
         MarmotMaterialSection(const string& materialName, const double* _materialProperties, int nMaterialProperties)
 
-    cdef cppclass ElementProperties(MarmotElementProperty) nogil:
+    cdef cppclass ElementProperties "Marmot::Discretizations::ElementProperties" nogil:
         ElementProperties(const double* _elementProperties, int nElementProperties)
 
 cdef extern from "Marmot/MarmotUtils.h":
-    cdef struct StateView:
+    cdef struct StateView "Marmot::Utilities::StateView":
         double *stateLocation
         int stateSize
 
 
 cdef extern from "Marmot/MarmotElement.h":
-    cdef cppclass MarmotElement nogil:
+    cdef cppclass MarmotElement "Marmot::Discretizations::Elements::Element" nogil:
 
         int getNumberOfRequiredStateVars()
 
         void assignStateVars(double *_stateVars, int nStateVars)
 
-        void assignProperty(const MarmotElementProperty& property)
+        void assignProperty(const ElementProperties& property)
 
         void assignProperty(const MarmotMaterialSection& property) except +ValueError
 

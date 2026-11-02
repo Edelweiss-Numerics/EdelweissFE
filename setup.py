@@ -122,7 +122,7 @@ extensions = [
         library_dirs=[join(marmot_dir, "lib")],
         runtime_library_dirs=runtime_library_dirs(join(marmot_dir, "lib")),
         language="c++",
-        extra_compile_args=compile_flags(arch=arch_flags),
+        extra_compile_args=compile_flags(cxx20=True, arch=arch_flags),
     )
 ]
 
