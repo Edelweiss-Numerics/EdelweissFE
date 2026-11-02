@@ -179,6 +179,16 @@ def test_a_failed_zero_increment_cannot_be_cut_back():
         timeStepper.rejectTimeStep(0.5)
 
 
+def test_a_failed_first_increment_of_nonzero_size_is_cut_back():
+    timeStepper = _timeStepper(makeZeroIncrementFirst=False)
+    timeStepper.proposeTimeStep()
+    timeStepper.rejectTimeStep(0.5)
+    retry = timeStepper.proposeTimeStep()
+
+    assert retry.number == 0
+    assert retry.stepProgressIncrement == 0.05
+
+
 def test_more_increments_than_allowed_are_refused():
     timeStepper = _timeStepper(makeZeroIncrementFirst=False, maxNumberIncrements=2)
     for _ in range(3):
