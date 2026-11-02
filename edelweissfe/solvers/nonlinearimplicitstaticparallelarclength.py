@@ -162,7 +162,7 @@ class NISTPArcLength(NISTParallel):
 
     identification = "NISTPArcLength"
 
-    supportsMPC = False
+    supportsMPC = True
 
     #: Option schema for this solver, per OptionSchemaProvider.
     schema = NISTPArcLengthSchema
@@ -552,6 +552,10 @@ class NISTPArcLength(NISTParallel):
         The controller completes :math:`\\Delta\\Delta U_0` with :math:`\\Delta\\Delta U_f` when the iterate is moved
         (:meth:`setTrialState`, :meth:`applyCorrection`).
 
+        With multi-point constraints (e.g. hanging nodes), the reference load is condensed like the out-of-balance
+        force, without a constraint drift of its own, and the slave degrees of freedom of both corrections take the
+        part their masters interpolate.
+
         Parameters
         ----------
         K_
@@ -576,6 +580,9 @@ class NISTPArcLength(NISTParallel):
 
         R_0[:] = R
         R_f[:] = -increment.referenceLoad
+        # R is condensed already; the reference load carries no constraint drift, so its slave rows vanish
+        if self.mpcTransformation is not None:
+            R_f[:] = self.mpcTransformation.transformResidual(R_f, np.zeros_like(R_f))
         for dirichlet in dirichlets:
             R_0[dirichlet.constrainedDofIndices] = 0.0
         R_f = self.applyDirichletToResidual(increment.referenceTimeStep, R_f, dirichlets)
@@ -587,6 +594,9 @@ class NISTPArcLength(NISTParallel):
 
         # solve 2 eq. systems at once: ddU_0 = K⁻¹ R_0 and ddU_f = K⁻¹ R_f
         ddU_ = self.linearSolve(K_, rightHandSides)
+        # add the master-interpolated part at the slave DOFs of both corrections
+        if self.mpcTransformation is not None:
+            ddU_ = self.mpcTransformation.recoverSlaveSolution(ddU_)
         increment.referenceCorrection = ddU_[:, 1]
 
         return ddU_[:, 0]
