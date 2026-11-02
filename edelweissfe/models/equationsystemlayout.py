@@ -80,8 +80,8 @@ class EquationSystemLayout:
 
     def readStateFromModel(self, U: DofVector, V: DofVector = None, A: DofVector = None, dynamicFields: list = None):
         """Read the state the model carries from increment to increment into the vectors of a (re)built equation
-        system, from which the next increment starts (see :doc:`/documentation/nodefieldresults`): the solution ``U``,
-        and, for a solver that integrates in time, the velocity ``V`` and the acceleration ``A``.
+        system, from which the next increment starts (see the documentation page *Node field results*): the solution
+        ``U``, and, for a solver that integrates in time, the velocity ``V`` and the acceleration ``A``.
 
         In a finite element model, every node carries its total solution: the entry ``U`` of every node field is read
         into ``U``, and the values of the scalar variables (e.g. the Lagrange multipliers of constraints). The entries
@@ -114,7 +114,7 @@ class EquationSystemLayout:
         """Set the degrees of freedom of the nodes that carry no total solution to zero in the solution vector of a
         converged increment, before its results are written to the model: these *incremental* degrees of freedom are
         the coefficients of one increment, and every increment starts them at zero (see
-        :doc:`/documentation/nodefieldresults`).
+        the documentation page *Node field results*).
 
         In a finite element model, every node carries its total solution, so there is nothing to do here. A meshfree
         model, whose background grid and kernel functions are incremental, sets their degrees of freedom to zero.
@@ -134,10 +134,10 @@ class EquationSystemLayout:
         A: DofVector = None,
         dynamicFields: list = None,
     ):
-        """Write the results of an accepted increment to the model, once (see :doc:`/documentation/nodefieldresults`):
-        the solution ``U``, its increment ``dU`` and the internal force ``P`` to the entries of the same names of the
-        node fields, the solution to the scalar variables, and, for a solver that integrates in time, the velocity ``V``
-        and the acceleration ``A`` (see :meth:`writeVelocityAndAccelerationToModel`).
+        """Write the results of an accepted increment to the model, once (see the documentation page *Node field
+        results*): the solution ``U``, its increment ``dU`` and the internal force ``P`` to the entries of the same
+        names of the node fields, the solution to the scalar variables, and, for a solver that integrates in time, the
+        velocity ``V`` and the acceleration ``A`` (see :meth:`writeVelocityAndAccelerationToModel`).
 
         Parameters
         ----------
