@@ -625,3 +625,44 @@ def test_abaqus_initial_time_average_flux_for_a_field_without_flux_yet():
     assert following.checkField(
         "nonlocal", np.array([3e-42]), np.array([2e-44]), np.array([1e-29]), 1e-42, 1
     ).fluxResidualConverged
+
+
+def test_the_time_average_of_the_abaqus_criterion_is_checkpointed_with_the_solver():
+    """A resumed step, and a step falling back to a checkpoint, continue the time average as it was at the
+    checkpoint: it is part of the solver's checkpointed state."""
+
+    def checkpointedSolver(criterion):
+        solver = nist(convergenceCriterion="abaqus")
+        solver.convergenceCriterion = criterion
+        return solver
+
+    previousStep = abaqus()
+    previousStep.checkField("u", np.zeros(1), None, np.ones(1), 10.0, 1)
+    previousStep.acceptIncrement()
+    atStepStart = abaqus()
+    atStepStart.startStep(previousStep)
+    later = abaqus()
+    later.startStep(previousStep)
+    for spatialAveragedFlux in (1.0, 3.0):
+        later.checkField("u", np.zeros(1), None, np.ones(1), spatialAveragedFlux, 1)
+        later.acceptIncrement()
+
+    for criterion in (atStepStart, later):
+        restored = checkpointedSolver(abaqus())
+        restored.setRestartData(checkpointedSolver(criterion).getRestartData())
+
+        for spatialAveragedFlux in (5.0, 1e-5):
+            assert restored.convergenceCriterion.timeAveragedFlux(
+                "u", spatialAveragedFlux
+            ) == criterion.timeAveragedFlux("u", spatialAveragedFlux)
+        assert restored.convergenceCriterion.timeAveragedFluxesAtStepEnd() == criterion.timeAveragedFluxesAtStepEnd()
+    assert later.timeAveragedFlux("u", 5.0) == pytest.approx((1.0 + 3.0 + 5.0) / 3)
+
+
+def test_the_legacy_criterion_carries_nothing_and_survives_a_restore():
+    solver = nist()
+    solver.convergenceCriterion = criterion = legacy()
+
+    solver.setRestartData(solver.getRestartData())
+
+    assert solver.convergenceCriterion is criterion
