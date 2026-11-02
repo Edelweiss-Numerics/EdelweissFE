@@ -142,8 +142,9 @@ that agrees only to solver tolerance. Switch it off with ``computeInitialAcceler
 continue a step from whatever acceleration was carried over.
 
 **State and restart.** Velocity and acceleration are ordinary node-field entries, ``V`` and ``A``,
-written after every converged increment alongside the parent's ``U``/``P``/``dU`` -- the same
-mechanism the explicit solver uses for its velocity. That makes them part of every checkpoint the
+read from the model whenever the equation system is (re)built and written at the acceptance of every
+increment alongside the parent's ``U``/``P``/``dU``, both through the model's layout of the equation
+system -- the same mechanism the explicit solver uses for its velocity. That makes them part of every checkpoint the
 ``*output, type=restart`` manager writes and of every ``*fieldOutput`` (``result=V``,
 ``result=A``), with no solver-specific restart code beyond a marker that tells a resumed run not to
 recompute the initial acceleration.
@@ -312,7 +313,8 @@ class _NewmarkSystem:
         Each dynamic field's total assembled mass (:meth:`NonlinearImplicitDynamic._totalMassByField`),
         a property of ``M`` alone, so computed once here rather than per accepted increment.
     V, A
-        The velocity and acceleration at the last converged increment.
+        The velocity and acceleration at the last converged increment: the solver's own vectors of the
+        current equation system, read from the model when it was built.
     """
 
     dofManager: DofManager
@@ -457,6 +459,13 @@ class NonlinearImplicitDynamic(NIST):
         self._currentIncrement = None
         #: The non-time-integrated fields a discarded inertia has already been warned about.
         self._fieldsWarnedAboutDiscardedInertia = set()
+        #: The velocity and the acceleration of the current equation system, read from the model when it is
+        #: (re)built (see :meth:`readStateFromModel`), and the state of the last converged increment from then on.
+        self._V = None
+        self._A = None
+        #: The names of the fields of the current equation system that carry a mass, whose velocity and acceleration
+        #: this solver reads from and writes to the model.
+        self._dynamicFields = None
 
         self._validateNewmarkParameters()
 
@@ -744,9 +753,10 @@ class NonlinearImplicitDynamic(NIST):
 
     @performancetiming.timeit("finalize increment")
     def finalizeIncrement(self, model: FEModel):
-        """The converged trial kinematics become the state; see the parent's hook. Only an accepted
-        increment gets here -- a failing one leaves by exception and keeps the previous velocity
-        and acceleration for the cutback.
+        """The converged trial kinematics become the state of the solver, which the model receives at
+        the acceptance of the increment (see :meth:`writeResultsToModel`); see the parent's hook. Only a
+        converged increment gets here -- a failing one leaves by exception and keeps the previous
+        velocity and acceleration for the cutback.
 
         Parameters
         ----------
@@ -759,7 +769,6 @@ class NonlinearImplicitDynamic(NIST):
 
         system.V[:] = increment.V_np
         system.A[:] = increment.A_np
-        self._writeVelocityAndAccelerationToNodeFields(system, model)
 
         # What a topology change before the next increment is compared against.
         self._conservedAtLastAccept = self._conservedQuantities(system, model)
@@ -813,23 +822,39 @@ class NonlinearImplicitDynamic(NIST):
         A_np[dynamicDofs] = ANew
         V_np[dynamicDofs] = VNew
 
-    def _writeVelocityAndAccelerationToNodeFields(self, system: _NewmarkSystem, model: FEModel):
-        """Write the committed velocity and acceleration to the ``V`` and ``A`` entries of the
-        dynamic fields' node fields -- what field outputs read, what a checkpoint stores, and what
-        the next equation system reads them back from.
+    def readStateFromModel(self, U: DofVector):
+        """Read the state the next increment starts from out of the model, into the vectors of the equation system just
+        (re)built: the solution, as in the parent, and the velocity and the acceleration of the fields carrying a mass,
+        where the last accepted increment (or the checkpoint, or nothing -- a start from rest) left them, and where a
+        refinement has meanwhile interpolated them onto the nodes it created.
 
         Parameters
         ----------
-        system
-            The current Newmark system.
-        model
-            The model tree.
+        U
+            The solution vector of the equation system, zero, overwritten.
         """
 
-        for fieldName in system.dynamicFields:
-            field = model.nodeFields[fieldName]
-            self.theDofManager.writeDofVectorToNodeField(system.V, field, "V")
-            self.theDofManager.writeDofVectorToNodeField(system.A, field, "A")
+        _, self._dynamicFields = self._locateDynamicDofs()
+        self._V = self.theDofManager.constructDofVector()
+        self._A = self.theDofManager.constructDofVector()
+        self.equationSystemLayout.readStateFromModel(U, self._V, self._A, self._dynamicFields)
+
+    def writeResultsToModel(self, U: DofVector, dU: DofVector, P: DofVector):
+        """Write the results of a converged increment to the model, as the parent does, and the velocity and the
+        acceleration of the fields carrying a mass with them: what field outputs read, what a checkpoint stores, and
+        what the next equation system reads back.
+
+        Parameters
+        ----------
+        U
+            The solution.
+        dU
+            The solution increment.
+        P
+            The internal force.
+        """
+
+        super().writeResultsToModel(U, dU, P, self._V, self._A, self._dynamicFields)
 
     def _updateNewmarkSystem(self, model: FEModel, stepActions: dict) -> _NewmarkSystem:
         """The Newmark operators and state for the parent's current equation system, assembled if
@@ -837,11 +862,10 @@ class NonlinearImplicitDynamic(NIST):
 
         The parent rebuilds its :class:`~edelweissfe.numerics.dofmanager.DofManager` at the start
         of a step and whenever the topology or a constraint's connectivity changes; the operators
-        are bound to that manager by identity and follow it. The velocity and acceleration are then
-        read back from the node fields, where the last converged increment (or the checkpoint, or
-        nothing -- a start from rest) left them, and where a refinement has meanwhile interpolated
-        them onto the nodes it created. A step changing a material property mid-step invalidates the
-        density, so the operators are reassembled every increment of such a step.
+        are bound to that manager by identity and follow it. The velocity and acceleration are the
+        ones the rebuild has read from the model (see :meth:`readStateFromModel`). A step changing a
+        material property mid-step invalidates the density, so the operators are reassembled every
+        increment of such a step.
 
         A rebuild that follows a recorded **topology change** -- a ``model.topology.history`` grown
         since the last build, or since the step started -- additionally re-arms the
@@ -884,16 +908,6 @@ class NonlinearImplicitDynamic(NIST):
         with performancetiming.timeit("newmark system setup"):
             dynamicDofs, dynamicFields = self._locateDynamicDofs()
 
-            if dofManagerChanged:
-                V = self.theDofManager.constructDofVector()
-                A = self.theDofManager.constructDofVector()
-                for fieldName in dynamicFields:
-                    field = model.nodeFields[fieldName]
-                    V = self.theDofManager.writeNodeFieldToDofVector(V, field, "V")
-                    A = self.theDofManager.writeNodeFieldToDofVector(A, field, "A")
-            else:
-                V, A = system.V, system.A
-
         reusedMassAndDamping = None
         if (
             dofManagerChanged
@@ -920,8 +934,8 @@ class NonlinearImplicitDynamic(NIST):
             MRowBlocks=self._rowBlocks(M, _MASS_ROWS_PER_BLOCK),
             MRowsPerBlock=_MASS_ROWS_PER_BLOCK,
             massByField=massByField,
-            V=V,
-            A=A,
+            V=self._V,
+            A=self._A,
         )
 
         if dofManagerChanged and topologyChanged:
@@ -1484,7 +1498,9 @@ class NonlinearImplicitDynamic(NIST):
 
         system.A[:] = 0.0
         system.A[system.dynamicDofs] = A0[system.dynamicDofs]
-        self._writeVelocityAndAccelerationToNodeFields(system, model)
+        # It completes the state the increment starts from: a rebuild before the increment is accepted -- a retry
+        # after a cutback whose contact search changes the connectivity -- reads it back from the model.
+        self.equationSystemLayout.writeVelocityAndAccelerationToModel(system.V, system.A, system.dynamicFields)
 
         self.journal.message(
             "acceleration from equilibrium at t = {:g}: ||a0||inf = {:e}".format(

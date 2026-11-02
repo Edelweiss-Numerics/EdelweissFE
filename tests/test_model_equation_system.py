@@ -140,28 +140,87 @@ def test_a_node_force_loads_its_nodes_in_the_equation_system():
     np.testing.assert_array_equal(P, [0.0, -1.5, 0.0, -1.5])
 
 
+def _twoFieldModel() -> tuple[FEModel, DofManager]:
+    """A model of two nodes with two fields, displacement and rotation, and the numbering of both."""
+    nodes = _nodesWithDisplacement((1, 2))
+    for node in nodes:
+        node.fields["rotation"] = FieldVariable(node, "rotation")
+    model = FEModel(2)
+    model.nodeFields[_FIELD] = NodeField(_FIELD, 2, NodeSet("all", nodes))
+    model.nodeFields["rotation"] = NodeField("rotation", 1, NodeSet("all", nodes))
+    return model, DofManager(model.nodeFields.values())
+
+
+def test_the_layout_of_a_finite_element_model_reads_the_state_of_every_node():
+    model, dofManager = _twoFieldModel()
+    for value, entry in enumerate(NodeField.ENTRIES, start=1):
+        for nodeField in model.nodeFields.values():
+            nodeField[entry][:] = value
+    layout = EquationSystemLayout(model, dofManager, [])
+
+    U, V, A = (dofManager.constructDofVector() for _ in range(3))
+    layout.readStateFromModel(U, V, A, dynamicFields=[_FIELD])
+
+    displacement, rotation = (dofManager.idcsOfFieldsInDofVector[name] for name in (_FIELD, "rotation"))
+    np.testing.assert_array_equal(U, 1.0)
+    # the velocity and the acceleration of the fields given only; the results dU and P are not read
+    np.testing.assert_array_equal(V[displacement], 4.0)
+    np.testing.assert_array_equal(A[displacement], 5.0)
+    np.testing.assert_array_equal(V[rotation], 0.0)
+    np.testing.assert_array_equal(A[rotation], 0.0)
+
+
+def test_the_layout_of_a_finite_element_model_writes_the_results_to_every_node():
+    model, dofManager = _twoFieldModel()
+    for nodeField in model.nodeFields.values():
+        nodeField["V"][:] = nodeField["A"][:] = -1.0
+    layout = EquationSystemLayout(model, dofManager, [])
+
+    U = dofManager.constructDofVector()
+    U[:] = np.arange(dofManager.nDof)
+    # every node carries its total solution: nothing is incremental
+    layout.zeroIncrementalCoefficients(U)
+    np.testing.assert_array_equal(U, np.arange(dofManager.nDof))
+
+    layout.writeResultsToModel(U, 2 * U, 3 * U)
+    for nodeField in model.nodeFields.values():
+        rows = np.asarray(U)[dofManager.idcsOfFieldsInDofVector[nodeField.name]].reshape(-1, nodeField.dimension)
+        for entry, factor in (("U", 1), ("dU", 2), ("P", 3)):
+            np.testing.assert_array_equal(nodeField[entry], factor * rows)
+        # a static solver passes no velocity and no acceleration: they are left as they are
+        np.testing.assert_array_equal(nodeField["V"], -1.0)
+        np.testing.assert_array_equal(nodeField["A"], -1.0)
+
+    layout.writeResultsToModel(U, 2 * U, 3 * U, 4 * U, 5 * U, dynamicFields=[_FIELD])
+    displacement = model.nodeFields[_FIELD]
+    rows = np.asarray(U)[dofManager.idcsOfFieldsInDofVector[_FIELD]].reshape(-1, 2)
+    np.testing.assert_array_equal(displacement["V"], 4 * rows)
+    np.testing.assert_array_equal(displacement["A"], 5 * rows)
+    np.testing.assert_array_equal(model.nodeFields["rotation"]["V"], -1.0)
+
+
 # --- a model whose equation system covers a part of it -------------------------------------------------------------
 
 
 class _FirstElementsLayout(EquationSystemLayout):
     """The layout of the equation system of the first elements of the strip: only their nodes are numbered, carry a
-    solution from increment to increment, and receive results; the other nodes of the model are left at zero."""
+    solution from increment to increment, and receive results; the other nodes of the model are left as they are, at
+    zero."""
 
     def __init__(self, model, dofManager, elements, nodesInSystem, nodeFieldsInSystem):
         super().__init__(model, dofManager, elements)
         self.nodesInSystem = nodesInSystem
         self.nodeFieldsInSystem = nodeFieldsInSystem
 
-    def writeSolutionToDofVector(self, U):
+    def readStateFromModel(self, U, V=None, A=None, dynamicFields=None):
         for nodeField in self.model.nodeFields.values():
-            U = self.dofManager.writeNodeFieldToDofVector(U, nodeField, "U", self.nodesInSystem)
-        return U
+            self.dofManager.writeNodeFieldToDofVector(U, nodeField, "U", self.nodesInSystem)
 
-    def writeResultsToModel(self, U, dU, P):
-        for nodeField in self.nodeFieldsInSystem.values():
+    def writeResultsToModel(self, U, dU, P, V=None, A=None, dynamicFields=None):
+        # straight into the model's node fields, at the nodes in the system: the other nodes keep their values
+        for nodeField in self.model.nodeFields.values():
             for vector, entry in ((U, "U"), (dU, "dU"), (P, "P")):
-                self.dofManager.writeDofVectorToNodeField(vector, nodeField, entry)
-            self.model.nodeFields[nodeField.name].copyEntriesFromOther(nodeField)
+                self.dofManager.writeDofVectorToNodeField(vector, nodeField, entry, self.nodesInSystem)
 
     def updateMaterialPoints(self, dU, timeStep, forEachChunk):
         self.model.materialPointUpdates += 1

@@ -25,7 +25,14 @@ what lives within one equation system.* An entry is therefore of one of two kind
 
 Iterations work on the solver's vectors only. A cut back increment writes nothing. An accepted increment writes
 every entry, once. A rebuilt equation system (a changed mesh, a changed active domain, a changed coupling) reads
-the state entries from the model.
+the state entries from the model. A refinement of the mesh interpolates the state entries onto the nodes it
+creates; the results there are zero until the next accepted increment.
+
+Every solver passes these entries through the model's layout of its equation system
+(:class:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout`), and in no other way:
+:meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.readStateFromModel` when it (re)builds the
+system, :meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeResultsToModel` when it accepts
+an increment.
 
 The entries
 -----------
@@ -83,7 +90,9 @@ The entries exist from the construction of a node field on, also in a model buil
 instance, by adaptive mesh refinement) keeps all of them. Reading or writing an entry through the
 :class:`~edelweissfe.numerics.dofmanager.DofManager` refuses a name that is not one of the five, and a node field
 the DofManager does not number: a node field is read or written as a whole only by the DofManager that numbers it,
-since its rows are addressed by position. A restart checkpoint holds every entry of every node field, and a
+since its rows are addressed by position; on a node set, its rows are found by node, so that any node field of a
+numbered field can be read or written there (e.g. the node field of the model, while the equation system numbers
+that of an active domain). A restart checkpoint holds every entry of every node field, and a
 checkpoint lacking one is refused (see :doc:`restart`).
 
 Where the solvers do not follow this page yet
@@ -94,10 +103,9 @@ from this list together with the deviation:
 
 - The explicit solver (``NED``) writes as ``P`` the net force that accelerates the nodes,
   :math:`\boldsymbol{f}_\mathrm{ext} - \boldsymbol{f}_\mathrm{int}` including loads and constraints -- the opposite
-  sign of the internal force -- and reads it back when it builds its equation system. It does not write ``dU``.
+  sign of the internal force -- and reads it back when it builds its equation system.
 - The implicit dynamic solver (``NonlinearImplicitDynamic``) writes as ``P`` the internal force without the inertial
   and damping forces, and its zero increment at a step start writes ``P`` as zero.
 - A quasi-static step after a dynamic one leaves ``V`` and ``A`` of the last dynamic increment in the model.
-- After a refinement, h-adaptivity writes ``U`` also into ``P``, until the next accepted increment.
 - In a meshfree model, ``U`` at the incremental nodes is the sum of their increments since the equation system was
   last built, and the explicit meshfree solver writes no node field entry.

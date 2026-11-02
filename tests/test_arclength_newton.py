@@ -511,7 +511,7 @@ def test_the_load_parameter_is_predicted_with_the_weights_of_the_solution():
     dUs = [np.array([1.0, -2.0]), np.array([1.5, -2.5])]
     dLambdas = [0.4, 0.55]
     solver = solverWithHistory("quadratic", [0.2, 0.1], dLambdas)
-    solver.dUBeforePrev, solver.dU = dUs
+    solver.dUOfIncrementBeforeLast, solver.dUOfLastIncrement = dUs
     timeStep = TimeStep(9, 0.15, 0.0, 0.15, 0.0, 0.0)
 
     weightOfLast, weightOfBeforeLast = solver.extrapolationWeights("quadratic", timeStep, solver.prevTimeStep)

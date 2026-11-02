@@ -408,6 +408,10 @@ class NED(NonlinearSolverBase):
         #: Lumped operators kept across a connectivity-only rebuild; see
         #: :class:`_ReusableExplicitOperators`.
         self._reusableOperators = None
+        #: What the model's current equation system is made of (see
+        #: :meth:`~edelweissfe.models.femodel.FEModel.buildEquationSystem`): the numbering of its degrees of
+        #: freedom, and how the state and the results pass between the model and the vectors of the increments.
+        self.equationSystemLayout = None
 
     def beginStep(
         self,
@@ -524,13 +528,12 @@ class NED(NonlinearSolverBase):
             self._buildSystem(self.buildEquationSystem(model, step, previous=None if meshChanged else theSystem))
             theSystem = self._system
 
-        U, V, P = self._U, self._V, self._P
+        V, P = self._V, self._P
 
         if meshChanged:
             # The net force is not re-evaluated on the new mesh: that would run the constitutive law
             # off-cycle and write into the material state. Zeroing it is an O(dT) error for one increment.
             P[:] = 0.0
-            self.publishNodeFields(model, U, V, P)
 
             self.reportTopologyChangeConservation(lumpedTotalsBefore, momentumBefore, kineticBefore, V, model)
 
@@ -683,13 +686,13 @@ class NED(NonlinearSolverBase):
             The increment.
         """
 
-        U, V, P = self._U, self._V, self._P
+        U, dU, V, P = self._U, self._dU, self._V, self._P
 
         # The zero increment is not recorded, so the first real increment is the leapfrog's half step.
         if timeStep.timeIncrement > 0.0:
             self.prevTimeStep = timeStep
 
-        self.publishNodeFields(model, U, V, P)
+        self.writeResultsToModel(U, dU, P, V)
 
         self.updateRigidBodies(model, timeStep)
 
@@ -1090,33 +1093,33 @@ class NED(NonlinearSolverBase):
                     "(penalty formulations) are supported here."
                 )
 
-    @performancetiming.timeit("publish node fields")
-    def publishNodeFields(self, model: FEModel, U, V, P):
-        """Write the solution, velocity and force to the node fields and the scalar variables.
+    @performancetiming.timeit("write results to nodes")
+    def writeResultsToModel(self, U: DofVector, dU: DofVector, P: DofVector, V: DofVector):
+        """Write the results of an increment to the model, through the model's layout of the equation system: the
+        solution, its increment, the force and the velocity to the node fields, and the solution to the scalar
+        variables (see :meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeResultsToModel`); the
+        incremental degrees of freedom are set to zero first, from where the next increment starts them (see
+        :meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.zeroIncrementalCoefficients`).
 
-        Published every increment, not only on output increments, for two reasons: an h-adaptivity
+        Written at every accepted increment, not only on output increments, for two reasons: an h-adaptivity
         event can fall on any increment and its interpolation reads these entries, and a restart
         checkpoint written from the node fields is the only way an explicit run can resume with its
         kinetic state intact. It is an O(nDof) copy.
 
         Parameters
         ----------
-        model
-            The model tree.
         U
             The solution vector.
-        V
-            The velocity vector.
+        dU
+            The solution increment vector of the increment.
         P
             The net force vector.
+        V
+            The velocity vector.
         """
 
-        for field in model.nodeFields.values():
-            self.theDofManager.writeDofVectorToNodeField(U, field, "U")
-            self.theDofManager.writeDofVectorToNodeField(P, field, "P")
-            self.theDofManager.writeDofVectorToNodeField(V, field, "V")
-
-        self.theDofManager.writeDofVectorToScalarVariables(U)
+        self.equationSystemLayout.zeroIncrementalCoefficients(U)
+        self.equationSystemLayout.writeResultsToModel(U, dU, P, V=V)
 
     @performancetiming.timeit("constraint connectivity")
     def updateConstraintConnectivity(self, model: FEModel) -> bool:
@@ -1388,11 +1391,11 @@ class NED(NonlinearSolverBase):
             against the prescribed Dirichlet conditions.
         previous
             The system being replaced, when this is a rebuild rather than the initial build. Its
-            solution, velocity and force are carried over verbatim rather than re-read from the node
-            fields, which do not hold the velocity at all. A rebuild triggered by a constraint's
-            connectivity leaves the mesh -- hence the DOF layout -- untouched, and that is checked
-            rather than assumed: copying between two different layouts would mis-index every vector
-            silently.
+            solution, velocity and force are carried over verbatim rather than re-read from the model:
+            they are the vectors the increment continues from. A rebuild triggered by a
+            constraint's connectivity leaves the mesh -- hence the DOF layout -- untouched, and that is
+            checked rather than assumed: copying between two different layouts would mis-index every
+            vector silently.
 
         Returns
         -------
@@ -1417,9 +1420,10 @@ class NED(NonlinearSolverBase):
             self.theDofManager.refreshConstraintIndices(model.activeConstraints())
         else:
             self.journal.message("Creating monolithic equation system", self.identification, verbosity)
-            # The numbering of the model's degrees of freedom; this solver evaluates the model's elements itself, and
-            # assembles no system matrix.
-            self.theDofManager = model.buildEquationSystem(withSystemMatrix=False).dofManager
+            # The numbering of the model's degrees of freedom, and how the state passes between the model and the
+            # vectors; this solver evaluates the model's elements itself, and assembles no system matrix.
+            self.equationSystemLayout = model.buildEquationSystem(withSystemMatrix=False)
+            self.theDofManager = self.equationSystemLayout.dofManager
         self.journal.message(
             "total size of eq. system: {:}".format(self.theDofManager.nDof),
             self.identification,
@@ -1457,14 +1461,12 @@ class NED(NonlinearSolverBase):
         P = self.theDofManager.constructDofVector()  # initialize reaction vector
 
         if not isRebuild:
-            for fieldName, field in model.nodeFields.items():
-                U = self.theDofManager.writeNodeFieldToDofVector(U, field, "U")
+            # After an h-adaptivity event, the solution and the velocity interpolated onto the new nodes are
+            # read back here (see hadaptivity.WARM_STARTED_NODE_FIELD_ENTRIES).
+            self.equationSystemLayout.readStateFromModel(U, V)
+            # The net force, which drives the first velocity update, is read back from the model's entry P.
+            for field in model.nodeFields.values():
                 P = self.theDofManager.writeNodeFieldToDofVector(P, field, "P")
-                # After an h-adaptivity event, the velocity interpolated onto the new nodes is read back
-                # here (see hadaptivity.WARM_STARTED_NODE_FIELD_ENTRIES).
-                V = self.theDofManager.writeNodeFieldToDofVector(V, field, "V")
-
-            U = self.theDofManager.writeScalarVariablesToDofVector(U)
         else:
             if previous.U.shape != U.shape:
                 raise RuntimeError(
@@ -1474,8 +1476,8 @@ class NED(NonlinearSolverBase):
                     "cannot be carried across safely.".format(U.shape[0], previous.U.shape[0])
                 )
 
-            # Carried straight over, not re-read from the node fields: the velocity is not a node
-            # field, so re-reading would silently resume from rest.
+            # Carried straight over: the numbering is the same, and these are the vectors the increment
+            # continues from.
             U[:] = previous.U
             V[:] = previous.V
             P[:] = previous.P
