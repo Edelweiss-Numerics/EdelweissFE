@@ -131,7 +131,8 @@ class NISTPArcLength(NISTParallel):
     Every arc length step scales its own reference load -- the change of its loads and prescribed displacements over
     the step -- from :math:`\\lambda = 0`, so it starts from the loads the steps before it ended with; at its end, every
     load keeps the value the step applied (see :meth:`applyStepActionsAtStepEnd`). The load parameter of the step being
-    solved is published as ``model.additionalParameters["arc length parameter"]``, e.g. for a load-displacement curve.
+    solved is written to the model at the acceptance of every increment, as
+    ``model.additionalParameters["arc length parameter"]``, e.g. for a load-displacement curve.
 
     The re-equilibration after a model change (option ``equilibrateAfterModelChange``) is an arc length increment of
     size zero, solved by :meth:`solveIncrement` like any other: the controller's equation asks for a change of zero, so
@@ -429,8 +430,6 @@ class NISTPArcLength(NISTParallel):
         self._dLambda = dLambda
 
         self.arcLengthController.finishIncrement(U_n, dU, dLambda, timeStep, self.theDofManager)
-        # published for the outputs: the external load is the dead load plus the reference load times this
-        model.additionalParameters["arc length parameter"] = self.Lambda
 
         for stepActionType in stepActions.values():
             for action in stepActionType.values():
@@ -776,7 +775,8 @@ class NISTPArcLength(NISTParallel):
 
     def acceptIncrement(self, step, model: FEModel, timeStep: TimeStep):
         """Accept the increment as :meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.acceptIncrement` does,
-        and keep the increment of the load parameter for the predictor alongside the solution increment.
+        write the load parameter to the model with the results, and keep the increment of the load parameter for the
+        predictor alongside the solution increment.
 
         Parameters
         ----------
@@ -791,6 +791,8 @@ class NISTPArcLength(NISTParallel):
         if self.arcLengthController is None:
             return super().acceptIncrement(step, model, timeStep)
 
+        # for the outputs: the external load is the dead load plus the reference load times this
+        model.additionalParameters["arc length parameter"] = self.Lambda
         dLambdaOfLastIncrement = self.dLambda
         super().acceptIncrement(step, model, timeStep)
         # the increment before the last one is kept just as long as the solution's is

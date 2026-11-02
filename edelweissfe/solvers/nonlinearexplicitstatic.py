@@ -320,7 +320,7 @@ class NEST(NIST):
         self.csrGenerator = CSRGenerator(self.theDofManager)
         K = self.createSystemMatrixAssembly(VIJSystemMatrixAssembly)
 
-        U = self.equationSystemLayout.writeSolutionToDofVector(U)
+        self.readStateFromModel(U)
 
         self._U, self._dU, self._P, self._K = U, dU, P, K
 
@@ -410,7 +410,7 @@ class NEST(NIST):
         step.timeStepper.changeIncrementSize(self._incScaleFactor)
         self.prevTimeStep = timeStep
 
-        self.equationSystemLayout.writeResultsToModel(U, dU, P)
+        self.writeResultsToModel(U, dU, P)
 
         self.updateRigidBodies(model, timeStep)
 
