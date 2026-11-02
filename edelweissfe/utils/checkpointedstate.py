@@ -42,7 +42,8 @@ cannot be checkpointed.
 
 An attribute that is None is simply left out, and read back as None. A ``dict`` maps strings to
 floats. An attribute whose type is none of the plain ones is a helper object that declares its own
-``checkpointedState``; its state is stored under the attribute's name as a prefix.
+``checkpointedState``; its state is stored under the attribute's name as a prefix. A helper that
+declares an empty mapping stores nothing and keeps itself as it is.
 """
 
 import numpy as np
@@ -135,10 +136,13 @@ def unpackState(component, state: dict[str, np.ndarray]):
         else:
             prefix = name + "."
             nested = {key[len(prefix) :]: array for key, array in state.items() if key.startswith(prefix)}
-            if not nested:
-                component.__dict__[name] = None
-                continue
             helper = component.__dict__.get(name)
+            if not nested:
+                # A helper that carries nothing stores nothing, and has nothing to restore; otherwise, the
+                # attribute was None.
+                if helper is None or _declaration(helper):
+                    component.__dict__[name] = None
+                continue
             if helper is None:
                 helper = kind.__new__(kind)
             unpackState(helper, nested)

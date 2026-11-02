@@ -414,20 +414,18 @@ class NIST(NonlinearSolverBase):
         "abaqusInitialTimeAveragedFlux": 1e-2,
     }
 
-    #: The convergence criterion of the current step.
-    convergenceCriterion = None
-
     #: What the model's current equation system is made of (see
     #: :meth:`~edelweissfe.models.femodel.FEModel.buildEquationSystem`), rebuilt with it; None until it is built.
     equationSystemLayout = None
 
     #: The predictor's state between increments: the last accepted increment and its dU, and, for a quadratic
-    #: extrapolation, the accepted increment before it and its dU.
+    #: extrapolation, the accepted increment before it and its dU; and the state of the convergence criterion.
     checkpointedState = {
         "prevTimeStep": TimeStep,
         "dU": np.ndarray,
         "timeStepBeforePrev": TimeStep,
         "dUBeforePrev": np.ndarray,
+        "convergenceCriterion": ConvergenceCriterionBase,
     }
 
     def __init__(self, jobInfo, journal, **kwargs):
@@ -458,6 +456,8 @@ class NIST(NonlinearSolverBase):
         self.timeStepBeforePrev = None
         #: The solution increment of :attr:`timeStepBeforePrev`.
         self.dUBeforePrev = None
+        #: The convergence criterion of the current step, created when the step begins (None before).
+        self.convergenceCriterion = None
 
     def applyOptionsOverride(self, fieldValues: dict) -> None:
         """Apply an override of this solver's options, see

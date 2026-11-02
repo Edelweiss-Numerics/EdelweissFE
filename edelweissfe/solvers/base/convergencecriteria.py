@@ -161,6 +161,10 @@ class FieldConvergence:
 class ConvergenceCriterionBase(ABC):
     """Base class for the field-wise convergence criteria of the implicit solvers."""
 
+    #: The state this criterion carries from one increment to the next, checkpointed with the solver; see
+    #: :mod:`~edelweissfe.utils.checkpointedstate`. Nothing, by default.
+    checkpointedState: dict = {}
+
     def startStep(self, previousCriterion: "ConvergenceCriterionBase | None"):
         """Called at the beginning of each step.
 
@@ -443,6 +447,13 @@ class AbaqusConvergenceCriterion(ConvergenceCriterionBase):
     initialTimeAveragedFlux
         :math:`\\tilde{q}^0`, the time average flux of a field that has not carried flux yet, in the first step.
     """
+
+    #: The time average flux of every field, as the converged increments of the step and the previous step left it.
+    checkpointedState = {
+        "_sumOfConvergedSpatialAveragedFluxes": dict,
+        "_nIncrementsWithFlux": dict,
+        "_timeAveragedFluxOfPreviousStep": dict,
+    }
 
     def __init__(
         self,
