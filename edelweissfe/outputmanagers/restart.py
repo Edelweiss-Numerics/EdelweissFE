@@ -42,7 +42,8 @@ from edelweissfe.utils.schema import schemaField
 
 """
 Writes restart checkpoints during the analysis (see ``*restart``), so a later run can resume from
-the last converged increment written via ``*restart, readFrom=...``.
+the last converged increment written via ``*restart, readFrom=...``, and a step can fall back to
+them when an increment fails at the minimum increment size (step option ``maxCheckpointFallbacks``).
 
 .. code-block:: console
     :caption: Example:
@@ -75,9 +76,8 @@ class RestartOutputManagerSchema:
 
 
 class _RestartFileRingBuffer(deque):
-    """Rotates through ``numberOfFilesToKeep`` checkpoint file names, ported from
-    EdelweissMeshfree's ``RestartHistoryManager``
-    (``edelweissmeshfree/solvers/base/nonlinearsolverbase.py``).
+    """Rotates through ``numberOfFilesToKeep`` checkpoint file names, and holds the names of the
+    checkpoints written so far, oldest first, as long as their files hold them.
 
     Resumes an existing ring buffer found on disk rather than always starting at index 0 --
     otherwise a resumed run that keeps writing checkpoints (the common case for a
@@ -130,8 +130,22 @@ class _RestartFileRingBuffer(deque):
         fileName, serial = self._fileName(self._nextIndex), self._nextSerial
         self._nextIndex = (self._nextIndex + 1) % self._maxsize
         self._nextSerial += 1
+        # the checkpoint this file held is overwritten
+        if fileName in self:
+            self.remove(fileName)
         self.append(fileName)
         return fileName, serial
+
+    def takeLatestCheckpoint(self) -> str | None:
+        """Take the name of the latest checkpoint written that has not been taken yet.
+
+        Returns
+        -------
+        str | None
+            The file name, or None if all have been taken.
+        """
+
+        return self.pop() if self else None
 
 
 class OutputManager(OutputManagerBase):
@@ -205,6 +219,9 @@ class OutputManager(OutputManagerBase):
         writeCheckpoint(fileName, self.model, self._currentStep, self.model.outputManagers, serial=serial)
 
         self.journal.message("Wrote restart checkpoint {:}".format(fileName), self.identification, 1)
+
+    def takeLatestCheckpoint(self) -> str | None:
+        return self._files.takeLatestCheckpoint()
 
     def finalizeFailedIncrement(self, **kwargs):
         pass

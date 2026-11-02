@@ -194,6 +194,20 @@ class OutputManagerBase(OptionSchemaProvider, ABC):
             The final reaction vector.
         """
 
+    def takeLatestCheckpoint(self) -> str | None:
+        """Hand over the latest restart checkpoint this output manager wrote that no fallback has taken
+        yet, for a step to fall back to (see
+        :meth:`~edelweissfe.steps.base.stepbase.StepBase.fallBackToCheckpoint`); it is not handed
+        over again. Only an output manager that :attr:`writesRestartCheckpoints` has any.
+
+        Returns
+        -------
+        str | None
+            The file name of the checkpoint, or None if there is none.
+        """
+
+        return None
+
     def getRestartData(self) -> dict[str, np.ndarray]:
         """The state this output manager carries from one increment to the next; by default the
         attributes declared in :attr:`checkpointedState`. Overridden where the state is not a plain

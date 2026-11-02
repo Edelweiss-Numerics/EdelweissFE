@@ -161,6 +161,8 @@ class ResumeCheckpoint:
             )
         #: The step the checkpointed run was in; the steps before it are not solved again.
         self.stepNumber = int(self._file.attrs["stepNumber"])
+        #: The model time the checkpoint was written at.
+        self.time = float(self._file.attrs["time"])
 
     def restoreModel(self, model, journal):
         """Restore the model's state, see :meth:`~edelweissfe.models.femodel.FEModel.readRestart`.
