@@ -7,7 +7,7 @@ name = "EdelweissFE"
 # The release this source tree is (or leads up to), as in the release tag (v26.11 -> 26.11); set to the next release
 # right after tagging. The conda workflow refuses a tag that does not match it and versions its development snapshots
 # <this version>.dev<commit time>.
-version = "26.11"
+version = "27.05"
 description = "EdelweissFE: A light-weight, platform-independent, parallel finite element framework."
 readme = "README.md"
 authors = [

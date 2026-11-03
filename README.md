@@ -71,7 +71,7 @@ Always use this separate environment for EdelweissFE. If it ever breaks, delete 
 
 ```console
 conda activate edelweissfe
-git clone --branch next_v26.11 https://github.com/Edelweiss-Numerics/EdelweissFE.git
+git clone https://github.com/Edelweiss-Numerics/EdelweissFE.git
 cd EdelweissFE
 pip install -e .
 ```
@@ -109,7 +109,7 @@ EdelweissFE (on Windows, see the [installation documentation](doc/source/install
 
 ```console
 conda activate edelweissfe
-git clone --recurse-submodules --branch next_v26.11 https://github.com/MAteRialMOdelingToolbox/Marmot/ ../Marmot
+git clone --recurse-submodules https://github.com/MAteRialMOdelingToolbox/Marmot/ ../Marmot
 cmake -S ../Marmot -B ../Marmot/build -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX -DCMAKE_PREFIX_PATH=$CONDA_PREFIX
 cmake --build ../Marmot/build -j && cmake --install ../Marmot/build
 pip install -e .

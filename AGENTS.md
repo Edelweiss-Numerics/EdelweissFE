@@ -44,7 +44,7 @@ run_tests_edelweissfe ./testfiles/marmot/ --create     # (re)generate U.ref refe
 pytest edelweissfe/numerics/test_numerics.py           # unit tests
 ```
 
-See [CONTRIBUTING.md](CONTRIBUTING.md#adding--running-tests) for test creation guidelines, and [CONTRIBUTING.md](CONTRIBUTING.md#pull-requests) for CI Marmot branch resolution and PR target branch conventions (`master` for bugfixes, `next_v<YY>.<MM>` for features).
+See [CONTRIBUTING.md](CONTRIBUTING.md#adding--running-tests) for test creation guidelines, and [CONTRIBUTING.md](CONTRIBUTING.md#pull-requests) for CI Marmot branch resolution and the PR target branch (`master`).
 
 ## Linting, formatting & commit conventions
 
