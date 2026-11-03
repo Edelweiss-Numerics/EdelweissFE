@@ -41,7 +41,10 @@ Every solver passes these entries through the model's layout of its equation sys
 (:class:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout`), and in no other way:
 :meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.readStateFromModel` when it (re)builds the
 system, :meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeResultsToModel` when it accepts
-an increment.
+an increment. A quasi-static solver does not integrate in time: the state it accepts is at rest, and it writes zero to
+``V`` and ``A`` of every node field
+(:meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeZeroVelocityAndAccelerationToModel`), so
+that a dynamic step after it starts from rest.
 
 A step hands the next one the model's state at its end time: the solution, and the velocity and the acceleration at
 that time. The explicit solvers integrate the velocity staggered half an increment behind the solution, and so write
@@ -132,11 +135,3 @@ since its rows are addressed by position; on a node set, its rows are found by n
 numbered field can be read or written there (e.g. the node field of the model, while the equation system numbers
 that of an active domain). A restart checkpoint holds every entry of every node field, and a
 checkpoint lacking one is refused (see :doc:`restart`).
-
-Where the solvers do not follow this page yet
----------------------------------------------
-
-The meanings above are being made to hold in every solver. Until then, these deviations remain; each is removed
-from this list together with the deviation:
-
-- A quasi-static step after a dynamic one leaves ``V`` and ``A`` of the last dynamic increment in the model.

@@ -193,6 +193,19 @@ class EquationSystemLayout:
             if A is not None:
                 self.writeEntryOfNodeField(A, nodeField, "A")
 
+    def writeZeroVelocityAndAccelerationToModel(self):
+        """Write zero to the entries ``V`` and ``A`` of every node field of the model, on every node: the state a
+        quasi-static solver leaves at acceptance. It does not integrate in time, so the state it accepts is at rest
+        (see the documentation page *Node field results*), and a dynamic step that follows starts from rest.
+
+        The model is at rest on every node, inside the equation system or not, so a layout covering a part of the
+        nodes writes the same zeros.
+        """
+
+        for nodeField in self.model.nodeFields.values():
+            nodeField["V"][:] = 0.0
+            nodeField["A"][:] = 0.0
+
     def writeEntryOfNodeField(self, dofVector: DofVector, nodeField: "NodeField", entry: str):
         """Write a vector of the equation system to one entry of one node field of the model; every write of
         :meth:`writeResultsToModel` and :meth:`writeVelocityAndAccelerationToModel` goes through here.
