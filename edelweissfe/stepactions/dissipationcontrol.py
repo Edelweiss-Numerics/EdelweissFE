@@ -145,6 +145,7 @@ class StepAction(ArcLengthControllerBase):
         "dDLast": float,
         "dUNormLast": float,
         "dULast": np.ndarray,
+        "dULastKeys": np.ndarray,
     }
 
     def __init__(
@@ -174,6 +175,8 @@ class StepAction(ArcLengthControllerBase):
         self.dDLast = 0.0
         self.dUNormLast = 0.0
         self.dULast = None
+        # (node label, component) of each entry of dULast, to remap it after the dofs were renumbered (refinement)
+        self.dULastKeys = None
 
         self.updateStepAction(elSet, dissipation, displacement, loadParameter, threshold)
 
@@ -241,18 +244,32 @@ class StepAction(ArcLengthControllerBase):
         self.loadParameter = loadParameter
         self.threshold = threshold
 
+        self._buildElementViews()
+
+    def _buildElementViews(self):
+        """Persistent views on the elements' dissipation and buffers for their energy gradients, for the current
+        members of the element set (rebuilt after a refinement changed the set)."""
+
         # persistent views on the trial state, updated by the elements in every iteration
         self._dissipationViews = [
             el.getResultArray("dissipation", qp, getPersistentView=True)
-            for el in elSet
+            for el in self.elSet
             for qp in range(el.getNumberOfQuadraturePoints())
         ]
         # buffers for the element energy gradients
-        self._gradientBuffers = {el: (np.empty(el.nDof), np.empty(el.nDof)) for el in elSet}
+        self._gradientBuffers = {el: (np.empty(el.nDof), np.empty(el.nDof)) for el in self.elSet}
+        self._recordSetVersion(self.elSet)
+
+    def _refreshIfElementsChanged(self):
+        """Rebuild the views and buffers if the element set was mutated (e.g. by h-adaptivity)."""
+
+        if self._checkSetChanged(self.elSet):
+            self._buildElementViews()
 
     def computeDissipation(self) -> float:
         """The dissipated energy of the current (trial) state."""
 
+        self._refreshIfElementsChanged()
         return sum(view[0] for view in self._dissipationViews)
 
     def computeDissipationGradient(self, dofManager: DofManager) -> np.ndarray:
@@ -264,6 +281,7 @@ class StepAction(ArcLengthControllerBase):
         element loop together with the residual.
         """
 
+        self._refreshIfElementsChanged()
         gradient = np.zeros(dofManager.nDof)
         for el, (dElasticEnergy_dQ, dDissipation_dQ) in self._gradientBuffers.items():
             el.computeEnergyGradients(dElasticEnergy_dQ, dDissipation_dQ)
@@ -275,6 +293,32 @@ class StepAction(ArcLengthControllerBase):
         """The indices of the displacement field in the solution vector."""
 
         return dofManager.idcsOfFieldsInDofVector["displacement"]
+
+    @staticmethod
+    def _displacementKeys(dofManager: DofManager) -> np.ndarray:
+        """(node label, component) of each displacement dof, in the order of :meth:`_displacementIdcs`."""
+
+        # indices are stored as arrays or slices
+        def asIndices(idcs):
+            return range(*idcs.indices(dofManager.nDof)) if isinstance(idcs, slice) else idcs
+
+        keyOfIndex = {}
+        for fieldVariable, idcs in dofManager.idcsOfFieldVariablesInDofVector.items():
+            if fieldVariable.field == "displacement":
+                for component, index in enumerate(asIndices(idcs)):
+                    keyOfIndex[int(index)] = (fieldVariable.node.label, component)
+        displacementIdcs = asIndices(StepAction._displacementIdcs(dofManager))
+        return np.array([keyOfIndex[int(i)] for i in displacementIdcs], dtype=np.int64)
+
+    def _lastIncrementOnCurrentDofs(self, dofManager: DofManager) -> np.ndarray:
+        """The last displacement increment on the current displacement dofs; remapped by node and component if the
+        dofs were renumbered, zero on nodes created since."""
+
+        keys = self._displacementKeys(dofManager)
+        if np.array_equal(self.dULastKeys, keys):
+            return self.dULast
+        last = {tuple(key): value for key, value in zip(self.dULastKeys, self.dULast)}
+        return np.array([last.get(tuple(key), 0.0) for key in keys])
 
     def setSystemState(
         self, reaction: DofVector, referenceIncrement: DofVector, loadParameter: float, loadParameterIncrement: float
@@ -360,15 +404,21 @@ class StepAction(ArcLengthControllerBase):
             # the displacement limit cannot be met along ddU_f: closest approach
             return 0.5 * (lower + upper)
 
-        # the dissipation target within the limit, else the end of the interval towards it
-        if abs(dD_f) * (upper - lower) > 1e-9 * dTau:
-            return float(np.clip((dTau - dD_0) / dD_f, lower, upper))
+        # the dissipation target within the limit; a gradient that changes the dissipation by less than 0.1 % of the
+        # target across the interval (elastic predictor) does not set the direction
+        if abs(dD_f) * (upper - lower) > 1e-3 * dTau:
+            target = (dTau - dD_0) / dD_f
+            if lower <= target <= upper:
+                return float(target)
 
-        # no dissipation gradient (elastic): continue in the direction of the last increment
+        # target out of reach or no dissipation gradient: the end of the interval in the direction of the last
+        # increment (the linearized dissipation may grow backwards, e.g. by crushing in a fully cracked tail)
+        dULast = None if self.dULast is None else self._lastIncrementOnCurrentDofs(dofManager)
+
         def forwardness(ddLambda):
-            if self.dULast is None or not self.dULast.any():
+            if dULast is None or not dULast.any():
                 return ddLambda
-            return (a + ddLambda * b).dot(self.dULast)
+            return (a + ddLambda * b).dot(dULast)
 
         return upper if forwardness(upper) >= forwardness(lower) else lower
 
@@ -458,6 +508,7 @@ class StepAction(ArcLengthControllerBase):
         D = self.computeDissipation()
         idcs = self._displacementIdcs(dofManager)
         self.dULast = np.array(dU[idcs], copy=True)
+        self.dULastKeys = self._displacementKeys(dofManager)
         self.dUNormLast = np.abs(self.dULast).max()
 
         if self.displacement is None:
