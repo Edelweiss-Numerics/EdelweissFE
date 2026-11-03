@@ -220,6 +220,21 @@ def test_the_layout_writes_the_state_of_a_quasi_static_solver_at_rest():
             np.testing.assert_array_equal(nodeField[entry], -1.0)
 
 
+def test_the_layout_of_a_finite_element_model_has_the_inertia_at_the_nodes():
+    model, dofManager = _twoFieldModel()
+    layout = EquationSystemLayout(model, dofManager, [])
+
+    # every node carries the mass the elements assemble
+    displacement = dofManager.idcsOfFieldsInDofVector[_FIELD]
+    np.testing.assert_array_equal(
+        layout.dofsWithNodalInertia([_FIELD]), np.arange(displacement.start, displacement.stop)
+    )
+    np.testing.assert_array_equal(layout.dofsWithNodalInertia([_FIELD, "rotation"]), np.arange(dofManager.nDof))
+    # no particles, no lumped mass of particles, and no material points
+    assert layout.assembleLumpedMassOfParticles(lambda entities, work: work(entities)) is None
+    assert layout.materialPoints == []
+
+
 def test_the_layout_writes_the_results_in_two_parts():
     model, dofManager = _twoFieldModel()
     layout = EquationSystemLayout(model, dofManager, [])

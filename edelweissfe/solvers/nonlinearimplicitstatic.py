@@ -558,11 +558,28 @@ class NIST(NonlinearSolverBase):
 
         self.validateModelCapabilities(model)
 
+        model.setNewmarkParametersOfEntities(*self.newmarkParametersOfEntities())
+
         self.applyStepActionsAtStepStart(model, step)
 
         # The timing table and the step's wall clock must start together.
         performancetiming.reset()
         self._stepWallClockTic = perf_counter()
+
+    def newmarkParametersOfEntities(self) -> tuple[float, float]:
+        """The Newmark parameters :math:`(\\beta, \\gamma)` that the entities of the model which integrate their own
+        inertia take at the start of every step (see
+        :meth:`~edelweissfe.models.femodel.FEModel.setNewmarkParametersOfEntities`), e.g. the particles of a meshfree
+        model. A quasi-static solver does not integrate in time: :math:`(0, 0)`, no inertia, whatever the entities were
+        given before.
+
+        Returns
+        -------
+        tuple[float, float]
+            :math:`\\beta` and :math:`\\gamma`.
+        """
+
+        return 0.0, 0.0
 
     def prepareIncrement(self, step, model: FEModel, isRetry: bool):
         """The topology update, at the start of every increment; see
