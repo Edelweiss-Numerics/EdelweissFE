@@ -38,7 +38,7 @@ balance equation per nonlocal variable :math:`\\bar\\kappa_i`
 with the nonlocal interaction parameter :math:`c(\\bar\\kappa_i)` and the local driving
 variable :math:`\\kappa_i`.
 
-The interface deliberately mirrors ``MarmotMaterialGeneralGradientEnhancedHypoElastic``
+The interface deliberately mirrors ``Marmot::Materials::MaterialGradientEnhancedHypoElastic``
 of `Marmot <https://github.com/MAteRialMOdelingToolbox/Marmot/>`_: the quantities are
 grouped into an :class:`GradientEnhancedIncrement` (the input), an
 :class:`GradientEnhancedResponse` and a set of :class:`GradientEnhancedTangents`, such
