@@ -274,7 +274,8 @@ Every accepted increment writes the load parameter of its step to the model, wit
 ``model.additionalParameters["arc length parameter"]``, e.g. for a load-displacement curve. The solver checkpoints the
 load parameter of the step and the increments of it its predictor extrapolates, the loads what they keep from step to
 step, and the controller the change of its controlled quantity over the step, so an arc length controlled run resumes
-exactly where it stopped.
+exactly where it stopped. The load parameter advances only when an increment has converged, with its solution, so a
+cut back increment starts again from the load parameter of the last accepted one.
 
 The re-equilibration after a model change (``equilibrateAfterModelChange``, see :doc:`modelmodifiers`) is, under arc
 length control, an arc length increment of size zero: the controller asks for a change of zero, so the controlled
