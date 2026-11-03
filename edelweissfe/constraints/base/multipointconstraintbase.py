@@ -148,3 +148,18 @@ class MultiPointConstraintBase(OptionSchemaProvider, ABC):
 
         The default implementation does nothing, which is correct for every stateless constraint
         (i.e. every constraint that does not override this method)."""
+
+    @property
+    def activatedNodeFields(self) -> list:
+        """The fields this constraint needs on nodes that no element activates (e.g. the
+        displacement and rotation of a reference point), as ``[(node, [field, ...]), ...]``.
+
+        The default is none: the slaves and masters of most multi-point constraints are element
+        nodes, which already carry their fields.
+
+        Returns
+        -------
+        list
+            The nodes and the fields to activate on them.
+        """
+        return []

@@ -189,6 +189,12 @@ class FEModel:
                     if field not in node.fields:
                         node.fields[field] = FieldVariable(node, field)
 
+        for mpc in self.multiPointConstraints.values():
+            for node, nodeFields in mpc.activatedNodeFields:
+                for field in nodeFields:
+                    if field not in node.fields:
+                        node.fields[field] = FieldVariable(node, field)
+
     def _createNodeFieldsFromNodes(self, nodes: list, nodeSets: list) -> dict[str, NodeField]:
         """Bundle nodal FieldVariables together in contiguous NodeFields.
 
