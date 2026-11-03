@@ -1,0 +1,1184 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Contact mechanics: theory &mdash; EdelweissFE v22.07 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=cfdaff8d" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=37fbe429" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=17e2f33f"></script>
+      <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+      <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-mml-chtml.js"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Degree of Freedom (DOF) Manager and Numerics" href="dofmanager.html" />
+    <link rel="prev" title="Rigid bodies" href="rigidbodies.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            EdelweissFE
+              <img src="../_static/edelweiss_fe_logo.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../features.html">Features</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../prerequisites.html">Prerequisites</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation.html">Installation</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">Documentation</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="syntax.html">Input file syntax</a></li>
+<li class="toctree-l2"><a class="reference internal" href="inputsystem.html">The input system: how <code class="docutils literal notranslate"><span class="pre">.inp</span></code> grammar is defined</a></li>
+<li class="toctree-l2"><a class="reference internal" href="jobs.html">Inputfile driven simulations</a></li>
+<li class="toctree-l2"><a class="reference internal" href="models.html">Models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="solvers.html">Solvers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="linsolvers.html">Linear solvers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="steps.html">Steps</a></li>
+<li class="toctree-l2"><a class="reference internal" href="analyticalfields.html">Analytical fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="constraints.html">Constraints</a></li>
+<li class="toctree-l2"><a class="reference internal" href="rigidbodies.html">Rigid bodies</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">Contact mechanics: theory</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#formulation">Formulation</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#gap-kinematics">Gap kinematics</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#normal-contact">Normal contact</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#coulomb-friction">Coulomb friction</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#surface-discretization-and-load-transfer">Surface discretization and load transfer</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#facet-based-surface-representation">Facet-based surface representation</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#face-triangulation">Face triangulation</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#tributary-areas-and-consistent-lumping">Tributary areas and consistent lumping</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#serendipity-faces-how-much-of-the-mismatch-is-removable">Serendipity faces: how much of the mismatch is removable</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#measured-the-discrete-solution-lifts-the-corners-off-instead">Measured: the discrete solution lifts the corners off instead</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#integrated-contact-distributing-with-the-parent-face-s-basis">Integrated contact: distributing with the parent face’s basis</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#the-integrated-formulation-step-by-step">The integrated formulation, step by step</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#integrated-contact-against-a-discrete-rigid-body">Integrated contact against a discrete rigid body</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#framework-integration-and-verification">Framework integration and verification</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#parameter-guidance">Parameter guidance</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#solver-integration">Solver integration</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#verification-and-benchmarks">Verification and benchmarks</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="dofmanager.html">Degree of Freedom (DOF) Manager and Numerics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="assembly.html">System matrix assembly</a></li>
+<li class="toctree-l2"><a class="reference internal" href="fieldoutputmanager.html">Field outputs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="fields.html">Fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="elements.html">Elements</a></li>
+<li class="toctree-l2"><a class="reference internal" href="exceptions.html">Exceptions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generators.html">Generators</a></li>
+<li class="toctree-l2"><a class="reference internal" href="journal.html">Journal</a></li>
+<li class="toctree-l2"><a class="reference internal" href="materials.html">Materials</a></li>
+<li class="toctree-l2"><a class="reference internal" href="mesh.html">Creating finite element meshes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="modelmodifiers.html">Model modifiers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="topologypipeline.html">The topology pipeline: how a model changes itself</a></li>
+<li class="toctree-l2"><a class="reference internal" href="restart.html">Restart</a></li>
+<li class="toctree-l2"><a class="reference internal" href="adaptivitytheory.html">Adaptive refinement: error estimation and marking</a></li>
+<li class="toctree-l2"><a class="reference internal" href="output.html">Outputmanagers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="parallelization.html">Parallelization</a></li>
+<li class="toctree-l2"><a class="reference internal" href="phenomena.html">Physical phenomena</a></li>
+<li class="toctree-l2"><a class="reference internal" href="plotter.html">Plotting</a></li>
+<li class="toctree-l2"><a class="reference internal" href="points.html">Points</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sections.html">Sections</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sets.html">Sets</a></li>
+<li class="toctree-l2"><a class="reference internal" href="stepactions.html">Step actions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="utils.html">Utilities</a></li>
+<li class="toctree-l2"><a class="reference internal" href="variables.html">Variables</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../contributors.html">Contributors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../publications.html">Publications</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">EdelweissFE</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="index.html">Documentation</a></li>
+      <li class="breadcrumb-item active">Contact mechanics: theory</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/documentation/contacttheory.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="contact-mechanics-theory">
+<h1>Contact mechanics: theory<a class="headerlink" href="#contact-mechanics-theory" title="Link to this heading"></a></h1>
+<p>This page documents the theory of the node-to-deformable-surface contact stack implemented in
+EdelweissFE: the discretization of contact surfaces into flat facets
+(<a class="reference internal" href="elements.html#module-edelweissfe.elements.contactsurfaceelement" title="edelweissfe.elements.contactsurfaceelement"><code class="xref py py-mod docutils literal notranslate"><span class="pre">contactsurfaceelement</span></code></a>,
+<a class="reference internal" href="generators.html#module-edelweissfe.generators.surfaceelementgenerator" title="edelweissfe.generators.surfaceelementgenerator"><code class="xref py py-mod docutils literal notranslate"><span class="pre">surfaceelementgenerator</span></code></a>), the gap kinematics in their finite-sliding
+and small-sliding variants (<code class="xref py py-mod docutils literal notranslate"><span class="pre">facetcontactgeometry</span></code>,
+<a class="reference internal" href="constraints.html#module-edelweissfe.constraints.nodetodeformablesurfacepenalty" title="edelweissfe.constraints.nodetodeformablesurfacepenalty"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nodetodeformablesurfacepenalty</span></code></a>), the penalty and augmented-Lagrange
+normal contact laws, Coulomb friction, and the integration into the implicit solver. Every formula
+stated here is implemented literally in the referenced modules and has been verified against
+independent finite differences, symbolic differentiation, or analytic benchmark solutions; the
+verification methodology is summarized at the end.</p>
+<p>The stack targets <em>small-deformation</em> applications with possibly <em>large relative sliding</em> along the
+interface (e.g. anchorage problems: steel anchors in concrete channels, friction-dominated
+capacity, curved bearing surfaces, quadratic solid elements).</p>
+<section id="formulation">
+<h2>Formulation<a class="headerlink" href="#formulation" title="Link to this heading"></a></h2>
+<p>The contact mechanics itself: how the gap is measured, what force answers it, and how friction is integrated. None of this is particular to EdelweissFE.</p>
+<section id="gap-kinematics">
+<h3>Gap kinematics<a class="headerlink" href="#gap-kinematics" title="Link to this heading"></a></h3>
+<p>Throughout, <span class="math notranslate nohighlight">\(\boldsymbol{x}_s\)</span> denotes the current position of a slave node and
+<span class="math notranslate nohighlight">\(\boldsymbol{x}_a,\; a = 1 \ldots k\)</span> the current positions of the assigned master facet’s
+nodes (<span class="math notranslate nohighlight">\(k = 3\)</span> for Tria3, <span class="math notranslate nohighlight">\(k = 2\)</span> for Line2). The generalized coordinate vector of
+one contact pair is <span class="math notranslate nohighlight">\(\boldsymbol{q} = [\boldsymbol{x}_s, \boldsymbol{x}_1, \ldots,
+\boldsymbol{x}_k]\)</span>.</p>
+<section id="finite-sliding-exact-gap-gradient-and-hessian">
+<span id="finite-sliding-kinematics"></span><h4>Finite sliding: exact gap, gradient, and Hessian<a class="headerlink" href="#finite-sliding-exact-gap-gradient-and-hessian" title="Link to this heading"></a></h4>
+<p>In the finite-sliding formulation (<code class="docutils literal notranslate"><span class="pre">sliding=finite</span></code>), the gap and its exact first and second
+derivatives are recomputed from the <em>current Newton iterate</em> in every iteration – no geometry is
+frozen within an increment.</p>
+<p>For a Tria3 facet, the unit normal is constructed by cross-product-then-normalize,</p>
+<div class="math notranslate nohighlight">
+\[\boldsymbol{c} = (\boldsymbol{x}_2 - \boldsymbol{x}_1) \times (\boldsymbol{x}_3 -
+\boldsymbol{x}_1), \qquad m = \lVert \boldsymbol{c} \rVert, \qquad \boldsymbol{n} =
+\boldsymbol{c} / m,\]</div>
+<p>and the gap is the signed plane distance</p>
+<div class="math notranslate nohighlight">
+\[g(\boldsymbol{q}) = \boldsymbol{n} \cdot (\boldsymbol{x}_s - \boldsymbol{x}_1),\]</div>
+<p>positive outside the facet’s half-space, negative when penetrating. (In 2D, <span class="math notranslate nohighlight">\(\boldsymbol{n}\)</span>
+is the edge direction rotated by <span class="math notranslate nohighlight">\(-90^\circ\)</span> and normalized, consistent with a
+counter-clockwise traversal of the solid’s boundary.)</p>
+<p>The gradient <span class="math notranslate nohighlight">\(\boldsymbol{w} = \partial g / \partial \boldsymbol{q}\)</span> follows from the chain
+rule with</p>
+<div class="math notranslate nohighlight">
+\[\frac{\partial \boldsymbol{n}}{\partial \boldsymbol{x}_a} = \frac{1}{m} \left( \boldsymbol{I}
+- \boldsymbol{n} \otimes \boldsymbol{n} \right) \frac{\partial \boldsymbol{c}}{\partial
+\boldsymbol{x}_a},\]</div>
+<p>where <span class="math notranslate nohighlight">\(\partial \boldsymbol{c} / \partial \boldsymbol{x}_a\)</span> are constant skew-symmetric
+(cross-product) matrices of the edge vectors. Because the facet is flat, the <em>only</em> second-order
+term in the Hessian <span class="math notranslate nohighlight">\(\boldsymbol{H} = \partial^2 g / \partial \boldsymbol{q}^2\)</span> is the
+pose-dependence of the normal’s own construction (the derivative of the
+normalize-the-cross-product map) – there is <strong>no curvature term</strong>. The closed forms comprise
+three contributions per node-pair block: the derivative of the tangent-plane projector, the
+derivative of the skew arguments, and the derivative of the normalization denominator. They were
+derived by hand and cross-verified against exact symbolic differentiation (SymPy) and independent
+central finite differences to machine precision at many random non-degenerate configurations; see
+the warning in <code class="xref py py-mod docutils literal notranslate"><span class="pre">facetcontactgeometry</span></code> – this normalize/rotate
+second-derivative algebra is very easy to get subtly wrong, and the module must not be hand-edited
+without re-verification.</p>
+<p>The slave is assigned to its single closest facet (by facet centroid distance) once per
+connectivity update – every increment in an implicit analysis, less often under explicit dynamics
+(see <a class="reference internal" href="#contact-explicit-dynamics"><span class="std std-ref">Explicit dynamics</span></a>) – from the last converged configuration. Within the
+increment, an exact in-facet containment test
+(barycentric for Tria3, parametric for Line2) gates the contribution: if the projection of the
+slave leaves the assigned facet mid-Newton, no contact is assembled for that slave until the next
+connectivity update. Two non-smoothness sources follow: the facet-normal snap when the closest
+point crosses a facet seam, and the mid-increment containment loss (“dead zones” at facet edges
+and corners, where a penetrating node can temporarily carry no force). Both are accepted
+limitations of this formulation – and both <em>vanish identically</em> in the small-sliding formulation,
+which is the recommended one for the target applications.</p>
+</section>
+<section id="small-sliding-frozen-closest-point-projection">
+<span id="small-sliding-kinematics"></span><h4>Small sliding: frozen closest-point projection<a class="headerlink" href="#small-sliding-frozen-closest-point-projection" title="Link to this heading"></a></h4>
+<p>In the small-sliding formulation (<code class="docutils literal notranslate"><span class="pre">sliding=small</span></code>, in the sense of the classical
+“small-sliding” contact of implicit FE codes), the closest-point projection of each slave onto
+the master surface is computed once per increment from the last converged configuration and
+<strong>frozen for all Newton iterations of that increment</strong>:</p>
+<ol class="arabic">
+<li><p>For every master facet, the true closest point of the <em>closed</em> facet domain is computed –
+interior, edge, or vertex – via the barycentric region classification (Ericson’s real-time
+collision detection test), yielding clamped, non-negative weights
+<span class="math notranslate nohighlight">\(\bar{N}_a \geq 0,\; \sum_a \bar{N}_a = 1\)</span>. The facet with the smallest true distance is
+assigned. Because the <em>closed</em> domain is used, there is no dead zone at facet seams: a node
+beyond a facet’s edge clamps to that edge or vertex and remains loadable.</p></li>
+<li><p>The assigned facet’s unit normal <span class="math notranslate nohighlight">\(\bar{\boldsymbol{n}}\)</span> and the clamped weights
+<span class="math notranslate nohighlight">\(\bar{N}_a\)</span> are frozen. The gap of the current iterate is then</p>
+<div class="math notranslate nohighlight">
+\[g(\boldsymbol{q}) = \bar{\boldsymbol{n}} \cdot \Big( \boldsymbol{x}_s - \sum_a \bar{N}_a\,
+\boldsymbol{x}_a \Big),\]</div>
+<p>which is <strong>linear in the displacement DOFs</strong>: the gradient is the constant vector</p>
+<div class="math notranslate nohighlight">
+\[\boldsymbol{w} = \boldsymbol{c} \otimes \bar{\boldsymbol{n}}, \qquad \boldsymbol{c} = [1,
+-\bar{N}_1, \ldots, -\bar{N}_k],\]</div>
+<p>(Kronecker-product block structure) and the geometric Hessian term vanishes identically.</p>
+</li>
+</ol>
+<p>Both non-smoothness sources of finite sliding disappear; the only remaining switch is the
+gap-sign activation. The formulation is variationally the linearization of the contact kinematics
+about the last converged state – consistent with a small-deformation setting, where the solid
+elements are linearized anyway, while still permitting arbitrarily large <em>accumulated</em> sliding
+through the per-increment re-projection. It is also the necessary basis for the frictional
+return mapping (constant tangent frame within the increment).</p>
+<p>The relative displacement mapping used throughout normal and frictional contact is the constant
+matrix</p>
+<div class="math notranslate nohighlight">
+\[\boldsymbol{G} = \boldsymbol{c} \otimes \boldsymbol{I}, \qquad \boldsymbol{u}_{rel} =
+\boldsymbol{G}\, \boldsymbol{q} = \boldsymbol{x}_s - \sum_a \bar{N}_a \boldsymbol{x}_a,\]</div>
+<p>with the identities <span class="math notranslate nohighlight">\(\boldsymbol{G}^T \boldsymbol{M} \boldsymbol{G} = (\boldsymbol{c}
+\otimes \boldsymbol{c}^T) \otimes \boldsymbol{M}\)</span> and <span class="math notranslate nohighlight">\(\boldsymbol{G}^T \boldsymbol{v} =
+\boldsymbol{c} \otimes \boldsymbol{v}\)</span> used verbatim in the implementation.</p>
+</section>
+</section>
+<section id="normal-contact">
+<h3>Normal contact<a class="headerlink" href="#normal-contact" title="Link to this heading"></a></h3>
+<section id="penalty-force-laws">
+<h4>Penalty force laws<a class="headerlink" href="#penalty-force-laws" title="Link to this heading"></a></h4>
+<p>Contact is active for <span class="math notranslate nohighlight">\(g &lt; 0\)</span>. With <span class="math notranslate nohighlight">\(\kappa = p\, A_s\)</span> (<code class="docutils literal notranslate"><span class="pre">penalty</span></code> <span class="math notranslate nohighlight">\(p\)</span>, an
+interface stiffness modulus per unit area, times the tributary area), two force laws are
+available; <span class="math notranslate nohighlight">\(f_n \leq 0\)</span> denotes the normal force carried by the slave node (compression
+negative), assembled as <span class="math notranslate nohighlight">\(\boldsymbol{P}^{ext} \mathrel{-}= f_n\, \boldsymbol{w}\)</span>:</p>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 14.0%" />
+<col style="width: 22.0%" />
+<col style="width: 22.0%" />
+<col style="width: 42.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>law</p></th>
+<th class="head"><p>potential <span class="math notranslate nohighlight">\(\Pi(g)\)</span></p></th>
+<th class="head"><p>force <span class="math notranslate nohighlight">\(f_n\)</span>, stiffness <span class="math notranslate nohighlight">\(\partial f_n / \partial g\)</span></p></th>
+<th class="head"><p>activation smoothness</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">linear</span></code></p></td>
+<td><p><span class="math notranslate nohighlight">\(\tfrac{1}{2} \kappa g^2\)</span></p></td>
+<td><p><span class="math notranslate nohighlight">\(\kappa g\)</span>, <span class="math notranslate nohighlight">\(\kappa\)</span></p></td>
+<td><p>force <span class="math notranslate nohighlight">\(C^0\)</span>; stiffness jumps by <span class="math notranslate nohighlight">\(\kappa\)</span> at <span class="math notranslate nohighlight">\(g = 0\)</span></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">quadratic</span></code></p></td>
+<td><p><span class="math notranslate nohighlight">\(-\tfrac{1}{6} \kappa g^3\)</span></p></td>
+<td><p><span class="math notranslate nohighlight">\(-\tfrac{1}{2} \kappa g^2\)</span>, <span class="math notranslate nohighlight">\(-\kappa g\)</span></p></td>
+<td><p>force <span class="math notranslate nohighlight">\(C^1\)</span>; stiffness continuous (<span class="math notranslate nohighlight">\(\to 0\)</span>) at <span class="math notranslate nohighlight">\(g = 0\)</span></p></td>
+</tr>
+</tbody>
+</table>
+<p>The sign convention matters: the quadratic force must carry the sign of <span class="math notranslate nohighlight">\(g\)</span> (i.e.
+<span class="math notranslate nohighlight">\(f_n = -\tfrac{1}{2}\kappa g^2 &lt; 0\)</span> in contact) so that the shared assembly expression
+remains repulsive; the consistent stiffness is then <span class="math notranslate nohighlight">\(-\kappa g &gt; 0\)</span>.</p>
+<p>The choice of law is not cosmetic. For frictionless contact both work; <strong>in combination with
+friction, the quadratic law is strongly recommended</strong>: the frictional slip tangent contains a
+nonsymmetric term proportional to <span class="math notranslate nohighlight">\(\mu \, \partial f_n / \partial g\)</span> (see
+<a class="reference internal" href="#friction-tangent"><span class="std std-ref">Consistent tangent</span></a>). With the linear law this term switches on and off with the full
+magnitude <span class="math notranslate nohighlight">\(\mu \kappa\)</span> at gap activation; nodes lifting off or touching down at a tilting
+contact edge (e.g. the trailing edge of a dragged block) then make Newton limit-cycle <em>independent
+of the increment size</em> – observed as a residual two-cycle persisting down to increments of
+<span class="math notranslate nohighlight">\(10^{-6}\)</span>. With the quadratic law, both the normal and the mu-scaled frictional tangent
+vanish continuously at activation, and the same problems converge without cutbacks.</p>
+<p>The consistent contribution of one active slave to the tangent is</p>
+<div class="math notranslate nohighlight">
+\[\boldsymbol{K} = \frac{\partial f_n}{\partial g}\, \boldsymbol{w} \otimes \boldsymbol{w} +
+f_n\, \boldsymbol{H},\]</div>
+<p>where <span class="math notranslate nohighlight">\(\boldsymbol{H} \equiv \boldsymbol{0}\)</span> for small sliding.</p>
+</section>
+<section id="augmented-lagrange-incremental-uzawa">
+<span id="augmented-lagrange"></span><h4>Augmented Lagrange (incremental Uzawa)<a class="headerlink" href="#augmented-lagrange-incremental-uzawa" title="Link to this heading"></a></h4>
+<p>With <code class="docutils literal notranslate"><span class="pre">augmentedLagrange=True</span></code> (requires <code class="docutils literal notranslate"><span class="pre">sliding=small</span></code>), each slave carries a persistent
+normal traction multiplier <span class="math notranslate nohighlight">\(\lambda_s \leq 0\)</span> (a force), and the contact force becomes</p>
+<div class="math notranslate nohighlight">
+\[f_n = \lambda_s + f_n^{pen}(g),\]</div>
+<p>with the penalty part <span class="math notranslate nohighlight">\(f_n^{pen}\)</span> of the chosen law for <span class="math notranslate nohighlight">\(g&lt;0\)</span> and zero at open gaps.
+Contact is assembled whenever <span class="math notranslate nohighlight">\(g &lt; 0\)</span> <em>or</em> <span class="math notranslate nohighlight">\(\lambda_s &lt; 0\)</span>; at an open gap with a
+lingering multiplier, the constant force <span class="math notranslate nohighlight">\(\lambda_s \boldsymbol{w}\)</span> is applied without any
+stiffness, and the multiplier decays within a few increments (see below). Since
+<span class="math notranslate nohighlight">\(\lambda_s\)</span> is <strong>constant within an increment, it contributes nothing to the tangent and
+cannot destabilize Newton</strong> – the entire algorithmic character of the penalty method is
+retained.</p>
+<p>On increment acceptance, the multiplier is updated by the <em>converged penalty force part</em>
+(incremental Uzawa):</p>
+<div class="math notranslate nohighlight">
+\[\lambda_s \leftarrow \min\big(0,\; \lambda_s + f_n^{pen}(g_{conv})\big),\]</div>
+<p>with the linear release measure <span class="math notranslate nohighlight">\(\kappa\, g_{conv} &gt; 0\)</span> at open gaps. The law-dependence of
+the update is essential and easy to get wrong: the textbook update <span class="math notranslate nohighlight">\(\lambda \leftarrow
+\lambda + \kappa g\)</span> <em>is</em> the penalty force only for the linear law, where it transfers the spring
+force to the multiplier in one step. Under the quadratic law the converged gap scales as
+<span class="math notranslate nohighlight">\(g \sim -\sqrt{2 N / \kappa}\)</span> for a nodal force <span class="math notranslate nohighlight">\(N\)</span>, so <span class="math notranslate nohighlight">\(\kappa g \sim
+-\sqrt{2 \kappa N}\)</span> overshoots the required traction by <span class="math notranslate nohighlight">\(\sqrt{\kappa / (2N)}\)</span> – orders of
+magnitude at practical penalties (observed: per-node multipliers ~100x the nodal force, total
+normal force spiking 40x, cutback cascade). Updating by the penalty <em>force</em> restores the
+one-step transfer property for both laws.</p>
+<p>Consequences: at fixed penalty the penetration is driven toward zero over the increments (the
+multiplier progressively carries the load), so the <strong>penalty can be reduced by an order of
+magnitude or more</strong> (conditioning, smoother switches) while the solution moves <em>closer</em> to the
+rigid-constraint limit than a pure penalty at the stiff value. The friction cone <span class="math notranslate nohighlight">\(\mu N\)</span>
+(below) uses the multiplier-augmented normal force – a sharper cone than the pure penalty
+estimate.</p>
+</section>
+</section>
+<section id="coulomb-friction">
+<h3>Coulomb friction<a class="headerlink" href="#coulomb-friction" title="Link to this heading"></a></h3>
+<section id="interface-plasticity-and-the-necessity-of-state">
+<h4>Interface plasticity and the necessity of state<a class="headerlink" href="#interface-plasticity-and-the-necessity-of-state" title="Link to this heading"></a></h4>
+<p>Coulomb friction is rate-independent plasticity on the interface: yield function
+<span class="math notranslate nohighlight">\(\phi = \lVert \boldsymbol{t}_T \rVert - \mu N \leq 0\)</span>, slip as the plastic flow, and the
+tangential force as the stress-like internal variable. The interface force is <em>not</em> a function of
+the current configuration – two loading histories ending at the identical displacement field
+carry different locked-in tangential forces (hysteresis is precisely this memory). The converged
+tangential force <span class="math notranslate nohighlight">\(\boldsymbol{t}_T^{(n)}\)</span> per slave is the minimal state that makes the
+incremental problem well-posed. A stateless incremental law (<span class="math notranslate nohighlight">\(\boldsymbol{t}_T = k_T \Delta
+\boldsymbol{u}_T\)</span>, reset each increment) would make a stuck block creep by <span class="math notranslate nohighlight">\(\tau / k_T\)</span>
+<em>per increment</em> under constant sub-limit shear – a response proportional to the number of
+increments, never converging under time-step refinement.</p>
+<p>Storing the <em>force</em> (rather than accumulated slip) is deliberate: total relative slip is not even
+well-defined across increments here – the frozen frame rotates and the assigned facet changes as
+a node slides across the master surface – whereas the force transfers cleanly (it is projected
+onto the new tangent plane at each connectivity update, and zeroed when contact is lost).</p>
+</section>
+<section id="predictor-corrector-radial-return">
+<h4>Predictor–corrector (radial return)<a class="headerlink" href="#predictor-corrector-radial-return" title="Link to this heading"></a></h4>
+<p>All frictional kinematics live in the frozen small-sliding frame (<code class="docutils literal notranslate"><span class="pre">mu</span> <span class="pre">&gt;</span> <span class="pre">0</span></code> requires
+<code class="docutils literal notranslate"><span class="pre">sliding=small</span></code>). With the tangent-plane projector <span class="math notranslate nohighlight">\(\bar{\boldsymbol{P}} = \boldsymbol{I}
+- \bar{\boldsymbol{n}} \otimes \bar{\boldsymbol{n}}\)</span> and the incremental relative displacement
+<span class="math notranslate nohighlight">\(\Delta \boldsymbol{u}_{rel} = \boldsymbol{G}\, \Delta \boldsymbol{q}\)</span> (<span class="math notranslate nohighlight">\(\Delta\)</span>
+relative to the last converged state, i.e. computed from the solver’s <span class="math notranslate nohighlight">\(d\boldsymbol{U}\)</span>
+fresh in every iteration – nothing accumulates across Newton iterations, which also makes
+cutbacks automatically state-safe):</p>
+<div class="math notranslate nohighlight">
+\[\begin{split}\boldsymbol{t}^{trial} &amp;= \boldsymbol{t}_T^{(n)} - k_T\, \bar{\boldsymbol{P}}\, \Delta
+\boldsymbol{u}_{rel}, \qquad k_T = t\, A_s \quad (\texttt{tangentPenalty}\ t), \\[4pt]
+\boldsymbol{t}_T &amp;= \begin{cases} \boldsymbol{t}^{trial}, &amp; \lVert \boldsymbol{t}^{trial}
+\rVert \leq \mu N \quad \text{(stick)} \\[2pt] \mu N \, \dfrac{\boldsymbol{t}^{trial}}{\lVert
+\boldsymbol{t}^{trial} \rVert}, &amp; \text{otherwise (slip: radial return onto the cone)}
+\end{cases}\end{split}\]</div>
+<p>with <span class="math notranslate nohighlight">\(N = -f_n \geq 0\)</span> the current normal force (multiplier-augmented if AL is active).
+The force on the slave node is <span class="math notranslate nohighlight">\(\boldsymbol{t}_T\)</span> and the facet nodes receive the reaction
+<span class="math notranslate nohighlight">\(-\bar{N}_a \boldsymbol{t}_T\)</span>, i.e. the assembly is <span class="math notranslate nohighlight">\(\boldsymbol{P}^{ext}
+\mathrel{+}= \boldsymbol{G}^T \boldsymbol{t}_T = \boldsymbol{c} \otimes \boldsymbol{t}_T\)</span>.</p>
+<p>Note the continuity at liftoff: as <span class="math notranslate nohighlight">\(N \to 0\)</span> the slip branch caps the force at <span class="math notranslate nohighlight">\(\mu N
+\to 0\)</span>, so the frictional force is continuous through gap activation. The <em>tangent</em>, however, is
+only continuous there if the normal stiffness vanishes at activation – the quadratic-law
+argument above.</p>
+<p>On increment acceptance (the constraint’s <code class="docutils literal notranslate"><span class="pre">acceptLastState</span></code> lifecycle hook, called by
+<a class="reference internal" href="models.html#edelweissfe.models.femodel.FEModel.advanceToTime" title="edelweissfe.models.femodel.FEModel.advanceToTime"><code class="xref py py-meth docutils literal notranslate"><span class="pre">advanceToTime()</span></code></a> alongside the element state commit),
+the tangential force of the converged iterate is promoted to the history:
+<span class="math notranslate nohighlight">\(\boldsymbol{t}_T^{(n+1)} \leftarrow \boldsymbol{t}_T\)</span>.</p>
+</section>
+<section id="consistent-tangent">
+<span id="friction-tangent"></span><h4>Consistent tangent<a class="headerlink" href="#consistent-tangent" title="Link to this heading"></a></h4>
+<p>With <span class="math notranslate nohighlight">\(\boldsymbol{K} = -\partial \boldsymbol{P}^{ext} / \partial \boldsymbol{U}\)</span> and the
+Kronecker identities above:</p>
+<p><strong>Stick</strong> (symmetric, positive semi-definite):</p>
+<div class="math notranslate nohighlight">
+\[\boldsymbol{K}^{stick} = \boldsymbol{G}^T \big( k_T \bar{\boldsymbol{P}} \big) \boldsymbol{G}
+= (\boldsymbol{c} \otimes \boldsymbol{c}^T) \otimes \big( k_T \bar{\boldsymbol{P}} \big).\]</div>
+<p><strong>Slip</strong> (nonsymmetric): differentiating <span class="math notranslate nohighlight">\(\boldsymbol{t}_T = \mu N \hat{\boldsymbol{s}}\)</span>
+with <span class="math notranslate nohighlight">\(\hat{\boldsymbol{s}} = \boldsymbol{t}^{trial} / \lVert \boldsymbol{t}^{trial}
+\rVert\)</span>, <span class="math notranslate nohighlight">\(\partial N / \partial \boldsymbol{q} = -(\partial f_n / \partial g)\,
+\boldsymbol{w}^T\)</span> and <span class="math notranslate nohighlight">\(\partial \hat{\boldsymbol{s}} / \partial \boldsymbol{q} =
+-\tfrac{k_T}{\lVert \boldsymbol{t}^{trial} \rVert} (\boldsymbol{I} - \hat{\boldsymbol{s}} \otimes
+\hat{\boldsymbol{s}}) \bar{\boldsymbol{P}} \boldsymbol{G}\)</span>:</p>
+<div class="math notranslate nohighlight">
+\[\boldsymbol{K}^{slip} = \underbrace{\mu \, \frac{\partial f_n}{\partial g} \, (\boldsymbol{c}
+\otimes \hat{\boldsymbol{s}}) \otimes \boldsymbol{w}}_{\text{normal--tangential coupling,
+nonsymmetric}} \; + \; (\boldsymbol{c} \otimes \boldsymbol{c}^T) \otimes \left[ \frac{\mu N
+k_T}{\lVert \boldsymbol{t}^{trial} \rVert} \big( \boldsymbol{I} - \hat{\boldsymbol{s}}
+\otimes \hat{\boldsymbol{s}} \big) \bar{\boldsymbol{P}} \right].\]</div>
+<p>The bracketed second term is symmetric (<span class="math notranslate nohighlight">\(\hat{\boldsymbol{s}} \perp \bar{\boldsymbol{n}}\)</span>
+implies the two projectors commute); the rank-one coupling term is not. The linear solvers used
+by the implicit solver operate on general unsymmetric matrices (e.g. the PARDISO interface runs
+<code class="docutils literal notranslate"><span class="pre">mtype</span> <span class="pre">=</span> <span class="pre">11</span></code>), so no symmetrization is applied. Both regimes of the tangent are verified
+against independent finite differences of the assembled residual to relative errors of
+<span class="math notranslate nohighlight">\(\sim 10^{-11}\)</span>.</p>
+</section>
+</section>
+</section>
+<section id="surface-discretization-and-load-transfer">
+<h2>Surface discretization and load transfer<a class="headerlink" href="#surface-discretization-and-load-transfer" title="Link to this heading"></a></h2>
+<p>How the two surfaces are discretized here, what that costs in fidelity, and why the serendipity case forced a second formulation. The measurements are kept beside the claims they support rather than collected at the end – each is the evidence for the paragraph above it.</p>
+<section id="facet-based-surface-representation">
+<h3>Facet-based surface representation<a class="headerlink" href="#facet-based-surface-representation" title="Link to this heading"></a></h3>
+<p>Both sides of a contact pair are represented by <em>contact facet elements</em>: flat, material-less,
+volume-less surface patches (<code class="docutils literal notranslate"><span class="pre">Tria3ContactFacet</span></code> in 3D, <code class="docutils literal notranslate"><span class="pre">Line2ContactFacet</span></code> in 2D) attached to
+the existing boundary nodes of a solid body. They carry no DOFs of their own – they only expose
+the current position and orientation of a flat patch as a function of their nodes’ ordinary
+displacement DOFs, which are shared with (and driven by) the solid elements referencing the same
+nodes. Their element interface (<code class="docutils literal notranslate"><span class="pre">computeKernels</span></code> etc.) is a no-op; all contact mechanics happens
+in the constraint.</p>
+<p>Because every facet is <em>exactly flat</em> – a plane through 3 points, or a straight segment through 2
+points – its normal field has identically zero curvature over its own domain. The
+second-fundamental-form (curvature) terms of classical curved-surface contact kinematics therefore
+vanish by construction; the only geometric nonlinearity is the dependence of the facet’s <em>own</em>
+normal on its nodes’ positions (see <a class="reference internal" href="#finite-sliding-kinematics"><span class="std std-ref">Finite sliding: exact gap, gradient, and Hessian</span></a>).</p>
+<p>A deliberate consequence of flat facets: the contact interpolation is always piecewise linear with
+<em>non-negative</em> barycentric weights inside each facet. Any interpolation basis of polynomial degree
+<span class="math notranslate nohighlight">\(\geq 2\)</span> (serendipity Quad8, Lagrangian Quad9, quadratic Tria6 alike) has shape functions
+that become negative somewhere on the face; a node-based contact scheme built on such a basis can
+produce sign-indefinite force distributions. Flat facets avoid this hazard categorically.</p>
+</section>
+<section id="face-triangulation">
+<h3>Face triangulation<a class="headerlink" href="#face-triangulation" title="Link to this heading"></a></h3>
+<p>The generator (<a class="reference internal" href="generators.html#module-edelweissfe.generators.surfaceelementgenerator" title="edelweissfe.generators.surfaceelementgenerator"><code class="xref py py-mod docutils literal notranslate"><span class="pre">surfaceelementgenerator</span></code></a>) builds facets from an
+existing <code class="docutils literal notranslate"><span class="pre">*surface</span></code> definition via face-node-ordering tables transcribed from Marmot’s own face
+definitions – the genuine Abaqus S1..S6 convention, which this codebase’s <code class="docutils literal notranslate"><span class="pre">Hexa8</span></code>/<code class="docutils literal notranslate"><span class="pre">Hexa20</span></code>
+elements and mesh generators (<code class="docutils literal notranslate"><span class="pre">boxGen</span></code>: 1=Ymin, 2=Ymax, 3=Xmin, 4=Zmax, 5=Xmax, 6=Zmin) share.
+Two triangulations are available for quadratic element faces:</p>
+<dl>
+<dt><code class="docutils literal notranslate"><span class="pre">triangulation=corner</span></code></dt><dd><p>The face is reduced to its linear corner-node subset; a quad face becomes two Tria3 via a
+fixed diagonal, preserving the source face’s outward winding. For hexa20, the midside nodes do
+not participate in contact at all. This is <strong>exact for straight-edged meshes</strong> (midside nodes
+at exact edge midpoints) and is the default.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">triangulation=midside</span></code></dt><dd><p>The full 8-node face boundary polygon <span class="math notranslate nohighlight">\((c_1, m_1, c_2, m_2, c_3, m_3, c_4, m_4)\)</span> is
+split into 4 corner triangles <span class="math notranslate nohighlight">\((m_{i-1}, c_i, m_i)\)</span> plus the central midside quad
+<span class="math notranslate nohighlight">\((m_1, m_2, m_3, m_4)\)</span> split into 2 triangles – 6 flat Tria3 using only real nodes
+(2D quad8 edges: split at the midside node into 2 Line2). This is identical in coverage to
+the corner reduction for straight-edged meshes and <strong>strictly more accurate for curved
+faces</strong>, where the midside nodes carry real geometric information.</p>
+<p>A note on the construction: a naive fan from a <em>corner</em> over the same boundary polygon would
+contain the triangles <span class="math notranslate nohighlight">\((c_1, m_1, c_2)\)</span> and <span class="math notranslate nohighlight">\((c_1, c_4, m_4)\)</span>, which are <em>exactly
+degenerate</em> (zero area, collinear nodes) for straight edges, since the midside node lies on
+the corner-to-corner segment. The midside-quad split has no degenerate members.</p>
+</dd>
+</dl>
+<p>The geometric error of a flat facet chording a curved face scales with the chord sagitta
+<span class="math notranslate nohighlight">\(s \approx |f''|\, c^2 / 8\)</span> (<span class="math notranslate nohighlight">\(f\)</span> the surface profile, <span class="math notranslate nohighlight">\(c\)</span> the chord length).
+The midside triangulation halves the chords, reducing the sagitta – i.e. the artificial gap
+error – by a factor of 4. This is not an academic refinement: on a cylindrical-arc interface
+where the sagitta of the corner chords is of the order of the physical interference, the corner
+reduction underestimates the total contact force by ~40 % on the identical mesh (regression test
+<code class="docutils literal notranslate"><span class="pre">NodeToDeformableSurfaceContactCurvedHexa20</span></code> and its manual variant <code class="docutils literal notranslate"><span class="pre">test_corner.inp</span></code>).</p>
+<p>All face tables (corner and midside) are verified numerically against the mesh generators’ actual
+node construction: face-plane membership, outward cross-product normals, non-degeneracy, exact
+area tiling, and midside-between-corners positions, for every face of every supported element
+type.</p>
+</section>
+<section id="tributary-areas-and-consistent-lumping">
+<span id="tributary-areas"></span><h3>Tributary areas and consistent lumping<a class="headerlink" href="#tributary-areas-and-consistent-lumping" title="Link to this heading"></a></h3>
+<p>The constraint’s contact points are the unique nodes of the <em>slave</em> facet surface. Each slave
+node <span class="math notranslate nohighlight">\(s\)</span> carries a tributary area <span class="math notranslate nohighlight">\(A_s\)</span>, and the penalty parameter acts per unit
+area, so that the assembled nodal forces approximate a contact <em>pressure</em> distribution
+<span class="math notranslate nohighlight">\(p_s = -f_n^{(s)} / A_s\)</span> and the response is insensitive to slave-surface refinement.</p>
+<p>The tributary areas are assembled from per-facet, per-node <em>area shares</em> assigned by the
+generator. The choice of shares is not arbitrary – it must be <strong>consistent with the nodal force
+distribution that the solid body itself delivers to its boundary for a uniform pressure</strong>,
+otherwise the force-vs-area mismatch appears as spurious pressure oscillation even on perfectly
+matching meshes:</p>
+<ul class="simple">
+<li><p>For a <strong>bilinear quad face</strong>, the consistent nodal forces of a uniform pressure are
+<span class="math notranslate nohighlight">\(p\,A/4\)</span> per corner – uniquely. An equal per-triangle split (<span class="math notranslate nohighlight">\(A_\triangle/3\)</span> per
+triangle node) instead depends on which nodes lie on the arbitrary diagonal, and differs from
+<span class="math notranslate nohighlight">\(A/4\)</span> by up to a factor 4/3. The generator therefore assigns each corner
+<span class="math notranslate nohighlight">\(A_{\text{face}}/4\)</span>, distributed evenly over the triangles of that face containing it.
+With this lumping the two-block <strong>contact patch test</strong> with matching meshes passes to machine
+precision (per-slave pressure spread <span class="math notranslate nohighlight">\(\sim 10^{-11}\)</span> against the analytic uniform
+pressure); with the naive per-triangle split, the spread is <span class="math notranslate nohighlight">\(\sim 0.7\)</span>.</p></li>
+<li><p>For the <strong>central midside quad</strong> of the midside triangulation, the same quad-consistent lumping
+is applied (removing the diagonal-dependence asymmetry among midside nodes). For a
+straight-edged hexa20 face the resulting shares are symmetric: <span class="math notranslate nohighlight">\(A/24\)</span> per corner and
+<span class="math notranslate nohighlight">\(5A/24\)</span> per midside node.</p></li>
+<li><p>For <strong>serendipity (quad8/hexa20) faces, exact pointwise pressure consistency is fundamentally
+unattainable regardless of the weights</strong>: the consistent nodal forces of a uniform pressure on
+a quad8 face are <em>negative</em> at the corners (<span class="math notranslate nohighlight">\(-p\,A/12\)</span>, with <span class="math notranslate nohighlight">\(+p\,A/3\)</span> at the
+midsides). A unilateral per-node spring scheme cannot exert tensile nodal forces; the discrete
+solution responds with corner micro-liftoff and locally redistributed pressures. This is the
+classical quadratic-element limitation of all node-based contact schemes (the reason
+commercial codes discourage node-to-surface contact on 20-node bricks), and it bounds what
+pressure fidelity can be expected from hexa20 slave surfaces. Total forces and mean pressures
+remain correct (they follow from global equilibrium). How far the mismatch can be reduced, and
+what the generator’s <code class="docutils literal notranslate"><span class="pre">nodalWeights</span></code> option does about it, is quantified in
+<a class="reference internal" href="#serendipity-weighting"><span class="std std-ref">Serendipity faces: how much of the mismatch is removable</span></a> below.</p></li>
+<li><p>On <strong>non-matching meshes</strong>, node-to-surface contact transfers each slave nodal force to the
+master facet nodes by the (non-negative, partition-of-unity) barycentric weights of the contact
+point. This is <em>not</em> the consistent load distribution of a smooth pressure on the master
+discretization; the master surface responds with micro-scale dishing between its nodes, and at
+interface stiffnesses far above the bulk stiffness the resulting gap variations map into
+pointwise pressure oscillation (measured: relative spread <span class="math notranslate nohighlight">\(\sim 0.5\)</span> for a 3x3-on-2x2
+interface, with exact total force and mean pressure; manual variant
+<code class="docutils literal notranslate"><span class="pre">NodeToDeformableSurfaceContactPatch/test_mismatched.inp</span></code>). Eliminating this pointwise error
+on non-matching meshes is precisely what mortar/segment-to-segment methods buy – and the
+measured spread is this project’s quantified tripwire for ever adopting one.</p></li>
+</ul>
+</section>
+<section id="serendipity-faces-how-much-of-the-mismatch-is-removable">
+<span id="serendipity-weighting"></span><h3>Serendipity faces: how much of the mismatch is removable<a class="headerlink" href="#serendipity-faces-how-much-of-the-mismatch-is-removable" title="Link to this heading"></a></h3>
+<p>Write <span class="math notranslate nohighlight">\(\hat N_i\)</span> for the piecewise-linear shape functions that the midside triangulation
+induces on a quadratic face’s eight nodes. The area shares assembled above <em>are</em> that
+interpolation’s own consistent lumping, <span class="math notranslate nohighlight">\(A_i = \int \hat N_i \, \mathrm{d}A\)</span>, so the
+assembled contact virtual work is</p>
+<div class="math notranslate nohighlight">
+\[\sum_s f_s \, \delta g_s \;=\; p \int \hat{\mathcal{I}}[\delta g] \, \mathrm{d}A
+\qquad\text{instead of}\qquad p \int \delta g \, \mathrm{d}A ,\]</div>
+<p>i.e. a piecewise-linear quadrature applied to an integrand that is the <em>quadratic</em> trace of the
+solid’s displacement field. For a linear (hexa8) face <span class="math notranslate nohighlight">\(\hat N \equiv N\)</span> and the error
+vanishes identically – which is exactly why the C3D8 contact patch test passes to machine
+precision. For a quadratic face it does not, and the per-node mismatch is</p>
+<div class="math notranslate nohighlight">
+\[\Delta_i \;=\; \int \hat N_i \, \mathrm{d}A \;-\; \int N_i \, \mathrm{d}A .\]</div>
+<p><span class="math notranslate nohighlight">\(\sum_i \Delta_i = 0\)</span> and <span class="math notranslate nohighlight">\(\sum_i \Delta_i \, \boldsymbol{x}_i = \boldsymbol{0}\)</span>:
+the mismatch is a <strong>self-equilibrated, zero-moment corner/midside alternating load pattern</strong>. It
+therefore does no work on rigid or linear surface motion – resultants and mean pressures stay
+right – but it drives the face’s quadratic surface modes directly, at the shortest wavelength the
+mesh can carry. Its amplitude is a fixed fraction of the transmitted traction, so <strong>mesh
+refinement does not reduce it</strong>; the resulting surface undulation scales as
+<span class="math notranslate nohighlight">\(\sim \Delta \, p / (E h)\)</span>.</p>
+<p>The two <code class="docutils literal notranslate"><span class="pre">nodalWeights</span></code> options are the two ends of what a per-node weighting can achieve
+(<span class="math notranslate nohighlight">\(A\)</span> is the face area):</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>node</p></th>
+<th class="head"><p><code class="docutils literal notranslate"><span class="pre">facetConsistent</span></code> (default)</p></th>
+<th class="head"><p><code class="docutils literal notranslate"><span class="pre">serendipityOptimal</span></code></p></th>
+<th class="head"><p>consistent <span class="math notranslate nohighlight">\(\int N_i \mathrm{d}A\)</span></p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>corner</p></td>
+<td><p><span class="math notranslate nohighlight">\(+A/24\)</span></p></td>
+<td><p><span class="math notranslate nohighlight">\(0\)</span></p></td>
+<td><p><span class="math notranslate nohighlight">\(-A/12\)</span></p></td>
+</tr>
+<tr class="row-odd"><td><p>midside</p></td>
+<td><p><span class="math notranslate nohighlight">\(+5A/24\)</span></p></td>
+<td><p><span class="math notranslate nohighlight">\(+A/4\)</span></p></td>
+<td><p><span class="math notranslate nohighlight">\(+A/3\)</span></p></td>
+</tr>
+<tr class="row-even"><td><p>mismatch <span class="math notranslate nohighlight">\(|\Delta_i|\)</span></p></td>
+<td><p><span class="math notranslate nohighlight">\(A/8\)</span></p></td>
+<td><p><span class="math notranslate nohighlight">\(A/12\)</span></p></td>
+<td><p><span class="math notranslate nohighlight">\(0\)</span></p></td>
+</tr>
+</tbody>
+</table>
+<p><code class="docutils literal notranslate"><span class="pre">serendipityOptimal</span></code> is the optimum, not merely an improvement: over all weightings that are
+resultant-exact (<span class="math notranslate nohighlight">\(4 w_c + 4 w_m = A\)</span>) and non-negative, the mismatch per node is
+<span class="math notranslate nohighlight">\(w_c + A/12\)</span>, monotone in the corner share, so a <em>vanishing</em> corner share minimises it.
+Exact consistency would require <span class="math notranslate nohighlight">\(w_c = -A/12\)</span>, i.e. a penalty spring that attracts. The
+weighting is the modified serendipity shape function set
+<span class="math notranslate nohighlight">\(\tilde N_{\text{mid}} = N_{\text{mid}} + \tfrac{1}{2}(N_{c_1} + N_{c_2})\)</span>,
+<span class="math notranslate nohighlight">\(\tilde N_{\text{corner}} = 0\)</span> of Puso, Laursen &amp; Solberg (CMAME 197, 2008), which the same
+authors and Popp, Wohlmuth &amp; Wall (SISC 2012) introduce for exactly this reason in quadratic mortar
+contact. Reducing the residual <span class="math notranslate nohighlight">\(A/12\)</span> any further requires integrating a pressure <em>field</em>
+against the parent face’s own quadratic shape functions (segment-to-segment/mortar), which this
+formulation does not do.</p>
+<p>On the master side the transferred force is distributed by the contact point’s barycentric weights
+on its facet, which are the same <span class="math notranslate nohighlight">\(\hat N_i\)</span>. <code class="docutils literal notranslate"><span class="pre">serendipityOptimal</span></code> therefore also installs a
+per-facet <strong>weight transform</strong> on the corner triangles, reassigning the corner’s interpolation
+weight in equal halves to its two adjacent midside nodes – which, for this triangulation, are
+exactly the facet’s own other two nodes, so the map never reaches outside the facet. This is
+variationally harmless under <code class="docutils literal notranslate"><span class="pre">sliding=small</span></code> and only there: the facet is flat, the transformed
+weights remain a partition of unity, and the frozen normal is normal to the facet plane at the
+increment’s start, so <span class="math notranslate nohighlight">\(g = \bar{\boldsymbol{n}} \cdot (\boldsymbol{x}_s - \sum_a w_a
+\boldsymbol{x}_a)\)</span> takes the same value for <em>any</em> partition of unity over the – coplanar – facet
+nodes. Gap, gradient <span class="math notranslate nohighlight">\(\boldsymbol{w} = \bar{\boldsymbol{n}} \otimes \boldsymbol{c}\)</span> and
+the symmetry of the tangent are all preserved; the substitution perturbs the gap only as the facet
+tilts away from the frozen normal within the increment, at exactly the order the small-sliding
+formulation already discards. Under <code class="docutils literal notranslate"><span class="pre">sliding=finite</span></code> the same substitution would make the force
+distribution differ from the transpose of the gap gradient and leave the geometric term
+<span class="math notranslate nohighlight">\(f_n \boldsymbol{H}\)</span> inconsistent with it, so the constraint refuses that combination
+outright.</p>
+<p><strong>What this costs.</strong> Corner nodes of the affected faces end up with a zero tributary area: they
+are no longer contact points. That is what removes the corner over-constraint (four constraints per
+face instead of eight), but it also means those nodes carry no penetration guard. Interior corners
+are held by the quadratic interpolation of their midside neighbours; at the <em>boundary</em> of a contact
+patch, and at convex edges of the slave body, a corner can penetrate. Such a node stays in the
+slave node list, inert, so the ordering of <code class="docutils literal notranslate"><span class="pre">getNormalPressures</span></code> and of the generated
+<code class="docutils literal notranslate"><span class="pre">&lt;prefix&gt;_nodes</span></code> set is unaffected, and it is reported at zero pressure.</p>
+<p><strong>Where the option does not apply, and is refused rather than ignored.</strong> Two combinations pass
+every other check and would then do nothing, so the generator and the constraint reject them at
+construction:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">surfaceToDeformableSurfacePenalty</span></code> refuses a surface generated with
+<code class="docutils literal notranslate"><span class="pre">nodalWeights='serendipityOptimal'</span></code>. There is no path by which it could honour a per-node
+weighting – it distributes the pressure with the parent face’s own shape functions at the
+quadrature points – so accepting the surface would silently give a different answer from the
+node-based constraint on identical input. It also needs no corner reweighting: the mismatch the
+weighting minimises is one <a class="reference internal" href="#integrated-contact"><span class="std std-ref">Integrated contact: distributing with the parent face’s basis</span></a> removes outright.</p></li>
+<li><p>The generator refuses <code class="docutils literal notranslate"><span class="pre">nodalWeights='serendipityOptimal'</span></code> for 2D higher-order element edges.
+The redistribution is defined on the four corner <em>triangles</em> of a midside-triangulated quadratic
+face; a quadratic edge tiles into two <code class="docutils literal notranslate"><span class="pre">Line2</span></code> facets and never reaches it. This is not merely
+an unimplemented case – a quadratic edge’s consistent weights are Simpson’s
+<span class="math notranslate nohighlight">\((L/6,\; 2L/3,\; L/6)\)</span>, all non-negative, so in 2D there is no tensile corner load to work
+around and a corner-share reassignment is the wrong instrument.</p></li>
+</ul>
+</section>
+<section id="measured-the-discrete-solution-lifts-the-corners-off-instead">
+<span id="serendipity-liftoff"></span><h3>Measured: the discrete solution lifts the corners off instead<a class="headerlink" href="#measured-the-discrete-solution-lifts-the-corners-off-instead" title="Link to this heading"></a></h3>
+<p>The analysis above describes an error in the applied <em>load</em>. It is not how the discrete solution
+actually resolves the inconsistency, and measuring
+<code class="docutils literal notranslate"><span class="pre">testfiles/edelweiss-only/NodeToDeformableSurfaceContactPatchHexa20</span></code> (matched 2x2 hexa20
+interface, analytic solution homogeneous uniaxial with a flat interface and a total force of 360)
+shows what it does instead:</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>variant</p></th>
+<th class="head"><p>interface force</p></th>
+<th class="head"><p>corners in contact</p></th>
+<th class="head"><p>max slave gap</p></th>
+<th class="head"><p>interface flatness</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>C3D8, for reference</p></td>
+<td><p>359.892</p></td>
+<td><p>–</p></td>
+<td><p>~1.2e-5</p></td>
+<td><p>1.4e-17</p></td>
+</tr>
+<tr class="row-odd"><td><p>hexa20, <code class="docutils literal notranslate"><span class="pre">facetConsistent</span></code></p></td>
+<td><p>353.787</p></td>
+<td><p><strong>0 of 9</strong></p></td>
+<td><p>2.396e-3</p></td>
+<td><p>1.4274e-3</p></td>
+</tr>
+<tr class="row-even"><td><p>hexa20, <code class="docutils literal notranslate"><span class="pre">serendipityOptimal</span></code></p></td>
+<td><p>353.810</p></td>
+<td><p><strong>0 of 9</strong></p></td>
+<td><p>1.950e-3</p></td>
+<td><p>1.2281e-3</p></td>
+</tr>
+</tbody>
+</table>
+<p>Under <em>both</em> weightings every corner node has lifted off, with gaps of 1.4e-3 to 2.4e-3 – two
+orders of magnitude above the midsides’ penalty compliance of ~1.2e-5. The unilateral constraint
+resolves the quad8 face’s demand for a <em>tensile</em> corner load by opening the corner gap, not by
+carrying a mis-distributed load. Once a corner is open its tributary area is irrelevant, and the
+weighting consequently moves the interface force by 0.007% and nothing else of substance: the
+corner-minus-midside displacement offset, 1.081e-3 of the 1.4274e-3 total flatness, is unchanged to
+0.07% between the two.</p>
+<p>The flatness difference in the table must therefore <strong>not</strong> be read as a benefit of the weighting.
+Sweeping the retained corner share continuously from <code class="docutils literal notranslate"><span class="pre">facetConsistent</span></code> to <code class="docutils literal notranslate"><span class="pre">serendipityOptimal</span></code>
+gives a non-monotone, two-valued response that tracks which of the facets sharing a
+vertex-coincident slave’s projection point wins the tie-break in the closest-point search, rather
+than the share itself.</p>
+<p>So the practical standing of the two options is: <code class="docutils literal notranslate"><span class="pre">serendipityOptimal</span></code> is the provably optimal
+non-negative per-node weighting and it drops the corner over-constraint, but <strong>no measured benefit
+has been demonstrated for it</strong>, because wherever a quadratic face carries a near-uniform pressure
+its corner nodes are already open and the weighting is moot. It can only matter where corner nodes
+are genuinely pressed into the master – convex slave corners, strongly non-matching interfaces –
+which is not covered by any test here. Corner liftoff and the accompanying 1.7% force deficit are
+beyond the reach of <em>any</em> per-node weighting, since the load the corners need is tensile. Removing
+them requires integrating a pressure field against the parent face’s own quadratic shape functions
+(segment-to-segment/mortar), which never imposes a unilateral condition at a corner node at all –
+and that, not the weighting, is what the numbers above argue for.</p>
+</section>
+<section id="integrated-contact-distributing-with-the-parent-face-s-basis">
+<span id="integrated-contact"></span><h3>Integrated contact: distributing with the parent face’s basis<a class="headerlink" href="#integrated-contact-distributing-with-the-parent-face-s-basis" title="Link to this heading"></a></h3>
+<p>The obstruction above is a property of <em>where</em> the unilateral condition is imposed, not of the
+physics. Impose it on the nodes and the nodal force must be non-negative; impose it on a <em>pressure
+field</em> and only the pressure must be non-negative, while the nodal forces are whatever the
+distribution makes them. <a class="reference internal" href="constraints.html#module-edelweissfe.constraints.surfacetodeformablesurfacepenalty" title="edelweissfe.constraints.surfacetodeformablesurfacepenalty"><code class="xref py py-mod docutils literal notranslate"><span class="pre">surfacetodeformablesurfacepenalty</span></code></a>
+does the latter, evaluating the penalty pressure at quadrature points over the slave facets and
+distributing it as</p>
+<div class="math notranslate nohighlight">
+\[f_a = \sum_q w_q \, J_q \, p(g_q) \, N_a(\xi_q) ,\]</div>
+<p>with <span class="math notranslate nohighlight">\(N_a\)</span> the <strong>parent element face’s</strong> shape functions. Wherever <span class="math notranslate nohighlight">\(N_a\)</span> is negative –
+which for a serendipity face is a neighbourhood of every corner – node <span class="math notranslate nohighlight">\(a\)</span> receives a
+tensile force, and for a uniform pressure the sum reproduces <span class="math notranslate nohighlight">\(-pA/12\)</span> exactly. The corner
+load is now available, so nothing needs to lift off.</p>
+<p>The parent-face basis is the load-bearing half of this, not the quadrature. Distributing with the
+flat sub-facets’ own linear shape functions would leave every weight non-negative and the corners
+lifting off exactly as before – the same wall the nodal weights run into, since the facet-linear
+lumping <em>is</em> the <code class="docutils literal notranslate"><span class="pre">facetConsistent</span></code> weighting. What each side’s parent face is, and where its
+quadrature points sit in that face’s parametric space, is recorded on the facets by the surface
+element generator; see <a class="reference internal" href="utils.html#module-edelweissfe.utils.parentfacegeometry" title="edelweissfe.utils.parentfacegeometry"><code class="xref py py-mod docutils literal notranslate"><span class="pre">parentfacegeometry</span></code></a>.</p>
+<p>Two consequences of freezing the projection per increment (<code class="docutils literal notranslate"><span class="pre">sliding=small</span></code>) make the formulation
+unusually cheap here. The gap</p>
+<div class="math notranslate nohighlight">
+\[g = \bar{\boldsymbol{n}} \cdot \left( N^s(\xi_q) \cdot \boldsymbol{x}^s
+    - N^m(\xi_m) \cdot \boldsymbol{x}^m \right)\]</div>
+<p>is linear in the displacement DOFs, so the gradient <span class="math notranslate nohighlight">\(\boldsymbol{w} = \bar{\boldsymbol{n}}
+\otimes [N^s, -N^m]\)</span> is constant and the geometric Hessian vanishes identically; and the tangent
+<span class="math notranslate nohighlight">\(\mathrm{d}f_n/\mathrm{d}g \, \boldsymbol{w} \otimes \boldsymbol{w}\)</span> is symmetric. This
+is structurally the same algebra as the node-based frozen form, with that formulation’s slave
+coefficient <span class="math notranslate nohighlight">\(1\)</span> replaced by the slave face’s shape-function vector.</p>
+<p>Note that the gap is measured to the <em>parent surface</em> point <span class="math notranslate nohighlight">\(N^m(\xi_m) \cdot
+\boldsymbol{x}^m\)</span>, not to the flat facet point. Distributing the force with <span class="math notranslate nohighlight">\(N^m\)</span> while
+measuring the gap to the flat point would make the force distribution differ from the transpose of
+the gap gradient – a non-symmetric, variationally inconsistent operator, the same defect that
+confines the <code class="docutils literal notranslate"><span class="pre">serendipityOptimal</span></code> weight transform to small sliding. For straight-edged faces the
+two points coincide identically.</p>
+<p>The flat facets are otherwise the search and parametrization scaffold only – with one exception
+that matters: the frozen normal <span class="math notranslate nohighlight">\(\bar{\boldsymbol{n}}\)</span> is the <em>facet’s</em> normal, not the
+parent face’s. The contact geometry is the curved parent surface, which also removes the slave-side
+faceting error, but the direction the gap is measured along is piecewise constant over the
+triangulation. That is what makes <span class="math notranslate nohighlight">\(\bar{\boldsymbol{n}}\)</span> discontinuous across an element
+boundary once the master deforms, and the consequences are quantified in
+<a class="reference internal" href="#contact-explicit-dynamics"><span class="std std-ref">Explicit dynamics</span></a>.</p>
+<p><strong>Measured</strong> (<code class="docutils literal notranslate"><span class="pre">testfiles/edelweiss-only/SurfaceToDeformableSurfaceContactPatchHexa20</span></code>, the same
+matched 2x2 hexa20 interface as the table above):</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>variant</p></th>
+<th class="head"><p>interface force</p></th>
+<th class="head"><p>corners in contact</p></th>
+<th class="head"><p>max slave gap</p></th>
+<th class="head"><p>interface flatness</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>C3D8, for reference</p></td>
+<td><p>359.892</p></td>
+<td><p>–</p></td>
+<td><p>-1.2e-5</p></td>
+<td><p>1.4e-17</p></td>
+</tr>
+<tr class="row-odd"><td><p>hexa20, node-based</p></td>
+<td><p>353.787</p></td>
+<td><p>0 of 9</p></td>
+<td><p>+2.396e-3</p></td>
+<td><p>1.4274e-3</p></td>
+</tr>
+<tr class="row-even"><td><p>hexa20, <strong>integrated</strong></p></td>
+<td><p><strong>359.892</strong></p></td>
+<td><p>all</p></td>
+<td><p><strong>-1.1996e-5</strong></p></td>
+<td><p><strong>3.19e-16</strong></p></td>
+</tr>
+</tbody>
+</table>
+<p>Each figure is what theory demands rather than merely an improvement. The resultant,
+359.89203239028313, agrees with the C3D8 reference’s 359.89203239028274 to 13 digits: the same
+answer a linear interface gives, penalty compliance included. The gap is
+<span class="math notranslate nohighlight">\(-1.1996401 \cdot 10^{-5} = -p/\varepsilon\)</span> at <em>every</em> quadrature point, i.e. a uniform
+penetration and hence a uniform pressure, with nothing lifted off. The interface is flat to
+machine precision, the per-point pressure spread is 5.6e-11, and the minimum slave nodal normal
+force is <span class="math notranslate nohighlight">\(-29.99100269952982\)</span> against the analytic <span class="math notranslate nohighlight">\(-4 pA/12 = -29.99100269919026\)</span> for
+an interior corner shared by four faces – the corner nodes carry exactly the tensile load the face
+demands. The patch test passes on hexa20 exactly as it does on hexa8.</p>
+<figure class="align-center" id="id1">
+<a class="reference internal image-reference" href="../_images/contact_nonmatching_comparison.png"><img alt="../_images/contact_nonmatching_comparison.png" src="../_images/contact_nonmatching_comparison.png" style="width: 100%;" />
+</a>
+<figcaption>
+<p><span class="caption-text">Box on box with <strong>non-matching</strong> interface meshes (3x3 against 4x4 elements, two elements
+thick), otherwise identical: <span class="math notranslate nohighlight">\(\nu = 0\)</span> under uniform imposed compression, so the exact
+solution is a flat interface transmitting a uniform <span class="math notranslate nohighlight">\(S_{33} = -360\)</span>. Every feature shown
+is discretization error, and the rows differ in nothing but the contact constraint.</span><a class="headerlink" href="#id1" title="Link to this image"></a></p>
+<div class="legend">
+<p>The slave interface is warped by its own <span class="math notranslate nohighlight">\(u_z\)</span> deviation from the interface mean, whose
+exact value is zero, so the <em>geometry</em> answers “is the interface flat?” while the <em>colour</em>
+answers “is the transmitted stress uniform?”. The stress is averaged over <em>all</em> of an element’s
+integration points: exporting a single one samples a corner point and biases the sample
+directionally, which showed up as a spurious diagonal gradient across an entirely symmetric
+model and inflated the apparent stress error roughly twofold. The two bodies are drawn
+translucent for context, with element gridlines taken from a linear copy of each block so the
+two discretizations can be compared,
+clipped to a slab around the interface – whole blocks leave the interface occupying a sixth of
+the frame and wash its colour out – and the master interface is overlaid as a wireframe, since
+the warped surface shows only the slave mesh and the non-matching discretization would
+otherwise be invisible. Regenerate with
+<code class="docutils literal notranslate"><span class="pre">python</span> <span class="pre">doc/figures/contact_nonmatching_comparison.py</span></code>.</p>
+</div>
+</figcaption>
+</figure>
+<p>The figure makes two points the matched patch tests above cannot. First, the improvement is not
+confined to the corner-liftoff mechanism: the interface undulation falls by between 61x and 1042x
+across the four element pairings, and the transmitted resultant, which node-to-surface contact
+misses by 0.4% to 3.2% here, is recovered to five or six digits in every one of them.</p>
+<p>Second – and contrary to what the matched tests suggest – <strong>the integrated formulation also helps
+for purely linear faces.</strong> On a matched interface the parent-face basis coincides with the facet
+basis and the two constraints agree to 13 digits, so there is genuinely nothing to gain. On a
+non-matching one, the hexa8/hexa8 pairing improves by 238x, because integrating the pressure over
+the slave facet is simply a better approximation of the transferred load than lumping it to the
+slave nodes, quite apart from any question about negative corner weights. Serendipity faces are
+where node-based contact fails <em>qualitatively</em>; non-matching meshes are where it fails
+<em>quantitatively</em>, whatever the element order.</p>
+<p>A second study replaces the equal footprints with a lower block 50% wider in plan, so the contact
+patch acquires a <strong>free boundary</strong>:</p>
+<figure class="align-center" id="id2">
+<a class="reference internal image-reference" href="../_images/contact_overhang_comparison.png"><img alt="../_images/contact_overhang_comparison.png" src="../_images/contact_overhang_comparison.png" style="width: 100%;" />
+</a>
+<figcaption>
+<p><span class="caption-text">The same eight models with the lower block widened by 50% in plan. The exact interface is now
+neither flat nor uniform – a punch-like corner and edge concentration is <em>physically</em> correct
+here – so this figure compares the two formulations with each other rather than against a
+known answer, and no flatness ratio is quoted for that reason.</span><a class="headerlink" href="#id2" title="Link to this image"></a></p>
+</figcaption>
+</figure>
+<p>Its result is a useful negative one. Both rows reproduce the same physical pattern, corners of the
+patch carrying the highest compression and the centre the least, and the interface deviation agrees
+to within a factor of two between the formulations (5.47e-3 against 5.06e-3 for hexa20/hexa20).
+Where the geometry itself concentrates the transmitted stress, that concentration dominates the
+discretization error and the choice of contact formulation matters comparatively little. The
+formulation matters where the interface <em>ought</em> to transmit uniformly – which is the regime of the
+first figure, and of a bearing surface.</p>
+<p>Note also that <code class="docutils literal notranslate"><span class="pre">hexa8</span> <span class="pre">slave</span> <span class="pre">/</span> <span class="pre">hexa20</span> <span class="pre">master</span></code> is the weakest of the four integrated cases (61x
+rather than several hundred). That is the slave-side sampling asymmetry: the quadrature points live
+on the slave facets, so a coarser-order slave under-samples the master’s basis. It is the reason to
+put the finer surface on the slave side.</p>
+<p><strong>What this does not fix.</strong> Pointwise enforcement at quadrature points still over-constrains a
+non-matching interface, and the integrand is discontinuous inside a slave facet wherever the
+assigned master facet changes, so that quadrature error does not shrink under refinement of the
+rule. Exactness on non-matching meshes requires integrating over <em>clipped</em> slave-master segments
+and enforcing the constraint weakly through a multiplier field – mortar (Puso &amp; Laursen 2004;
+for the quadratic dual basis, whose construction uses the very same modified shape functions as
+<code class="docutils literal notranslate"><span class="pre">nodalWeights=serendipityOptimal</span></code>, Popp, Wohlmuth &amp; Wall, SISC 2012). The measured spread of
+<span class="math notranslate nohighlight">\(\sim 0.5\)</span> on a 3x3-on-2x2 interface remains this project’s tripwire for that step, and
+<a class="reference internal" href="constraints.html#module-edelweissfe.constraints.tie" title="edelweissfe.constraints.tie"><code class="xref py py-mod docutils literal notranslate"><span class="pre">tie</span></code></a> would share the same clipping layer.</p>
+<p><strong>Cost.</strong> Each contact point couples both parent faces, so in 3D a block is
+<span class="math notranslate nohighlight">\((8+8) \times 3 = 48\)</span> DOF rather than the node-based <span class="math notranslate nohighlight">\((1+3) \times 3 = 12\)</span>, and there
+are typically two to three times as many contact points as slave nodes – of order 30 times the
+contact-assembly entries. Whether that matters depends on contact’s share of the assembly, which is
+worth measuring on a given model before adopting it in an explicit run.</p>
+</section>
+<section id="the-integrated-formulation-step-by-step">
+<span id="integrated-contact-algorithm"></span><h3>The integrated formulation, step by step<a class="headerlink" href="#the-integrated-formulation-step-by-step" title="Link to this heading"></a></h3>
+<p>The argument above says what is computed and why; this is the order in which it happens, which is
+what a reader modifying <a class="reference internal" href="constraints.html#module-edelweissfe.constraints.surfacetodeformablesurfacepenalty" title="edelweissfe.constraints.surfacetodeformablesurfacepenalty"><code class="xref py py-mod docutils literal notranslate"><span class="pre">surfacetodeformablesurfacepenalty</span></code></a> needs. The
+slave side of the steps below lives in
+<code class="xref py py-class docutils literal notranslate"><span class="pre">ContactPointsOnSlaveSurface</span></code>, and
+is shared with the rigid-body variant (<a class="reference internal" href="#integrated-contact-rigid-body"><span class="std std-ref">Integrated contact against a discrete rigid body</span></a>).</p>
+<p><strong>Once, at construction</strong> (and again after an AMR retiling, through <code class="docutils literal notranslate"><span class="pre">refresh</span></code>):</p>
+<ol class="arabic simple">
+<li><p>Each slave facet is given a quadrature rule in its own barycentric coordinates,
+<code class="docutils literal notranslate"><span class="pre">nQuadraturePoints</span></code> points with weights summing to one
+(<a class="reference internal" href="utils.html#edelweissfe.utils.parentfacegeometry.facetQuadratureRule" title="edelweissfe.utils.parentfacegeometry.facetQuadratureRule"><code class="xref py py-func docutils literal notranslate"><span class="pre">facetQuadratureRule()</span></code></a>). The <strong>contact points</strong> are
+the flattened <code class="docutils literal notranslate"><span class="pre">(slave</span> <span class="pre">facet,</span> <span class="pre">quadrature</span> <span class="pre">point)</span></code> pairs, so there are
+<span class="math notranslate nohighlight">\(n_\text{slave facets} \times\)</span> <code class="docutils literal notranslate"><span class="pre">nQuadraturePoints</span></code> of them – not one per node.</p></li>
+<li><p>Each point’s barycentric location is mapped into its facet’s <em>parent face</em> parametric space
+through the facet’s stamped <code class="docutils literal notranslate"><span class="pre">vertexParametricCoords</span></code>, and the parent-face shape functions
+<span class="math notranslate nohighlight">\(N^s\)</span> are evaluated there. This is frozen for the whole analysis: a contact point does not
+move on its own slave parent face, whatever the body does.</p></li>
+<li><p>The point’s integration weight is <span class="math notranslate nohighlight">\(w_q J_q\)</span> with <span class="math notranslate nohighlight">\(J_q\)</span> the slave facet’s measure in
+the <strong>reference</strong> configuration, computed once and never updated. That is the same
+small-deformation choice the node-based constraint’s tributary areas make, and it is why the
+weights need no per-increment refresh.</p></li>
+</ol>
+<p><strong>Once per increment</strong>, in <code class="docutils literal notranslate"><span class="pre">updateConnectivity</span></code> – throttled to every
+<code class="docutils literal notranslate"><span class="pre">contact-update-frequency</span></code> increments on the explicit path (<a class="reference internal" href="#contact-explicit-dynamics"><span class="std std-ref">Explicit dynamics</span></a>):</p>
+<ol class="arabic simple">
+<li><p>Every contact point’s current position is evaluated from its slave parent face’s <em>current</em>
+nodal coordinates through the frozen <span class="math notranslate nohighlight">\(N^s\)</span>, so the points ride the curved slave surface.</p></li>
+<li><p>Candidate master facets come from the shared broadphase (a centroid k-d tree with a
+triangle-inequality radius bound, a superset of the exhaustive sweep iterated in ascending facet
+index, so it reproduces the exhaustive tie-break). The clamped closest point is computed on each
+candidate <strong>flat</strong> facet and the nearest wins, subject to <code class="docutils literal notranslate"><span class="pre">searchDistance</span></code> where one is given.</p></li>
+<li><p>What is frozen from the winner is <em>not</em> the flat-facet interpolation: the clamped barycentric
+weights are mapped through that facet’s <code class="docutils literal notranslate"><span class="pre">vertexParametricCoords</span></code> into its parent face’s
+parametric space, and the parent-face shape functions <span class="math notranslate nohighlight">\(N^m\)</span> are evaluated there. The
+facet’s unit normal <span class="math notranslate nohighlight">\(\bar{\boldsymbol{n}}\)</span> is frozen alongside them, per facet rather than
+per point.</p></li>
+<li><p>Only <em>assigned</em> points contribute DOFs, and each contributes one dense block over its slave
+parent face’s nodes plus its assigned master parent face’s nodes. Gap activation is deliberately
+<strong>not</strong> part of this: an assigned point that happens to be open still owns its block, which is
+then left at zero, so the sparsity pattern is stable across the Newton loop and only a genuine
+reassignment forces a rebuild.</p></li>
+<li><p>A point that loses its master facet has its stored gap reset to zero rather than left stale –
+it backs the public <code class="docutils literal notranslate"><span class="pre">getGaps()</span></code>, whose callers cannot mask unassigned entries because they do
+not know the assignment.</p></li>
+</ol>
+<p><strong>Every evaluation</strong>, in <code class="docutils literal notranslate"><span class="pre">applyConstraint</span></code> (implicit) or <code class="docutils literal notranslate"><span class="pre">applyConstraintExplicit</span></code>:</p>
+<ol class="arabic simple">
+<li><p>The gap of each assigned point follows from the frozen data by the expression above; the point
+is closed where <span class="math notranslate nohighlight">\(g &lt; 0\)</span>.</p></li>
+<li><p>The closed points’ normal force is the penalty law applied to <span class="math notranslate nohighlight">\(g\)</span>, scaled by that point’s
+integration weight – so <code class="docutils literal notranslate"><span class="pre">penalty</span></code> is a stiffness per unit <em>area</em>, and the force of a point is
+the pressure it carries times the area it represents.</p></li>
+<li><p>That force is distributed with <span class="math notranslate nohighlight">\(\boldsymbol{w} = \bar{\boldsymbol{n}} \otimes [N^s,
+-N^m]\)</span>, which is where a serendipity corner receives its tensile share. The tangent is assembled
+only when one is asked for; the explicit path overrides the hook so that no tangent container is
+ever allocated.</p></li>
+</ol>
+<p>Open points are skipped entirely rather than contributing a zero, and the whole evaluation is
+batched over the active set, falling back to a per-point loop where parent-node counts are not
+uniform across points. The two paths are held to each other by a dedicated equivalence test, since
+every ordinary model takes the batched one.</p>
+</section>
+<section id="integrated-contact-against-a-discrete-rigid-body">
+<span id="integrated-contact-rigid-body"></span><h3>Integrated contact against a discrete rigid body<a class="headerlink" href="#integrated-contact-against-a-discrete-rigid-body" title="Link to this heading"></a></h3>
+<p><a class="reference internal" href="constraints.html#module-edelweissfe.constraints.surfacetodiscreterigidbodypenalty" title="edelweissfe.constraints.surfacetodiscreterigidbodypenalty"><code class="xref py py-mod docutils literal notranslate"><span class="pre">surfacetodiscreterigidbodypenalty</span></code></a> applies the same integrated
+formulation when the master side is a <a class="reference internal" href="rigidbodies.html"><span class="doc">discrete rigid body</span></a> instead of a
+deformable surface. The slave side is identical and shared: the contact points, their weights and
+the distribution with the parent-face shape functions <span class="math notranslate nohighlight">\(N^s\)</span> all come from
+<code class="xref py py-class docutils literal notranslate"><span class="pre">ContactPointsOnSlaveSurface</span></code>, and
+the penalty law from <code class="xref py py-mod docutils literal notranslate"><span class="pre">penaltylaw</span></code>. So a serendipity corner
+receives its tensile share exactly as above, and the node-based
+<code class="docutils literal notranslate"><span class="pre">nodeToDiscreteRigidBodyPenalty</span></code> – whose corners lift off for the reason explained in
+<a class="reference internal" href="#serendipity-liftoff"><span class="std std-ref">Measured: the discrete solution lifts the corners off instead</span></a> – is deprecated in its favour.</p>
+<p>Only the master side differs. The rigid body moves with its reference point (RP): current position
+<span class="math notranslate nohighlight">\(\boldsymbol{c} = \boldsymbol{X}_{RP} + \boldsymbol{u}_{RP}\)</span> and rotation
+<span class="math notranslate nohighlight">\(\boldsymbol{R}(\boldsymbol{\theta})\)</span>, so that a body-frame point <span class="math notranslate nohighlight">\(\boldsymbol{Y}\)</span> is at
+<span class="math notranslate nohighlight">\(\boldsymbol{c} + \boldsymbol{R}(\boldsymbol{Y} - \boldsymbol{X}_{RP})\)</span>.</p>
+<p><strong>Contact search.</strong> At each <code class="docutils literal notranslate"><span class="pre">updateConnectivity</span></code>, every contact point is pulled back into the body
+frame, <span class="math notranslate nohighlight">\(\hat{\boldsymbol{X}}_q = \boldsymbol{X}_{RP} + \boldsymbol{R}^T(\boldsymbol{x}_q -
+\boldsymbol{c})\)</span>, and assigned its closest triangle of the rigid surface, using the same broadphase
+and clamped closest point as the deformable case. Frozen until the next search are the triangle’s
+outward body-frame normal <span class="math notranslate nohighlight">\(\boldsymbol{N}_q\)</span> and its plane offset
+<span class="math notranslate nohighlight">\(d_q = \boldsymbol{N}_q \cdot (\boldsymbol{Y}_t - \boldsymbol{X}_{RP})\)</span> (<span class="math notranslate nohighlight">\(\boldsymbol{Y}_t\)</span>
+a vertex of the triangle). The point then sees the triangle’s plane, moving rigidly with the body.
+The rigid surface must be closed and free of zero-area triangles, so that the outward normals are
+defined; both are checked when the constraint is created.</p>
+<p><strong>Gap.</strong> With <span class="math notranslate nohighlight">\(\boldsymbol{n}_q = \boldsymbol{R}\boldsymbol{N}_q\)</span> and the lever arm
+<span class="math notranslate nohighlight">\(\boldsymbol{r}_q = \boldsymbol{x}_q - \boldsymbol{c}\)</span>,</p>
+<div class="math notranslate nohighlight">
+\[g_q = \boldsymbol{n}_q \cdot \boldsymbol{r}_q - d_q ,
+\qquad
+\frac{\partial g_q}{\partial \boldsymbol{x}^s_a} = N^s_a \boldsymbol{n}_q , \quad
+\frac{\partial g_q}{\partial \boldsymbol{u}_{RP}} = -\boldsymbol{n}_q , \quad
+\frac{\partial g_q}{\partial \boldsymbol{\theta}} = -\boldsymbol{S}^T(\boldsymbol{r}_q \times \boldsymbol{n}_q) ,\]</div>
+<p>with <span class="math notranslate nohighlight">\(\boldsymbol{S} = \boldsymbol{R}\,\boldsymbol{J}_r(\boldsymbol{\theta})\)</span> (see
+<a class="reference internal" href="rigidbodies.html"><span class="doc">Rigid bodies</span></a>). Unlike the deformable case, the gap is not linear in the degrees of freedom: the
+normal rotates with the body, <span class="math notranslate nohighlight">\(\partial\boldsymbol{n}_q/\partial\boldsymbol{\theta} =
+-\mathrm{skew}(\boldsymbol{n}_q)\boldsymbol{S}\)</span>, which gives the geometric tangent terms coupling
+the rotation to the slave nodes and to <span class="math notranslate nohighlight">\(\boldsymbol{u}_{RP}\)</span>. The
+<span class="math notranslate nohighlight">\(\boldsymbol{\theta}\boldsymbol{\theta}\)</span> block is omitted, as for the node-based constraint;
+it plays no role for a fixed rigid body or in explicit runs.</p>
+<p><strong>Degrees of freedom.</strong> The constraint acts on all parent-face nodes of the slave surface and on the
+RP. This footprint does not depend on the search, so a search never changes the equation system –
+which matters on the explicit path, where the search runs every <code class="docutils literal notranslate"><span class="pre">contact-update-frequency</span></code>
+increments. The stiffness consists of one block per slave facet plus the RP block they all share
+(<code class="xref py py-mod docutils literal notranslate"><span class="pre">rigidbodycontactstiffness</span></code>). A fixed support is a rigid body
+whose RP carries Dirichlet conditions.</p>
+<p><strong>Penalty units.</strong> In both integrated constraints <code class="docutils literal notranslate"><span class="pre">penalty</span></code> is a modulus per unit area (force per
+length cubed), multiplied by each point’s integration weight. The node-based constraints use a
+force per length per node instead, so a node-based value converts approximately as
+<span class="math notranslate nohighlight">\(p_\text{integrated} \approx p_\text{node} / A_\text{tributary}\)</span>:</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Constraint</p></th>
+<th class="head"><p><code class="docutils literal notranslate"><span class="pre">type=linear</span></code></p></th>
+<th class="head"><p><code class="docutils literal notranslate"><span class="pre">type=quadratic</span></code></p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">surfaceToDeformableSurfacePenalty</span></code>, <code class="docutils literal notranslate"><span class="pre">surfaceToDiscreteRigidBodyPenalty</span></code></p></td>
+<td><p>force / length<sup>3</sup></p></td>
+<td><p>force / length<sup>4</sup></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">nodeToDiscreteRigidBodyPenalty</span></code></p></td>
+<td><p>force / length</p></td>
+<td><p>force / length<sup>2</sup></p></td>
+</tr>
+</tbody>
+</table>
+<p>The integrated penalty is therefore also independent of the mesh size, e.g. under AMR, whereas a
+per-node penalty stiffens the interface by the refinement factor.</p>
+</section>
+</section>
+<section id="framework-integration-and-verification">
+<h2>Framework integration and verification<a class="headerlink" href="#framework-integration-and-verification" title="Link to this heading"></a></h2>
+<p>What the constraints require of a solver, how the options should be chosen, and which test cases cover the above.</p>
+<section id="parameter-guidance">
+<h3>Parameter guidance<a class="headerlink" href="#parameter-guidance" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">tangentPenalty</span></code> <span class="math notranslate nohighlight">\(t\)</span> regularizes stick; the stick window (elastic reversal length) is
+<span class="math notranslate nohighlight">\(\delta_{stick} \approx \mu N / k_T\)</span> per node. Choose it such that
+<span class="math notranslate nohighlight">\(\delta_{stick}\)</span> is <em>well below</em> the expected slip per increment but not so stiff that
+the collective stick-to-slip transition at sliding onset makes Newton oscillate – in practice
+one to two orders of magnitude softer than the normal penalty. (The physics is insensitive to
+this choice: the sliding plateau <span class="math notranslate nohighlight">\(T/N = \mu\)</span> is exact for any regularization.)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">penalty</span></code> <span class="math notranslate nohighlight">\(p\)</span> sets the penetration <span class="math notranslate nohighlight">\(g \approx -N_s / (p A_s)\)</span> (linear) or
+<span class="math notranslate nohighlight">\(g \approx -\sqrt{2 N_s / (p A_s)}\)</span> (quadratic). With <code class="docutils literal notranslate"><span class="pre">augmentedLagrange=True</span></code> the
+multiplier absorbs the load over the increments and <span class="math notranslate nohighlight">\(p\)</span> can be chosen an order of
+magnitude lower for the same (or better) penetration control.</p></li>
+<li><p>Use <code class="docutils literal notranslate"><span class="pre">type=quadratic</span></code> whenever friction is active (see above); <code class="docutils literal notranslate"><span class="pre">type=linear</span></code> is appropriate
+for frictionless cases and yields the cleanest analytic correspondence (e.g. in patch tests).</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">nQuadraturePoints</span></code> (integrated contact only) defaults to 3, which integrates a quad8 parent
+face’s shape functions exactly over a Tria3 facet – that exactness is what makes the consistent
+nodal loads, negative corners included, come out right. Beware of a misleading self-check here:
+the facet weights sum to one, so the transmitted <strong>resultant</strong> is exact at any point count, and a
+test that only compares resultants passes at one point per facet. Under-integration degrades the
+<em>distribution</em> of that resultant over the parent-face nodes, which is the whole quantity of
+interest. Lower it only with a distribution-level check in hand.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">searchDistance</span></code> gates the broadphase: a contact point whose nearest master facet is further
+away than this is left unassigned and contributes nothing. Left unset, every point is always
+assigned its single closest facet with no distance gate, which is the right default for a closed
+interface; set it where slave facets genuinely have no counterpart, and size it well above the
+largest expected approach so that a point does not enter and leave the assigned set repeatedly.</p></li>
+</ul>
+</section>
+<section id="solver-integration">
+<h3>Solver integration<a class="headerlink" href="#solver-integration" title="Link to this heading"></a></h3>
+<p>The constraint participates in the implicit solution through three hooks:</p>
+<dl class="simple">
+<dt><code class="docutils literal notranslate"><span class="pre">updateConnectivity(model)</span></code> (once per increment in an implicit analysis, before the equation system is (re)built)</dt><dd><p>Re-assigns every slave to its closest facet from the last converged configuration (clamped
+closest point for small sliding, centroid distance for finite sliding), refreshes the frozen
+projection data, rotates the frictional history into the new tangent plane, zeroes the
+history and multiplier of slaves that lost contact, and reports whether the constraint’s DOF
+footprint changed. The solver rebuilds the <code class="docutils literal notranslate"><span class="pre">DofManager</span></code>/sparsity pattern only when some
+constraint reports a change. (All constraints are always polled – the poll must not
+short-circuit, since every dynamic constraint relies on the call to refresh its state.)</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">applyConstraint(U,</span> <span class="pre">dU,</span> <span class="pre">PExt,</span> <span class="pre">K,</span> <span class="pre">timeStep)</span></code> (every Newton iteration)</dt><dd><p>Assembles forces and consistent tangent from the current iterate, as derived above. All
+quantities derive from (converged state, <span class="math notranslate nohighlight">\(d\boldsymbol{U}\)</span>); nothing accumulates
+across iterations, so failed increments and cutbacks need no state rollback.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">acceptLastState()</span></code> (on increment acceptance)</dt><dd><p>Promotes the tangential forces of the converged iterate to the frictional history and
+performs the incremental Uzawa update of the normal multipliers.</p>
+</dd>
+</dl>
+<p>Per-slave results – normal pressures <span class="math notranslate nohighlight">\(p_s = -f_n/A_s\)</span>, tangential traction magnitudes,
+gaps – are exposed via <code class="docutils literal notranslate"><span class="pre">getNormalPressures()</span></code> / <code class="docutils literal notranslate"><span class="pre">getTangentialTractions()</span></code> / <code class="docutils literal notranslate"><span class="pre">getGaps()</span></code>,
+ordered like the generator’s <code class="docutils literal notranslate"><span class="pre">&lt;prefix&gt;_nodes</span></code> node set, and are typically requested as
+<code class="docutils literal notranslate"><span class="pre">fromExpression</span></code> field outputs.</p>
+<p>The integrated constraint (<a class="reference internal" href="#integrated-contact-algorithm"><span class="std std-ref">The integrated formulation, step by step</span></a>) presents the same
+<code class="docutils literal notranslate"><span class="pre">updateConnectivity</span></code> / <code class="docutils literal notranslate"><span class="pre">applyConstraint</span></code> pair, with three differences worth knowing at the
+solver boundary. It carries no history, so it has no <code class="docutils literal notranslate"><span class="pre">acceptLastState</span></code> to promote – every
+quantity derives from the converged state and <span class="math notranslate nohighlight">\(d\boldsymbol{U}\)</span>. Its DOF footprint is the set
+of <em>assigned</em> contact points and does not respond to gap activation, so the sparsity pattern
+changes only on a genuine reassignment, not when a point opens or closes mid-Newton. And its
+results are ordered <strong>by contact point</strong>, not by node: <code class="docutils literal notranslate"><span class="pre">getGaps()</span></code> and <code class="docutils literal notranslate"><span class="pre">getNormalPressures()</span></code>
+run over slave facets and, within a facet, over quadrature points, so a <code class="docutils literal notranslate"><span class="pre">fromExpression</span></code> output
+reading them cannot be tied to a node set – use a reduction, or <code class="docutils literal notranslate"><span class="pre">getSlaveNodalNormalForces()</span></code>,
+which is node-ordered like the accessors above.</p>
+<section id="explicit-dynamics">
+<span id="contact-explicit-dynamics"></span><h4>Explicit dynamics<a class="headerlink" href="#explicit-dynamics" title="Link to this heading"></a></h4>
+<p>Under <code class="docutils literal notranslate"><span class="pre">NED</span></code> (<a class="reference internal" href="solvers.html"><span class="doc">Solvers</span></a>) the same formulation is used, with two differences that follow from
+what an explicit increment is.</p>
+<p><strong>No tangent is assembled.</strong> An explicit increment solves no linear system, so a constraint
+stiffness enters nothing. The solver calls
+<a class="reference internal" href="constraints.html#edelweissfe.constraints.base.constraintbase.ConstraintBase.applyConstraintExplicit" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.applyConstraintExplicit"><code class="xref py py-meth docutils literal notranslate"><span class="pre">applyConstraintExplicit()</span></code></a>
+instead of <code class="docutils literal notranslate"><span class="pre">applyConstraint</span></code>, and this constraint overrides it to evaluate the contact forces
+without building a tangent at all. The base-class default forwards to <code class="docutils literal notranslate"><span class="pre">applyConstraint</span></code> with a
+discarded tangent contribution, so a constraint that has not been ported still works – correctly,
+but paying for a stiffness nobody reads. Constraints for which the tangent is a material part of
+the cost should override the method; for this one it is, at a per-slave outer product and four
+block writes.</p>
+<p><strong>The connectivity search is throttled.</strong> The closest-facet search is
+<span class="math notranslate nohighlight">\(\mathcal{O}(n_\text{slave} \times n_\text{facet})\)</span> work in Python, affordable once per
+increment of an implicit analysis – where it is amortised over a Newton loop and a linear
+solve – and not affordable at every one of millions of explicit increments. It therefore runs
+every <code class="docutils literal notranslate"><span class="pre">contact-update-frequency</span></code> increments, and is skipped entirely on an increment where a
+mid-run topology check is due, because that check re-searches every constraint anyway <em>after</em> a
+possible refinement (<a class="reference internal" href="adaptivitytheory.html"><span class="doc">Adaptive refinement: error estimation and marking</span></a>).</p>
+<p>What makes throttling defensible rather than merely cheap is that an explicit time step is tiny:
+between two searches a slave node moves <span class="math notranslate nohighlight">\(\|\boldsymbol{v}\| \, \Delta t \, f\)</span>, orders of
+magnitude below a facet dimension. This is reported rather than assumed – on every search that
+changes the connectivity the solver prints the largest nodal motion accumulated since the previous
+one, so the configured frequency can be checked against a given model’s facet size instead of
+trusted. A connectivity change rebuilds the equation system, but reuses the critical time step:
+the mesh is unchanged, so the stability limit is unchanged, and recomputing it would cost a full
+element pass.</p>
+<p>A candidate-facet pre-filter (a centroid k-d tree with a triangle-inequality radius bound) reduces
+the search cost without changing which facet is selected; it is a superset of the exhaustive sweep
+and iterated in ascending facet index, so it reproduces the exhaustive tie-break exactly.</p>
+<p><strong>What throttling costs in reproducibility, as opposed to accuracy.</strong> The argument above is about
+accuracy, and it holds. Reproducibility is a separate question, and the answer is different: a
+periodic re-search makes an explicit trajectory a <em>step function of rounding</em>. Re-projection itself
+does not – on a flat master it is provably a change of representation and nothing else, since
+<span class="math notranslate nohighlight">\(\bar{\boldsymbol{n}}\)</span> is constant and <span class="math notranslate nohighlight">\(\bar{\boldsymbol{n}} \cdot \boldsymbol{x}\)</span>
+is unchanged by a tangential slide, so the gap is bit-identical whichever facet, parent face or
+parametric location the search now returns (asserted in
+<code class="docutils literal notranslate"><span class="pre">test_surfacetodeformablesurfacepenalty.py</span></code>, both within one parent face and across two). What
+is discontinuous is the <em>frozen facet normal</em> where the master is deformed: two adjacent element
+faces are then no longer coplanar, and a point crossing their seam picks up the kink. Measured on
+<code class="docutils literal notranslate"><span class="pre">NEDSurfaceContact</span></code> at <code class="docutils literal notranslate"><span class="pre">contact-update-frequency=10</span></code>: 166 crossings over the run, with
+<span class="math notranslate nohighlight">\(\|\Delta \bar{\boldsymbol{n}}\|\)</span> up to <span class="math notranslate nohighlight">\(5.2 \times 10^{-2}\)</span> and a gap jump up to
+<span class="math notranslate nohighlight">\(4.8 \times 10^{-4}\)</span>, some 1.3 % of the gap. Which side of a seam a borderline point lands on
+is decided at the <span class="math notranslate nohighlight">\(10^{-16}\)</span> level, so a perturbation of that size grows to
+<span class="math notranslate nohighlight">\(5.3 \times 10^{-4}\)</span> in the final displacements; with the connectivity pinned
+(<code class="docutils literal notranslate"><span class="pre">contact-update-frequency=0</span></code>) the same perturbation ends at <span class="math notranslate nohighlight">\(3.8 \times 10^{-16}\)</span>.</p>
+<p>The practical consequences are worth separating. For a <em>simulation</em>, nothing here is a defect: the
+jump is the genuine facet-normal discontinuity of any facet-based scheme, it is self-limiting, and
+throttling remains the right trade. For a <em>regression reference</em>, it is fatal, so the explicit
+regression case pins its connectivity and the reassignment path is covered by unit tests instead.
+Note also that the node-based constraint’s decks are not a control for any of this unless they set
+<code class="docutils literal notranslate"><span class="pre">sliding=small</span></code> explicitly: the node-based default is <code class="docutils literal notranslate"><span class="pre">sliding=finite</span></code>, which has no frozen
+projection to re-freeze. Under <code class="docutils literal notranslate"><span class="pre">sliding=small</span></code> it injects re-projection jumps too (up to
+<span class="math notranslate nohighlight">\(4.8 \times 10^{-6}\)</span> on the equivalent model) and still reproduces to
+<span class="math notranslate nohighlight">\(6.9 \times 10^{-16}\)</span>, because its slave <em>nodes</em> happen never to cross a master element
+boundary where 54 quadrature points do – a property of that model’s sampling, not of the
+formulation.</p>
+<p><strong>Throttling and restart.</strong> Between two searches, a small-sliding contact constraint keeps the
+projection of the last search (master facet or rigid triangle, shape functions, normal). It belongs to
+an older configuration than a restart checkpoint’s, so it is written to the checkpoint
+(<code class="xref py py-mod docutils literal notranslate"><span class="pre">frozencontactsearch</span></code>) and a resumed explicit step adopts it
+instead of searching; the resumed run is then bitwise identical to the uninterrupted one. A
+checkpoint without it, or written for other contact points, falls back to a fresh search. The
+explicit solver writes a checkpoint after the topology check (<code class="docutils literal notranslate"><span class="pre">topology-check-frequency</span></code>) of its
+increment, so the checkpoint already holds the mesh, the contact search and the net force that check
+produced.</p>
+</section>
+</section>
+<section id="verification-and-benchmarks">
+<h3>Verification and benchmarks<a class="headerlink" href="#verification-and-benchmarks" title="Link to this heading"></a></h3>
+<p>The implementation is verified on several independent levels, and the regression suite pins the
+key physical invariants:</p>
+<ul class="simple">
+<li><p><strong>Derivatives</strong>: the finite-sliding gap gradient and Hessian against SymPy symbolic
+differentiation and central finite differences (machine precision, random configurations); the
+small-sliding and frictional consistent tangents (stick, slip, with history, with facet motion,
+with AL, 2D and 3D) against finite differences of the assembled forces (relative error
+<span class="math notranslate nohighlight">\(\sim 10^{-11}\)</span>).</p></li>
+<li><p><strong>Geometry</strong>: clamped closest-point projections against brute-force barycentric grid searches;
+all face-triangulation tables against the mesh generators’ actual node construction.</p></li>
+<li><p><strong>Patch test</strong> (<code class="docutils literal notranslate"><span class="pre">...ContactPatch</span></code>): matching meshes, <span class="math notranslate nohighlight">\(\nu = 0\)</span> – uniform pressure to
+machine precision against the analytic value; the mismatched variant quantifies the intrinsic
+node-to-surface pointwise limitation.</p></li>
+<li><p><strong>Friction physics</strong>: sliding plateau <span class="math notranslate nohighlight">\(T/N = \mu\)</span> exactly (drag tests, 2D and 3D, hexa8
+and hexa20); the full hysteresis loop <span class="math notranslate nohighlight">\(+\mu N \to\)</span> elastic unloading <span class="math notranslate nohighlight">\(\to -\mu N\)</span>
+under drag reversal (<code class="docutils literal notranslate"><span class="pre">...FrictionHysteresis</span></code>); a two-interface shaft pull-out where the pull
+force approaches <span class="math notranslate nohighlight">\(\mu\)</span> times the total confinement force, with the residual deviation
+explained by Poisson contraction of the shaft (<code class="docutils literal notranslate"><span class="pre">...PullOut</span></code>).</p></li>
+<li><p><strong>Curved interfaces</strong> (<code class="docutils literal notranslate"><span class="pre">...CurvedHexa20</span></code>): midside vs corner triangulation on an identical
+curved hexa20 mesh; the corner reduction’s chord sagitta acts as artificial gap and
+underestimates the total contact force by ~42 % in the committed configuration.</p></li>
+<li><p><strong>Augmented Lagrange</strong>: at a 10x reduced penalty, the AL solution is closer to a stiff
+pure-penalty reference than a pure penalty at the same reduced value; one-step force-transfer
+and clamping of the Uzawa update are unit-checked.</p></li>
+</ul>
+<p>Known, deliberate limitations: no self-contact (slave and master surfaces must not share nodes –
+enforced at construction); single assigned facet per slave and increment; pointwise pressure
+oscillation on non-matching meshes and serendipity-face corner liftoff as discussed in
+<a class="reference internal" href="#tributary-areas"><span class="std std-ref">Tributary areas and consistent lumping</span></a>; the finite-sliding branch retains its seam non-smoothness and dead zones
+and is effectively superseded by <code class="docutils literal notranslate"><span class="pre">sliding=small</span></code> for the intended applications.</p>
+</section>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="rigidbodies.html" class="btn btn-neutral float-left" title="Rigid bodies" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="dofmanager.html" class="btn btn-neutral float-right" title="Degree of Freedom (DOF) Manager and Numerics" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Matthias Neuner.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

@@ -1,0 +1,799 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>edelweissfe.adaptivity.refinement &mdash; EdelweissFE v22.07 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=cfdaff8d" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/custom.css?v=37fbe429" />
+
+  
+      <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../_static/documentation_options.js?v=17e2f33f"></script>
+      <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../index.html" class="icon icon-home">
+            EdelweissFE
+              <img src="../../../_static/edelweiss_fe_logo.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../features.html">Features</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../prerequisites.html">Prerequisites</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../documentation/index.html">Documentation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../contributors.html">Contributors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../publications.html">Publications</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">EdelweissFE</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">edelweissfe.adaptivity.refinement</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for edelweissfe.adaptivity.refinement</h1><div class="highlight"><pre>
+<span></span><span class="ch">#!/usr/bin/env python3</span>
+<span class="c1"># -*- coding: utf-8 -*-</span>
+<span class="c1">#  ---------------------------------------------------------------------</span>
+<span class="c1">#</span>
+<span class="c1">#  _____    _      _              _         _____ _____</span>
+<span class="c1"># | ____|__| | ___| |_      _____(_)___ ___|  ___| ____|</span>
+<span class="c1"># |  _| / _` |/ _ \ \ \ /\ / / _ \ / __/ __| |_  |  _|</span>
+<span class="c1"># | |__| (_| |  __/ |\ V  V /  __/ \__ \__ \  _| | |___</span>
+<span class="c1"># |_____\__,_|\___|_| \_/\_/ \___|_|___/___/_|   |_____|</span>
+<span class="c1">#</span>
+<span class="c1">#</span>
+<span class="c1">#  Unit of Strength of Materials and Structural Analysis</span>
+<span class="c1">#  University of Innsbruck,</span>
+<span class="c1">#  2017 - today</span>
+<span class="c1">#</span>
+<span class="c1">#  Matthias Neuner matthias.neuner@uibk.ac.at</span>
+<span class="c1">#</span>
+<span class="c1">#  This file is part of EdelweissFE.</span>
+<span class="c1">#</span>
+<span class="c1">#  This library is free software; you can redistribute it and/or</span>
+<span class="c1">#  modify it under the terms of the GNU Lesser General Public</span>
+<span class="c1">#  License as published by the Free Software Foundation; either</span>
+<span class="c1">#  version 2.1 of the License, or (at your option) any later version.</span>
+<span class="c1">#</span>
+<span class="c1">#  The full text of the license can be found in the file LICENSE.md at</span>
+<span class="c1">#  the top level directory of EdelweissFE.</span>
+<span class="c1">#  ---------------------------------------------------------------------</span>
+<span class="sd">"""Octree refinement of HEX20 elements: subdivision, 2:1 balancing, hanging-node classification and</span>
+<span class="sd">the conformity check -- all decided topologically, in exact integer arithmetic.</span>
+
+<span class="sd">Vocabulary (see also :mod:`edelweissfe.adaptivity.rootentities`)</span>
+<span class="sd">-----------------------------------------------------------------</span>
+<span class="sd">Reference box</span>
+<span class="sd">    Every element lies inside one root element and covers an axis-aligned box of that root's reference</span>
+<span class="sd">    lattice: an integer origin and an integer edge length (``2M`` for the root itself, divided by the</span>
+<span class="sd">    split factor at every level). An element's own nodes therefore sit at exact lattice points.</span>
+<span class="sd">Own node / hanging node</span>
+<span class="sd">    A node is one of an element's *own* nodes if it is in the element's connectivity. A node that lies</span>
+<span class="sd">    on the boundary of an active element without being one of its own nodes *hangs* on it: its value is</span>
+<span class="sd">    tied to the element's trace on that edge or face by a hanging-node constraint.</span>
+<span class="sd">Conformity</span>
+<span class="sd">    The active mesh is conforming up to the hanging-node constraints iff every node on the boundary of</span>
+<span class="sd">    an active element is an own node or a hanging node (:meth:`AdaptiveMesh.check_conformity`).</span>
+
+<span class="sd">Physical coordinates are carried along -- the finite elements need them, and children are placed with</span>
+<span class="sd">the parent's isoparametric map, so curved parents stay curved -- but no decision about which nodes</span>
+<span class="sd">coincide, touch or hang is ever taken from them.</span>
+<span class="sd">"""</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections</span><span class="w"> </span><span class="kn">import</span> <span class="n">defaultdict</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">fractions</span><span class="w"> </span><span class="kn">import</span> <span class="n">Fraction</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">itertools</span><span class="w"> </span><span class="kn">import</span> <span class="n">product</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">NamedTuple</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.adaptivity.rootentities</span><span class="w"> </span><span class="kn">import</span> <span class="n">RootEntityTable</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.mpctransformation</span><span class="w"> </span><span class="kn">import</span> <span class="n">_flattenChainedRecords</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.utils.exceptions</span><span class="w"> </span><span class="kn">import</span> <span class="n">TopologyError</span>
+
+<span class="c1">#: The deepest refinement level the exact reference lattice can represent. The lattice resolution is</span>
+<span class="c1">#: ``splitFactor ** MAXIMUM_REFINEMENT_DEPTH`` units per half root edge, which stays an ordinary</span>
+<span class="c1">#: integer for any practical split factor; refining beyond this depth raises.</span>
+<span class="n">MAXIMUM_REFINEMENT_DEPTH</span> <span class="o">=</span> <span class="mi">20</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">NodeRegistry</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Hands out node labels for the nodes that refinement creates, and remembers their coordinates.</span>
+
+<span class="sd">    A new node is named by its *identity* -- which corners of its parent span it, and in what exact</span>
+<span class="sd">    integer proportion (see :meth:`AdaptiveMesh._childConnectivity`) -- so every parent that touches</span>
+<span class="sd">    the point derives the same identity and gets the same label. Identities are kept per body</span>
+<span class="sd">    (``componentId``): two bodies touching at a flush interface never share a node.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    reserve_labels</span>
+<span class="sd">        The ``count -&gt; range`` label allocator of the model this registry mirrors, i.e.</span>
+<span class="sd">        ``TopologyPipeline.reserveNodeNumbers``, so model and octree draw from one counter and cannot collide.</span>
+<span class="sd">        Without one (a standalone octree, e.g. in tests) the registry mints ``max + 1`` itself.</span>
+<span class="sd">    """</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">reserve_labels</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_labelOfIdentity</span> <span class="o">=</span> <span class="p">{}</span>  <span class="c1"># (componentId, identity) -&gt; label</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">coordinates</span> <span class="o">=</span> <span class="p">{}</span>  <span class="c1"># label -&gt; np.ndarray(coord)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">componentOf</span> <span class="o">=</span> <span class="p">{}</span>  <span class="c1"># label -&gt; componentId of the body the node belongs to</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_maxLabel</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_reserveLabels</span> <span class="o">=</span> <span class="n">reserve_labels</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">seed</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">label</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">coord</span><span class="p">,</span> <span class="n">componentId</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Register an existing node of the model (a node of a root element): its coordinates and body."""</span>
+        <span class="c1"># a copy, never an alias of a live Node's array</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">coordinates</span><span class="p">[</span><span class="n">label</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">coord</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">componentOf</span><span class="p">[</span><span class="n">label</span><span class="p">]</span> <span class="o">=</span> <span class="n">componentId</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_maxLabel</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_maxLabel</span><span class="p">,</span> <span class="n">label</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">reserve_labels_up_to</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">label</span><span class="p">:</span> <span class="nb">int</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Raise the label high-water mark, so new labels cannot collide with labels the registry does</span>
+<span class="sd">        not track (nodes outside the refineable mesh, e.g. those of contact facets)."""</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_maxLabel</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_maxLabel</span><span class="p">,</span> <span class="n">label</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">label_of_new_node</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">identity</span><span class="p">,</span> <span class="n">coord</span><span class="p">,</span> <span class="n">componentId</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The label of the node with the given identity, minting a fresh one the first time.</span>
+
+<span class="sd">        Only minting draws a label; looking up a known identity -- the common case, since most new</span>
+<span class="sd">        nodes are shared by several children -- consumes none.</span>
+<span class="sd">        """</span>
+        <span class="n">key</span> <span class="o">=</span> <span class="p">(</span><span class="n">componentId</span><span class="p">,</span> <span class="n">identity</span><span class="p">)</span>
+        <span class="n">label</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_labelOfIdentity</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">label</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">label</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_mint</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_labelOfIdentity</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">label</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">coordinates</span><span class="p">[</span><span class="n">label</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">coord</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">componentOf</span><span class="p">[</span><span class="n">label</span><span class="p">]</span> <span class="o">=</span> <span class="n">componentId</span>
+        <span class="k">return</span> <span class="n">label</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_mint</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""One fresh label, from the model's allocator if this registry was given one."""</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_reserveLabels</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">label</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_maxLabel</span> <span class="o">+</span> <span class="mi">1</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="p">(</span><span class="n">label</span><span class="p">,)</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_reserveLabels</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">label</span> <span class="o">&lt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_maxLabel</span><span class="p">:</span>
+                <span class="c1"># the allocator is monotonic and was told about every label the registry knows, so</span>
+                <span class="c1"># this means registry and model were wired to different models</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">"the node allocator handed out label </span><span class="si">{:d}</span><span class="s2">, which the refinement registry "</span>
+                    <span class="s2">"already uses; registry and model are out of sync"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">label</span><span class="p">)</span>
+                <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_maxLabel</span> <span class="o">=</span> <span class="n">label</span>
+        <span class="k">return</span> <span class="n">label</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">HangingNode</span><span class="p">(</span><span class="n">NamedTuple</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""A hanging node: its value is ``sum(weights[i] * value(masters[i]))``, the trace of the master</span>
+<span class="sd">    element on the edge or face (``kind``) the node lies on."""</span>
+
+    <span class="n">slave</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">kind</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">masters</span><span class="p">:</span> <span class="nb">list</span>
+    <span class="n">weights</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">InternalPlane</span><span class="p">(</span><span class="n">NamedTuple</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""A lattice plane inside a root element: reference coordinate ``axis`` equals ``value``."""</span>
+
+    <span class="n">rootEid</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">axis</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">value</span><span class="p">:</span> <span class="nb">int</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">Rectangle</span><span class="p">(</span><span class="n">NamedTuple</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""An axis-aligned rectangle ``[uMin, uMax] x [vMin, vMax]`` of lattice coordinates on a face."""</span>
+
+    <span class="n">uMin</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">uMax</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">vMin</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">vMax</span><span class="p">:</span> <span class="nb">int</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">overlaps</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">:</span> <span class="s2">"Rectangle"</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""True if the two rectangles overlap with positive area (touching edges do not count)."""</span>
+        <span class="k">return</span> <span class="nb">min</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">uMax</span><span class="p">,</span> <span class="n">other</span><span class="o">.</span><span class="n">uMax</span><span class="p">)</span> <span class="o">&gt;</span> <span class="nb">max</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">uMin</span><span class="p">,</span> <span class="n">other</span><span class="o">.</span><span class="n">uMin</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">min</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">vMax</span><span class="p">,</span> <span class="n">other</span><span class="o">.</span><span class="n">vMax</span><span class="p">)</span> <span class="o">&gt;</span> <span class="nb">max</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">vMin</span><span class="p">,</span> <span class="n">other</span><span class="o">.</span><span class="n">vMin</span>
+        <span class="p">)</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">FaceOnEntity</span><span class="p">(</span><span class="n">NamedTuple</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""An element face: the entity it lies on (a :class:`~edelweissfe.adaptivity.rootentities.RootFace`</span>
+<span class="sd">    or an :class:`InternalPlane`) and the rectangle it covers there."""</span>
+
+    <span class="n">entity</span><span class="p">:</span> <span class="nb">object</span>
+    <span class="n">rectangle</span><span class="p">:</span> <span class="n">Rectangle</span>
+
+
+<div class="viewcode-block" id="AdaptiveMesh">
+<a class="viewcode-back" href="../../../documentation/modelmodifiers.html#edelweissfe.adaptivity.refinement.AdaptiveMesh">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">AdaptiveMesh</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Octree hierarchy of HEX20 elements: refinement, 2:1 balancing and hanging-node classification.</span>
+
+<span class="sd">    Every decision about how elements and nodes relate -- which nodes coincide, which node lies on</span>
+<span class="sd">    which face or edge, which elements share a face, which nodes hang and with which weights, which new</span>
+<span class="sd">    nodes join a node set -- is taken topologically and in exact integer arithmetic, never from physical</span>
+<span class="sd">    coordinates: each element knows its root and its exact reference box, and the root mesh's</span>
+<span class="sd">    vertices, edges and faces are named by their corner labels</span>
+<span class="sd">    (:class:`~edelweissfe.adaptivity.rootentities.RootEntityTable`). This holds on curved, warped and</span>
+<span class="sd">    arbitrarily oriented unstructured meshes alike. The only requirement is a conforming root mesh</span>
+<span class="sd">    without collapsed elements. :meth:`check_conformity` verifies the result after every adaptation.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    splitFactor</span>
+<span class="sd">        ``n``: a refined element is split into ``n`` parts per axis, i.e. ``n**3`` children.</span>
+<span class="sd">    topology</span>
+<span class="sd">        The element :class:`~edelweissfe.adaptivity.topologybase.TopologyBase` (default: HEX20).</span>
+<span class="sd">    reserve_labels</span>
+<span class="sd">        The model's node-label allocator, see :class:`NodeRegistry`.</span>
+<span class="sd">    """</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">splitFactor</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">2</span><span class="p">,</span> <span class="n">topology</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">reserve_labels</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">topology</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.adaptivity.hex20topology</span><span class="w"> </span><span class="kn">import</span> <span class="n">Hex20Topology</span>
+
+            <span class="n">topology</span> <span class="o">=</span> <span class="n">Hex20Topology</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">topology</span> <span class="o">=</span> <span class="n">topology</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">registry</span> <span class="o">=</span> <span class="n">NodeRegistry</span><span class="p">(</span><span class="n">reserve_labels</span><span class="o">=</span><span class="n">reserve_labels</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">splitFactor</span> <span class="o">=</span> <span class="n">splitFactor</span>
+        <span class="c1">#: M: reference coordinate xi of a root is the lattice integer (xi + 1) * M</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">latticeUnits</span> <span class="o">=</span> <span class="n">splitFactor</span><span class="o">**</span><span class="n">MAXIMUM_REFINEMENT_DEPTH</span>
+        <span class="c1">#: eid -&gt; dict(conn, coords, level, active, parent, children, componentId, rootEid,</span>
+        <span class="c1">#: referenceBoxOrigin, referenceBoxEdgeLength, nodeKeys)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">elements</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="c1"># The active elements, so that active() does not scan the hierarchy. Insertion order is ascending</span>
+        <span class="c1"># in eid, which balance_2to1 relies on.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_active</span> <span class="o">=</span> <span class="p">{}</span>  <span class="c1"># eid -&gt; None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">elementSets</span> <span class="o">=</span> <span class="p">{}</span>  <span class="c1"># name -&gt; set(eid)      (children inherit membership on refine)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">nodeSets</span> <span class="o">=</span> <span class="p">{}</span>  <span class="c1"># name -&gt; set(node label)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">surfaces</span> <span class="o">=</span> <span class="p">{}</span>  <span class="c1"># name -&gt; set((eid, faceID))  (element-based, Marmot faceID convention)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_next</span> <span class="o">=</span> <span class="mi">1</span>
+        <span class="n">n</span> <span class="o">=</span> <span class="n">splitFactor</span>
+        <span class="n">lattice</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">topology</span><span class="o">.</span><span class="n">reference_node_lattice</span>  <span class="c1"># own nodes, 0..2 per axis</span>
+        <span class="c1">#: per child (in subdivision order ix * n * n + iy * n + iz): its nodes on the parent's lattice</span>
+        <span class="c1">#: with 2n units per edge -- the child at position i along an axis covers [2i, 2i + 2] there</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_childLattice</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="p">[</span><span class="nb">tuple</span><span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="n">i</span> <span class="o">+</span> <span class="nb">int</span><span class="p">(</span><span class="n">p</span><span class="p">[</span><span class="n">k</span><span class="p">])</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">position</span><span class="p">))</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">lattice</span><span class="p">]</span>
+            <span class="k">for</span> <span class="n">position</span> <span class="ow">in</span> <span class="n">product</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="n">n</span><span class="p">),</span> <span class="n">repeat</span><span class="o">=</span><span class="mi">3</span><span class="p">)</span>
+        <span class="p">]</span>
+        <span class="c1">#: the parent's own nodes on the same lattice, so a child node landing on one reuses it</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_ownNodeAt</span> <span class="o">=</span> <span class="p">{</span><span class="nb">tuple</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="o">*</span> <span class="n">n</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">p</span><span class="p">):</span> <span class="n">slot</span> <span class="k">for</span> <span class="n">slot</span><span class="p">,</span> <span class="n">p</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">lattice</span><span class="p">)}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_cornerSlots</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">topology</span><span class="o">.</span><span class="n">corner_slots</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">rootEntities</span> <span class="o">=</span> <span class="n">RootEntityTable</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">topology</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">latticeUnits</span><span class="p">)</span>
+        <span class="c1">#: result of _nodesOnElementBoundaries for the current active mesh; reset by every change</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_boundaryNodesCache</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="c1">#: (point in an element's box, its edge length, entity) -&gt; verified hanging-node weights; valid</span>
+        <span class="c1">#: for the lifetime of the mesh, as they depend on nothing else</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_traceWeightsOf</span> <span class="o">=</span> <span class="p">{}</span>
+
+    <span class="c1"># ---- topological containers ----</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">define_element_set</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">eids</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">elementSets</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">eids</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">define_node_set</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">labels</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">nodeSets</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">labels</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">define_surface</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">pairs</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""pairs: iterable of (eid, faceID) with Marmot faceID (1-6)."""</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">surfaces</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">pairs</span><span class="p">)</span>
+
+    <span class="c1"># ---- building the hierarchy ----</span>
+<div class="viewcode-block" id="AdaptiveMesh.add_root">
+<a class="viewcode-back" href="../../../documentation/modelmodifiers.html#edelweissfe.adaptivity.refinement.AdaptiveMesh.add_root">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">add_root</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">coords</span><span class="p">,</span> <span class="n">labels</span><span class="p">,</span> <span class="n">componentId</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Add a root (level-0) element: its 20 node coordinates and node labels, in C3D20 order.</span>
+
+<span class="sd">        The labels are the model's own, and each must have been registered with</span>
+<span class="sd">        :meth:`NodeRegistry.seed`. ``componentId`` is the connected body the element belongs to: node</span>
+<span class="sd">        identities are kept per body, so two bodies sharing a flush interface are never welded together.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            For an unregistered label, a collapsed root element, or a non-manifold root mesh.</span>
+<span class="sd">        """</span>
+        <span class="n">labels</span> <span class="o">=</span> <span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">label</span><span class="p">)</span> <span class="k">for</span> <span class="n">label</span> <span class="ow">in</span> <span class="n">labels</span><span class="p">]</span>
+        <span class="n">unknown</span> <span class="o">=</span> <span class="p">[</span><span class="n">label</span> <span class="k">for</span> <span class="n">label</span> <span class="ow">in</span> <span class="n">labels</span> <span class="k">if</span> <span class="n">label</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">registry</span><span class="o">.</span><span class="n">coordinates</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">unknown</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"root element node(s) </span><span class="si">{</span><span class="n">unknown</span><span class="si">}</span><span class="s2"> were not seeded into the refinement registry"</span><span class="p">)</span>
+        <span class="n">eid</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_add</span><span class="p">(</span><span class="n">coords</span><span class="p">,</span> <span class="n">labels</span><span class="p">,</span> <span class="n">level</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">parent</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">componentId</span><span class="o">=</span><span class="n">componentId</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">rootEntities</span><span class="o">.</span><span class="n">add_root</span><span class="p">(</span><span class="n">eid</span><span class="p">,</span> <span class="n">labels</span><span class="p">,</span> <span class="n">componentId</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">eid</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_add</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">coords</span><span class="p">,</span> <span class="n">conn</span><span class="p">,</span> <span class="n">level</span><span class="p">,</span> <span class="n">parent</span><span class="p">,</span> <span class="n">componentId</span><span class="p">,</span> <span class="n">childPosition</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+        <span class="n">eid</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_next</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_next</span> <span class="o">+=</span> <span class="mi">1</span>
+        <span class="k">if</span> <span class="n">parent</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">rootEid</span><span class="p">,</span> <span class="n">origin</span><span class="p">,</span> <span class="n">edgeLength</span> <span class="o">=</span> <span class="n">eid</span><span class="p">,</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="mi">2</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">latticeUnits</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># the child's box in its root's lattice: the parent's box, split n ways per axis</span>
+            <span class="n">p</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">elements</span><span class="p">[</span><span class="n">parent</span><span class="p">]</span>
+            <span class="n">rootEid</span> <span class="o">=</span> <span class="n">p</span><span class="p">[</span><span class="s2">"rootEid"</span><span class="p">]</span>
+            <span class="n">edgeLength</span> <span class="o">=</span> <span class="n">p</span><span class="p">[</span><span class="s2">"referenceBoxEdgeLength"</span><span class="p">]</span> <span class="o">//</span> <span class="bp">self</span><span class="o">.</span><span class="n">splitFactor</span>
+            <span class="n">origin</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">p</span><span class="p">[</span><span class="s2">"referenceBoxOrigin"</span><span class="p">][</span><span class="n">k</span><span class="p">]</span> <span class="o">+</span> <span class="n">childPosition</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">*</span> <span class="n">edgeLength</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">3</span><span class="p">))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">elements</span><span class="p">[</span><span class="n">eid</span><span class="p">]</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span>
+            <span class="n">conn</span><span class="o">=</span><span class="n">conn</span><span class="p">,</span>
+            <span class="n">coords</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">coords</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">),</span>
+            <span class="n">level</span><span class="o">=</span><span class="n">level</span><span class="p">,</span>
+            <span class="n">active</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="n">parent</span><span class="o">=</span><span class="n">parent</span><span class="p">,</span>
+            <span class="n">children</span><span class="o">=</span><span class="p">[],</span>
+            <span class="n">componentId</span><span class="o">=</span><span class="n">componentId</span><span class="p">,</span>
+            <span class="n">rootEid</span><span class="o">=</span><span class="n">rootEid</span><span class="p">,</span>
+            <span class="n">referenceBoxOrigin</span><span class="o">=</span><span class="n">origin</span><span class="p">,</span>
+            <span class="n">referenceBoxEdgeLength</span><span class="o">=</span><span class="n">edgeLength</span><span class="p">,</span>
+            <span class="n">nodeKeys</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_active</span><span class="p">[</span><span class="n">eid</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_boundaryNodesCache</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">return</span> <span class="n">eid</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_childConnectivity</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">parentConn</span><span class="p">,</span> <span class="n">childIndex</span><span class="p">,</span> <span class="n">coords</span><span class="p">,</span> <span class="n">componentId</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The node labels of one child, decided topologically.</span>
+
+<span class="sd">        Each child node is either one of the parent's own nodes -- an exact lattice match, reused -- or</span>
+<span class="sd">        a new node spanned by some of the parent's corners. Its identity is then the set of spanning</span>
+<span class="sd">        corner *labels* with exact integer (multilinear) weights; a neighbour sharing that face or edge</span>
+<span class="sd">        names the same corners with the same weights, so both arrive at one label for one point.</span>
+<span class="sd">        """</span>
+        <span class="n">extent</span> <span class="o">=</span> <span class="mi">2</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">splitFactor</span>
+        <span class="n">lattice</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">topology</span><span class="o">.</span><span class="n">reference_node_lattice</span>
+        <span class="n">conn</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">slot</span><span class="p">,</span> <span class="n">point</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_childLattice</span><span class="p">[</span><span class="n">childIndex</span><span class="p">]):</span>
+            <span class="n">own</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ownNodeAt</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">point</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">own</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">conn</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">parentConn</span><span class="p">[</span><span class="n">own</span><span class="p">])</span>
+                <span class="k">continue</span>
+            <span class="n">spanning</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="k">for</span> <span class="n">cornerSlot</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cornerSlots</span><span class="p">:</span>
+                <span class="n">weight</span> <span class="o">=</span> <span class="mi">1</span>
+                <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">3</span><span class="p">):</span>
+                    <span class="n">weight</span> <span class="o">*=</span> <span class="n">point</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="k">if</span> <span class="n">lattice</span><span class="p">[</span><span class="n">cornerSlot</span><span class="p">][</span><span class="n">k</span><span class="p">]</span> <span class="o">==</span> <span class="mi">2</span> <span class="k">else</span> <span class="n">extent</span> <span class="o">-</span> <span class="n">point</span><span class="p">[</span><span class="n">k</span><span class="p">]</span>
+                <span class="k">if</span> <span class="n">weight</span><span class="p">:</span>
+                    <span class="n">spanning</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">parentConn</span><span class="p">[</span><span class="n">cornerSlot</span><span class="p">],</span> <span class="n">weight</span><span class="p">))</span>
+            <span class="n">spanning</span><span class="o">.</span><span class="n">sort</span><span class="p">()</span>
+            <span class="n">conn</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">registry</span><span class="o">.</span><span class="n">label_of_new_node</span><span class="p">(</span><span class="nb">tuple</span><span class="p">(</span><span class="n">spanning</span><span class="p">),</span> <span class="n">coords</span><span class="p">[</span><span class="n">slot</span><span class="p">],</span> <span class="n">componentId</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">conn</span>
+
+<div class="viewcode-block" id="AdaptiveMesh.refine">
+<a class="viewcode-back" href="../../../documentation/modelmodifiers.html#edelweissfe.adaptivity.refinement.AdaptiveMesh.refine">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">refine</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">eid</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Split an active element into ``splitFactor**3`` children; deactivate it and keep element sets,</span>
+<span class="sd">        surfaces and node sets consistent.</span>
+
+<span class="sd">        Children are returned in subdivision order, ``ix * n * n + iy * n + iz``</span>
+<span class="sd">        (see :meth:`~edelweissfe.adaptivity.topologybase.TopologyBase.subdivision_children_param`).</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        TopologyError</span>
+<span class="sd">            Beyond :data:`MAXIMUM_REFINEMENT_DEPTH`.</span>
+<span class="sd">        """</span>
+        <span class="n">e</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">elements</span><span class="p">[</span><span class="n">eid</span><span class="p">]</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">e</span><span class="p">[</span><span class="s2">"active"</span><span class="p">]:</span>
+            <span class="k">return</span> <span class="n">e</span><span class="p">[</span><span class="s2">"children"</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">e</span><span class="p">[</span><span class="s2">"level"</span><span class="p">]</span> <span class="o">&gt;=</span> <span class="n">MAXIMUM_REFINEMENT_DEPTH</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">TopologyError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"AMR: element </span><span class="si">{</span><span class="n">eid</span><span class="si">}</span><span class="s2"> is at the maximum refinement depth </span><span class="si">{</span><span class="n">MAXIMUM_REFINEMENT_DEPTH</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+        <span class="n">n</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">splitFactor</span>
+        <span class="n">parentConn</span> <span class="o">=</span> <span class="n">e</span><span class="p">[</span><span class="s2">"conn"</span><span class="p">]</span>
+        <span class="n">kids</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">childIndex</span><span class="p">,</span> <span class="p">(</span><span class="n">childCoords</span><span class="p">,</span> <span class="n">position</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span>
+            <span class="nb">zip</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">topology</span><span class="o">.</span><span class="n">subdivide</span><span class="p">(</span><span class="n">e</span><span class="p">[</span><span class="s2">"coords"</span><span class="p">],</span> <span class="n">n</span><span class="p">),</span> <span class="n">product</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="n">n</span><span class="p">),</span> <span class="n">repeat</span><span class="o">=</span><span class="mi">3</span><span class="p">))</span>
+        <span class="p">):</span>
+            <span class="c1"># children stay in the parent's body, and take their node identities from it</span>
+            <span class="n">conn</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_childConnectivity</span><span class="p">(</span><span class="n">parentConn</span><span class="p">,</span> <span class="n">childIndex</span><span class="p">,</span> <span class="n">childCoords</span><span class="p">,</span> <span class="n">e</span><span class="p">[</span><span class="s2">"componentId"</span><span class="p">])</span>
+            <span class="n">kids</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_add</span><span class="p">(</span><span class="n">childCoords</span><span class="p">,</span> <span class="n">conn</span><span class="p">,</span> <span class="n">e</span><span class="p">[</span><span class="s2">"level"</span><span class="p">]</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="n">eid</span><span class="p">,</span> <span class="n">e</span><span class="p">[</span><span class="s2">"componentId"</span><span class="p">],</span> <span class="n">position</span><span class="p">))</span>
+        <span class="n">e</span><span class="p">[</span><span class="s2">"active"</span><span class="p">]</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="k">del</span> <span class="bp">self</span><span class="o">.</span><span class="n">_active</span><span class="p">[</span><span class="n">eid</span><span class="p">]</span>
+        <span class="n">e</span><span class="p">[</span><span class="s2">"children"</span><span class="p">]</span> <span class="o">=</span> <span class="n">kids</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_boundaryNodesCache</span> <span class="o">=</span> <span class="kc">None</span>
+
+        <span class="c1"># element sets + section assignment: children inherit every membership of the parent</span>
+        <span class="k">for</span> <span class="n">members</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">elementSets</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+            <span class="k">if</span> <span class="n">eid</span> <span class="ow">in</span> <span class="n">members</span><span class="p">:</span>
+                <span class="n">members</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">kids</span><span class="p">)</span>
+
+        <span class="c1"># surfaces: (parent, faceID) -&gt; (child, faceID) for the children tiling that face</span>
+        <span class="k">for</span> <span class="n">pairs</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">surfaces</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+            <span class="n">faceids_here</span> <span class="o">=</span> <span class="p">[</span><span class="n">fid</span> <span class="k">for</span> <span class="p">(</span><span class="n">peid</span><span class="p">,</span> <span class="n">fid</span><span class="p">)</span> <span class="ow">in</span> <span class="n">pairs</span> <span class="k">if</span> <span class="n">peid</span> <span class="o">==</span> <span class="n">eid</span><span class="p">]</span>
+            <span class="k">for</span> <span class="n">fid</span> <span class="ow">in</span> <span class="n">faceids_here</span><span class="p">:</span>
+                <span class="n">pairs</span><span class="o">.</span><span class="n">discard</span><span class="p">((</span><span class="n">eid</span><span class="p">,</span> <span class="n">fid</span><span class="p">))</span>
+                <span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">topology</span><span class="o">.</span><span class="n">face_child_indices</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">topology</span><span class="o">.</span><span class="n">faceid_to_face</span><span class="p">[</span><span class="n">fid</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">splitFactor</span><span class="p">):</span>
+                    <span class="n">pairs</span><span class="o">.</span><span class="n">add</span><span class="p">((</span><span class="n">kids</span><span class="p">[</span><span class="n">j</span><span class="p">],</span> <span class="n">fid</span><span class="p">))</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_inheritNodeSetMembership</span><span class="p">(</span><span class="n">parentConn</span><span class="p">,</span> <span class="n">kids</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">kids</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_inheritNodeSetMembership</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">parentConn</span><span class="p">,</span> <span class="n">kids</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""A new node joins a node set iff it lies on a parent face or edge whose nodes are all in the set</span>
+<span class="sd">        -- decided from the node's exact lattice position in the parent.</span>
+
+<span class="sd">        A node set is thus inherited *through faces and edges*: a set holding all nodes of a face gains</span>
+<span class="sd">        the new nodes on that face (even if it was meant as the face's perimeter only), and a set never</span>
+<span class="sd">        gains new nodes inside the parent. Where that is not the intended membership, define the set</span>
+<span class="sd">        through an element set or a surface instead.</span>
+<span class="sd">        """</span>
+        <span class="n">extent</span> <span class="o">=</span> <span class="mi">2</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">splitFactor</span>
+        <span class="n">onEntities</span> <span class="o">=</span> <span class="p">{}</span>  <span class="c1"># new node label -&gt; parent faces and edges it lies on</span>
+        <span class="k">for</span> <span class="n">childIndex</span><span class="p">,</span> <span class="n">kid</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">kids</span><span class="p">):</span>
+            <span class="k">for</span> <span class="n">label</span><span class="p">,</span> <span class="n">point</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">elements</span><span class="p">[</span><span class="n">kid</span><span class="p">][</span><span class="s2">"conn"</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">_childLattice</span><span class="p">[</span><span class="n">childIndex</span><span class="p">]):</span>
+                <span class="k">if</span> <span class="n">label</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">onEntities</span> <span class="ow">and</span> <span class="n">point</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ownNodeAt</span><span class="p">:</span>
+                    <span class="n">onEntities</span><span class="p">[</span><span class="n">label</span><span class="p">]</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">topology</span><span class="o">.</span><span class="n">entities_containing</span><span class="p">(</span><span class="n">point</span><span class="p">,</span> <span class="n">extent</span><span class="p">))</span>
+        <span class="n">entities</span> <span class="o">=</span> <span class="p">[</span><span class="nb">tuple</span><span class="p">(</span><span class="n">f</span><span class="p">)</span> <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">topology</span><span class="o">.</span><span class="n">faces</span><span class="p">]</span> <span class="o">+</span> <span class="p">[</span><span class="nb">tuple</span><span class="p">(</span><span class="n">ed</span><span class="p">)</span> <span class="k">for</span> <span class="n">ed</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">topology</span><span class="o">.</span><span class="n">edges</span><span class="p">]</span>
+        <span class="k">for</span> <span class="n">S</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">nodeSets</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+            <span class="n">inSet</span> <span class="o">=</span> <span class="p">[</span><span class="n">entity</span> <span class="k">for</span> <span class="n">entity</span> <span class="ow">in</span> <span class="n">entities</span> <span class="k">if</span> <span class="nb">all</span><span class="p">(</span><span class="n">parentConn</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="ow">in</span> <span class="n">S</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">entity</span><span class="p">)]</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">inSet</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="k">for</span> <span class="n">label</span><span class="p">,</span> <span class="n">containing</span> <span class="ow">in</span> <span class="n">onEntities</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                <span class="k">if</span> <span class="nb">any</span><span class="p">(</span><span class="n">entity</span> <span class="ow">in</span> <span class="n">containing</span> <span class="k">for</span> <span class="n">entity</span> <span class="ow">in</span> <span class="n">inSet</span><span class="p">):</span>
+                    <span class="n">S</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">label</span><span class="p">)</span>
+
+    <span class="c1"># ---- queries ----</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">active</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The active (leaf) elements, in ascending eid order."""</span>
+        <span class="k">return</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_active</span><span class="p">)</span>
+
+<div class="viewcode-block" id="AdaptiveMesh.node_lattice_points">
+<a class="viewcode-back" href="../../../documentation/modelmodifiers.html#edelweissfe.adaptivity.refinement.AdaptiveMesh.node_lattice_points">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">node_lattice_points</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">eid</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The lattice points, in the element's root, of the element's own nodes (slot order)."""</span>
+        <span class="n">e</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">elements</span><span class="p">[</span><span class="n">eid</span><span class="p">]</span>
+        <span class="n">origin</span><span class="p">,</span> <span class="n">half</span> <span class="o">=</span> <span class="n">e</span><span class="p">[</span><span class="s2">"referenceBoxOrigin"</span><span class="p">],</span> <span class="n">e</span><span class="p">[</span><span class="s2">"referenceBoxEdgeLength"</span><span class="p">]</span> <span class="o">//</span> <span class="mi">2</span>
+        <span class="k">return</span> <span class="p">[</span><span class="nb">tuple</span><span class="p">(</span><span class="n">origin</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">+</span> <span class="nb">int</span><span class="p">(</span><span class="n">p</span><span class="p">[</span><span class="n">k</span><span class="p">])</span> <span class="o">*</span> <span class="n">half</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">3</span><span class="p">))</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">topology</span><span class="o">.</span><span class="n">reference_node_lattice</span><span class="p">]</span></div>
+
+
+<div class="viewcode-block" id="AdaptiveMesh.node_keys">
+<a class="viewcode-back" href="../../../documentation/modelmodifiers.html#edelweissfe.adaptivity.refinement.AdaptiveMesh.node_keys">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">node_keys</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">eid</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The :class:`~edelweissfe.adaptivity.rootentities.NodeKey` of each of the element's own nodes,</span>
+<span class="sd">        in slot order. Computed once: an element's reference box never changes."""</span>
+        <span class="n">e</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">elements</span><span class="p">[</span><span class="n">eid</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">e</span><span class="p">[</span><span class="s2">"nodeKeys"</span><span class="p">]</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">e</span><span class="p">[</span><span class="s2">"nodeKeys"</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">rootEntities</span><span class="o">.</span><span class="n">key</span><span class="p">(</span><span class="n">e</span><span class="p">[</span><span class="s2">"rootEid"</span><span class="p">],</span> <span class="n">point</span><span class="p">)</span> <span class="k">for</span> <span class="n">point</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">node_lattice_points</span><span class="p">(</span><span class="n">eid</span><span class="p">)]</span>
+        <span class="k">return</span> <span class="n">e</span><span class="p">[</span><span class="s2">"nodeKeys"</span><span class="p">]</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_nodesOnElementBoundaries</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Every node on the boundary of an active element that is not one of its own nodes, as</span>
+<span class="sd">        ``(eid, label, pointInElement)``: the node's lattice point relative to that element's box</span>
+<span class="sd">        origin, the element spanning ``[0, edge length]`` per axis.</span>
+
+<span class="sd">        Exact and exhaustive by construction: every node sits at an exact point of its root, and the root</span>
+<span class="sd">        mesh's entities are named by their corner labels, so a node on an element's boundary is found</span>
+<span class="sd">        whichever element -- or neighbouring root -- it belongs to. Also verifies that no point carries</span>
+<span class="sd">        two nodes and no node sits at two points. Only a refined root, or a root sharing a vertex with</span>
+<span class="sd">        one, can hold such a node (elsewhere the mesh is the conforming root mesh itself), so only their</span>
+<span class="sd">        elements are examined. Cached until the mesh next changes.</span>
+<span class="sd">        """</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_boundaryNodesCache</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_boundaryNodesCache</span>
+        <span class="n">act</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">active</span><span class="p">()</span>
+        <span class="n">refinedRoots</span> <span class="o">=</span> <span class="p">{</span><span class="bp">self</span><span class="o">.</span><span class="n">elements</span><span class="p">[</span><span class="n">eid</span><span class="p">][</span><span class="s2">"rootEid"</span><span class="p">]</span> <span class="k">for</span> <span class="n">eid</span> <span class="ow">in</span> <span class="n">act</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">elements</span><span class="p">[</span><span class="n">eid</span><span class="p">][</span><span class="s2">"level"</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">}</span>
+        <span class="n">relevantRoots</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">root</span> <span class="ow">in</span> <span class="n">refinedRoots</span><span class="p">:</span>
+            <span class="n">relevantRoots</span> <span class="o">|=</span> <span class="bp">self</span><span class="o">.</span><span class="n">rootEntities</span><span class="o">.</span><span class="n">roots_touching</span><span class="p">(</span><span class="n">root</span><span class="p">)</span>
+        <span class="n">labelOfKey</span><span class="p">,</span> <span class="n">keyOfLabel</span> <span class="o">=</span> <span class="p">{},</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">eid</span> <span class="ow">in</span> <span class="n">act</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">elements</span><span class="p">[</span><span class="n">eid</span><span class="p">][</span><span class="s2">"rootEid"</span><span class="p">]</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">relevantRoots</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="k">for</span> <span class="n">label</span><span class="p">,</span> <span class="n">key</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">elements</span><span class="p">[</span><span class="n">eid</span><span class="p">][</span><span class="s2">"conn"</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">node_keys</span><span class="p">(</span><span class="n">eid</span><span class="p">)):</span>
+                <span class="k">if</span> <span class="n">labelOfKey</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">label</span><span class="p">)</span> <span class="o">!=</span> <span class="n">label</span> <span class="ow">or</span> <span class="n">keyOfLabel</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="n">label</span><span class="p">,</span> <span class="n">key</span><span class="p">)</span> <span class="o">!=</span> <span class="n">key</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="n">TopologyError</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">"AMR conformity: node </span><span class="si">{</span><span class="n">label</span><span class="si">}</span><span class="s2"> and node </span><span class="si">{</span><span class="n">labelOfKey</span><span class="p">[</span><span class="n">key</span><span class="p">]</span><span class="si">}</span><span class="s2"> occupy one point </span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2"> "</span>
+                        <span class="sa">f</span><span class="s2">"(or node </span><span class="si">{</span><span class="n">label</span><span class="si">}</span><span class="s2"> sits at two points); refinement split or merged a node"</span>
+                    <span class="p">)</span>
+
+        <span class="n">nodesOfRoot</span> <span class="o">=</span> <span class="p">{</span><span class="n">root</span><span class="p">:</span> <span class="p">[]</span> <span class="k">for</span> <span class="n">root</span> <span class="ow">in</span> <span class="n">relevantRoots</span><span class="p">}</span>  <span class="c1"># root -&gt; [(label, lattice point in that root)]</span>
+        <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">label</span> <span class="ow">in</span> <span class="n">labelOfKey</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">for</span> <span class="n">root</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">rootEntities</span><span class="o">.</span><span class="n">roots_sharing</span><span class="p">(</span><span class="n">key</span><span class="p">):</span>
+                <span class="k">if</span> <span class="n">root</span> <span class="ow">in</span> <span class="n">nodesOfRoot</span><span class="p">:</span>
+                    <span class="n">nodesOfRoot</span><span class="p">[</span><span class="n">root</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">label</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">rootEntities</span><span class="o">.</span><span class="n">local_point</span><span class="p">(</span><span class="n">root</span><span class="p">,</span> <span class="n">key</span><span class="p">)))</span>
+
+        <span class="c1"># per node, descend its root's octree to the active elements whose closed box contains it:</span>
+        <span class="c1"># O(nodes x depth), not O(elements x nodes) per root</span>
+        <span class="n">found</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">root</span><span class="p">,</span> <span class="n">nodes</span> <span class="ow">in</span> <span class="n">nodesOfRoot</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">for</span> <span class="n">label</span><span class="p">,</span> <span class="n">point</span> <span class="ow">in</span> <span class="n">nodes</span><span class="p">:</span>
+                <span class="k">for</span> <span class="n">eid</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_activeElementsContaining</span><span class="p">(</span><span class="n">root</span><span class="p">,</span> <span class="n">point</span><span class="p">):</span>
+                    <span class="n">e</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">elements</span><span class="p">[</span><span class="n">eid</span><span class="p">]</span>
+                    <span class="k">if</span> <span class="n">label</span> <span class="ow">in</span> <span class="n">e</span><span class="p">[</span><span class="s2">"conn"</span><span class="p">]:</span>
+                        <span class="k">continue</span>
+                    <span class="n">edgeLength</span> <span class="o">=</span> <span class="n">e</span><span class="p">[</span><span class="s2">"referenceBoxEdgeLength"</span><span class="p">]</span>
+                    <span class="n">pointInElement</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">point</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">-</span> <span class="n">e</span><span class="p">[</span><span class="s2">"referenceBoxOrigin"</span><span class="p">][</span><span class="n">k</span><span class="p">]</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">3</span><span class="p">))</span>
+                    <span class="k">if</span> <span class="nb">any</span><span class="p">(</span><span class="n">v</span> <span class="o">==</span> <span class="mi">0</span> <span class="ow">or</span> <span class="n">v</span> <span class="o">==</span> <span class="n">edgeLength</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">pointInElement</span><span class="p">):</span>
+                        <span class="n">found</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">eid</span><span class="p">,</span> <span class="n">label</span><span class="p">,</span> <span class="n">pointInElement</span><span class="p">))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_boundaryNodesCache</span> <span class="o">=</span> <span class="n">found</span>
+        <span class="k">return</span> <span class="n">found</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_activeElementsContaining</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">rootEid</span><span class="p">,</span> <span class="n">point</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The active elements of root ``rootEid`` whose closed box contains a lattice point, found by</span>
+<span class="sd">        descending the octree: the child along each axis follows from the point's position, and a point</span>
+<span class="sd">        on a split plane belongs to the children on both sides."""</span>
+        <span class="n">n</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">splitFactor</span>
+        <span class="n">found</span><span class="p">,</span> <span class="n">stack</span> <span class="o">=</span> <span class="p">[],</span> <span class="p">[</span><span class="n">rootEid</span><span class="p">]</span>
+        <span class="k">while</span> <span class="n">stack</span><span class="p">:</span>
+            <span class="n">eid</span> <span class="o">=</span> <span class="n">stack</span><span class="o">.</span><span class="n">pop</span><span class="p">()</span>
+            <span class="n">e</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">elements</span><span class="p">[</span><span class="n">eid</span><span class="p">]</span>
+            <span class="k">if</span> <span class="n">e</span><span class="p">[</span><span class="s2">"active"</span><span class="p">]:</span>
+                <span class="n">found</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">eid</span><span class="p">)</span>
+                <span class="k">continue</span>
+            <span class="n">childEdgeLength</span> <span class="o">=</span> <span class="n">e</span><span class="p">[</span><span class="s2">"referenceBoxEdgeLength"</span><span class="p">]</span> <span class="o">//</span> <span class="n">n</span>
+            <span class="n">candidates</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">3</span><span class="p">):</span>
+                <span class="n">i</span><span class="p">,</span> <span class="n">remainder</span> <span class="o">=</span> <span class="nb">divmod</span><span class="p">(</span><span class="n">point</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">-</span> <span class="n">e</span><span class="p">[</span><span class="s2">"referenceBoxOrigin"</span><span class="p">][</span><span class="n">k</span><span class="p">],</span> <span class="n">childEdgeLength</span><span class="p">)</span>
+                <span class="n">candidates</span><span class="o">.</span><span class="n">append</span><span class="p">([</span><span class="n">c</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="p">(</span><span class="n">i</span> <span class="o">-</span> <span class="mi">1</span><span class="p">,</span> <span class="n">i</span><span class="p">)</span> <span class="k">if</span> <span class="mi">0</span> <span class="o">&lt;=</span> <span class="n">c</span> <span class="o">&lt;</span> <span class="n">n</span><span class="p">]</span> <span class="k">if</span> <span class="n">remainder</span> <span class="o">==</span> <span class="mi">0</span> <span class="k">else</span> <span class="p">[</span><span class="n">i</span><span class="p">])</span>
+            <span class="k">for</span> <span class="n">ix</span><span class="p">,</span> <span class="n">iy</span><span class="p">,</span> <span class="n">iz</span> <span class="ow">in</span> <span class="n">product</span><span class="p">(</span><span class="o">*</span><span class="n">candidates</span><span class="p">):</span>
+                <span class="n">stack</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">e</span><span class="p">[</span><span class="s2">"children"</span><span class="p">][</span><span class="n">ix</span> <span class="o">*</span> <span class="n">n</span> <span class="o">*</span> <span class="n">n</span> <span class="o">+</span> <span class="n">iy</span> <span class="o">*</span> <span class="n">n</span> <span class="o">+</span> <span class="n">iz</span><span class="p">])</span>
+        <span class="k">return</span> <span class="n">found</span>
+
+    <span class="c1"># ---- conformity ----</span>
+<div class="viewcode-block" id="AdaptiveMesh.check_conformity">
+<a class="viewcode-back" href="../../../documentation/modelmodifiers.html#edelweissfe.adaptivity.refinement.AdaptiveMesh.check_conformity">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">check_conformity</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">slaveLabels</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Raise unless the active mesh is conforming up to the given hanging-node slaves.</span>
+
+<span class="sd">        Exact, and independent of how the hanging nodes were found. Two conditions:</span>
+
+<span class="sd">        * One node per point: a :class:`~edelweissfe.adaptivity.rootentities.NodeKey` maps to one label,</span>
+<span class="sd">          and a label to one key. A split point would be two unconnected nodes; a merged one would weld</span>
+<span class="sd">          distinct points.</span>
+<span class="sd">        * Every node on the boundary of an active element is one of its own nodes or a hanging-node</span>
+<span class="sd">          slave. Anything else is a free node on the element's boundary: the interface is not conforming.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        slaveLabels</span>
+<span class="sd">            The labels of all hanging-node slaves (e.g. the keys of :meth:`hanging_mpc_records`).</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        TopologyError</span>
+<span class="sd">            Naming the offending nodes and elements.</span>
+<span class="sd">        """</span>
+        <span class="n">slaveLabels</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">slaveLabels</span><span class="p">)</span>
+        <span class="n">unconstrained</span> <span class="o">=</span> <span class="p">[(</span><span class="n">label</span><span class="p">,</span> <span class="n">eid</span><span class="p">)</span> <span class="k">for</span> <span class="n">eid</span><span class="p">,</span> <span class="n">label</span><span class="p">,</span> <span class="n">_</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_nodesOnElementBoundaries</span><span class="p">()</span> <span class="k">if</span> <span class="n">label</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">slaveLabels</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">unconstrained</span><span class="p">:</span>
+            <span class="n">nodes</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">({</span><span class="n">label</span> <span class="k">for</span> <span class="n">label</span><span class="p">,</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">unconstrained</span><span class="p">})</span>
+            <span class="k">raise</span> <span class="n">TopologyError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"AMR conformity: </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">nodes</span><span class="p">)</span><span class="si">}</span><span class="s2"> node(s) lie on the boundary of an active element without "</span>
+                <span class="sa">f</span><span class="s2">"being one of its nodes or a hanging-node slave -- the coarse-fine interface is not "</span>
+                <span class="sa">f</span><span class="s2">"conforming there. First (node, element) pairs: </span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="n">unconstrained</span><span class="p">)[:</span><span class="mi">10</span><span class="p">]</span><span class="si">}</span><span class="s2">"</span>
+            <span class="p">)</span></div>
+
+
+    <span class="c1"># ---- 2:1 balancing ----</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_facesOnEntities</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">eid</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The six faces of an element as :class:`FaceOnEntity`, exact and topological.</span>
+
+<span class="sd">        A face on the boundary of the element's root lies on a root face, named by its corner labels,</span>
+<span class="sd">        and its rectangle is measured in that face's canonical frame, so a neighbouring root derives the</span>
+<span class="sd">        identical entity and rectangle. A face inside the root lies on an :class:`InternalPlane`, with</span>
+<span class="sd">        the rectangle in the other two lattice coordinates. Two elements share a face iff they have faces</span>
+<span class="sd">        on one entity whose rectangles overlap with positive area.</span>
+<span class="sd">        """</span>
+        <span class="n">e</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">elements</span><span class="p">[</span><span class="n">eid</span><span class="p">]</span>
+        <span class="n">rootEid</span><span class="p">,</span> <span class="n">origin</span><span class="p">,</span> <span class="n">length</span> <span class="o">=</span> <span class="n">e</span><span class="p">[</span><span class="s2">"rootEid"</span><span class="p">],</span> <span class="n">e</span><span class="p">[</span><span class="s2">"referenceBoxOrigin"</span><span class="p">],</span> <span class="n">e</span><span class="p">[</span><span class="s2">"referenceBoxEdgeLength"</span><span class="p">]</span>
+        <span class="n">rootExtent</span> <span class="o">=</span> <span class="mi">2</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">latticeUnits</span>
+        <span class="n">lattice</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">topology</span><span class="o">.</span><span class="n">reference_node_lattice</span>
+        <span class="n">faces</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">faceIndex</span><span class="p">,</span> <span class="n">face</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">topology</span><span class="o">.</span><span class="n">faces</span><span class="p">):</span>
+            <span class="n">rows</span> <span class="o">=</span> <span class="n">lattice</span><span class="p">[</span><span class="nb">list</span><span class="p">(</span><span class="n">face</span><span class="p">)]</span>
+            <span class="n">axis</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="n">k</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span> <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="n">rows</span><span class="p">[:,</span> <span class="n">k</span><span class="p">]</span> <span class="o">==</span> <span class="n">rows</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="n">k</span><span class="p">]))</span>
+            <span class="n">value</span> <span class="o">=</span> <span class="n">origin</span><span class="p">[</span><span class="n">axis</span><span class="p">]</span> <span class="o">+</span> <span class="nb">int</span><span class="p">(</span><span class="n">rows</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="n">axis</span><span class="p">])</span> <span class="o">*</span> <span class="n">length</span> <span class="o">//</span> <span class="mi">2</span>
+            <span class="n">u</span><span class="p">,</span> <span class="n">v</span> <span class="o">=</span> <span class="p">(</span><span class="n">k</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span> <span class="k">if</span> <span class="n">k</span> <span class="o">!=</span> <span class="n">axis</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">value</span> <span class="ow">in</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">rootExtent</span><span class="p">):</span>
+                <span class="n">corners</span> <span class="o">=</span> <span class="p">[]</span>
+                <span class="k">for</span> <span class="n">du</span><span class="p">,</span> <span class="n">dv</span> <span class="ow">in</span> <span class="p">((</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="p">(</span><span class="n">length</span><span class="p">,</span> <span class="n">length</span><span class="p">)):</span>
+                    <span class="n">point</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span>
+                    <span class="n">point</span><span class="p">[</span><span class="n">axis</span><span class="p">],</span> <span class="n">point</span><span class="p">[</span><span class="n">u</span><span class="p">],</span> <span class="n">point</span><span class="p">[</span><span class="n">v</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span><span class="p">,</span> <span class="n">origin</span><span class="p">[</span><span class="n">u</span><span class="p">]</span> <span class="o">+</span> <span class="n">du</span><span class="p">,</span> <span class="n">origin</span><span class="p">[</span><span class="n">v</span><span class="p">]</span> <span class="o">+</span> <span class="n">dv</span>
+                    <span class="n">entity</span><span class="p">,</span> <span class="n">position</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">rootEntities</span><span class="o">.</span><span class="n">root_face_position</span><span class="p">(</span><span class="n">rootEid</span><span class="p">,</span> <span class="n">faceIndex</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">point</span><span class="p">))</span>
+                    <span class="n">corners</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">position</span><span class="p">)</span>
+                <span class="p">(</span><span class="n">u0</span><span class="p">,</span> <span class="n">v0</span><span class="p">),</span> <span class="p">(</span><span class="n">u1</span><span class="p">,</span> <span class="n">v1</span><span class="p">)</span> <span class="o">=</span> <span class="n">corners</span>
+                <span class="n">faces</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">FaceOnEntity</span><span class="p">(</span><span class="n">entity</span><span class="p">,</span> <span class="n">Rectangle</span><span class="p">(</span><span class="nb">min</span><span class="p">(</span><span class="n">u0</span><span class="p">,</span> <span class="n">u1</span><span class="p">),</span> <span class="nb">max</span><span class="p">(</span><span class="n">u0</span><span class="p">,</span> <span class="n">u1</span><span class="p">),</span> <span class="nb">min</span><span class="p">(</span><span class="n">v0</span><span class="p">,</span> <span class="n">v1</span><span class="p">),</span> <span class="nb">max</span><span class="p">(</span><span class="n">v0</span><span class="p">,</span> <span class="n">v1</span><span class="p">))))</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">rectangle</span> <span class="o">=</span> <span class="n">Rectangle</span><span class="p">(</span><span class="n">origin</span><span class="p">[</span><span class="n">u</span><span class="p">],</span> <span class="n">origin</span><span class="p">[</span><span class="n">u</span><span class="p">]</span> <span class="o">+</span> <span class="n">length</span><span class="p">,</span> <span class="n">origin</span><span class="p">[</span><span class="n">v</span><span class="p">],</span> <span class="n">origin</span><span class="p">[</span><span class="n">v</span><span class="p">]</span> <span class="o">+</span> <span class="n">length</span><span class="p">)</span>
+                <span class="n">faces</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">FaceOnEntity</span><span class="p">(</span><span class="n">InternalPlane</span><span class="p">(</span><span class="n">rootEid</span><span class="p">,</span> <span class="n">axis</span><span class="p">,</span> <span class="n">value</span><span class="p">),</span> <span class="n">rectangle</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">faces</span>
+
+<div class="viewcode-block" id="AdaptiveMesh.balance_2to1">
+<a class="viewcode-back" href="../../../documentation/modelmodifiers.html#edelweissfe.adaptivity.refinement.AdaptiveMesh.balance_2to1">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">balance_2to1</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Refine coarser elements until no face-adjacent active pair differs by more than one level.</span>
+
+<span class="sd">        Face adjacency is exact and topological (see :meth:`_facesOnEntities`), so balancing holds on</span>
+<span class="sd">        curved and warped meshes as on flat ones. Returns the number of extra elements refined.</span>
+
+<span class="sd">        Only *face* neighbours are balanced. Elements touching only along an edge or at a vertex may</span>
+<span class="sd">        differ by two or more levels; the interface stays conforming (the finer edge nodes hang on the</span>
+<span class="sd">        coarsest element's edge, through exactly resolved constraint chains), so this is a grading, not a</span>
+<span class="sd">        correctness, limitation. Edge/vertex balancing is deliberately not implemented: it would refine</span>
+<span class="sd">        additional elements and change the results of multi-level runs.</span>
+<span class="sd">        """</span>
+        <span class="n">nExtra</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+            <span class="n">act</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">active</span><span class="p">()</span>
+            <span class="n">level</span> <span class="o">=</span> <span class="p">{</span><span class="n">eid</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">elements</span><span class="p">[</span><span class="n">eid</span><span class="p">][</span><span class="s2">"level"</span><span class="p">]</span> <span class="k">for</span> <span class="n">eid</span> <span class="ow">in</span> <span class="n">act</span><span class="p">}</span>
+            <span class="c1"># only a pair whose levels differ by two or more can violate the rule: a mesh whose active</span>
+            <span class="c1"># levels span less -- every mesh refined by a single level -- is balanced</span>
+            <span class="n">minLevel</span><span class="p">,</span> <span class="n">maxLevel</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">level</span><span class="o">.</span><span class="n">values</span><span class="p">()),</span> <span class="nb">max</span><span class="p">(</span><span class="n">level</span><span class="o">.</span><span class="n">values</span><span class="p">())</span>
+            <span class="k">if</span> <span class="n">maxLevel</span> <span class="o">-</span> <span class="n">minLevel</span> <span class="o">&lt;</span> <span class="mi">2</span><span class="p">:</span>
+                <span class="k">break</span>
+            <span class="n">finerFacesOn</span> <span class="o">=</span> <span class="n">defaultdict</span><span class="p">(</span><span class="nb">list</span><span class="p">)</span>  <span class="c1"># entity -&gt; [(level, rectangle)] of the finer candidates</span>
+            <span class="k">for</span> <span class="n">eid</span> <span class="ow">in</span> <span class="n">act</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">level</span><span class="p">[</span><span class="n">eid</span><span class="p">]</span> <span class="o">&gt;=</span> <span class="n">minLevel</span> <span class="o">+</span> <span class="mi">2</span><span class="p">:</span>
+                    <span class="k">for</span> <span class="n">face</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_facesOnEntities</span><span class="p">(</span><span class="n">eid</span><span class="p">):</span>
+                        <span class="n">finerFacesOn</span><span class="p">[</span><span class="n">face</span><span class="o">.</span><span class="n">entity</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">level</span><span class="p">[</span><span class="n">eid</span><span class="p">],</span> <span class="n">face</span><span class="o">.</span><span class="n">rectangle</span><span class="p">))</span>
+            <span class="n">toRefine</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+            <span class="k">for</span> <span class="n">a</span> <span class="ow">in</span> <span class="n">act</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">level</span><span class="p">[</span><span class="n">a</span><span class="p">]</span> <span class="o">+</span> <span class="mi">2</span> <span class="o">&gt;</span> <span class="n">maxLevel</span><span class="p">:</span>
+                    <span class="k">continue</span>
+                <span class="k">for</span> <span class="n">face</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_facesOnEntities</span><span class="p">(</span><span class="n">a</span><span class="p">):</span>
+                    <span class="k">if</span> <span class="nb">any</span><span class="p">(</span>
+                        <span class="n">finerLevel</span> <span class="o">&gt;=</span> <span class="n">level</span><span class="p">[</span><span class="n">a</span><span class="p">]</span> <span class="o">+</span> <span class="mi">2</span> <span class="ow">and</span> <span class="n">face</span><span class="o">.</span><span class="n">rectangle</span><span class="o">.</span><span class="n">overlaps</span><span class="p">(</span><span class="n">rectangle</span><span class="p">)</span>
+                        <span class="k">for</span> <span class="n">finerLevel</span><span class="p">,</span> <span class="n">rectangle</span> <span class="ow">in</span> <span class="n">finerFacesOn</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">face</span><span class="o">.</span><span class="n">entity</span><span class="p">,</span> <span class="p">())</span>
+                    <span class="p">):</span>
+                        <span class="n">toRefine</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">a</span><span class="p">)</span>
+                        <span class="k">break</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">toRefine</span><span class="p">:</span>
+                <span class="k">break</span>
+            <span class="k">for</span> <span class="n">eid</span> <span class="ow">in</span> <span class="n">toRefine</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">refine</span><span class="p">(</span><span class="n">eid</span><span class="p">)</span>
+                <span class="n">nExtra</span> <span class="o">+=</span> <span class="mi">1</span>
+        <span class="k">return</span> <span class="n">nExtra</span></div>
+
+
+    <span class="c1"># ---- hanging nodes ----</span>
+<div class="viewcode-block" id="AdaptiveMesh.classify_hanging">
+<a class="viewcode-back" href="../../../documentation/modelmodifiers.html#edelweissfe.adaptivity.refinement.AdaptiveMesh.classify_hanging">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">classify_hanging</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""All hanging nodes of the active mesh, as :class:`HangingNode`, sorted by slave label.</span>
+
+<span class="sd">        A hanging node is a node on the boundary of an active element that is not one of its own nodes</span>
+<span class="sd">        (:meth:`_nodesOnElementBoundaries`: exact, exhaustive, no geometry). Its master entity is the</span>
+<span class="sd">        lowest-dimensional one of that element containing it -- an edge or a face -- and, among several</span>
+<span class="sd">        such elements, the coarsest, which guarantees continuity with the coarsest trace. Its weights are</span>
+<span class="sd">        the master element's own shape functions at the node's exact reference point, which on that edge</span>
+<span class="sd">        or face are non-zero only for the entity's nodes: the exact coarse trace, on curved and warped</span>
+<span class="sd">        elements alike. They are verified in exact arithmetic before use. Rational arithmetic is slow, but</span>
+<span class="sd">        the weights depend only on the node's point in the master's box and the entity, and an octree has</span>
+<span class="sd">        few distinct such pairs: each is computed and verified once.</span>
+<span class="sd">        """</span>
+        <span class="n">best</span> <span class="o">=</span> <span class="p">{}</span>  <span class="c1"># slave -&gt; (dimension, level, eid, pointInElement, kind, entity)</span>
+        <span class="k">for</span> <span class="n">eid</span><span class="p">,</span> <span class="n">label</span><span class="p">,</span> <span class="n">pointInElement</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_nodesOnElementBoundaries</span><span class="p">():</span>
+            <span class="n">e</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">elements</span><span class="p">[</span><span class="n">eid</span><span class="p">]</span>
+            <span class="n">kind</span><span class="p">,</span> <span class="n">entity</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">topology</span><span class="o">.</span><span class="n">lowest_entity_containing</span><span class="p">(</span><span class="n">pointInElement</span><span class="p">,</span> <span class="n">e</span><span class="p">[</span><span class="s2">"referenceBoxEdgeLength"</span><span class="p">])</span>
+            <span class="k">if</span> <span class="n">kind</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"edge"</span><span class="p">,</span> <span class="s2">"face"</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="n">TopologyError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"AMR: node </span><span class="si">{</span><span class="n">label</span><span class="si">}</span><span class="s2"> lies on a corner of element </span><span class="si">{</span><span class="n">eid</span><span class="si">}</span><span class="s2"> without being its node"</span><span class="p">)</span>
+            <span class="n">candidate</span> <span class="o">=</span> <span class="p">(</span><span class="mi">1</span> <span class="k">if</span> <span class="n">kind</span> <span class="o">==</span> <span class="s2">"edge"</span> <span class="k">else</span> <span class="mi">2</span><span class="p">,</span> <span class="n">e</span><span class="p">[</span><span class="s2">"level"</span><span class="p">],</span> <span class="n">eid</span><span class="p">,</span> <span class="n">pointInElement</span><span class="p">,</span> <span class="n">kind</span><span class="p">,</span> <span class="n">entity</span><span class="p">)</span>
+            <span class="n">current</span> <span class="o">=</span> <span class="n">best</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">label</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">current</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">candidate</span><span class="p">[:</span><span class="mi">2</span><span class="p">]</span> <span class="o">&lt;</span> <span class="n">current</span><span class="p">[:</span><span class="mi">2</span><span class="p">]:</span>
+                <span class="n">best</span><span class="p">[</span><span class="n">label</span><span class="p">]</span> <span class="o">=</span> <span class="n">candidate</span>
+
+        <span class="n">hanging</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">label</span><span class="p">,</span> <span class="p">(</span><span class="n">_</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">eid</span><span class="p">,</span> <span class="n">pointInElement</span><span class="p">,</span> <span class="n">kind</span><span class="p">,</span> <span class="n">entity</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">best</span><span class="o">.</span><span class="n">items</span><span class="p">()):</span>
+            <span class="n">e</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">elements</span><span class="p">[</span><span class="n">eid</span><span class="p">]</span>
+            <span class="n">key</span> <span class="o">=</span> <span class="p">(</span><span class="n">pointInElement</span><span class="p">,</span> <span class="n">e</span><span class="p">[</span><span class="s2">"referenceBoxEdgeLength"</span><span class="p">],</span> <span class="n">entity</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">key</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_traceWeightsOf</span><span class="p">:</span>
+                <span class="n">xi</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">Fraction</span><span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="n">v</span><span class="p">,</span> <span class="n">e</span><span class="p">[</span><span class="s2">"referenceBoxEdgeLength"</span><span class="p">])</span> <span class="o">-</span> <span class="mi">1</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">pointInElement</span><span class="p">)</span>
+                <span class="n">exactWeights</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">topology</span><span class="o">.</span><span class="n">shape_functions_exact</span><span class="p">(</span><span class="o">*</span><span class="n">xi</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_verifyTraceWeights</span><span class="p">(</span><span class="n">label</span><span class="p">,</span> <span class="n">eid</span><span class="p">,</span> <span class="n">xi</span><span class="p">,</span> <span class="n">entity</span><span class="p">,</span> <span class="n">exactWeights</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_traceWeightsOf</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="nb">float</span><span class="p">(</span><span class="n">exactWeights</span><span class="p">[</span><span class="n">i</span><span class="p">])</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">entity</span><span class="p">)</span>
+            <span class="n">weights</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_traceWeightsOf</span><span class="p">[</span><span class="n">key</span><span class="p">])</span>
+            <span class="n">hanging</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">HangingNode</span><span class="p">(</span><span class="n">label</span><span class="p">,</span> <span class="n">kind</span><span class="p">,</span> <span class="p">[</span><span class="n">e</span><span class="p">[</span><span class="s2">"conn"</span><span class="p">][</span><span class="n">i</span><span class="p">]</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">entity</span><span class="p">],</span> <span class="n">weights</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">hanging</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_verifyTraceWeights</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">label</span><span class="p">,</span> <span class="n">eid</span><span class="p">,</span> <span class="n">xi</span><span class="p">,</span> <span class="n">entity</span><span class="p">,</span> <span class="n">exactWeights</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Raise unless ``exactWeights`` are the exact trace weights of a node at ``xi`` on ``entity``.</span>
+
+<span class="sd">        Checked in exact rational arithmetic, so without any tolerance: the weight of every node off the</span>
+<span class="sd">        entity vanishes, and the entity's weights reproduce the constant, the three reference coordinates</span>
+<span class="sd">        and the six quadratic monomials :math:`\\xi_a \\xi_b` at the node -- which catches a wrong entity</span>
+<span class="sd">        or orientation, not just a wrong formula.</span>
+<span class="sd">        """</span>
+        <span class="n">reference</span> <span class="o">=</span> <span class="p">[</span><span class="nb">tuple</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">p</span><span class="p">)</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">topology</span><span class="o">.</span><span class="n">reference_node_lattice</span><span class="p">]</span>
+        <span class="n">exponents</span> <span class="o">=</span> <span class="p">[(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">)]</span> <span class="o">+</span> <span class="p">[</span><span class="nb">tuple</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">k</span> <span class="o">==</span> <span class="n">a</span><span class="p">)</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">3</span><span class="p">))</span> <span class="k">for</span> <span class="n">a</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">3</span><span class="p">)]</span>
+        <span class="n">exponents</span> <span class="o">+=</span> <span class="p">[</span><span class="nb">tuple</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">k</span> <span class="o">==</span> <span class="n">a</span><span class="p">)</span> <span class="o">+</span> <span class="nb">int</span><span class="p">(</span><span class="n">k</span> <span class="o">==</span> <span class="n">b</span><span class="p">)</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">3</span><span class="p">))</span> <span class="k">for</span> <span class="n">a</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span> <span class="k">for</span> <span class="n">b</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="mi">3</span><span class="p">)]</span>
+
+        <span class="k">def</span><span class="w"> </span><span class="nf">monomial</span><span class="p">(</span><span class="n">point</span><span class="p">,</span> <span class="n">exponent</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">point</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">**</span> <span class="n">exponent</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="n">point</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">**</span> <span class="n">exponent</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">*</span> <span class="n">point</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">**</span> <span class="n">exponent</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span>
+
+        <span class="n">onEntity</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">entity</span><span class="p">)</span>
+        <span class="n">offEntityWeightVanishes</span> <span class="o">=</span> <span class="nb">all</span><span class="p">(</span><span class="n">w</span> <span class="o">==</span> <span class="mi">0</span> <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">w</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">exactWeights</span><span class="p">)</span> <span class="k">if</span> <span class="n">i</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">onEntity</span><span class="p">)</span>
+        <span class="n">reproduces</span> <span class="o">=</span> <span class="nb">all</span><span class="p">(</span>
+            <span class="nb">sum</span><span class="p">(</span><span class="n">exactWeights</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">*</span> <span class="n">monomial</span><span class="p">(</span><span class="n">reference</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">exponent</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">entity</span><span class="p">)</span> <span class="o">==</span> <span class="n">monomial</span><span class="p">(</span><span class="n">xi</span><span class="p">,</span> <span class="n">exponent</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">exponent</span> <span class="ow">in</span> <span class="n">exponents</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="n">offEntityWeightVanishes</span> <span class="ow">and</span> <span class="n">reproduces</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="n">TopologyError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"AMR: the hanging-node weights of node </span><span class="si">{</span><span class="n">label</span><span class="si">}</span><span class="s2"> on element </span><span class="si">{</span><span class="n">eid</span><span class="si">}</span><span class="s2"> (reference point </span><span class="si">{</span><span class="n">xi</span><span class="si">}</span><span class="s2">) "</span>
+                <span class="s2">"are not the exact trace of that element's shape functions"</span>
+            <span class="p">)</span>
+
+<div class="viewcode-block" id="AdaptiveMesh.hanging_mpc_records">
+<a class="viewcode-back" href="../../../documentation/modelmodifiers.html#edelweissfe.adaptivity.refinement.AdaptiveMesh.hanging_mpc_records">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">hanging_mpc_records</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The hanging-node constraints as ``{slave: [(master, weight), ...]}``, every master an</span>
+<span class="sd">        independent node: a chain -- a master that is itself hanging -- is substituted through, with the</span>
+<span class="sd">        same flattening the multi-point-constraint transformation applies across all constraints."""</span>
+        <span class="n">raw</span> <span class="o">=</span> <span class="p">[(</span><span class="n">h</span><span class="o">.</span><span class="n">slave</span><span class="p">,</span> <span class="nb">list</span><span class="p">(</span><span class="nb">zip</span><span class="p">(</span><span class="n">h</span><span class="o">.</span><span class="n">masters</span><span class="p">,</span> <span class="n">h</span><span class="o">.</span><span class="n">weights</span><span class="p">)))</span> <span class="k">for</span> <span class="n">h</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">classify_hanging</span><span class="p">()]</span>
+        <span class="k">return</span> <span class="p">{</span><span class="n">slave</span><span class="p">:</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">masters</span><span class="p">)</span> <span class="k">for</span> <span class="n">slave</span><span class="p">,</span> <span class="n">masters</span> <span class="ow">in</span> <span class="n">_flattenChainedRecords</span><span class="p">(</span><span class="n">raw</span><span class="p">)}</span></div>
+</div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Matthias Neuner.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

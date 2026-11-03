@@ -1,0 +1,369 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>edelweissfe.timesteppers.base.timestepperbase &mdash; EdelweissFE v22.07 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=cfdaff8d" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css?v=37fbe429" />
+
+  
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=17e2f33f"></script>
+      <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            EdelweissFE
+              <img src="../../../../_static/edelweiss_fe_logo.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../features.html">Features</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../prerequisites.html">Prerequisites</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../documentation/index.html">Documentation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../contributors.html">Contributors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../publications.html">Publications</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">EdelweissFE</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">edelweissfe.timesteppers.base.timestepperbase</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for edelweissfe.timesteppers.base.timestepperbase</h1><div class="highlight"><pre>
+<span></span><span class="ch">#!/usr/bin/env python3</span>
+<span class="c1"># -*- coding: utf-8 -*-</span>
+<span class="c1">#  ---------------------------------------------------------------------</span>
+<span class="c1">#</span>
+<span class="c1">#  _____    _      _              _         _____ _____</span>
+<span class="c1"># | ____|__| | ___| |_      _____(_)___ ___|  ___| ____|</span>
+<span class="c1"># |  _| / _` |/ _ \ \ \ /\ / / _ \ / __/ __| |_  |  _|</span>
+<span class="c1"># | |__| (_| |  __/ |\ V  V /  __/ \__ \__ \  _| | |___</span>
+<span class="c1"># |_____\__,_|\___|_| \_/\_/ \___|_|___/___/_|   |_____|</span>
+<span class="c1">#</span>
+<span class="c1">#</span>
+<span class="c1">#  Unit of Strength of Materials and Structural Analysis</span>
+<span class="c1">#  University of Innsbruck,</span>
+<span class="c1">#  2017 - today</span>
+<span class="c1">#</span>
+<span class="c1">#  Matthias Neuner matthias.neuner@uibk.ac.at</span>
+<span class="c1">#</span>
+<span class="c1">#  This file is part of EdelweissFE.</span>
+<span class="c1">#</span>
+<span class="c1">#  This library is free software; you can redistribute it and/or</span>
+<span class="c1">#  modify it under the terms of the GNU Lesser General Public</span>
+<span class="c1">#  License as published by the Free Software Foundation; either</span>
+<span class="c1">#  version 2.1 of the License, or (at your option) any later version.</span>
+<span class="c1">#</span>
+<span class="c1">#  The full text of the license can be found in the file LICENSE.md at</span>
+<span class="c1">#  the top level directory of EdelweissFE.</span>
+<span class="c1">#  ---------------------------------------------------------------------</span>
+<span class="sd">"""A time stepper divides a simulation step into increments. It is a small state machine:</span>
+
+<span class="sd">.. code-block:: text</span>
+
+<span class="sd">    while not stepper.isFinished():</span>
+<span class="sd">        timeStep = stepper.proposeTimeStep()      # the next increment; changes nothing</span>
+<span class="sd">        try:</span>
+<span class="sd">            solve the increment</span>
+<span class="sd">        except failed:</span>
+<span class="sd">            stepper.rejectTimeStep(cutbackFactor) # a smaller increment is proposed next</span>
+<span class="sd">            continue</span>
+<span class="sd">        stepper.acceptTimeStep(timeStep)          # the step advances by this increment</span>
+<span class="sd">        write output (and restart checkpoints)</span>
+
+<span class="sd">All the stepper knows is in its attributes, and after :meth:`acceptTimeStep` they describe exactly</span>
+<span class="sd">the state the next increment starts from. A restart checkpoint is written after an increment is</span>
+<span class="sd">accepted, so it holds those attributes as they are, see :attr:`checkpointedState`.</span>
+<span class="sd">"""</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">ABC</span><span class="p">,</span> <span class="n">abstractmethod</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.timesteppers.timestep</span><span class="w"> </span><span class="kn">import</span> <span class="n">TimeStep</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.utils.checkpointedstate</span><span class="w"> </span><span class="kn">import</span> <span class="n">packState</span><span class="p">,</span> <span class="n">unpackState</span>
+
+
+<div class="viewcode-block" id="TimeStepperBase">
+<a class="viewcode-back" href="../../../../documentation/utils.html#edelweissfe.timesteppers.base.timestepperbase.TimeStepperBase">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">TimeStepperBase</span><span class="p">(</span><span class="n">ABC</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Base class for all time steppers.</span>
+
+<span class="sd">    It defines the interface which all solvers may rely on for controlling</span>
+<span class="sd">    the incrementation of a simulation step.</span>
+<span class="sd">    """</span>
+
+    <span class="c1">#: Overridden by every stepper; a default so base-class diagnostics can name their source.</span>
+    <span class="n">identification</span> <span class="o">=</span> <span class="s2">"TimeStepper"</span>
+
+    <span class="c1">#: The attributes that make up the stepper's progress within the step, by type; see</span>
+    <span class="c1">#: :mod:`~edelweissfe.utils.checkpointedstate`. Not its configuration, which a resumed run takes</span>
+    <span class="c1">#: from its own input file.</span>
+    <span class="n">checkpointedState</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+
+<div class="viewcode-block" id="TimeStepperBase.isFinished">
+<a class="viewcode-back" href="../../../../documentation/utils.html#edelweissfe.timesteppers.base.timestepperbase.TimeStepperBase.isFinished">[docs]</a>
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">isFinished</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Whether the step has reached its end.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        bool</span>
+<span class="sd">            True if no increment is left.</span>
+<span class="sd">        """</span></div>
+
+
+<div class="viewcode-block" id="TimeStepperBase.isAtStepStart">
+<a class="viewcode-back" href="../../../../documentation/utils.html#edelweissfe.timesteppers.base.timestepperbase.TimeStepperBase.isAtStepStart">[docs]</a>
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">isAtStepStart</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Whether no increment of the step was accepted yet. A step resumed from a checkpoint never</span>
+<span class="sd">        is: a checkpoint is written after an accepted increment.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        bool</span>
+<span class="sd">            True at the start of a step.</span>
+<span class="sd">        """</span></div>
+
+
+<div class="viewcode-block" id="TimeStepperBase.proposeTimeStep">
+<a class="viewcode-back" href="../../../../documentation/utils.html#edelweissfe.timesteppers.base.timestepperbase.TimeStepperBase.proposeTimeStep">[docs]</a>
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">proposeTimeStep</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TimeStep</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The next increment, starting from the last accepted one. Changes nothing: proposing twice</span>
+<span class="sd">        gives the same increment.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        TimeStep</span>
+<span class="sd">            The proposed increment.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ReachedMaxIncrements</span>
+<span class="sd">            If the step needs more increments than it is allowed.</span>
+<span class="sd">        """</span></div>
+
+
+<div class="viewcode-block" id="TimeStepperBase.acceptTimeStep">
+<a class="viewcode-back" href="../../../../documentation/utils.html#edelweissfe.timesteppers.base.timestepperbase.TimeStepperBase.acceptTimeStep">[docs]</a>
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">acceptTimeStep</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">:</span> <span class="n">TimeStep</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Advance the step by ``timeStep``, the increment just solved, and choose the size of the next.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        timeStep</span>
+<span class="sd">            The increment, as :meth:`proposeTimeStep` returned it.</span>
+<span class="sd">        """</span></div>
+
+
+<div class="viewcode-block" id="TimeStepperBase.rejectTimeStep">
+<a class="viewcode-back" href="../../../../documentation/utils.html#edelweissfe.timesteppers.base.timestepperbase.TimeStepperBase.rejectTimeStep">[docs]</a>
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">rejectTimeStep</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">cutbackFactor</span><span class="p">:</span> <span class="nb">float</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Discard the proposed increment, which could not be solved; the next one proposed is</span>
+<span class="sd">        smaller by ``cutbackFactor``, within the bounds of the minimum and maximum increment size.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        cutbackFactor</span>
+<span class="sd">            The factor scaling the increment size.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ReachedMinIncrementSize</span>
+<span class="sd">            If the increment cannot be reduced any further.</span>
+<span class="sd">        """</span></div>
+
+
+<div class="viewcode-block" id="TimeStepperBase.changeIncrementSize">
+<a class="viewcode-back" href="../../../../documentation/utils.html#edelweissfe.timesteppers.base.timestepperbase.TimeStepperBase.changeIncrementSize">[docs]</a>
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">changeIncrementSize</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">scaleFactor</span><span class="p">:</span> <span class="nb">float</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Modify the size of the next increment by a given scale factor</span>
+<span class="sd">        within the bounds of the minimum and maximum increment size.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        scaleFactor</span>
+<span class="sd">            The factor for scaling based on the current increment.</span>
+<span class="sd">        """</span></div>
+
+
+<div class="viewcode-block" id="TimeStepperBase.preventIncrementIncrease">
+<a class="viewcode-back" href="../../../../documentation/utils.html#edelweissfe.timesteppers.base.timestepperbase.TimeStepperBase.preventIncrementIncrease">[docs]</a>
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">preventIncrementIncrease</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Keep the next increment from growing, e.g., in case of bad convergence. Called before</span>
+<span class="sd">        :meth:`acceptTimeStep`."""</span></div>
+
+
+<div class="viewcode-block" id="TimeStepperBase.enforceTimeIncrement">
+<a class="viewcode-back" href="../../../../documentation/utils.html#edelweissfe.timesteppers.base.timestepperbase.TimeStepperBase.enforceTimeIncrement">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">enforceTimeIncrement</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">timeIncrement</span><span class="p">:</span> <span class="nb">float</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Use ``timeIncrement`` for every following increment, instead of adapting it.</span>
+
+<span class="sd">        The caller is an explicit solver, whose stable time increment is a property of the mesh: set</span>
+<span class="sd">        at the start of the step, and lowered when a refinement shrinks the smallest element.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        timeIncrement</span>
+<span class="sd">            The time increment to use.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        NotImplementedError</span>
+<span class="sd">            If this stepper cannot run on an enforced time increment.</span>
+<span class="sd">        """</span>
+
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> cannot run on an enforced time increment."</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="TimeStepperBase.getRestartData">
+<a class="viewcode-back" href="../../../../documentation/utils.html#edelweissfe.timesteppers.base.timestepperbase.TimeStepperBase.getRestartData">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">getRestartData</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""The declared state, for a restart checkpoint.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        dict[str, numpy.ndarray]</span>
+<span class="sd">            The state; see :func:`~edelweissfe.utils.checkpointedstate.packState`.</span>
+<span class="sd">        """</span>
+
+        <span class="k">return</span> <span class="n">packState</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="TimeStepperBase.setRestartData">
+<a class="viewcode-back" href="../../../../documentation/utils.html#edelweissfe.timesteppers.base.timestepperbase.TimeStepperBase.setRestartData">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">setRestartData</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]):</span>
+<span class="w">        </span><span class="sd">"""Restore the declared state from a restart checkpoint.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        data</span>
+<span class="sd">            What :meth:`getRestartData` returned.</span>
+<span class="sd">        """</span>
+
+        <span class="n">unpackState</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_warnIfResumedAtIncrementCap</span><span class="p">()</span></div>
+
+
+<div class="viewcode-block" id="TimeStepperBase.numberOfIncrementsDone">
+<a class="viewcode-back" href="../../../../documentation/utils.html#edelweissfe.timesteppers.base.timestepperbase.TimeStepperBase.numberOfIncrementsDone">[docs]</a>
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">numberOfIncrementsDone</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The number of increments accepted so far, counted against the maximum number of increments.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        int</span>
+<span class="sd">            The number of increments.</span>
+<span class="sd">        """</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_warnIfResumedAtIncrementCap</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Warn when a checkpoint is resumed at or past the step's increment cap.</span>
+
+<span class="sd">        The maximum number of increments counts from the start of the analysis, not from the resume,</span>
+<span class="sd">        and it is taken from the step's own configuration rather than the checkpoint, so it can be</span>
+<span class="sd">        raised between runs. The trap: resume without raising it far enough, and the stepper's first</span>
+<span class="sd">        proposal ends the step, which the solver treats as a step that finished normally -- the job</span>
+<span class="sd">        reports success having advanced nothing. A diagnostic run resumed at increment 130 000 with</span>
+<span class="sd">        the cap still at 60 000 was very nearly read as evidence that a crash did not reproduce.</span>
+
+<span class="sd">        This does not change the behaviour -- the cap is absolute by design -- only the silence.</span>
+<span class="sd">        """</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">numberOfIncrementsDone</span><span class="p">()</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">maxNumberIncrements</span><span class="p">:</span>
+            <span class="k">return</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">journal</span><span class="o">.</span><span class="n">message</span><span class="p">(</span>
+            <span class="s2">"WARNING: this checkpoint is already at increment </span><span class="si">{0:}</span><span class="s2">, at or past this step's "</span>
+            <span class="s2">"maxNumInc of </span><span class="si">{1:}</span><span class="s2">, so the resumed step will end immediately WITHOUT advancing the "</span>
+            <span class="s2">"solution -- and the job will then report success. maxNumInc counts increments from "</span>
+            <span class="s2">"the start of the analysis, not from the resume: raise it above </span><span class="si">{0:}</span><span class="s2"> to continue."</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">numberOfIncrementsDone</span><span class="p">(),</span> <span class="bp">self</span><span class="o">.</span><span class="n">maxNumberIncrements</span>
+            <span class="p">),</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">identification</span><span class="p">,</span>
+            <span class="mi">0</span><span class="p">,</span>
+        <span class="p">)</span></div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Matthias Neuner.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

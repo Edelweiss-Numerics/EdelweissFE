@@ -14,8 +14,8 @@
       <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
       <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
       <script src="../../../../_static/documentation_options.js?v=17e2f33f"></script>
-      <script src="../../../../_static/doctools.js?v=9bcbadda"></script>
-      <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../../../../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../../../../genindex.html" />
     <link rel="search" title="Search" href="../../../../search.html" /> 
@@ -113,48 +113,49 @@
 <div class="viewcode-block" id="BaseHypoElasticMaterial">
 <a class="viewcode-back" href="../../../../documentation/materials.html#edelweissfe.materials.base.basehypoelasticmaterial.BaseHypoElasticMaterial">[docs]</a>
 <span class="k">class</span><span class="w"> </span><span class="nc">BaseHypoElasticMaterial</span><span class="p">(</span><span class="n">ABC</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Base material class for a hypo elastic material.</span>
+<span class="w">    </span><span class="sd">"""Base material class for a hypo elastic material.</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
 <span class="sd">    materialProperties</span>
-<span class="sd">        The numpy array containing the material properties for the requested material.&quot;&quot;&quot;</span>
+<span class="sd">        The numpy array containing the material properties for the requested material."""</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">materialProperties</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;The properties the material has.&quot;&quot;&quot;</span>
+<span class="w">        </span><span class="sd">"""The properties the material has, as handed to ``__init__``."""</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_materialProperties</span>
 
 <div class="viewcode-block" id="BaseHypoElasticMaterial.getNumberOfRequiredStateVars">
 <a class="viewcode-back" href="../../../../documentation/materials.html#edelweissfe.materials.base.basehypoelasticmaterial.BaseHypoElasticMaterial.getNumberOfRequiredStateVars">[docs]</a>
     <span class="nd">@abstractmethod</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">getNumberOfRequiredStateVars</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Returns number of needed material state Variables per integration point in the material.</span>
+<span class="w">        </span><span class="sd">"""Returns number of needed material state Variables per integration point in the material.</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
 <span class="sd">        int</span>
-<span class="sd">            Number of needed material state Vars.&quot;&quot;&quot;</span></div>
+<span class="sd">            Number of needed material state Vars."""</span></div>
 
 
     <span class="nd">@abstractmethod</span>
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">materialProperties</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Initialize.&quot;&quot;&quot;</span>
+<span class="w">        </span><span class="sd">"""Initialize."""</span>
 
 <div class="viewcode-block" id="BaseHypoElasticMaterial.assignCurrentStateVars">
 <a class="viewcode-back" href="../../../../documentation/materials.html#edelweissfe.materials.base.basehypoelasticmaterial.BaseHypoElasticMaterial.assignCurrentStateVars">[docs]</a>
     <span class="nd">@abstractmethod</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">assignCurrentStateVars</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">currentStateVars</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Assign new current state vars.</span>
+<span class="w">        </span><span class="sd">"""Assign new current state vars.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
 <span class="sd">        currentStateVars</span>
-<span class="sd">            Array containing the material state vars.&quot;&quot;&quot;</span></div>
+<span class="sd">            Array containing the material state vars."""</span></div>
 
 
 <div class="viewcode-block" id="BaseHypoElasticMaterial.computePlaneStress">
 <a class="viewcode-back" href="../../../../documentation/materials.html#edelweissfe.materials.base.basehypoelasticmaterial.BaseHypoElasticMaterial.computePlaneStress">[docs]</a>
-    <span class="nd">@abstractmethod</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">computePlaneStress</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">stress</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
@@ -163,7 +164,7 @@
         <span class="n">time</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
         <span class="n">dTime</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
     <span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Computes the stresses for a 2D material with plane stress.</span>
+<span class="w">        </span><span class="sd">"""Computes the stresses for a 2D material with plane stress.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
@@ -176,7 +177,7 @@
 <span class="sd">        time</span>
 <span class="sd">            Array of step time and total time.</span>
 <span class="sd">        dTime</span>
-<span class="sd">            Current time step size.&quot;&quot;&quot;</span>
+<span class="sd">            Current time step size."""</span>
 
         <span class="n">dStress_dStrain3D</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">([</span><span class="mi">6</span><span class="p">,</span> <span class="mi">6</span><span class="p">])</span>
         <span class="n">dStrain</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">=</span> <span class="o">-</span><span class="n">dStrain</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">-</span> <span class="n">dStrain</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
@@ -193,7 +194,7 @@
             <span class="n">dStrain</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">-=</span> <span class="n">revTangent</span> <span class="o">*</span> <span class="n">stress3D</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span>
             <span class="n">counter</span> <span class="o">+=</span> <span class="mi">1</span>
             <span class="k">if</span> <span class="n">counter</span> <span class="o">&gt;</span> <span class="mi">13</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="n">CutbackRequest</span><span class="p">(</span><span class="s2">&quot;Plane Stress Newton failed.&quot;</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">)</span>
+                <span class="k">raise</span> <span class="n">CutbackRequest</span><span class="p">(</span><span class="s2">"Plane Stress Newton failed."</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">)</span>
         <span class="n">stress</span><span class="p">[:]</span> <span class="o">+=</span> <span class="n">stress3D</span>
         <span class="n">C</span> <span class="o">=</span> <span class="n">dStress_dStrain3D</span>
         <span class="n">dStress_dStrain</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span>
@@ -228,7 +229,7 @@
         <span class="n">time</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
         <span class="n">dTime</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
     <span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Computes the stresses for a 3D material/2D material with plane strain.</span>
+<span class="w">        </span><span class="sd">"""Computes the stresses for a 3D material/2D material with plane strain.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
@@ -241,12 +242,11 @@
 <span class="sd">        time</span>
 <span class="sd">            Array of step time and total time.</span>
 <span class="sd">        dTime</span>
-<span class="sd">            Current time step size.&quot;&quot;&quot;</span></div>
+<span class="sd">            Current time step size."""</span></div>
 
 
 <div class="viewcode-block" id="BaseHypoElasticMaterial.computeUniaxialStress">
 <a class="viewcode-back" href="../../../../documentation/materials.html#edelweissfe.materials.base.basehypoelasticmaterial.BaseHypoElasticMaterial.computeUniaxialStress">[docs]</a>
-    <span class="nd">@abstractmethod</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">computeUniaxialStress</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">stress</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
@@ -255,7 +255,7 @@
         <span class="n">time</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
         <span class="n">dTime</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
     <span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Computes the stresses for a uniaxial stress state.</span>
+<span class="w">        </span><span class="sd">"""Computes the stresses for a uniaxial stress state.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
@@ -268,26 +268,34 @@
 <span class="sd">        time</span>
 <span class="sd">            Array of step time and total time.</span>
 <span class="sd">        dTime</span>
-<span class="sd">            Current time step size.&quot;&quot;&quot;</span></div>
+<span class="sd">            Current time step size."""</span>
 
+        <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s2">"Computing uniaxial stress is not possible with this material."</span><span class="p">)</span></div>
+
+
+    <span class="n">_density</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="w">    </span><span class="sd">"""Mass density; materials without one leave it unset."""</span>
 
 <div class="viewcode-block" id="BaseHypoElasticMaterial.getDensity">
 <a class="viewcode-back" href="../../../../documentation/materials.html#edelweissfe.materials.base.basehypoelasticmaterial.BaseHypoElasticMaterial.getDensity">[docs]</a>
-    <span class="nd">@abstractmethod</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">getDensity</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Determines the density of the material.</span>
+<span class="w">        </span><span class="sd">"""Determines the density of the material.</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
 <span class="sd">        float</span>
-<span class="sd">            The density of the material.&quot;&quot;&quot;</span></div>
+<span class="sd">            The density of the material."""</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_density</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s2">"Density is not defined for this material."</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_density</span></div>
 
 
 <div class="viewcode-block" id="BaseHypoElasticMaterial.getResult">
 <a class="viewcode-back" href="../../../../documentation/materials.html#edelweissfe.materials.base.basehypoelasticmaterial.BaseHypoElasticMaterial.getResult">[docs]</a>
     <span class="nd">@abstractmethod</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">getResult</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">result</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get the result, as a persistent view which is continiously</span>
+<span class="w">        </span><span class="sd">"""Get the result, as a persistent view which is continiously</span>
 <span class="sd">        updated by the material.</span>
 
 <span class="sd">        Parameters</span>
@@ -299,7 +307,7 @@
 <span class="sd">        -------</span>
 <span class="sd">        float</span>
 <span class="sd">            The result.</span>
-<span class="sd">        &quot;&quot;&quot;</span></div>
+<span class="sd">        """</span></div>
 </div>
 
 </pre></div>

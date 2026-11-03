@@ -14,8 +14,8 @@
       <script src="../../../_static/jquery.js?v=5d32c60e"></script>
       <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
       <script src="../../../_static/documentation_options.js?v=17e2f33f"></script>
-      <script src="../../../_static/doctools.js?v=9bcbadda"></script>
-      <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../../../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../../../genindex.html" />
     <link rel="search" title="Search" href="../../../search.html" /> 
@@ -117,7 +117,7 @@
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.journal.journal</span><span class="w"> </span><span class="kn">import</span> <span class="n">Journal</span>
 
-<span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">"""</span>
 <span class="sd">Plotting in EdelweissFE through matplotlib can be performed easily</span>
 <span class="sd">through a global plotting instance, which is passed to all output managers.</span>
 <span class="sd">Output managers may use the plotter for visualizing all kinds of outputs.</span>
@@ -143,39 +143,39 @@
 
 <span class="sd">The default style of plots can be configured via a classical rcparams.py file,</span>
 <span class="sd">which may be located in the current working directory.</span>
-<span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">"""</span>
 
 <span class="n">documentation_configurePlots</span> <span class="o">=</span> <span class="p">{</span>
-    <span class="s2">&quot;figure&quot;</span><span class="p">:</span> <span class="s2">&quot;The figure to be configured&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;xLimits&quot;</span><span class="p">:</span> <span class="s2">&quot;Specify x axis limits&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;yLimits&quot;</span><span class="p">:</span> <span class="s2">&quot;Specify y axis limits&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;xLabel&quot;</span><span class="p">:</span> <span class="s2">&quot;Specify x axis label&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;yLabel&quot;</span><span class="p">:</span> <span class="s2">&quot;Specify y axis label&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;flipX&quot;</span><span class="p">:</span> <span class="s2">&quot;Flip x axis&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;flipY&quot;</span><span class="p">:</span> <span class="s2">&quot;Flip y axis&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;aspect&quot;</span><span class="p">:</span> <span class="s2">&quot;Set aspect&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;grid&quot;</span><span class="p">:</span> <span class="s2">&quot;Switch grid&quot;</span><span class="p">,</span>
+    <span class="s2">"figure"</span><span class="p">:</span> <span class="s2">"The figure to be configured"</span><span class="p">,</span>
+    <span class="s2">"xLimits"</span><span class="p">:</span> <span class="s2">"Specify x axis limits"</span><span class="p">,</span>
+    <span class="s2">"yLimits"</span><span class="p">:</span> <span class="s2">"Specify y axis limits"</span><span class="p">,</span>
+    <span class="s2">"xLabel"</span><span class="p">:</span> <span class="s2">"Specify x axis label"</span><span class="p">,</span>
+    <span class="s2">"yLabel"</span><span class="p">:</span> <span class="s2">"Specify y axis label"</span><span class="p">,</span>
+    <span class="s2">"flipX"</span><span class="p">:</span> <span class="s2">"Flip x axis"</span><span class="p">,</span>
+    <span class="s2">"flipY"</span><span class="p">:</span> <span class="s2">"Flip y axis"</span><span class="p">,</span>
+    <span class="s2">"aspect"</span><span class="p">:</span> <span class="s2">"Set aspect"</span><span class="p">,</span>
+    <span class="s2">"grid"</span><span class="p">:</span> <span class="s2">"Switch grid"</span><span class="p">,</span>
 <span class="p">}</span>
 
 <span class="n">documentation_exportPlots</span> <span class="o">=</span> <span class="p">{</span>
-    <span class="s2">&quot;figure&quot;</span><span class="p">:</span> <span class="s2">&quot;The figure to be exported&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;fileName&quot;</span><span class="p">:</span> <span class="s2">&quot;The export file name&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;width&quot;</span><span class="p">:</span> <span class="s2">&quot;Width of the figure&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;heightRatio&quot;</span><span class="p">:</span> <span class="s2">&quot;Ratio of height/width&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;png&quot;</span><span class="p">:</span> <span class="s2">&quot;Set true to export .png additionally&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;scale&quot;</span><span class="p">:</span> <span class="s2">&quot;Scale the figure&quot;</span><span class="p">,</span>
+    <span class="s2">"figure"</span><span class="p">:</span> <span class="s2">"The figure to be exported"</span><span class="p">,</span>
+    <span class="s2">"fileName"</span><span class="p">:</span> <span class="s2">"The export file name"</span><span class="p">,</span>
+    <span class="s2">"width"</span><span class="p">:</span> <span class="s2">"Width of the figure"</span><span class="p">,</span>
+    <span class="s2">"heightRatio"</span><span class="p">:</span> <span class="s2">"Ratio of height/width"</span><span class="p">,</span>
+    <span class="s2">"png"</span><span class="p">:</span> <span class="s2">"Set true to export .png additionally"</span><span class="p">,</span>
+    <span class="s2">"scale"</span><span class="p">:</span> <span class="s2">"Scale the figure"</span><span class="p">,</span>
 <span class="p">}</span>
 
-<span class="n">defaultMarkerCycle</span> <span class="o">=</span> <span class="n">itertools</span><span class="o">.</span><span class="n">cycle</span><span class="p">((</span><span class="s2">&quot;o&quot;</span><span class="p">,</span> <span class="s2">&quot;v&quot;</span><span class="p">,</span> <span class="s2">&quot;D&quot;</span><span class="p">,</span> <span class="s2">&quot;s&quot;</span><span class="p">,</span> <span class="s2">&quot;^&quot;</span><span class="p">))</span>
-<span class="n">defaultLinePlotColorCycle</span> <span class="o">=</span> <span class="n">itertools</span><span class="o">.</span><span class="n">cycle</span><span class="p">((</span><span class="s2">&quot;k&quot;</span><span class="p">))</span>
-<span class="n">defaultScatterPlotColorCycle</span> <span class="o">=</span> <span class="n">itertools</span><span class="o">.</span><span class="n">cycle</span><span class="p">((</span><span class="s2">&quot;k&quot;</span><span class="p">,</span> <span class="s2">&quot;r&quot;</span><span class="p">,</span> <span class="s2">&quot;b&quot;</span><span class="p">,</span> <span class="s2">&quot;g&quot;</span><span class="p">))</span>
-<span class="n">defaultLineStyleCycle</span> <span class="o">=</span> <span class="n">itertools</span><span class="o">.</span><span class="n">cycle</span><span class="p">((</span><span class="s2">&quot;-&quot;</span><span class="p">,</span> <span class="s2">&quot;0-3-2&quot;</span><span class="p">,</span> <span class="s2">&quot;0-3-1-1-1&quot;</span><span class="p">,</span> <span class="s2">&quot;0-1-1&quot;</span><span class="p">))</span>
+<span class="n">defaultMarkerCycle</span> <span class="o">=</span> <span class="n">itertools</span><span class="o">.</span><span class="n">cycle</span><span class="p">((</span><span class="s2">"o"</span><span class="p">,</span> <span class="s2">"v"</span><span class="p">,</span> <span class="s2">"D"</span><span class="p">,</span> <span class="s2">"s"</span><span class="p">,</span> <span class="s2">"^"</span><span class="p">))</span>
+<span class="n">defaultLinePlotColorCycle</span> <span class="o">=</span> <span class="n">itertools</span><span class="o">.</span><span class="n">cycle</span><span class="p">((</span><span class="s2">"k"</span><span class="p">))</span>
+<span class="n">defaultScatterPlotColorCycle</span> <span class="o">=</span> <span class="n">itertools</span><span class="o">.</span><span class="n">cycle</span><span class="p">((</span><span class="s2">"k"</span><span class="p">,</span> <span class="s2">"r"</span><span class="p">,</span> <span class="s2">"b"</span><span class="p">,</span> <span class="s2">"g"</span><span class="p">))</span>
+<span class="n">defaultLineStyleCycle</span> <span class="o">=</span> <span class="n">itertools</span><span class="o">.</span><span class="n">cycle</span><span class="p">((</span><span class="s2">"-"</span><span class="p">,</span> <span class="s2">"0-3-2"</span><span class="p">,</span> <span class="s2">"0-3-1-1-1"</span><span class="p">,</span> <span class="s2">"0-1-1"</span><span class="p">))</span>
 
 
 <div class="viewcode-block" id="Plotter">
 <a class="viewcode-back" href="../../../documentation/plotter.html#edelweissfe.utils.plotter.Plotter">[docs]</a>
 <span class="k">class</span><span class="w"> </span><span class="nc">Plotter</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">"""</span>
 <span class="sd">    The unified plotter, which can be accessed and used by all outputmanagers.</span>
 
 <span class="sd">    Parameters</span>
@@ -186,40 +186,41 @@
 <span class="sd">        The list of dictionaries configuring individual plots.</span>
 <span class="sd">    exportJobs</span>
 <span class="sd">        The list of jobs to export plots at the end of a simulations.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
+<span class="sd">    """</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">journal</span><span class="p">:</span> <span class="n">Journal</span><span class="p">,</span> <span class="n">plotConfigurations</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">],</span> <span class="n">exportJobs</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">]):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">plotConfigurations</span> <span class="o">=</span> <span class="n">plotConfigurations</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">exportJobs</span> <span class="o">=</span> <span class="n">exportJobs</span>
 
         <span class="n">latexAvailable</span> <span class="o">=</span> <span class="kc">False</span>
-        <span class="k">if</span> <span class="n">shutil</span><span class="o">.</span><span class="n">which</span><span class="p">(</span><span class="s2">&quot;latex&quot;</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">shutil</span><span class="o">.</span><span class="n">which</span><span class="p">(</span><span class="s2">"pdflatex"</span><span class="p">):</span>
             <span class="n">latexAvailable</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_latexAvailable</span> <span class="o">=</span> <span class="n">latexAvailable</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">rcParams</span> <span class="o">=</span> <span class="p">{</span>
-            <span class="s2">&quot;pgf.texsystem&quot;</span><span class="p">:</span> <span class="s2">&quot;pdflatex&quot;</span><span class="p">,</span>  <span class="c1"># change this if using xetex or lautex</span>
-            <span class="s2">&quot;text.usetex&quot;</span><span class="p">:</span> <span class="n">latexAvailable</span><span class="p">,</span>  <span class="c1"># use LaTeX to write all text</span>
-            <span class="s2">&quot;text.latex.preamble&quot;</span><span class="p">:</span> <span class="sa">r</span><span class="s2">&quot; \usepackage[utf8]</span><span class="si">{inputenc}</span><span class="s2"> \usepackage</span><span class="si">{amsmath}</span><span class="s2"> \usepackage</span><span class="si">{amssymb}</span><span class="s2"> \usepackage</span><span class="si">{mathpazo}</span><span class="s2"> \usepackage</span><span class="si">{siunitx}</span><span class="s2">&quot;</span><span class="p">,</span>  <span class="c1"># noqa: E501</span>
-            <span class="s2">&quot;font.family&quot;</span><span class="p">:</span> <span class="s2">&quot;serif&quot;</span><span class="p">,</span>
-            <span class="c1">#                &quot;font.serif&quot;: [],  # blank entries should cause plots to inherit fonts from the document</span>
-            <span class="c1">#                &quot;font.sans-serif&quot;: [],</span>
-            <span class="s2">&quot;font.monospace&quot;</span><span class="p">:</span> <span class="p">[],</span>
-            <span class="s2">&quot;axes.labelsize&quot;</span><span class="p">:</span> <span class="mi">10</span><span class="p">,</span>  <span class="c1"># LaTeX default is 10pt font.</span>
-            <span class="s2">&quot;font.size&quot;</span><span class="p">:</span> <span class="mi">10</span><span class="p">,</span>
-            <span class="s2">&quot;legend.fontsize&quot;</span><span class="p">:</span> <span class="mi">8</span><span class="p">,</span>  <span class="c1"># Make the legend/label fonts a little smaller</span>
-            <span class="s2">&quot;legend.numpoints&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
-            <span class="s2">&quot;legend.labelspacing&quot;</span><span class="p">:</span> <span class="mf">0.2</span><span class="p">,</span>
-            <span class="s2">&quot;xtick.labelsize&quot;</span><span class="p">:</span> <span class="mi">8</span><span class="p">,</span>
-            <span class="s2">&quot;ytick.labelsize&quot;</span><span class="p">:</span> <span class="mi">8</span><span class="p">,</span>
-            <span class="s2">&quot;lines.linewidth&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
-            <span class="s2">&quot;lines.markeredgewidth&quot;</span><span class="p">:</span> <span class="mf">0.4</span><span class="p">,</span>
-            <span class="s2">&quot;lines.markersize&quot;</span><span class="p">:</span> <span class="mi">4</span><span class="p">,</span>
-            <span class="s2">&quot;axes.unicode_minus&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+            <span class="s2">"pgf.texsystem"</span><span class="p">:</span> <span class="s2">"pdflatex"</span><span class="p">,</span>  <span class="c1"># change this if using xetex or lautex</span>
+            <span class="s2">"text.usetex"</span><span class="p">:</span> <span class="n">latexAvailable</span><span class="p">,</span>  <span class="c1"># use LaTeX to write all text</span>
+            <span class="s2">"text.latex.preamble"</span><span class="p">:</span> <span class="sa">r</span><span class="s2">" \usepackage[utf8]</span><span class="si">{inputenc}</span><span class="s2"> \usepackage</span><span class="si">{amsmath}</span><span class="s2"> \usepackage</span><span class="si">{amssymb}</span><span class="s2"> \usepackage</span><span class="si">{mathpazo}</span><span class="s2"> \usepackage</span><span class="si">{siunitx}</span><span class="s2">"</span><span class="p">,</span>  <span class="c1"># noqa: E501</span>
+            <span class="s2">"font.family"</span><span class="p">:</span> <span class="s2">"serif"</span><span class="p">,</span>
+            <span class="c1">#                "font.serif": [],  # blank entries should cause plots to inherit fonts from the document</span>
+            <span class="c1">#                "font.sans-serif": [],</span>
+            <span class="s2">"font.monospace"</span><span class="p">:</span> <span class="p">[],</span>
+            <span class="s2">"axes.labelsize"</span><span class="p">:</span> <span class="mi">10</span><span class="p">,</span>  <span class="c1"># LaTeX default is 10pt font.</span>
+            <span class="s2">"font.size"</span><span class="p">:</span> <span class="mi">10</span><span class="p">,</span>
+            <span class="s2">"legend.fontsize"</span><span class="p">:</span> <span class="mi">8</span><span class="p">,</span>  <span class="c1"># Make the legend/label fonts a little smaller</span>
+            <span class="s2">"legend.numpoints"</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
+            <span class="s2">"legend.labelspacing"</span><span class="p">:</span> <span class="mf">0.2</span><span class="p">,</span>
+            <span class="s2">"xtick.labelsize"</span><span class="p">:</span> <span class="mi">8</span><span class="p">,</span>
+            <span class="s2">"ytick.labelsize"</span><span class="p">:</span> <span class="mi">8</span><span class="p">,</span>
+            <span class="s2">"lines.linewidth"</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
+            <span class="s2">"lines.markeredgewidth"</span><span class="p">:</span> <span class="mf">0.4</span><span class="p">,</span>
+            <span class="s2">"lines.markersize"</span><span class="p">:</span> <span class="mi">4</span><span class="p">,</span>
+            <span class="s2">"axes.unicode_minus"</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
         <span class="p">}</span>
-        <span class="n">plt</span><span class="o">.</span><span class="n">close</span><span class="p">(</span><span class="s2">&quot;all&quot;</span><span class="p">)</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">close</span><span class="p">(</span><span class="s2">"all"</span><span class="p">)</span>
 
-        <span class="k">if</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">isfile</span><span class="p">(</span><span class="s2">&quot;plotterRcParams.py&quot;</span><span class="p">):</span>
-            <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;found plotterRcParams.py&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">isfile</span><span class="p">(</span><span class="s2">"plotterRcParams.py"</span><span class="p">):</span>
+            <span class="nb">print</span><span class="p">(</span><span class="s2">"found plotterRcParams.py"</span><span class="p">)</span>
             <span class="n">sys</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">getcwd</span><span class="p">())</span>
             <span class="kn">import</span><span class="w"> </span><span class="nn">plotterRcParams</span>
 
@@ -231,7 +232,7 @@
 <div class="viewcode-block" id="Plotter.getAx">
 <a class="viewcode-back" href="../../../documentation/plotter.html#edelweissfe.utils.plotter.Plotter.getAx">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">getAx</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">figureID</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span> <span class="n">axSpec</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">111</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">matplotlib</span><span class="o">.</span><span class="n">axes</span><span class="o">.</span><span class="n">Axes</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get or create a figure with axes if it doesn&#39;t exist yet.</span>
+<span class="w">        </span><span class="sd">"""Get or create a figure with axes if it doesn't exist yet.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
@@ -244,7 +245,7 @@
 <span class="sd">        -------</span>
 <span class="sd">        matplotlib.axes.Axes</span>
 <span class="sd">            The matplotlib Axes instance.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
+<span class="sd">        """</span>
 
         <span class="k">if</span> <span class="n">figureID</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">figsWithAxes</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">figsWithAxes</span><span class="p">[</span><span class="n">figureID</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figureID</span><span class="p">),</span> <span class="p">{})</span>
@@ -261,7 +262,7 @@
 <div class="viewcode-block" id="Plotter.getFig">
 <a class="viewcode-back" href="../../../documentation/plotter.html#edelweissfe.utils.plotter.Plotter.getFig">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">getFig</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">figureID</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">matplotlib</span><span class="o">.</span><span class="n">figure</span><span class="o">.</span><span class="n">Figure</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get or create a figure doesn&#39;t exist yet.</span>
+<span class="w">        </span><span class="sd">"""Get or create a figure doesn't exist yet.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
@@ -271,7 +272,7 @@
 <span class="sd">        -------</span>
 <span class="sd">        matplotlib.figure.Figure</span>
 <span class="sd">            The matplotlib Figure instance.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
+<span class="sd">        """</span>
 
         <span class="k">if</span> <span class="n">figureID</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">figsWithAxes</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">figsWithAxes</span><span class="p">[</span><span class="n">figureID</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figureID</span><span class="p">),</span> <span class="p">{})</span>
@@ -289,7 +290,7 @@
         <span class="n">axSpec</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">111</span><span class="p">,</span>
         <span class="n">plotOptions</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Plots a single curve.</span>
+<span class="w">        </span><span class="sd">"""Plots a single curve.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
@@ -303,7 +304,7 @@
 <span class="sd">            The matpotlib axes.</span>
 <span class="sd">        plotOptions</span>
 <span class="sd">            A dictionary with additional plot options in matplotlib format.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
+<span class="sd">        """</span>
 
         <span class="n">ax</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">getAx</span><span class="p">(</span><span class="n">figureID</span><span class="p">,</span> <span class="n">axSpec</span><span class="p">)</span>
 
@@ -312,21 +313,21 @@
         <span class="n">y</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">y</span><span class="p">)</span><span class="o">.</span><span class="n">flatten</span><span class="p">()</span>
 
         <span class="n">plotDefinition</span> <span class="o">=</span> <span class="p">{}</span>
-        <span class="k">if</span> <span class="s2">&quot;label&quot;</span> <span class="ow">in</span> <span class="n">plotOptions</span><span class="p">:</span>
-            <span class="n">plotDefinition</span><span class="p">[</span><span class="s2">&quot;label&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">plotOptions</span><span class="p">[</span><span class="s2">&quot;label&quot;</span><span class="p">]</span>
-        <span class="k">if</span> <span class="n">plotOptions</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;plotType&quot;</span><span class="p">,</span> <span class="s2">&quot;linePlot&quot;</span><span class="p">)</span> <span class="o">==</span> <span class="s2">&quot;scatter&quot;</span><span class="p">:</span>
-            <span class="n">plotDefinition</span><span class="p">[</span><span class="s2">&quot;marker&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">plotOptions</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;marker&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">or</span> <span class="nb">next</span><span class="p">(</span><span class="n">defaultMarkerCycle</span><span class="p">)</span>
-            <span class="k">if</span> <span class="s2">&quot;ms&quot;</span> <span class="ow">in</span> <span class="n">plotOptions</span><span class="p">:</span>
-                <span class="n">plotDefinition</span><span class="p">[</span><span class="s2">&quot;markersize&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">plotOptions</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;ms&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
-            <span class="n">plotDefinition</span><span class="p">[</span><span class="s2">&quot;markerfacecolor&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">plotOptions</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;markerfacecolor&quot;</span><span class="p">,</span> <span class="s2">&quot;None&quot;</span><span class="p">)</span>
-            <span class="n">plotDefinition</span><span class="p">[</span><span class="s2">&quot;markeredgecolor&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">plotOptions</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;c&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span> <span class="ow">or</span> <span class="nb">next</span><span class="p">(</span><span class="n">defaultScatterPlotColorCycle</span><span class="p">)</span>
-            <span class="n">plotDefinition</span><span class="p">[</span><span class="s2">&quot;linestyle&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+        <span class="k">if</span> <span class="s2">"label"</span> <span class="ow">in</span> <span class="n">plotOptions</span><span class="p">:</span>
+            <span class="n">plotDefinition</span><span class="p">[</span><span class="s2">"label"</span><span class="p">]</span> <span class="o">=</span> <span class="n">plotOptions</span><span class="p">[</span><span class="s2">"label"</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">plotOptions</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"plotType"</span><span class="p">,</span> <span class="s2">"linePlot"</span><span class="p">)</span> <span class="o">==</span> <span class="s2">"scatter"</span><span class="p">:</span>
+            <span class="n">plotDefinition</span><span class="p">[</span><span class="s2">"marker"</span><span class="p">]</span> <span class="o">=</span> <span class="n">plotOptions</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"marker"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">or</span> <span class="nb">next</span><span class="p">(</span><span class="n">defaultMarkerCycle</span><span class="p">)</span>
+            <span class="k">if</span> <span class="s2">"ms"</span> <span class="ow">in</span> <span class="n">plotOptions</span><span class="p">:</span>
+                <span class="n">plotDefinition</span><span class="p">[</span><span class="s2">"markersize"</span><span class="p">]</span> <span class="o">=</span> <span class="n">plotOptions</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"ms"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="n">plotDefinition</span><span class="p">[</span><span class="s2">"markerfacecolor"</span><span class="p">]</span> <span class="o">=</span> <span class="n">plotOptions</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"markerfacecolor"</span><span class="p">,</span> <span class="s2">"None"</span><span class="p">)</span>
+            <span class="n">plotDefinition</span><span class="p">[</span><span class="s2">"markeredgecolor"</span><span class="p">]</span> <span class="o">=</span> <span class="n">plotOptions</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"c"</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span> <span class="ow">or</span> <span class="nb">next</span><span class="p">(</span><span class="n">defaultScatterPlotColorCycle</span><span class="p">)</span>
+            <span class="n">plotDefinition</span><span class="p">[</span><span class="s2">"linestyle"</span><span class="p">]</span> <span class="o">=</span> <span class="s2">""</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="n">plotDefinition</span><span class="p">[</span><span class="s2">&quot;c&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">plotOptions</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;c&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span> <span class="ow">or</span> <span class="nb">next</span><span class="p">(</span><span class="n">defaultLinePlotColorCycle</span><span class="p">)</span>
-            <span class="n">plotDefinition</span><span class="p">[</span><span class="s2">&quot;linestyle&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">plotOptions</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;ls&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span> <span class="ow">or</span> <span class="nb">next</span><span class="p">(</span><span class="n">defaultLineStyleCycle</span><span class="p">)</span>
-            <span class="n">lsParts</span> <span class="o">=</span> <span class="n">plotDefinition</span><span class="p">[</span><span class="s2">&quot;linestyle&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;-&quot;</span><span class="p">)</span>
+            <span class="n">plotDefinition</span><span class="p">[</span><span class="s2">"c"</span><span class="p">]</span> <span class="o">=</span> <span class="n">plotOptions</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"c"</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span> <span class="ow">or</span> <span class="nb">next</span><span class="p">(</span><span class="n">defaultLinePlotColorCycle</span><span class="p">)</span>
+            <span class="n">plotDefinition</span><span class="p">[</span><span class="s2">"linestyle"</span><span class="p">]</span> <span class="o">=</span> <span class="n">plotOptions</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"ls"</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span> <span class="ow">or</span> <span class="nb">next</span><span class="p">(</span><span class="n">defaultLineStyleCycle</span><span class="p">)</span>
+            <span class="n">lsParts</span> <span class="o">=</span> <span class="n">plotDefinition</span><span class="p">[</span><span class="s2">"linestyle"</span><span class="p">]</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">"-"</span><span class="p">)</span>
             <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">lsParts</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="mi">3</span><span class="p">:</span>
-                <span class="n">plotDefinition</span><span class="p">[</span><span class="s2">&quot;linestyle&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="n">plotDefinition</span><span class="p">[</span><span class="s2">"linestyle"</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
                     <span class="nb">float</span><span class="p">(</span><span class="n">lsParts</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span>
                     <span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">onOff</span><span class="p">)</span> <span class="k">for</span> <span class="n">onOff</span> <span class="ow">in</span> <span class="n">lsParts</span><span class="p">[</span><span class="mi">1</span><span class="p">:]],</span>
                 <span class="p">)</span>
@@ -336,51 +337,51 @@
 <div class="viewcode-block" id="Plotter.configurePlotter">
 <a class="viewcode-back" href="../../../documentation/plotter.html#edelweissfe.utils.plotter.Plotter.configurePlotter">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">configurePlotter</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Set global options of the plotter.&quot;&quot;&quot;</span>
+<span class="w">        </span><span class="sd">"""Set global options of the plotter."""</span>
 
         <span class="k">for</span> <span class="n">configEntry</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">plotConfigurations</span><span class="p">:</span>
-            <span class="n">ax</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">figsWithAxes</span><span class="p">[(</span><span class="n">configEntry</span><span class="p">[</span><span class="s2">&quot;figure&quot;</span><span class="p">])][</span><span class="mi">1</span><span class="p">][</span><span class="n">configEntry</span><span class="p">[</span><span class="s2">&quot;axSpec&quot;</span><span class="p">]]</span>
+            <span class="n">ax</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">figsWithAxes</span><span class="p">[(</span><span class="n">configEntry</span><span class="p">[</span><span class="s2">"figure"</span><span class="p">])][</span><span class="mi">1</span><span class="p">][</span><span class="n">configEntry</span><span class="p">[</span><span class="s2">"axSpec"</span><span class="p">]]</span>
 
-            <span class="k">if</span> <span class="s2">&quot;xLimits&quot;</span> <span class="ow">in</span> <span class="n">configEntry</span><span class="p">:</span>
-                <span class="n">limits</span> <span class="o">=</span> <span class="p">[</span><span class="nb">float</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">configEntry</span><span class="p">[</span><span class="s2">&quot;xLimits&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;_&quot;</span><span class="p">)]</span>
+            <span class="k">if</span> <span class="s2">"xLimits"</span> <span class="ow">in</span> <span class="n">configEntry</span><span class="p">:</span>
+                <span class="n">limits</span> <span class="o">=</span> <span class="p">[</span><span class="nb">float</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">configEntry</span><span class="p">[</span><span class="s2">"xLimits"</span><span class="p">]</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">"_"</span><span class="p">)]</span>
                 <span class="n">ax</span><span class="o">.</span><span class="n">set_xlim</span><span class="p">(</span><span class="n">limits</span><span class="p">)</span>
 
-            <span class="k">if</span> <span class="s2">&quot;yLimits&quot;</span> <span class="ow">in</span> <span class="n">configEntry</span><span class="p">:</span>
-                <span class="n">limits</span> <span class="o">=</span> <span class="p">[</span><span class="nb">float</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">configEntry</span><span class="p">[</span><span class="s2">&quot;yLimits&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;_&quot;</span><span class="p">)]</span>
+            <span class="k">if</span> <span class="s2">"yLimits"</span> <span class="ow">in</span> <span class="n">configEntry</span><span class="p">:</span>
+                <span class="n">limits</span> <span class="o">=</span> <span class="p">[</span><span class="nb">float</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">configEntry</span><span class="p">[</span><span class="s2">"yLimits"</span><span class="p">]</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">"_"</span><span class="p">)]</span>
                 <span class="n">ax</span><span class="o">.</span><span class="n">set_ylim</span><span class="p">(</span><span class="n">limits</span><span class="p">)</span>
 
-            <span class="k">if</span> <span class="s2">&quot;xLabel&quot;</span> <span class="ow">in</span> <span class="n">configEntry</span><span class="p">:</span>
-                <span class="n">ax</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="n">configEntry</span><span class="p">[</span><span class="s2">&quot;xLabel&quot;</span><span class="p">])</span>
-            <span class="k">if</span> <span class="s2">&quot;yLabel&quot;</span> <span class="ow">in</span> <span class="n">configEntry</span><span class="p">:</span>
-                <span class="n">ax</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="n">configEntry</span><span class="p">[</span><span class="s2">&quot;yLabel&quot;</span><span class="p">])</span>
-            <span class="k">if</span> <span class="s2">&quot;flipX&quot;</span> <span class="ow">in</span> <span class="n">configEntry</span><span class="p">:</span>
+            <span class="k">if</span> <span class="s2">"xLabel"</span> <span class="ow">in</span> <span class="n">configEntry</span><span class="p">:</span>
+                <span class="n">ax</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="n">configEntry</span><span class="p">[</span><span class="s2">"xLabel"</span><span class="p">])</span>
+            <span class="k">if</span> <span class="s2">"yLabel"</span> <span class="ow">in</span> <span class="n">configEntry</span><span class="p">:</span>
+                <span class="n">ax</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="n">configEntry</span><span class="p">[</span><span class="s2">"yLabel"</span><span class="p">])</span>
+            <span class="k">if</span> <span class="s2">"flipX"</span> <span class="ow">in</span> <span class="n">configEntry</span><span class="p">:</span>
                 <span class="n">ax</span><span class="o">.</span><span class="n">invert_xaxis</span><span class="p">()</span>
-            <span class="k">if</span> <span class="s2">&quot;flipY&quot;</span> <span class="ow">in</span> <span class="n">configEntry</span><span class="p">:</span>
+            <span class="k">if</span> <span class="s2">"flipY"</span> <span class="ow">in</span> <span class="n">configEntry</span><span class="p">:</span>
                 <span class="n">ax</span><span class="o">.</span><span class="n">invert_yaxis</span><span class="p">()</span>
-            <span class="k">if</span> <span class="s2">&quot;aspect&quot;</span> <span class="ow">in</span> <span class="n">configEntry</span><span class="p">:</span>
-                <span class="n">ax</span><span class="o">.</span><span class="n">set_aspect</span><span class="p">(</span><span class="n">configEntry</span><span class="p">[</span><span class="s2">&quot;aspect&quot;</span><span class="p">])</span>
-            <span class="k">if</span> <span class="s2">&quot;grid&quot;</span> <span class="ow">in</span> <span class="n">configEntry</span><span class="p">:</span>
+            <span class="k">if</span> <span class="s2">"aspect"</span> <span class="ow">in</span> <span class="n">configEntry</span><span class="p">:</span>
+                <span class="n">ax</span><span class="o">.</span><span class="n">set_aspect</span><span class="p">(</span><span class="n">configEntry</span><span class="p">[</span><span class="s2">"aspect"</span><span class="p">])</span>
+            <span class="k">if</span> <span class="s2">"grid"</span> <span class="ow">in</span> <span class="n">configEntry</span><span class="p">:</span>
                 <span class="n">ax</span><span class="o">.</span><span class="n">grid</span><span class="p">()</span></div>
 
 
 <div class="viewcode-block" id="Plotter.exportPlots">
 <a class="viewcode-back" href="../../../documentation/plotter.html#edelweissfe.utils.plotter.Plotter.exportPlots">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">exportPlots</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Export all plots according to the export job definitions.&quot;&quot;&quot;</span>
+<span class="w">        </span><span class="sd">"""Export all plots according to the export job definitions."""</span>
 
         <span class="k">for</span> <span class="n">exportJob</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">exportJobs</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">exportFigure</span><span class="p">(</span>
-                <span class="n">exportJob</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;fileName&quot;</span><span class="p">),</span>
-                <span class="n">exportJob</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;figure&quot;</span><span class="p">,</span> <span class="s2">&quot;1&quot;</span><span class="p">),</span>
-                <span class="nb">float</span><span class="p">(</span><span class="n">exportJob</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;width&quot;</span><span class="p">,</span> <span class="mf">469.47</span><span class="p">)),</span>
-                <span class="nb">float</span><span class="p">(</span><span class="n">exportJob</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;scale&quot;</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">)),</span>
-                <span class="n">exportJob</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;heightRatio&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">),</span>
-                <span class="n">exportJob</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;png&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">),</span>
+                <span class="n">exportJob</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"fileName"</span><span class="p">),</span>
+                <span class="n">exportJob</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"figure"</span><span class="p">,</span> <span class="s2">"1"</span><span class="p">),</span>
+                <span class="nb">float</span><span class="p">(</span><span class="n">exportJob</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"width"</span><span class="p">,</span> <span class="mf">469.47</span><span class="p">)),</span>
+                <span class="nb">float</span><span class="p">(</span><span class="n">exportJob</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"scale"</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">)),</span>
+                <span class="n">exportJob</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"heightRatio"</span><span class="p">,</span> <span class="kc">False</span><span class="p">),</span>
+                <span class="n">exportJob</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"png"</span><span class="p">,</span> <span class="kc">False</span><span class="p">),</span>
             <span class="p">)</span></div>
 
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_fancyFigSize</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">scale</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">width</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">heightRatio</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Create a fancy figure size compatible with matplotlib specs.&quot;&quot;&quot;</span>
+<span class="w">        </span><span class="sd">"""Create a fancy figure size compatible with matplotlib specs."""</span>
 
         <span class="n">fig_width_pt</span> <span class="o">=</span> <span class="n">width</span>
         <span class="n">inches_per_pt</span> <span class="o">=</span> <span class="mf">1.0</span> <span class="o">/</span> <span class="mf">72.27</span>  <span class="c1"># Convert pt to inch</span>
@@ -401,7 +402,7 @@
         <span class="n">heightRatio</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">png</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
     <span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Export a figure.</span>
+<span class="w">        </span><span class="sd">"""Export a figure.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
@@ -417,15 +418,17 @@
 <span class="sd">            Set the height ratio or take golden mean if False.</span>
 <span class="sd">        png</span>
 <span class="sd">            Also export a .png figure.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
+<span class="sd">        """</span>
 
         <span class="n">fig</span><span class="p">,</span> <span class="n">ax</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">figsWithAxes</span><span class="p">[</span><span class="n">figureID</span><span class="p">]</span>
         <span class="n">fig</span><span class="o">.</span><span class="n">set_size_inches</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_fancyFigSize</span><span class="p">(</span><span class="n">scale</span><span class="p">,</span> <span class="n">width</span><span class="p">,</span> <span class="n">heightRatio</span><span class="p">))</span>
         <span class="n">fig</span><span class="o">.</span><span class="n">tight_layout</span><span class="p">(</span><span class="n">pad</span><span class="o">=</span><span class="mf">0.15</span><span class="p">)</span>
-        <span class="n">fig</span><span class="o">.</span><span class="n">savefig</span><span class="p">(</span><span class="s2">&quot;</span><span class="si">{}</span><span class="s2">.pgf&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">fileName</span><span class="p">))</span>
-        <span class="n">fig</span><span class="o">.</span><span class="n">savefig</span><span class="p">(</span><span class="s2">&quot;</span><span class="si">{}</span><span class="s2">.pdf&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">fileName</span><span class="p">))</span>
+        <span class="c1"># Saving .pgf invokes pdflatex for text metrics even without text.usetex, so gate it on LaTeX too.</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_latexAvailable</span><span class="p">:</span>
+            <span class="n">fig</span><span class="o">.</span><span class="n">savefig</span><span class="p">(</span><span class="s2">"</span><span class="si">{}</span><span class="s2">.pgf"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">fileName</span><span class="p">))</span>
+        <span class="n">fig</span><span class="o">.</span><span class="n">savefig</span><span class="p">(</span><span class="s2">"</span><span class="si">{}</span><span class="s2">.pdf"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">fileName</span><span class="p">))</span>
         <span class="k">if</span> <span class="n">png</span><span class="p">:</span>
-            <span class="n">fig</span><span class="o">.</span><span class="n">savefig</span><span class="p">(</span><span class="s2">&quot;</span><span class="si">{}</span><span class="s2">.png&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">fileName</span><span class="p">),</span> <span class="n">dpi</span><span class="o">=</span><span class="mi">400</span><span class="p">)</span></div>
+            <span class="n">fig</span><span class="o">.</span><span class="n">savefig</span><span class="p">(</span><span class="s2">"</span><span class="si">{}</span><span class="s2">.png"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">fileName</span><span class="p">),</span> <span class="n">dpi</span><span class="o">=</span><span class="mi">400</span><span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="Plotter.finalize">
@@ -433,12 +436,12 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">finalize</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
     <span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Finalize and export plots.&quot;&quot;&quot;</span>
+<span class="w">        </span><span class="sd">"""Finalize and export plots."""</span>
 
         <span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
 
         <span class="k">with</span> <span class="n">warnings</span><span class="o">.</span><span class="n">catch_warnings</span><span class="p">():</span>
-            <span class="n">warnings</span><span class="o">.</span><span class="n">simplefilter</span><span class="p">(</span><span class="s2">&quot;ignore&quot;</span><span class="p">)</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">simplefilter</span><span class="p">(</span><span class="s2">"ignore"</span><span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">configurePlotter</span><span class="p">()</span>
 
             <span class="k">for</span> <span class="n">fig</span><span class="p">,</span> <span class="n">axes</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">figsWithAxes</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
@@ -459,7 +462,7 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">show</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
     <span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Show the plots!&quot;&quot;&quot;</span>
+<span class="w">        </span><span class="sd">"""Show the plots!"""</span>
 
         <span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span></div>
 </div>

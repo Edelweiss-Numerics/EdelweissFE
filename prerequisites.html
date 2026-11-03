@@ -15,8 +15,8 @@
       <script src="_static/jquery.js?v=5d32c60e"></script>
       <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
       <script src="_static/documentation_options.js?v=17e2f33f"></script>
-      <script src="_static/doctools.js?v=9bcbadda"></script>
-      <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="_static/js/theme.js"></script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
@@ -79,44 +79,67 @@
              
   <section id="prerequisites">
 <h1>Prerequisites<a class="headerlink" href="#prerequisites" title="Link to this heading"></a></h1>
-<p>It is recommended to use a recent version of <a class="reference external" href="https://anaconda.org/">Anaconda</a> to compile and run EdelweissFE on a Linux system.
-Then EdelweissFE requires the packages</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">anaconda</span><span class="p">::</span><span class="n">mkl</span>
-<span class="n">anaconda</span><span class="p">::</span><span class="n">mkl</span><span class="o">-</span><span class="n">include</span>
-<span class="n">anaconda</span><span class="p">::</span><span class="n">intel</span><span class="o">-</span><span class="n">openmp</span>
-<span class="n">boost</span><span class="o">-</span><span class="n">cpp</span>
-<span class="n">cmake</span>
-<span class="n">compilers</span>
-<span class="n">cython</span>
-<span class="n">docutils</span><span class="o">=</span><span class="mf">0.16</span>
-<span class="n">gstools</span>
-<span class="n">make</span>
-<span class="n">matplotlib</span>
-<span class="n">meshio</span>
-<span class="n">numpy</span>
-<span class="n">numpydoc</span>
-<span class="c1"># petsc4py</span>
-<span class="n">pyamg</span>
-<span class="c1"># pymumps</span>
-<span class="n">python</span><span class="o">=</span><span class="mf">3.14</span>
-<span class="n">pytest</span>
-<span class="n">pyvista</span>
-<span class="n">prettytable</span>
-<span class="n">scipy</span>
-<span class="n">suitesparse</span>
-<span class="n">sphinx</span>
-<span class="n">sphinx_rtd_theme</span>
-<span class="n">sympy</span>
-<span class="n">vtk</span><span class="o">&gt;=</span><span class="mf">9.1.0</span>
+<p>EdelweissFE requires a conda installation (e.g. <a class="reference external" href="https://conda-forge.org/download/">Miniforge</a>) and
+<a class="reference external" href="https://conda.github.io/conda-lock/">conda-lock</a>. The complete environment, including the free-threaded Python
+interpreter, is declared in <code class="docutils literal notranslate"><span class="pre">environment.yml</span></code> in the repository root and pinned by <code class="docutils literal notranslate"><span class="pre">conda-lock.yml</span></code>:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="c1"># EdelweissFE development environment: free-threaded Python, everything from conda packages.</span>
+<span class="c1"># This file declares it; conda-lock.yml pins it exactly for every platform. After changing this file,</span>
+<span class="c1"># re-lock (see doc/source/installation.rst) and commit both files together.</span>
+<span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">edelweissfe</span>
+<span class="nt">channels</span><span class="p">:</span>
+<span class="w">  </span><span class="c1"># Only for what conda-forge lacks: vtk built for free-threaded Python (cp314t), autodiff with Eigen 5</span>
+<span class="w">  </span><span class="c1"># support, fastor and amgcl. Recipes: https://github.com/matthiasneuner/edelweiss-conda-channel</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">https://repo.prefix.dev/matthiasneuner/edelweiss</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">conda-forge</span>
+<span class="nt">platforms</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">linux-64</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">osx-arm64</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">osx-64</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">win-64</span>
+<span class="nt">dependencies</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">python=3.14</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">python-freethreading=3.14</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">pip</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">setuptools</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cython</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">numpy</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">scipy</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">sympy</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">matplotlib</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">prettytable</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">gstools</span>
+<span class="w">  </span><span class="c1"># vtk-base, not vtk: the vtk meta-package adds vtk-io-ffmpeg (VTK's video writer, unused here), which pulls in</span>
+<span class="w">  </span><span class="c1"># ffmpeg -&gt; librsvg -&gt; gdk-pixbuf, whose post-install step hangs on Windows. pyvista itself needs vtk-base only.</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">vtk-base</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">pyvista</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">suitesparse</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">compilers</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmake</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">make</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">libboost-devel</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">amgcl</span>
+<span class="w">  </span><span class="c1"># Build dependencies of Marmot; Eigen is also one of the AMGCL extension (amgcl-spectral-radius.hpp).</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">eigen</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">autodiff=1.1.2</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">fastor</span>
+<span class="w">  </span><span class="c1"># Tests and documentation.</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">pytest</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">pytest-cov</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">sphinx</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">sphinx_rtd_theme&gt;=3.1.0</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">numpydoc</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">sphinxcontrib-bibtex</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">docutils</span>
+<span class="w">  </span><span class="c1"># Intel MKL enables the PARDISO solver (Linux, Windows); it does not exist for macOS, where PARDISO is not built.</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">mkl</span><span class="w">  </span><span class="c1"># [linux64]</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">mkl-include</span><span class="w">  </span><span class="c1"># [linux64]</span>
+<span class="w">  </span><span class="c1"># On Windows, linking against MKL also needs its import libraries (.lib), which mkl-devel provides.</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">mkl-devel</span><span class="w">  </span><span class="c1"># [win64]</span>
 </pre></div>
 </div>
-<p>Anaconda provides free access to Intel MKL binaries (via package <code class="docutils literal notranslate"><span class="pre">mkl</span></code>, usually installed by default) and header files (via package <code class="docutils literal notranslate"><span class="pre">mkl-include</span></code>, available via <code class="docutils literal notranslate"><span class="pre">conda</span> <span class="pre">install</span> <span class="pre">mkl-include</span></code>), so no standalaone installation of the Intel MKL is required.</p>
-<p>In addition</p>
-<ul class="simple">
-<li><p><a class="reference external" href="https://github.com/MAteRialMOdelingToolbox/Marmot/">Marmot</a></p></li>
-<li><p><a class="reference external" href="http://eigen.tuxfamily.org/index.php?title=Main_Page">Eigen</a> library for linear algebra</p></li>
-</ul>
-<p>are usually required.</p>
+<p>Optionally, <a class="reference external" href="https://github.com/MAteRialMOdelingToolbox/Marmot/">Marmot</a> provides additional elements and
+constitutive models.</p>
+<p>See <a class="reference internal" href="installation.html"><span class="doc">Installation</span></a> for the installation steps.</p>
 </section>
 
 

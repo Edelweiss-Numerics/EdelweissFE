@@ -15,8 +15,8 @@
       <script src="_static/jquery.js?v=5d32c60e"></script>
       <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
       <script src="_static/documentation_options.js?v=17e2f33f"></script>
-      <script src="_static/doctools.js?v=9bcbadda"></script>
-      <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="_static/js/theme.js"></script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
@@ -48,15 +48,15 @@
 <li class="toctree-l1"><a class="reference internal" href="features.html">Features</a></li>
 <li class="toctree-l1"><a class="reference internal" href="prerequisites.html">Prerequisites</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Installation</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="#common-base-setup">Common base setup</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#working-installation-without-marmot">Working installation without Marmot</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#working-installation-with-marmot">Working installation with Marmot</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#tldr">TLDR</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#installation-steps-without-marmot">Installation steps without Marmot</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#installation-steps-with-marmot">Installation steps with Marmot</a></li>
-</ul>
-</li>
-<li class="toctree-l2"><a class="reference internal" href="#build-the-documentation">Build the documentation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ready-to-run-package">Ready-to-run package</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#get-conda">Get conda</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#create-a-dedicated-environment">Create a dedicated environment</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#installation-without-marmot">Installation without Marmot</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#installation-with-marmot">Installation with Marmot</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#developing">Developing</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#changing-dependencies">Changing dependencies</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#running-with-free-threading">Running with free-threading</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#troubleshooting">Troubleshooting</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="documentation/index.html">Documentation</a></li>
@@ -90,266 +90,203 @@
              
   <section id="installation">
 <h1>Installation<a class="headerlink" href="#installation" title="Link to this heading"></a></h1>
-<p>The currently maintained installation recipes reflect the supported installation paths for EdelweissFE.
-They assume that you are in the EdelweissFE repository root and that a conda environment is active,
-so that <code class="docutils literal notranslate"><span class="pre">$CONDA_PREFIX</span></code> points to the installation prefix used by the build steps.</p>
-<section id="common-base-setup">
-<h2>Common base setup<a class="headerlink" href="#common-base-setup" title="Link to this heading"></a></h2>
-<p>Both supported installation paths start with the same package installation steps:</p>
-<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">mamba install --file conda_requirements.txt</span>
-<span class="go">pip install -r pip_requirements.txt</span>
+<p>EdelweissFE is developed in a dedicated conda environment. <code class="docutils literal notranslate"><span class="pre">environment.yml</span></code> declares it, and the committed lockfile
+<code class="docutils literal notranslate"><span class="pre">conda-lock.yml</span></code> pins it exactly: every package, with version, build and checksum, for every supported platform.
+The same pinned environment is published as the conda package <code class="docutils literal notranslate"><span class="pre">edelweissfe-dev</span></code>, versioned by date (the current
+version is in <code class="docutils literal notranslate"><span class="pre">conda/edelweissfe-dev/VERSION</span></code>), so it installs with a single <code class="docutils literal notranslate"><span class="pre">conda</span> <span class="pre">create</span></code>, identically on every
+machine and in CI. Nothing changes until a new version is published. Everything, including the free-threaded
+(<code class="docutils literal notranslate"><span class="pre">cp314t</span></code>) Python interpreter, comes from conda packages; <code class="docutils literal notranslate"><span class="pre">pip</span></code> only builds and installs EdelweissFE itself.</p>
+<p>The packages come from <a class="reference external" href="https://conda-forge.org/">conda-forge</a>, except for the few conda-forge does not provide
+yet, which come from the <a class="reference external" href="https://prefix.dev/channels/edelweiss">matthiasneuner/edelweiss</a> channel on prefix.dev:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">vtk</span></code> built for free-threaded Python (conda-forge only builds it for the regular interpreter),</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">autodiff</span></code> 1.1.2 with Eigen 5 support, <code class="docutils literal notranslate"><span class="pre">fastor</span></code> and <code class="docutils literal notranslate"><span class="pre">amgcl</span></code> (header-only C++ libraries).</p></li>
+</ul>
+<p>The recipes of that channel are maintained at
+<a class="reference external" href="https://github.com/matthiasneuner/edelweiss-conda-channel">matthiasneuner/edelweiss-conda-channel</a>.</p>
+<p>Supported platforms are Linux (x86-64), macOS 14 or newer (arm64 and x86-64), and Windows (x64).</p>
+<section id="ready-to-run-package">
+<h2>Ready-to-run package<a class="headerlink" href="#ready-to-run-package" title="Link to this heading"></a></h2>
+<p>To run simulations without developing EdelweissFE, install the conda package <code class="docutils literal notranslate"><span class="pre">edelweissfe</span></code> (released versions,
+with Marmot’s public elements and materials and all linear solvers; same platforms as below):</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">conda create -n edelweissfe -c https\://repo.prefix.dev/matthiasneuner/edelweiss -c conda-forge edelweissfe</span>
+</pre></div>
+</div>
+<p>It depends on the matching <code class="docutils literal notranslate"><span class="pre">marmot</span></code> package, pinned exactly: compiled C++ code has no stable interface across
+Marmot versions. Both are built with portable compiler flags (no <code class="docutils literal notranslate"><span class="pre">-march=native</span></code>).</p>
+<p>Everything else on this page is for <strong>developing</strong> EdelweissFE or Marmot, adding (private) Marmot modules, or
+compiling for your own CPU. Do that in a separate environment created from <code class="docutils literal notranslate"><span class="pre">edelweissfe-dev</span></code>, never in one with the
+<code class="docutils literal notranslate"><span class="pre">edelweissfe</span></code> or <code class="docutils literal notranslate"><span class="pre">marmot</span></code> package installed: a self-built Marmot installed there overwrites files conda manages,
+and the packaged EdelweissFE would then run against a library it was not compiled for. Likewise, <code class="docutils literal notranslate"><span class="pre">pip</span> <span class="pre">install</span> <span class="pre">-e</span> <span class="pre">.</span></code>
+on top of the <code class="docutils literal notranslate"><span class="pre">edelweissfe</span></code> package leaves two copies of EdelweissFE in the environment.</p>
+<p>The recipe is <code class="docutils literal notranslate"><span class="pre">conda/edelweissfe/recipe.yaml</span></code>; the <code class="docutils literal notranslate"><span class="pre">conda</span></code> workflow builds and tests it (against Marmot’s own
+recipe, built from the matching Marmot branch) on every pull request and uploads it for a release tag.</p>
+</section>
+<section id="get-conda">
+<h2>Get conda<a class="headerlink" href="#get-conda" title="Link to this heading"></a></h2>
+<p>A conda installation, e.g. <a class="reference external" href="https://conda-forge.org/download/">Miniforge</a>. On Linux and macOS:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">curl -L -O "https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-$(uname)-$(uname -m).sh"</span>
+<span class="go">bash Miniforge3-$(uname)-$(uname -m).sh</span>
+</pre></div>
+</div>
+<p>On Windows, use the Miniforge installer (<code class="docutils literal notranslate"><span class="pre">Miniforge3-Windows-x86_64.exe</span></code>) and run the commands below in the
+<em>Miniforge Prompt</em>. Windows additionally needs the Microsoft C++ compiler: the free
+<a class="reference external" href="https://visualstudio.microsoft.com/visual-cpp-build-tools/">Visual Studio 2022 Build Tools</a> (MSVC v143 toolset)
+with the workload <em>Desktop development with C++</em>. The environment’s <code class="docutils literal notranslate"><span class="pre">compilers</span></code> package only activates it; it cannot
+install it. Both can also be installed from a terminal:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">winget install CondaForge.Miniforge3</span>
+<span class="go">winget install Microsoft.VisualStudio.2022.BuildTools --override "--wait --passive --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"</span>
+</pre></div>
+</div>
+<p>Activating the environment on Windows prints a long list of Visual Studio setup commands; that is the compiler
+activation and normal.</p>
+</section>
+<section id="create-a-dedicated-environment">
+<h2>Create a dedicated environment<a class="headerlink" href="#create-a-dedicated-environment" title="Link to this heading"></a></h2>
+<p>Install EdelweissFE into an environment of its own, never into conda’s <code class="docutils literal notranslate"><span class="pre">base</span></code> environment or one shared with other
+projects:</p>
+<ul class="simple">
+<li><p><strong>It needs a special interpreter.</strong> EdelweissFE runs on the free-threaded (<code class="docutils literal notranslate"><span class="pre">cp314t</span></code>) Python build, and many
+packages built for the regular interpreter cannot be installed alongside it.</p></li>
+<li><p><strong>Its package versions are pinned.</strong> The environment is installed exactly as <code class="docutils literal notranslate"><span class="pre">conda-lock.yml</span></code> specifies. Installing
+other packages into it changes those versions, and a single package that is not free-threading safe (e.g.
+<code class="docutils literal notranslate"><span class="pre">pyamg</span></code>) silently re-enables the GIL for the whole process, disabling the thread-parallel element loops.</p></li>
+<li><p><strong>It can be rebuilt at any time.</strong> A dedicated environment can simply be deleted and recreated from the lockfile,
+which reliably fixes a broken installation; <code class="docutils literal notranslate"><span class="pre">base</span></code> cannot be recreated that way.</p></li>
+<li><p><strong>Marmot is built into it.</strong> <code class="docutils literal notranslate"><span class="pre">cmake</span> <span class="pre">--install</span></code> writes Marmot’s libraries and headers into the environment, where
+they must not mix with other projects’ builds.</p></li>
+</ul>
+<p>Create it with the pinned environment package:</p>
+<pre class="literal-block">conda create -n edelweissfe -c https://repo.prefix.dev/matthiasneuner/edelweiss -c conda-forge edelweissfe-dev=2026.10.29
+conda activate edelweissfe</pre>
+<p>This installs exactly the environment of <code class="docutils literal notranslate"><span class="pre">conda-lock.yml</span></code> for your platform.</p>
+<p><strong>Alternatively, from the lockfile.</strong> The same environment can be installed from <code class="docutils literal notranslate"><span class="pre">conda-lock.yml</span></code> in the
+repository root with <a class="reference external" href="https://conda.github.io/conda-lock/">conda-lock</a>, which itself gets a small environment of its
+own (not <code class="docutils literal notranslate"><span class="pre">base</span></code>). This route does not include <code class="docutils literal notranslate"><span class="pre">edelweissfe-dev</span></code>’s activation script, so set
+<code class="docutils literal notranslate"><span class="pre">PIP_NO_BUILD_ISOLATION</span></code> yourself (last line; see below):</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">conda create -n conda-lock -c conda-forge conda-lock</span>
+<span class="go">conda run -n conda-lock conda-lock install -n edelweissfe conda-lock.yml</span>
+<span class="go">conda env config vars set -n edelweissfe PIP_NO_BUILD_ISOLATION=0</span>
+<span class="go">conda activate edelweissfe</span>
+</pre></div>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Do not create the environment from <code class="docutils literal notranslate"><span class="pre">environment.yml</span></code> directly (<code class="docutils literal notranslate"><span class="pre">conda</span> <span class="pre">env</span> <span class="pre">create</span> <span class="pre">-f</span> <span class="pre">environment.yml</span></code>): that
+re-solves it against whatever packages are newest today, which is exactly what the pinned environment avoids.</p>
+</div>
+<p>On Linux and Windows the environment includes Intel MKL, which enables the PARDISO direct solver. MKL does not exist for
+macOS; there the PARDISO extension is simply not built and the default linear solver falls back to SciPy’s SuperLU.</p>
+<p>The commands on this page use Linux/macOS shell syntax. On Windows, set environment variables separately in the
+Miniforge Prompt (cmd.exe), e.g. <code class="docutils literal notranslate"><span class="pre">set</span> <span class="pre">PYTHON_GIL=0</span></code> before <code class="docutils literal notranslate"><span class="pre">run_tests_edelweissfe</span> <span class="pre">.\testfiles\edelweiss-only\</span></code>.</p>
+</section>
+<section id="installation-without-marmot">
+<h2>Installation without Marmot<a class="headerlink" href="#installation-without-marmot" title="Link to this heading"></a></h2>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">pip install -e .</span>
+<span class="go">PYTHON_GIL=0 run_tests_edelweissfe ./testfiles/edelweiss-only/</span>
+</pre></div>
+</div>
+<p>pip only builds and installs EdelweissFE itself; all dependencies are already in the environment. <code class="docutils literal notranslate"><span class="pre">-e</span></code> (editable)
+makes changes to Python files take effect immediately; rerun the command after changing Cython or C++ sources.</p>
+<p>pip builds against the environment’s own setuptools, Cython and NumPy: activating the environment sets
+<code class="docutils literal notranslate"><span class="pre">PIP_NO_BUILD_ISOLATION=0</span></code> (pip reads it inverted; <code class="docutils literal notranslate"><span class="pre">0</span></code> disables build isolation). Without that, pip would fetch
+its own copies from PyPI into a temporary build environment and compile the Cython extensions against those, which
+can mismatch the environment’s NumPy at runtime. An environment installed from the lockfile needs the
+<code class="docutils literal notranslate"><span class="pre">conda</span> <span class="pre">env</span> <span class="pre">config</span> <span class="pre">vars</span> <span class="pre">set</span></code> step shown above, or <code class="docutils literal notranslate"><span class="pre">pip</span> <span class="pre">install</span> <span class="pre">--no-build-isolation</span> <span class="pre">-e</span> <span class="pre">.</span></code>.</p>
+<p>This installation is sufficient for the EdelweissFE-only elements, materials and tests.</p>
+<p>Without Marmot, the build output (<code class="docutils literal notranslate"><span class="pre">pip</span> <span class="pre">install</span> <span class="pre">-v</span></code>) shows a warning that Marmot was not found, followed by compiler
+errors (e.g. <code class="docutils literal notranslate"><span class="pre">fatal</span> <span class="pre">error</span> <span class="pre">C1083</span></code> on Windows) and <code class="docutils literal notranslate"><span class="pre">[FAIL]</span></code> lines for the three Marmot extensions
+(<code class="docutils literal notranslate"><span class="pre">marmotelement.element</span></code>, <code class="docutils literal notranslate"><span class="pre">marmothypoelastic</span></code>, <code class="docutils literal notranslate"><span class="pre">marmotgradientenhancedhypoelastic</span></code>). That is expected: these
+extensions are optional and skipped. <code class="docutils literal notranslate"><span class="pre">edelweissfe/built_extensions.log</span></code> lists the extensions that were built.</p>
+</section>
+<section id="installation-with-marmot">
+<h2>Installation with Marmot<a class="headerlink" href="#installation-with-marmot" title="Link to this heading"></a></h2>
+<p><a class="reference external" href="https://github.com/MAteRialMOdelingToolbox/Marmot/">Marmot</a> provides the Marmot-backed elements and constitutive
+models. All of its dependencies (Eigen, autodiff, Fastor) are already in the environment, so only Marmot itself is
+built from source, into the environment:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">git clone --recurse-submodules --branch next_v26.11 https://github.com/MAteRialMOdelingToolbox/Marmot/ ../Marmot</span>
+<span class="go">cmake -S ../Marmot -B ../Marmot/build -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX -DCMAKE_PREFIX_PATH=$CONDA_PREFIX \</span>
+<span class="go">      -DCMAKE_FIND_USE_PACKAGE_REGISTRY=OFF</span>
+<span class="go">cmake --build ../Marmot/build -j</span>
+<span class="go">cmake --install ../Marmot/build</span>
+</pre></div>
+</div>
+<p>On Windows, in the <em>Miniforge Prompt</em>, conda’s headers and libraries are under <code class="docutils literal notranslate"><span class="pre">%CONDA_PREFIX%\Library</span></code>, and
+Marmot is built in the <code class="docutils literal notranslate"><span class="pre">Release</span></code> configuration:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">git clone --recurse-submodules --branch next_v26.11 https://github.com/MAteRialMOdelingToolbox/Marmot/ ..\Marmot</span>
+<span class="go">cmake -S ..\Marmot -B ..\Marmot\build -DCMAKE_INSTALL_PREFIX=%CONDA_PREFIX%\Library ^</span>
+<span class="go">      -DCMAKE_PREFIX_PATH=%CONDA_PREFIX%\Library -DCMAKE_FIND_USE_PACKAGE_REGISTRY=OFF</span>
+<span class="go">cmake --build ..\Marmot\build --config Release --parallel</span>
+<span class="go">cmake --install ..\Marmot\build --config Release</span>
+</pre></div>
+</div>
+<p>Then build EdelweissFE, which picks up Marmot automatically, and validate the installation:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">pip install -v -e .</span>
+<span class="go">PYTHON_GIL=0 run_tests_edelweissfe ./testfiles/marmot/</span>
+<span class="go">PYTHON_GIL=0 run_tests_edelweissfe ./testfiles/edelweiss-only/</span>
+</pre></div>
+</div>
+<p>Marmot is found in <code class="docutils literal notranslate"><span class="pre">$CONDA_PREFIX</span></code> (Windows: <code class="docutils literal notranslate"><span class="pre">%CONDA_PREFIX%\Library</span></code>) by default; set <code class="docutils literal notranslate"><span class="pre">MARMOT_INSTALL_DIR</span></code>
+if it is installed elsewhere. The build records the Marmot installation it used (<code class="docutils literal notranslate"><span class="pre">edelweissfe/marmot_install_dir.txt</span></code>):
+on Linux and macOS, the Marmot extensions find the library there through their embedded library path; on Windows,
+<code class="docutils literal notranslate"><span class="pre">import</span> <span class="pre">edelweissfe</span></code> adds its <code class="docutils literal notranslate"><span class="pre">bin</span></code> directory to the DLL search path. So the extensions always load the Marmot they
+were built against, whatever the runtime environment. Rebuild EdelweissFE after moving or reinstalling Marmot
+elsewhere.</p>
+<p>The extensions are compiled with <code class="docutils literal notranslate"><span class="pre">-march=native</span></code> by default (no architecture flags on Windows), so a build only runs
+on processors like the one it was compiled on. For builds that must run elsewhere, e.g. container images or packages,
+set <code class="docutils literal notranslate"><span class="pre">EDELWEISSFE_ARCH_FLAGS</span></code> (e.g. <code class="docutils literal notranslate"><span class="pre">-march=x86-64-v3</span></code>, or empty for none). The compile flags are defined in
+<code class="docutils literal notranslate"><span class="pre">edelweissfe.utils.extensionbuild</span></code>, which downstream packages (EdelweissMeshfree) use for their own extensions.</p>
+</section>
+<section id="developing">
+<h2>Developing<a class="headerlink" href="#developing" title="Link to this heading"></a></h2>
+<p>Python changes take effect immediately (editable install). After changing Cython sources, or after rebuilding and
+installing Marmot, rerun <code class="docutils literal notranslate"><span class="pre">pip</span> <span class="pre">install</span> <span class="pre">-e</span> <span class="pre">.</span></code>. The editable install belongs to one checkout: in a
+second checkout or git worktree, use a separate environment, or it silently runs the first checkout’s code. Further:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">PYTHON_GIL=0</span> <span class="pre">pytest</span> <span class="pre">tests</span></code>: the pytest suite,</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">sphinx-build</span> <span class="pre">-b</span> <span class="pre">html</span> <span class="pre">doc/source</span> <span class="pre">doc/build/html</span></code>: this documentation.</p></li>
+</ul>
+</section>
+<section id="changing-dependencies">
+<h2>Changing dependencies<a class="headerlink" href="#changing-dependencies" title="Link to this heading"></a></h2>
+<p>With conda-lock in its own environment (<code class="docutils literal notranslate"><span class="pre">conda</span> <span class="pre">create</span> <span class="pre">-n</span> <span class="pre">conda-lock</span> <span class="pre">-c</span> <span class="pre">conda-forge</span> <span class="pre">conda-lock</span></code>), edit
+<code class="docutils literal notranslate"><span class="pre">environment.yml</span></code>, re-lock, and update your environment from the lockfile:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">conda run -n conda-lock conda-lock lock -f environment.yml --virtual-package-spec virtual-packages.yml</span>
+<span class="go">conda run -n conda-lock conda-lock install -n edelweissfe conda-lock.yml</span>
+</pre></div>
+</div>
+<p>Then set a new version, today’s date, in <code class="docutils literal notranslate"><span class="pre">conda/edelweissfe-dev/VERSION</span></code> (append <code class="docutils literal notranslate"><span class="pre">.1</span></code>, <code class="docutils literal notranslate"><span class="pre">.2</span></code>, … for further
+changes on the same day) and in the <code class="docutils literal notranslate"><span class="pre">conda</span> <span class="pre">create</span></code> command of the README (this page reads it from <code class="docutils literal notranslate"><span class="pre">VERSION</span></code>). Commit everything together;
+CI fails if the lockfile is out of date with <code class="docutils literal notranslate"><span class="pre">environment.yml</span></code>, if it changed without a new version, or if the
+documented commands do not show the current version. Once merged into <code class="docutils literal notranslate"><span class="pre">next_v26.11</span></code>, CI publishes the new
+<code class="docutils literal notranslate"><span class="pre">edelweissfe-dev</span></code>.</p>
+<p><code class="docutils literal notranslate"><span class="pre">virtual-packages.yml</span></code> tells conda-lock which system properties (e.g. the minimum macOS version) to assume for each
+platform. Platform-specific dependencies use selectors, e.g. <code class="docutils literal notranslate"><span class="pre">-</span> <span class="pre">mkl</span>&#160; <span class="pre">#</span> <span class="pre">[linux64]</span></code>.</p>
+<p>A weekly CI job re-locks against the newest packages and opens a pull request with a new version, whose CI tests the
+updated environment before it is merged.</p>
+</section>
+<section id="running-with-free-threading">
+<h2>Running with free-threading<a class="headerlink" href="#running-with-free-threading" title="Link to this heading"></a></h2>
+<p>Disable the GIL and set the number of threads explicitly:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">PYTHON_GIL=0 OMP_NUM_THREADS=8 edelweissfe input.inp</span>
 </pre></div>
 </div>
 </section>
-<section id="working-installation-without-marmot">
-<h2>Working installation without Marmot<a class="headerlink" href="#working-installation-without-marmot" title="Link to this heading"></a></h2>
-<p>Build a working EdelweissFE installation without Marmot support as follows:</p>
-<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">mamba install --file conda_requirements.txt</span>
-<span class="go">pip install -r pip_requirements.txt</span>
-<span class="go">pip install .</span>
-</pre></div>
-</div>
-<p>Validate that installation with the same command used in CI:</p>
-<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">run_tests_edelweissfe ./testfiles/edelweiss-only/</span>
-</pre></div>
-</div>
-<p>This installation path is sufficient for the EdelweissFE-only examples and tests. Marmot-backed elements and material models
-require the additional dependencies described below.</p>
-</section>
-<section id="working-installation-with-marmot">
-<h2>Working installation with Marmot<a class="headerlink" href="#working-installation-with-marmot" title="Link to this heading"></a></h2>
-<p>Extend the base setup with the external libraries needed for Marmot-enabled builds.</p>
-<p>Install Eigen:</p>
-<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">cd ..</span>
-<span class="go">git clone --branch 3.4.0 https://gitlab.com/libeigen/eigen.git</span>
-<span class="go">cd eigen</span>
-<span class="go">mkdir build</span>
-<span class="go">cd build</span>
-<span class="go">cmake -DBUILD_TESTING=OFF -DINCLUDE_INSTALL_DIR=$CONDA_PREFIX/include -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX ..</span>
-<span class="go">make install</span>
-<span class="go">cd ../..</span>
-</pre></div>
-</div>
-<p>Install autodiff:</p>
-<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">git clone --branch v1.1.0 https://github.com/autodiff/autodiff.git</span>
-<span class="go">cd autodiff</span>
-<span class="go">mkdir build</span>
-<span class="go">cd build</span>
-<span class="go">cmake -DAUTODIFF_BUILD_TESTS=OFF \</span>
-<span class="go">  -DAUTODIFF_BUILD_PYTHON=OFF \</span>
-<span class="go">  -DAUTODIFF_BUILD_EXAMPLES=OFF \</span>
-<span class="go">  -DAUTODIFF_BUILD_DOCS=OFF \</span>
-<span class="go">  -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX \</span>
-<span class="go">  ..</span>
-<span class="go">make install</span>
-<span class="go">cd ../..</span>
-</pre></div>
-</div>
-<p>Install Fastor:</p>
-<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">git clone https://github.com/romeric/Fastor.git</span>
-<span class="go">cd Fastor</span>
-<span class="go">mkdir build</span>
-<span class="go">cd build</span>
-<span class="go">cmake -DBUILD_TESTING=OFF -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX ..</span>
-<span class="go">make install</span>
-<span class="go">cd ../..</span>
-</pre></div>
-</div>
-<p>Install AMGCL:</p>
-<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">git clone --branch 1.4.7 --depth 1 https://github.com/ddemidov/amgcl.git</span>
-<span class="go">cd amgcl</span>
-<span class="go">mkdir build</span>
-<span class="go">cd build</span>
-<span class="go">cmake -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX ..</span>
-<span class="go">make install</span>
-<span class="go">cd ../..</span>
-</pre></div>
-</div>
-<p>Install Marmot:</p>
-<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">git clone --branch master --recurse-submodules https://github.com/MAteRialMOdelingToolbox/Marmot/</span>
-<span class="go">cd Marmot</span>
-</pre></div>
-</div>
-<p>Then build and install Marmot:</p>
-<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">mkdir build</span>
-<span class="go">cd build</span>
-<span class="go">cmake -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX ..</span>
-<span class="go">make install</span>
-<span class="go">cd ../../EdelweissFE</span>
-</pre></div>
-</div>
-<p>Build EdelweissFE with Marmot available:</p>
-<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">pip install -v .</span>
-</pre></div>
-</div>
-<p>Validate that installation with the same CI commands:</p>
-<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">run_tests_edelweissfe ./testfiles/marmot/</span>
-<span class="go">run_tests_edelweissfe ./testfiles/edelweiss-only/</span>
-</pre></div>
-</div>
-</section>
-<section id="tldr">
-<h2>TLDR<a class="headerlink" href="#tldr" title="Link to this heading"></a></h2>
-<p>Assuming that you are in an empty directory,
-you can quickly get a working version of EdelweissFE in a Linux based
-environment:</p>
-<section id="installation-steps-without-marmot">
-<h3>Installation steps without Marmot<a class="headerlink" href="#installation-steps-without-marmot" title="Link to this heading"></a></h3>
-<p>If necessary, get <a class="reference external" href="https://www.anaconda.com/">Anaconda</a></p>
-<p>The example below uses the Linux <code class="docutils literal notranslate"><span class="pre">aarch64</span></code> Miniforge installer. If you are on a different platform,
-choose the matching installer from the Miniforge releases page.</p>
-<div class="literal-block-wrapper docutils container" id="id1">
-<div class="code-block-caption"><span class="caption-text">Step 1</span><a class="headerlink" href="#id1" title="Link to this code"></a></div>
-<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go"> curl -L -O \</span>
-<span class="go">     https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-aarch64.sh</span>
-<span class="go"> bash Miniforge3-Linux-aarch64.sh -b -p ./miniforge3</span>
-</pre></div>
-</div>
-</div>
-<p>Add mamba to your environment:</p>
-<div class="literal-block-wrapper docutils container" id="id2">
-<div class="code-block-caption"><span class="caption-text">Step 2</span><a class="headerlink" href="#id2" title="Link to this code"></a></div>
-<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go"> export EWROOT=$PWD</span>
-<span class="go"> export PATH=$EWROOT/miniforge3/bin:$PATH</span>
-<span class="go"> conda init --all</span>
-<span class="go"> exit</span>
-</pre></div>
-</div>
-</div>
-<p>Restart shell and activate mamba</p>
-<div class="literal-block-wrapper docutils container" id="id3">
-<div class="code-block-caption"><span class="caption-text">Step 3</span><a class="headerlink" href="#id3" title="Link to this code"></a></div>
-<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go"> export EWROOT=$PWD</span>
-<span class="go"> conda activate</span>
-</pre></div>
-</div>
-</div>
-<p>Get EdelweissFE:</p>
-<div class="literal-block-wrapper docutils container" id="id4">
-<div class="code-block-caption"><span class="caption-text">Step 4</span><a class="headerlink" href="#id4" title="Link to this code"></a></div>
-<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go"> git clone https://github.com/EdelweissFE/EdelweissFE.git</span>
-</pre></div>
-</div>
-</div>
-<p>Install the required conda packages:</p>
-<div class="literal-block-wrapper docutils container" id="id5">
-<div class="code-block-caption"><span class="caption-text">Step 5</span><a class="headerlink" href="#id5" title="Link to this code"></a></div>
-<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go"> mamba install --file EdelweissFE/conda_requirements.txt</span>
-</pre></div>
-</div>
-</div>
-<p>Install the additional pip packages:</p>
-<div class="literal-block-wrapper docutils container" id="id6">
-<div class="code-block-caption"><span class="caption-text">Step 6</span><a class="headerlink" href="#id6" title="Link to this code"></a></div>
-<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go"> pip install -r EdelweissFE/pip_requirements.txt</span>
-</pre></div>
-</div>
-</div>
-<p>Build and test EdelweissFE without Marmot:</p>
-<div class="literal-block-wrapper docutils container" id="id7">
-<div class="code-block-caption"><span class="caption-text">Step 7</span><a class="headerlink" href="#id7" title="Link to this code"></a></div>
-<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go"> cd $EWROOT/EdelweissFE</span>
-<span class="go"> pip install .</span>
-<span class="go"> run_tests_edelweissfe ./testfiles/edelweiss-only/</span>
-</pre></div>
-</div>
-</div>
-</section>
-<section id="installation-steps-with-marmot">
-<h3>Installation steps with Marmot<a class="headerlink" href="#installation-steps-with-marmot" title="Link to this heading"></a></h3>
-<p>Install Eigen:</p>
-<div class="literal-block-wrapper docutils container" id="id8">
-<div class="code-block-caption"><span class="caption-text">Step 8</span><a class="headerlink" href="#id8" title="Link to this code"></a></div>
-<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go"> cd $EWROOT</span>
-<span class="go"> git clone --branch 3.4.0 https://gitlab.com/libeigen/eigen.git</span>
-<span class="go"> cd eigen</span>
-<span class="go"> mkdir build</span>
-<span class="go"> cd build</span>
-<span class="go"> cmake \</span>
-<span class="go">     -DBUILD_TESTING=OFF \</span>
-<span class="go">     -DINCLUDE_INSTALL_DIR=$CONDA_PREFIX/include \</span>
-<span class="go">     -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX \</span>
-<span class="go">     ..</span>
-<span class="go"> make install</span>
-</pre></div>
-</div>
-</div>
-<p>Install autodiff:</p>
-<div class="literal-block-wrapper docutils container" id="id9">
-<div class="code-block-caption"><span class="caption-text">Step 9</span><a class="headerlink" href="#id9" title="Link to this code"></a></div>
-<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go"> cd $EWROOT</span>
-<span class="go"> git clone --branch v1.1.0 https://github.com/autodiff/autodiff.git</span>
-<span class="go"> cd autodiff</span>
-<span class="go"> mkdir build</span>
-<span class="go"> cd build</span>
-<span class="go"> cmake \</span>
-<span class="go">     -DAUTODIFF_BUILD_TESTS=OFF \</span>
-<span class="go">     -DAUTODIFF_BUILD_PYTHON=OFF \</span>
-<span class="go">     -DAUTODIFF_BUILD_EXAMPLES=OFF \</span>
-<span class="go">     -DAUTODIFF_BUILD_DOCS=OFF \</span>
-<span class="go">     -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX \</span>
-<span class="go">     ..</span>
-<span class="go"> make install</span>
-</pre></div>
-</div>
-</div>
-<p>Install Fastor:</p>
-<div class="literal-block-wrapper docutils container" id="id10">
-<div class="code-block-caption"><span class="caption-text">Step 10</span><a class="headerlink" href="#id10" title="Link to this code"></a></div>
-<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go"> cd $EWROOT</span>
-<span class="go"> git clone https://github.com/romeric/Fastor.git</span>
-<span class="go"> cd Fastor</span>
-<span class="go"> mkdir build</span>
-<span class="go"> cd build</span>
-<span class="go"> cmake -DBUILD_TESTING=OFF -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX ..</span>
-<span class="go"> make install</span>
-</pre></div>
-</div>
-</div>
-<p>Install AMGCL:</p>
-<div class="literal-block-wrapper docutils container" id="id11">
-<div class="code-block-caption"><span class="caption-text">Step 11</span><a class="headerlink" href="#id11" title="Link to this code"></a></div>
-<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go"> cd $EWROOT</span>
-<span class="go"> git clone --branch 1.4.7 --depth 1 https://github.com/ddemidov/amgcl.git</span>
-<span class="go"> cd amgcl</span>
-<span class="go"> mkdir build</span>
-<span class="go"> cd build</span>
-<span class="go"> cmake -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX ..</span>
-<span class="go"> make install</span>
-</pre></div>
-</div>
-</div>
-<p>Install Marmot from the master branch:</p>
-<div class="literal-block-wrapper docutils container" id="id12">
-<div class="code-block-caption"><span class="caption-text">Step 12</span><a class="headerlink" href="#id12" title="Link to this code"></a></div>
-<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go"> cd $EWROOT</span>
-<span class="go"> git clone --branch master --recurse-submodules https://github.com/MAteRialMOdelingToolbox/Marmot/</span>
-<span class="go"> cd Marmot</span>
-<span class="go"> mkdir build</span>
-<span class="go"> cd build</span>
-<span class="go"> cmake -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX ..</span>
-<span class="go"> make install</span>
-</pre></div>
-</div>
-</div>
-<p>Build and test EdelweissFE with Marmot:</p>
-<div class="literal-block-wrapper docutils container" id="id13">
-<div class="code-block-caption"><span class="caption-text">Step 13</span><a class="headerlink" href="#id13" title="Link to this code"></a></div>
-<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go"> cd $EWROOT/EdelweissFE</span>
-<span class="go"> pip install -v .</span>
-<span class="go"> run_tests_edelweissfe ./testfiles/marmot/</span>
-<span class="go"> run_tests_edelweissfe ./testfiles/edelweiss-only/</span>
-</pre></div>
-</div>
-</div>
-</section>
-</section>
-<section id="build-the-documentation">
-<h2>Build the documentation<a class="headerlink" href="#build-the-documentation" title="Link to this heading"></a></h2>
-<p>The documentation workflow builds the HTML output with:</p>
-<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">sphinx-build ./doc/source/ ./docs -b html</span>
-</pre></div>
-</div>
+<section id="troubleshooting">
+<h2>Troubleshooting<a class="headerlink" href="#troubleshooting" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p><strong>The environment behaves differently than on other machines.</strong> Make sure it was created from <code class="docutils literal notranslate"><span class="pre">edelweissfe-dev</span></code>
+(or with <code class="docutils literal notranslate"><span class="pre">conda-lock</span> <span class="pre">install</span></code>), not from <code class="docutils literal notranslate"><span class="pre">environment.yml</span></code>, and that <code class="docutils literal notranslate"><span class="pre">conda</span> <span class="pre">list</span> <span class="pre">edelweissfe-dev</span></code> shows the
+version documented above.</p></li>
+<li><p><strong>CMake finds an unexpected Eigen or other package.</strong> CMake also searches its user package registry
+(<code class="docutils literal notranslate"><span class="pre">~/.cmake/packages</span></code>), to which some projects register their <em>build</em> trees. If a package from the environment is
+rejected (e.g. by a version check), CMake silently falls back to such an entry. Configure with
+<code class="docutils literal notranslate"><span class="pre">-DCMAKE_FIND_USE_PACKAGE_REGISTRY=OFF</span></code> (as above); the configure output prints the Eigen version and location
+that was found.</p></li>
+<li><p><strong>The GIL is re-enabled at runtime.</strong> Importing any extension module that does not declare free-threading support
+re-enables the GIL for the whole process, with a <code class="docutils literal notranslate"><span class="pre">RuntimeWarning</span></code>. Do not add such packages (e.g. <code class="docutils literal notranslate"><span class="pre">pyamg</span></code>) to the
+environment.</p></li>
+</ul>
 </section>
 </section>
 

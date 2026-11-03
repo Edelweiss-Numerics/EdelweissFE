@@ -1,0 +1,319 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>edelweissfe.linsolve.composition.cornernodetwolevelcycle &mdash; EdelweissFE v22.07 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=cfdaff8d" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css?v=37fbe429" />
+
+  
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=17e2f33f"></script>
+      <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            EdelweissFE
+              <img src="../../../../_static/edelweiss_fe_logo.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../features.html">Features</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../prerequisites.html">Prerequisites</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../documentation/index.html">Documentation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../contributors.html">Contributors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../publications.html">Publications</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">EdelweissFE</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">edelweissfe.linsolve.composition.cornernodetwolevelcycle</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for edelweissfe.linsolve.composition.cornernodetwolevelcycle</h1><div class="highlight"><pre>
+<span></span><span class="ch">#!/usr/bin/env python3</span>
+<span class="c1"># -*- coding: utf-8 -*-</span>
+<span class="c1">#  ---------------------------------------------------------------------</span>
+<span class="c1">#</span>
+<span class="c1">#  _____    _      _              _         _____ _____</span>
+<span class="c1"># | ____|__| | ___| |_      _____(_)___ ___|  ___| ____|</span>
+<span class="c1"># |  _| / _` |/ _ \ \ \ /\ / / _ \ / __/ __| |_  |  _|</span>
+<span class="c1"># | |__| (_| |  __/ |\ V  V /  __/ \__ \__ \  _| | |___</span>
+<span class="c1"># |_____\__,_|\___|_| \_/\_/ \___|_|___/___/_|   |_____|</span>
+<span class="c1">#</span>
+<span class="c1">#</span>
+<span class="c1">#  Unit of Strength of Materials and Structural Analysis</span>
+<span class="c1">#  University of Innsbruck,</span>
+<span class="c1">#  2017 - today</span>
+<span class="c1">#</span>
+<span class="c1">#  Matthias Neuner matthias.neuner@uibk.ac.at</span>
+<span class="c1">#</span>
+<span class="c1">#  This library is free software; you can redistribute it and/or</span>
+<span class="c1">#  modify it under the terms of the GNU Lesser General Public</span>
+<span class="c1">#  License as published by the Free Software Foundation; either</span>
+<span class="c1">#  version 2.1 of the License, or (at your option) any later version.</span>
+<span class="c1">#</span>
+<span class="c1">#  The full text of the license can be found in the file LICENSE.md at</span>
+<span class="c1">#  the top level directory of EdelweissFE.</span>
+<span class="c1">#  ---------------------------------------------------------------------</span>
+<span class="sd">"""p-multigrid (Galerkin P1 corner-node) preconditioner for one field's diagonal block: the cycle of</span>
+<span class="sd">``TwoLevel(coarseSpace=CornerNodeInterpolation(coarseSolve))``</span>
+<span class="sd">(:class:`~edelweissfe.linsolve.composition.twolevel.TwoLevel`).</span>
+
+<span class="sd">Precondition the quadratic operator through its linear (P1) part: :math:`\\nu` Chebyshev sweeps on the field's own</span>
+<span class="sd">(scaled) block, restrict the residual through :math:`P^T`, solve on the Galerkin-projected :math:`A_c = P^T A P` with</span>
+<span class="sd">the coarse component, prolong through :math:`P`, :math:`\\nu` more Chebyshev sweeps.</span>
+
+<span class="sd">The prolongation interpolates the scaled variables</span>
+<span class="sd">---------------------------------------------------</span>
+
+<span class="sd">The block is :math:`\\hat A = D A D` (a :class:`~edelweissfe.linsolve.composition.diagonalscaling.DiagonalScaling`</span>
+<span class="sd">above), and a displacement :math:`u` of the physical problem is :math:`\\hat u = D^{-1} u` in its variables. The P1</span>
+<span class="sd">interpolant acts on :math:`u`: :math:`P_{geo}` keeps a corner node's displacement and gives a midside node the mean of</span>
+<span class="sd">its two edge-endpoint corners. In the scaled variables the same interpolation is</span>
+
+<span class="sd">.. math::</span>
+
+<span class="sd">    P = D^{-1} P_{geo} D_c: \\quad P_{cc} = 1, \\qquad</span>
+<span class="sd">    P_{ma} = \\tfrac{1}{2} \\frac{s_a}{s_m}, \\quad P_{mb} = \\tfrac{1}{2} \\frac{s_b}{s_m}</span>
+
+<span class="sd">for a midside dof :math:`m` on the edge :math:`(a, b)`, with :math:`s` the diagonal of :math:`D` and :math:`D_c` its</span>
+<span class="sd">restriction to the corners. The plain weights :math:`\\tfrac{1}{2}, \\tfrac{1}{2}` would interpolate :math:`\\hat u`</span>
+<span class="sd">as if it were :math:`u`: a scaled translation :math:`D^{-1} t`, the smoothest error there is, would be off by the</span>
+<span class="sd">ratios :math:`s_a / s_m` at every midside node, and the coarse level could not remove it. With :math:`P` the</span>
+<span class="sd">translations are reproduced exactly, and</span>
+
+<span class="sd">.. math::</span>
+
+<span class="sd">    A_c = P^T \\hat A P = D_c \\, P_{geo}^T A P_{geo} \\, D_c</span>
+
+<span class="sd">is the P1 operator of the physical problem in the corners' scaled variables: the operator of the corner-node field,</span>
+<span class="sd">scaled by :math:`D_c`. Without a scaling above (:math:`D = I`), :math:`P = P_{geo}`.</span>
+
+<span class="sd">The coarse problem is a field of its own</span>
+<span class="sd">----------------------------------------</span>
+
+<span class="sd">The coarse solve is a component of the composed solver, set up on :math:`A_c` with the context of the corner-node field</span>
+<span class="sd">(:meth:`~edelweissfe.linsolve.composition.base.SetUpContext.ofCoarseNodes`: the same field on the coarse nodes, their</span>
+<span class="sd">coordinates, the scaling :math:`D_c`), so that every component works on it unchanged. Its default,</span>
+<span class="sd">``DiagonalScaling(AMG())``, works on any field; for a 3D displacement field</span>
+<span class="sd">``DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModesPerAggregate()))`` is faster</span>
+<span class="sd">(:ref:`measured-scaled-corner-node-interpolation`), and the ``blockamg`` preset passes it, with the smoother of the</span>
+<span class="sd">corner-node two-level cycle (:func:`~edelweissfe.linsolve.composition.amg.defaultCornerNodeTwoLevelTree`). Both scale</span>
+<span class="sd">:math:`A_c` to a unit diagonal once more: where a midside diagonal is tiny against its corners', the weights</span>
+<span class="sd">:math:`s_a / s_m` are large, :math:`A_c` inherits entries of their square, and a Chebyshev smoother on the unscaled</span>
+<span class="sd">:math:`A_c` would work with a spectral radius far above that of a unit-diagonal operator.</span>
+
+<span class="sd">The cycle runs in C++ (``CornerNodeTwoLevelCycleT`` in ``edelweissfe/linsolve/amgcl/amgcl-wrapper.hpp``, wrapped as</span>
+<span class="sd">:class:`~edelweissfe.linsolve.amgcl.amgcl.PyAMGCLCornerNodeTwoLevelCycle`), OpenMP-threaded throughout, and calls the</span>
+<span class="sd">coarse component back once per application.</span>
+
+<span class="sd">**Dirichlet rows.** A field's diagonal block still carries its Dirichlet identity rows (the Dirichlet elimination runs</span>
+<span class="sd">before the linear solver), and the identity rows of multi-point-constraint slaves, which are treated alike. The fine</span>
+<span class="sd">smoothing and the Galerkin projection act on the *free* DOFs only, with the Dirichlet DOFs decoupled entirely: the</span>
+<span class="sd">cycle is that of the free submatrix, and a Dirichlet DOF that is only masked after a step still couples into the free</span>
+<span class="sd">DOFs within it. A free midside node whose edge-endpoint corner is Dirichlet-constrained keeps</span>
+<span class="sd">only the surviving weight of its free endpoint -- no renormalization (the constrained corner contributes exactly zero</span>
+<span class="sd">to a homogeneous Newton correction, which the dropped weight already encodes). A free midside dof whose *both*</span>
+<span class="sd">endpoint dofs are constrained (a symmetry plane and a tie on one edge, issue #223) would get an empty row of :math:`P`</span>
+<span class="sd">-- no coarse correction at all -- so its node becomes a coarse node of its own</span>
+<span class="sd">(:attr:`CornerNodeTwoLevelCycle.coarseNodes`), as :func:`~edelweissfe.numerics.p1topology.buildMidsideCorners` makes a</span>
+<span class="sd">node a corner on an AMR edge conflict; it is decided at the build, where the Dirichlet rows are known, not in the</span>
+<span class="sd">topology map. A Dirichlet coarse dof is a zero column of :math:`P` and an identity row of :math:`A_c`: the coarse field</span>
+<span class="sd">keeps its Dirichlet rows, as the fine one does.</span>
+
+<span class="sd">The C++ implementation does not extract the free submatrix, it decouples the Dirichlet DOFs exactly</span>
+<span class="sd">inside the full block layout instead: the fine right-hand side and iterate are kept zero on them (a</span>
+<span class="sd">Dirichlet row holds only its diagonal, so every residual and every Chebyshev update stays zero</span>
+<span class="sd">there, whatever the columns hold), and ``P`` has no rows for them. That is the</span>
+<span class="sd">free-submatrix cycle up to floating-point summation order, and it is what allows a node-wise 3x3</span>
+<span class="sd">block storage of the fine operator (``fineBlockSize``) on partially constrained nodes.</span>
+<span class="sd">"""</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">scipy.sparse</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">sp</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.linsolve.composition.twolevelcycle</span><span class="w"> </span><span class="kn">import</span> <span class="n">TwoLevelCycle</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">performancetiming</span>
+
+
+<div class="viewcode-block" id="CornerNodeTwoLevelCycle">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.cornernodetwolevelcycle.CornerNodeTwoLevelCycle">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">CornerNodeTwoLevelCycle</span><span class="p">(</span><span class="n">TwoLevelCycle</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""A corner-node two-level cycle for one vector field's diagonal block, a two-level preconditioner</span>
+<span class="sd">    (:class:`~edelweissfe.linsolve.composition.twolevelcycle.TwoLevelCycle`) whose coarse level is the P1</span>
+<span class="sd">    corner nodes, and whose coarse solve is a callable, set with :meth:`setCoarseSolve`.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    isCorner, edgeEndpoints</span>
+<span class="sd">        This field's midside corners (:func:`edelweissfe.numerics.p1topology.buildMidsideCorners`), in the</span>
+<span class="sd">        field's own node order.</span>
+<span class="sd">    amgclTree, backendBlockSize, backendPrecision</span>
+<span class="sd">        The parameters of the cycle, see</span>
+<span class="sd">        :meth:`~edelweissfe.linsolve.composition.twolevelcycle.TwoLevelCycle.cycleParameters`: the fine</span>
+<span class="sd">        Chebyshev smoother is the ``relax``, ``npre`` and ``npost`` of the field's AMGCL tree. With ``npre`` 0 the cycle</span>
+<span class="sd">        starts with the coarse-grid correction of the right-hand side itself and ends with ``npost`` sweeps: one</span>
+<span class="sd">        smoother application fewer per cycle than a symmetric one, at the price of a nonsymmetric preconditioner -- of</span>
+<span class="sd">        no concern to the right-preconditioned GMRES around it, which needs a fixed linear operator, not a symmetric</span>
+<span class="sd">        one. Ending on the smoother is the right way round for that one sweep: it damps the high-frequency error the</span>
+<span class="sd">        prolongated correction leaves on the fine level.</span>
+<span class="sd">    """</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">isCorner</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+        <span class="n">edgeEndpoints</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+        <span class="n">amgclTree</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span>
+        <span class="n">backendBlockSize</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
+        <span class="n">backendPrecision</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"double"</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_isCorner</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">isCorner</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int8</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_edgeEndpoints</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">edgeEndpoints</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int32</span><span class="p">)</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.linsolve.amgcl.amgcl</span><span class="w"> </span><span class="kn">import</span> <span class="n">PyAMGCLCornerNodeTwoLevelCycle</span>
+
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span>
+            <span class="n">PyAMGCLCornerNodeTwoLevelCycle</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">cycleParameters</span><span class="p">(</span><span class="n">amgclTree</span><span class="p">,</span> <span class="n">backendBlockSize</span><span class="p">,</span> <span class="n">backendPrecision</span><span class="p">),</span>
+        <span class="p">)</span>
+
+<div class="viewcode-block" id="CornerNodeTwoLevelCycle.setCoarseSolve">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.cornernodetwolevelcycle.CornerNodeTwoLevelCycle.setCoarseSolve">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">setCoarseSolve</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">coarseSolve</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The coarse solve, a callable ``r_c -&gt; z_c`` with :math:`z_c \\approx A_c^{-1} r_c`, e.g. a component of the</span>
+<span class="sd">        composed solver once it is set up on the coarse operator :meth:`build` returns; called once per application.</span>
+<span class="sd">        Set before or after the build, before the first application; the cycle calls the one set last."""</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_preconditioner</span><span class="o">.</span><span class="n">setCoarseSolve</span><span class="p">(</span><span class="n">coarseSolve</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="CornerNodeTwoLevelCycle.build">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.cornernodetwolevelcycle.CornerNodeTwoLevelCycle.build">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">build</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">A</span><span class="p">,</span> <span class="n">scaling</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">sp</span><span class="o">.</span><span class="n">csr_matrix</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Build the prolongation, the Galerkin coarse operator and the fine Chebyshev smoother, all in C++, and return</span>
+<span class="sd">        the coarse operator, on which the caller sets up the coarse solve before the first application.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        A</span>
+<span class="sd">            This field's scaled diagonal block :math:`\\hat A = D A D` (scipy CSR), still carrying its Dirichlet</span>
+<span class="sd">            identity rows.</span>
+<span class="sd">        scaling</span>
+<span class="sd">            This field's slice of the scaling :math:`D`: the weights of the prolongation (see the module documentation).</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        sp.csr_matrix</span>
+<span class="sd">            :math:`A_c = P^T \\hat A P` on all dofs of the :attr:`coarseNodes`, in node order and then by component,</span>
+<span class="sd">            with an identity row for each Dirichlet coarse dof; 0 x 0 for a field without a free dof (the cycle is then</span>
+<span class="sd">            the exact diagonal inverse and needs no coarse solve).</span>
+<span class="sd">        """</span>
+        <span class="n">A</span> <span class="o">=</span> <span class="n">A</span><span class="o">.</span><span class="n">tocsr</span><span class="p">()</span>
+        <span class="n">n</span> <span class="o">=</span> <span class="n">A</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">nNodes</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_isCorner</span><span class="p">)</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">nNodes</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span> <span class="o">!=</span> <span class="p">(</span><span class="n">n</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span> <span class="ow">or</span> <span class="p">(</span><span class="n">nNodes</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="ow">and</span> <span class="n">n</span> <span class="o">%</span> <span class="n">nNodes</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">"cornerNodeTwoLevelCycle: block size </span><span class="si">{:}</span><span class="s2"> is not a multiple of the topology map's node count </span><span class="si">{:}</span><span class="s2"> -- "</span>
+                <span class="s2">"the map does not match this field."</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">nNodes</span><span class="p">)</span>
+            <span class="p">)</span>
+        <span class="k">with</span> <span class="n">performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"C++ build"</span><span class="p">):</span>
+            <span class="c1"># a build that throws leaves the C++ object unbuilt: applyPreconditioner then raises</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_preconditioner</span><span class="o">.</span><span class="n">build</span><span class="p">(</span>
+                <span class="n">A</span><span class="p">,</span>
+                <span class="n">scaling</span><span class="p">,</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_isCorner</span><span class="p">,</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_edgeEndpoints</span><span class="p">,</span>
+            <span class="p">)</span></div>
+
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">nCoarse</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The coarse dofs: all dofs of the :attr:`coarseNodes`."""</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_preconditioner</span><span class="o">.</span><span class="n">nCoarse</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">coarseNodes</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Per node, whether the last build made it a coarse node: the corner nodes, and every midside node</span>
+<span class="sd">        with a free dof whose two edge-endpoint dofs are both constrained (see the module documentation)."""</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_preconditioner</span><span class="o">.</span><span class="n">coarseNodes</span>
+
+<div class="viewcode-block" id="CornerNodeTwoLevelCycle.prolongationMatrix">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.cornernodetwolevelcycle.CornerNodeTwoLevelCycle.prolongationMatrix">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">prolongationMatrix</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">sp</span><span class="o">.</span><span class="n">csr_matrix</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The prolongation ``P`` as the cycle uses it, a scipy CSR matrix (for inspection)."""</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_preconditioner</span><span class="o">.</span><span class="n">prolongationMatrix</span><span class="p">()</span></div>
+</div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Matthias Neuner.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

@@ -1,0 +1,291 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Restart &mdash; EdelweissFE v22.07 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=cfdaff8d" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=37fbe429" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=17e2f33f"></script>
+      <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Adaptive refinement: error estimation and marking" href="adaptivitytheory.html" />
+    <link rel="prev" title="The topology pipeline: how a model changes itself" href="topologypipeline.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            EdelweissFE
+              <img src="../_static/edelweiss_fe_logo.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../features.html">Features</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../prerequisites.html">Prerequisites</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation.html">Installation</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">Documentation</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="syntax.html">Input file syntax</a></li>
+<li class="toctree-l2"><a class="reference internal" href="inputsystem.html">The input system: how <code class="docutils literal notranslate"><span class="pre">.inp</span></code> grammar is defined</a></li>
+<li class="toctree-l2"><a class="reference internal" href="jobs.html">Inputfile driven simulations</a></li>
+<li class="toctree-l2"><a class="reference internal" href="models.html">Models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="solvers.html">Solvers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="linsolvers.html">Linear solvers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="steps.html">Steps</a></li>
+<li class="toctree-l2"><a class="reference internal" href="analyticalfields.html">Analytical fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="constraints.html">Constraints</a></li>
+<li class="toctree-l2"><a class="reference internal" href="rigidbodies.html">Rigid bodies</a></li>
+<li class="toctree-l2"><a class="reference internal" href="contacttheory.html">Contact mechanics: theory</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dofmanager.html">Degree of Freedom (DOF) Manager and Numerics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="assembly.html">System matrix assembly</a></li>
+<li class="toctree-l2"><a class="reference internal" href="fieldoutputmanager.html">Field outputs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="fields.html">Fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="elements.html">Elements</a></li>
+<li class="toctree-l2"><a class="reference internal" href="exceptions.html">Exceptions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generators.html">Generators</a></li>
+<li class="toctree-l2"><a class="reference internal" href="journal.html">Journal</a></li>
+<li class="toctree-l2"><a class="reference internal" href="materials.html">Materials</a></li>
+<li class="toctree-l2"><a class="reference internal" href="mesh.html">Creating finite element meshes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="modelmodifiers.html">Model modifiers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="topologypipeline.html">The topology pipeline: how a model changes itself</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">Restart</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#the-rule">The rule</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#one-increment-and-where-the-checkpoint-is-written">One increment, and where the checkpoint is written</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#restoring-a-checkpoint">Restoring a checkpoint</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#adding-something-that-carries-state-between-increments">Adding something that carries state between increments</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="adaptivitytheory.html">Adaptive refinement: error estimation and marking</a></li>
+<li class="toctree-l2"><a class="reference internal" href="output.html">Outputmanagers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="parallelization.html">Parallelization</a></li>
+<li class="toctree-l2"><a class="reference internal" href="phenomena.html">Physical phenomena</a></li>
+<li class="toctree-l2"><a class="reference internal" href="plotter.html">Plotting</a></li>
+<li class="toctree-l2"><a class="reference internal" href="points.html">Points</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sections.html">Sections</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sets.html">Sets</a></li>
+<li class="toctree-l2"><a class="reference internal" href="stepactions.html">Step actions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="utils.html">Utilities</a></li>
+<li class="toctree-l2"><a class="reference internal" href="variables.html">Variables</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../contributors.html">Contributors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../publications.html">Publications</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">EdelweissFE</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="index.html">Documentation</a></li>
+      <li class="breadcrumb-item active">Restart</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/documentation/restart.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="restart">
+<h1>Restart<a class="headerlink" href="#restart" title="Link to this heading"></a></h1>
+<p>An analysis writes restart checkpoints with <code class="docutils literal notranslate"><span class="pre">*output,</span> <span class="pre">type=restart</span></code> (see <a class="reference internal" href="output.html"><span class="doc">Outputmanagers</span></a>) and resumes
+from one with <code class="docutils literal notranslate"><span class="pre">*restart,</span> <span class="pre">readFrom=&lt;checkpoint&gt;</span></code> (see <a class="reference internal" href="keywords.html"><span class="doc">&lt;no title&gt;</span></a>). This page describes the one
+rule restart follows, and how each part of the code keeps it.</p>
+<section id="the-rule">
+<h2>The rule<a class="headerlink" href="#the-rule" title="Link to this heading"></a></h2>
+<p><strong>A checkpoint is written after an increment is accepted. A resumed run continues with the next
+increment and performs exactly the operations the uninterrupted run performed from there.</strong></p>
+<p>So a resumed run ends <em>bitwise identical</em> to the uninterrupted one – not “close to” it. Nothing in
+restart uses a tolerance. The rule has three consequences, each kept by construction:</p>
+<ol class="arabic simple">
+<li><p><strong>Everything carried from one increment to the next is written into the checkpoint, exactly as it
+is, and read back.</strong> Nothing is re-derived or reconstructed. What is a pure function of the
+restored model needs nothing.</p></li>
+<li><p><strong>The step start is not repeated.</strong> Step-start actions (initial conditions, material
+initialization, prescribed fields), the zero increment, the step-start topology update and the
+first contact search all happened before the checkpoint was written. Whether a step is at its
+start is part of the time stepper’s state
+(<a class="reference internal" href="utils.html#edelweissfe.timesteppers.base.timestepperbase.TimeStepperBase.isAtStepStart" title="edelweissfe.timesteppers.base.timestepperbase.TimeStepperBase.isAtStepStart"><code class="xref py py-meth docutils literal notranslate"><span class="pre">isAtStepStart()</span></code></a>): nothing
+accepted yet. A restored time stepper never is, so a resumed step skips them – there is no
+separate “resumed” flag.</p></li>
+<li><p><strong>The increment loop is written once, and decides by increment number.</strong> Topology checks,
+contact searches, output and checkpoints happen at the same increments whether a run started cold
+or was resumed.</p></li>
+</ol>
+<p>A checkpoint file is written under a temporary name and renamed once complete, so a job killed while
+writing one never leaves a truncated checkpoint behind. Each carries a serial number, by which the
+restart writer finds the oldest one to replace – not by file times, which copying changes.</p>
+<p>Whatever cannot keep the rule refuses to resume, with a <a class="reference internal" href="exceptions.html#edelweissfe.utils.exceptions.RestartError" title="edelweissfe.utils.exceptions.RestartError"><code class="xref py py-class docutils literal notranslate"><span class="pre">RestartError</span></code></a>:
+a solver that does not checkpoint its state (the default of
+<code class="xref py py-meth docutils literal notranslate"><span class="pre">readRestart()</span></code>), and a
+checkpoint of another format version (every checkpoint carries one, and a run reads its own only),
+and a resume past a <code class="docutils literal notranslate"><span class="pre">modelupdate</span></code> – it executes an arbitrary expression whose effect no checkpoint
+records, so a run is resumed only from checkpoints written in steps before the first one.</p>
+</section>
+<section id="one-increment-and-where-the-checkpoint-is-written">
+<h2>One increment, and where the checkpoint is written<a class="headerlink" href="#one-increment-and-where-the-checkpoint-is-written" title="Link to this heading"></a></h2>
+<p>The step’s increment loop (<a class="reference internal" href="steps.html#edelweissfe.steps.base.stepbase.StepBase.solve" title="edelweissfe.steps.base.stepbase.StepBase.solve"><code class="xref py py-meth docutils literal notranslate"><span class="pre">solve()</span></code></a>) is the same for
+every solver:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>increment n
+├── prepare      topology update when due: model modifiers   (implicit: every increment;
+│                (e.g. AMR), then ties and contact catch up    explicit: at the step start and
+│                                                               after every topology-check-
+│                                                               frequency-th increment)
+├── propose      the time stepper proposes the increment
+├── attempt      Newton iterations / explicit update; if it fails: reject, retry smaller
+├── accept       solver: material state, solver state (predictor, external work, ...)
+│                time stepper: progress, size of the next increment
+└── output       field outputs, output managers, the CHECKPOINT last
+                                            ▲
+a resumed run starts here ──────────────────┘  with increment n + 1
+</pre></div>
+</div>
+<p>The topology update comes before the proposal, because a refinement may lower the stable time
+increment of an explicit analysis. An increment retried after a cutback starts from the same
+accepted state, so the model modifiers are not asked again: they decide once per accepted state.</p>
+</section>
+<section id="restoring-a-checkpoint">
+<h2>Restoring a checkpoint<a class="headerlink" href="#restoring-a-checkpoint" title="Link to this heading"></a></h2>
+<p>The model is first rebuilt from the same input file, then restored in this order:</p>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 30.0%" />
+<col style="width: 70.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>What</p></th>
+<th class="head"><p>How</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>model time</p></td>
+<td><p>read</p></td>
+</tr>
+<tr class="row-odd"><td><p>mesh</p></td>
+<td><p>the mesh rebuilt from the input file is checked against the one the checkpointed run started
+from (<a class="reference internal" href="models.html#edelweissfe.models.topologypipeline.TopologyPipeline.setupFingerprint" title="edelweissfe.models.topologypipeline.TopologyPipeline.setupFingerprint"><code class="xref py py-meth docutils literal notranslate"><span class="pre">setupFingerprint()</span></code></a>), then
+the recorded topology decisions are replayed through the model modifiers’ own <code class="docutils literal notranslate"><span class="pre">apply</span></code>
+(<a class="reference internal" href="models.html#edelweissfe.models.topologypipeline.TopologyPipeline.replayHistory" title="edelweissfe.models.topologypipeline.TopologyPipeline.replayHistory"><code class="xref py py-meth docutils literal notranslate"><span class="pre">replayHistory()</span></code></a>), and the
+result is checked against the recorded fingerprint; the time of a replay is printed in a
+performance table of its own, before the resumed step’s table</p></td>
+</tr>
+<tr class="row-even"><td><p>ties, contact surfaces</p></td>
+<td><p>catch up with the replayed mesh, as they had in the uninterrupted run</p></td>
+</tr>
+<tr class="row-odd"><td><p>node fields, scalar variables, element state</p></td>
+<td><p>read</p></td>
+</tr>
+<tr class="row-even"><td><p>rigid bodies</p></td>
+<td><p>their surface nodes are moved to the restored configuration</p></td>
+</tr>
+<tr class="row-odd"><td><p>constraint state (e.g. a frozen contact search)</p></td>
+<td><p>read; adopted only if it refers to the restored model’s contact points, otherwise refused</p></td>
+</tr>
+<tr class="row-even"><td><p>output managers’ sequence bookkeeping</p></td>
+<td><p>read, including each restart writer’s position in its write interval</p></td>
+</tr>
+<tr class="row-odd"><td><p>time stepper</p></td>
+<td><p>its state after the last accepted increment, as it is: progress, increment counter, the size
+of the next increment, the enforced time increment, and whether the zero increment was done</p></td>
+</tr>
+<tr class="row-even"><td><p>solver</p></td>
+<td><p>its state between increments: the implicit solver’s predictor (last accepted increment and
+its <code class="docutils literal notranslate"><span class="pre">dU</span></code>), the explicit solver’s last increment and accumulated external work</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="adding-something-that-carries-state-between-increments">
+<h2>Adding something that carries state between increments<a class="headerlink" href="#adding-something-that-carries-state-between-increments" title="Link to this heading"></a></h2>
+<p>Declare it. Every solver, time stepper, constraint and output manager states which of its attributes
+it carries from one increment to the next, by name and type, and the checkpoint writes and reads
+exactly those, as they are (<a class="reference internal" href="output.html#module-edelweissfe.utils.checkpointedstate" title="edelweissfe.utils.checkpointedstate"><code class="xref py py-mod docutils literal notranslate"><span class="pre">checkpointedstate</span></code></a>):</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">NIST</span><span class="p">(</span><span class="n">NonlinearSolverBase</span><span class="p">):</span>
+    <span class="c1">#: The predictor's state between increments: the last accepted increment and its dU.</span>
+    <span class="n">checkpointedState</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"prevTimeStep"</span><span class="p">:</span> <span class="n">TimeStep</span><span class="p">,</span> <span class="s2">"dU"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">}</span>
+</pre></div>
+</div>
+<p>A component that carries nothing declares an empty mapping. One whose state is not a plain attribute
+(Ensight’s sequence bookkeeping, a frozen contact search) overrides <code class="docutils literal notranslate"><span class="pre">getRestartData</span></code> and
+<code class="docutils literal notranslate"><span class="pre">setRestartData</span></code> instead. A component that declares nothing cannot be checkpointed:
+<code class="docutils literal notranslate"><span class="pre">tests/test_checkpointed_state_declared.py</span></code> checks every class in the package, so a forgotten
+declaration fails there, and writing a checkpoint refuses. A solver that is not restartable says so
+by keeping the declaration None.</p>
+<p>Step actions declare their state too: a load ramped over several steps accumulates from step to
+step, and most actions switch themselves off at the end of their step. A resumed run skips the
+steps before the checkpoint, so it restores that state rather than re-deriving it.</p>
+<p>Field outputs carry their history the same way, and how much of their export file belongs to the
+run: before its first write, a resumed run cuts the file back to that size, so the rows an
+interrupted run wrote after its last checkpoint are replaced, not duplicated.</p>
+<p>Then add a scenario to <code class="docutils literal notranslate"><span class="pre">tests/test_restart_exhaustive.py</span></code>: it resumes from every checkpoint of a
+small run and requires the bitwise-identical end state, the same checkpoints and the same output.</p>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="topologypipeline.html" class="btn btn-neutral float-left" title="The topology pipeline: how a model changes itself" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="adaptivitytheory.html" class="btn btn-neutral float-right" title="Adaptive refinement: error estimation and marking" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Matthias Neuner.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

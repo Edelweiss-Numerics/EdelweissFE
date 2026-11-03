@@ -1,0 +1,570 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>edelweissfe.linsolve.composition.amg &mdash; EdelweissFE v22.07 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=cfdaff8d" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css?v=37fbe429" />
+
+  
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=17e2f33f"></script>
+      <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            EdelweissFE
+              <img src="../../../../_static/edelweiss_fe_logo.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../features.html">Features</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../prerequisites.html">Prerequisites</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../documentation/index.html">Documentation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../contributors.html">Contributors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../publications.html">Publications</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">EdelweissFE</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">edelweissfe.linsolve.composition.amg</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for edelweissfe.linsolve.composition.amg</h1><div class="highlight"><pre>
+<span></span><span class="ch">#!/usr/bin/env python3</span>
+<span class="c1"># -*- coding: utf-8 -*-</span>
+<span class="c1">#  ---------------------------------------------------------------------</span>
+<span class="c1">#</span>
+<span class="c1">#  _____    _      _              _         _____ _____</span>
+<span class="c1"># | ____|__| | ___| |_      _____(_)___ ___|  ___| ____|</span>
+<span class="c1"># |  _| / _` |/ _ \ \ \ /\ / / _ \ / __/ __| |_  |  _|</span>
+<span class="c1"># | |__| (_| |  __/ |\ V  V /  __/ \__ \__ \  _| | |___</span>
+<span class="c1"># |_____\__,_|\___|_| \_/\_/ \___|_|___/___/_|   |_____|</span>
+<span class="c1">#</span>
+<span class="c1">#</span>
+<span class="c1">#  Unit of Strength of Materials and Structural Analysis</span>
+<span class="c1">#  University of Innsbruck,</span>
+<span class="c1">#  2017 - today</span>
+<span class="c1">#</span>
+<span class="c1">#  Matthias Neuner matthias.neuner@uibk.ac.at</span>
+<span class="c1">#</span>
+<span class="c1">#  This file is part of EdelweissFE.</span>
+<span class="c1">#</span>
+<span class="c1">#  This library is free software; you can redistribute it and/or</span>
+<span class="c1">#  modify it under the terms of the GNU Lesser General Public</span>
+<span class="c1">#  License as published by the Free Software Foundation; either</span>
+<span class="c1">#  version 2.1 of the License, or (at your option) any later version.</span>
+<span class="c1">#</span>
+<span class="c1">#  The full text of the license can be found in the file LICENSE.md at</span>
+<span class="c1">#  the top level directory of EdelweissFE.</span>
+<span class="c1">#  ---------------------------------------------------------------------</span>
+<span class="sd">"""Algebraic multigrid on one field: :class:`AMG`, one AMGCL hierarchy, applied as one cycle per application.</span>
+
+<span class="sd">Smoothed aggregation builds coarse levels from a *near null-space*: the error components a smoother such as</span>
+<span class="sd">Chebyshev does not reduce, because the operator has (almost) no stiffness in their direction. For a displacement</span>
+<span class="sd">field those are the rigid-body modes -- 3 translations and 3 rotations in 3D; for a scalar field the constant. In</span>
+<span class="sd">the variables of a scaled block :math:`\\hat A_{ii} = D_i A_{ii} D_i` they are :math:`D_i^{-1}` times the physical</span>
+<span class="sd">modes (see :mod:`~edelweissfe.linsolve.nullspace`).</span>
+
+<span class="sd">AMGCL stores a 3D displacement field's hierarchy in node-wise 3x3 blocks by default -- faster per cycle, but a</span>
+<span class="sd">block hierarchy takes the 3 translations as its near null-space at most. The rotations then need a coarse level</span>
+<span class="sd">of their own, see :class:`~edelweissfe.linsolve.composition.twolevel.TwoLevel`.</span>
+<span class="sd">"""</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">copy</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">scipy.sparse</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">sp</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">edelweissfe.utils.performancetiming</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">performancetiming</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.linsolve.composition.base</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">Description</span><span class="p">,</span>
+    <span class="n">Preconditioner</span><span class="p">,</span>
+    <span class="n">SetUpContext</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.linsolve.nullspace</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">carriesRigidBodyModes</span><span class="p">,</span>
+    <span class="n">rigidBodyNullspace</span><span class="p">,</span>
+    <span class="n">translationNullspace</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="c1">#: The coarsening and the smoother every vector field's default tree shares, whatever its dimension (why each value,</span>
+<span class="c1">#: and the measurements behind them: "Why the defaults are what they are" in</span>
+<span class="c1">#: ``doc/source/documentation/fieldsplitmeasurements.rst``):</span>
+<span class="c1">#:</span>
+<span class="c1">#: - ``estimate_spectral_radius``: a sharper weight of the prolongation smoother of smoothed aggregation than the</span>
+<span class="c1">#:   Gershgorin bound;</span>
+<span class="c1">#: - Chebyshev of degree 16 after the coarse correction only (``npre`` 0, ``npost`` 1): for the same number of</span>
+<span class="c1">#:   preconditioner applications, one high-degree post-smoothing sweep beat a symmetric V(1,1) cycle of low degree.</span>
+<span class="c1">#:</span>
+<span class="c1">#: Both spectral radii -- of the smoother and of the prolongation smoothing -- are estimated by ``spectralRadiusSteps``</span>
+<span class="c1">#: Arnoldi steps (default 10) from a start vector seeded per row, the same at any thread count</span>
+<span class="c1">#: (``edelweissfe/linsolve/amgcl/amgcl-spectral-radius.hpp``; "The spectral radius estimate of the Chebyshev smoother"</span>
+<span class="c1">#: in ``fieldsplitmeasurements.rst``); the trees leave the default. ``spectralRadiusSteps`` is EdelweissFE's own key,</span>
+<span class="c1">#: not AMGCL's.</span>
+<span class="n">_VECTOR_FIELD_TREE</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">"coarsening"</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s2">"type"</span><span class="p">:</span> <span class="s2">"smoothed_aggregation"</span><span class="p">,</span>
+        <span class="s2">"aggr"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"eps_strong"</span><span class="p">:</span> <span class="mf">0.01</span><span class="p">},</span>
+        <span class="s2">"estimate_spectral_radius"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="p">},</span>
+    <span class="s2">"relax"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"type"</span><span class="p">:</span> <span class="s2">"chebyshev"</span><span class="p">,</span> <span class="s2">"degree"</span><span class="p">:</span> <span class="mi">16</span><span class="p">,</span> <span class="s2">"lower"</span><span class="p">:</span> <span class="mf">0.01</span><span class="p">,</span> <span class="s2">"higher"</span><span class="p">:</span> <span class="mf">1.1</span><span class="p">},</span>
+    <span class="s2">"npre"</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span>
+    <span class="s2">"npost"</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
+<span class="p">}</span>
+<span class="n">_SCALAR_FIELD_TREE</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">"coarsening"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"type"</span><span class="p">:</span> <span class="s2">"smoothed_aggregation"</span><span class="p">},</span>
+    <span class="s2">"relax"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"type"</span><span class="p">:</span> <span class="s2">"chebyshev"</span><span class="p">},</span>
+<span class="p">}</span>
+<span class="c1">#: The smoother of the corner-node two-level cycle, ``TwoLevel(coarseSpace=CornerNodeInterpolation())``: Chebyshev of</span>
+<span class="c1">#: degree 8 on the interval from 0.03 to 1.1 times the spectral radius, on the quadratic field and, in the</span>
+<span class="c1">#: ``blockAMG()`` preset, on the rigid-body coarse level of its coarse solve (:func:`defaultCornerNodeTwoLevelTree`). A</span>
+<span class="c1">#: sweep of degree 8 costs half the matrix products of one of degree 16, and the corner-node two-level cycle needs</span>
+<span class="c1">#: fewer than twice the outer iterations with it, so it is faster (:ref:`measured-corner-node-two-level-smoother`).</span>
+<span class="c1">#: ``AMG()`` and the rigid-body coarse level alone keep degree 16 (:data:`_VECTOR_FIELD_TREE`): there, degree 8 gains</span>
+<span class="c1">#: nothing.</span>
+<span class="n">_CORNER_NODE_TWO_LEVEL_SMOOTHER</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"type"</span><span class="p">:</span> <span class="s2">"chebyshev"</span><span class="p">,</span> <span class="s2">"degree"</span><span class="p">:</span> <span class="mi">8</span><span class="p">,</span> <span class="s2">"lower"</span><span class="p">:</span> <span class="mf">0.03</span><span class="p">,</span> <span class="s2">"higher"</span><span class="p">:</span> <span class="mf">1.1</span><span class="p">}</span>
+
+
+<div class="viewcode-block" id="defaultFieldTree">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.amg.defaultFieldTree">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">defaultFieldTree</span><span class="p">(</span><span class="n">dimension</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""The default AMGCL preconditioner tree of a field, from its nodal dimension: :data:`_VECTOR_FIELD_TREE` for a</span>
+<span class="sd">    vector field, a Chebyshev-smoothed smoothed aggregation with AMGCL's defaults for a scalar field (e.g.</span>
+<span class="sd">    ``nonlocal damage``), but the smoother's margin ``higher`` 1.1 above the estimated spectral radius, the default of</span>
+<span class="sd">    EdelweissFE's Chebyshev smoother (see ``amgcl-chebyshev.hpp``). A copy: the trees are nested, and a caller may adapt</span>
+<span class="sd">    the one it gets. The backend the tree is built on (block size, precision) is chosen apart from it, see</span>
+<span class="sd">    :func:`backendOf`."""</span>
+    <span class="k">return</span> <span class="n">copy</span><span class="o">.</span><span class="n">deepcopy</span><span class="p">(</span><span class="n">_VECTOR_FIELD_TREE</span> <span class="k">if</span> <span class="n">dimension</span> <span class="o">&gt;</span> <span class="mi">1</span> <span class="k">else</span> <span class="n">_SCALAR_FIELD_TREE</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="defaultCornerNodeTwoLevelTree">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.amg.defaultCornerNodeTwoLevelTree">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">defaultCornerNodeTwoLevelTree</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""The default AMGCL tree of the corner-node two-level cycle on a 3D displacement field,</span>
+<span class="sd">    ``TwoLevel(coarseSpace=CornerNodeInterpolation())``, and the tree the ``blockAMG()`` preset gives the rigid-body</span>
+<span class="sd">    coarse level of its coarse solve (any other field keeps :func:`defaultFieldTree`): the default tree of a vector</span>
+<span class="sd">    field (:data:`_VECTOR_FIELD_TREE`) with the smoother of the corner-node two-level cycle</span>
+<span class="sd">    (:data:`_CORNER_NODE_TWO_LEVEL_SMOOTHER`). The corner-node two-level cycle reads only the smoother of its tree</span>
+<span class="sd">    (``relax``, ``npre``, ``npost``), the rigid-body coarse level the whole tree. A copy, as :func:`defaultFieldTree`.</span>
+<span class="sd">    """</span>
+    <span class="n">tree</span> <span class="o">=</span> <span class="n">defaultFieldTree</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span>
+    <span class="n">tree</span><span class="p">[</span><span class="s2">"relax"</span><span class="p">]</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">_CORNER_NODE_TWO_LEVEL_SMOOTHER</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">tree</span></div>
+
+
+
+<span class="c1">#: The near null-spaces :class:`AMG` builds its hierarchy from, see :func:`backendOf`.</span>
+<span class="n">NEAR_NULLSPACES</span> <span class="o">=</span> <span class="p">(</span><span class="s2">"rigidBodyModes"</span><span class="p">,</span> <span class="s2">"translations"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="checkBackend">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.amg.checkBackend">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">checkBackend</span><span class="p">(</span><span class="n">owner</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">backendBlockSize</span><span class="p">,</span> <span class="n">backendPrecision</span><span class="p">,</span> <span class="n">nearNullspace</span><span class="o">=</span><span class="s2">"rigidBodyModes"</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Raise, naming ``owner``, for a backend AMGCL does not have, at construction (``None`` is the default of the</span>
+<span class="sd">    field, see :func:`backendOf`): ``backendBlockSize`` 1 (scalar entries), 2 or 3 (node-wise blocks),</span>
+<span class="sd">    ``backendPrecision`` ``"double"`` or ``"float"`` (2x2 blocks only in double), ``nearNullspace`` one of</span>
+<span class="sd">    :data:`NEAR_NULLSPACES`."""</span>
+    <span class="k">if</span> <span class="n">backendBlockSize</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"</span><span class="si">{:}</span><span class="s2">: backendBlockSize must be 1, 2 or 3, got </span><span class="si">{!r}</span><span class="s2">"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">owner</span><span class="p">,</span> <span class="n">backendBlockSize</span><span class="p">))</span>
+    <span class="k">if</span> <span class="n">backendPrecision</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="s2">"double"</span><span class="p">,</span> <span class="s2">"float"</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"</span><span class="si">{:}</span><span class="s2">: backendPrecision must be 'double' or 'float', got </span><span class="si">{!r}</span><span class="s2">"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">owner</span><span class="p">,</span> <span class="n">backendPrecision</span><span class="p">))</span>
+    <span class="k">if</span> <span class="n">backendBlockSize</span> <span class="o">==</span> <span class="mi">2</span> <span class="ow">and</span> <span class="n">backendPrecision</span> <span class="o">==</span> <span class="s2">"float"</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"</span><span class="si">{:}</span><span class="s2">: 2x2 blocks are stored in double only, got backendPrecision 'float'"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">owner</span><span class="p">))</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="n">nearNullspace</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="p">(</span><span class="nb">isinstance</span><span class="p">(</span><span class="n">nearNullspace</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="ow">and</span> <span class="n">nearNullspace</span> <span class="ow">in</span> <span class="n">NEAR_NULLSPACES</span><span class="p">)):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="s2">"</span><span class="si">{:}</span><span class="s2">: nearNullspace must be 'rigidBodyModes', 'translations' or None, got </span><span class="si">{!r}</span><span class="s2">"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">owner</span><span class="p">,</span> <span class="n">nearNullspace</span><span class="p">)</span>
+        <span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="backendOf">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.amg.backendOf">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">backendOf</span><span class="p">(</span>
+    <span class="n">owner</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">field</span><span class="p">,</span> <span class="n">amgclTree</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span> <span class="n">backendBlockSize</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">backendPrecision</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">nearNullspace</span><span class="o">=</span><span class="s2">"rigidBodyModes"</span>
+<span class="p">):</span>
+<span class="w">    </span><span class="sd">"""The AMGCL backend a one-field component builds on for the field (:class:`AMG`,</span>
+<span class="sd">    :class:`~edelweissfe.linsolve.composition.twolevel.TwoLevel`): what it was given, the field's default for what it</span>
+<span class="sd">    was not -- the one place of those defaults.</span>
+
+<span class="sd">    - ``backendBlockSize``: the field's dimension for a 2D or 3D field (node-wise blocks: less index and value traffic</span>
+<span class="sd">      per product than scalar entries), else 1;</span>
+<span class="sd">    - ``backendPrecision``: ``"float"`` on 3x3 blocks, which keeps the setup in double and stores only the matrices the</span>
+<span class="sd">      cycle reads in float (measured faster at the same iterations), else ``"double"`` -- on the scalar backend float</span>
+<span class="sd">      would build the whole hierarchy in single precision, its spectral-radius estimates included;</span>
+<span class="sd">    - ``nearNullspace``, what smoothed aggregation starts from, in the variables of the scaled block (divided by</span>
+<span class="sd">      :math:`D`, see :mod:`~edelweissfe.linsolve.nullspace`): ``"rigidBodyModes"`` (the default) the field's</span>
+<span class="sd">      rigid-body modes as far as the backend and the field hold them -- translations and rotations of a displacement</span>
+<span class="sd">      field on the scalar backend (:func:`~edelweissfe.linsolve.nullspace.carriesRigidBodyModes`), the translations on</span>
+<span class="sd">      a block backend (which takes the translations at most) and for any other vector field; ``"translations"`` the</span>
+<span class="sd">      translations :math:`D^{-1} t` (:func:`~edelweissfe.linsolve.nullspace.translationNullspace`); ``None`` none</span>
+<span class="sd">      given, AMGCL's own: constant blocks on a block backend, which are :math:`D`-weighted translations, the constant</span>
+<span class="sd">      on the scalar backend. A scalar field always takes AMGCL's constant.</span>
+
+<span class="sd">    Raises, naming ``owner`` and the field, for blocks that do not match the field, and for a near null-space on a</span>
+<span class="sd">    block backend without smoothed aggregation.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    tuple</span>
+<span class="sd">        ``(backendBlockSize, backendPrecision, nearNullspace)``, the near null-space as built: ``"rigidBodyModes"``,</span>
+<span class="sd">        ``"translations"`` or ``None``.</span>
+<span class="sd">    """</span>
+    <span class="n">blockSize</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">backendBlockSize</span> <span class="k">if</span> <span class="n">backendBlockSize</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="p">(</span><span class="n">field</span><span class="o">.</span><span class="n">dimension</span> <span class="k">if</span> <span class="n">field</span><span class="o">.</span><span class="n">dimension</span> <span class="ow">in</span> <span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span> <span class="k">else</span> <span class="mi">1</span><span class="p">)</span>
+    <span class="p">)</span>
+    <span class="n">precision</span> <span class="o">=</span> <span class="n">backendPrecision</span> <span class="k">if</span> <span class="n">backendPrecision</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="p">(</span><span class="s2">"float"</span> <span class="k">if</span> <span class="n">blockSize</span> <span class="o">==</span> <span class="mi">3</span> <span class="k">else</span> <span class="s2">"double"</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">field</span><span class="o">.</span><span class="n">dimension</span> <span class="o">==</span> <span class="mi">1</span> <span class="ow">or</span> <span class="n">nearNullspace</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">nearNullspace</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="k">elif</span> <span class="n">nearNullspace</span> <span class="o">==</span> <span class="s2">"rigidBodyModes"</span> <span class="ow">and</span> <span class="p">(</span><span class="n">blockSize</span> <span class="o">&gt;</span> <span class="mi">1</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">carriesRigidBodyModes</span><span class="p">(</span><span class="n">field</span><span class="p">)):</span>
+        <span class="n">nearNullspace</span> <span class="o">=</span> <span class="s2">"translations"</span>
+    <span class="k">if</span> <span class="n">blockSize</span> <span class="o">&gt;</span> <span class="mi">1</span> <span class="ow">and</span> <span class="n">blockSize</span> <span class="o">!=</span> <span class="n">field</span><span class="o">.</span><span class="n">dimension</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="s2">"</span><span class="si">{:}</span><span class="s2"> on the field '</span><span class="si">{:}</span><span class="s2">': backendBlockSize </span><span class="si">{:}</span><span class="s2"> does not match the field's dimension </span><span class="si">{:}</span><span class="s2">"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+                <span class="n">owner</span><span class="p">,</span> <span class="n">field</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">blockSize</span><span class="p">,</span> <span class="n">field</span><span class="o">.</span><span class="n">dimension</span>
+            <span class="p">)</span>
+        <span class="p">)</span>
+    <span class="k">if</span> <span class="n">blockSize</span> <span class="o">==</span> <span class="mi">2</span> <span class="ow">and</span> <span class="n">precision</span> <span class="o">==</span> <span class="s2">"float"</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"</span><span class="si">{:}</span><span class="s2"> on the field '</span><span class="si">{:}</span><span class="s2">': 2x2 blocks are stored in double only"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">owner</span><span class="p">,</span> <span class="n">field</span><span class="o">.</span><span class="n">name</span><span class="p">))</span>
+    <span class="c1"># AMGCL's defaults: class amg, coarsening.type smoothed_aggregation</span>
+    <span class="n">coarsening</span> <span class="o">=</span> <span class="n">amgclTree</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"coarsening"</span><span class="p">,</span> <span class="p">{})</span>
+    <span class="n">coarseningType</span> <span class="o">=</span> <span class="n">coarsening</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"type"</span><span class="p">,</span> <span class="s2">"smoothed_aggregation"</span><span class="p">)</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">coarsening</span><span class="p">,</span> <span class="nb">dict</span><span class="p">)</span> <span class="k">else</span> <span class="kc">None</span>
+    <span class="n">onBlocks</span> <span class="o">=</span> <span class="n">blockSize</span> <span class="o">&gt;</span> <span class="mi">1</span> <span class="ow">and</span> <span class="n">nearNullspace</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+    <span class="k">if</span> <span class="n">onBlocks</span> <span class="ow">and</span> <span class="p">(</span><span class="n">amgclTree</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"class"</span><span class="p">,</span> <span class="s2">"amg"</span><span class="p">)</span> <span class="o">!=</span> <span class="s2">"amg"</span> <span class="ow">or</span> <span class="n">coarseningType</span> <span class="o">!=</span> <span class="s2">"smoothed_aggregation"</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="s2">"</span><span class="si">{:}</span><span class="s2"> on the field '</span><span class="si">{:}</span><span class="s2">': the near null-space on a block backend (nearNullspace, the translations by "</span>
+            <span class="s2">"default) needs smoothed aggregation (coarsening.type); set nearNullspace=None for another "</span>
+            <span class="s2">"coarsening"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">owner</span><span class="p">,</span> <span class="n">field</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
+        <span class="p">)</span>
+    <span class="k">return</span> <span class="n">blockSize</span><span class="p">,</span> <span class="n">precision</span><span class="p">,</span> <span class="n">nearNullspace</span></div>
+
+
+
+<div class="viewcode-block" id="isSignificant">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.amg.isSignificant">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">isSignificant</span><span class="p">(</span><span class="n">values</span><span class="p">,</span> <span class="n">rows</span><span class="p">,</span> <span class="n">cols</span><span class="p">,</span> <span class="n">sqrtAbsDiagonal</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">tau</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Whether the entries ``values`` at the positions ``(rows, cols)`` pass the relative drop test of AMG's strength</span>
+<span class="sd">    of connection,</span>
+
+<span class="sd">    .. math::</span>
+
+<span class="sd">        \\lvert a_{ij} \\rvert \\geq \\tau \\sqrt{\\lvert a_{ii} a_{jj} \\rvert},</span>
+
+<span class="sd">    with ``sqrtAbsDiagonal`` holding :math:`\\sqrt{\\lvert a_{ii} \\rvert}`. The one definition of the test: the</span>
+<span class="sd">    filtered matrix of :func:`droppedSmallEntries` and the drop and thinning of the approximate Schur complement</span>
+<span class="sd">    (:mod:`~edelweissfe.linsolve.composition.schurcomplement`) use it. ``rows`` and ``cols`` broadcast against</span>
+<span class="sd">    ``values``: the row and the column of every stored entry of a sparse matrix, or ``rows[:, None]`` and</span>
+<span class="sd">    ``cols[None, :]`` for a dense block.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    np.ndarray</span>
+<span class="sd">        The keep mask, of the shape of ``values``.</span>
+<span class="sd">    """</span>
+    <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">values</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="n">tau</span> <span class="o">*</span> <span class="n">sqrtAbsDiagonal</span><span class="p">[</span><span class="n">rows</span><span class="p">]</span> <span class="o">*</span> <span class="n">sqrtAbsDiagonal</span><span class="p">[</span><span class="n">cols</span><span class="p">]</span></div>
+
+
+
+<div class="viewcode-block" id="droppedSmallEntries">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.amg.droppedSmallEntries">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">droppedSmallEntries</span><span class="p">(</span><span class="n">A</span><span class="p">:</span> <span class="n">sp</span><span class="o">.</span><span class="n">csr_matrix</span><span class="p">,</span> <span class="n">dropTolerance</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">lumpDroppedEntries</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">sp</span><span class="o">.</span><span class="n">csr_matrix</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""The *filtered* matrix :math:`\\tilde A` of ``A`` that a preconditioner is built on: the off-diagonal entries</span>
+<span class="sd">    that fail the relative drop test (:func:`isSignificant`) at :math:`\\tau` = ``dropTolerance`` dropped. The diagonal</span>
+<span class="sd">    is always kept, so no row is emptied. Shared by :class:`AMG` and</span>
+<span class="sd">    :class:`~edelweissfe.linsolve.composition.twolevel.TwoLevel`.</span>
+
+<span class="sd">    Why: some operators (e.g. of RKPM) store many entries per row whose median off-diagonal is orders of magnitude</span>
+<span class="sd">    below the diagonal -- numerically far sparser than structurally. Smoothed aggregation then weighs every one of</span>
+<span class="sd">    them per row, and the Galerkin products carry them to every coarse level. Only the preconditioner is built on</span>
+<span class="sd">    :math:`\\tilde A`; the Krylov solve still applies :math:`A`, so the converged solution is that of :math:`A`, and</span>
+<span class="sd">    only the number of iterations to reach it changes. The criterion is scale-invariant and symmetric in</span>
+<span class="sd">    :math:`(i, j)`: a symmetric matrix stays symmetric, as smoothed aggregation and the Chebyshev smoother assume.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    A</span>
+<span class="sd">        The matrix.</span>
+<span class="sd">    dropTolerance</span>
+<span class="sd">        :math:`\\tau`.</span>
+<span class="sd">    lumpDroppedEntries</span>
+<span class="sd">        Add the dropped entries of each row onto its diagonal instead of discarding them: the row sums are kept,</span>
+<span class="sd">        :math:`\\tilde A \\mathbf 1 = A \\mathbf 1`, so the constant near null-space vector survives (the "filtered</span>
+<span class="sd">        matrix" of the AMG literature). For elasticity, whose off-diagonals are mostly negative, this weakens the</span>
+<span class="sd">        diagonal dominance; whether that helps depends on the operator.</span>
+<span class="sd">    """</span>
+    <span class="n">coo</span> <span class="o">=</span> <span class="n">A</span><span class="o">.</span><span class="n">tocoo</span><span class="p">()</span>
+    <span class="n">sqrtAbsDiagonal</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">A</span><span class="o">.</span><span class="n">diagonal</span><span class="p">()))</span>
+    <span class="n">keep</span> <span class="o">=</span> <span class="p">(</span><span class="n">coo</span><span class="o">.</span><span class="n">row</span> <span class="o">==</span> <span class="n">coo</span><span class="o">.</span><span class="n">col</span><span class="p">)</span> <span class="o">|</span> <span class="n">isSignificant</span><span class="p">(</span><span class="n">coo</span><span class="o">.</span><span class="n">data</span><span class="p">,</span> <span class="n">coo</span><span class="o">.</span><span class="n">row</span><span class="p">,</span> <span class="n">coo</span><span class="o">.</span><span class="n">col</span><span class="p">,</span> <span class="n">sqrtAbsDiagonal</span><span class="p">,</span> <span class="n">dropTolerance</span><span class="p">)</span>
+    <span class="n">filtered</span> <span class="o">=</span> <span class="n">sp</span><span class="o">.</span><span class="n">coo_matrix</span><span class="p">((</span><span class="n">coo</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="n">keep</span><span class="p">],</span> <span class="p">(</span><span class="n">coo</span><span class="o">.</span><span class="n">row</span><span class="p">[</span><span class="n">keep</span><span class="p">],</span> <span class="n">coo</span><span class="o">.</span><span class="n">col</span><span class="p">[</span><span class="n">keep</span><span class="p">])),</span> <span class="n">shape</span><span class="o">=</span><span class="n">A</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span><span class="o">.</span><span class="n">tocsr</span><span class="p">()</span>
+    <span class="k">if</span> <span class="n">lumpDroppedEntries</span><span class="p">:</span>
+        <span class="n">droppedRowSums</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">bincount</span><span class="p">(</span><span class="n">coo</span><span class="o">.</span><span class="n">row</span><span class="p">[</span><span class="o">~</span><span class="n">keep</span><span class="p">],</span> <span class="n">weights</span><span class="o">=</span><span class="n">coo</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="o">~</span><span class="n">keep</span><span class="p">],</span> <span class="n">minlength</span><span class="o">=</span><span class="n">A</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+        <span class="n">filtered</span> <span class="o">=</span> <span class="p">(</span><span class="n">filtered</span> <span class="o">+</span> <span class="n">sp</span><span class="o">.</span><span class="n">diags</span><span class="p">(</span><span class="n">droppedRowSums</span><span class="p">,</span> <span class="nb">format</span><span class="o">=</span><span class="s2">"csr"</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">))</span><span class="o">.</span><span class="n">tocsr</span><span class="p">()</span>
+    <span class="k">return</span> <span class="n">filtered</span></div>
+
+
+
+<div class="viewcode-block" id="preconditionerMatrix">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.amg.preconditionerMatrix">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">preconditionerMatrix</span><span class="p">(</span><span class="n">A</span><span class="p">,</span> <span class="n">dropTolerance</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">lumpDroppedEntries</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span> <span class="n">statistics</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">sp</span><span class="o">.</span><span class="n">csr_matrix</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""The matrix a one-field preconditioner (:class:`AMG`,</span>
+<span class="sd">    :class:`~edelweissfe.linsolve.composition.twolevel.TwoLevel`) is built on: :math:`A` itself, or with</span>
+<span class="sd">    ``dropTolerance &gt; 0`` its filtered copy (:func:`droppedSmallEntries`), with the stored entries before and after</span>
+<span class="sd">    recorded in the component's ``statistics``."""</span>
+    <span class="n">matrix</span> <span class="o">=</span> <span class="n">A</span><span class="o">.</span><span class="n">matrix</span><span class="p">()</span>
+    <span class="k">if</span> <span class="n">dropTolerance</span> <span class="o">&lt;=</span> <span class="mf">0.0</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">matrix</span>
+    <span class="k">with</span> <span class="n">performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"diagonal blocks"</span><span class="p">):</span>
+        <span class="n">filtered</span> <span class="o">=</span> <span class="n">droppedSmallEntries</span><span class="p">(</span><span class="n">matrix</span><span class="p">,</span> <span class="n">dropTolerance</span><span class="p">,</span> <span class="n">lumpDroppedEntries</span><span class="p">)</span>
+    <span class="n">statistics</span><span class="o">.</span><span class="n">sizes</span><span class="o">.</span><span class="n">update</span><span class="p">({</span><span class="s2">"nnz"</span><span class="p">:</span> <span class="n">matrix</span><span class="o">.</span><span class="n">nnz</span><span class="p">,</span> <span class="s2">"nnz kept"</span><span class="p">:</span> <span class="n">filtered</span><span class="o">.</span><span class="n">nnz</span><span class="p">})</span>
+    <span class="k">return</span> <span class="n">filtered</span></div>
+
+
+
+<div class="viewcode-block" id="fieldTreeOf">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.amg.fieldTreeOf">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">fieldTreeOf</span><span class="p">(</span><span class="n">owner</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">amgclTree</span><span class="p">:</span> <span class="s2">"dict | None"</span><span class="p">,</span> <span class="n">field</span><span class="p">,</span> <span class="n">defaultTree</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""The AMGCL tree a one-field component builds on: ``amgclTree``, or the component's default for the field,</span>
+<span class="sd">    ``defaultTree(field)`` (built only then); raises, naming ``owner`` and the field, if ``amgclTree`` is not a</span>
+<span class="sd">    tree."""</span>
+    <span class="k">if</span> <span class="n">amgclTree</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">defaultTree</span><span class="p">(</span><span class="n">field</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">amgclTree</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="s2">"</span><span class="si">{:}</span><span class="s2"> on the field '</span><span class="si">{:}</span><span class="s2">': its amgclTree must be an AMGCL preconditioner tree (a dict), got </span><span class="si">{!r}</span><span class="s2">"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+                <span class="n">owner</span><span class="p">,</span> <span class="n">field</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">amgclTree</span>
+            <span class="p">)</span>
+        <span class="p">)</span>
+    <span class="k">return</span> <span class="n">amgclTree</span></div>
+
+
+
+<div class="viewcode-block" id="buildFieldHierarchy">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.amg.buildFieldHierarchy">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">buildFieldHierarchy</span><span class="p">(</span><span class="n">block</span><span class="p">,</span> <span class="n">amgclTree</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span> <span class="n">backend</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">,</span> <span class="n">scaling</span><span class="p">,</span> <span class="n">coords</span><span class="p">,</span> <span class="n">diagonalBlock</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""One AMGCL hierarchy for a field's scaled diagonal block :math:`\\hat A_{ii}` (``diagonalBlock``, a callable</span>
+<span class="sd">    that returns it, so that it is cut out only now), with the field's near null-space.</span>
+
+<span class="sd">    The near null-space is the one :func:`backendOf` resolved: the rigid-body modes, with ``coords`` (else the</span>
+<span class="sd">    translations), the translations, or none given (AMGCL's constant blocks, or its constant).</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    block</span>
+<span class="sd">        The field's :class:`~edelweissfe.linsolve.base.FieldBlock`.</span>
+<span class="sd">    amgclTree</span>
+<span class="sd">        The field's AMGCL tree, with EdelweissFE's own key ``spectralRadiusSteps`` (see :data:`_VECTOR_FIELD_TREE`).</span>
+<span class="sd">    backend</span>
+<span class="sd">        ``(backendBlockSize, backendPrecision, nearNullspace)``, see :func:`backendOf`.</span>
+<span class="sd">    scaling</span>
+<span class="sd">        The field's scaling :math:`D_i`.</span>
+<span class="sd">    coords</span>
+<span class="sd">        The field's node coordinates for its rigid-body rotations, or ``None``.</span>
+<span class="sd">    diagonalBlock</span>
+<span class="sd">        ``() -&gt; scipy CSR``, the scaled diagonal block.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    PyAMGCLSolver</span>
+<span class="sd">        The hierarchy, applied by its ``applyPreconditioner``.</span>
+<span class="sd">    """</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.linsolve.amgcl.amgcl</span><span class="w"> </span><span class="kn">import</span> <span class="n">PyAMGCLSolver</span>
+
+    <span class="n">backendBlockSize</span><span class="p">,</span> <span class="n">backendPrecision</span><span class="p">,</span> <span class="n">nearNullspace</span> <span class="o">=</span> <span class="n">backend</span>
+    <span class="n">hierarchy</span> <span class="o">=</span> <span class="n">PyAMGCLSolver</span><span class="p">(</span>
+        <span class="p">{</span>
+            <span class="s2">"precond"</span><span class="p">:</span> <span class="n">amgclTree</span><span class="p">,</span>
+            <span class="s2">"backendPrecision"</span><span class="p">:</span> <span class="n">backendPrecision</span><span class="p">,</span>
+            <span class="s2">"backendBlockSize"</span><span class="p">:</span> <span class="n">backendBlockSize</span><span class="p">,</span>
+        <span class="p">}</span>
+    <span class="p">)</span>
+    <span class="k">if</span> <span class="n">nearNullspace</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">with</span> <span class="n">performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"nullspace construction"</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">nearNullspace</span> <span class="o">==</span> <span class="s2">"rigidBodyModes"</span> <span class="ow">and</span> <span class="n">coords</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">nullspace</span> <span class="o">=</span> <span class="n">rigidBodyNullspace</span><span class="p">(</span><span class="n">block</span><span class="p">,</span> <span class="n">coords</span><span class="p">,</span> <span class="n">scaling</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">nullspace</span> <span class="o">=</span> <span class="n">translationNullspace</span><span class="p">(</span><span class="n">block</span><span class="p">,</span> <span class="n">scaling</span><span class="p">)</span>
+        <span class="n">hierarchy</span><span class="o">.</span><span class="n">set_nullspace</span><span class="p">(</span><span class="n">nullspace</span><span class="p">)</span>
+    <span class="n">matrix</span> <span class="o">=</span> <span class="n">diagonalBlock</span><span class="p">()</span>
+    <span class="k">with</span> <span class="n">performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"</span><span class="si">{:}</span><span class="s2"> AMG build"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">block</span><span class="o">.</span><span class="n">name</span><span class="p">)):</span>
+        <span class="n">hierarchy</span><span class="o">.</span><span class="n">build</span><span class="p">(</span><span class="n">matrix</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">hierarchy</span></div>
+
+
+
+<div class="viewcode-block" id="AMG">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.amg.AMG">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">AMG</span><span class="p">(</span><span class="n">Preconditioner</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""One AMGCL hierarchy on the matrix of a field, applied as one cycle: :math:`z = \\mathrm{AMG}(A)^{-1} r`.</span>
+
+<span class="sd">    Reused while only the values of the matrix change: the hierarchy is built again only if a rebuild is asked for</span>
+<span class="sd">    (see :class:`~edelweissfe.linsolve.composition.base.MatrixChange`).</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    amgclTree</span>
+<span class="sd">        The AMGCL parameter tree, with EdelweissFE's own key ``spectralRadiusSteps`` (see</span>
+<span class="sd">        :data:`_VECTOR_FIELD_TREE`); ``None``: the default tree of the field's dimension (:func:`defaultFieldTree`).</span>
+<span class="sd">    backendBlockSize, backendPrecision</span>
+<span class="sd">        The AMGCL backend: scalar entries (1) or node-wise blocks (2, 3), stored in ``"double"`` or ``"float"``;</span>
+<span class="sd">        ``None``: the field's default, see :func:`backendOf`.</span>
+<span class="sd">    nearNullspace</span>
+<span class="sd">        What smoothed aggregation starts from: ``"rigidBodyModes"`` (the default; the rotations of a displacement field</span>
+<span class="sd">        on the scalar backend need node coordinates, a block backend takes the translations), ``"translations"``, or</span>
+<span class="sd">        ``None`` (AMGCL's own); see :func:`backendOf`.</span>
+<span class="sd">    dropTolerance, lumpDroppedEntries</span>
+<span class="sd">        Build the hierarchy on the filtered matrix, see :func:`droppedSmallEntries`; ``0`` (the default) builds it</span>
+<span class="sd">        on the matrix itself.</span>
+<span class="sd">    """</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">amgclTree</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">backendBlockSize</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">backendPrecision</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">nearNullspace</span><span class="p">:</span> <span class="s2">"str | None"</span> <span class="o">=</span> <span class="s2">"rigidBodyModes"</span><span class="p">,</span>
+        <span class="n">dropTolerance</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">,</span>
+        <span class="n">lumpDroppedEntries</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">dropTolerance</span> <span class="o">&gt;=</span> <span class="mf">0.0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"AMG: dropTolerance must not be negative, got </span><span class="si">{!r}</span><span class="s2">"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">dropTolerance</span><span class="p">))</span>
+        <span class="n">checkBackend</span><span class="p">(</span><span class="s2">"AMG"</span><span class="p">,</span> <span class="n">backendBlockSize</span><span class="p">,</span> <span class="n">backendPrecision</span><span class="p">,</span> <span class="n">nearNullspace</span><span class="p">)</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">amgclTree</span> <span class="o">=</span> <span class="n">amgclTree</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">backendBlockSize</span> <span class="o">=</span> <span class="n">backendBlockSize</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">backendPrecision</span> <span class="o">=</span> <span class="n">backendPrecision</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">nearNullspace</span> <span class="o">=</span> <span class="n">nearNullspace</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dropTolerance</span> <span class="o">=</span> <span class="n">dropTolerance</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">lumpDroppedEntries</span> <span class="o">=</span> <span class="n">lumpDroppedEntries</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_forget</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">hierarchy</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_field</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="c1"># the near null-space the hierarchy was built with, as far as the backend and the field hold the one asked for</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_builtNearNullspace</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_setUp</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">A</span><span class="p">,</span> <span class="n">context</span><span class="p">:</span> <span class="n">SetUpContext</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">field</span> <span class="o">=</span> <span class="n">context</span><span class="o">.</span><span class="n">onlyField</span><span class="p">(</span><span class="s2">"AMG"</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_field</span> <span class="o">=</span> <span class="n">field</span>
+        <span class="n">amgclTree</span> <span class="o">=</span> <span class="n">fieldTreeOf</span><span class="p">(</span><span class="s2">"AMG"</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">amgclTree</span><span class="p">,</span> <span class="n">field</span><span class="p">,</span> <span class="k">lambda</span> <span class="n">field</span><span class="p">:</span> <span class="n">defaultFieldTree</span><span class="p">(</span><span class="n">field</span><span class="o">.</span><span class="n">dimension</span><span class="p">))</span>
+        <span class="n">backend</span> <span class="o">=</span> <span class="n">backendOf</span><span class="p">(</span><span class="s2">"AMG"</span><span class="p">,</span> <span class="n">field</span><span class="p">,</span> <span class="n">amgclTree</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">backendBlockSize</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">backendPrecision</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">nearNullspace</span><span class="p">)</span>
+        <span class="n">coords</span> <span class="o">=</span> <span class="n">context</span><span class="o">.</span><span class="n">coordinates</span><span class="p">(</span><span class="n">field</span><span class="o">.</span><span class="n">name</span><span class="p">)</span> <span class="k">if</span> <span class="n">backend</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">==</span> <span class="s2">"rigidBodyModes"</span> <span class="k">else</span> <span class="kc">None</span>
+        <span class="c1"># the rotations need the node coordinates; without them, the hierarchy takes the translations</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_builtNearNullspace</span> <span class="o">=</span> <span class="s2">"translations"</span> <span class="k">if</span> <span class="n">backend</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">==</span> <span class="s2">"rigidBodyModes"</span> <span class="ow">and</span> <span class="n">coords</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">backend</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">hierarchy</span> <span class="o">=</span> <span class="n">buildFieldHierarchy</span><span class="p">(</span>
+            <span class="n">field</span><span class="p">,</span>
+            <span class="n">amgclTree</span><span class="p">,</span>
+            <span class="n">backend</span><span class="p">,</span>
+            <span class="n">context</span><span class="o">.</span><span class="n">scalingOf</span><span class="p">(</span><span class="nb">slice</span><span class="p">(</span><span class="kc">None</span><span class="p">)),</span>
+            <span class="n">coords</span><span class="p">,</span>
+            <span class="k">lambda</span><span class="p">:</span> <span class="n">preconditionerMatrix</span><span class="p">(</span><span class="n">A</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">dropTolerance</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">lumpDroppedEntries</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">statistics</span><span class="p">),</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">statistics</span><span class="o">.</span><span class="n">sizes</span><span class="p">[</span><span class="s2">"rows"</span><span class="p">]</span> <span class="o">=</span> <span class="n">A</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">A</span><span class="p">,</span> <span class="n">change</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">change</span><span class="o">.</span><span class="n">requiresRebuild</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">hierarchy</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">setUp</span><span class="p">(</span><span class="n">A</span><span class="p">,</span> <span class="n">change</span><span class="o">.</span><span class="n">context</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_apply</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">r</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">hierarchy</span><span class="o">.</span><span class="n">applyPreconditioner</span><span class="p">(</span><span class="n">r</span><span class="p">)</span>
+
+<div class="viewcode-block" id="AMG.describe">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.amg.AMG.describe">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">describe</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Description</span><span class="p">:</span>
+        <span class="n">backend</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">"backendBlockSize"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">backendBlockSize</span><span class="p">,</span>
+            <span class="s2">"backendPrecision"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">backendPrecision</span><span class="p">,</span>
+        <span class="p">}</span>
+        <span class="n">parameters</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"amgclTree"</span><span class="p">:</span> <span class="s2">"default"</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">amgclTree</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="s2">"given"</span><span class="p">}</span>
+        <span class="n">parameters</span><span class="o">.</span><span class="n">update</span><span class="p">({</span><span class="n">key</span><span class="p">:</span> <span class="n">value</span> <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">backend</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">})</span>
+        <span class="c1"># the near null-space as built, once it is, where it differs from the one asked for (a block backend takes the</span>
+        <span class="c1"># translations at most); before, the one asked for, where it is not the default</span>
+        <span class="n">nearNullspace</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_builtNearNullspace</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_field</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">nearNullspace</span>
+        <span class="k">if</span> <span class="n">nearNullspace</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">nearNullspace</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">nearNullspace</span> <span class="o">!=</span> <span class="s2">"rigidBodyModes"</span><span class="p">:</span>
+            <span class="n">parameters</span><span class="p">[</span><span class="s2">"nearNullspace"</span><span class="p">]</span> <span class="o">=</span> <span class="n">nearNullspace</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">dropTolerance</span> <span class="o">&gt;</span> <span class="mf">0.0</span><span class="p">:</span>
+            <span class="n">parameters</span><span class="p">[</span><span class="s2">"dropTolerance"</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">dropTolerance</span>
+            <span class="n">parameters</span><span class="p">[</span><span class="s2">"lumpDroppedEntries"</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">lumpDroppedEntries</span>
+        <span class="n">name</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_field</span><span class="o">.</span><span class="n">name</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_field</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="s2">"A"</span>
+        <span class="k">return</span> <span class="n">Description</span><span class="p">(</span>
+            <span class="n">name</span><span class="o">=</span><span class="s2">"AMG"</span><span class="p">,</span>
+            <span class="n">formula</span><span class="o">=</span><span class="s2">"AMG("</span> <span class="o">+</span> <span class="n">name</span> <span class="o">+</span> <span class="s2">")⁻¹"</span><span class="p">,</span>
+            <span class="n">latex</span><span class="o">=</span><span class="s2">"</span><span class="se">\\</span><span class="s2">mathrm</span><span class="si">{AMG}</span><span class="s2">(A_{</span><span class="se">\\</span><span class="s2">text{"</span> <span class="o">+</span> <span class="n">name</span> <span class="o">+</span> <span class="s2">"}})^{-1}"</span><span class="p">,</span>
+            <span class="n">parameters</span><span class="o">=</span><span class="n">parameters</span><span class="p">,</span>
+        <span class="p">)</span></div>
+</div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Matthias Neuner.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

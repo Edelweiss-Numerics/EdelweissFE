@@ -1,0 +1,1131 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>edelweissfe.linsolve.composition.schurcomplement &mdash; EdelweissFE v22.07 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=cfdaff8d" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css?v=37fbe429" />
+
+  
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=17e2f33f"></script>
+      <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            EdelweissFE
+              <img src="../../../../_static/edelweiss_fe_logo.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../features.html">Features</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../prerequisites.html">Prerequisites</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../documentation/index.html">Documentation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../contributors.html">Contributors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../publications.html">Publications</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">EdelweissFE</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">edelweissfe.linsolve.composition.schurcomplement</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for edelweissfe.linsolve.composition.schurcomplement</h1><div class="highlight"><pre>
+<span></span><span class="ch">#!/usr/bin/env python3</span>
+<span class="c1"># -*- coding: utf-8 -*-</span>
+<span class="c1">#  ---------------------------------------------------------------------</span>
+<span class="c1">#</span>
+<span class="c1">#  _____    _      _              _         _____ _____</span>
+<span class="c1"># | ____|__| | ___| |_      _____(_)___ ___|  ___| ____|</span>
+<span class="c1"># |  _| / _` |/ _ \ \ \ /\ / / _ \ / __/ __| |_  |  _|</span>
+<span class="c1"># | |__| (_| |  __/ |\ V  V /  __/ \__ \__ \  _| | |___</span>
+<span class="c1"># |_____\__,_|\___|_| \_/\_/ \___|_|___/___/_|   |_____|</span>
+<span class="c1">#</span>
+<span class="c1">#</span>
+<span class="c1">#  Unit of Strength of Materials and Structural Analysis</span>
+<span class="c1">#  University of Innsbruck,</span>
+<span class="c1">#  2017 - today</span>
+<span class="c1">#</span>
+<span class="c1">#  Matthias Neuner matthias.neuner@uibk.ac.at</span>
+<span class="c1">#</span>
+<span class="c1">#  This file is part of EdelweissFE.</span>
+<span class="c1">#</span>
+<span class="c1">#  This library is free software; you can redistribute it and/or</span>
+<span class="c1">#  modify it under the terms of the GNU Lesser General Public</span>
+<span class="c1">#  License as published by the Free Software Foundation; either</span>
+<span class="c1">#  version 2.1 of the License, or (at your option) any later version.</span>
+<span class="c1">#</span>
+<span class="c1">#  The full text of the license can be found in the file LICENSE.md at</span>
+<span class="c1">#  the top level directory of EdelweissFE.</span>
+<span class="c1">#  ---------------------------------------------------------------------</span>
+<span class="sd">"""Condensing hard dofs exactly: :class:`SchurComplement`, a block LU factorization around a child, and the</span>
+<span class="sd">condensation it is built from, :class:`SchurComplementCondensation`.</span>
+
+<span class="sd">Some dofs make a system hard for AMG: the dofs of embedded bars tied to their host elements by bond springs</span>
+<span class="sd">(:math:`u_{bar} \\approx \\sum_i N_i u_i`, which an aggregation coarse space cannot represent), or the dofs of a</span>
+<span class="sd">softening zone. We call these dofs :math:`b` (the condensed dofs: "bars") and all others :math:`k` (the kept, or</span>
+<span class="sd">remaining, dofs). Ordered this way, the system reads</span>
+
+<span class="sd">.. math::</span>
+
+<span class="sd">    \\begin{bmatrix} A_{bb} &amp; A_{bk} \\\\ A_{kb} &amp; A_{kk} \\end{bmatrix}</span>
+<span class="sd">    \\begin{bmatrix} x_b \\\\ x_k \\end{bmatrix} =</span>
+<span class="sd">    \\begin{bmatrix} r_b \\\\ r_k \\end{bmatrix}.</span>
+
+<span class="sd">The block :math:`A_{bb}` is factorized exactly (a direct solver). Eliminating :math:`x_b` leaves the remaining dofs</span>
+<span class="sd">with the Schur complement :math:`S = A_{kk} - A_{kb} A_{bb}^{-1} A_{bk}` -- for bars, the concrete stiffened by the</span>
+<span class="sd">bars as seen through their bond -- on which the child of :class:`SchurComplement` is built (e.g. a field-split AMG).</span>
+<span class="sd">Gaussian elimination by blocks is the block LU factorization of :math:`A`, and its inverse is a preconditioner of the</span>
+<span class="sd">outer Krylov solve:</span>
+
+<span class="sd">.. math::</span>
+
+<span class="sd">    y_b = A_{bb}^{-1} r_b, \\quad z_k = M_{\\tilde S}^{-1} (r_k - A_{kb} y_b), \\quad</span>
+<span class="sd">    z_b = A_{bb}^{-1} (r_b - A_{bk} z_k),</span>
+
+<span class="sd">with :math:`M_{\\tilde S}^{-1}` the child (``schurComplementSolve``) on an approximation :math:`\\tilde S` of</span>
+<span class="sd">:math:`S`. With :math:`\\tilde S = S` and an exact sweep it is :math:`A^{-1}`.</span>
+
+<span class="sd">It solves with :math:`A_{bb}` twice. The default (``blockFactors = "upper"``) inverts only the block upper triangular</span>
+<span class="sd">factor :math:`U = \\begin{bmatrix} A_{bb} &amp; A_{bk} \\\\ 0 &amp; S \\end{bmatrix}` of</span>
+<span class="sd">:math:`A = \\begin{bmatrix} I &amp; 0 \\\\ A_{kb} A_{bb}^{-1} &amp; I \\end{bmatrix} U`, with one solve:</span>
+
+<span class="sd">.. math::</span>
+
+<span class="sd">    z_k = M_{\\tilde S}^{-1} r_k, \\quad z_b = A_{bb}^{-1} (r_b - A_{bk} z_k):</span>
+
+<span class="sd">the remaining dofs first, then the condensed ones follow them (for bars: the bars follow the concrete). Its last step</span>
+<span class="sd">solves the rows of :math:`b` exactly, so after the first outer iteration the residual of these rows is zero, and the</span>
+<span class="sd">outer Krylov solve iterates on the rows of :math:`k` alone, with the operator :math:`S \\tilde S^{-1}`: the same</span>
+<span class="sd">operator as with the full block LU factorization. With exact :math:`S`, GMRES converges in two iterations instead of</span>
+<span class="sd">one; with :math:`\\tilde S` and AMG, the outer iterations hardly grow, and every one saves a solve with</span>
+<span class="sd">:math:`A_{bb}`.</span>
+
+<span class="sd">:math:`S` is dense wherever :math:`A_{bb}^{-1}` is, e.g. along a whole bar. Its entries decay quickly away from</span>
+<span class="sd">the diagonal, though (a bar on its bond is a beam on an elastic foundation: a load is felt only a few host elements</span>
+<span class="sd">away), so :math:`\\tilde S` keeps only the significant ones:</span>
+
+<span class="sd">- a banded component of :math:`A_{bb}` (a bar, ordered along the bar) is cut into overlapping windows of nodes</span>
+<span class="sd">  along it; for the dofs of a window's core, :math:`A_{bb}^{-1}` is replaced by the inverse of the window's block</span>
+<span class="sd">  (restricted additive Schwarz); a short component is a single, exact window,</span>
+<span class="sd">- a component that is not banded (a zone of a 2D or 3D mesh, e.g. a softening zone) gets its exact correction from</span>
+<span class="sd">  a factorization of its own block, in batches of right-hand sides,</span>
+<span class="sd">- entries :math:`|\\tilde S_{ij}| &lt; \\tau \\sqrt{|\\tilde S_{ii} \\tilde S_{jj}|}` are dropped (``dropTolerance``).</span>
+
+<span class="sd">Which dofs are condensed is decided by markers, the same ones that mark elements for adaptive refinement</span>
+<span class="sd">(:mod:`edelweissfe.adaptivity.marking`): :math:`b` holds all dofs of the *interior nodes* of the marked elements,</span>
+<span class="sd">i.e., of the nodes that have at least one element, all of them marked::</span>
+
+<span class="sd">    bar node:   bar, bond                -&gt; all marked -&gt; condensed</span>
+<span class="sd">    host node:  bond, concrete, concrete -&gt; not all    -&gt; kept</span>
+
+<span class="sd">For embedded bars, mark the bar and the bond elements. For a softening zone, mark the elements of a ``perElement``</span>
+<span class="sd">fieldOutput above a threshold, with a ``halo`` so that the zone's own nodes become interior. Only the dofs of nodes</span>
+<span class="sd">can be condensed, and always all fields of a node together.</span>
+<span class="sd">"""</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">NamedTuple</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">scipy.sparse</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">sp</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">scipy.linalg</span><span class="w"> </span><span class="kn">import</span> <span class="n">solve_banded</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">scipy.sparse.csgraph</span><span class="w"> </span><span class="kn">import</span> <span class="n">connected_components</span><span class="p">,</span> <span class="n">reverse_cuthill_mckee</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">edelweissfe.utils.performancetiming</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">performancetiming</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.adaptivity.marking</span><span class="w"> </span><span class="kn">import</span> <span class="n">RefineableElements</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.linsolve.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">FieldBlock</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.linsolve.composition.amg</span><span class="w"> </span><span class="kn">import</span> <span class="n">isSignificant</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.linsolve.composition.base</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">Description</span><span class="p">,</span>
+    <span class="n">Preconditioner</span><span class="p">,</span>
+    <span class="n">SetUpContext</span><span class="p">,</span>
+    <span class="n">Step</span><span class="p">,</span>
+    <span class="n">requirePreconditioner</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.linsolve.composition.direct</span><span class="w"> </span><span class="kn">import</span> <span class="n">DirectSolver</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.linsolve.composition.systemmatrix</span><span class="w"> </span><span class="kn">import</span> <span class="n">SystemMatrix</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.parallelizationutilities</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">getNumberOfThreads</span><span class="p">,</span>
+    <span class="n">getThreadPool</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="c1">#: A component of :math:`A_{bb}` is a chain (a bar) if its bandwidth, in the reverse Cuthill-McKee ordering, is at</span>
+<span class="c1">#: most a window's core divided by this: a chain couples each node only to a few neighbours along it, while a zone of</span>
+<span class="c1">#: a 2D or 3D mesh couples it across the zone's width.</span>
+<span class="n">CHAIN_BANDWIDTH_DIVISOR</span> <span class="o">=</span> <span class="mi">4</span>
+
+<span class="c1">#: The number of right-hand sides per batch of the exact correction of a zone (:meth:`_exactCorrection`) ...</span>
+<span class="n">EXACT_CORRECTION_BATCH</span> <span class="o">=</span> <span class="mi">256</span>
+<span class="c1">#: ... at most, and fewer when the zones are so large that a batch would exceed this many entries.</span>
+<span class="n">EXACT_CORRECTION_MAX_ENTRIES</span> <span class="o">=</span> <span class="mi">2</span><span class="o">**</span><span class="mi">25</span>
+
+<span class="c1">#: The correction of every window, and of every batch of a zone, is thinned against the diagonal of :math:`A_{kk}` at</span>
+<span class="c1">#: this fraction of the drop tolerance before the parts are summed, which bounds their memory; the final drop is</span>
+<span class="c1">#: against the diagonal of :math:`\tilde S` itself. A fraction well below 1 keeps what the final drop keeps, also an</span>
+<span class="c1">#: entry to which several parts contribute.</span>
+<span class="n">THINNING_FRACTION</span> <span class="o">=</span> <span class="mf">0.1</span>
+
+<span class="c1">#: A window's block is solved in LAPACK band storage while its band (lower + upper + 1) holds at most this fraction of</span>
+<span class="c1">#: its columns (:func:`_solveTransposed`): a window along a bar has a band of a few dofs, so the banded solve costs a</span>
+<span class="c1">#: small fraction of the dense one, while for a short window, whose band reaches across it, the band storage no longer</span>
+<span class="c1">#: pays.</span>
+<span class="n">BAND_STORAGE_MAX_FRACTION</span> <span class="o">=</span> <span class="mf">0.25</span>
+
+<span class="c1">#: The split of :math:`A` into its blocks and the drop of the small entries of :math:`\tilde S` work on blocks of about</span>
+<span class="c1">#: this many entries in parallel threads, so that the temporaries of each block stay small. The threads write into</span>
+<span class="c1">#: arrays of the calling thread: in the free-threaded interpreter, an array made by a worker thread and dropped by</span>
+<span class="c1">#: another is freed only when that worker runs again.</span>
+<span class="n">PARALLEL_BLOCK_ENTRIES</span> <span class="o">=</span> <span class="mi">2</span><span class="o">**</span><span class="mi">20</span>
+
+
+<div class="viewcode-block" id="SchurComplementCondensation">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.schurcomplement.SchurComplementCondensation">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">SchurComplementCondensation</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""The condensed dofs :math:`b`, the factorization of :math:`A_{bb}`, the approximate Schur complement</span>
+<span class="sd">    :math:`\\tilde S` of all other dofs :math:`k`, and the preconditioner; see the module documentation.</span>
+
+<span class="sd">    :class:`SchurComplement` uses it in three steps: :meth:`update` on every solve (select :math:`b`, split :math:`A`;</span>
+<span class="sd">    the Schur complement then factorizes :math:`A_{bb}` with its ``condensedBlockSolve``),</span>
+<span class="sd">    :meth:`approximateSchurComplement` whenever it rebuilds its child (built on :math:`\\tilde S` instead of :math:`A`),</span>
+<span class="sd">    and :func:`blockLU` in every outer iteration.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    condensedDofMarkers</span>
+<span class="sd">        The markers whose marked elements' interior nodes are condensed: they select :attr:`condensedDofs`.</span>
+<span class="sd">    condensedBlockSolve</span>
+<span class="sd">        The exact solve with (a part of) :math:`A_{bb}`, a</span>
+<span class="sd">        :class:`~edelweissfe.linsolve.composition.direct.DirectSolver`: here the one of the zones corrected exactly</span>
+<span class="sd">        (see :meth:`_exactCorrection`), set up on their block of :math:`A_{bb}` and applied to batches of right-hand</span>
+<span class="sd">        sides. Default: SuperLU.</span>
+<span class="sd">    approximation</span>
+<span class="sd">        ``"local"``: :math:`\\tilde S` as described in the module documentation; ``"none"``:</span>
+<span class="sd">        :math:`\\tilde S = A_{kk}` (the coupling through :math:`b` is ignored).</span>
+<span class="sd">    dropTolerance</span>
+<span class="sd">        The relative size :math:`\\tau` below which entries of :math:`\\tilde S` are dropped.</span>
+<span class="sd">    windowNodes, haloNodes</span>
+<span class="sd">        The nodes of a window's core along a chain, and of its halo on either side (``None``: as many as the core).</span>
+<span class="sd">    """</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">condensedDofMarkers</span><span class="p">:</span> <span class="nb">list</span><span class="p">,</span>
+        <span class="n">condensedBlockSolve</span><span class="p">:</span> <span class="n">DirectSolver</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">approximation</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"local"</span><span class="p">,</span>
+        <span class="n">dropTolerance</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1e-4</span><span class="p">,</span>
+        <span class="n">windowNodes</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">50</span><span class="p">,</span>
+        <span class="n">haloNodes</span><span class="p">:</span> <span class="s2">"int | None"</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="k">if</span> <span class="n">approximation</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"local"</span><span class="p">,</span> <span class="s2">"none"</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"SchurComplement: approximation must be 'local' or 'none', got </span><span class="si">{!r}</span><span class="s2">"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">approximation</span><span class="p">))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_markers</span> <span class="o">=</span> <span class="n">condensedDofMarkers</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_condensedBlockSolve</span> <span class="o">=</span> <span class="n">condensedBlockSolve</span> <span class="k">if</span> <span class="n">condensedBlockSolve</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">DirectSolver</span><span class="p">(</span><span class="s2">"superlu"</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_approximation</span> <span class="o">=</span> <span class="n">approximation</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_dropTolerance</span> <span class="o">=</span> <span class="n">dropTolerance</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_windowNodes</span> <span class="o">=</span> <span class="n">windowNodes</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_haloNodes</span> <span class="o">=</span> <span class="n">windowNodes</span> <span class="k">if</span> <span class="n">haloNodes</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">haloNodes</span>
+
+        <span class="c1"># the model, its elements as the candidates of the markers (with the elements at each node), and the dofs of</span>
+        <span class="c1"># each node, by node label; see setModel</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_model</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_candidateElements</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_dofsOfNode</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="c1">#: The condensed dofs b and all other (remaining) dofs k, sorted.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">condensedDofs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">remainingDofs</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="c1"># the node (label) of each condensed dof, for the windows along the chains</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_nodeOfCondensedDof</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
+        <span class="c1">#: Whether the markers selected every dof at the last :meth:`update`, which leaves nothing for the field</span>
+        <span class="c1">#: split: then nothing is condensed (a direct solver is the better choice for such a system).</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">selectedAllDofs</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="c1">#: The number of diagonal entries of the last :math:`\\tilde S` that are not positive (see</span>
+        <span class="c1">#: :meth:`approximateSchurComplement`).</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">nonPositiveDiagonalEntries</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="c1"># where the entries of the blocks of A are in A.data, found once per sparsity pattern of A and choice of b,</span>
+        <span class="c1"># see _split</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_splitCache</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="c1"># the last selection of the condensed dofs, and the markers' stamps it was made with, see</span>
+        <span class="c1"># _selectCondensedDofs</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_selection</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_selectionStamp</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">forget</span><span class="p">()</span>
+
+<div class="viewcode-block" id="SchurComplementCondensation.forget">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.schurcomplement.SchurComplementCondensation.forget">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">forget</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Drop what was formed from the last matrix: its blocks :math:`A_{bb}`, :math:`A_{bk}`, :math:`A_{kb}`, and</span>
+<span class="sd">        what :meth:`approximateSchurComplement` formed from them (the factorization of the zones). What is reused for</span>
+<span class="sd">        the next matrix stays: the selection of the condensed dofs, and where the entries of the blocks are in a matrix</span>
+<span class="sd">        of the same pattern."""</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">A_bb</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">A_bk</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">A_kb</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_condensedBlockSolve</span><span class="o">.</span><span class="n">forget</span><span class="p">()</span></div>
+
+
+    <span class="c1"># ----- the condensed dofs -----</span>
+
+<div class="viewcode-block" id="SchurComplementCondensation.setModel">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.schurcomplement.SchurComplementCondensation.setModel">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">setModel</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">dofManager</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Take the model and its dofs: check that what the markers read exists, and find the dofs of each node."""</span>
+        <span class="k">for</span> <span class="n">marker</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_markers</span><span class="p">:</span>
+            <span class="n">marker</span><span class="o">.</span><span class="n">checkReferences</span><span class="p">(</span><span class="n">model</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_model</span> <span class="o">=</span> <span class="n">model</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_candidateElements</span> <span class="o">=</span> <span class="n">RefineableElements</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">elements</span><span class="o">.</span><span class="n">values</span><span class="p">()))</span>
+        <span class="n">indices</span> <span class="o">=</span> <span class="n">dofManager</span><span class="o">.</span><span class="n">idcsOfFieldVariablesInDofVector</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_dofsOfNode</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">element</span> <span class="ow">in</span> <span class="n">model</span><span class="o">.</span><span class="n">elements</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+            <span class="k">for</span> <span class="n">node</span> <span class="ow">in</span> <span class="n">element</span><span class="o">.</span><span class="n">nodes</span><span class="p">:</span>
+                <span class="n">dofs</span> <span class="o">=</span> <span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">atleast_1d</span><span class="p">(</span><span class="n">indices</span><span class="p">[</span><span class="n">fv</span><span class="p">])</span> <span class="k">for</span> <span class="n">fv</span> <span class="ow">in</span> <span class="n">node</span><span class="o">.</span><span class="n">fields</span><span class="o">.</span><span class="n">values</span><span class="p">()</span> <span class="k">if</span> <span class="n">fv</span> <span class="ow">in</span> <span class="n">indices</span><span class="p">]</span>
+                <span class="k">if</span> <span class="n">dofs</span><span class="p">:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_dofsOfNode</span><span class="p">[</span><span class="n">node</span><span class="o">.</span><span class="n">label</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">(</span><span class="n">dofs</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">condensedDofs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_splitCache</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_selection</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_selectionStamp</span> <span class="o">=</span> <span class="kc">None</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_selectCondensedDofs</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""All dofs of the interior nodes of the marked elements, sorted: a node is interior if it has at least one</span>
+<span class="sd">        element and all of its elements are marked. A marker that has nothing to decide on yet (a fieldOutput</span>
+<span class="sd">        before the first converged increment) marks nothing.</span>
+
+<span class="sd">        The selection is kept, and reused while every marker's</span>
+<span class="sd">        :meth:`~edelweissfe.adaptivity.marking.MarkerBase.selectionStamp` stays the same: a marker of sets changes</span>
+<span class="sd">        only with the model (:meth:`setModel` drops the selection), one of a fieldOutput when the fieldOutput is</span>
+<span class="sd">        updated (after a converged increment), and a marker that cannot tell (stamp ``None``) marks again on every</span>
+<span class="sd">        call. So a fieldOutput marker with a halo is not re-evaluated on every Newton iteration.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        tuple</span>
+<span class="sd">            ``(dofs, nodeOfDof)``: the condensed dofs and the label of the node of each.</span>
+<span class="sd">        """</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_model</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="s2">"schurComplement: the condensed dofs are chosen on the model, but setModel was not called"</span>
+            <span class="p">)</span>
+        <span class="n">stamp</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">marker</span><span class="o">.</span><span class="n">selectionStamp</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_model</span><span class="p">)</span> <span class="k">for</span> <span class="n">marker</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_markers</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_selection</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="kc">None</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">stamp</span> <span class="ow">and</span> <span class="n">stamp</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">_selectionStamp</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_selection</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_selection</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_selectionStamp</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_markedInteriorDofs</span><span class="p">(),</span> <span class="n">stamp</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_selection</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_markedInteriorDofs</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The selection of :meth:`_selectCondensedDofs`, made anew."""</span>
+        <span class="n">marked</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">marker</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_markers</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">marker</span><span class="o">.</span><span class="n">isReady</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_model</span><span class="p">):</span>
+                <span class="n">marked</span> <span class="o">|=</span> <span class="n">marker</span><span class="o">.</span><span class="n">mark</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_model</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_candidateElements</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="n">elementsAtNode</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_candidateElements</span><span class="o">.</span><span class="n">elementsAtNode</span><span class="p">()</span>
+        <span class="n">markedNodes</span> <span class="o">=</span> <span class="p">{</span><span class="n">node</span><span class="o">.</span><span class="n">label</span> <span class="k">for</span> <span class="n">element</span> <span class="ow">in</span> <span class="n">marked</span> <span class="k">for</span> <span class="n">node</span> <span class="ow">in</span> <span class="n">element</span><span class="o">.</span><span class="n">nodes</span><span class="p">}</span>
+        <span class="n">interiorNodes</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span>
+            <span class="n">label</span>
+            <span class="k">for</span> <span class="n">label</span> <span class="ow">in</span> <span class="n">markedNodes</span>
+            <span class="k">if</span> <span class="n">label</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dofsOfNode</span> <span class="ow">and</span> <span class="nb">all</span><span class="p">(</span><span class="n">element</span> <span class="ow">in</span> <span class="n">marked</span> <span class="k">for</span> <span class="n">element</span> <span class="ow">in</span> <span class="n">elementsAtNode</span><span class="p">[</span><span class="n">label</span><span class="p">])</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">interiorNodes</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
+        <span class="n">dofs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">([</span><span class="bp">self</span><span class="o">.</span><span class="n">_dofsOfNode</span><span class="p">[</span><span class="n">label</span><span class="p">]</span> <span class="k">for</span> <span class="n">label</span> <span class="ow">in</span> <span class="n">interiorNodes</span><span class="p">])</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
+        <span class="n">nodeOfDof</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">repeat</span><span class="p">(</span><span class="n">interiorNodes</span><span class="p">,</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_dofsOfNode</span><span class="p">[</span><span class="n">label</span><span class="p">]</span><span class="o">.</span><span class="n">size</span> <span class="k">for</span> <span class="n">label</span> <span class="ow">in</span> <span class="n">interiorNodes</span><span class="p">])</span>
+        <span class="n">order</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">argsort</span><span class="p">(</span><span class="n">dofs</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">dofs</span><span class="p">[</span><span class="n">order</span><span class="p">],</span> <span class="n">nodeOfDof</span><span class="p">[</span><span class="n">order</span><span class="p">]</span>
+
+<div class="viewcode-block" id="SchurComplementCondensation.hasCondensedDofs">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.schurcomplement.SchurComplementCondensation.hasCondensedDofs">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">hasCondensedDofs</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Whether anything is condensed (after the last :meth:`update`)."""</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">condensedDofs</span><span class="o">.</span><span class="n">size</span> <span class="o">&gt;</span> <span class="mi">0</span></div>
+
+
+    <span class="c1"># ----- every solve -----</span>
+
+<div class="viewcode-block" id="SchurComplementCondensation.update">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.schurcomplement.SchurComplementCondensation.update">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">A</span><span class="p">:</span> <span class="n">sp</span><span class="o">.</span><span class="n">csr_matrix</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Select the condensed dofs and cut the blocks :math:`A_{bb}`, :math:`A_{bk}`, :math:`A_{kb}` out of ``A``.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        A</span>
+<span class="sd">            The system matrix, CSR in canonical format.</span>
+<span class="sd">        """</span>
+        <span class="c1"># the blocks of the last matrix go before those of this one are cut out</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">forget</span><span class="p">()</span>
+        <span class="k">with</span> <span class="n">performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"schur dof selection"</span><span class="p">):</span>
+            <span class="n">dofs</span><span class="p">,</span> <span class="n">nodeOfDof</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_selectCondensedDofs</span><span class="p">()</span>
+        <span class="n">selectedAllDofs</span> <span class="o">=</span> <span class="n">dofs</span><span class="o">.</span><span class="n">size</span> <span class="o">==</span> <span class="n">A</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">selectedAllDofs</span><span class="p">:</span>
+            <span class="n">dofs</span><span class="p">,</span> <span class="n">nodeOfDof</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">array_equal</span><span class="p">(</span><span class="n">dofs</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">condensedDofs</span><span class="p">):</span>
+            <span class="n">remainingDofs</span><span class="p">,</span> <span class="n">splitCache</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">remainingDofs</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_splitCache</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">isCondensed</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">A</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">)</span>
+            <span class="n">isCondensed</span><span class="p">[</span><span class="n">dofs</span><span class="p">]</span> <span class="o">=</span> <span class="kc">True</span>
+            <span class="n">remainingDofs</span><span class="p">,</span> <span class="n">splitCache</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">flatnonzero</span><span class="p">(</span><span class="o">~</span><span class="n">isCondensed</span><span class="p">),</span> <span class="kc">None</span>
+        <span class="n">A_bb</span> <span class="o">=</span> <span class="n">A_bk</span> <span class="o">=</span> <span class="n">A_kb</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="n">dofs</span><span class="o">.</span><span class="n">size</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">with</span> <span class="n">performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"schur split"</span><span class="p">):</span>
+                <span class="n">splitCache</span> <span class="o">=</span> <span class="n">_splitCacheFor</span><span class="p">(</span><span class="n">A</span><span class="p">,</span> <span class="n">splitCache</span><span class="p">)</span>
+                <span class="n">A_bb</span><span class="p">,</span> <span class="n">A_bk</span><span class="p">,</span> <span class="n">A_kb</span> <span class="o">=</span> <span class="n">_split</span><span class="p">(</span><span class="n">A</span><span class="p">,</span> <span class="p">(</span><span class="s2">"bb"</span><span class="p">,</span> <span class="s2">"bk"</span><span class="p">,</span> <span class="s2">"kb"</span><span class="p">),</span> <span class="n">dofs</span><span class="p">,</span> <span class="n">remainingDofs</span><span class="p">,</span> <span class="n">splitCache</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">selectedAllDofs</span> <span class="o">=</span> <span class="n">selectedAllDofs</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">condensedDofs</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_nodeOfCondensedDof</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">remainingDofs</span> <span class="o">=</span> <span class="n">dofs</span><span class="p">,</span> <span class="n">nodeOfDof</span><span class="p">,</span> <span class="n">remainingDofs</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_splitCache</span> <span class="o">=</span> <span class="n">splitCache</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">A_bb</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">A_bk</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">A_kb</span> <span class="o">=</span> <span class="n">A_bb</span><span class="p">,</span> <span class="n">A_bk</span><span class="p">,</span> <span class="n">A_kb</span></div>
+
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">approximation</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""How :math:`\\tilde S` is formed: ``"local"`` or ``"none"`` (:math:`\\tilde S = A_{kk}`)."""</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_approximation</span>
+
+    <span class="c1"># ----- the remaining dofs, on which the child is built -----</span>
+
+<div class="viewcode-block" id="SchurComplementCondensation.remainingFieldBlocks">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.schurcomplement.SchurComplementCondensation.remainingFieldBlocks">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">remainingFieldBlocks</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">blocks</span><span class="p">:</span> <span class="nb">list</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The field blocks of the remaining dofs: every field without its condensed dofs, in the same order (and</span>
+<span class="sd">        contiguous, as the remaining dofs keep their order). A field whose dofs are all condensed (e.g. the rotations</span>
+<span class="sd">        of embedded beams) has no block."""</span>
+        <span class="n">remainingBlocks</span><span class="p">,</span> <span class="n">start</span> <span class="o">=</span> <span class="p">[],</span> <span class="mi">0</span>
+        <span class="k">for</span> <span class="n">block</span> <span class="ow">in</span> <span class="n">blocks</span><span class="p">:</span>
+            <span class="n">n</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">count_nonzero</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">remainingNodes</span><span class="p">(</span><span class="n">block</span><span class="p">)))</span> <span class="o">*</span> <span class="n">block</span><span class="o">.</span><span class="n">dimension</span>
+            <span class="k">if</span> <span class="n">n</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="n">remainingBlocks</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">FieldBlock</span><span class="p">(</span><span class="n">block</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">start</span><span class="p">,</span> <span class="n">start</span> <span class="o">+</span> <span class="n">n</span><span class="p">,</span> <span class="n">block</span><span class="o">.</span><span class="n">dimension</span><span class="p">))</span>
+            <span class="n">start</span> <span class="o">+=</span> <span class="n">n</span>
+        <span class="k">return</span> <span class="n">remainingBlocks</span></div>
+
+
+<div class="viewcode-block" id="SchurComplementCondensation.remainingNodes">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.schurcomplement.SchurComplementCondensation.remainingNodes">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">remainingNodes</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">block</span><span class="p">:</span> <span class="n">FieldBlock</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Which nodes of the field block ``block`` (of the whole system) remain, are not condensed: a boolean mask</span>
+<span class="sd">        over the field's nodes, in its dof order. Condensation takes whole nodes, and a field's dofs are node-major."""</span>
+        <span class="n">inBlock</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">condensedDofs</span><span class="p">[(</span><span class="bp">self</span><span class="o">.</span><span class="n">condensedDofs</span> <span class="o">&gt;=</span> <span class="n">block</span><span class="o">.</span><span class="n">start</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">condensedDofs</span> <span class="o">&lt;</span> <span class="n">block</span><span class="o">.</span><span class="n">stop</span><span class="p">)]</span>
+        <span class="n">remains</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">((</span><span class="n">block</span><span class="o">.</span><span class="n">stop</span> <span class="o">-</span> <span class="n">block</span><span class="o">.</span><span class="n">start</span><span class="p">)</span> <span class="o">//</span> <span class="n">block</span><span class="o">.</span><span class="n">dimension</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">)</span>
+        <span class="n">remains</span><span class="p">[(</span><span class="n">inBlock</span> <span class="o">-</span> <span class="n">block</span><span class="o">.</span><span class="n">start</span><span class="p">)</span> <span class="o">//</span> <span class="n">block</span><span class="o">.</span><span class="n">dimension</span><span class="p">]</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="k">return</span> <span class="n">remains</span></div>
+
+
+    <span class="c1"># ----- the approximate Schur complement -----</span>
+
+<div class="viewcode-block" id="SchurComplementCondensation.approximateSchurComplement">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.schurcomplement.SchurComplementCondensation.approximateSchurComplement">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">approximateSchurComplement</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">A</span><span class="p">:</span> <span class="n">sp</span><span class="o">.</span><span class="n">csr_matrix</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">sp</span><span class="o">.</span><span class="n">csr_matrix</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">""":math:`\\tilde S`, see the module documentation. Also counts its diagonal entries that are not positive</span>
+<span class="sd">        (:attr:`nonPositiveDiagonalEntries`): for a symmetric positive definite :math:`A` there are none, so any</span>
+<span class="sd">        means that the condensed zone did not take all the softening.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        A</span>
+<span class="sd">            The system matrix of the last :meth:`update`.</span>
+<span class="sd">        """</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_approximation</span> <span class="o">==</span> <span class="s2">"none"</span><span class="p">:</span>
+            <span class="p">(</span><span class="n">S</span><span class="p">,)</span> <span class="o">=</span> <span class="n">_split</span><span class="p">(</span><span class="n">A</span><span class="p">,</span> <span class="p">(</span><span class="s2">"kk"</span><span class="p">,),</span> <span class="bp">self</span><span class="o">.</span><span class="n">condensedDofs</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">remainingDofs</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_splitCache</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">S</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_localSchurComplement</span><span class="p">(</span><span class="n">A</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">nonPositiveDiagonalEntries</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">count_nonzero</span><span class="p">(</span><span class="n">S</span><span class="o">.</span><span class="n">diagonal</span><span class="p">()</span> <span class="o">&lt;=</span> <span class="mf">0.0</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">S</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_localSchurComplement</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">A</span><span class="p">:</span> <span class="n">sp</span><span class="o">.</span><span class="n">csr_matrix</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">sp</span><span class="o">.</span><span class="n">csr_matrix</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">""":math:`A_{kk}` minus the corrections of the windows and of the zones, with small entries dropped.</span>
+
+<span class="sd">        Each large matrix is formed only once the one before it is no longer needed: the sum :math:`C` of the</span>
+<span class="sd">        corrections (thinned against the diagonal of :math:`A_{kk}`, which is that of :math:`A` at k), then</span>
+<span class="sd">        :math:`A_{kk} - C`, then :math:`\\tilde S` by the drop of its small entries."""</span>
+        <span class="n">tau</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dropTolerance</span>
+        <span class="n">sqrtAbsDiagonalOfA_kk</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">A</span><span class="o">.</span><span class="n">diagonal</span><span class="p">()[</span><span class="bp">self</span><span class="o">.</span><span class="n">remainingDofs</span><span class="p">]))</span>
+        <span class="n">corrections</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_corrections</span><span class="p">(</span><span class="n">sqrtAbsDiagonalOfA_kk</span><span class="p">,</span> <span class="n">THINNING_FRACTION</span> <span class="o">*</span> <span class="n">tau</span><span class="p">)</span>
+        <span class="k">with</span> <span class="n">performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"schur assembly"</span><span class="p">):</span>
+            <span class="p">(</span><span class="n">A_kk</span><span class="p">,)</span> <span class="o">=</span> <span class="n">_split</span><span class="p">(</span><span class="n">A</span><span class="p">,</span> <span class="p">(</span><span class="s2">"kk"</span><span class="p">,),</span> <span class="bp">self</span><span class="o">.</span><span class="n">condensedDofs</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">remainingDofs</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_splitCache</span><span class="p">)</span>
+            <span class="n">S</span> <span class="o">=</span> <span class="n">A_kk</span> <span class="o">-</span> <span class="n">corrections</span>
+            <span class="k">del</span> <span class="n">A_kk</span><span class="p">,</span> <span class="n">corrections</span>  <span class="c1"># before the drop, which forms S~ beside S</span>
+            <span class="k">return</span> <span class="n">_dropSmallEntries</span><span class="p">(</span><span class="n">S</span><span class="p">,</span> <span class="n">tau</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_corrections</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">sqrtAbsDiagonalOfA_kk</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">thinningTolerance</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">sp</span><span class="o">.</span><span class="n">csr_matrix</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The sum :math:`C` of the corrections of all windows and zones, each thinned (see</span>
+<span class="sd">        :data:`THINNING_FRACTION`), as a sparse matrix over the remaining dofs k."""</span>
+        <span class="n">windows</span><span class="p">,</span> <span class="n">zoneDofs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_windowsAndZones</span><span class="p">()</span>
+        <span class="n">A_kb_byColumns</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">A_kb</span><span class="o">.</span><span class="n">tocsc</span><span class="p">()</span>
+        <span class="n">parts</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">with</span> <span class="n">performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"schur windows"</span><span class="p">):</span>
+            <span class="n">pool</span> <span class="o">=</span> <span class="n">getThreadPool</span><span class="p">(</span><span class="n">getNumberOfThreads</span><span class="p">())</span>
+            <span class="k">for</span> <span class="n">part</span> <span class="ow">in</span> <span class="n">pool</span><span class="o">.</span><span class="n">map</span><span class="p">(</span>
+                <span class="k">lambda</span> <span class="n">window</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_windowCorrection</span><span class="p">(</span><span class="n">window</span><span class="p">,</span> <span class="n">A_kb_byColumns</span><span class="p">,</span> <span class="n">sqrtAbsDiagonalOfA_kk</span><span class="p">,</span> <span class="n">thinningTolerance</span><span class="p">),</span>
+                <span class="n">windows</span><span class="p">,</span>
+            <span class="p">):</span>
+                <span class="k">if</span> <span class="n">part</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="n">parts</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">part</span><span class="p">)</span>
+        <span class="k">with</span> <span class="n">performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"schur exact correction"</span><span class="p">):</span>
+            <span class="n">parts</span> <span class="o">+=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_exactCorrection</span><span class="p">(</span><span class="n">zoneDofs</span><span class="p">,</span> <span class="n">sqrtAbsDiagonalOfA_kk</span><span class="p">,</span> <span class="n">thinningTolerance</span><span class="p">)</span>
+        <span class="n">n</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">remainingDofs</span><span class="o">.</span><span class="n">size</span>
+        <span class="k">with</span> <span class="n">performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"schur sum of corrections"</span><span class="p">):</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">parts</span><span class="p">:</span>
+                <span class="k">return</span> <span class="n">sp</span><span class="o">.</span><span class="n">csr_matrix</span><span class="p">((</span><span class="n">n</span><span class="p">,</span> <span class="n">n</span><span class="p">))</span>
+            <span class="n">rows</span><span class="p">,</span> <span class="n">cols</span><span class="p">,</span> <span class="n">values</span> <span class="o">=</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="o">*</span><span class="n">parts</span><span class="p">))</span>
+            <span class="k">return</span> <span class="n">sp</span><span class="o">.</span><span class="n">csr_matrix</span><span class="p">((</span><span class="n">values</span><span class="p">,</span> <span class="p">(</span><span class="n">rows</span><span class="p">,</span> <span class="n">cols</span><span class="p">)),</span> <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">n</span><span class="p">))</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_windowsAndZones</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The windows along the chains of :math:`A_{bb}`, and the dofs of its zones: of every connected component of</span>
+<span class="sd">        :math:`A_{bb}`, in the reverse Cuthill-McKee order (along the bar, for a bar, see</span>
+<span class="sd">        :func:`_componentsInBandOrder`), a banded one (see :data:`CHAIN_BANDWIDTH_DIVISOR`) is a chain, cut into</span>
+<span class="sd">        overlapping windows (:func:`_cutIntoWindows`), and any other is a zone (of a 2D or 3D mesh), corrected exactly</span>
+<span class="sd">        (see :meth:`_exactCorrection`).</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        tuple</span>
+<span class="sd">            ``(windows, zoneDofs)``: the :class:`Window` s (the cores partition the dofs of the chains), and the dofs of</span>
+<span class="sd">            the zones (positions in b).</span>
+<span class="sd">        """</span>
+        <span class="n">windows</span><span class="p">,</span> <span class="n">zones</span> <span class="o">=</span> <span class="p">[],</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">dofs</span><span class="p">,</span> <span class="n">bandwidth</span> <span class="ow">in</span> <span class="n">_componentsInBandOrder</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">A_bb</span><span class="p">):</span>
+            <span class="n">core</span><span class="p">,</span> <span class="n">halo</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_coreAndHalo</span><span class="p">(</span><span class="n">dofs</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">bandwidth</span> <span class="o">&gt;</span> <span class="n">core</span> <span class="o">//</span> <span class="n">CHAIN_BANDWIDTH_DIVISOR</span><span class="p">:</span>
+                <span class="n">zones</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">dofs</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">windows</span> <span class="o">+=</span> <span class="n">_cutIntoWindows</span><span class="p">(</span><span class="n">dofs</span><span class="p">,</span> <span class="n">core</span><span class="p">,</span> <span class="n">halo</span><span class="p">)</span>
+        <span class="n">zoneDofs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sort</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">(</span><span class="n">zones</span><span class="p">))</span> <span class="k">if</span> <span class="n">zones</span> <span class="k">else</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">windows</span><span class="p">,</span> <span class="n">zoneDofs</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_coreAndHalo</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dofs</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The core and the halo of the windows along the chain of the dofs ``dofs``, in dofs: ``windowNodes`` and</span>
+<span class="sd">        ``haloNodes`` nodes (all nodes of a chain carry the same dofs)."""</span>
+        <span class="n">dofsPerNode</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="nb">round</span><span class="p">(</span><span class="n">dofs</span><span class="o">.</span><span class="n">size</span> <span class="o">/</span> <span class="n">np</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_nodeOfCondensedDof</span><span class="p">[</span><span class="n">dofs</span><span class="p">])</span><span class="o">.</span><span class="n">size</span><span class="p">))</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_windowNodes</span> <span class="o">*</span> <span class="n">dofsPerNode</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_haloNodes</span> <span class="o">*</span> <span class="n">dofsPerNode</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_windowCorrection</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">window</span><span class="p">:</span> <span class="s2">"Window"</span><span class="p">,</span>
+        <span class="n">A_kb_byColumns</span><span class="p">:</span> <span class="n">sp</span><span class="o">.</span><span class="n">csc_matrix</span><span class="p">,</span>
+        <span class="n">sqrtAbsDiagonalOfA_kk</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+        <span class="n">thinningTolerance</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+    <span class="p">):</span>
+<span class="w">        </span><span class="sd">"""The correction :math:`A_{kb} A_{bb}^{-1} A_{bk}` of one window's core, in which :math:`A_{bb}^{-1}` is</span>
+<span class="sd">        replaced by the inverse of the window's block :math:`A_{ww}`. Only the core rows of that inverse are needed,</span>
+<span class="sd">        :math:`(A_{ww}^{-1})_{core,:}`, far fewer right-hand sides than there are remaining dofs coupled to the window:</span>
+
+<span class="sd">        .. math::</span>
+
+<span class="sd">            \\text{correction}_{ij} = (A_{kb})_{i,core} \\, (A_{ww}^{-1})_{core,:} \\, (A_{bk})_{window,j}</span>
+
+<span class="sd">        for the remaining dofs i coupled to the core and j coupled to the window. ``A_kb_byColumns`` is</span>
+<span class="sd">        :math:`A_{kb}` in CSC format, from which the columns of the core are cut.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        tuple | None</span>
+<span class="sd">            ``(rows, cols, values)`` of the significant entries, as positions in k, or ``None``.</span>
+<span class="sd">        """</span>
+        <span class="n">A_bk_window</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">A_bk</span><span class="p">[</span><span class="n">window</span><span class="o">.</span><span class="n">dofs</span><span class="p">]</span>
+        <span class="n">coupledToWindow</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">A_bk_window</span><span class="o">.</span><span class="n">indices</span><span class="p">)</span>
+        <span class="n">A_kb_core</span> <span class="o">=</span> <span class="n">A_kb_byColumns</span><span class="p">[:,</span> <span class="n">window</span><span class="o">.</span><span class="n">dofs</span><span class="p">[</span><span class="n">window</span><span class="o">.</span><span class="n">core</span><span class="p">]]</span>
+        <span class="n">coupledToCore</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">A_kb_core</span><span class="o">.</span><span class="n">indices</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">coupledToWindow</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span> <span class="ow">or</span> <span class="nb">len</span><span class="p">(</span><span class="n">coupledToCore</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">None</span>
+        <span class="n">A_ww</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">A_bb</span><span class="p">[</span><span class="n">window</span><span class="o">.</span><span class="n">dofs</span><span class="p">][:,</span> <span class="n">window</span><span class="o">.</span><span class="n">dofs</span><span class="p">]</span>
+        <span class="c1"># (A_ww^-1)_{core,:}: the transposed solution of A_ww^T X = I[:, core], the core columns of the identity</span>
+        <span class="n">inverseOfA_ww_coreRows</span> <span class="o">=</span> <span class="n">_solveTransposed</span><span class="p">(</span><span class="n">A_ww</span><span class="o">.</span><span class="n">tocoo</span><span class="p">(),</span> <span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">window</span><span class="o">.</span><span class="n">dofs</span><span class="p">))[:,</span> <span class="n">window</span><span class="o">.</span><span class="n">core</span><span class="p">])</span><span class="o">.</span><span class="n">T</span>
+        <span class="n">correction</span> <span class="o">=</span> <span class="n">A_kb_core</span><span class="p">[</span><span class="n">coupledToCore</span><span class="p">]</span> <span class="o">@</span> <span class="n">inverseOfA_ww_coreRows</span> <span class="o">@</span> <span class="n">A_bk_window</span><span class="p">[:,</span> <span class="n">coupledToWindow</span><span class="p">]</span>
+        <span class="k">return</span> <span class="n">_significantEntries</span><span class="p">(</span><span class="n">correction</span><span class="p">,</span> <span class="n">coupledToCore</span><span class="p">,</span> <span class="n">coupledToWindow</span><span class="p">,</span> <span class="n">sqrtAbsDiagonalOfA_kk</span><span class="p">,</span> <span class="n">thinningTolerance</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_exactCorrection</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">zoneDofs</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">sqrtAbsDiagonalOfA_kk</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">thinningTolerance</span><span class="p">:</span> <span class="nb">float</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The exact correction :math:`A_{kz} A_{zz}^{-1} A_{zk}` of the zones (dofs ``zoneDofs`` of b): their block</span>
+<span class="sd">        :math:`A_{zz}` of :math:`A_{bb}` (block diagonal over the components, so its inverse is the zones' part of</span>
+<span class="sd">        :math:`A_{bb}^{-1}`) is factorized once, and solved for the remaining dofs coupled to the zones in batches of</span>
+<span class="sd">        at most :data:`EXACT_CORRECTION_BATCH` right-hand sides.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        list</span>
+<span class="sd">            ``(rows, cols, values)`` of the significant entries of every batch, as positions in k.</span>
+<span class="sd">        """</span>
+        <span class="k">if</span> <span class="n">zoneDofs</span><span class="o">.</span><span class="n">size</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">return</span> <span class="p">[]</span>
+        <span class="n">A_zz</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">A_bb</span><span class="p">[</span><span class="n">zoneDofs</span><span class="p">][:,</span> <span class="n">zoneDofs</span><span class="p">]</span><span class="o">.</span><span class="n">tocsr</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_condensedBlockSolve</span><span class="o">.</span><span class="n">setUp</span><span class="p">(</span>
+            <span class="n">SystemMatrix</span><span class="p">(</span><span class="n">A_zz</span><span class="p">),</span> <span class="n">SetUpContext</span><span class="p">(</span><span class="n">fields</span><span class="o">=</span><span class="p">(</span><span class="n">FieldBlock</span><span class="p">(</span><span class="s2">"zones"</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">zoneDofs</span><span class="o">.</span><span class="n">size</span><span class="p">,</span> <span class="mi">1</span><span class="p">),))</span>
+        <span class="p">)</span>
+        <span class="n">A_bk_zones</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">A_bk</span><span class="p">[</span><span class="n">zoneDofs</span><span class="p">]</span><span class="o">.</span><span class="n">tocsc</span><span class="p">()</span>
+        <span class="n">coupledColumns</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">flatnonzero</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">diff</span><span class="p">(</span><span class="n">A_bk_zones</span><span class="o">.</span><span class="n">indptr</span><span class="p">))</span>
+        <span class="n">A_kb_zones</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">A_kb</span><span class="p">[:,</span> <span class="n">zoneDofs</span><span class="p">]</span><span class="o">.</span><span class="n">tocsr</span><span class="p">()</span>
+        <span class="n">coupledRows</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">flatnonzero</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">diff</span><span class="p">(</span><span class="n">A_kb_zones</span><span class="o">.</span><span class="n">indptr</span><span class="p">))</span>
+        <span class="n">A_kb_zones</span> <span class="o">=</span> <span class="n">A_kb_zones</span><span class="p">[</span><span class="n">coupledRows</span><span class="p">]</span>
+        <span class="n">batch</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="nb">min</span><span class="p">(</span><span class="n">EXACT_CORRECTION_BATCH</span><span class="p">,</span> <span class="n">EXACT_CORRECTION_MAX_ENTRIES</span> <span class="o">//</span> <span class="n">zoneDofs</span><span class="o">.</span><span class="n">size</span><span class="p">))</span>
+        <span class="n">parts</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">start</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">coupledColumns</span><span class="p">),</span> <span class="n">batch</span><span class="p">):</span>
+            <span class="n">columns</span> <span class="o">=</span> <span class="n">coupledColumns</span><span class="p">[</span><span class="n">start</span> <span class="p">:</span> <span class="n">start</span> <span class="o">+</span> <span class="n">batch</span><span class="p">]</span>
+            <span class="n">rightHandSides</span> <span class="o">=</span> <span class="n">A_bk_zones</span><span class="p">[:,</span> <span class="n">columns</span><span class="p">]</span><span class="o">.</span><span class="n">toarray</span><span class="p">()</span>
+            <span class="n">X</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_condensedBlockSolve</span><span class="p">(</span><span class="n">rightHandSides</span><span class="p">))</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">rightHandSides</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+            <span class="n">correction</span> <span class="o">=</span> <span class="n">A_kb_zones</span> <span class="o">@</span> <span class="n">X</span>
+            <span class="n">parts</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                <span class="n">_significantEntries</span><span class="p">(</span><span class="n">correction</span><span class="p">,</span> <span class="n">coupledRows</span><span class="p">,</span> <span class="n">columns</span><span class="p">,</span> <span class="n">sqrtAbsDiagonalOfA_kk</span><span class="p">,</span> <span class="n">thinningTolerance</span><span class="p">)</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="n">parts</span></div>
+
+
+
+<div class="viewcode-block" id="Window">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.schurcomplement.Window">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">Window</span><span class="p">(</span><span class="n">NamedTuple</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""A window along a chain of :math:`A_{bb}`, see :meth:`SchurComplementCondensation._windowsAndZones`."""</span>
+
+    <span class="c1">#: The dofs of the window, positions in b: its core and the halos on either side, in order along the chain.</span>
+    <span class="n">dofs</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+    <span class="c1">#: The positions of its core within ``dofs``.</span>
+    <span class="n">core</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span></div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_componentsInBandOrder</span><span class="p">(</span><span class="n">A_bb</span><span class="p">:</span> <span class="n">sp</span><span class="o">.</span><span class="n">csr_matrix</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""The connected components of :math:`A_{bb}`: per component, its dofs (positions in b) in the reverse</span>
+<span class="sd">    Cuthill-McKee order -- along the bar, for a bar -- and its bandwidth in that order."""</span>
+    <span class="n">order</span> <span class="o">=</span> <span class="n">reverse_cuthill_mckee</span><span class="p">(</span><span class="n">A_bb</span><span class="p">,</span> <span class="n">symmetric_mode</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">nComponents</span><span class="p">,</span> <span class="n">componentOf</span> <span class="o">=</span> <span class="n">connected_components</span><span class="p">(</span><span class="n">A_bb</span><span class="p">,</span> <span class="n">directed</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="c1"># the dofs component by component, each component in the reverse Cuthill-McKee order</span>
+    <span class="n">alongComponents</span> <span class="o">=</span> <span class="n">order</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">argsort</span><span class="p">(</span><span class="n">componentOf</span><span class="p">[</span><span class="n">order</span><span class="p">],</span> <span class="n">kind</span><span class="o">=</span><span class="s2">"stable"</span><span class="p">)]</span>
+    <span class="n">componentSizes</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">bincount</span><span class="p">(</span><span class="n">componentOf</span><span class="p">,</span> <span class="n">minlength</span><span class="o">=</span><span class="n">nComponents</span><span class="p">)</span>
+    <span class="n">rank</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">empty_like</span><span class="p">(</span><span class="n">order</span><span class="p">)</span>
+    <span class="n">rank</span><span class="p">[</span><span class="n">order</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">order</span><span class="o">.</span><span class="n">size</span><span class="p">)</span>
+    <span class="n">coo</span> <span class="o">=</span> <span class="n">A_bb</span><span class="o">.</span><span class="n">tocoo</span><span class="p">()</span>
+    <span class="n">bandwidth</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">nComponents</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
+    <span class="n">np</span><span class="o">.</span><span class="n">maximum</span><span class="o">.</span><span class="n">at</span><span class="p">(</span><span class="n">bandwidth</span><span class="p">,</span> <span class="n">componentOf</span><span class="p">[</span><span class="n">coo</span><span class="o">.</span><span class="n">row</span><span class="p">],</span> <span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">rank</span><span class="p">[</span><span class="n">coo</span><span class="o">.</span><span class="n">row</span><span class="p">]</span> <span class="o">-</span> <span class="n">rank</span><span class="p">[</span><span class="n">coo</span><span class="o">.</span><span class="n">col</span><span class="p">]))</span>
+    <span class="k">return</span> <span class="nb">list</span><span class="p">(</span><span class="nb">zip</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">alongComponents</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">cumsum</span><span class="p">(</span><span class="n">componentSizes</span><span class="p">)[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]),</span> <span class="n">bandwidth</span><span class="p">))</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_cutIntoWindows</span><span class="p">(</span><span class="n">dofs</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">core</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">halo</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""The windows along a chain of the dofs ``dofs`` (in order along it): cores of ``core`` dofs, each with a halo of</span>
+<span class="sd">    ``halo`` dofs on either side; a chain no longer than one core with both halos is a single, exact window."""</span>
+    <span class="n">n</span> <span class="o">=</span> <span class="n">dofs</span><span class="o">.</span><span class="n">size</span>
+    <span class="k">if</span> <span class="n">n</span> <span class="o">&lt;=</span> <span class="n">core</span> <span class="o">+</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">halo</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">[</span><span class="n">Window</span><span class="p">(</span><span class="n">dofs</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">n</span><span class="p">))]</span>
+    <span class="n">windows</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">start</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">n</span><span class="p">,</span> <span class="n">core</span><span class="p">):</span>
+        <span class="n">stop</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">start</span> <span class="o">+</span> <span class="n">core</span><span class="p">,</span> <span class="n">n</span><span class="p">)</span>
+        <span class="n">low</span><span class="p">,</span> <span class="n">high</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">start</span> <span class="o">-</span> <span class="n">halo</span><span class="p">),</span> <span class="nb">min</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">stop</span> <span class="o">+</span> <span class="n">halo</span><span class="p">)</span>
+        <span class="n">windows</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">Window</span><span class="p">(</span><span class="n">dofs</span><span class="p">[</span><span class="n">low</span><span class="p">:</span><span class="n">high</span><span class="p">],</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">start</span> <span class="o">-</span> <span class="n">low</span><span class="p">,</span> <span class="n">stop</span> <span class="o">-</span> <span class="n">low</span><span class="p">)))</span>
+    <span class="k">return</span> <span class="n">windows</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_splitCacheFor</span><span class="p">(</span><span class="n">A</span><span class="p">:</span> <span class="n">sp</span><span class="o">.</span><span class="n">csr_matrix</span><span class="p">,</span> <span class="n">cache</span><span class="p">:</span> <span class="s2">"dict | None"</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""The cache of :func:`_split` for ``A``: ``cache`` if it was made for ``A``'s sparsity pattern, else an empty one</span>
+<span class="sd">    for it (made, too, when ``cache`` is ``None``: a new choice of the condensed dofs)."""</span>
+    <span class="k">if</span> <span class="n">cache</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">np</span><span class="o">.</span><span class="n">array_equal</span><span class="p">(</span><span class="n">cache</span><span class="p">[</span><span class="s2">"indptr"</span><span class="p">],</span> <span class="n">A</span><span class="o">.</span><span class="n">indptr</span><span class="p">)</span> <span class="ow">and</span> <span class="n">np</span><span class="o">.</span><span class="n">array_equal</span><span class="p">(</span><span class="n">cache</span><span class="p">[</span><span class="s2">"indices"</span><span class="p">],</span> <span class="n">A</span><span class="o">.</span><span class="n">indices</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">cache</span>
+    <span class="k">return</span> <span class="p">{</span><span class="s2">"indptr"</span><span class="p">:</span> <span class="n">A</span><span class="o">.</span><span class="n">indptr</span><span class="o">.</span><span class="n">copy</span><span class="p">(),</span> <span class="s2">"indices"</span><span class="p">:</span> <span class="n">A</span><span class="o">.</span><span class="n">indices</span><span class="o">.</span><span class="n">copy</span><span class="p">(),</span> <span class="s2">"blocks"</span><span class="p">:</span> <span class="p">{}}</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_split</span><span class="p">(</span><span class="n">A</span><span class="p">:</span> <span class="n">sp</span><span class="o">.</span><span class="n">csr_matrix</span><span class="p">,</span> <span class="n">which</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">,</span> <span class="n">condensedDofs</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">remainingDofs</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">cache</span><span class="p">:</span> <span class="nb">dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""The blocks ``which`` (of ``"bb"``, ``"bk"``, ``"kb"``, ``"kk"``) of ``A`` for the condensed dofs b and the</span>
+<span class="sd">    remaining dofs k, as CSR matrices.</span>
+
+<span class="sd">    The simple way is fancy indexing, ``A[b][:, k]``, which copies and searches the large matrix on every solve.</span>
+<span class="sd">    But the sparsity pattern of ``A`` stays the same over many solves, so this finds once per pattern (and choice of</span>
+<span class="sd">    b) where the entries of a block are in ``A.data`` (:func:`_entriesOfBlock`), and keeps that in ``cache`` (see</span>
+<span class="sd">    :func:`_splitCacheFor`). Every solve then only gathers the values and the column indices of these entries, for</span>
+<span class="sd">    blocks of them in parallel threads (:func:`_gatheredInParallel`)."""</span>
+    <span class="n">dofsOf</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"b"</span><span class="p">:</span> <span class="n">condensedDofs</span><span class="p">,</span> <span class="s2">"k"</span><span class="p">:</span> <span class="n">remainingDofs</span><span class="p">}</span>
+    <span class="n">blocks</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">which</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">cache</span><span class="p">[</span><span class="s2">"blocks"</span><span class="p">]:</span>
+            <span class="n">cache</span><span class="p">[</span><span class="s2">"blocks"</span><span class="p">][</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">_entriesOfBlock</span><span class="p">(</span><span class="n">A</span><span class="p">,</span> <span class="n">dofsOf</span><span class="p">[</span><span class="n">name</span><span class="p">[</span><span class="mi">0</span><span class="p">]],</span> <span class="n">dofsOf</span><span class="p">[</span><span class="n">name</span><span class="p">[</span><span class="mi">1</span><span class="p">]])</span>
+        <span class="n">indexInData</span><span class="p">,</span> <span class="n">positionInCols</span><span class="p">,</span> <span class="n">indptr</span><span class="p">,</span> <span class="n">shape</span> <span class="o">=</span> <span class="n">cache</span><span class="p">[</span><span class="s2">"blocks"</span><span class="p">][</span><span class="n">name</span><span class="p">]</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="n">_gatheredInParallel</span><span class="p">(</span><span class="k">lambda</span> <span class="n">index</span><span class="p">:</span> <span class="n">A</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="n">index</span><span class="p">],</span> <span class="n">indexInData</span><span class="p">,</span> <span class="n">A</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span>
+        <span class="n">indices</span> <span class="o">=</span> <span class="n">_gatheredInParallel</span><span class="p">(</span><span class="k">lambda</span> <span class="n">index</span><span class="p">:</span> <span class="n">positionInCols</span><span class="p">[</span><span class="n">A</span><span class="o">.</span><span class="n">indices</span><span class="p">[</span><span class="n">index</span><span class="p">]],</span> <span class="n">indexInData</span><span class="p">,</span> <span class="n">indptr</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span>
+        <span class="n">blocks</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">sp</span><span class="o">.</span><span class="n">csr_matrix</span><span class="p">((</span><span class="n">data</span><span class="p">,</span> <span class="n">indices</span><span class="p">,</span> <span class="n">indptr</span><span class="p">),</span> <span class="n">shape</span><span class="o">=</span><span class="n">shape</span><span class="p">))</span>
+    <span class="k">return</span> <span class="n">blocks</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_entriesOfBlock</span><span class="p">(</span><span class="n">A</span><span class="p">:</span> <span class="n">sp</span><span class="o">.</span><span class="n">csr_matrix</span><span class="p">,</span> <span class="n">rows</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">cols</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Where the entries of the block ``A[rows][:, cols]`` are in ``A.data``, for sorted ``rows`` and ``cols`` and a</span>
+<span class="sd">    canonical ``A``: the entries of the rows ``rows`` in the columns ``cols``, which keep their order in ``A.data``.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    tuple</span>
+<span class="sd">        ``(indexInData, positionInCols, indptr, shape)``: the index in ``A.data`` of every entry of the block, in the</span>
+<span class="sd">        order of the block's CSR format, the position of every column of ``A`` in ``cols`` (the block's column index</span>
+<span class="sd">        of an entry in that column), and the block's row pointers and shape. The indices are int32 while ``A`` has</span>
+<span class="sd">        fewer than 2^31 entries.</span>
+<span class="sd">    """</span>
+    <span class="n">n</span> <span class="o">=</span> <span class="n">A</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="n">indexType</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">int32</span> <span class="k">if</span> <span class="n">A</span><span class="o">.</span><span class="n">nnz</span> <span class="o">&lt;=</span> <span class="n">np</span><span class="o">.</span><span class="n">iinfo</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">int32</span><span class="p">)</span><span class="o">.</span><span class="n">max</span> <span class="k">else</span> <span class="n">np</span><span class="o">.</span><span class="n">int64</span>
+    <span class="n">isRow</span><span class="p">,</span> <span class="n">isCol</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">)</span>
+    <span class="n">isRow</span><span class="p">[</span><span class="n">rows</span><span class="p">],</span> <span class="n">isCol</span><span class="p">[</span><span class="n">cols</span><span class="p">]</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span> <span class="kc">True</span>
+    <span class="n">inBlock</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">repeat</span><span class="p">(</span><span class="n">isRow</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">diff</span><span class="p">(</span><span class="n">A</span><span class="o">.</span><span class="n">indptr</span><span class="p">))</span>
+    <span class="n">inBlock</span> <span class="o">&amp;=</span> <span class="n">isCol</span><span class="p">[</span><span class="n">A</span><span class="o">.</span><span class="n">indices</span><span class="p">]</span>
+    <span class="n">indexInData</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">flatnonzero</span><span class="p">(</span><span class="n">inBlock</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">indexType</span><span class="p">)</span>
+    <span class="c1"># the entries of the block up to its row r are those before the end of A's row r</span>
+    <span class="n">rowEnds</span> <span class="o">=</span> <span class="n">A</span><span class="o">.</span><span class="n">indptr</span><span class="p">[</span><span class="n">rows</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">indexType</span><span class="p">)</span>  <span class="c1"># else searchsorted converts indexInData to their type</span>
+    <span class="n">indptr</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">([[</span><span class="mi">0</span><span class="p">],</span> <span class="n">np</span><span class="o">.</span><span class="n">searchsorted</span><span class="p">(</span><span class="n">indexInData</span><span class="p">,</span> <span class="n">rowEnds</span><span class="p">)])</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">indexType</span><span class="p">)</span>
+    <span class="n">positionInCols</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">indexType</span><span class="p">)</span>
+    <span class="n">positionInCols</span><span class="p">[</span><span class="n">cols</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">cols</span><span class="o">.</span><span class="n">size</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">indexInData</span><span class="p">,</span> <span class="n">positionInCols</span><span class="p">,</span> <span class="n">indptr</span><span class="p">,</span> <span class="p">(</span><span class="n">rows</span><span class="o">.</span><span class="n">size</span><span class="p">,</span> <span class="n">cols</span><span class="o">.</span><span class="n">size</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_gatheredInParallel</span><span class="p">(</span><span class="n">gather</span><span class="p">,</span> <span class="n">index</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">dtype</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""``gather(index)``, an array of ``index``'s size, computed for blocks of :data:`PARALLEL_BLOCK_ENTRIES` entries</span>
+<span class="sd">    of ``index`` in parallel threads. Blocks also keep the temporaries small: numpy indexes with an int32 index by</span>
+<span class="sd">    an int64 copy of it."""</span>
+    <span class="n">gathered</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="n">index</span><span class="o">.</span><span class="n">size</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">gatherBlock</span><span class="p">(</span><span class="n">start</span><span class="p">):</span>
+        <span class="n">gathered</span><span class="p">[</span><span class="n">start</span> <span class="p">:</span> <span class="n">start</span> <span class="o">+</span> <span class="n">PARALLEL_BLOCK_ENTRIES</span><span class="p">]</span> <span class="o">=</span> <span class="n">gather</span><span class="p">(</span><span class="n">index</span><span class="p">[</span><span class="n">start</span> <span class="p">:</span> <span class="n">start</span> <span class="o">+</span> <span class="n">PARALLEL_BLOCK_ENTRIES</span><span class="p">])</span>
+
+    <span class="nb">list</span><span class="p">(</span><span class="n">getThreadPool</span><span class="p">(</span><span class="n">getNumberOfThreads</span><span class="p">())</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="n">gatherBlock</span><span class="p">,</span> <span class="nb">range</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">index</span><span class="o">.</span><span class="n">size</span><span class="p">,</span> <span class="n">PARALLEL_BLOCK_ENTRIES</span><span class="p">)))</span>
+    <span class="k">return</span> <span class="n">gathered</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_significantEntries</span><span class="p">(</span>
+    <span class="n">correction</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">rows</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">cols</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">sqrtAbsDiagonal</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">tolerance</span><span class="p">:</span> <span class="nb">float</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""The entries of a dense correction block (rows ``rows``, columns ``cols`` of k) that pass the relative drop test</span>
+<span class="sd">    at ``tolerance`` (:func:`~edelweissfe.linsolve.composition.amg.isSignificant`, against the diagonal of</span>
+<span class="sd">    :math:`A_{kk}`), as ``(rows, cols, values)``."""</span>
+    <span class="n">significant</span> <span class="o">=</span> <span class="n">isSignificant</span><span class="p">(</span><span class="n">correction</span><span class="p">,</span> <span class="n">rows</span><span class="p">[:,</span> <span class="kc">None</span><span class="p">],</span> <span class="n">cols</span><span class="p">[</span><span class="kc">None</span><span class="p">,</span> <span class="p">:],</span> <span class="n">sqrtAbsDiagonal</span><span class="p">,</span> <span class="n">tolerance</span><span class="p">)</span>
+    <span class="n">i</span><span class="p">,</span> <span class="n">j</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">nonzero</span><span class="p">(</span><span class="n">significant</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">rows</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">cols</span><span class="p">[</span><span class="n">j</span><span class="p">],</span> <span class="n">correction</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="n">j</span><span class="p">]</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_dropSmallEntries</span><span class="p">(</span><span class="n">S</span><span class="p">:</span> <span class="n">sp</span><span class="o">.</span><span class="n">csr_matrix</span><span class="p">,</span> <span class="n">tau</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">sp</span><span class="o">.</span><span class="n">csr_matrix</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""``S`` without the entries that fail the relative drop test :math:`|S_{ij}| \\geq \\tau \\sqrt{|S_{ii} S_{jj}|}`</span>
+<span class="sd">    (:func:`~edelweissfe.linsolve.composition.amg.isSignificant`) and without stored zeros.</span>
+
+<span class="sd">    The simple form is ``S.data[~significant] = 0; S.eliminate_zeros()``. For the hundreds of millions of entries of a</span>
+<span class="sd">    large model, this computes it for blocks of rows (of about :data:`PARALLEL_BLOCK_ENTRIES` entries) in parallel</span>
+<span class="sd">    threads instead, in two passes: the first marks the kept entries (one byte per entry) and counts them per row, the</span>
+<span class="sd">    second copies them into the result, allocated once their number is known."""</span>
+    <span class="n">sqrtAbsDiagonal</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">S</span><span class="o">.</span><span class="n">diagonal</span><span class="p">()))</span>
+    <span class="n">rowBlocks</span> <span class="o">=</span> <span class="n">_rowBlocks</span><span class="p">(</span><span class="n">S</span><span class="p">)</span>
+    <span class="n">indexType</span> <span class="o">=</span> <span class="n">S</span><span class="o">.</span><span class="n">indices</span><span class="o">.</span><span class="n">dtype</span>  <span class="c1"># also of the result's indptr, else scipy converts it</span>
+    <span class="n">keep</span><span class="p">,</span> <span class="n">keptPerRow</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="n">S</span><span class="o">.</span><span class="n">nnz</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="n">S</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">indexType</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">markKeptEntries</span><span class="p">(</span><span class="n">rowBlock</span><span class="p">):</span>
+        <span class="n">low</span><span class="p">,</span> <span class="n">high</span> <span class="o">=</span> <span class="n">rowBlock</span>
+        <span class="n">entries</span> <span class="o">=</span> <span class="nb">slice</span><span class="p">(</span><span class="n">S</span><span class="o">.</span><span class="n">indptr</span><span class="p">[</span><span class="n">low</span><span class="p">],</span> <span class="n">S</span><span class="o">.</span><span class="n">indptr</span><span class="p">[</span><span class="n">high</span><span class="p">])</span>
+        <span class="n">rowOfEntry</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">repeat</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">low</span><span class="p">,</span> <span class="n">high</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">diff</span><span class="p">(</span><span class="n">S</span><span class="o">.</span><span class="n">indptr</span><span class="p">[</span><span class="n">low</span> <span class="p">:</span> <span class="n">high</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]))</span>
+        <span class="n">keepHere</span> <span class="o">=</span> <span class="n">isSignificant</span><span class="p">(</span><span class="n">S</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="n">entries</span><span class="p">],</span> <span class="n">rowOfEntry</span><span class="p">,</span> <span class="n">S</span><span class="o">.</span><span class="n">indices</span><span class="p">[</span><span class="n">entries</span><span class="p">],</span> <span class="n">sqrtAbsDiagonal</span><span class="p">,</span> <span class="n">tau</span><span class="p">)</span>
+        <span class="n">keepHere</span> <span class="o">&amp;=</span> <span class="n">S</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="n">entries</span><span class="p">]</span> <span class="o">!=</span> <span class="mf">0.0</span>
+        <span class="n">keep</span><span class="p">[</span><span class="n">entries</span><span class="p">]</span> <span class="o">=</span> <span class="n">keepHere</span>
+        <span class="n">keptPerRow</span><span class="p">[</span><span class="n">low</span><span class="p">:</span><span class="n">high</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">bincount</span><span class="p">(</span><span class="n">rowOfEntry</span><span class="p">[</span><span class="n">keepHere</span><span class="p">]</span> <span class="o">-</span> <span class="n">low</span><span class="p">,</span> <span class="n">minlength</span><span class="o">=</span><span class="n">high</span> <span class="o">-</span> <span class="n">low</span><span class="p">)</span>
+
+    <span class="n">pool</span> <span class="o">=</span> <span class="n">getThreadPool</span><span class="p">(</span><span class="n">getNumberOfThreads</span><span class="p">())</span>
+    <span class="nb">list</span><span class="p">(</span><span class="n">pool</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="n">markKeptEntries</span><span class="p">,</span> <span class="n">rowBlocks</span><span class="p">))</span>
+    <span class="n">indptr</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">S</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">indexType</span><span class="p">)</span>
+    <span class="n">np</span><span class="o">.</span><span class="n">cumsum</span><span class="p">(</span><span class="n">keptPerRow</span><span class="p">,</span> <span class="n">out</span><span class="o">=</span><span class="n">indptr</span><span class="p">[</span><span class="mi">1</span><span class="p">:])</span>
+    <span class="n">data</span><span class="p">,</span> <span class="n">indices</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="n">indptr</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">S</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">dtype</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="n">indptr</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">indexType</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">copyKeptEntries</span><span class="p">(</span><span class="n">rowBlock</span><span class="p">):</span>
+        <span class="n">low</span><span class="p">,</span> <span class="n">high</span> <span class="o">=</span> <span class="n">rowBlock</span>
+        <span class="n">entries</span><span class="p">,</span> <span class="n">kept</span> <span class="o">=</span> <span class="nb">slice</span><span class="p">(</span><span class="n">S</span><span class="o">.</span><span class="n">indptr</span><span class="p">[</span><span class="n">low</span><span class="p">],</span> <span class="n">S</span><span class="o">.</span><span class="n">indptr</span><span class="p">[</span><span class="n">high</span><span class="p">]),</span> <span class="nb">slice</span><span class="p">(</span><span class="n">indptr</span><span class="p">[</span><span class="n">low</span><span class="p">],</span> <span class="n">indptr</span><span class="p">[</span><span class="n">high</span><span class="p">])</span>
+        <span class="n">np</span><span class="o">.</span><span class="n">compress</span><span class="p">(</span><span class="n">keep</span><span class="p">[</span><span class="n">entries</span><span class="p">],</span> <span class="n">S</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="n">entries</span><span class="p">],</span> <span class="n">out</span><span class="o">=</span><span class="n">data</span><span class="p">[</span><span class="n">kept</span><span class="p">])</span>
+        <span class="n">np</span><span class="o">.</span><span class="n">compress</span><span class="p">(</span><span class="n">keep</span><span class="p">[</span><span class="n">entries</span><span class="p">],</span> <span class="n">S</span><span class="o">.</span><span class="n">indices</span><span class="p">[</span><span class="n">entries</span><span class="p">],</span> <span class="n">out</span><span class="o">=</span><span class="n">indices</span><span class="p">[</span><span class="n">kept</span><span class="p">])</span>
+
+    <span class="nb">list</span><span class="p">(</span><span class="n">pool</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="n">copyKeptEntries</span><span class="p">,</span> <span class="n">rowBlocks</span><span class="p">))</span>
+    <span class="k">return</span> <span class="n">sp</span><span class="o">.</span><span class="n">csr_matrix</span><span class="p">((</span><span class="n">data</span><span class="p">,</span> <span class="n">indices</span><span class="p">,</span> <span class="n">indptr</span><span class="p">),</span> <span class="n">shape</span><span class="o">=</span><span class="n">S</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_rowBlocks</span><span class="p">(</span><span class="n">S</span><span class="p">:</span> <span class="n">sp</span><span class="o">.</span><span class="n">csr_matrix</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Consecutive ranges ``(low, high)`` of the rows of ``S`` that cover all of them, each with about</span>
+<span class="sd">    :data:`PARALLEL_BLOCK_ENTRIES` entries."""</span>
+    <span class="n">nBlocks</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">ceil</span><span class="p">(</span><span class="n">S</span><span class="o">.</span><span class="n">nnz</span> <span class="o">/</span> <span class="n">PARALLEL_BLOCK_ENTRIES</span><span class="p">)))</span>
+    <span class="n">firstRows</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">searchsorted</span><span class="p">(</span><span class="n">S</span><span class="o">.</span><span class="n">indptr</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">S</span><span class="o">.</span><span class="n">nnz</span><span class="p">,</span> <span class="n">nBlocks</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)[</span><span class="mi">1</span><span class="p">:</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
+    <span class="n">bounds</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">([[</span><span class="mi">0</span><span class="p">],</span> <span class="n">firstRows</span><span class="p">,</span> <span class="p">[</span><span class="n">S</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]]]))</span>
+    <span class="k">return</span> <span class="nb">list</span><span class="p">(</span><span class="nb">zip</span><span class="p">(</span><span class="n">bounds</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="n">bounds</span><span class="p">[</span><span class="mi">1</span><span class="p">:]))</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_solveTransposed</span><span class="p">(</span><span class="n">A</span><span class="p">:</span> <span class="n">sp</span><span class="o">.</span><span class="n">coo_matrix</span><span class="p">,</span> <span class="n">B</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">""":math:`A^{-T} B` for a square sparse ``A``: by a banded LU factorization if ``A`` is banded (a window along</span>
+<span class="sd">    a bar), else by a dense one (see :data:`BAND_STORAGE_MAX_FRACTION`)."""</span>
+    <span class="n">n</span> <span class="o">=</span> <span class="n">A</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="n">lower</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="nb">max</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="p">(</span><span class="n">A</span><span class="o">.</span><span class="n">row</span> <span class="o">-</span> <span class="n">A</span><span class="o">.</span><span class="n">col</span><span class="p">)</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">initial</span><span class="o">=</span><span class="mi">0</span><span class="p">)))</span>
+    <span class="n">upper</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="nb">max</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="p">(</span><span class="n">A</span><span class="o">.</span><span class="n">col</span> <span class="o">-</span> <span class="n">A</span><span class="o">.</span><span class="n">row</span><span class="p">)</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">initial</span><span class="o">=</span><span class="mi">0</span><span class="p">)))</span>
+    <span class="k">if</span> <span class="n">lower</span> <span class="o">+</span> <span class="n">upper</span> <span class="o">+</span> <span class="mi">1</span> <span class="o">&gt;</span> <span class="nb">int</span><span class="p">(</span><span class="n">BAND_STORAGE_MAX_FRACTION</span> <span class="o">*</span> <span class="n">n</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">solve</span><span class="p">(</span><span class="n">A</span><span class="o">.</span><span class="n">toarray</span><span class="p">()</span><span class="o">.</span><span class="n">T</span><span class="p">,</span> <span class="n">B</span><span class="p">)</span>
+    <span class="c1"># A^T in LAPACK band storage: (A^T)_ij = A_ji at [upper(A^T) + i - j, j], and upper(A^T) = lower(A)</span>
+    <span class="n">banded</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">lower</span> <span class="o">+</span> <span class="n">upper</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="n">n</span><span class="p">))</span>
+    <span class="n">banded</span><span class="p">[</span><span class="n">lower</span> <span class="o">+</span> <span class="n">A</span><span class="o">.</span><span class="n">col</span> <span class="o">-</span> <span class="n">A</span><span class="o">.</span><span class="n">row</span><span class="p">,</span> <span class="n">A</span><span class="o">.</span><span class="n">row</span><span class="p">]</span> <span class="o">=</span> <span class="n">A</span><span class="o">.</span><span class="n">data</span>
+    <span class="k">return</span> <span class="n">solve_banded</span><span class="p">((</span><span class="n">upper</span><span class="p">,</span> <span class="n">lower</span><span class="p">),</span> <span class="n">banded</span><span class="p">,</span> <span class="n">B</span><span class="p">,</span> <span class="n">check_finite</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="blockLU">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.schurcomplement.blockLU">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">blockLU</span><span class="p">(</span><span class="n">r</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">condensation</span><span class="p">,</span> <span class="n">schurComplementSolve</span><span class="p">,</span> <span class="n">condensedBlockSolve</span><span class="p">,</span> <span class="n">blockFactors</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""One application of the block LU preconditioner, see the module documentation:</span>
+
+<span class="sd">    .. math::</span>
+
+<span class="sd">        y_b = A_{bb}^{-1} r_b, \\qquad z_k = M_{\\tilde S}^{-1} (r_k - A_{kb} y_b), \\qquad</span>
+<span class="sd">        z_b = A_{bb}^{-1} (r_b - A_{bk} z_k)</span>
+
+<span class="sd">    or, with ``blockFactors="upper"``, :math:`z_k = M_{\\tilde S}^{-1} r_k` (the remaining dofs first, then the</span>
+<span class="sd">    condensed ones follow them: the bars follow the concrete). The application of :class:`SchurComplement`.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    r</span>
+<span class="sd">        The vector to precondition (all dofs).</span>
+<span class="sd">    condensation</span>
+<span class="sd">        The :class:`SchurComplementCondensation`: the dofs :math:`b, k` and the blocks :math:`A_{bk}, A_{kb}`.</span>
+<span class="sd">    schurComplementSolve</span>
+<span class="sd">        :math:`M_{\\tilde S}^{-1}`, applied to a vector of the remaining dofs :math:`k`.</span>
+<span class="sd">    condensedBlockSolve</span>
+<span class="sd">        :math:`A_{bb}^{-1}`, applied to a vector of the condensed dofs :math:`b`.</span>
+<span class="sd">    blockFactors</span>
+<span class="sd">        ``"upper"`` or ``"both"``, see the module documentation.</span>
+<span class="sd">    """</span>
+    <span class="n">A_bk</span><span class="p">,</span> <span class="n">A_kb</span> <span class="o">=</span> <span class="n">condensation</span><span class="o">.</span><span class="n">A_bk</span><span class="p">,</span> <span class="n">condensation</span><span class="o">.</span><span class="n">A_kb</span>
+    <span class="n">b</span><span class="p">,</span> <span class="n">k</span> <span class="o">=</span> <span class="n">condensation</span><span class="o">.</span><span class="n">condensedDofs</span><span class="p">,</span> <span class="n">condensation</span><span class="o">.</span><span class="n">remainingDofs</span>
+    <span class="n">r_b</span><span class="p">,</span> <span class="n">r_k</span> <span class="o">=</span> <span class="n">r</span><span class="p">[</span><span class="n">b</span><span class="p">],</span> <span class="n">r</span><span class="p">[</span><span class="n">k</span><span class="p">]</span>
+    <span class="k">if</span> <span class="n">blockFactors</span> <span class="o">==</span> <span class="s2">"both"</span><span class="p">:</span>
+        <span class="n">y_b</span> <span class="o">=</span> <span class="n">condensedBlockSolve</span><span class="p">(</span><span class="n">r_b</span><span class="p">)</span>
+        <span class="n">z_k</span> <span class="o">=</span> <span class="n">schurComplementSolve</span><span class="p">(</span><span class="n">r_k</span> <span class="o">-</span> <span class="n">A_kb</span> <span class="o">@</span> <span class="n">y_b</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">z_k</span> <span class="o">=</span> <span class="n">schurComplementSolve</span><span class="p">(</span><span class="n">r_k</span><span class="p">)</span>
+    <span class="n">z_b</span> <span class="o">=</span> <span class="n">condensedBlockSolve</span><span class="p">(</span><span class="n">r_b</span> <span class="o">-</span> <span class="n">A_bk</span> <span class="o">@</span> <span class="n">z_k</span><span class="p">)</span>
+    <span class="n">z</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">empty_like</span><span class="p">(</span><span class="n">r</span><span class="p">)</span>
+    <span class="n">z</span><span class="p">[</span><span class="n">b</span><span class="p">],</span> <span class="n">z</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="n">z_b</span><span class="p">,</span> <span class="n">z_k</span>
+    <span class="k">return</span> <span class="n">z</span></div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_compactCount</span><span class="p">(</span><span class="n">count</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""A count with three significant digits and a suffix: ``233398138`` is ``233M``, ``240084`` is ``240k``."""</span>
+    <span class="k">for</span> <span class="n">factor</span><span class="p">,</span> <span class="n">suffix</span> <span class="ow">in</span> <span class="p">((</span><span class="mf">1e9</span><span class="p">,</span> <span class="s2">"G"</span><span class="p">),</span> <span class="p">(</span><span class="mf">1e6</span><span class="p">,</span> <span class="s2">"M"</span><span class="p">),</span> <span class="p">(</span><span class="mf">1e3</span><span class="p">,</span> <span class="s2">"k"</span><span class="p">)):</span>
+        <span class="k">if</span> <span class="n">count</span> <span class="o">&gt;=</span> <span class="n">factor</span><span class="p">:</span>
+            <span class="k">return</span> <span class="s2">"</span><span class="si">{:.3g}{:}</span><span class="s2">"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">count</span> <span class="o">/</span> <span class="n">factor</span><span class="p">,</span> <span class="n">suffix</span><span class="p">)</span>
+    <span class="k">return</span> <span class="nb">str</span><span class="p">(</span><span class="n">count</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="SchurComplement">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.schurcomplement.SchurComplement">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">SchurComplement</span><span class="p">(</span><span class="n">Preconditioner</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""The block LU preconditioner around the Schur complement of the condensed dofs; see the module documentation.</span>
+
+<span class="sd">    Every solve selects the condensed dofs again and sets up ``condensedBlockSolve`` on :math:`A_{bb}` (factorizes it);</span>
+<span class="sd">    :math:`\\tilde S` and the child are rebuilt when a rebuild is asked for, and when the condensed dofs change. If</span>
+<span class="sd">    :math:`A_{bb}` cannot be factorized (a bond that lost all stiffness), that solve does without the condensation: the</span>
+<span class="sd">    child is built on the whole :math:`A`.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    condensedDofMarkers</span>
+<span class="sd">        The markers whose marked elements' interior nodes are condensed (e.g. an element set marker); the dofs they</span>
+<span class="sd">        select are :meth:`condensedDofs`.</span>
+<span class="sd">    schurComplementSolve</span>
+<span class="sd">        :math:`M_{\\tilde S}^{-1}`, built on :math:`\\tilde S`.</span>
+<span class="sd">    condensedBlockSolve</span>
+<span class="sd">        The exact solve with :math:`A_{bb}`, a :class:`~edelweissfe.linsolve.composition.direct.DirectSolver`</span>
+<span class="sd">        (default: SuperLU). The zones corrected exactly in :math:`\\tilde S` are factorized by a second one of the same</span>
+<span class="sd">        package and options.</span>
+<span class="sd">    approximation, dropTolerance, windowNodes, haloNodes</span>
+<span class="sd">        How :math:`\\tilde S` is formed, see :class:`SchurComplementCondensation`.</span>
+<span class="sd">    blockFactors</span>
+<span class="sd">        ``"upper"`` (the default): only the block upper triangular factor :math:`U`, one solve with :math:`A_{bb}`;</span>
+<span class="sd">        ``"both"``: both factors of the block LU factorization, two solves with :math:`A_{bb}`.</span>
+<span class="sd">    """</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">condensedDofMarkers</span><span class="p">:</span> <span class="nb">list</span> <span class="o">=</span> <span class="p">(),</span>
+        <span class="n">schurComplementSolve</span><span class="p">:</span> <span class="n">Preconditioner</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">condensedBlockSolve</span><span class="p">:</span> <span class="n">DirectSolver</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">approximation</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"local"</span><span class="p">,</span>
+        <span class="n">dropTolerance</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1e-4</span><span class="p">,</span>
+        <span class="n">windowNodes</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">50</span><span class="p">,</span>
+        <span class="n">haloNodes</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">blockFactors</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"upper"</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="k">if</span> <span class="n">schurComplementSolve</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">"SchurComplement: schurComplementSolve, the preconditioner of the Schur complement, is needed"</span>
+            <span class="p">)</span>
+        <span class="n">requirePreconditioner</span><span class="p">(</span><span class="s2">"SchurComplement"</span><span class="p">,</span> <span class="s2">"schurComplementSolve"</span><span class="p">,</span> <span class="n">schurComplementSolve</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">condensedBlockSolve</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">condensedBlockSolve</span><span class="p">,</span> <span class="n">DirectSolver</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                <span class="s2">"SchurComplement: condensedBlockSolve must be a DirectSolver, the exact solve with A_bb, "</span>
+                <span class="s2">"got </span><span class="si">{!r}</span><span class="s2">"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">condensedBlockSolve</span><span class="p">)</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="n">blockFactors</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"upper"</span><span class="p">,</span> <span class="s2">"both"</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"SchurComplement: blockFactors must be 'upper' or 'both', got </span><span class="si">{!r}</span><span class="s2">"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">blockFactors</span><span class="p">))</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">list</span><span class="p">(</span><span class="n">condensedDofMarkers</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">"SchurComplement: nothing to condense -- give the markers of the condensed elements "</span>
+                <span class="s2">"(condensedDofMarkers=[...])"</span>
+            <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">schurComplementSolve</span> <span class="o">=</span> <span class="n">schurComplementSolve</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">condensedBlockSolve</span> <span class="o">=</span> <span class="n">condensedBlockSolve</span> <span class="k">if</span> <span class="n">condensedBlockSolve</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">DirectSolver</span><span class="p">(</span><span class="s2">"superlu"</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">blockFactors</span> <span class="o">=</span> <span class="n">blockFactors</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">condensation</span> <span class="o">=</span> <span class="n">SchurComplementCondensation</span><span class="p">(</span>
+            <span class="nb">list</span><span class="p">(</span><span class="n">condensedDofMarkers</span><span class="p">),</span>
+            <span class="n">DirectSolver</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">condensedBlockSolve</span><span class="o">.</span><span class="n">package</span><span class="p">,</span> <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">condensedBlockSolve</span><span class="o">.</span><span class="n">options</span><span class="p">),</span>
+            <span class="n">approximation</span><span class="o">=</span><span class="n">approximation</span><span class="p">,</span>
+            <span class="n">dropTolerance</span><span class="o">=</span><span class="n">dropTolerance</span><span class="p">,</span>
+            <span class="n">windowNodes</span><span class="o">=</span><span class="n">windowNodes</span><span class="p">,</span>
+            <span class="n">haloNodes</span><span class="o">=</span><span class="n">haloNodes</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="c1"># the messages shown once per model</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_messagesShown</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+        <span class="c1"># after the condensation: what this component builds includes the blocks it cuts out (see _forget)</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_forget</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">condensation</span><span class="o">.</span><span class="n">forget</span><span class="p">()</span>
+        <span class="c1">#: Whether the last set-up condenses (else the child is built on the whole matrix).</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">condensing</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="c1">#: :math:`\tilde S`, on which the child is built.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">S_tilde</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="c1"># the condensed dofs the child was built for (None: built on the whole matrix, or not built)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_builtForDofs</span> <span class="o">=</span> <span class="kc">None</span>
+
+<div class="viewcode-block" id="SchurComplement.setModel">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.schurcomplement.SchurComplement.setModel">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">setModel</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">dofManager</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">condensation</span><span class="o">.</span><span class="n">setModel</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">dofManager</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_builtForDofs</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_messagesShown</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">setModel</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">dofManager</span><span class="p">)</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_setUp</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">A</span><span class="p">,</span> <span class="n">context</span><span class="p">:</span> <span class="n">SetUpContext</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_condense</span><span class="p">(</span><span class="n">A</span><span class="p">,</span> <span class="n">context</span><span class="p">,</span> <span class="n">rebuild</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">change</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">A</span><span class="p">,</span> <span class="n">change</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_condense</span><span class="p">(</span><span class="n">A</span><span class="p">,</span> <span class="n">change</span><span class="o">.</span><span class="n">context</span><span class="p">,</span> <span class="n">rebuild</span><span class="o">=</span><span class="n">change</span><span class="o">.</span><span class="n">requiresRebuild</span><span class="p">,</span> <span class="n">change</span><span class="o">=</span><span class="n">change</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_condense</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">A</span><span class="p">,</span> <span class="n">context</span><span class="p">:</span> <span class="n">SetUpContext</span><span class="p">,</span> <span class="n">rebuild</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span> <span class="n">change</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Select the condensed dofs and factorize A_bb, then set up or update the child on S~ (or, without condensed</span>
+<span class="sd">        dofs, on A)."""</span>
+        <span class="n">condensation</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">condensation</span>
+        <span class="n">condensation</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">A</span><span class="o">.</span><span class="n">matrix</span><span class="p">())</span>
+        <span class="n">condensing</span> <span class="o">=</span> <span class="n">condensation</span><span class="o">.</span><span class="n">hasCondensedDofs</span><span class="p">()</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">condensing</span><span class="p">:</span>
+                <span class="n">A_bb</span> <span class="o">=</span> <span class="n">condensation</span><span class="o">.</span><span class="n">A_bb</span>
+                <span class="k">with</span> <span class="n">performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"schur factorization"</span><span class="p">):</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">condensedBlockSolve</span><span class="o">.</span><span class="n">setUp</span><span class="p">(</span>
+                        <span class="n">SystemMatrix</span><span class="p">(</span><span class="n">A_bb</span><span class="p">),</span> <span class="n">SetUpContext</span><span class="p">(</span><span class="n">fields</span><span class="o">=</span><span class="p">(</span><span class="n">FieldBlock</span><span class="p">(</span><span class="s2">"condensed"</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">A_bb</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="mi">1</span><span class="p">),))</span>
+                    <span class="p">)</span>
+        <span class="k">except</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">LinAlgError</span> <span class="k">as</span> <span class="n">error</span><span class="p">:</span>
+            <span class="c1"># e.g. a softening zone or a bond that lost all stiffness. The condensed dofs come from the last converged</span>
+            <span class="c1"># increment, so a cutback would meet the same block again: this solve does without.</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_warn</span><span class="p">(</span><span class="n">context</span><span class="p">,</span> <span class="s2">"the condensed block A_bb cannot be factorized (</span><span class="si">{:}</span><span class="s2">); solved without it"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">error</span><span class="p">))</span>
+            <span class="n">condensing</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="k">if</span> <span class="n">condensation</span><span class="o">.</span><span class="n">selectedAllDofs</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_warnOnce</span><span class="p">(</span><span class="n">context</span><span class="p">,</span> <span class="s2">"the markers select every dof; nothing is condensed"</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">condensing</span> <span class="ow">and</span> <span class="n">condensation</span><span class="o">.</span><span class="n">condensedDofs</span><span class="o">.</span><span class="n">size</span> <span class="o">&gt;</span> <span class="n">A</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">//</span> <span class="mi">2</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_warnOnce</span><span class="p">(</span>
+                <span class="n">context</span><span class="p">,</span>
+                <span class="s2">"the markers select more than half of the dofs: the solve is mostly a direct one, with the cost of the "</span>
+                <span class="s2">"preconditioner of S̃ on top"</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="n">rebuild</span> <span class="o">=</span> <span class="n">rebuild</span> <span class="ow">or</span> <span class="n">change</span> <span class="ow">is</span> <span class="kc">None</span>
+        <span class="n">dofs</span><span class="p">,</span> <span class="n">dofsChanged</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_condensedDofsOf</span><span class="p">(</span><span class="n">condensing</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">rebuild</span> <span class="ow">or</span> <span class="n">dofsChanged</span><span class="p">:</span>
+            <span class="c1"># the child is built anew, on a new S~ or on A: the old S~ and the child's old state go first</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">S_tilde</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">schurComplementSolve</span><span class="o">.</span><span class="n">forget</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">condensing</span> <span class="ow">and</span> <span class="p">(</span><span class="n">rebuild</span> <span class="ow">or</span> <span class="n">dofsChanged</span><span class="p">):</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="k">with</span> <span class="n">performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"schur complement"</span><span class="p">):</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">S_tilde</span> <span class="o">=</span> <span class="n">SystemMatrix</span><span class="p">(</span><span class="n">condensation</span><span class="o">.</span><span class="n">approximateSchurComplement</span><span class="p">(</span><span class="n">A</span><span class="o">.</span><span class="n">matrix</span><span class="p">()))</span>
+            <span class="k">except</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">LinAlgError</span> <span class="k">as</span> <span class="n">error</span><span class="p">:</span>
+                <span class="c1"># e.g. a singular window block of A_bb, which factorizes as a whole: like a failed factorization, this</span>
+                <span class="c1"># solve does without the condensation</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_warn</span><span class="p">(</span>
+                    <span class="n">context</span><span class="p">,</span> <span class="s2">"the approximate Schur complement cannot be formed (</span><span class="si">{:}</span><span class="s2">); solved without it"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">error</span><span class="p">)</span>
+                <span class="p">)</span>
+                <span class="n">condensing</span> <span class="o">=</span> <span class="kc">False</span>
+                <span class="n">dofs</span><span class="p">,</span> <span class="n">dofsChanged</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_condensedDofsOf</span><span class="p">(</span><span class="n">condensing</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">statistics</span><span class="o">.</span><span class="n">sizes</span><span class="o">.</span><span class="n">update</span><span class="p">({</span><span class="s2">"condensed dofs"</span><span class="p">:</span> <span class="n">dofs</span><span class="o">.</span><span class="n">size</span><span class="p">,</span> <span class="s2">"S̃ nnz"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">S_tilde</span><span class="o">.</span><span class="n">nnz</span><span class="p">})</span>
+                <span class="k">if</span> <span class="n">condensation</span><span class="o">.</span><span class="n">nonPositiveDiagonalEntries</span><span class="p">:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_warn</span><span class="p">(</span>
+                        <span class="n">context</span><span class="p">,</span>
+                        <span class="s2">"the approximate Schur complement has </span><span class="si">{:}</span><span class="s2"> non-positive diagonal entries: the condensed dofs do "</span>
+                        <span class="s2">"not hold all of the softening, and the preconditioner of the remaining dofs may "</span>
+                        <span class="s2">"struggle"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">condensation</span><span class="o">.</span><span class="n">nonPositiveDiagonalEntries</span><span class="p">),</span>
+                    <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">condensing</span> <span class="o">=</span> <span class="n">condensing</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">condensing</span><span class="p">:</span>
+            <span class="n">childMatrix</span><span class="p">,</span> <span class="n">childContext</span> <span class="o">=</span> <span class="n">A</span><span class="p">,</span> <span class="n">context</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">remainingFields</span> <span class="o">=</span> <span class="n">condensation</span><span class="o">.</span><span class="n">remainingFieldBlocks</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">context</span><span class="o">.</span><span class="n">fields</span><span class="p">))</span>
+            <span class="n">childMatrix</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">S_tilde</span>
+            <span class="n">remainingNodes</span> <span class="o">=</span> <span class="p">{</span><span class="n">block</span><span class="o">.</span><span class="n">name</span><span class="p">:</span> <span class="n">condensation</span><span class="o">.</span><span class="n">remainingNodes</span><span class="p">(</span><span class="n">block</span><span class="p">)</span> <span class="k">for</span> <span class="n">block</span> <span class="ow">in</span> <span class="n">context</span><span class="o">.</span><span class="n">fields</span><span class="p">}</span>
+            <span class="n">childContext</span> <span class="o">=</span> <span class="n">context</span><span class="o">.</span><span class="n">restrictedTo</span><span class="p">(</span><span class="n">remainingFields</span><span class="p">,</span> <span class="n">condensation</span><span class="o">.</span><span class="n">remainingDofs</span><span class="p">,</span> <span class="n">nodesOf</span><span class="o">=</span><span class="n">remainingNodes</span><span class="o">.</span><span class="n">get</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">change</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">schurComplementSolve</span><span class="o">.</span><span class="n">setUp</span><span class="p">(</span><span class="n">childMatrix</span><span class="p">,</span> <span class="n">childContext</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">childChange</span> <span class="o">=</span> <span class="n">change</span><span class="o">.</span><span class="n">withContext</span><span class="p">(</span><span class="n">childContext</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">dofsChanged</span><span class="p">:</span>
+                <span class="n">childChange</span> <span class="o">=</span> <span class="n">childChange</span><span class="o">.</span><span class="n">withRebuild</span><span class="p">(</span><span class="s2">"condensed dofs"</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">schurComplementSolve</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">childMatrix</span><span class="p">,</span> <span class="n">childChange</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_builtForDofs</span> <span class="o">=</span> <span class="n">dofs</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_condensedDofsOf</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">condensing</span><span class="p">:</span> <span class="nb">bool</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The condensed dofs of this solve (``None`` without condensation), and whether they differ from those the</span>
+<span class="sd">        child was built for."""</span>
+        <span class="n">dofs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">condensation</span><span class="o">.</span><span class="n">condensedDofs</span> <span class="k">if</span> <span class="n">condensing</span> <span class="k">else</span> <span class="kc">None</span>
+        <span class="n">changed</span> <span class="o">=</span> <span class="p">(</span><span class="n">dofs</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">)</span> <span class="o">!=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_builtForDofs</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">or</span> <span class="p">(</span>
+            <span class="n">dofs</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">np</span><span class="o">.</span><span class="n">array_equal</span><span class="p">(</span><span class="n">dofs</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_builtForDofs</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">dofs</span><span class="p">,</span> <span class="n">changed</span>
+
+<div class="viewcode-block" id="SchurComplement.finishSolve">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.schurcomplement.SchurComplement.finishSolve">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">finishSolve</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="c1"># S~ is kept for the next solve (its child may be reused), but what the solve formed from it is not</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">S_tilde</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">S_tilde</span><span class="o">.</span><span class="n">releaseFormedMatrices</span><span class="p">()</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">finishSolve</span><span class="p">()</span></div>
+
+
+<div class="viewcode-block" id="SchurComplement.builtMatrices">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.schurcomplement.SchurComplement.builtMatrices">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">builtMatrices</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">condensing</span><span class="p">:</span>
+            <span class="k">return</span> <span class="p">()</span>
+        <span class="k">return</span> <span class="p">((</span><span class="s2">"A_bb"</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">condensation</span><span class="o">.</span><span class="n">A_bb</span><span class="p">),</span> <span class="p">(</span><span class="s2">"S̃"</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">S_tilde</span><span class="o">.</span><span class="n">A</span><span class="p">))</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_warn</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">context</span><span class="p">:</span> <span class="n">SetUpContext</span><span class="p">,</span> <span class="n">message</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">context</span><span class="o">.</span><span class="n">message</span><span class="p">(</span><span class="s2">"warning"</span><span class="p">,</span> <span class="s2">"⚠ SchurComplement: "</span> <span class="o">+</span> <span class="n">message</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_warnOnce</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">context</span><span class="p">:</span> <span class="n">SetUpContext</span><span class="p">,</span> <span class="n">message</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""A warning shown only the first time for the current model."""</span>
+        <span class="k">if</span> <span class="n">message</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_messagesShown</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_messagesShown</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">message</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_warn</span><span class="p">(</span><span class="n">context</span><span class="p">,</span> <span class="n">message</span><span class="p">)</span>
+
+<div class="viewcode-block" id="SchurComplement.condensedDofs">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.schurcomplement.SchurComplement.condensedDofs">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">condensedDofs</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"np.ndarray | None"</span><span class="p">:</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">condensation</span><span class="o">.</span><span class="n">condensedDofs</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">condensing</span> <span class="k">else</span> <span class="kc">None</span></div>
+
+
+<div class="viewcode-block" id="SchurComplement.setUpNotes">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.schurcomplement.SchurComplement.setUpNotes">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">setUpNotes</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">condensing</span><span class="p">:</span>
+            <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">setUpNotes</span><span class="p">()</span>
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="s2">"</span><span class="si">{:}</span><span class="s2"> dofs condensed"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">_compactCount</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">condensation</span><span class="o">.</span><span class="n">condensedDofs</span><span class="o">.</span><span class="n">size</span><span class="p">)),</span>
+            <span class="s2">"S̃ </span><span class="si">{:}</span><span class="s2"> nnz"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">_compactCount</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">S_tilde</span><span class="o">.</span><span class="n">nnz</span><span class="p">)),</span>
+        <span class="p">)</span> <span class="o">+</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">setUpNotes</span><span class="p">()</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_apply</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">r</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">condensing</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">schurComplementSolve</span><span class="p">(</span><span class="n">r</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">blockLU</span><span class="p">(</span><span class="n">r</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">condensation</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">schurComplementSolve</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">condensedBlockSolve</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">blockFactors</span><span class="p">)</span>
+
+<div class="viewcode-block" id="SchurComplement.children">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.schurcomplement.SchurComplement.children">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">children</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">((</span><span class="s2">"condensedBlockSolve"</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">condensedBlockSolve</span><span class="p">),</span> <span class="p">(</span><span class="s2">"schurComplementSolve"</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">schurComplementSolve</span><span class="p">))</span></div>
+
+
+<div class="viewcode-block" id="SchurComplement.describe">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.schurcomplement.SchurComplement.describe">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">describe</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Description</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">blockFactors</span> <span class="o">==</span> <span class="s2">"both"</span><span class="p">:</span>
+            <span class="n">steps</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="n">Step</span><span class="p">(</span><span class="s2">"y_b = A_bb⁻¹ r_b"</span><span class="p">,</span> <span class="s2">"condensedBlockSolve"</span><span class="p">),</span>
+                <span class="n">Step</span><span class="p">(</span><span class="s2">"z_k = M_S̃⁻¹ (r_k − A_kb y_b)"</span><span class="p">,</span> <span class="s2">"schurComplementSolve"</span><span class="p">),</span>
+                <span class="n">Step</span><span class="p">(</span><span class="s2">"z_b = A_bb⁻¹ (r_b − A_bk z_k)"</span><span class="p">,</span> <span class="s2">"condensedBlockSolve"</span><span class="p">),</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">steps</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="n">Step</span><span class="p">(</span><span class="s2">"z_k = M_S̃⁻¹ r_k"</span><span class="p">,</span> <span class="s2">"schurComplementSolve"</span><span class="p">),</span>
+                <span class="n">Step</span><span class="p">(</span><span class="s2">"z_b = A_bb⁻¹ (r_b − A_bk z_k)"</span><span class="p">,</span> <span class="s2">"condensedBlockSolve"</span><span class="p">),</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="n">Description</span><span class="p">(</span>
+            <span class="n">name</span><span class="o">=</span><span class="s2">"SchurComplement"</span><span class="p">,</span>
+            <span class="n">formula</span><span class="o">=</span><span class="s2">"BlockLU[</span><span class="si">{condensedBlockSolve}</span><span class="s2">, </span><span class="si">{schurComplementSolve}</span><span class="s2">]"</span><span class="p">,</span>
+            <span class="n">latex</span><span class="o">=</span><span class="s2">"</span><span class="se">\\</span><span class="s2">mathrm</span><span class="si">{BlockLU}</span><span class="se">\\</span><span class="s2">left[</span><span class="si">{condensedBlockSolve}</span><span class="s2">,</span><span class="se">\\</span><span class="s2">, </span><span class="si">{schurComplementSolve}</span><span class="se">\\</span><span class="s2">right]"</span><span class="p">,</span>
+            <span class="n">parameters</span><span class="o">=</span><span class="p">{</span>
+                <span class="s2">"blockFactors"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">blockFactors</span><span class="p">,</span>
+                <span class="s2">"S̃"</span><span class="p">:</span> <span class="s2">"A_kk"</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">condensation</span><span class="o">.</span><span class="n">approximation</span> <span class="o">==</span> <span class="s2">"none"</span> <span class="k">else</span> <span class="s2">"A_kk − A_kb A_bb⁻¹ A_bk, local"</span><span class="p">,</span>
+            <span class="p">},</span>
+            <span class="n">steps</span><span class="o">=</span><span class="n">steps</span><span class="p">,</span>
+        <span class="p">)</span></div>
+</div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Matthias Neuner.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

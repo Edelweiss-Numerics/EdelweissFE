@@ -14,8 +14,8 @@
       <script src="../../../_static/jquery.js?v=5d32c60e"></script>
       <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
       <script src="../../../_static/documentation_options.js?v=17e2f33f"></script>
-      <script src="../../../_static/doctools.js?v=9bcbadda"></script>
-      <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../../../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../../../genindex.html" />
     <link rel="search" title="Search" href="../../../search.html" /> 
@@ -105,15 +105,17 @@
 <span class="c1"># Created on Fri Feb 10 19:20:25 2017</span>
 
 <span class="c1"># @author: Matthias Neuner</span>
-<span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">"""</span>
 <span class="sd">Currently, EdelweissFE provides</span>
 
 <span class="sd"> * a nonlinear implicit static solver (NIST),</span>
 <span class="sd"> * a nonlinear explicit static solver (NEST),</span>
 <span class="sd"> * a nonlinear explicit dynamic solver (NED),</span>
+<span class="sd"> * a nonlinear implicit dynamic solver (NID, Newmark-beta time integration),</span>
 <span class="sd"> * a parallel nonlinear implicit static solver (NISTParallel),</span>
 <span class="sd"> * a parallel nonlinear explicit static solver (NESTParallel),</span>
 <span class="sd"> * a parallel nonlinear explicit dynamic solver (NEDParallel),</span>
+<span class="sd"> * a parallel nonlinear implicit dynamic solver (NIDParallel),</span>
 <span class="sd"> * and a parallel arc length solver (NISTPArcLength).</span>
 
 <span class="sd">Choose the solver in the ``*solver`` definition:</span>
@@ -121,44 +123,47 @@
 <span class="sd">.. code-block:: edelweiss</span>
 
 <span class="sd">    *solver, name=mySolver, solver=NISTParallel</span>
-<span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">"""</span>
 
-<span class="kn">import</span><span class="w"> </span><span class="nn">importlib</span>
-
-<span class="n">solverLibrary</span> <span class="o">=</span> <span class="p">{</span>
-    <span class="s2">&quot;NIST&quot;</span><span class="p">:</span> <span class="s2">&quot;nonlinearimplicitstatic&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;NEST&quot;</span><span class="p">:</span> <span class="s2">&quot;nonlinearexplicitstatic&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;NED&quot;</span><span class="p">:</span> <span class="s2">&quot;nonlinearexplicitdynamic&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;NISTParallel&quot;</span><span class="p">:</span> <span class="s2">&quot;nonlinearimplicitstaticparallel&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;NESTParallel&quot;</span><span class="p">:</span> <span class="s2">&quot;nonlinearexplicitstaticparallel&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;NEDParallel&quot;</span><span class="p">:</span> <span class="s2">&quot;nonlinearexplicitdynamicparallel&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;NISTPArcLength&quot;</span><span class="p">:</span> <span class="s2">&quot;nonlinearimplicitstaticparallelarclength&quot;</span><span class="p">,</span>
-<span class="p">}</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.config</span><span class="w"> </span><span class="kn">import</span> <span class="n">registry</span>
 
 
 <div class="viewcode-block" id="getSolverByName">
 <a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.config.solvers.getSolverByName">[docs]</a>
 <span class="k">def</span><span class="w"> </span><span class="nf">getSolverByName</span><span class="p">(</span><span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">type</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Get the class type of the requested solver.</span>
+<span class="w">    </span><span class="sd">"""Get the class type of the requested solver.</span>
+
+<span class="sd">    Resolved through the registry (``solver`` category) rather than through a hand-maintained</span>
+<span class="sd">    table private to this module. Such a table could only ever list solvers living *inside* this</span>
+<span class="sd">    package, so an external package -- EdelweissMeshfree, a plugin -- had no way to contribute one;</span>
+<span class="sd">    going through the registry means a built-in, an entry point and an in-process</span>
+<span class="sd">    :func:`~edelweissfe.config.registry.register` call are all equally reachable here. An unknown</span>
+<span class="sd">    name now raises :class:`~edelweissfe.config.registry.RegistryLookupError` naming the available</span>
+<span class="sd">    solvers, instead of a ``KeyError``.</span>
+
+<span class="sd">    **Solver names are now case-insensitive, deliberately.** This resolver was the one</span>
+<span class="sd">    case-*sensitive* registry in the codebase: it indexed a table with CamelCase keys and then read</span>
+<span class="sd">    the class off the module under the *same* string, so the name doubled as the class</span>
+<span class="sd">    attribute name and e.g. ``"nist"`` failed twice over, while 12 of the 13 legacy ``config/*.py``</span>
+<span class="sd">    registries already casefolded the name at the resolver. That audit amends rule (c) to sanction</span>
+<span class="sd">    this: a name must not resolve differently depending on which front-end it arrived through, and</span>
+<span class="sd">    the registry is reached by callers with no ``.inp`` parser in the loop. The change is strictly</span>
+<span class="sd">    more permissive, so no existing input file changes meaning.</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
 <span class="sd">    name</span>
-<span class="sd">        The name of the solver to load.</span>
+<span class="sd">        The name of the solver to load (case insensitive).</span>
 
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
 <span class="sd">    type</span>
 <span class="sd">        The solver class type.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
+<span class="sd">    """</span>
 
-    <span class="k">try</span><span class="p">:</span>
-        <span class="n">solverType</span> <span class="o">=</span> <span class="n">solverLibrary</span><span class="p">[</span><span class="n">name</span><span class="p">]</span>
-    <span class="k">except</span> <span class="ne">KeyError</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Solver </span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2"> not found in library. Available solvers: &quot;</span> <span class="o">+</span> <span class="s2">&quot;, &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">solverLibrary</span><span class="o">.</span><span class="n">keys</span><span class="p">()))</span>
+    <span class="n">solverClass</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">registry</span><span class="o">.</span><span class="n">lookup</span><span class="p">(</span><span class="s2">"solver"</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span>
 
-    <span class="n">solver</span> <span class="o">=</span> <span class="n">importlib</span><span class="o">.</span><span class="n">import_module</span><span class="p">(</span><span class="s2">&quot;edelweissfe.solvers.</span><span class="si">{:}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">solverType</span><span class="p">))</span>
-    <span class="k">return</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">solver</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span></div>
+    <span class="k">return</span> <span class="n">solverClass</span></div>
 
 </pre></div>
 

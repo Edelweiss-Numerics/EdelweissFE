@@ -14,8 +14,8 @@
       <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
       <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
       <script src="../../../../_static/documentation_options.js?v=17e2f33f"></script>
-      <script src="../../../../_static/doctools.js?v=9bcbadda"></script>
-      <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../../../../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../../../../genindex.html" />
     <link rel="search" title="Search" href="../../../../search.html" /> 
@@ -115,18 +115,18 @@
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">putCInVoigt</span><span class="p">(</span><span class="n">C</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Put the right Cauchy-Green tensor C in length 9 Voigt notation.</span>
+<span class="w">    </span><span class="sd">"""Put the right Cauchy-Green tensor C in length 9 Voigt notation.</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
 <span class="sd">    C</span>
-<span class="sd">        The right Cauchy-Green tensor.&quot;&quot;&quot;</span>
+<span class="sd">        The right Cauchy-Green tensor."""</span>
 
     <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">C</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">],</span> <span class="n">C</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">],</span> <span class="n">C</span><span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">],</span> <span class="n">C</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">],</span> <span class="n">C</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">],</span> <span class="n">C</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">],</span> <span class="n">C</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">],</span> <span class="n">C</span><span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">],</span> <span class="n">C</span><span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">0</span><span class="p">]])</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">I1</span><span class="p">(</span><span class="n">C</span><span class="p">):</span>  <span class="c1"># trace of C in Voigt</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Compute the first invariant with a vectorized C.</span>
+<span class="w">    </span><span class="sd">"""Compute the first invariant with a vectorized C.</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
@@ -136,13 +136,13 @@
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
 <span class="sd">    double</span>
-<span class="sd">        The first invariant of the right Cauchy-Green tensor.&quot;&quot;&quot;</span>
+<span class="sd">        The first invariant of the right Cauchy-Green tensor."""</span>
 
     <span class="k">return</span> <span class="n">C</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">+</span> <span class="n">C</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="n">C</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">I2</span><span class="p">(</span><span class="n">C</span><span class="p">):</span>  <span class="c1"># second invariant in Voigt</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Compute the second invariant with a vectorized C.</span>
+<span class="w">    </span><span class="sd">"""Compute the second invariant with a vectorized C.</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
@@ -152,7 +152,7 @@
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
 <span class="sd">    double</span>
-<span class="sd">        The second invariant of the right Cauchy-Green tensor.&quot;&quot;&quot;</span>
+<span class="sd">        The second invariant of the right Cauchy-Green tensor."""</span>
 
     <span class="n">Cm</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([[</span><span class="n">C</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">C</span><span class="p">[</span><span class="mi">3</span><span class="p">],</span> <span class="n">C</span><span class="p">[</span><span class="mi">5</span><span class="p">]],</span> <span class="p">[</span><span class="n">C</span><span class="p">[</span><span class="mi">6</span><span class="p">],</span> <span class="n">C</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">C</span><span class="p">[</span><span class="mi">4</span><span class="p">]],</span> <span class="p">[</span><span class="n">C</span><span class="p">[</span><span class="mi">8</span><span class="p">],</span> <span class="n">C</span><span class="p">[</span><span class="mi">7</span><span class="p">],</span> <span class="n">C</span><span class="p">[</span><span class="mi">2</span><span class="p">]]])</span>
     <span class="n">CC</span> <span class="o">=</span> <span class="n">Cm</span> <span class="o">@</span> <span class="n">Cm</span>
@@ -161,7 +161,7 @@
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">J</span><span class="p">(</span><span class="n">C</span><span class="p">):</span>  <span class="c1"># det of F in Voigt</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Compute the determinant of the deformation gradient with a vectorized C.</span>
+<span class="w">    </span><span class="sd">"""Compute the determinant of the deformation gradient with a vectorized C.</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
@@ -171,7 +171,7 @@
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
 <span class="sd">    double</span>
-<span class="sd">        The determinant of the deformation gradient.&quot;&quot;&quot;</span>
+<span class="sd">        The determinant of the deformation gradient."""</span>
 
     <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span>
         <span class="n">C</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="n">C</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">*</span> <span class="n">C</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span>
@@ -186,43 +186,28 @@
 <div class="viewcode-block" id="HyperelasticAdvancedI2ExtendedMaterial">
 <a class="viewcode-back" href="../../../../documentation/materials.html#edelweissfe.materials.hyperelasticadvanced.hyperelasticadvancedi2extended.HyperelasticAdvancedI2ExtendedMaterial">[docs]</a>
 <span class="k">class</span><span class="w"> </span><span class="nc">HyperelasticAdvancedI2ExtendedMaterial</span><span class="p">(</span><span class="n">BaseHyperElasticMaterial</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Hyperelastic material with automatic differentiation for automatic calculation of the Kirchhoff stress and the tangent moduli.</span>
+<span class="w">    </span><span class="sd">"""Hyperelastic material with automatic differentiation for automatic calculation of the Kirchhoff stress and the tangent moduli.</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
 <span class="sd">    materialProperties</span>
-<span class="sd">        The numpy array containing the material properties for the requested material.&quot;&quot;&quot;</span>
+<span class="sd">        The numpy array containing the material properties for the requested material."""</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">materialProperties</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;The properties the material has.&quot;&quot;&quot;</span>
+<span class="w">        </span><span class="sd">"""The properties the material has."""</span>
 
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_materialProperties</span>
-
-<div class="viewcode-block" id="HyperelasticAdvancedI2ExtendedMaterial.getDensity">
-<a class="viewcode-back" href="../../../../documentation/materials.html#edelweissfe.materials.hyperelasticadvanced.hyperelasticadvancedi2extended.HyperelasticAdvancedI2ExtendedMaterial.getDensity">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">getDensity</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Returns the density of the material.</span>
-
-<span class="sd">        Returns</span>
-<span class="sd">        -------</span>
-<span class="sd">        float</span>
-<span class="sd">            The density of the material.&quot;&quot;&quot;</span>
-
-        <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;_density&quot;</span><span class="p">):</span>
-            <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s2">&quot;Density is not defined for this material.&quot;</span><span class="p">)</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_density</span></div>
-
 
 <div class="viewcode-block" id="HyperelasticAdvancedI2ExtendedMaterial.getNumberOfRequiredStateVars">
 <a class="viewcode-back" href="../../../../documentation/materials.html#edelweissfe.materials.hyperelasticadvanced.hyperelasticadvancedi2extended.HyperelasticAdvancedI2ExtendedMaterial.getNumberOfRequiredStateVars">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">getNumberOfRequiredStateVars</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Returns number of needed material state Variables per integration point in the material.</span>
+<span class="w">        </span><span class="sd">"""Returns number of needed material state Variables per integration point in the material.</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
 <span class="sd">        int</span>
-<span class="sd">            Number of needed material state Vars.&quot;&quot;&quot;</span>
+<span class="sd">            Number of needed material state Vars."""</span>
 
         <span class="k">return</span> <span class="mi">1</span></div>
 
@@ -230,28 +215,28 @@
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">materialProperties</span><span class="p">:</span> <span class="nb">dict</span><span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_materialProperties</span> <span class="o">=</span> <span class="n">materialProperties</span>
         <span class="c1"># elastic parameters</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_mu</span> <span class="o">=</span> <span class="n">materialProperties</span><span class="p">[</span><span class="s2">&quot;mu&quot;</span><span class="p">]</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_K</span> <span class="o">=</span> <span class="n">materialProperties</span><span class="p">[</span><span class="s2">&quot;K&quot;</span><span class="p">]</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">setEnergyFunction</span><span class="p">(</span><span class="n">materialProperties</span><span class="p">[</span><span class="s2">&quot;psi_e&quot;</span><span class="p">])</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_params</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">materialProperties</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;a&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">))</span>  <span class="c1"># extra optional parameters</span>
-        <span class="k">if</span> <span class="s2">&quot;density&quot;</span> <span class="ow">in</span> <span class="n">materialProperties</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_density</span> <span class="o">=</span> <span class="n">materialProperties</span><span class="p">[</span><span class="s2">&quot;density&quot;</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_mu</span> <span class="o">=</span> <span class="n">materialProperties</span><span class="p">[</span><span class="s2">"mu"</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_K</span> <span class="o">=</span> <span class="n">materialProperties</span><span class="p">[</span><span class="s2">"K"</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">setEnergyFunction</span><span class="p">(</span><span class="n">materialProperties</span><span class="p">[</span><span class="s2">"psi_e"</span><span class="p">])</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_params</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">materialProperties</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"a"</span><span class="p">,</span> <span class="s2">""</span><span class="p">))</span>  <span class="c1"># extra optional parameters</span>
+        <span class="k">if</span> <span class="s2">"density"</span> <span class="ow">in</span> <span class="n">materialProperties</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_density</span> <span class="o">=</span> <span class="n">materialProperties</span><span class="p">[</span><span class="s2">"density"</span><span class="p">]</span>
 
 <div class="viewcode-block" id="HyperelasticAdvancedI2ExtendedMaterial.setEnergyFunction">
 <a class="viewcode-back" href="../../../../documentation/materials.html#edelweissfe.materials.hyperelasticadvanced.hyperelasticadvancedi2extended.HyperelasticAdvancedI2ExtendedMaterial.setEnergyFunction">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">setEnergyFunction</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">materialEnergy</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Sets the energy density function for the custom material.</span>
+<span class="w">        </span><span class="sd">"""Sets the energy density function for the custom material.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
 <span class="sd">        materialEnergy</span>
-<span class="sd">            Energy density function for the material.&quot;&quot;&quot;</span>
+<span class="sd">            Energy density function for the material."""</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_materialEnergy</span> <span class="o">=</span> <span class="n">materialEnergy</span>
 
         <span class="k">if</span> <span class="n">materialEnergy</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s2">&quot;This material requires an energy density function set with W=&#39;fct(C)&#39;.&quot;</span><span class="p">)</span>
-        <span class="k">if</span> <span class="s2">&quot;C&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">materialEnergy</span><span class="p">:</span>  <span class="c1"># use num_dual</span>
+            <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s2">"This material requires an energy density function set with W='fct(C)'."</span><span class="p">)</span>
+        <span class="k">if</span> <span class="s2">"C"</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">materialEnergy</span><span class="p">:</span>  <span class="c1"># use num_dual</span>
             <span class="kn">import</span><span class="w"> </span><span class="nn">num_dual</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">nd</span>
             <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 
@@ -263,7 +248,7 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">_autodiffisnum_dual</span> <span class="o">=</span> <span class="kc">False</span>
 
         <span class="k">def</span><span class="w"> </span><span class="nf">energyDensity</span><span class="p">(</span><span class="n">C</span><span class="p">,</span> <span class="n">mu</span><span class="p">,</span> <span class="n">K</span><span class="p">,</span> <span class="n">I1</span><span class="p">,</span> <span class="n">I2</span><span class="p">,</span> <span class="n">J</span><span class="p">,</span> <span class="n">a</span><span class="p">,</span> <span class="n">np</span><span class="p">):</span>
-<span class="w">            </span><span class="sd">&quot;&quot;&quot;The energy density function.</span>
+<span class="w">            </span><span class="sd">"""The energy density function.</span>
 
 <span class="sd">            Parameters</span>
 <span class="sd">            ----------</span>
@@ -287,17 +272,17 @@
 <span class="sd">            Returns</span>
 <span class="sd">            -------</span>
 <span class="sd">            double</span>
-<span class="sd">                The energy density.&quot;&quot;&quot;</span>
+<span class="sd">                The energy density."""</span>
 
             <span class="k">try</span><span class="p">:</span>
                 <span class="k">return</span> <span class="nb">eval</span><span class="p">(</span><span class="n">materialEnergy</span><span class="p">)</span>
             <span class="k">except</span> <span class="ne">NameError</span><span class="p">:</span>
                 <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span>
-                    <span class="s2">&quot;This material only allows parameters mu, K, the first 2 invariants of C (I1, I2), C itself and J = det(F) as well as your own parameters a[i].&quot;</span>
+                    <span class="s2">"This material only allows parameters mu, K, the first 2 invariants of C (I1, I2), C itself and J = det(F) as well as your own parameters a[i]."</span>
                 <span class="p">)</span>
 
         <span class="k">def</span><span class="w"> </span><span class="nf">getEnergyAndStressAndTangent</span><span class="p">(</span><span class="n">C</span><span class="p">,</span> <span class="n">energyFct</span><span class="p">):</span>
-<span class="w">            </span><span class="sd">&quot;&quot;&quot;Compute the energy, the Kirchhoff stress and the tangent.</span>
+<span class="w">            </span><span class="sd">"""Compute the energy, the Kirchhoff stress and the tangent.</span>
 
 <span class="sd">            Parameters</span>
 <span class="sd">            ----------</span>
@@ -313,7 +298,7 @@
 <span class="sd">            np.ndarray</span>
 <span class="sd">                The Kirchhoff stress.</span>
 <span class="sd">            np.ndarray</span>
-<span class="sd">                The tangent dKirchhoff/dDeformationGradient.&quot;&quot;&quot;</span>
+<span class="sd">                The tangent dKirchhoff/dDeformationGradient."""</span>
 
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_autodiffisnum_dual</span><span class="p">:</span>
                 <span class="n">Cv</span> <span class="o">=</span> <span class="n">putCInVoigt</span><span class="p">(</span><span class="n">C</span><span class="p">)</span>
@@ -355,12 +340,12 @@
 <div class="viewcode-block" id="HyperelasticAdvancedI2ExtendedMaterial.assignCurrentStateVars">
 <a class="viewcode-back" href="../../../../documentation/materials.html#edelweissfe.materials.hyperelasticadvanced.hyperelasticadvancedi2extended.HyperelasticAdvancedI2ExtendedMaterial.assignCurrentStateVars">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">assignCurrentStateVars</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">currentStateVars</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Assign new current state vars.</span>
+<span class="w">        </span><span class="sd">"""Assign new current state vars.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
 <span class="sd">        currentStateVars</span>
-<span class="sd">            Array containing the material state vars.&quot;&quot;&quot;</span>
+<span class="sd">            Array containing the material state vars."""</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_energy</span> <span class="o">=</span> <span class="n">currentStateVars</span></div>
 
@@ -375,7 +360,7 @@
         <span class="n">time</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
         <span class="n">dTime</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
     <span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Computes the stresses for a 2D material with plane stress.</span>
+<span class="w">        </span><span class="sd">"""Computes the stresses for a 2D material with plane stress.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
@@ -388,7 +373,7 @@
 <span class="sd">        time</span>
 <span class="sd">            Array of step time and total time.</span>
 <span class="sd">        dTime</span>
-<span class="sd">            Current time step size.&quot;&quot;&quot;</span>
+<span class="sd">            Current time step size."""</span>
 
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">computePlaneKirchhoff</span><span class="p">(</span><span class="n">stress</span><span class="p">,</span> <span class="n">dStress_dDeformationGradient</span><span class="p">,</span> <span class="n">deformationGradient</span><span class="p">,</span> <span class="n">time</span><span class="p">,</span> <span class="n">dTime</span><span class="p">)</span></div>
 
@@ -403,7 +388,7 @@
         <span class="n">time</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
         <span class="n">dTime</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
     <span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Computes the stresses for a 3D material/2D material with plane strain.</span>
+<span class="w">        </span><span class="sd">"""Computes the stresses for a 3D material/2D material with plane strain.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
@@ -416,16 +401,16 @@
 <span class="sd">        time</span>
 <span class="sd">            Array of step time and total time.</span>
 <span class="sd">        dTime</span>
-<span class="sd">            Current time step size.&quot;&quot;&quot;</span>
+<span class="sd">            Current time step size."""</span>
 
         <span class="n">F</span> <span class="o">=</span> <span class="n">deformationGradient</span>
         <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_energy</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">S</span><span class="p">,</span> <span class="n">CSE</span><span class="p">)</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_getHessian</span><span class="p">(</span><span class="n">F</span><span class="o">.</span><span class="n">T</span> <span class="o">@</span> <span class="n">F</span><span class="p">)</span>
         <span class="n">S</span> <span class="o">=</span> <span class="n">undoVoigtStress</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="n">S</span><span class="p">)</span>
         <span class="n">stress</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">doVoigtStress</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="n">F</span> <span class="o">@</span> <span class="n">S</span> <span class="o">@</span> <span class="n">F</span><span class="o">.</span><span class="n">T</span><span class="p">)</span>
-        <span class="n">dC_dF</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span><span class="s2">&quot;lo,kp-&gt;opkl&quot;</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="n">F</span><span class="p">)</span> <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span><span class="s2">&quot;ko,lp-&gt;opkl&quot;</span><span class="p">,</span> <span class="n">F</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">3</span><span class="p">))</span>
-        <span class="n">CTauF1</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span><span class="s2">&quot;ik,ln,jn-&gt;ijkl&quot;</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="n">S</span><span class="p">,</span> <span class="n">F</span><span class="p">)</span>
-        <span class="n">CTauF2</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span><span class="s2">&quot;im,mnop,opkl,jn-&gt;ijkl&quot;</span><span class="p">,</span> <span class="n">F</span><span class="p">,</span> <span class="mi">1</span> <span class="o">/</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">undoVoigtMatrix</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="n">CSE</span><span class="p">),</span> <span class="n">dC_dF</span><span class="p">,</span> <span class="n">F</span><span class="p">)</span>
-        <span class="n">CTauF3</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span><span class="s2">&quot;im,ml,jk-&gt;ijkl&quot;</span><span class="p">,</span> <span class="n">F</span><span class="p">,</span> <span class="n">S</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">3</span><span class="p">))</span>
+        <span class="n">dC_dF</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span><span class="s2">"lo,kp-&gt;opkl"</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="n">F</span><span class="p">)</span> <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span><span class="s2">"ko,lp-&gt;opkl"</span><span class="p">,</span> <span class="n">F</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">3</span><span class="p">))</span>
+        <span class="n">CTauF1</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span><span class="s2">"ik,ln,jn-&gt;ijkl"</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="n">S</span><span class="p">,</span> <span class="n">F</span><span class="p">)</span>
+        <span class="n">CTauF2</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span><span class="s2">"im,mnop,opkl,jn-&gt;ijkl"</span><span class="p">,</span> <span class="n">F</span><span class="p">,</span> <span class="mi">1</span> <span class="o">/</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">undoVoigtMatrix</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="n">CSE</span><span class="p">),</span> <span class="n">dC_dF</span><span class="p">,</span> <span class="n">F</span><span class="p">)</span>
+        <span class="n">CTauF3</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span><span class="s2">"im,ml,jk-&gt;ijkl"</span><span class="p">,</span> <span class="n">F</span><span class="p">,</span> <span class="n">S</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">3</span><span class="p">))</span>
         <span class="n">dStress_dDeformationGradient</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">CTauF1</span> <span class="o">+</span> <span class="n">CTauF2</span> <span class="o">+</span> <span class="n">CTauF3</span></div>
 
 
@@ -439,7 +424,7 @@
         <span class="n">time</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
         <span class="n">dTime</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
     <span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Computes the stresses for a uniaxial stress state.</span>
+<span class="w">        </span><span class="sd">"""Computes the stresses for a uniaxial stress state.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
@@ -452,15 +437,15 @@
 <span class="sd">        time</span>
 <span class="sd">            Array of step time and total time.</span>
 <span class="sd">        dTime</span>
-<span class="sd">            Current time step size.&quot;&quot;&quot;</span>
+<span class="sd">            Current time step size."""</span>
 
-        <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s2">&quot;Computing uniaxial stress is not possible with this material.&quot;</span><span class="p">)</span></div>
+        <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s2">"Computing uniaxial stress is not possible with this material."</span><span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="HyperelasticAdvancedI2ExtendedMaterial.getResult">
 <a class="viewcode-back" href="../../../../documentation/materials.html#edelweissfe.materials.hyperelasticadvanced.hyperelasticadvancedi2extended.HyperelasticAdvancedI2ExtendedMaterial.getResult">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">getResult</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">result</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get the result, as a persistent view which is continiously</span>
+<span class="w">        </span><span class="sd">"""Get the result, as a persistent view which is continiously</span>
 <span class="sd">        updated by the material.</span>
 
 <span class="sd">        Parameters</span>
@@ -472,12 +457,12 @@
 <span class="sd">        -------</span>
 <span class="sd">        float</span>
 <span class="sd">            The result.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
+<span class="sd">        """</span>
 
-        <span class="k">if</span> <span class="n">result</span> <span class="o">==</span> <span class="s2">&quot;energy&quot;</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">result</span> <span class="o">==</span> <span class="s2">"energy"</span><span class="p">:</span>
             <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_energy</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s2">&quot;This result doesn&#39;t exist for the current material.&quot;</span><span class="p">)</span></div>
+            <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s2">"This result doesn't exist for the current material."</span><span class="p">)</span></div>
 </div>
 
 </pre></div>

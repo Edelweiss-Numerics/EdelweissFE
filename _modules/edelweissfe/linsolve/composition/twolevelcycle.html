@@ -1,0 +1,234 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>edelweissfe.linsolve.composition.twolevelcycle &mdash; EdelweissFE v22.07 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=cfdaff8d" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css?v=37fbe429" />
+
+  
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=17e2f33f"></script>
+      <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            EdelweissFE
+              <img src="../../../../_static/edelweiss_fe_logo.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../features.html">Features</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../prerequisites.html">Prerequisites</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../documentation/index.html">Documentation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../contributors.html">Contributors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../publications.html">Publications</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">EdelweissFE</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">edelweissfe.linsolve.composition.twolevelcycle</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for edelweissfe.linsolve.composition.twolevelcycle</h1><div class="highlight"><pre>
+<span></span><span class="ch">#!/usr/bin/env python3</span>
+<span class="c1"># -*- coding: utf-8 -*-</span>
+<span class="c1">#  ---------------------------------------------------------------------</span>
+<span class="c1">#</span>
+<span class="c1">#  _____    _      _              _         _____ _____</span>
+<span class="c1"># | ____|__| | ___| |_      _____(_)___ ___|  ___| ____|</span>
+<span class="c1"># |  _| / _` |/ _ \ \ \ /\ / / _ \ / __/ __| |_  |  _|</span>
+<span class="c1"># | |__| (_| |  __/ |\ V  V /  __/ \__ \__ \  _| | |___</span>
+<span class="c1"># |_____\__,_|\___|_| \_/\_/ \___|_|___/___/_|   |_____|</span>
+<span class="c1">#</span>
+<span class="c1">#</span>
+<span class="c1">#  Unit of Strength of Materials and Structural Analysis</span>
+<span class="c1">#  University of Innsbruck,</span>
+<span class="c1">#  2017 - today</span>
+<span class="c1">#</span>
+<span class="c1">#  Matthias Neuner matthias.neuner@uibk.ac.at</span>
+<span class="c1">#</span>
+<span class="c1">#  This library is free software; you can redistribute it and/or</span>
+<span class="c1">#  modify it under the terms of the GNU Lesser General Public</span>
+<span class="c1">#  License as published by the Free Software Foundation; either</span>
+<span class="c1">#  version 2.1 of the License, or (at your option) any later version.</span>
+<span class="c1">#</span>
+<span class="c1">#  The full text of the license can be found in the file LICENSE.md at</span>
+<span class="c1">#  the top level directory of EdelweissFE.</span>
+<span class="c1">#  ---------------------------------------------------------------------</span>
+<span class="sd">"""What the two-level cycles of a vector field (:class:`~edelweissfe.linsolve.composition.twolevel.TwoLevel`) share: the</span>
+<span class="sd">corner-node two-level cycle (:mod:`~edelweissfe.linsolve.composition.cornernodetwolevelcycle`) and the rigid-body coarse</span>
+<span class="sd">level (:mod:`~edelweissfe.linsolve.composition.rigidbodymodestwolevelcycle`).</span>
+
+<span class="sd">Both are one two-level cycle -- fine Chebyshev sweeps on the field's scaled block, and the coarse correction on the</span>
+<span class="sd">Galerkin coarse operator -- that differ in their coarse level and coarse solve: the rigid-body coarse level solves with</span>
+<span class="sd">an AMGCL hierarchy of its own, the corner-node two-level cycle with a component of the composed solver. Both are built</span>
+<span class="sd">and applied in C++: the shared cycle is ``TwoLevelCycle`` in ``amgcl-wrapper.hpp``, wrapped as ``_PyAMGCLTwoLevelCycle``</span>
+<span class="sd">in ``amgcl.pyx``. :class:`TwoLevelCycle` mirrors those bases here: it creates the C++ object, which validates</span>
+<span class="sd">every parameter, and passes the cycle, the fine spectral radius a build estimates, the timings and the report through.</span>
+<span class="sd">A derived class chooses the parameters and builds its coarse level, in its ``build``, from what that coarse level</span>
+<span class="sd">needs.</span>
+<span class="sd">"""</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+
+
+<div class="viewcode-block" id="TwoLevelCycle">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.twolevelcycle.TwoLevelCycle">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">TwoLevelCycle</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""A two-level preconditioner of one vector field's equilibrated diagonal block, built once per hierarchy refresh and</span>
+<span class="sd">    applied many times within the outer Krylov solve, with the ``build`` / ``applyPreconditioner`` life cycle of</span>
+<span class="sd">    :class:`~edelweissfe.linsolve.amgcl.amgcl.PyAMGCLSolver`.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    cppClass</span>
+<span class="sd">        The Cython class of the C++ preconditioner, created here from ``parameters``.</span>
+<span class="sd">    parameters</span>
+<span class="sd">        Its parameters, which its constructor checks -- the one place they are checked.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        For parameters the C++ class cannot use, before anything is built.</span>
+<span class="sd">    """</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">cppClass</span><span class="p">,</span> <span class="n">parameters</span><span class="p">:</span> <span class="nb">dict</span><span class="p">):</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_preconditioner</span> <span class="o">=</span> <span class="n">cppClass</span><span class="p">(</span><span class="n">parameters</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">RuntimeError</span> <span class="k">as</span> <span class="n">error</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">error</span><span class="p">))</span> <span class="kn">from</span><span class="w"> </span><span class="nn">error</span>
+
+<div class="viewcode-block" id="TwoLevelCycle.cycleParameters">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.twolevelcycle.TwoLevelCycle.cycleParameters">[docs]</a>
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">cycleParameters</span><span class="p">(</span><span class="n">amgclTree</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span> <span class="n">backendBlockSize</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">backendPrecision</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""The parameters of the cycle, in the one spelling both C++ classes read (``TwoLevelCycleParameters`` in</span>
+<span class="sd">        ``amgcl-wrapper.hpp``).</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        amgclTree</span>
+<span class="sd">            The field's AMGCL tree. Its ``relax`` (a Chebyshev polynomial, without Jacobi scaling), ``npre`` and</span>
+<span class="sd">            ``npost`` are the fine smoother, with AMGCL's defaults for what it leaves out; the default trees, the one</span>
+<span class="sd">            place of EdelweissFE's defaults, are :func:`~edelweissfe.linsolve.composition.amg.defaultFieldTree` and,</span>
+<span class="sd">            for the corner-node two-level cycle,</span>
+<span class="sd">            :func:`~edelweissfe.linsolve.composition.amg.defaultCornerNodeTwoLevelTree`.</span>
+<span class="sd">        backendBlockSize</span>
+<span class="sd">            The storage of the fine operator: ``1`` (scalar entries), or ``2``/``3`` (node-wise blocks of the field's</span>
+<span class="sd">            components: less memory traffic per product, the same cycle up to the order of summation).</span>
+<span class="sd">        backendPrecision</span>
+<span class="sd">            The value type of the stored fine operator and of :math:`P`, :math:`P^T`: ``"double"``, or ``"float"``</span>
+<span class="sd">            (not for 2x2 blocks) for half the bytes per entry; vectors and sums stay double, and the spectral radius</span>
+<span class="sd">            is estimated on the double operator.</span>
+<span class="sd">        """</span>
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="s2">"amgcl"</span><span class="p">:</span> <span class="n">amgclTree</span><span class="p">,</span>
+            <span class="s2">"backendBlockSize"</span><span class="p">:</span> <span class="n">backendBlockSize</span><span class="p">,</span>
+            <span class="s2">"backendPrecision"</span><span class="p">:</span> <span class="n">backendPrecision</span><span class="p">,</span>
+        <span class="p">}</span></div>
+
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">fineSpectralRadius</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The estimate of the fine spectral radius the smoother was built with: ``relax.spectralRadiusSteps`` Arnoldi</span>
+<span class="sd">        steps from a start vector seeded per row, zero on the Dirichlet rows (``amgcl-spectral-radius.hpp``)."""</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_preconditioner</span><span class="o">.</span><span class="n">fineSpectralRadius</span>
+
+<div class="viewcode-block" id="TwoLevelCycle.applyPreconditioner">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.twolevelcycle.TwoLevelCycle.applyPreconditioner">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">applyPreconditioner</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">r</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""One two-level cycle: fine Chebyshev sweeps and the coarse correction on the free dofs; the Dirichlet rows</span>
+<span class="sd">        are solved exactly, ``x[i] = r[i] / A[i, i]``."""</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_preconditioner</span><span class="o">.</span><span class="n">applyPreconditioner</span><span class="p">(</span><span class="n">r</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="TwoLevelCycle.timings">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.twolevelcycle.TwoLevelCycle.timings">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">timings</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Wall time [s] of the last build's stages and the cumulative apply (fine vs. coarse) -- kept measured, not</span>
+<span class="sd">        assumed, since the split decides where the next optimization goes."""</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_preconditioner</span><span class="o">.</span><span class="n">timings</span><span class="p">()</span></div>
+
+
+<div class="viewcode-block" id="TwoLevelCycle.report">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.twolevelcycle.TwoLevelCycle.report">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">report</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The coarse level in figures, and the report of its coarse solve (diagnostics, not a convergence gate)."""</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_preconditioner</span><span class="o">.</span><span class="n">report</span><span class="p">()</span></div>
+</div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Matthias Neuner.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

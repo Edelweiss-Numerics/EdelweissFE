@@ -1,0 +1,1152 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>edelweissfe.adaptivity.marking &mdash; EdelweissFE v22.07 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=cfdaff8d" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/custom.css?v=37fbe429" />
+
+  
+      <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../_static/documentation_options.js?v=17e2f33f"></script>
+      <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../index.html" class="icon icon-home">
+            EdelweissFE
+              <img src="../../../_static/edelweiss_fe_logo.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../features.html">Features</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../prerequisites.html">Prerequisites</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../documentation/index.html">Documentation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../contributors.html">Contributors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../publications.html">Publications</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">EdelweissFE</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">edelweissfe.adaptivity.marking</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for edelweissfe.adaptivity.marking</h1><div class="highlight"><pre>
+<span></span><span class="ch">#!/usr/bin/env python3</span>
+<span class="c1"># -*- coding: utf-8 -*-</span>
+<span class="c1">#  ---------------------------------------------------------------------</span>
+<span class="c1">#</span>
+<span class="c1">#  _____    _      _              _         _____ _____</span>
+<span class="c1"># | ____|__| | ___| |_      _____(_)___ ___|  ___| ____|</span>
+<span class="c1"># |  _| / _` |/ _ \ \ \ /\ / / _ \ / __/ __| |_  |  _|</span>
+<span class="c1"># | |__| (_| |  __/ |\ V  V /  __/ \__ \__ \  _| | |___</span>
+<span class="c1"># |_____\__,_|\___|_| \_/\_/ \___|_|___/___/_|   |_____|</span>
+<span class="c1">#</span>
+<span class="c1">#</span>
+<span class="c1">#  Unit of Strength of Materials and Structural Analysis</span>
+<span class="c1">#  University of Innsbruck,</span>
+<span class="c1">#  2017 - today</span>
+<span class="c1">#</span>
+<span class="c1">#  Matthias Neuner matthias.neuner@uibk.ac.at</span>
+<span class="c1">#</span>
+<span class="c1">#  This file is part of EdelweissFE.</span>
+<span class="c1">#</span>
+<span class="c1">#  This library is free software; you can redistribute it and/or</span>
+<span class="c1">#  modify it under the terms of the GNU Lesser General Public</span>
+<span class="c1">#  License as published by the Free Software Foundation; either</span>
+<span class="c1">#  version 2.1 of the License, or (at your option) any later version.</span>
+<span class="c1">#</span>
+<span class="c1">#  The full text of the license can be found in the file LICENSE.md at</span>
+<span class="c1">#  the top level directory of EdelweissFE.</span>
+<span class="c1">#  ---------------------------------------------------------------------</span>
+
+<span class="sd">"""Refinement marking (WS-G): the markers that decide which elements an adaptivity mechanism refines.</span>
+
+<span class="sd">Each marker is a small, registry-resolved policy object (see :mod:`edelweissfe.config.markerlibrary`)</span>
+<span class="sd">implementing :meth:`MarkerBase.mark`. Topological markers select from a set/surface; the</span>
+<span class="sd">:class:`FieldOutputMarker` thresholds a per-element quantity. Deliberately, a marker never re-derives</span>
+<span class="sd">a field quantity itself: the reduction (a magnitude, a principal stress via ``eigVal``, a norm, ...)</span>
+<span class="sd">lives in the referenced fieldOutput's own ``f(x)`` -- one first-class, reusable quantity -- and the</span>
+<span class="sd">marker only applies the refinement decision (a threshold) on top of it.</span>
+<span class="sd">"""</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">operator</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections</span><span class="w"> </span><span class="kn">import</span> <span class="n">defaultdict</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Collection</span><span class="p">,</span> <span class="n">Iterator</span><span class="p">,</span> <span class="n">Mapping</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.adaptivity.hex20shapefunctions</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">EDGES</span><span class="p">,</span>
+    <span class="n">LOCAL_COORDS</span><span class="p">,</span>
+    <span class="n">N_NODES</span><span class="p">,</span>
+    <span class="n">hex20_shape</span><span class="p">,</span>
+    <span class="n">hex20_shape_grad</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.utils.fieldoutput</span><span class="w"> </span><span class="kn">import</span> <span class="n">ElementFieldOutput</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.utils.schema</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">OptionSchemaProvider</span><span class="p">,</span>
+    <span class="n">buildSchemaFromOptions</span><span class="p">,</span>
+    <span class="n">schemaField</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="c1"># 2x2x2 Gauss points on [-1, 1]^3 with unit weights: the superconvergent points of the gradient of a</span>
+<span class="c1"># serendipity HEX20 (Zienkiewicz-Zhu). Shape functions are tabulated once at import time.</span>
+<span class="n">_GP_1D</span> <span class="o">=</span> <span class="mf">1.0</span> <span class="o">/</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="mf">3.0</span><span class="p">)</span>
+<span class="n">_GAUSS_POINTS</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span>
+    <span class="p">[(</span><span class="n">sx</span> <span class="o">*</span> <span class="n">_GP_1D</span><span class="p">,</span> <span class="n">sy</span> <span class="o">*</span> <span class="n">_GP_1D</span><span class="p">,</span> <span class="n">sz</span> <span class="o">*</span> <span class="n">_GP_1D</span><span class="p">)</span> <span class="k">for</span> <span class="n">sx</span> <span class="ow">in</span> <span class="p">(</span><span class="o">-</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">)</span> <span class="k">for</span> <span class="n">sy</span> <span class="ow">in</span> <span class="p">(</span><span class="o">-</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">)</span> <span class="k">for</span> <span class="n">sz</span> <span class="ow">in</span> <span class="p">(</span><span class="o">-</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">)],</span>
+    <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">_GP_N</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">hex20_shape</span><span class="p">(</span><span class="o">*</span><span class="n">gp</span><span class="p">)</span> <span class="k">for</span> <span class="n">gp</span> <span class="ow">in</span> <span class="n">_GAUSS_POINTS</span><span class="p">])</span>  <span class="c1"># (8, 20)  shape-fn values at Gauss points</span>
+<span class="n">_GP_DNDXI</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">hex20_shape_grad</span><span class="p">(</span><span class="o">*</span><span class="n">gp</span><span class="p">)[</span><span class="mi">1</span><span class="p">]</span> <span class="k">for</span> <span class="n">gp</span> <span class="ow">in</span> <span class="n">_GAUSS_POINTS</span><span class="p">])</span>  <span class="c1"># (8, 20, 3)  dN/dxi at Gauss points</span>
+<span class="n">_NODE_DNDXI</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">hex20_shape_grad</span><span class="p">(</span><span class="o">*</span><span class="n">p</span><span class="p">)[</span><span class="mi">1</span><span class="p">]</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">LOCAL_COORDS</span><span class="p">])</span>  <span class="c1"># (20, 20, 3)  dN/dxi at each node</span>
+
+<span class="c1"># HEX20 corner and edge topology for superconvergent patch recovery (SPR): patches are assembled at</span>
+<span class="c1"># the 8 corners, and each of the 12 edge midsides is recovered from its two corner patches.</span>
+<span class="n">_MID_LOCALS</span> <span class="o">=</span> <span class="p">{</span><span class="n">edge</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="k">for</span> <span class="n">edge</span> <span class="ow">in</span> <span class="n">EDGES</span><span class="p">}</span>  <span class="c1"># 12 edge-midside local indices</span>
+<span class="n">_CORNER_LOCALS</span> <span class="o">=</span> <span class="p">[</span><span class="n">i</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">N_NODES</span><span class="p">)</span> <span class="k">if</span> <span class="n">i</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">_MID_LOCALS</span><span class="p">]</span>  <span class="c1"># 8 corner local indices</span>
+<span class="n">_MID_EDGES</span> <span class="o">=</span> <span class="p">[(</span><span class="n">edge</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">edge</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">edge</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span> <span class="k">for</span> <span class="n">edge</span> <span class="ow">in</span> <span class="n">EDGES</span><span class="p">]</span>  <span class="c1"># (midLocal, cornerA_local, cornerB_local)</span>
+
+
+<span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">MarkerOptionsBase</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""L2 options common to every ``&gt;&gt;marker`` block, regardless of ``type``.</span>
+
+<span class="sd">    Each concrete marker's schema derives from this so that ``initialOnly`` -- the one option every</span>
+<span class="sd">    marker accepts -- is declared once. The ``type`` dispatch key itself is deliberately *not* a</span>
+<span class="sd">    field here: it is consumed by the adaptivity mechanism to resolve the marker class through the</span>
+<span class="sd">    :mod:`~edelweissfe.config.markerlibrary` registry, and is stripped before a marker validates the</span>
+<span class="sd">    remaining options against its own schema.</span>
+<span class="sd">    """</span>
+
+    <span class="n">initialOnly</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="n">schemaField</span><span class="p">(</span>
+        <span class="n">description</span><span class="o">=</span><span class="s2">"Evaluate the marker only once, at simulation start, instead of every increment."</span><span class="p">,</span>
+        <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">,</span>
+        <span class="n">default</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="p">)</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">RefineableElements</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""The elements a marker may mark, together with the node adjacency a refinement halo grows over.</span>
+
+<span class="sd">    A live view of the refineable mesh: iterating it walks the wrapped collection (typically the</span>
+<span class="sd">    adaptivity mechanism's ``dict.values()`` of its active elements) in that collection's own order,</span>
+<span class="sd">    so a marker sees exactly the elements, in exactly the order, it would see without this wrapper.</span>
+
+<span class="sd">    What it adds is :meth:`elementsAtNode`, the map from a node label to the refineable elements</span>
+<span class="sd">    touching that node. Building it walks every node of every element, which on a large mesh costs</span>
+<span class="sd">    far more than the marking itself, yet it only changes when the mesh does. It is therefore built</span>
+<span class="sd">    on first use and kept until the owner of the collection reports a change of the mesh via</span>
+<span class="sd">    :meth:`invalidateNodeAdjacency` -- a refinement, live or replayed on a restart, both of which</span>
+<span class="sd">    run through the same mesh mutation.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    elements</span>
+<span class="sd">        The refineable elements; read again on every iteration and on every rebuild of the</span>
+<span class="sd">        adjacency, so a live view stays current.</span>
+<span class="sd">    """</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">elements</span><span class="p">:</span> <span class="n">Collection</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_elements</span> <span class="o">=</span> <span class="n">elements</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_elementsAtNode</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__iter__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">:</span>
+        <span class="k">return</span> <span class="nb">iter</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_elements</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__len__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+        <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_elements</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">elementsAtNode</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The refineable elements touching each node, built once per mesh.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        dict</span>
+<span class="sd">            Node label -&gt; list of the refineable elements having that node, each list in the order</span>
+<span class="sd">            of iteration. Shared with every later caller until :meth:`invalidateNodeAdjacency`, so</span>
+<span class="sd">            it must not be modified.</span>
+<span class="sd">        """</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_elementsAtNode</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">elementsAtNode</span> <span class="o">=</span> <span class="n">defaultdict</span><span class="p">(</span><span class="nb">list</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">element</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_elements</span><span class="p">:</span>
+                <span class="k">for</span> <span class="n">node</span> <span class="ow">in</span> <span class="n">element</span><span class="o">.</span><span class="n">nodes</span><span class="p">:</span>
+                    <span class="n">elementsAtNode</span><span class="p">[</span><span class="n">node</span><span class="o">.</span><span class="n">label</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">element</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_elementsAtNode</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">elementsAtNode</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_elementsAtNode</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">invalidateNodeAdjacency</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Discard the node adjacency, because the mesh changed; the next query rebuilds it."""</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_elementsAtNode</span> <span class="o">=</span> <span class="kc">None</span>
+
+
+<span class="c1">#: The :meth:`~MarkerBase.selectionStamp` of a marker whose selection changes only with the model: its sets and</span>
+<span class="c1">#: surfaces, which a new model replaces. (``None``, by contrast, is the stamp of a marker that cannot tell.)</span>
+<span class="n">STABLE_FOR_THE_MODEL</span> <span class="o">=</span> <span class="p">()</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">MarkerBase</span><span class="p">(</span><span class="n">OptionSchemaProvider</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Base class for markers.</span>
+
+<span class="sd">    A marker selects elements: those to refine for adaptive mesh refinement, or those whose interior nodes</span>
+<span class="sd">    a Schur complement condenses (:mod:`~edelweissfe.linsolve.composition.schurcomplement`). It is resolved by</span>
+<span class="sd">    ``type`` through the L3 registry</span>
+<span class="sd">    (category ``marker``; see :mod:`edelweissfe.config.markerlibrary`) and constructed from its</span>
+<span class="sd">    ``&gt;&gt;marker`` block options via :meth:`fromOptions`, so *any* adaptivity mechanism -- not only the</span>
+<span class="sd">    HEX20 h-adaptivity model modifier -- can reuse the same marker library, and third-party packages</span>
+<span class="sd">    can contribute markers through entry points. Each concrete marker owns its option :attr:`schema`</span>
+<span class="sd">    (an :class:`MarkerOptionsBase` subclass), which both validates and documents its ``&gt;&gt;marker``</span>
+<span class="sd">    line, replacing the former flat union schema that jammed every marker's options together.</span>
+<span class="sd">    """</span>
+
+    <span class="c1">#: The L2 option schema for this marker's ``&gt;&gt;marker`` block, overridden per subclass.</span>
+    <span class="n">schema</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">initialOnly</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">initialOnly</span> <span class="o">=</span> <span class="n">initialOnly</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">checkReferences</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Raise if a set, surface or fieldOutput this marker reads does not exist in ``model``.</span>
+
+<span class="sd">        For a caller that knows all of them must exist when the run starts (e.g. the Schur</span>
+<span class="sd">        complement of a composed solver, see :mod:`edelweissfe.linsolve.composition.schurcomplement`), so that a typo fails at setup</span>
+<span class="sd">        instead of silently marking nothing. Nothing to check by default.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        model</span>
+<span class="sd">            The FEModel.</span>
+<span class="sd">        """</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">isReady</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Whether the marker has what it decides on, e.g. a fieldOutput result, which exists only after the first</span>
+<span class="sd">        converged increment. Always, by default.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        model</span>
+<span class="sd">            The FEModel.</span>
+<span class="sd">        """</span>
+        <span class="k">return</span> <span class="kc">True</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">selectionStamp</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""A value that changes whenever what :meth:`isReady` and :meth:`mark` read can change, other than the model</span>
+<span class="sd">        itself (its elements, sets and surfaces, which change only with a new model): :data:`STABLE_FOR_THE_MODEL`</span>
+<span class="sd">        for a marker that reads nothing else, or ``None`` if the marker cannot tell. A caller may keep a selection</span>
+<span class="sd">        while the stamp stays the same (the Schur complement of a composed solver does); ``None``, the default,</span>
+<span class="sd">        means: mark again.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        model</span>
+<span class="sd">            The FEModel.</span>
+<span class="sd">        """</span>
+        <span class="k">return</span> <span class="kc">None</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">mark</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">candidateElements</span><span class="p">:</span> <span class="n">RefineableElements</span><span class="p">,</span> <span class="n">mesh</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Select elements: those to refine, for adaptive mesh refinement.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        model</span>
+<span class="sd">            The FEModel, for the sets, surfaces, fields and fieldOutputs a marker reads.</span>
+<span class="sd">        candidateElements</span>
+<span class="sd">            The elements the marker may select (e.g. the refineable ones), with their node adjacency.</span>
+<span class="sd">        mesh</span>
+<span class="sd">            The adaptivity mechanism's mesh mirror; ``None`` outside adaptive refinement (no marker here reads it).</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        set</span>
+<span class="sd">            The selected elements.</span>
+<span class="sd">        """</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">()</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">fromOptions</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">options</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="s2">"MarkerBase"</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Construct this marker from its raw parsed ``&gt;&gt;marker`` options.</span>
+
+<span class="sd">        ``options`` is the ``&gt;&gt;marker`` block's option mapping with the ``type`` dispatch key already</span>
+<span class="sd">        removed (the adaptivity mechanism uses ``type`` to look the class up before calling this).</span>
+<span class="sd">        The options are validated and coerced against :attr:`schema` via</span>
+<span class="sd">        :func:`~edelweissfe.utils.schema.buildSchemaFromOptions`, then mapped onto the constructor.</span>
+<span class="sd">        """</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">()</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_perElementFieldOutput</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">fieldOutputName</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""The ``perElement`` fieldOutput ``fieldOutputName`` of ``model``; raises with an actionable message if it</span>
+<span class="sd">    is not defined or is not a ``perElement`` one."""</span>
+    <span class="n">fieldOutputController</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">fieldOutputController</span>
+    <span class="k">if</span> <span class="n">fieldOutputController</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">fieldOutputName</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">fieldOutputController</span><span class="o">.</span><span class="n">fieldOutputs</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"marker references fieldOutput </span><span class="si">{</span><span class="n">fieldOutputName</span><span class="si">!r}</span><span class="s2">, which is not "</span>
+            <span class="s2">"defined. Declare it under '*fieldOutput' (before the increment loop starts) so the "</span>
+            <span class="s2">"marker can look it up by name."</span>
+        <span class="p">)</span>
+    <span class="n">fieldOutput</span> <span class="o">=</span> <span class="n">fieldOutputController</span><span class="o">.</span><span class="n">fieldOutputs</span><span class="p">[</span><span class="n">fieldOutputName</span><span class="p">]</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">fieldOutput</span><span class="p">,</span> <span class="n">ElementFieldOutput</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"marker references fieldOutput </span><span class="si">{</span><span class="n">fieldOutputName</span><span class="si">!r}</span><span class="s2">, which is a "</span>
+            <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">fieldOutput</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">; only a 'perElement' fieldOutput exposes one result "</span>
+            <span class="s2">"row per element, as required for marking."</span>
+        <span class="p">)</span>
+    <span class="k">return</span> <span class="n">fieldOutput</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_perElementFieldOutputResult</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">fieldOutputName</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Resolve an already-declared ``perElement`` fieldOutput and return ``(elements, values)`` --</span>
+<span class="sd">    the element list (its associated set) and the last per-element result array ``(nElem, ...)``.</span>
+
+<span class="sd">    The fieldOutput *may* carry an ``f(x)``: that is precisely how a marker consumes a shaped</span>
+<span class="sd">    quantity -- a magnitude ``abs(x)``, a principal stress ``eigVal(...)``, a norm -- computed once in</span>
+<span class="sd">    the fieldOutput layer (where it is also reusable for output/monitoring) rather than re-derived</span>
+<span class="sd">    here. The only requirement is that it keeps one result row per element; an ``f(x)`` that collapses</span>
+<span class="sd">    the per-element axis is caught by the row-count check below. Raises with an actionable message if</span>
+<span class="sd">    the fieldOutput is missing, is not a ``perElement`` one, or reports a row count that does not match</span>
+<span class="sd">    its element set. Shared by every marker that drives refinement off a fieldOutput.</span>
+<span class="sd">    """</span>
+    <span class="n">fieldOutput</span> <span class="o">=</span> <span class="n">_perElementFieldOutput</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">fieldOutputName</span><span class="p">)</span>
+    <span class="n">elements</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">fieldOutput</span><span class="o">.</span><span class="n">associatedSet</span><span class="p">)</span>
+    <span class="n">values</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">fieldOutput</span><span class="o">.</span><span class="n">getLastResult</span><span class="p">())</span>
+
+    <span class="k">if</span> <span class="n">values</span><span class="o">.</span><span class="n">ndim</span> <span class="o">&lt;</span> <span class="mi">1</span> <span class="ow">or</span> <span class="n">values</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="n">elements</span><span class="p">):</span>
+        <span class="n">rowCount</span> <span class="o">=</span> <span class="n">values</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">if</span> <span class="n">values</span><span class="o">.</span><span class="n">ndim</span> <span class="o">&gt;=</span> <span class="mi">1</span> <span class="k">else</span> <span class="mi">0</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"marker: fieldOutput </span><span class="si">{</span><span class="n">fieldOutputName</span><span class="si">!r}</span><span class="s2"> reports </span><span class="si">{</span><span class="n">rowCount</span><span class="si">}</span><span class="s2"> "</span>
+            <span class="sa">f</span><span class="s2">"result row(s) (shape </span><span class="si">{</span><span class="n">values</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">) for </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">elements</span><span class="p">)</span><span class="si">}</span><span class="s2"> element(s) in its associated set; refusing to mark "</span>
+            <span class="s2">"against a mismatched fieldOutput."</span>
+        <span class="p">)</span>
+    <span class="k">return</span> <span class="n">elements</span><span class="p">,</span> <span class="n">values</span>
+
+
+<span class="c1"># Comparison operators a FieldOutputMarker may apply against its threshold, keyed by the input file string.</span>
+<span class="n">_COMPARISON_OPERATORS</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">"&gt;"</span><span class="p">:</span> <span class="n">operator</span><span class="o">.</span><span class="n">gt</span><span class="p">,</span>
+    <span class="s2">"&gt;="</span><span class="p">:</span> <span class="n">operator</span><span class="o">.</span><span class="n">ge</span><span class="p">,</span>
+    <span class="s2">"&lt;"</span><span class="p">:</span> <span class="n">operator</span><span class="o">.</span><span class="n">lt</span><span class="p">,</span>
+    <span class="s2">"&lt;="</span><span class="p">:</span> <span class="n">operator</span><span class="o">.</span><span class="n">le</span><span class="p">,</span>
+    <span class="s2">"=="</span><span class="p">:</span> <span class="n">operator</span><span class="o">.</span><span class="n">eq</span><span class="p">,</span>
+    <span class="s2">"!="</span><span class="p">:</span> <span class="n">operator</span><span class="o">.</span><span class="n">ne</span><span class="p">,</span>
+<span class="p">}</span>
+
+
+<span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">FieldOutputMarkerSchema</span><span class="p">(</span><span class="n">MarkerOptionsBase</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""L2 options of a ``&gt;&gt;marker, type=fieldOutput`` block."""</span>
+
+    <span class="n">fieldOutput</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">schemaField</span><span class="p">(</span>
+        <span class="n">description</span><span class="o">=</span><span class="p">(</span>
+            <span class="s2">"Name of an already-declared 'perElement' *fieldOutput to threshold. The *quantity* is "</span>
+            <span class="s2">"shaped by that fieldOutput's own 'f(x)' (e.g. 'abs(x)' for a magnitude, "</span>
+            <span class="s2">"'eigVal(x.reshape(-1,6))[:,0]...' for a principal stress); the marker only compares it."</span>
+        <span class="p">),</span>
+        <span class="n">dtype</span><span class="o">=</span><span class="nb">str</span><span class="p">,</span>
+        <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">required</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">threshold</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">schemaField</span><span class="p">(</span>
+        <span class="n">description</span><span class="o">=</span><span class="s2">"Value the fieldOutput result is compared against (element-wise, via 'operator')."</span><span class="p">,</span>
+        <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">,</span>
+        <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">required</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">operator</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">schemaField</span><span class="p">(</span>
+        <span class="n">description</span><span class="o">=</span><span class="s2">"Comparison against 'threshold', applied element-wise: one of &gt;, &gt;=, &lt;, &lt;=, ==, !=."</span><span class="p">,</span>
+        <span class="n">dtype</span><span class="o">=</span><span class="nb">str</span><span class="p">,</span>
+        <span class="n">default</span><span class="o">=</span><span class="s2">"&gt;="</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">halo</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">schemaField</span><span class="p">(</span>
+        <span class="n">description</span><span class="o">=</span><span class="p">(</span>
+            <span class="s2">"Number of rings of node-adjacent elements to add around the thresholded set (a buffer: "</span>
+            <span class="s2">"for refinement, e.g. to keep a localization band's flanks conforming with an interior that "</span>
+            <span class="s2">"has not yet crossed the threshold; for a Schur complement condensation, so that the nodes of "</span>
+            <span class="s2">"the thresholded zone become interior). Grows only within the candidate elements. "</span>
+            <span class="s2">"0 (default) disables."</span>
+        <span class="p">),</span>
+        <span class="n">dtype</span><span class="o">=</span><span class="nb">int</span><span class="p">,</span>
+        <span class="n">default</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+    <span class="p">)</span>
+
+
+<div class="viewcode-block" id="FieldOutputMarker">
+<a class="viewcode-back" href="../../../documentation/adaptivitytheory.html#edelweissfe.adaptivity.marking.FieldOutputMarker">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">FieldOutputMarker</span><span class="p">(</span><span class="n">MarkerBase</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Marks every element whose fieldOutput result satisfies ``value &lt;operator&gt; threshold`` at any</span>
+<span class="sd">    entry (any quadrature point / component).</span>
+
+<span class="sd">    The marker is a pure *threshold decision*: the quantity it compares is produced by the referenced</span>
+<span class="sd">    ``perElement`` fieldOutput -- either raw, or shaped by that fieldOutput's own ``f(x)`` (``abs(x)``</span>
+<span class="sd">    for a magnitude, ``eigVal`` for a principal stress, a norm, ...). Keeping the reduction in the</span>
+<span class="sd">    fieldOutput (where it is a first-class, reusable/visualizable quantity) and only the threshold</span>
+<span class="sd">    policy here is the division of labour -- the fieldOutput says *what* the quantity is, the marker</span>
+<span class="sd">    says *when* it is large enough to refine. Marking is driven by the exact numbers the fieldOutput</span>
+<span class="sd">    reports, and an element is marked if ``np.any`` of the comparison over its result row holds, so a</span>
+<span class="sd">    multi-QP / multi-component row is decided by its worst entry.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    halo</span>
+<span class="sd">        Number of rings of node-adjacent elements to add around the thresholded set (see</span>
+<span class="sd">        :func:`_growByNeighbors`), the same buffer mechanism as</span>
+<span class="sd">        :class:`RecoveryErrorMarker`'s own ``halo``. Applied after the threshold decision, so the</span>
+<span class="sd">        final marked count can exceed what the bare threshold would have produced. Grows only within</span>
+<span class="sd">        the refineable elements, so it never leaks onto elements outside ``refineElSet``. ``0``</span>
+<span class="sd">        (default) keeps the bare thresholded set.</span>
+<span class="sd">    """</span>
+
+    <span class="n">schema</span> <span class="o">=</span> <span class="n">FieldOutputMarkerSchema</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">fieldOutputName</span><span class="p">,</span> <span class="n">threshold</span><span class="p">,</span> <span class="n">operator</span><span class="o">=</span><span class="s2">"&gt;="</span><span class="p">,</span> <span class="n">halo</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">initialOnly</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">initialOnly</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">fieldOutputName</span> <span class="o">=</span> <span class="n">fieldOutputName</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">threshold</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">threshold</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">operator</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">_COMPARISON_OPERATORS</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"FieldOutputMarker: unknown operator </span><span class="si">{</span><span class="n">operator</span><span class="si">!r}</span><span class="s2">; expected one of "</span>
+                <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="s1">', '</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">_COMPARISON_OPERATORS</span><span class="p">)</span><span class="si">}</span><span class="s2">."</span>
+            <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">operator</span> <span class="o">=</span> <span class="n">operator</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_compare</span> <span class="o">=</span> <span class="n">_COMPARISON_OPERATORS</span><span class="p">[</span><span class="n">operator</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">halo</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">halo</span><span class="p">)</span>
+
+<div class="viewcode-block" id="FieldOutputMarker.fromOptions">
+<a class="viewcode-back" href="../../../documentation/adaptivitytheory.html#edelweissfe.adaptivity.marking.FieldOutputMarker.fromOptions">[docs]</a>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">fromOptions</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">options</span><span class="p">):</span>
+        <span class="n">opts</span> <span class="o">=</span> <span class="n">buildSchemaFromOptions</span><span class="p">(</span><span class="bp">cls</span><span class="o">.</span><span class="n">schema</span><span class="p">,</span> <span class="n">options</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span>
+            <span class="n">opts</span><span class="o">.</span><span class="n">fieldOutput</span><span class="p">,</span>
+            <span class="n">opts</span><span class="o">.</span><span class="n">threshold</span><span class="p">,</span>
+            <span class="n">operator</span><span class="o">=</span><span class="n">opts</span><span class="o">.</span><span class="n">operator</span><span class="p">,</span>
+            <span class="n">halo</span><span class="o">=</span><span class="n">opts</span><span class="o">.</span><span class="n">halo</span><span class="p">,</span>
+            <span class="n">initialOnly</span><span class="o">=</span><span class="n">opts</span><span class="o">.</span><span class="n">initialOnly</span><span class="p">,</span>
+        <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="FieldOutputMarker.checkReferences">
+<a class="viewcode-back" href="../../../documentation/adaptivitytheory.html#edelweissfe.adaptivity.marking.FieldOutputMarker.checkReferences">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">checkReferences</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">):</span>
+        <span class="n">_perElementFieldOutput</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">fieldOutputName</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="FieldOutputMarker.isReady">
+<a class="viewcode-back" href="../../../documentation/adaptivitytheory.html#edelweissfe.adaptivity.marking.FieldOutputMarker.isReady">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">isReady</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">_perElementFieldOutput</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">fieldOutputName</span><span class="p">)</span><span class="o">.</span><span class="n">hasResult</span><span class="p">()</span></div>
+
+
+<div class="viewcode-block" id="FieldOutputMarker.selectionStamp">
+<a class="viewcode-back" href="../../../documentation/adaptivitytheory.html#edelweissfe.adaptivity.marking.FieldOutputMarker.selectionStamp">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">selectionStamp</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">):</span>
+        <span class="c1"># the fieldOutput's result, which changes when the fieldOutput is updated (after a converged increment)</span>
+        <span class="n">fieldOutput</span> <span class="o">=</span> <span class="n">_perElementFieldOutput</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">fieldOutputName</span><span class="p">)</span>
+        <span class="k">return</span> <span class="p">(</span><span class="nb">id</span><span class="p">(</span><span class="n">fieldOutput</span><span class="p">),</span> <span class="n">fieldOutput</span><span class="o">.</span><span class="n">resultVersion</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="FieldOutputMarker.mark">
+<a class="viewcode-back" href="../../../documentation/adaptivitytheory.html#edelweissfe.adaptivity.marking.FieldOutputMarker.mark">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">mark</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">candidateElements</span><span class="p">,</span> <span class="n">mesh</span><span class="p">):</span>
+        <span class="n">elements</span><span class="p">,</span> <span class="n">values</span> <span class="o">=</span> <span class="n">_perElementFieldOutputResult</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">fieldOutputName</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">elements</span><span class="p">:</span>
+            <span class="k">return</span> <span class="nb">set</span><span class="p">()</span>
+        <span class="c1"># one comparison over all entries at once; an element is marked if any entry of its row holds</span>
+        <span class="n">entryHolds</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_compare</span><span class="p">(</span><span class="n">values</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">elements</span><span class="p">),</span> <span class="o">-</span><span class="mi">1</span><span class="p">),</span> <span class="bp">self</span><span class="o">.</span><span class="n">threshold</span><span class="p">)</span>
+        <span class="n">marked</span> <span class="o">=</span> <span class="p">{</span><span class="n">elements</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">np</span><span class="o">.</span><span class="n">flatnonzero</span><span class="p">(</span><span class="n">entryHolds</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">))}</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">halo</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="ow">and</span> <span class="n">marked</span><span class="p">:</span>
+            <span class="n">marked</span> <span class="o">=</span> <span class="n">_growByNeighbors</span><span class="p">(</span><span class="n">marked</span><span class="p">,</span> <span class="n">candidateElements</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">halo</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">marked</span></div>
+</div>
+
+
+
+<span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">ElementSetMarkerSchema</span><span class="p">(</span><span class="n">MarkerOptionsBase</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""L2 options of a ``&gt;&gt;marker, type=elementSet`` block."""</span>
+
+    <span class="n">elSet</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">schemaField</span><span class="p">(</span>
+        <span class="n">description</span><span class="o">=</span><span class="s2">"Element set whose members are marked for refinement."</span><span class="p">,</span>
+        <span class="n">dtype</span><span class="o">=</span><span class="nb">str</span><span class="p">,</span>
+        <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">required</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="p">)</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">ModelEntityMarker</span><span class="p">(</span><span class="n">MarkerBase</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""A marker of a named set or surface of the model, which changes only with the model: so its selection does,</span>
+<span class="sd">    and it can check up front that the model has the entity it names.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    entityName</span>
+<span class="sd">        The name of the set or surface.</span>
+<span class="sd">    """</span>
+
+    <span class="c1">#: What the marker names, in messages: ``"element set"``, ``"node set"`` or ``"surface"``.</span>
+    <span class="n">entityKind</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">entityName</span><span class="p">,</span> <span class="n">initialOnly</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">initialOnly</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">entityName</span> <span class="o">=</span> <span class="n">entityName</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_entities</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""The model's entities of this kind, by name (e.g. ``model.elementSets``)."""</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">()</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_markEntity</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">entity</span><span class="p">,</span> <span class="n">candidateElements</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">set</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The elements :meth:`mark` selects for the entity ``entity``."""</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">()</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">checkReferences</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">entityName</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_entities</span><span class="p">(</span><span class="n">model</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"marker references the </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">entityKind</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">entityName</span><span class="si">!r}</span><span class="s2">, which the model does not have"</span>
+            <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">selectionStamp</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">STABLE_FOR_THE_MODEL</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">mark</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">candidateElements</span><span class="p">,</span> <span class="n">mesh</span><span class="p">):</span>
+        <span class="n">entities</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_entities</span><span class="p">(</span><span class="n">model</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">entityName</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">entities</span><span class="p">:</span>
+            <span class="c1"># adaptive refinement checks no references (checkReferences): a name the model lacks marks nothing</span>
+            <span class="k">return</span> <span class="nb">set</span><span class="p">()</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_markEntity</span><span class="p">(</span><span class="n">entities</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">entityName</span><span class="p">],</span> <span class="n">candidateElements</span><span class="p">)</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">ElementSetMarker</span><span class="p">(</span><span class="n">ModelEntityMarker</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Marks the elements of an element set."""</span>
+
+    <span class="n">schema</span> <span class="o">=</span> <span class="n">ElementSetMarkerSchema</span>
+    <span class="n">entityKind</span> <span class="o">=</span> <span class="s2">"element set"</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">fromOptions</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">options</span><span class="p">):</span>
+        <span class="n">opts</span> <span class="o">=</span> <span class="n">buildSchemaFromOptions</span><span class="p">(</span><span class="bp">cls</span><span class="o">.</span><span class="n">schema</span><span class="p">,</span> <span class="n">options</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="n">opts</span><span class="o">.</span><span class="n">elSet</span><span class="p">,</span> <span class="n">initialOnly</span><span class="o">=</span><span class="n">opts</span><span class="o">.</span><span class="n">initialOnly</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_entities</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">model</span><span class="o">.</span><span class="n">elementSets</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_markEntity</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">entity</span><span class="p">,</span> <span class="n">candidateElements</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">set</span><span class="p">:</span>
+        <span class="k">return</span> <span class="nb">set</span><span class="p">(</span><span class="n">entity</span><span class="p">)</span>
+
+
+<span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">NodeSetMarkerSchema</span><span class="p">(</span><span class="n">MarkerOptionsBase</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""L2 options of a ``&gt;&gt;marker, type=nodeSet`` block."""</span>
+
+    <span class="n">nSet</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">schemaField</span><span class="p">(</span>
+        <span class="n">description</span><span class="o">=</span><span class="s2">"Node set whose touching elements are marked for refinement."</span><span class="p">,</span>
+        <span class="n">dtype</span><span class="o">=</span><span class="nb">str</span><span class="p">,</span>
+        <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">required</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="p">)</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">NodeSetMarker</span><span class="p">(</span><span class="n">ModelEntityMarker</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Marks the candidate elements that touch a node of a node set."""</span>
+
+    <span class="n">schema</span> <span class="o">=</span> <span class="n">NodeSetMarkerSchema</span>
+    <span class="n">entityKind</span> <span class="o">=</span> <span class="s2">"node set"</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">fromOptions</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">options</span><span class="p">):</span>
+        <span class="n">opts</span> <span class="o">=</span> <span class="n">buildSchemaFromOptions</span><span class="p">(</span><span class="bp">cls</span><span class="o">.</span><span class="n">schema</span><span class="p">,</span> <span class="n">options</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="n">opts</span><span class="o">.</span><span class="n">nSet</span><span class="p">,</span> <span class="n">initialOnly</span><span class="o">=</span><span class="n">opts</span><span class="o">.</span><span class="n">initialOnly</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_entities</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">model</span><span class="o">.</span><span class="n">nodeSets</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_markEntity</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">entity</span><span class="p">,</span> <span class="n">candidateElements</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">set</span><span class="p">:</span>
+        <span class="n">ns_nodes</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">entity</span><span class="o">.</span><span class="n">nodes</span><span class="p">)</span>
+        <span class="n">marked</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">el</span> <span class="ow">in</span> <span class="n">candidateElements</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">any</span><span class="p">(</span><span class="n">n</span> <span class="ow">in</span> <span class="n">ns_nodes</span> <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="n">el</span><span class="o">.</span><span class="n">nodes</span><span class="p">):</span>
+                <span class="n">marked</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">el</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">marked</span>
+
+
+<span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">SurfaceMarkerSchema</span><span class="p">(</span><span class="n">MarkerOptionsBase</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""L2 options of a ``&gt;&gt;marker, type=surface`` block."""</span>
+
+    <span class="n">surface</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">schemaField</span><span class="p">(</span>
+        <span class="n">description</span><span class="o">=</span><span class="s2">"Surface whose elements are marked for refinement."</span><span class="p">,</span>
+        <span class="n">dtype</span><span class="o">=</span><span class="nb">str</span><span class="p">,</span>
+        <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">required</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="p">)</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">SurfaceMarker</span><span class="p">(</span><span class="n">ModelEntityMarker</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Marks the elements of a surface."""</span>
+
+    <span class="n">schema</span> <span class="o">=</span> <span class="n">SurfaceMarkerSchema</span>
+    <span class="n">entityKind</span> <span class="o">=</span> <span class="s2">"surface"</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">fromOptions</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">options</span><span class="p">):</span>
+        <span class="n">opts</span> <span class="o">=</span> <span class="n">buildSchemaFromOptions</span><span class="p">(</span><span class="bp">cls</span><span class="o">.</span><span class="n">schema</span><span class="p">,</span> <span class="n">options</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="n">opts</span><span class="o">.</span><span class="n">surface</span><span class="p">,</span> <span class="n">initialOnly</span><span class="o">=</span><span class="n">opts</span><span class="o">.</span><span class="n">initialOnly</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_entities</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">model</span><span class="o">.</span><span class="n">surfaces</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_markEntity</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">entity</span><span class="p">,</span> <span class="n">candidateElements</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">set</span><span class="p">:</span>
+        <span class="n">marked</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+        <span class="c1"># a surface is a dict of faceID -&gt; list of elements</span>
+        <span class="k">for</span> <span class="n">elements</span> <span class="ow">in</span> <span class="n">entity</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+            <span class="k">for</span> <span class="n">el</span> <span class="ow">in</span> <span class="n">elements</span><span class="p">:</span>
+                <span class="n">marked</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">el</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">marked</span>
+
+
+<span class="c1"># A Rankine (max-principal-stress) criterion is a plain FieldOutputMarker on a stress fieldOutput:</span>
+<span class="c1">#     &gt;&gt;perElement, ..., result=stress, f(x)='eigVal(x.reshape(-1,6))[:,0].reshape(x.shape[0],x.shape[1])'</span>
+<span class="c1">#     &gt;&gt;marker, type=fieldOutput, fieldOutput=&lt;that output&gt;, operator='&gt;=', threshold=&lt;factor*f_t&gt;</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_sprPolynomialBasis</span><span class="p">(</span><span class="n">localCoords</span><span class="p">,</span> <span class="n">order</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Complete polynomial basis (3D) evaluated at ``localCoords`` (shape ``(n, 3)``, relative to a</span>
+<span class="sd">    patch centre). ``order=0`` -&gt; ``[1]`` (1 term); ``order=1`` -&gt; that plus ``[x, y, z]`` (4 terms);</span>
+<span class="sd">    ``order=2`` -&gt; that plus ``[x^2, y^2, z^2, xy, yz, zx]`` (10 terms)."""</span>
+    <span class="n">ones</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">((</span><span class="nb">len</span><span class="p">(</span><span class="n">localCoords</span><span class="p">),</span> <span class="mi">1</span><span class="p">))</span>
+    <span class="k">if</span> <span class="n">order</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">ones</span>
+    <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">z</span> <span class="o">=</span> <span class="n">localCoords</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">:</span><span class="mi">1</span><span class="p">],</span> <span class="n">localCoords</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">:</span><span class="mi">2</span><span class="p">],</span> <span class="n">localCoords</span><span class="p">[:,</span> <span class="mi">2</span><span class="p">:</span><span class="mi">3</span><span class="p">]</span>
+    <span class="k">if</span> <span class="n">order</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">([</span><span class="n">ones</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">z</span><span class="p">],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">([</span><span class="n">ones</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">z</span><span class="p">,</span> <span class="n">x</span> <span class="o">*</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span> <span class="o">*</span> <span class="n">y</span><span class="p">,</span> <span class="n">z</span> <span class="o">*</span> <span class="n">z</span><span class="p">,</span> <span class="n">x</span> <span class="o">*</span> <span class="n">y</span><span class="p">,</span> <span class="n">y</span> <span class="o">*</span> <span class="n">z</span><span class="p">,</span> <span class="n">z</span> <span class="o">*</span> <span class="n">x</span><span class="p">],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_recoverAveraging</span><span class="p">(</span><span class="n">coordsAll</span><span class="p">,</span> <span class="n">valuesAll</span><span class="p">,</span> <span class="n">connectivity</span><span class="p">,</span> <span class="n">nGlobalNodes</span><span class="p">,</span> <span class="n">dim</span><span class="p">,</span> <span class="n">volume</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Volume-weighted nodal averaging recovery (ZZ 1987): the recovered nodal gradient is the</span>
+<span class="sd">    volume-weighted mean of the FE gradient sampled at that node by every element sharing it.</span>
+<span class="sd">    Returns ``(recovered (nGlobalNodes, dim, 3), hasRecovery (nGlobalNodes,))``."""</span>
+    <span class="n">jacobianNode</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span><span class="s2">"ebi,abj-&gt;eaij"</span><span class="p">,</span> <span class="n">coordsAll</span><span class="p">,</span> <span class="n">_NODE_DNDXI</span><span class="p">)</span>  <span class="c1"># (nElem, 20, 3, 3)</span>
+    <span class="n">paramGradNode</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span><span class="s2">"ebd,abj-&gt;eadj"</span><span class="p">,</span> <span class="n">valuesAll</span><span class="p">,</span> <span class="n">_NODE_DNDXI</span><span class="p">)</span>  <span class="c1"># (nElem, 20, dim, 3)</span>
+    <span class="n">gradAtNode</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span><span class="s2">"eadj,eaji-&gt;eadi"</span><span class="p">,</span> <span class="n">paramGradNode</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">inv</span><span class="p">(</span><span class="n">jacobianNode</span><span class="p">))</span>  <span class="c1"># (nElem, 20, dim, 3)</span>
+
+    <span class="n">weight</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">volume</span> <span class="o">&gt;</span> <span class="mf">0.0</span><span class="p">,</span> <span class="n">volume</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span>  <span class="c1"># (nElem,) drop any inverted/degenerate element</span>
+    <span class="n">flatConnectivity</span> <span class="o">=</span> <span class="n">connectivity</span><span class="o">.</span><span class="n">ravel</span><span class="p">()</span>
+    <span class="n">recoveredSum</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">nGlobalNodes</span><span class="p">,</span> <span class="n">dim</span><span class="p">,</span> <span class="mi">3</span><span class="p">))</span>
+    <span class="n">recoveredWeight</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">nGlobalNodes</span><span class="p">)</span>
+    <span class="n">np</span><span class="o">.</span><span class="n">add</span><span class="o">.</span><span class="n">at</span><span class="p">(</span><span class="n">recoveredSum</span><span class="p">,</span> <span class="n">flatConnectivity</span><span class="p">,</span> <span class="p">(</span><span class="n">weight</span><span class="p">[:,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">]</span> <span class="o">*</span> <span class="n">gradAtNode</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">dim</span><span class="p">,</span> <span class="mi">3</span><span class="p">))</span>
+    <span class="n">np</span><span class="o">.</span><span class="n">add</span><span class="o">.</span><span class="n">at</span><span class="p">(</span><span class="n">recoveredWeight</span><span class="p">,</span> <span class="n">flatConnectivity</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">repeat</span><span class="p">(</span><span class="n">weight</span><span class="p">,</span> <span class="n">N_NODES</span><span class="p">))</span>
+    <span class="n">hasRecovery</span> <span class="o">=</span> <span class="n">recoveredWeight</span> <span class="o">&gt;</span> <span class="mf">0.0</span>
+    <span class="n">recovered</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">nGlobalNodes</span><span class="p">,</span> <span class="n">dim</span><span class="p">,</span> <span class="mi">3</span><span class="p">))</span>
+    <span class="n">recovered</span><span class="p">[</span><span class="n">hasRecovery</span><span class="p">]</span> <span class="o">=</span> <span class="n">recoveredSum</span><span class="p">[</span><span class="n">hasRecovery</span><span class="p">]</span> <span class="o">/</span> <span class="n">recoveredWeight</span><span class="p">[</span><span class="n">hasRecovery</span><span class="p">][:,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">]</span>
+    <span class="k">return</span> <span class="n">recovered</span><span class="p">,</span> <span class="n">hasRecovery</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_recoverSpr</span><span class="p">(</span><span class="n">coordsAll</span><span class="p">,</span> <span class="n">connectivity</span><span class="p">,</span> <span class="n">nGlobalNodes</span><span class="p">,</span> <span class="n">dim</span><span class="p">,</span> <span class="n">gaussCoords</span><span class="p">,</span> <span class="n">gradGauss</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Superconvergent patch recovery (Zienkiewicz-Zhu 1992). For each corner (vertex) node a least-</span>
+<span class="sd">    squares polynomial is fitted to the FE gradient at the superconvergent Gauss points of the patch</span>
+<span class="sd">    of elements sharing that node; the recovered corner value is the fit at the node. Each edge</span>
+<span class="sd">    midside node is recovered by averaging the two corner-endpoint patch fits evaluated at its</span>
+<span class="sd">    location. Returns ``(recovered (nGlobalNodes, dim, 3), hasRecovery (nGlobalNodes,))``.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    gaussCoords</span>
+<span class="sd">        ``(nElem, 8, 3)`` physical coordinates of each element's Gauss points.</span>
+<span class="sd">    gradGauss</span>
+<span class="sd">        ``(nElem, 8, dim, 3)`` FE gradient at those Gauss points.</span>
+<span class="sd">    """</span>
+    <span class="n">nComponents</span> <span class="o">=</span> <span class="n">dim</span> <span class="o">*</span> <span class="mi">3</span>
+    <span class="n">gaussCoords</span> <span class="o">=</span> <span class="n">gaussCoords</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
+    <span class="n">gaussValues</span> <span class="o">=</span> <span class="n">gradGauss</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="n">nComponents</span><span class="p">)</span>
+
+    <span class="c1"># global node coordinates, corner patches, and edge (midside -&gt; two corners) topology</span>
+    <span class="n">nodeCoords</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">nGlobalNodes</span><span class="p">,</span> <span class="mi">3</span><span class="p">))</span>
+    <span class="n">seen</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">nGlobalNodes</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">)</span>
+    <span class="n">cornerElements</span> <span class="o">=</span> <span class="n">defaultdict</span><span class="p">(</span><span class="nb">list</span><span class="p">)</span>  <span class="c1"># global corner node -&gt; element indices sharing it</span>
+    <span class="n">edgeCorners</span> <span class="o">=</span> <span class="p">{}</span>  <span class="c1"># global midside node -&gt; (global cornerA, global cornerB)</span>
+    <span class="k">for</span> <span class="n">e</span><span class="p">,</span> <span class="n">conn</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">connectivity</span><span class="p">):</span>
+        <span class="k">for</span> <span class="n">a</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">N_NODES</span><span class="p">):</span>
+            <span class="n">g</span> <span class="o">=</span> <span class="n">conn</span><span class="p">[</span><span class="n">a</span><span class="p">]</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">seen</span><span class="p">[</span><span class="n">g</span><span class="p">]:</span>
+                <span class="n">nodeCoords</span><span class="p">[</span><span class="n">g</span><span class="p">]</span> <span class="o">=</span> <span class="n">coordsAll</span><span class="p">[</span><span class="n">e</span><span class="p">,</span> <span class="n">a</span><span class="p">]</span>
+                <span class="n">seen</span><span class="p">[</span><span class="n">g</span><span class="p">]</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="k">for</span> <span class="n">cornerLocal</span> <span class="ow">in</span> <span class="n">_CORNER_LOCALS</span><span class="p">:</span>
+            <span class="n">cornerElements</span><span class="p">[</span><span class="n">conn</span><span class="p">[</span><span class="n">cornerLocal</span><span class="p">]]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">e</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">midLocal</span><span class="p">,</span> <span class="n">cornerA</span><span class="p">,</span> <span class="n">cornerB</span> <span class="ow">in</span> <span class="n">_MID_EDGES</span><span class="p">:</span>
+            <span class="n">edgeCorners</span><span class="p">[</span><span class="n">conn</span><span class="p">[</span><span class="n">midLocal</span><span class="p">]]</span> <span class="o">=</span> <span class="p">(</span><span class="n">conn</span><span class="p">[</span><span class="n">cornerA</span><span class="p">],</span> <span class="n">conn</span><span class="p">[</span><span class="n">cornerB</span><span class="p">])</span>
+
+    <span class="c1"># fit one polynomial per corner patch; the value at the corner is the constant term (the fit is</span>
+    <span class="c1"># centred on the corner, so the basis reduces to [1, 0, ...] there)</span>
+    <span class="n">cornerFit</span> <span class="o">=</span> <span class="p">{}</span>  <span class="c1"># global corner -&gt; (order, coeffs (nBasis, nComponents))</span>
+    <span class="n">recovered</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">nGlobalNodes</span><span class="p">,</span> <span class="n">dim</span><span class="p">,</span> <span class="mi">3</span><span class="p">))</span>
+    <span class="k">for</span> <span class="n">corner</span><span class="p">,</span> <span class="n">elements</span> <span class="ow">in</span> <span class="n">cornerElements</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="n">elements</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">elements</span><span class="p">)</span>
+        <span class="n">sampleCoords</span> <span class="o">=</span> <span class="n">gaussCoords</span><span class="p">[</span><span class="n">elements</span><span class="p">]</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span> <span class="o">-</span> <span class="n">nodeCoords</span><span class="p">[</span><span class="n">corner</span><span class="p">]</span>
+        <span class="n">sampleValues</span> <span class="o">=</span> <span class="n">gaussValues</span><span class="p">[</span><span class="n">elements</span><span class="p">]</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">nComponents</span><span class="p">)</span>
+        <span class="n">nSamples</span> <span class="o">=</span> <span class="n">sampleCoords</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">order</span> <span class="o">=</span> <span class="mi">2</span> <span class="k">if</span> <span class="n">nSamples</span> <span class="o">&gt;=</span> <span class="mi">10</span> <span class="k">else</span> <span class="p">(</span><span class="mi">1</span> <span class="k">if</span> <span class="n">nSamples</span> <span class="o">&gt;=</span> <span class="mi">4</span> <span class="k">else</span> <span class="mi">0</span><span class="p">)</span>
+        <span class="n">basis</span> <span class="o">=</span> <span class="n">_sprPolynomialBasis</span><span class="p">(</span><span class="n">sampleCoords</span><span class="p">,</span> <span class="n">order</span><span class="p">)</span>
+        <span class="n">coeffs</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">lstsq</span><span class="p">(</span><span class="n">basis</span><span class="p">,</span> <span class="n">sampleValues</span><span class="p">,</span> <span class="n">rcond</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>  <span class="c1"># (nBasis, nComponents)</span>
+        <span class="n">cornerFit</span><span class="p">[</span><span class="n">corner</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="n">order</span><span class="p">,</span> <span class="n">coeffs</span><span class="p">)</span>
+        <span class="n">recovered</span><span class="p">[</span><span class="n">corner</span><span class="p">]</span> <span class="o">=</span> <span class="n">coeffs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">dim</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
+
+    <span class="c1"># midside nodes: average of the adjacent corner patches, each evaluated at the midside location</span>
+    <span class="n">hasRecovery</span> <span class="o">=</span> <span class="n">seen</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+    <span class="k">for</span> <span class="n">midside</span><span class="p">,</span> <span class="p">(</span><span class="n">cornerA</span><span class="p">,</span> <span class="n">cornerB</span><span class="p">)</span> <span class="ow">in</span> <span class="n">edgeCorners</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="n">values</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">corner</span> <span class="ow">in</span> <span class="p">(</span><span class="n">cornerA</span><span class="p">,</span> <span class="n">cornerB</span><span class="p">):</span>
+            <span class="n">fit</span> <span class="o">=</span> <span class="n">cornerFit</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">corner</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">fit</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">order</span><span class="p">,</span> <span class="n">coeffs</span> <span class="o">=</span> <span class="n">fit</span>
+                <span class="n">basis</span> <span class="o">=</span> <span class="n">_sprPolynomialBasis</span><span class="p">((</span><span class="n">nodeCoords</span><span class="p">[</span><span class="n">midside</span><span class="p">]</span> <span class="o">-</span> <span class="n">nodeCoords</span><span class="p">[</span><span class="n">corner</span><span class="p">])[</span><span class="kc">None</span><span class="p">,</span> <span class="p">:],</span> <span class="n">order</span><span class="p">)</span>
+                <span class="n">values</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">basis</span> <span class="o">@</span> <span class="n">coeffs</span><span class="p">)</span><span class="o">.</span><span class="n">ravel</span><span class="p">())</span>
+        <span class="k">if</span> <span class="n">values</span><span class="p">:</span>
+            <span class="n">recovered</span><span class="p">[</span><span class="n">midside</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">values</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">dim</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">hasRecovery</span><span class="p">[</span><span class="n">midside</span><span class="p">]</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="k">return</span> <span class="n">recovered</span><span class="p">,</span> <span class="n">hasRecovery</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_recoveryIndicators</span><span class="p">(</span><span class="n">coordsAll</span><span class="p">,</span> <span class="n">valuesAll</span><span class="p">,</span> <span class="n">connectivity</span><span class="p">,</span> <span class="n">nGlobalNodes</span><span class="p">,</span> <span class="n">recovery</span><span class="o">=</span><span class="s2">"averaging"</span><span class="p">):</span>
+<span class="w">    </span><span class="sa">r</span><span class="sd">"""Zienkiewicz-Zhu recovered-gradient error indicator, over all elements at once.</span>
+
+<span class="sd">    The FE gradient at the 2x2x2 Gauss points and the final error norm are batched into single</span>
+<span class="sd">    ``numpy`` calls; the recovery of the continuous gradient ``grad*`` is delegated to</span>
+<span class="sd">    :func:`_recoverAveraging` (``recovery='averaging'``) or :func:`_recoverSpr` (``'spr'``).</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    coordsAll</span>
+<span class="sd">        ``(nElem, 20, 3)`` node coordinates of each element, in C3D20 order.</span>
+<span class="sd">    valuesAll</span>
+<span class="sd">        ``(nElem, 20, dim)`` nodal values of the recovered field on each element.</span>
+<span class="sd">    connectivity</span>
+<span class="sd">        ``(nElem, 20)`` compact global node index of each element node, so nodes shared between</span>
+<span class="sd">        elements accumulate into the same recovery slot.</span>
+<span class="sd">    nGlobalNodes</span>
+<span class="sd">        Number of distinct global nodes referenced by ``connectivity``.</span>
+<span class="sd">    recovery</span>
+<span class="sd">        ``'averaging'`` (nodal averaging) or ``'spr'`` (superconvergent patch recovery).</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    tuple[np.ndarray, np.ndarray]</span>
+<span class="sd">        ``indicators`` ``(nElem,)`` :math:`\eta_K = \lVert \nabla u^{*} - \nabla u^{h} \rVert_{L^2(K)}`</span>
+<span class="sd">        and ``gradEnergy`` ``(nElem,)`` :math:`\lVert \nabla u^{h} \rVert_{L^2(K)}^2` -- the FE-gradient</span>
+<span class="sd">        energy, used as the reference scale for the global relative error that gates marking (so a</span>
+<span class="sd">        smooth, well-resolved field, whose indicators are pure floating-point noise, marks nothing).</span>
+<span class="sd">    """</span>
+    <span class="n">dim</span> <span class="o">=</span> <span class="n">valuesAll</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span>
+
+    <span class="c1"># FE gradient at the 2x2x2 Gauss points (grad^h) and the element volumes</span>
+    <span class="n">jacobianGauss</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span><span class="s2">"eai,gaj-&gt;egij"</span><span class="p">,</span> <span class="n">coordsAll</span><span class="p">,</span> <span class="n">_GP_DNDXI</span><span class="p">)</span>  <span class="c1"># (nElem, 8, 3, 3): dx_i/dxi_j</span>
+    <span class="n">detJGauss</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">det</span><span class="p">(</span><span class="n">jacobianGauss</span><span class="p">)</span>  <span class="c1"># (nElem, 8)</span>
+    <span class="n">paramGradGauss</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span><span class="s2">"ead,gaj-&gt;egdj"</span><span class="p">,</span> <span class="n">valuesAll</span><span class="p">,</span> <span class="n">_GP_DNDXI</span><span class="p">)</span>  <span class="c1"># (nElem, 8, dim, 3): du_d/dxi_j</span>
+    <span class="n">gradH</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span><span class="s2">"egdj,egji-&gt;egdi"</span><span class="p">,</span> <span class="n">paramGradGauss</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">inv</span><span class="p">(</span><span class="n">jacobianGauss</span><span class="p">))</span>  <span class="c1"># (nElem, 8, dim, 3)</span>
+    <span class="n">volume</span> <span class="o">=</span> <span class="n">detJGauss</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>  <span class="c1"># (nElem,)</span>
+    <span class="n">detJPos</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">detJGauss</span> <span class="o">&gt;</span> <span class="mf">0.0</span><span class="p">,</span> <span class="n">detJGauss</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span>  <span class="c1"># (nElem, 8) drop inverted-element Gauss points</span>
+
+    <span class="c1"># || grad^h ||^2_L2(K): the field's own gradient energy, the reference scale for the relative error</span>
+    <span class="n">gradEnergy</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">detJPos</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">gradH</span><span class="o">**</span><span class="mi">2</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">)),</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>  <span class="c1"># (nElem,)</span>
+
+    <span class="k">if</span> <span class="n">recovery</span> <span class="o">==</span> <span class="s2">"spr"</span><span class="p">:</span>
+        <span class="n">gaussCoords</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span><span class="s2">"ga,ead-&gt;egd"</span><span class="p">,</span> <span class="n">_GP_N</span><span class="p">,</span> <span class="n">coordsAll</span><span class="p">)</span>  <span class="c1"># (nElem, 8, 3) physical Gauss coords</span>
+        <span class="n">recovered</span><span class="p">,</span> <span class="n">hasRecovery</span> <span class="o">=</span> <span class="n">_recoverSpr</span><span class="p">(</span><span class="n">coordsAll</span><span class="p">,</span> <span class="n">connectivity</span><span class="p">,</span> <span class="n">nGlobalNodes</span><span class="p">,</span> <span class="n">dim</span><span class="p">,</span> <span class="n">gaussCoords</span><span class="p">,</span> <span class="n">gradH</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">recovered</span><span class="p">,</span> <span class="n">hasRecovery</span> <span class="o">=</span> <span class="n">_recoverAveraging</span><span class="p">(</span><span class="n">coordsAll</span><span class="p">,</span> <span class="n">valuesAll</span><span class="p">,</span> <span class="n">connectivity</span><span class="p">,</span> <span class="n">nGlobalNodes</span><span class="p">,</span> <span class="n">dim</span><span class="p">,</span> <span class="n">volume</span><span class="p">)</span>
+
+    <span class="c1"># eta_K = || grad* - grad^h ||_{L2(K)}, integrated at the Gauss points</span>
+    <span class="n">gradStar</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span><span class="s2">"ga,eadi-&gt;egdi"</span><span class="p">,</span> <span class="n">_GP_N</span><span class="p">,</span> <span class="n">recovered</span><span class="p">[</span><span class="n">connectivity</span><span class="p">])</span>  <span class="c1"># (nElem, 8, dim, 3)</span>
+    <span class="n">perGauss</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">((</span><span class="n">gradStar</span> <span class="o">-</span> <span class="n">gradH</span><span class="p">)</span> <span class="o">**</span> <span class="mi">2</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">))</span>  <span class="c1"># (nElem, 8)</span>
+    <span class="n">errorSq</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">detJPos</span> <span class="o">*</span> <span class="n">perGauss</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>  <span class="c1"># (nElem,)</span>
+    <span class="c1"># an element touching a node that never received a recovered value (all its elements degenerate)</span>
+    <span class="c1"># cannot be scored; leave its indicator at zero</span>
+    <span class="n">errorSq</span><span class="p">[</span><span class="o">~</span><span class="n">hasRecovery</span><span class="p">[</span><span class="n">connectivity</span><span class="p">]</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)]</span> <span class="o">=</span> <span class="mf">0.0</span>
+    <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">errorSq</span><span class="p">),</span> <span class="n">gradEnergy</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_growByNeighbors</span><span class="p">(</span><span class="n">seed</span><span class="p">,</span> <span class="n">candidatePool</span><span class="p">:</span> <span class="n">RefineableElements</span><span class="p">,</span> <span class="n">layers</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Dilate ``seed`` by ``layers`` rings of node-adjacent elements drawn from ``candidatePool``.</span>
+
+<span class="sd">    Two elements are neighbours if they share at least one node (a node-adjacency, so it also picks up</span>
+<span class="sd">    edge/corner touches, not only shared faces -- the coarser stencil is what a refinement halo wants).</span>
+<span class="sd">    Returns a new ``set`` containing ``seed`` plus the grown ring; ``candidatePool`` bounds the growth</span>
+<span class="sd">    so the halo can never leak onto non-refineable elements. Its node adjacency is reused from earlier</span>
+<span class="sd">    calls on the same mesh (see :class:`RefineableElements`).</span>
+<span class="sd">    """</span>
+    <span class="k">if</span> <span class="n">layers</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">return</span> <span class="nb">set</span><span class="p">(</span><span class="n">seed</span><span class="p">)</span>
+    <span class="n">elementsAtNode</span> <span class="o">=</span> <span class="n">candidatePool</span><span class="o">.</span><span class="n">elementsAtNode</span><span class="p">()</span>
+    <span class="n">noElements</span> <span class="o">=</span> <span class="p">()</span>
+    <span class="n">grown</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">seed</span><span class="p">)</span>
+    <span class="n">frontier</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">seed</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">layers</span><span class="p">):</span>
+        <span class="n">nextFrontier</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">element</span> <span class="ow">in</span> <span class="n">frontier</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">node</span> <span class="ow">in</span> <span class="n">element</span><span class="o">.</span><span class="n">nodes</span><span class="p">:</span>
+                <span class="k">for</span> <span class="n">neighbor</span> <span class="ow">in</span> <span class="n">elementsAtNode</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">node</span><span class="o">.</span><span class="n">label</span><span class="p">,</span> <span class="n">noElements</span><span class="p">):</span>
+                    <span class="k">if</span> <span class="n">neighbor</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">grown</span><span class="p">:</span>
+                        <span class="n">grown</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">neighbor</span><span class="p">)</span>
+                        <span class="n">nextFrontier</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">neighbor</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">nextFrontier</span><span class="p">:</span>
+            <span class="k">break</span>
+        <span class="n">frontier</span> <span class="o">=</span> <span class="n">nextFrontier</span>
+    <span class="k">return</span> <span class="n">grown</span>
+
+
+<span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">RecoveryErrorMarkerSchema</span><span class="p">(</span><span class="n">MarkerOptionsBase</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""L2 options of a ``&gt;&gt;marker, type=recoveryError`` block."""</span>
+
+    <span class="n">nodeField</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">schemaField</span><span class="p">(</span>
+        <span class="n">description</span><span class="o">=</span><span class="p">(</span>
+            <span class="s2">"Name of the nodal field whose recovered-gradient (Zienkiewicz-Zhu) error drives "</span>
+            <span class="s2">"marking, e.g. 'nonlocal damage'."</span>
+        <span class="p">),</span>
+        <span class="n">dtype</span><span class="o">=</span><span class="nb">str</span><span class="p">,</span>
+        <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">required</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">markFraction</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">schemaField</span><span class="p">(</span>
+        <span class="n">description</span><span class="o">=</span><span class="p">(</span>
+            <span class="s2">"Doerfler bulk-marking fraction theta in (0, 1]; refine the worst elements accumulating "</span>
+            <span class="s2">"this fraction of the total squared error."</span>
+        <span class="p">),</span>
+        <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">,</span>
+        <span class="n">default</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">maxRefinedFraction</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">schemaField</span><span class="p">(</span>
+        <span class="n">description</span><span class="o">=</span><span class="p">(</span>
+            <span class="s2">"Hard cap on the fraction of elements a single pass may mark (bounds the direct-solver "</span>
+            <span class="s2">"factorization cost). Note that a non-zero 'halo' adds neighbor rings around these marks "</span>
+            <span class="s2">"and can increase the final count beyond this fraction. Refinement may also be deferred "</span>
+            <span class="s2">"across increments until 'minMarkedElements' accumulate at the model-modifier level."</span>
+        <span class="p">),</span>
+        <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">,</span>
+        <span class="n">default</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">fieldThreshold</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">schemaField</span><span class="p">(</span>
+        <span class="n">description</span><span class="o">=</span><span class="p">(</span>
+            <span class="s2">"Absolute floor on the peak nodal |field| per element; an element is a refinement "</span>
+            <span class="s2">"candidate only where the driving field is significant. This is what keeps the elastic "</span>
+            <span class="s2">"phase (nonlocal field at machine zero) from being refined -- set it to a small fraction "</span>
+            <span class="s2">"of the field value at damage initiation. 0 disables."</span>
+        <span class="p">),</span>
+        <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">,</span>
+        <span class="n">default</span><span class="o">=</span><span class="mf">1e-6</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">relTol</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">schemaField</span><span class="p">(</span>
+        <span class="n">description</span><span class="o">=</span><span class="p">(</span>
+            <span class="s2">"Global relative-error threshold applied among the significant elements; while "</span>
+            <span class="s2">"||eta|| / ||grad|| stays below it the field is treated as well resolved and nothing is "</span>
+            <span class="s2">"refined. 0 disables."</span>
+        <span class="p">),</span>
+        <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">,</span>
+        <span class="n">default</span><span class="o">=</span><span class="mf">1e-3</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">halo</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">schemaField</span><span class="p">(</span>
+        <span class="n">description</span><span class="o">=</span><span class="p">(</span>
+            <span class="s2">"Number of rings of node-adjacent elements to add around the marked set (a refinement "</span>
+            <span class="s2">"buffer). Since the ZZ error peaks on the flanks of a localization band and dips over "</span>
+            <span class="s2">"its core, halo=1 bridges the flank rows across the core; larger values also refine "</span>
+            <span class="s2">"ahead of the front. Grows only within refineable elements. 0 disables."</span>
+        <span class="p">),</span>
+        <span class="n">dtype</span><span class="o">=</span><span class="nb">int</span><span class="p">,</span>
+        <span class="n">default</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">recovery</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">schemaField</span><span class="p">(</span>
+        <span class="n">description</span><span class="o">=</span><span class="p">(</span>
+            <span class="s2">"Gradient recovery method -- 'averaging' (nodal averaging) or 'spr' (superconvergent "</span>
+            <span class="s2">"patch recovery, sharper for serendipity elements)."</span>
+        <span class="p">),</span>
+        <span class="n">dtype</span><span class="o">=</span><span class="nb">str</span><span class="p">,</span>
+        <span class="n">default</span><span class="o">=</span><span class="s2">"averaging"</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">entry</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">schemaField</span><span class="p">(</span>
+        <span class="n">description</span><span class="o">=</span><span class="s2">"Node-field value entry to read ('U', the current converged field, by default)."</span><span class="p">,</span>
+        <span class="n">dtype</span><span class="o">=</span><span class="nb">str</span><span class="p">,</span>
+        <span class="n">default</span><span class="o">=</span><span class="s2">"U"</span><span class="p">,</span>
+    <span class="p">)</span>
+
+
+<div class="viewcode-block" id="RecoveryErrorMarker">
+<a class="viewcode-back" href="../../../documentation/adaptivitytheory.html#edelweissfe.adaptivity.marking.RecoveryErrorMarker">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">RecoveryErrorMarker</span><span class="p">(</span><span class="n">MarkerBase</span><span class="p">):</span>
+<span class="w">    </span><span class="sa">r</span><span class="sd">"""Zienkiewicz-Zhu recovery-based error indicator on the *gradient* of a nodal field, with</span>
+<span class="sd">    Doerfler bulk marking. Aimed at gradient-enhanced damage: the nonlocal driving field</span>
+<span class="sd">    :math:`\bar\varepsilon` (governed by a screened-Poisson/Helmholtz equation) is smooth, but its</span>
+<span class="sd">    gradient localizes in the process zone, and that is where the mesh must be resolved.</span>
+
+<span class="sd">    The per-element indicator is the L2 norm of the difference between a recovered, continuous</span>
+<span class="sd">    gradient field and the raw (discontinuous) FE gradient,</span>
+
+<span class="sd">    .. math:: \eta_K = \lVert \nabla\bar\varepsilon^{*} - \nabla\bar\varepsilon^{h} \rVert_{L^2(K)},</span>
+
+<span class="sd">    which is exactly the thermal-flux ZZ estimator applied to the nonlocal field (the constant</span>
+<span class="sd">    length-scale factor :math:`\ell^2` cancels out of a pure ranking, so it is omitted). The</span>
+<span class="sd">    recovered field :math:`\nabla\bar\varepsilon^{*}` is built by volume-weighted nodal averaging of</span>
+<span class="sd">    the FE gradient sampled at the 2x2x2 (superconvergent) Gauss points -- the serendipity HEX20</span>
+<span class="sd">    sweet spot. (An SPR patch-least-squares variant is a planned upgrade behind ``recovery``.)</span>
+
+<span class="sd">    Selection is by Doerfler bulk marking on the squared indicators: the worst elements whose</span>
+<span class="sd">    :math:`\sum \eta_K^2` first reaches ``markFraction`` of the total are marked -- but never more</span>
+<span class="sd">    than ``maxRefinedFraction`` of all elements. Under a fixed single-level refinement this is the</span>
+<span class="sd">    natural criterion: refinement depth is fixed, so marking reduces to ranking, and the hard cap</span>
+<span class="sd">    keeps the direct-solver (PARDISO) factorization cost bounded.</span>
+
+<span class="sd">    Doerfler is a purely *relative* criterion, so on its own it always marks a ``markFraction`` share</span>
+<span class="sd">    of the ranking -- even in the elastic phase, before any damage, where the nonlocal field is</span>
+<span class="sd">    *machine zero* (~1e-30). Crucially, a relative gate cannot fix this: the noise-level field's</span>
+<span class="sd">    recovered-vs-FE gradient mismatch is O(1) *relative to itself*, indistinguishable from a genuinely</span>
+<span class="sd">    localizing field. Marking is therefore gated by an **absolute** floor ``fieldThreshold`` on the</span>
+<span class="sd">    peak nodal ``|field|`` per element -- an element is a candidate only where the driving field is</span>
+<span class="sd">    significant (the active-damage field is 1e-5 and up, ~25 orders above the elastic noise, so the</span>
+<span class="sd">    separation is unambiguous). Among those significant elements a secondary ZZ *global relative error*</span>
+<span class="sd">    gate ``relTol`` skips regions the mesh already resolves well.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    nodeFieldName</span>
+<span class="sd">        Name of the nodal field whose recovered-gradient error drives marking (e.g.</span>
+<span class="sd">        ``'nonlocal damage'``).</span>
+<span class="sd">    markFraction</span>
+<span class="sd">        Doerfler bulk fraction ``theta`` in ``(0, 1]``: mark the worst elements accumulating this</span>
+<span class="sd">        fraction of the total squared error.</span>
+<span class="sd">    maxRefinedFraction</span>
+<span class="sd">        Hard cap on the fraction of eligible elements a single pass may mark.</span>
+<span class="sd">    fieldThreshold</span>
+<span class="sd">        Absolute floor on the peak nodal ``|field|`` per element: an element is a refinement candidate</span>
+<span class="sd">        only where the driving field itself is significant. This is what keeps the elastic phase (where</span>
+<span class="sd">        the nonlocal field is machine zero, ~1e-30) from being refined -- a purely relative criterion</span>
+<span class="sd">        cannot, because the noise-level field's recovered-vs-FE gradient mismatch is O(1) relative to</span>
+<span class="sd">        itself. Set it to a small fraction of the field value at damage initiation (for a strain-like</span>
+<span class="sd">        driving field, damage onset is ``O(f_t / E)``, so a default of ``1e-6`` sits well below onset</span>
+<span class="sd">        yet ~20 orders above the elastic noise). Set to ``0.0`` to disable and refine on gradient</span>
+<span class="sd">        roughness alone.</span>
+<span class="sd">    relTol</span>
+<span class="sd">        Global relative-error threshold, applied among the significant elements only: while</span>
+<span class="sd">        :math:`\lVert \eta \rVert / \lVert \nabla\bar\varepsilon^{h} \rVert &lt; \text{relTol}` the field</span>
+<span class="sd">        is treated as well resolved and no element is refined. Set to ``0.0`` to disable.</span>
+<span class="sd">    halo</span>
+<span class="sd">        Number of rings of node-adjacent elements to add around the Doerfler-marked set (a refinement</span>
+<span class="sd">        buffer). The ZZ estimator responds to gradient error, which peaks on the *flanks* of a</span>
+<span class="sd">        localization band and dips over its (locally smooth) core, so on its own it can refine two rows</span>
+<span class="sd">        straddling a crack while leaving the core coarse. ``halo=1`` bridges those rows across the</span>
+<span class="sd">        core; a larger halo also refines ahead of the propagating front. ``0`` (default) keeps the bare</span>
+<span class="sd">        Doerfler set. The halo grows only within the refineable elements, so it never leaks elsewhere,</span>
+<span class="sd">        and it is applied *after* the ``maxRefinedFraction`` cap, so the final count may exceed it.</span>
+<span class="sd">    recovery</span>
+<span class="sd">        Recovery method: ``'averaging'`` (volume-weighted nodal averaging, ZZ 1987) or ``'spr'``</span>
+<span class="sd">        (superconvergent patch recovery, ZZ 1992 -- the sharper choice for serendipity elements).</span>
+<span class="sd">    entry</span>
+<span class="sd">        Node-field value entry to read (``'U'``, the current converged field, by default).</span>
+<span class="sd">    """</span>
+
+    <span class="n">_RECOVERY_METHODS</span> <span class="o">=</span> <span class="p">(</span><span class="s2">"averaging"</span><span class="p">,</span> <span class="s2">"spr"</span><span class="p">)</span>
+
+    <span class="n">schema</span> <span class="o">=</span> <span class="n">RecoveryErrorMarkerSchema</span>
+
+<div class="viewcode-block" id="RecoveryErrorMarker.fromOptions">
+<a class="viewcode-back" href="../../../documentation/adaptivitytheory.html#edelweissfe.adaptivity.marking.RecoveryErrorMarker.fromOptions">[docs]</a>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">fromOptions</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">options</span><span class="p">):</span>
+        <span class="n">opts</span> <span class="o">=</span> <span class="n">buildSchemaFromOptions</span><span class="p">(</span><span class="bp">cls</span><span class="o">.</span><span class="n">schema</span><span class="p">,</span> <span class="n">options</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span>
+            <span class="n">opts</span><span class="o">.</span><span class="n">nodeField</span><span class="p">,</span>
+            <span class="n">markFraction</span><span class="o">=</span><span class="n">opts</span><span class="o">.</span><span class="n">markFraction</span><span class="p">,</span>
+            <span class="n">maxRefinedFraction</span><span class="o">=</span><span class="n">opts</span><span class="o">.</span><span class="n">maxRefinedFraction</span><span class="p">,</span>
+            <span class="n">fieldThreshold</span><span class="o">=</span><span class="n">opts</span><span class="o">.</span><span class="n">fieldThreshold</span><span class="p">,</span>
+            <span class="n">relTol</span><span class="o">=</span><span class="n">opts</span><span class="o">.</span><span class="n">relTol</span><span class="p">,</span>
+            <span class="n">halo</span><span class="o">=</span><span class="n">opts</span><span class="o">.</span><span class="n">halo</span><span class="p">,</span>
+            <span class="n">recovery</span><span class="o">=</span><span class="n">opts</span><span class="o">.</span><span class="n">recovery</span><span class="p">,</span>
+            <span class="n">entry</span><span class="o">=</span><span class="n">opts</span><span class="o">.</span><span class="n">entry</span><span class="p">,</span>
+            <span class="n">initialOnly</span><span class="o">=</span><span class="n">opts</span><span class="o">.</span><span class="n">initialOnly</span><span class="p">,</span>
+        <span class="p">)</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">nodeFieldName</span><span class="p">,</span>
+        <span class="n">markFraction</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>
+        <span class="n">maxRefinedFraction</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span>
+        <span class="n">fieldThreshold</span><span class="o">=</span><span class="mf">1e-6</span><span class="p">,</span>
+        <span class="n">relTol</span><span class="o">=</span><span class="mf">1e-3</span><span class="p">,</span>
+        <span class="n">halo</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+        <span class="n">recovery</span><span class="o">=</span><span class="s2">"averaging"</span><span class="p">,</span>
+        <span class="n">entry</span><span class="o">=</span><span class="s2">"U"</span><span class="p">,</span>
+        <span class="n">initialOnly</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">initialOnly</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">nodeFieldName</span> <span class="o">=</span> <span class="n">nodeFieldName</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">markFraction</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">markFraction</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">maxRefinedFraction</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">maxRefinedFraction</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">fieldThreshold</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">fieldThreshold</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">relTol</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">relTol</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">halo</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">halo</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">recovery</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_RECOVERY_METHODS</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"RecoveryErrorMarker: unknown recovery=</span><span class="si">{</span><span class="n">recovery</span><span class="si">!r}</span><span class="s2">; expected one of </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_RECOVERY_METHODS</span><span class="si">}</span><span class="s2">."</span>
+            <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">recovery</span> <span class="o">=</span> <span class="n">recovery</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">entry</span> <span class="o">=</span> <span class="n">entry</span>
+
+<div class="viewcode-block" id="RecoveryErrorMarker.mark">
+<a class="viewcode-back" href="../../../documentation/adaptivitytheory.html#edelweissfe.adaptivity.marking.RecoveryErrorMarker.mark">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">mark</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">candidateElements</span><span class="p">,</span> <span class="n">mesh</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">model</span><span class="o">.</span><span class="n">nodeFields</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">nodeFieldName</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">model</span><span class="o">.</span><span class="n">nodeFields</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"hAdaptivity recoveryError marker references nodeField </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">nodeFieldName</span><span class="si">!r}</span><span class="s2">, "</span>
+                <span class="s2">"which is not defined on the model. Use the exact field name (e.g. 'nonlocal damage')."</span>
+            <span class="p">)</span>
+        <span class="n">nodeField</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">nodeFields</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">nodeFieldName</span><span class="p">]</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">entry</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">nodeField</span><span class="p">:</span>
+            <span class="k">return</span> <span class="nb">set</span><span class="p">()</span>
+        <span class="n">values</span> <span class="o">=</span> <span class="n">nodeField</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">entry</span><span class="p">]</span>
+        <span class="n">indexOf</span> <span class="o">=</span> <span class="n">nodeField</span><span class="o">.</span><span class="n">_indicesOfNodesInArray</span>
+
+        <span class="c1"># gather node coordinates, field values and a compact global node index per element; elements</span>
+        <span class="c1"># with a node that does not carry the field are skipped</span>
+        <span class="n">elements</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">coordsList</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">valuesList</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">connectivity</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">nodeToIndex</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">element</span> <span class="ow">in</span> <span class="n">candidateElements</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">element</span><span class="o">.</span><span class="n">nodes</span><span class="p">)</span> <span class="o">!=</span> <span class="n">N_NODES</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="n">rows</span> <span class="o">=</span> <span class="p">[</span><span class="n">indexOf</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">node</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="k">for</span> <span class="n">node</span> <span class="ow">in</span> <span class="n">element</span><span class="o">.</span><span class="n">nodes</span><span class="p">]</span>
+            <span class="k">if</span> <span class="o">-</span><span class="mi">1</span> <span class="ow">in</span> <span class="n">rows</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="n">localConnectivity</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="k">for</span> <span class="n">node</span> <span class="ow">in</span> <span class="n">element</span><span class="o">.</span><span class="n">nodes</span><span class="p">:</span>
+                <span class="n">globalIndex</span> <span class="o">=</span> <span class="n">nodeToIndex</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">node</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">globalIndex</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="n">globalIndex</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">nodeToIndex</span><span class="p">)</span>
+                    <span class="n">nodeToIndex</span><span class="p">[</span><span class="n">node</span><span class="p">]</span> <span class="o">=</span> <span class="n">globalIndex</span>
+                <span class="n">localConnectivity</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">globalIndex</span><span class="p">)</span>
+            <span class="n">elements</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">element</span><span class="p">)</span>
+            <span class="n">coordsList</span><span class="o">.</span><span class="n">append</span><span class="p">([</span><span class="n">node</span><span class="o">.</span><span class="n">coordinates</span> <span class="k">for</span> <span class="n">node</span> <span class="ow">in</span> <span class="n">element</span><span class="o">.</span><span class="n">nodes</span><span class="p">])</span>
+            <span class="n">valuesList</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">values</span><span class="p">[</span><span class="n">rows</span><span class="p">])</span>
+            <span class="n">connectivity</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">localConnectivity</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">elements</span><span class="p">:</span>
+            <span class="k">return</span> <span class="nb">set</span><span class="p">()</span>
+
+        <span class="n">coordsAll</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">coordsList</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span>  <span class="c1"># (nElem, 20, 3)</span>
+        <span class="n">valuesAll</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">valuesList</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span>  <span class="c1"># (nElem, 20, dim)</span>
+        <span class="n">connectivity</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">connectivity</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">intp</span><span class="p">)</span>  <span class="c1"># (nElem, 20)</span>
+        <span class="n">indicators</span><span class="p">,</span> <span class="n">gradEnergy</span> <span class="o">=</span> <span class="n">_recoveryIndicators</span><span class="p">(</span>
+            <span class="n">coordsAll</span><span class="p">,</span> <span class="n">valuesAll</span><span class="p">,</span> <span class="n">connectivity</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">nodeToIndex</span><span class="p">),</span> <span class="bp">self</span><span class="o">.</span><span class="n">recovery</span>
+        <span class="p">)</span>
+
+        <span class="c1"># ---- absolute field-magnitude eligibility ----</span>
+        <span class="c1"># A relative criterion cannot reject the elastic phase, where the field is machine-zero noise;</span>
+        <span class="c1"># elements below the absolute floor on peak |field| are scored zero.</span>
+        <span class="n">elementFieldMax</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">valuesAll</span><span class="p">),</span> <span class="n">axis</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">))</span>  <span class="c1"># (nElem,) peak |field| per element</span>
+        <span class="n">indicators</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">elementFieldMax</span> <span class="o">&gt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">fieldThreshold</span><span class="p">,</span> <span class="n">indicators</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span>
+
+        <span class="c1"># ---- global relative-error gate ----</span>
+        <span class="c1"># refine only if ||eta|| / ||grad|| over the significant elements exceeds relTol</span>
+        <span class="n">totalSquared</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">indicators</span><span class="o">**</span><span class="mi">2</span><span class="p">))</span>
+        <span class="k">if</span> <span class="n">totalSquared</span> <span class="o">&lt;=</span> <span class="mf">0.0</span><span class="p">:</span>
+            <span class="k">return</span> <span class="nb">set</span><span class="p">()</span>
+        <span class="n">referenceSquared</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">elementFieldMax</span> <span class="o">&gt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">fieldThreshold</span><span class="p">,</span> <span class="n">gradEnergy</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)))</span>
+        <span class="k">if</span> <span class="n">referenceSquared</span> <span class="o">&lt;=</span> <span class="mf">0.0</span> <span class="ow">or</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">totalSquared</span> <span class="o">/</span> <span class="n">referenceSquared</span><span class="p">)</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">relTol</span><span class="p">:</span>
+            <span class="k">return</span> <span class="nb">set</span><span class="p">()</span>
+
+        <span class="c1"># ---- Doerfler bulk marking, capped by the DOF budget ----</span>
+        <span class="n">target</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">markFraction</span> <span class="o">*</span> <span class="n">totalSquared</span>
+        <span class="n">budget</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">ceil</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">maxRefinedFraction</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">elements</span><span class="p">))))</span>
+        <span class="n">order</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">argsort</span><span class="p">(</span><span class="n">indicators</span><span class="p">)[::</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>  <span class="c1"># worst first</span>
+
+        <span class="n">marked</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+        <span class="n">accumulated</span> <span class="o">=</span> <span class="mf">0.0</span>
+        <span class="k">for</span> <span class="n">idx</span> <span class="ow">in</span> <span class="n">order</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">marked</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="n">budget</span> <span class="ow">or</span> <span class="n">indicators</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span> <span class="o">&lt;=</span> <span class="mf">0.0</span><span class="p">:</span>
+                <span class="k">break</span>
+            <span class="n">marked</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">elements</span><span class="p">[</span><span class="n">idx</span><span class="p">])</span>
+            <span class="n">accumulated</span> <span class="o">+=</span> <span class="n">indicators</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span> <span class="o">**</span> <span class="mi">2</span>
+            <span class="k">if</span> <span class="n">accumulated</span> <span class="o">&gt;=</span> <span class="n">target</span><span class="p">:</span>
+                <span class="k">break</span>
+
+        <span class="c1"># optional halo: bridge the flank-marked rows across the band core</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">halo</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="ow">and</span> <span class="n">marked</span><span class="p">:</span>
+            <span class="n">marked</span> <span class="o">=</span> <span class="n">_growByNeighbors</span><span class="p">(</span><span class="n">marked</span><span class="p">,</span> <span class="n">candidateElements</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">halo</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">marked</span></div>
+</div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Matthias Neuner.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

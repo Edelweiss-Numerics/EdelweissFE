@@ -14,8 +14,8 @@
       <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
       <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
       <script src="../../../../_static/documentation_options.js?v=17e2f33f"></script>
-      <script src="../../../../_static/doctools.js?v=9bcbadda"></script>
-      <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../../../../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../../../../genindex.html" />
     <link rel="search" title="Search" href="../../../../search.html" /> 
@@ -105,17 +105,35 @@
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">ABC</span>
 
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.journal.journal</span><span class="w"> </span><span class="kn">import</span> <span class="n">Journal</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.models.femodel</span><span class="w"> </span><span class="kn">import</span> <span class="n">FEModel</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.timesteppers.timestep</span><span class="w"> </span><span class="kn">import</span> <span class="n">TimeStep</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.utils.checkpointedstate</span><span class="w"> </span><span class="kn">import</span> <span class="n">packState</span><span class="p">,</span> <span class="n">unpackState</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.utils.fieldoutput</span><span class="w"> </span><span class="kn">import</span> <span class="n">FieldOutputController</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.utils.schema</span><span class="w"> </span><span class="kn">import</span> <span class="n">OptionSchemaProvider</span>
 
 
 <div class="viewcode-block" id="StepActionBase">
 <a class="viewcode-back" href="../../../../documentation/stepactions.html#edelweissfe.stepactions.base.stepactionbase.StepActionBase">[docs]</a>
-<span class="k">class</span><span class="w"> </span><span class="nc">StepActionBase</span><span class="p">(</span><span class="n">ABC</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;This is the abase class for all step actions.</span>
-<span class="sd">    User defined step actions can override the methods.</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">StepActionBase</span><span class="p">(</span><span class="n">OptionSchemaProvider</span><span class="p">,</span> <span class="n">ABC</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""This is the base class for all step actions.</span>
+<span class="sd">    User defined step actions must implement the methods.</span>
+
+<span class="sd">    Two construction paths</span>
+<span class="sd">    -----------------------</span>
+<span class="sd">    A step action is reached either from Python or from an ``.inp`` file, and the input file is a</span>
+<span class="sd">    *serialization* of the Python path, not a second way of building the object. A step action with</span>
+<span class="sd">    a typed constructor -- ``nSet`` is a node set, ``f_t`` is a callable, prescribed values are a</span>
+<span class="sd">    ``dict`` -- overrides :meth:`fromStepActionDefinition` / :meth:`updateStepActionFromDefinition`</span>
+<span class="sd">    to translate the parser's option mapping into a call to it. Everything string-shaped stays on</span>
+<span class="sd">    that translation, which is the only thing the ``.inp`` front-end adds.</span>
+
+<span class="sd">    A step action with an untyped constructor needs no such override: the two hooks below default</span>
+<span class="sd">    to handing the raw ``definition`` dict straight to ``__init__``/``updateStepAction``. Which path</span>
+<span class="sd">    a module takes is decided by whether it overrides the hooks -- ordinary polymorphism, not</span>
+<span class="sd">    attribute probing, and no separate list of which modules use which convention to keep in sync.</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
@@ -126,12 +144,46 @@
 <span class="sd">    jobInfo</span>
 <span class="sd">        A dictionary containing the information about the job.</span>
 <span class="sd">    model</span>
-<span class="sd">        A dictionary containing the model tree.</span>
+<span class="sd">        The model tree.</span>
 <span class="sd">    fieldOutputController</span>
-<span class="sd">        The fieldput controlling object.</span>
+<span class="sd">        The field output controlling object.</span>
 <span class="sd">    journal</span>
 <span class="sd">        The journal object for logging.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
+<span class="sd">    """</span>
+
+    <span class="c1">#: The state this step action carries from one increment (and step) to the next, by attribute name and type;</span>
+    <span class="c1">#: see :mod:`~edelweissfe.utils.checkpointedstate`. Undeclared, :meth:`getRestartData` and</span>
+    <span class="c1">#: :meth:`setRestartData` must be overridden for checkpointing.</span>
+    <span class="n">checkpointedState</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+
+<div class="viewcode-block" id="StepActionBase.getRestartData">
+<a class="viewcode-back" href="../../../../documentation/stepactions.html#edelweissfe.stepactions.base.stepactionbase.StepActionBase.getRestartData">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">getRestartData</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""The state this step action carries; by default the attributes declared in</span>
+<span class="sd">        :attr:`checkpointedState`.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        dict[str, numpy.ndarray]</span>
+<span class="sd">            A flat mapping of array name to array.</span>
+<span class="sd">        """</span>
+
+        <span class="k">return</span> <span class="n">packState</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="StepActionBase.setRestartData">
+<a class="viewcode-back" href="../../../../documentation/stepactions.html#edelweissfe.stepactions.base.stepactionbase.StepActionBase.setRestartData">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">setRestartData</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]):</span>
+<span class="w">        </span><span class="sd">"""Restore the state :meth:`getRestartData` returned.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        data</span>
+<span class="sd">            The mapping of arrays.</span>
+<span class="sd">        """</span>
+
+        <span class="n">unpackState</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">)</span></div>
+
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
@@ -140,10 +192,84 @@
         <span class="n">jobInfo</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span>
         <span class="n">model</span><span class="p">:</span> <span class="n">FEModel</span><span class="p">,</span>
         <span class="n">fieldOutputController</span><span class="p">:</span> <span class="n">FieldOutputController</span><span class="p">,</span>
-        <span class="n">dofmanager</span><span class="p">,</span>
         <span class="n">journal</span><span class="p">:</span> <span class="n">Journal</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="k">pass</span>
+
+<div class="viewcode-block" id="StepActionBase.fromStepActionDefinition">
+<a class="viewcode-back" href="../../../../documentation/stepactions.html#edelweissfe.stepactions.base.stepactionbase.StepActionBase.fromStepActionDefinition">[docs]</a>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">fromStepActionDefinition</span><span class="p">(</span>
+        <span class="bp">cls</span><span class="p">,</span>
+        <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">definition</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span>
+        <span class="n">jobInfo</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span>
+        <span class="n">model</span><span class="p">:</span> <span class="n">FEModel</span><span class="p">,</span>
+        <span class="n">fieldOutputController</span><span class="p">:</span> <span class="n">FieldOutputController</span><span class="p">,</span>
+        <span class="n">journal</span><span class="p">:</span> <span class="n">Journal</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"StepActionBase"</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Create this step action from a parsed ``.inp`` step action definition.</span>
+
+<span class="sd">        This is the one place a module's input-file shape (numbered component options, a ``f(t)``</span>
+<span class="sd">        expression string, a node *set name*) is turned into the typed arguments its real</span>
+<span class="sd">        constructor takes. Override it together with a typed ``__init__``; leave it alone and the</span>
+<span class="sd">        default dict-consuming constructor is used unchanged.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        name</span>
+<span class="sd">            The name of the step action.</span>
+<span class="sd">        definition</span>
+<span class="sd">            The parsed option mapping for this step action.</span>
+<span class="sd">        jobInfo</span>
+<span class="sd">            A dictionary containing the information about the job.</span>
+<span class="sd">        model</span>
+<span class="sd">            The model tree.</span>
+<span class="sd">        fieldOutputController</span>
+<span class="sd">            The field output controlling object.</span>
+<span class="sd">        journal</span>
+<span class="sd">            The journal object for logging.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        StepActionBase</span>
+<span class="sd">            The constructed step action.</span>
+<span class="sd">        """</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">definition</span><span class="p">,</span> <span class="n">jobInfo</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">fieldOutputController</span><span class="p">,</span> <span class="n">journal</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="StepActionBase.updateStepActionFromDefinition">
+<a class="viewcode-back" href="../../../../documentation/stepactions.html#edelweissfe.stepactions.base.stepactionbase.StepActionBase.updateStepActionFromDefinition">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">updateStepActionFromDefinition</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">definition</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span>
+        <span class="n">jobInfo</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span>
+        <span class="n">model</span><span class="p">:</span> <span class="n">FEModel</span><span class="p">,</span>
+        <span class="n">fieldOutputController</span><span class="p">:</span> <span class="n">FieldOutputController</span><span class="p">,</span>
+        <span class="n">journal</span><span class="p">:</span> <span class="n">Journal</span><span class="p">,</span>
+    <span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Update this step action from a parsed ``.inp`` step action definition.</span>
+
+<span class="sd">        The update counterpart of :meth:`fromStepActionDefinition`, needed as its own hook because a</span>
+<span class="sd">        later step re-declaring an action reaches the *instance*, not the class. Override both or</span>
+<span class="sd">        neither: a module whose constructor is typed but whose update path still consumed a dict</span>
+<span class="sd">        would work only until the first multi-step input.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        definition</span>
+<span class="sd">            The parsed option mapping for this step action.</span>
+<span class="sd">        jobInfo</span>
+<span class="sd">            A dictionary containing the information about the job.</span>
+<span class="sd">        model</span>
+<span class="sd">            The model tree.</span>
+<span class="sd">        fieldOutputController</span>
+<span class="sd">            The field output controlling object.</span>
+<span class="sd">        journal</span>
+<span class="sd">            The journal object for logging.</span>
+<span class="sd">        """</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">updateStepAction</span><span class="p">(</span><span class="n">definition</span><span class="p">,</span> <span class="n">jobInfo</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">fieldOutputController</span><span class="p">,</span> <span class="n">journal</span><span class="p">)</span></div>
+
 
 <div class="viewcode-block" id="StepActionBase.updateStepAction">
 <a class="viewcode-back" href="../../../../documentation/stepactions.html#edelweissfe.stepactions.base.stepactionbase.StepActionBase.updateStepAction">[docs]</a>
@@ -153,71 +279,104 @@
         <span class="n">jobInfo</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span>
         <span class="n">model</span><span class="p">:</span> <span class="n">FEModel</span><span class="p">,</span>
         <span class="n">fieldOutputController</span><span class="p">:</span> <span class="n">FieldOutputController</span><span class="p">,</span>
-        <span class="n">dofmanager</span><span class="p">,</span>
         <span class="n">journal</span><span class="p">:</span> <span class="n">Journal</span><span class="p">,</span>
     <span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Is called when an updated definition is present for a new step.</span>
+<span class="w">        </span><span class="sd">"""Is called when an updated definition is present for a new step.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
-<span class="sd">        name</span>
-<span class="sd">            The name of this step action.</span>
 <span class="sd">        definition</span>
 <span class="sd">            A dictionary containing the options for this step action.</span>
 <span class="sd">        jobInfo</span>
 <span class="sd">            A dictionary containing the information about the job.</span>
 <span class="sd">        model</span>
-<span class="sd">            A dictionary containing the model tree.</span>
+<span class="sd">            The model tree.</span>
 <span class="sd">        fieldOutputController</span>
-<span class="sd">            The fieldput controlling object.</span>
+<span class="sd">            The field output controlling object.</span>
 <span class="sd">        journal</span>
 <span class="sd">            The journal object for logging.</span>
-<span class="sd">        &quot;&quot;&quot;</span></div>
+<span class="sd">        """</span></div>
 
 
 <div class="viewcode-block" id="StepActionBase.applyAtStepStart">
 <a class="viewcode-back" href="../../../../documentation/stepactions.html#edelweissfe.stepactions.base.stepactionbase.StepActionBase.applyAtStepStart">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">applyAtStepStart</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Is called when a step starts.</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">applyAtStepStart</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">:</span> <span class="n">FEModel</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Is called when a step starts.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
-<span class="sd">        U</span>
-<span class="sd">            The current solution vector.</span>
-<span class="sd">        P</span>
-<span class="sd">            The current reaction force vector.</span>
-<span class="sd">        &quot;&quot;&quot;</span></div>
+<span class="sd">        model</span>
+<span class="sd">            The current state of the model.</span>
+<span class="sd">        """</span></div>
 
 
 <div class="viewcode-block" id="StepActionBase.applyAtStepEnd">
 <a class="viewcode-back" href="../../../../documentation/stepactions.html#edelweissfe.stepactions.base.stepactionbase.StepActionBase.applyAtStepEnd">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">applyAtStepEnd</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Is called when a step successfully finished.</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">applyAtStepEnd</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">:</span> <span class="n">FEModel</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Is called when a step successfully finished.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
-<span class="sd">        U</span>
-<span class="sd">            The current solution vector.</span>
-<span class="sd">        P</span>
-<span class="sd">            The current reaction force vector.</span>
-<span class="sd">        &quot;&quot;&quot;</span></div>
+<span class="sd">        model</span>
+<span class="sd">            The current state of the model.</span>
+<span class="sd">        """</span></div>
 
 
 <div class="viewcode-block" id="StepActionBase.applyAtIncrementStart">
 <a class="viewcode-back" href="../../../../documentation/stepactions.html#edelweissfe.stepactions.base.stepactionbase.StepActionBase.applyAtIncrementStart">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">applyAtIncrementStart</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">:</span> <span class="n">TimeStep</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Is called when a step increment starts.</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">applyAtIncrementStart</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">:</span> <span class="n">FEModel</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">:</span> <span class="n">TimeStep</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Is called when a step increment starts.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
-<span class="sd">        U_n</span>
-<span class="sd">            The current converged solution vector at start of the increment.</span>
-<span class="sd">        P</span>
-<span class="sd">            The current reaction force vector.</span>
-<span class="sd">        increment</span>
-<span class="sd">            The defintion of the time increment.</span>
-<span class="sd">        &quot;&quot;&quot;</span></div>
-</div>
+<span class="sd">        model</span>
+<span class="sd">            The current state of the model.</span>
+<span class="sd">        timeStep</span>
+<span class="sd">            The definition of the time increment.</span>
+<span class="sd">        """</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_checkSetChanged</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">theSet</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Lazily detect whether ``theSet`` (a stable-identity</span>
+<span class="sd">        :class:`~edelweissfe.sets.nodeset.NodeSet` or :class:`~edelweissfe.sets.elementset.ElementSet`)</span>
+<span class="sd">        was mutated in-place (e.g. by AMR) since this step action last checked it.</span>
+
+<span class="sd">        A step action that pre-sizes a derived array to ``len(theSet)`` (e.g. Dirichlet's</span>
+<span class="sd">        ``delta``) calls this at its own per-increment entry point to recompute that array lazily,</span>
+<span class="sd">        without registering as a</span>
+<span class="sd">        :class:`~edelweissfe.models.meshdependent.MeshDependent`. A step action that</span>
+<span class="sd">        merely iterates ``theSet`` needs no such check -- it sees new members automatically.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        theSet</span>
+<span class="sd">            The set whose version is being tracked.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        bool</span>
+<span class="sd">            True if ``theSet`` changed since its version was last recorded or checked.</span>
+<span class="sd">        """</span>
+        <span class="n">setVersions</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">"_setVersions"</span><span class="p">,</span> <span class="p">{})</span>
+        <span class="k">if</span> <span class="n">theSet</span><span class="o">.</span><span class="n">name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">setVersions</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">: a set is checked for changes, but the state derived "</span>
+                <span class="s2">"from it never recorded its version (call _recordSetVersion where that state is built)."</span>
+            <span class="p">)</span>
+        <span class="n">changed</span> <span class="o">=</span> <span class="n">setVersions</span><span class="p">[</span><span class="n">theSet</span><span class="o">.</span><span class="n">name</span><span class="p">]</span> <span class="o">!=</span> <span class="n">theSet</span><span class="o">.</span><span class="n">_version</span>
+        <span class="n">setVersions</span><span class="p">[</span><span class="n">theSet</span><span class="o">.</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">theSet</span><span class="o">.</span><span class="n">_version</span>
+        <span class="k">return</span> <span class="n">changed</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_recordSetVersion</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">theSet</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Record the version of ``theSet`` that derived state was just built from, so the next</span>
+<span class="sd">        :meth:`_checkSetChanged` reports any change after this point -- including the first one.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        theSet</span>
+<span class="sd">            The set the derived state was built from.</span>
+<span class="sd">        """</span>
+        <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">"_setVersions"</span><span class="p">,</span> <span class="p">{})[</span><span class="n">theSet</span><span class="o">.</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">theSet</span><span class="o">.</span><span class="n">_version</span></div>
 
 </pre></div>
 

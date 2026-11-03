@@ -1,0 +1,379 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>edelweissfe.adaptivity.rootentities &mdash; EdelweissFE v22.07 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=cfdaff8d" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/custom.css?v=37fbe429" />
+
+  
+      <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../_static/documentation_options.js?v=17e2f33f"></script>
+      <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../index.html" class="icon icon-home">
+            EdelweissFE
+              <img src="../../../_static/edelweiss_fe_logo.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../features.html">Features</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../prerequisites.html">Prerequisites</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../documentation/index.html">Documentation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../contributors.html">Contributors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../publications.html">Publications</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">EdelweissFE</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">edelweissfe.adaptivity.rootentities</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for edelweissfe.adaptivity.rootentities</h1><div class="highlight"><pre>
+<span></span><span class="ch">#!/usr/bin/env python3</span>
+<span class="c1"># -*- coding: utf-8 -*-</span>
+<span class="c1">#  ---------------------------------------------------------------------</span>
+<span class="c1">#</span>
+<span class="c1">#  _____    _      _              _         _____ _____</span>
+<span class="c1"># | ____|__| | ___| |_      _____(_)___ ___|  ___| ____|</span>
+<span class="c1"># |  _| / _` |/ _ \ \ \ /\ / / _ \ / __/ __| |_  |  _|</span>
+<span class="c1"># | |__| (_| |  __/ |\ V  V /  __/ \__ \__ \  _| | |___</span>
+<span class="c1"># |_____\__,_|\___|_| \_/\_/ \___|_|___/___/_|   |_____|</span>
+<span class="c1">#</span>
+<span class="c1">#</span>
+<span class="c1">#  Unit of Strength of Materials and Structural Analysis</span>
+<span class="c1">#  University of Innsbruck,</span>
+<span class="c1">#  2017 - today</span>
+<span class="c1">#</span>
+<span class="c1">#  Matthias Neuner matthias.neuner@uibk.ac.at</span>
+<span class="c1">#</span>
+<span class="c1">#  This file is part of EdelweissFE.</span>
+<span class="c1">#</span>
+<span class="c1">#  This library is free software; you can redistribute it and/or</span>
+<span class="c1">#  modify it under the terms of the GNU Lesser General Public</span>
+<span class="c1">#  License as published by the Free Software Foundation; either</span>
+<span class="c1">#  version 2.1 of the License, or (at your option) any later version.</span>
+<span class="c1">#</span>
+<span class="c1">#  The full text of the license can be found in the file LICENSE.md at</span>
+<span class="c1">#  the top level directory of EdelweissFE.</span>
+<span class="c1">#  ---------------------------------------------------------------------</span>
+<span class="sd">"""The vertices, edges and faces of the *root* mesh, and where on them a refinement node lies --</span>
+<span class="sd">decided without looking at a single physical coordinate.</span>
+
+<span class="sd">Vocabulary</span>
+<span class="sd">----------</span>
+<span class="sd">Root element</span>
+<span class="sd">    An element of the mesh before any refinement. Every refined element lies inside exactly one.</span>
+<span class="sd">Reference lattice</span>
+<span class="sd">    The reference cube of a root element, :math:`[-1, 1]^3`, carries an integer lattice: reference</span>
+<span class="sd">    coordinate :math:`\\xi` corresponds to the integer :math:`(\\xi + 1)\\,M`, so the cube spans</span>
+<span class="sd">    :math:`[0, 2M]` per axis. :math:`M` is a power of the split factor, fine enough that every node a</span>
+<span class="sd">    subdivision can create sits on a lattice point -- so all positions are *exact integers*.</span>
+<span class="sd">Root entity</span>
+<span class="sd">    A vertex, edge or face of the root mesh, named by the labels of its corner nodes. Two root elements</span>
+<span class="sd">    that share a face therefore derive the identical name for it, whatever the orientation of their</span>
+<span class="sd">    local axes.</span>
+<span class="sd">Node key</span>
+<span class="sd">    Where a node sits: the lowest-dimensional root entity containing it, and its exact integer</span>
+<span class="sd">    position on that entity, measured in a frame that the entity's corner labels fix (see</span>
+<span class="sd">    :class:`NodeKey`). Two nodes are at one point iff they have one key.</span>
+
+<span class="sd">This is the mechanism established AMR libraries use (deal.II, p4est, MFEM): whether two points</span>
+<span class="sd">coincide and whether a point lies on a face are questions of topology and exact arithmetic, so no</span>
+<span class="sd">tolerance can make them wrong on a curved or warped mesh.</span>
+<span class="sd">"""</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">NamedTuple</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">NodeKey</span><span class="p">(</span><span class="n">NamedTuple</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Where a node sits: a root entity and the node's exact integer position on it.</span>
+
+<span class="sd">    ============  ====================================  ===========================================</span>
+<span class="sd">    ``kind``      ``entity``                            ``position``</span>
+<span class="sd">    ============  ====================================  ===========================================</span>
+<span class="sd">    ``vertex``    the vertex's node label               ``()``</span>
+<span class="sd">    ``edge``      its two corner labels, ascending      ``(t,)`` from the smaller label, in [0, 2M]</span>
+<span class="sd">    ``face``      its four corner labels, ascending     ``(u, v)`` in the canonical face frame</span>
+<span class="sd">    ``interior``  the root element's id                 ``(x, y, z)`` in the root's lattice</span>
+<span class="sd">    ============  ====================================  ===========================================</span>
+
+<span class="sd">    ``component`` is the body the node belongs to: two bodies that touch at a flush interface</span>
+<span class="sd">    (a tie, a contact pair, a crack plane) share no entity, even where their coordinates coincide.</span>
+<span class="sd">    """</span>
+
+    <span class="n">kind</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">component</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">entity</span><span class="p">:</span> <span class="nb">object</span>
+    <span class="n">position</span><span class="p">:</span> <span class="nb">tuple</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">RootFace</span><span class="p">(</span><span class="n">NamedTuple</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""A face of the root mesh, named by the ascending labels of its four corner nodes."""</span>
+
+    <span class="n">component</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">cornerLabels</span><span class="p">:</span> <span class="nb">tuple</span>
+
+
+<div class="viewcode-block" id="RootEntityTable">
+<a class="viewcode-back" href="../../../documentation/modelmodifiers.html#edelweissfe.adaptivity.rootentities.RootEntityTable">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">RootEntityTable</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""The vertices, edges and faces of the root mesh, keyed by root corner labels.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    topology</span>
+<span class="sd">        The :class:`~edelweissfe.adaptivity.topologybase.TopologyBase` of the root elements.</span>
+<span class="sd">    latticeUnits</span>
+<span class="sd">        :math:`M`: reference coordinate :math:`\\xi` of a root element is the lattice integer</span>
+<span class="sd">        :math:`(\\xi + 1)\\,M`.</span>
+<span class="sd">    """</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">topology</span><span class="p">,</span> <span class="n">latticeUnits</span><span class="p">:</span> <span class="nb">int</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_topology</span> <span class="o">=</span> <span class="n">topology</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_latticeUnits</span> <span class="o">=</span> <span class="n">latticeUnits</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_cornerSlots</span> <span class="o">=</span> <span class="n">topology</span><span class="o">.</span><span class="n">corner_slots</span>
+        <span class="c1">#: a corner's position in the root lattice (every coordinate 0 or 2M)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_cornerPoint</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="n">slot</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="o">*</span> <span class="n">latticeUnits</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">topology</span><span class="o">.</span><span class="n">reference_node_lattice</span><span class="p">[</span><span class="n">slot</span><span class="p">])</span>
+            <span class="k">for</span> <span class="n">slot</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cornerSlots</span>
+        <span class="p">}</span>
+        <span class="n">cornerSet</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_cornerSlots</span><span class="p">)</span>
+        <span class="c1">#: per face: its corner slots in loop order; per edge: its two corner slots</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_faceCorners</span> <span class="o">=</span> <span class="p">[[</span><span class="n">slot</span> <span class="k">for</span> <span class="n">slot</span> <span class="ow">in</span> <span class="n">face</span> <span class="k">if</span> <span class="n">slot</span> <span class="ow">in</span> <span class="n">cornerSet</span><span class="p">]</span> <span class="k">for</span> <span class="n">face</span> <span class="ow">in</span> <span class="n">topology</span><span class="o">.</span><span class="n">faces</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_edgeCorners</span> <span class="o">=</span> <span class="p">[[</span><span class="n">slot</span> <span class="k">for</span> <span class="n">slot</span> <span class="ow">in</span> <span class="n">edge</span> <span class="k">if</span> <span class="n">slot</span> <span class="ow">in</span> <span class="n">cornerSet</span><span class="p">]</span> <span class="k">for</span> <span class="n">edge</span> <span class="ow">in</span> <span class="n">topology</span><span class="o">.</span><span class="n">edges</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_rootCorners</span> <span class="o">=</span> <span class="p">{}</span>  <span class="c1"># rootEid -&gt; {corner slot: node label}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_rootComponent</span> <span class="o">=</span> <span class="p">{}</span>  <span class="c1"># rootEid -&gt; componentId</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_rootsOfFace</span> <span class="o">=</span> <span class="p">{}</span>  <span class="c1"># RootFace -&gt; [rootEid, ...]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_rootsOfCorner</span> <span class="o">=</span> <span class="p">{}</span>  <span class="c1"># (componentId, corner label) -&gt; [rootEid, ...]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_keyOfPoint</span> <span class="o">=</span> <span class="p">{}</span>  <span class="c1"># (rootEid, lattice point) -&gt; NodeKey; a node is shared by many elements</span>
+
+<div class="viewcode-block" id="RootEntityTable.add_root">
+<a class="viewcode-back" href="../../../documentation/modelmodifiers.html#edelweissfe.adaptivity.rootentities.RootEntityTable.add_root">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">add_root</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">rootEid</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">connectivity</span><span class="p">,</span> <span class="n">componentId</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Register a root element by its node labels (in the topology's local node order).</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            For a collapsed root element (a corner label repeated), whose faces and edges cannot be</span>
+<span class="sd">            named by their corners, and for a face owned by more than two roots (a non-manifold mesh).</span>
+<span class="sd">        """</span>
+        <span class="n">corners</span> <span class="o">=</span> <span class="p">{</span><span class="n">slot</span><span class="p">:</span> <span class="n">connectivity</span><span class="p">[</span><span class="n">slot</span><span class="p">]</span> <span class="k">for</span> <span class="n">slot</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cornerSlots</span><span class="p">}</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="n">corners</span><span class="o">.</span><span class="n">values</span><span class="p">()))</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="n">corners</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"root element </span><span class="si">{</span><span class="n">rootEid</span><span class="si">}</span><span class="s2"> repeats a corner node label (a collapsed element); its faces "</span>
+                <span class="s2">"and edges cannot be named by their corner labels"</span>
+            <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_rootCorners</span><span class="p">[</span><span class="n">rootEid</span><span class="p">]</span> <span class="o">=</span> <span class="n">corners</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_rootComponent</span><span class="p">[</span><span class="n">rootEid</span><span class="p">]</span> <span class="o">=</span> <span class="n">componentId</span>
+        <span class="k">for</span> <span class="n">label</span> <span class="ow">in</span> <span class="n">corners</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_rootsOfCorner</span><span class="o">.</span><span class="n">setdefault</span><span class="p">((</span><span class="n">componentId</span><span class="p">,</span> <span class="n">label</span><span class="p">),</span> <span class="p">[])</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">rootEid</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">faceCorners</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_faceCorners</span><span class="p">:</span>
+            <span class="n">face</span> <span class="o">=</span> <span class="n">RootFace</span><span class="p">(</span><span class="n">componentId</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">(</span><span class="nb">sorted</span><span class="p">(</span><span class="n">corners</span><span class="p">[</span><span class="n">s</span><span class="p">]</span> <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">faceCorners</span><span class="p">)))</span>
+            <span class="n">owners</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_rootsOfFace</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="n">face</span><span class="p">,</span> <span class="p">[])</span>
+            <span class="n">owners</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">rootEid</span><span class="p">)</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">owners</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">2</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">"the face with corner labels </span><span class="si">{</span><span class="nb">list</span><span class="p">(</span><span class="n">face</span><span class="o">.</span><span class="n">cornerLabels</span><span class="p">)</span><span class="si">}</span><span class="s2"> is shared by more than two root "</span>
+                    <span class="sa">f</span><span class="s2">"elements (</span><span class="si">{</span><span class="n">owners</span><span class="si">}</span><span class="s2">); the root mesh is not a manifold"</span>
+                <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="RootEntityTable.key">
+<a class="viewcode-back" href="../../../documentation/modelmodifiers.html#edelweissfe.adaptivity.rootentities.RootEntityTable.key">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">key</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">rootEid</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">point</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">NodeKey</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The :class:`NodeKey` of a lattice point (three integers in [0, 2M]) of root ``rootEid``."""</span>
+        <span class="n">cached</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_keyOfPoint</span><span class="o">.</span><span class="n">get</span><span class="p">((</span><span class="n">rootEid</span><span class="p">,</span> <span class="n">point</span><span class="p">))</span>
+        <span class="k">if</span> <span class="n">cached</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">cached</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_keyOfPoint</span><span class="p">[(</span><span class="n">rootEid</span><span class="p">,</span> <span class="n">point</span><span class="p">)]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_computeKey</span><span class="p">(</span><span class="n">rootEid</span><span class="p">,</span> <span class="n">point</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">cached</span></div>
+
+
+<div class="viewcode-block" id="RootEntityTable.roots_sharing">
+<a class="viewcode-back" href="../../../documentation/modelmodifiers.html#edelweissfe.adaptivity.rootentities.RootEntityTable.roots_sharing">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">roots_sharing</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">:</span> <span class="n">NodeKey</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The root elements whose closure contains the entity of ``key``."""</span>
+        <span class="k">if</span> <span class="n">key</span><span class="o">.</span><span class="n">kind</span> <span class="o">==</span> <span class="s2">"interior"</span><span class="p">:</span>
+            <span class="k">return</span> <span class="p">[</span><span class="n">key</span><span class="o">.</span><span class="n">entity</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">key</span><span class="o">.</span><span class="n">kind</span> <span class="o">==</span> <span class="s2">"face"</span><span class="p">:</span>
+            <span class="k">return</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_rootsOfFace</span><span class="p">[</span><span class="n">RootFace</span><span class="p">(</span><span class="n">key</span><span class="o">.</span><span class="n">component</span><span class="p">,</span> <span class="n">key</span><span class="o">.</span><span class="n">entity</span><span class="p">)])</span>
+        <span class="k">if</span> <span class="n">key</span><span class="o">.</span><span class="n">kind</span> <span class="o">==</span> <span class="s2">"vertex"</span><span class="p">:</span>
+            <span class="k">return</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_rootsOfCorner</span><span class="p">[(</span><span class="n">key</span><span class="o">.</span><span class="n">component</span><span class="p">,</span> <span class="n">key</span><span class="o">.</span><span class="n">entity</span><span class="p">)])</span>
+        <span class="n">a</span><span class="p">,</span> <span class="n">b</span> <span class="o">=</span> <span class="n">key</span><span class="o">.</span><span class="n">entity</span>
+        <span class="n">withBoth</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_rootsOfCorner</span><span class="p">[(</span><span class="n">key</span><span class="o">.</span><span class="n">component</span><span class="p">,</span> <span class="n">a</span><span class="p">)])</span> <span class="o">&amp;</span> <span class="nb">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_rootsOfCorner</span><span class="p">[(</span><span class="n">key</span><span class="o">.</span><span class="n">component</span><span class="p">,</span> <span class="n">b</span><span class="p">)])</span>
+        <span class="k">return</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">root</span> <span class="k">for</span> <span class="n">root</span> <span class="ow">in</span> <span class="n">withBoth</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_isEdgeOf</span><span class="p">(</span><span class="n">root</span><span class="p">,</span> <span class="n">key</span><span class="o">.</span><span class="n">entity</span><span class="p">))</span></div>
+
+
+<div class="viewcode-block" id="RootEntityTable.roots_touching">
+<a class="viewcode-back" href="../../../documentation/modelmodifiers.html#edelweissfe.adaptivity.rootentities.RootEntityTable.roots_touching">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">roots_touching</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">rootEid</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">set</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The root elements sharing at least one vertex (hence possibly an edge or a face) with</span>
+<span class="sd">        ``rootEid``, including itself."""</span>
+        <span class="n">component</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_rootComponent</span><span class="p">[</span><span class="n">rootEid</span><span class="p">]</span>
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="n">root</span> <span class="k">for</span> <span class="n">label</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_rootCorners</span><span class="p">[</span><span class="n">rootEid</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">()</span> <span class="k">for</span> <span class="n">root</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_rootsOfCorner</span><span class="p">[(</span><span class="n">component</span><span class="p">,</span> <span class="n">label</span><span class="p">)]</span>
+        <span class="p">}</span></div>
+
+
+<div class="viewcode-block" id="RootEntityTable.root_face_position">
+<a class="viewcode-back" href="../../../documentation/modelmodifiers.html#edelweissfe.adaptivity.rootentities.RootEntityTable.root_face_position">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">root_face_position</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">rootEid</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">faceIndex</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">point</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The root face ``faceIndex`` (into ``topology.faces``) of ``rootEid`` as a :class:`RootFace`,</span>
+<span class="sd">        and the position of ``point`` (a lattice point on it, possibly on its boundary) in the face's</span>
+<span class="sd">        canonical frame -- identical from either root sharing the face."""</span>
+        <span class="n">corners</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_rootCorners</span><span class="p">[</span><span class="n">rootEid</span><span class="p">]</span>
+        <span class="n">faceCorners</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_faceCorners</span><span class="p">[</span><span class="n">faceIndex</span><span class="p">]</span>
+        <span class="n">origin</span><span class="p">,</span> <span class="n">first</span><span class="p">,</span> <span class="n">second</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_canonicalFaceFrame</span><span class="p">(</span><span class="n">faceCorners</span><span class="p">,</span> <span class="n">corners</span><span class="p">)</span>
+        <span class="n">face</span> <span class="o">=</span> <span class="n">RootFace</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_rootComponent</span><span class="p">[</span><span class="n">rootEid</span><span class="p">],</span> <span class="nb">tuple</span><span class="p">(</span><span class="nb">sorted</span><span class="p">(</span><span class="n">corners</span><span class="p">[</span><span class="n">s</span><span class="p">]</span> <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">faceCorners</span><span class="p">)))</span>
+        <span class="k">return</span> <span class="n">face</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_faceCoordinates</span><span class="p">(</span><span class="n">point</span><span class="p">,</span> <span class="n">origin</span><span class="p">,</span> <span class="n">first</span><span class="p">,</span> <span class="n">second</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="RootEntityTable.local_point">
+<a class="viewcode-back" href="../../../documentation/modelmodifiers.html#edelweissfe.adaptivity.rootentities.RootEntityTable.local_point">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">local_point</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">rootEid</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">key</span><span class="p">:</span> <span class="n">NodeKey</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The lattice point, in root element ``rootEid``, of a key whose entity lies in that root's</span>
+<span class="sd">        closure (see :meth:`roots_sharing`)."""</span>
+        <span class="n">corners</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_rootCorners</span><span class="p">[</span><span class="n">rootEid</span><span class="p">]</span>
+        <span class="n">slotOf</span> <span class="o">=</span> <span class="p">{</span><span class="n">label</span><span class="p">:</span> <span class="n">slot</span> <span class="k">for</span> <span class="n">slot</span><span class="p">,</span> <span class="n">label</span> <span class="ow">in</span> <span class="n">corners</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span>
+        <span class="k">if</span> <span class="n">key</span><span class="o">.</span><span class="n">kind</span> <span class="o">==</span> <span class="s2">"interior"</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">key</span><span class="o">.</span><span class="n">position</span>
+        <span class="k">if</span> <span class="n">key</span><span class="o">.</span><span class="n">kind</span> <span class="o">==</span> <span class="s2">"vertex"</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cornerPoint</span><span class="p">[</span><span class="n">slotOf</span><span class="p">[</span><span class="n">key</span><span class="o">.</span><span class="n">entity</span><span class="p">]]</span>
+        <span class="k">if</span> <span class="n">key</span><span class="o">.</span><span class="n">kind</span> <span class="o">==</span> <span class="s2">"edge"</span><span class="p">:</span>
+            <span class="n">a</span><span class="p">,</span> <span class="n">b</span> <span class="o">=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_cornerPoint</span><span class="p">[</span><span class="n">slotOf</span><span class="p">[</span><span class="n">label</span><span class="p">]]</span> <span class="k">for</span> <span class="n">label</span> <span class="ow">in</span> <span class="n">key</span><span class="o">.</span><span class="n">entity</span><span class="p">)</span>
+            <span class="p">(</span><span class="n">t</span><span class="p">,)</span> <span class="o">=</span> <span class="n">key</span><span class="o">.</span><span class="n">position</span>
+            <span class="k">return</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">a</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">+</span> <span class="n">t</span> <span class="o">*</span> <span class="p">(</span><span class="n">b</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">-</span> <span class="n">a</span><span class="p">[</span><span class="n">k</span><span class="p">])</span> <span class="o">//</span> <span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">_latticeUnits</span><span class="p">)</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">3</span><span class="p">))</span>
+        <span class="n">faceCorners</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="n">fc</span> <span class="k">for</span> <span class="n">fc</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_faceCorners</span> <span class="k">if</span> <span class="nb">tuple</span><span class="p">(</span><span class="nb">sorted</span><span class="p">(</span><span class="n">corners</span><span class="p">[</span><span class="n">s</span><span class="p">]</span> <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">fc</span><span class="p">))</span> <span class="o">==</span> <span class="n">key</span><span class="o">.</span><span class="n">entity</span><span class="p">)</span>
+        <span class="n">origin</span><span class="p">,</span> <span class="n">first</span><span class="p">,</span> <span class="n">second</span> <span class="o">=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_cornerPoint</span><span class="p">[</span><span class="n">s</span><span class="p">]</span> <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_canonicalFaceFrame</span><span class="p">(</span><span class="n">faceCorners</span><span class="p">,</span> <span class="n">corners</span><span class="p">))</span>
+        <span class="n">u</span><span class="p">,</span> <span class="n">v</span> <span class="o">=</span> <span class="n">key</span><span class="o">.</span><span class="n">position</span>
+        <span class="n">twoM</span> <span class="o">=</span> <span class="mi">2</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">_latticeUnits</span>
+        <span class="k">return</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">origin</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">+</span> <span class="p">(</span><span class="n">u</span> <span class="o">*</span> <span class="p">(</span><span class="n">first</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">-</span> <span class="n">origin</span><span class="p">[</span><span class="n">k</span><span class="p">])</span> <span class="o">+</span> <span class="n">v</span> <span class="o">*</span> <span class="p">(</span><span class="n">second</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">-</span> <span class="n">origin</span><span class="p">[</span><span class="n">k</span><span class="p">]))</span> <span class="o">//</span> <span class="n">twoM</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">3</span><span class="p">))</span></div>
+
+
+    <span class="c1"># ---- internals ----</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_computeKey</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">rootEid</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">point</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">NodeKey</span><span class="p">:</span>
+        <span class="n">corners</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_rootCorners</span><span class="p">[</span><span class="n">rootEid</span><span class="p">]</span>
+        <span class="n">component</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_rootComponent</span><span class="p">[</span><span class="n">rootEid</span><span class="p">]</span>
+        <span class="n">kind</span><span class="p">,</span> <span class="n">entity</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_topology</span><span class="o">.</span><span class="n">lowest_entity_containing</span><span class="p">(</span><span class="n">point</span><span class="p">,</span> <span class="mi">2</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">_latticeUnits</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">kind</span> <span class="o">==</span> <span class="s2">"vertex"</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">NodeKey</span><span class="p">(</span><span class="s2">"vertex"</span><span class="p">,</span> <span class="n">component</span><span class="p">,</span> <span class="n">corners</span><span class="p">[</span><span class="n">entity</span><span class="p">],</span> <span class="p">())</span>
+        <span class="k">if</span> <span class="n">kind</span> <span class="o">==</span> <span class="s2">"edge"</span><span class="p">:</span>
+            <span class="n">a</span><span class="p">,</span> <span class="n">b</span> <span class="o">=</span> <span class="p">(</span><span class="n">slot</span> <span class="k">for</span> <span class="n">slot</span> <span class="ow">in</span> <span class="n">entity</span> <span class="k">if</span> <span class="n">slot</span> <span class="ow">in</span> <span class="n">corners</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">corners</span><span class="p">[</span><span class="n">a</span><span class="p">]</span> <span class="o">&gt;</span> <span class="n">corners</span><span class="p">[</span><span class="n">b</span><span class="p">]:</span>
+                <span class="n">a</span><span class="p">,</span> <span class="n">b</span> <span class="o">=</span> <span class="n">b</span><span class="p">,</span> <span class="n">a</span>
+            <span class="k">return</span> <span class="n">NodeKey</span><span class="p">(</span><span class="s2">"edge"</span><span class="p">,</span> <span class="n">component</span><span class="p">,</span> <span class="p">(</span><span class="n">corners</span><span class="p">[</span><span class="n">a</span><span class="p">],</span> <span class="n">corners</span><span class="p">[</span><span class="n">b</span><span class="p">]),</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_edgeParameter</span><span class="p">(</span><span class="n">point</span><span class="p">,</span> <span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">),))</span>
+        <span class="k">if</span> <span class="n">kind</span> <span class="o">==</span> <span class="s2">"face"</span><span class="p">:</span>
+            <span class="n">faceCorners</span> <span class="o">=</span> <span class="p">[</span><span class="n">slot</span> <span class="k">for</span> <span class="n">slot</span> <span class="ow">in</span> <span class="n">entity</span> <span class="k">if</span> <span class="n">slot</span> <span class="ow">in</span> <span class="n">corners</span><span class="p">]</span>
+            <span class="n">origin</span><span class="p">,</span> <span class="n">first</span><span class="p">,</span> <span class="n">second</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_canonicalFaceFrame</span><span class="p">(</span><span class="n">faceCorners</span><span class="p">,</span> <span class="n">corners</span><span class="p">)</span>
+            <span class="n">labels</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="nb">sorted</span><span class="p">(</span><span class="n">corners</span><span class="p">[</span><span class="n">s</span><span class="p">]</span> <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">faceCorners</span><span class="p">))</span>
+            <span class="k">return</span> <span class="n">NodeKey</span><span class="p">(</span><span class="s2">"face"</span><span class="p">,</span> <span class="n">component</span><span class="p">,</span> <span class="n">labels</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_faceCoordinates</span><span class="p">(</span><span class="n">point</span><span class="p">,</span> <span class="n">origin</span><span class="p">,</span> <span class="n">first</span><span class="p">,</span> <span class="n">second</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">NodeKey</span><span class="p">(</span><span class="s2">"interior"</span><span class="p">,</span> <span class="n">component</span><span class="p">,</span> <span class="n">rootEid</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">point</span><span class="p">))</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_isEdgeOf</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">rootEid</span><span class="p">,</span> <span class="n">labels</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+        <span class="n">corners</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_rootCorners</span><span class="p">[</span><span class="n">rootEid</span><span class="p">]</span>
+        <span class="k">return</span> <span class="nb">any</span><span class="p">({</span><span class="n">corners</span><span class="p">[</span><span class="n">a</span><span class="p">],</span> <span class="n">corners</span><span class="p">[</span><span class="n">b</span><span class="p">]}</span> <span class="o">==</span> <span class="nb">set</span><span class="p">(</span><span class="n">labels</span><span class="p">)</span> <span class="k">for</span> <span class="n">a</span><span class="p">,</span> <span class="n">b</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_edgeCorners</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_edgeParameter</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">point</span><span class="p">,</span> <span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Position along the root edge from corner ``a`` (0) to corner ``b`` (2M)."""</span>
+        <span class="n">pa</span><span class="p">,</span> <span class="n">pb</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cornerPoint</span><span class="p">[</span><span class="n">a</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cornerPoint</span><span class="p">[</span><span class="n">b</span><span class="p">]</span>
+        <span class="n">axis</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="n">k</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span> <span class="k">if</span> <span class="n">pa</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">!=</span> <span class="n">pb</span><span class="p">[</span><span class="n">k</span><span class="p">])</span>
+        <span class="k">return</span> <span class="nb">abs</span><span class="p">(</span><span class="n">point</span><span class="p">[</span><span class="n">axis</span><span class="p">]</span> <span class="o">-</span> <span class="n">pa</span><span class="p">[</span><span class="n">axis</span><span class="p">])</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_canonicalFaceFrame</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">faceCorners</span><span class="p">,</span> <span class="n">corners</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""The face frame fixed by the corner labels::</span>
+
+<span class="sd">                second ------ .</span>
+<span class="sd">                  |           |       origin: the corner with the smallest label</span>
+<span class="sd">                  |           |       first:  its loop neighbour with the smaller label</span>
+<span class="sd">                origin ---- first     second: its other loop neighbour</span>
+
+<span class="sd">        so both roots sharing the face choose the same frame, whatever their local numbering."""</span>
+        <span class="n">k</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="mi">4</span><span class="p">),</span> <span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">i</span><span class="p">:</span> <span class="n">corners</span><span class="p">[</span><span class="n">faceCorners</span><span class="p">[</span><span class="n">i</span><span class="p">]])</span>
+        <span class="n">previous</span><span class="p">,</span> <span class="n">following</span> <span class="o">=</span> <span class="n">faceCorners</span><span class="p">[(</span><span class="n">k</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> <span class="o">%</span> <span class="mi">4</span><span class="p">],</span> <span class="n">faceCorners</span><span class="p">[(</span><span class="n">k</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span> <span class="o">%</span> <span class="mi">4</span><span class="p">]</span>
+        <span class="n">first</span><span class="p">,</span> <span class="n">second</span> <span class="o">=</span> <span class="p">(</span><span class="n">previous</span><span class="p">,</span> <span class="n">following</span><span class="p">)</span> <span class="k">if</span> <span class="n">corners</span><span class="p">[</span><span class="n">previous</span><span class="p">]</span> <span class="o">&lt;</span> <span class="n">corners</span><span class="p">[</span><span class="n">following</span><span class="p">]</span> <span class="k">else</span> <span class="p">(</span><span class="n">following</span><span class="p">,</span> <span class="n">previous</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">faceCorners</span><span class="p">[</span><span class="n">k</span><span class="p">],</span> <span class="n">first</span><span class="p">,</span> <span class="n">second</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_faceCoordinates</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">point</span><span class="p">,</span> <span class="n">origin</span><span class="p">,</span> <span class="n">first</span><span class="p">,</span> <span class="n">second</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Position of ``point`` in the face frame: the distances from the origin along the two frame</span>
+<span class="sd">        edges, which are lattice-axis-aligned, each spanning [0, 2M]."""</span>
+        <span class="n">o</span><span class="p">,</span> <span class="n">e1</span><span class="p">,</span> <span class="n">e2</span> <span class="o">=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_cornerPoint</span><span class="p">[</span><span class="n">s</span><span class="p">]</span> <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="p">(</span><span class="n">origin</span><span class="p">,</span> <span class="n">first</span><span class="p">,</span> <span class="n">second</span><span class="p">))</span>
+        <span class="n">axisU</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="n">k</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span> <span class="k">if</span> <span class="n">e1</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">!=</span> <span class="n">o</span><span class="p">[</span><span class="n">k</span><span class="p">])</span>
+        <span class="n">axisV</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="n">k</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span> <span class="k">if</span> <span class="n">e2</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">!=</span> <span class="n">o</span><span class="p">[</span><span class="n">k</span><span class="p">])</span>
+        <span class="k">return</span> <span class="p">(</span><span class="nb">abs</span><span class="p">(</span><span class="n">point</span><span class="p">[</span><span class="n">axisU</span><span class="p">]</span> <span class="o">-</span> <span class="n">o</span><span class="p">[</span><span class="n">axisU</span><span class="p">]),</span> <span class="nb">abs</span><span class="p">(</span><span class="n">point</span><span class="p">[</span><span class="n">axisV</span><span class="p">]</span> <span class="o">-</span> <span class="n">o</span><span class="p">[</span><span class="n">axisV</span><span class="p">]))</span></div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Matthias Neuner.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

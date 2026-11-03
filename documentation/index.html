@@ -15,8 +15,8 @@
       <script src="../_static/jquery.js?v=5d32c60e"></script>
       <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
       <script src="../_static/documentation_options.js?v=17e2f33f"></script>
-      <script src="../_static/doctools.js?v=9bcbadda"></script>
-      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
@@ -50,6 +50,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../installation.html">Installation</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Documentation</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="syntax.html">Input file syntax</a></li>
+<li class="toctree-l2"><a class="reference internal" href="inputsystem.html">The input system: how <code class="docutils literal notranslate"><span class="pre">.inp</span></code> grammar is defined</a></li>
 <li class="toctree-l2"><a class="reference internal" href="jobs.html">Inputfile driven simulations</a></li>
 <li class="toctree-l2"><a class="reference internal" href="models.html">Models</a></li>
 <li class="toctree-l2"><a class="reference internal" href="solvers.html">Solvers</a></li>
@@ -57,7 +58,10 @@
 <li class="toctree-l2"><a class="reference internal" href="steps.html">Steps</a></li>
 <li class="toctree-l2"><a class="reference internal" href="analyticalfields.html">Analytical fields</a></li>
 <li class="toctree-l2"><a class="reference internal" href="constraints.html">Constraints</a></li>
-<li class="toctree-l2"><a class="reference internal" href="dofmanager.html">DOF manager</a></li>
+<li class="toctree-l2"><a class="reference internal" href="rigidbodies.html">Rigid bodies</a></li>
+<li class="toctree-l2"><a class="reference internal" href="contacttheory.html">Contact mechanics: theory</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dofmanager.html">Degree of Freedom (DOF) Manager and Numerics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="assembly.html">System matrix assembly</a></li>
 <li class="toctree-l2"><a class="reference internal" href="fieldoutputmanager.html">Field outputs</a></li>
 <li class="toctree-l2"><a class="reference internal" href="fields.html">Fields</a></li>
 <li class="toctree-l2"><a class="reference internal" href="elements.html">Elements</a></li>
@@ -66,6 +70,10 @@
 <li class="toctree-l2"><a class="reference internal" href="journal.html">Journal</a></li>
 <li class="toctree-l2"><a class="reference internal" href="materials.html">Materials</a></li>
 <li class="toctree-l2"><a class="reference internal" href="mesh.html">Creating finite element meshes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="modelmodifiers.html">Model modifiers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="topologypipeline.html">The topology pipeline: how a model changes itself</a></li>
+<li class="toctree-l2"><a class="reference internal" href="restart.html">Restart</a></li>
+<li class="toctree-l2"><a class="reference internal" href="adaptivitytheory.html">Adaptive refinement: error estimation and marking</a></li>
 <li class="toctree-l2"><a class="reference internal" href="output.html">Outputmanagers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="parallelization.html">Parallelization</a></li>
 <li class="toctree-l2"><a class="reference internal" href="phenomena.html">Physical phenomena</a></li>
@@ -112,8 +120,20 @@
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="syntax.html">Input file syntax</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="syntax.html#edelweissfe.utils.inputfileparser.parseInputFile"><code class="docutils literal notranslate"><span class="pre">parseInputFile()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="syntax.html#edelweissfe.utils.inputfileparser.printKeywords"><code class="docutils literal notranslate"><span class="pre">printKeywords()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="syntax.html#edelweissfe.utils.inputfileparser.keywordIdentifier"><code class="docutils literal notranslate"><span class="pre">keywordIdentifier</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="syntax.html#keywords">Keywords</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="inputsystem.html">The input system: how <code class="docutils literal notranslate"><span class="pre">.inp</span></code> grammar is defined</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="inputsystem.html#the-four-layers">The four layers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="inputsystem.html#l2-declaring-a-schema">L2: declaring a schema</a></li>
+<li class="toctree-l2"><a class="reference internal" href="inputsystem.html#l3-the-registry">L3: the registry</a></li>
+<li class="toctree-l2"><a class="reference internal" href="inputsystem.html#l4-from-parsed-text-to-a-python-call">L4: from parsed text to a Python call</a></li>
+<li class="toctree-l2"><a class="reference internal" href="inputsystem.html#top-level-keywords">Top-level keywords</a></li>
+<li class="toctree-l2"><a class="reference internal" href="inputsystem.html#dynamic-options-overrides">Dynamic <code class="docutils literal notranslate"><span class="pre">&gt;&gt;options</span></code> overrides</a></li>
+<li class="toctree-l2"><a class="reference internal" href="inputsystem.html#documentation-and-the-grammar-surface-come-from-the-same-schema">Documentation and the grammar surface come from the same schema</a></li>
+<li class="toctree-l2"><a class="reference internal" href="inputsystem.html#worked-example-adding-a-new-output-manager">Worked example: adding a new output manager</a></li>
+<li class="toctree-l2"><a class="reference internal" href="inputsystem.html#quick-reference">Quick reference</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="jobs.html">Inputfile driven simulations</a><ul>
@@ -122,6 +142,7 @@
 </li>
 <li class="toctree-l1"><a class="reference internal" href="models.html">Models</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="models.html#module-edelweissfe.models.femodel"><code class="docutils literal notranslate"><span class="pre">FEModel</span></code> - A classical finite element model</a></li>
+<li class="toctree-l2"><a class="reference internal" href="models.html#topologypipeline-how-the-mesh-may-change-during-a-run"><code class="docutils literal notranslate"><span class="pre">TopologyPipeline</span></code> - How the mesh may change during a run</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="solvers.html">Solvers</a><ul>
@@ -129,15 +150,28 @@
 <li class="toctree-l2"><a class="reference internal" href="solvers.html#module-edelweissfe.solvers.nonlinearimplicitstatic"><code class="docutils literal notranslate"><span class="pre">NIST</span></code> - Nonlinear Implicit Static</a></li>
 <li class="toctree-l2"><a class="reference internal" href="solvers.html#module-edelweissfe.solvers.nonlinearimplicitstaticparallel"><code class="docutils literal notranslate"><span class="pre">NISTParallel</span></code> - Nonlinear Implicit Static (parallel)</a></li>
 <li class="toctree-l2"><a class="reference internal" href="solvers.html#module-edelweissfe.solvers.nonlinearimplicitstaticparallelarclength"><code class="docutils literal notranslate"><span class="pre">NISTPArcLength</span></code> - Nonlinear Implicit Static - Arc length</a></li>
+<li class="toctree-l2"><a class="reference internal" href="solvers.html#module-edelweissfe.solvers.nonlinearimplicitdynamic"><code class="docutils literal notranslate"><span class="pre">NID</span></code> - Nonlinear Implicit Dynamic (Newmark-beta)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="solvers.html#module-edelweissfe.solvers.nonlinearimplicitdynamicparallel"><code class="docutils literal notranslate"><span class="pre">NIDParallel</span></code> - Nonlinear Implicit Dynamic (Newmark-beta, parallel)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="solvers.html#convergence-criteria-of-the-implicit-solvers">Convergence criteria of the implicit solvers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="solvers.html#iteration-table-of-the-implicit-solvers">Iteration table of the implicit solvers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="solvers.html#performance-table-of-the-implicit-solvers">Performance table of the implicit solvers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="solvers.html#module-edelweissfe.solvers.nonlinearexplicitstatic"><code class="docutils literal notranslate"><span class="pre">NEST</span></code> - Nonlinear Explicit Static</a></li>
 <li class="toctree-l2"><a class="reference internal" href="solvers.html#module-edelweissfe.solvers.nonlinearexplicitstaticparallel"><code class="docutils literal notranslate"><span class="pre">NESTParallel</span></code> - Nonlinear Explicit Static (parallel)</a></li>
 <li class="toctree-l2"><a class="reference internal" href="solvers.html#module-edelweissfe.solvers.nonlinearexplicitdynamic"><code class="docutils literal notranslate"><span class="pre">NED</span></code> - Nonlinear Explicit Dynamic</a></li>
 <li class="toctree-l2"><a class="reference internal" href="solvers.html#module-edelweissfe.solvers.nonlinearexplicitdynamicparallel"><code class="docutils literal notranslate"><span class="pre">NEDParallel</span></code> - Nonlinear Explicit Dynamic (parallel)</a></li>
 </ul>
 </li>
-<li class="toctree-l1"><a class="reference internal" href="linsolvers.html">Linear solvers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="linsolvers.html">Linear solvers</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="linsolvers.html#direct-or-iterative">Direct or iterative</a></li>
+<li class="toctree-l2"><a class="reference internal" href="linsolvers.html#one-adapter-for-every-type">One adapter for every type</a></li>
+<li class="toctree-l2"><a class="reference internal" href="linsolvers.html#the-options-of-each-type">The options of each type</a></li>
+<li class="toctree-l2"><a class="reference internal" href="linsolvers.html#the-pages-on-linear-solvers">The pages on linear solvers</a></li>
+</ul>
+</li>
 <li class="toctree-l1"><a class="reference internal" href="steps.html">Steps</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="steps.html#edelweissfe.steps.base.stepbase.StepBase"><code class="docutils literal notranslate"><span class="pre">StepBase</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="steps.html#edelweissfe.steps.base.stepbase.StepIncrementationSchema"><code class="docutils literal notranslate"><span class="pre">StepIncrementationSchema</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="steps.html#increment-control-of-adaptive-steps">Increment control of adaptive steps</a></li>
 <li class="toctree-l2"><a class="reference internal" href="steps.html#module-edelweissfe.steps.adaptivestep"><code class="docutils literal notranslate"><span class="pre">AdaptiveStep</span></code> - A classical adpative step for transient simulations</a></li>
 <li class="toctree-l2"><a class="reference internal" href="steps.html#module-edelweissfe.steps.adaptivestepforexplicitsimulations"><code class="docutils literal notranslate"><span class="pre">AdaptiveStepForExplicitSimulations</span></code> - An adaptive step for explicit simulations</a></li>
 </ul>
@@ -157,11 +191,48 @@
 <li class="toctree-l2"><a class="reference internal" href="constraints.html#penaltyindirectcontrol-penalty-based-indirect-control"><code class="docutils literal notranslate"><span class="pre">penaltyindirectcontrol</span></code> - Penalty based indirect control</a></li>
 <li class="toctree-l2"><a class="reference internal" href="constraints.html#directionalspringpenalty-assigning-a-stiffness-to-specific-degrees-of-freedom"><code class="docutils literal notranslate"><span class="pre">directionalspringpenalty</span></code> - Assigning a stiffness to specific degrees of freedom</a></li>
 <li class="toctree-l2"><a class="reference internal" href="constraints.html#nodetorigidsurfacepenalty-preventing-nodes-from-penetrating-a-defined-rigid-boundary"><code class="docutils literal notranslate"><span class="pre">nodetorigidsurfacepenalty</span></code> - Preventing nodes from penetrating a defined rigid boundary</a></li>
+<li class="toctree-l2"><a class="reference internal" href="constraints.html#nodetodiscreterigidbodypenalty-contact-against-a-discrete-rigid-body-deprecated"><code class="docutils literal notranslate"><span class="pre">nodetodiscreterigidbodypenalty</span></code> - Contact against a discrete rigid body (deprecated)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="constraints.html#nodetodeformablesurfacepenalty-node-to-deformable-surface-contact"><code class="docutils literal notranslate"><span class="pre">nodetodeformablesurfacepenalty</span></code> - Node-to-deformable-surface contact</a></li>
+<li class="toctree-l2"><a class="reference internal" href="constraints.html#surfacetodeformablesurfacepenalty-integrated-surface-to-surface-contact"><code class="docutils literal notranslate"><span class="pre">surfacetodeformablesurfacepenalty</span></code> - Integrated surface-to-surface contact</a></li>
+<li class="toctree-l2"><a class="reference internal" href="constraints.html#surfacetodiscreterigidbodypenalty-integrated-contact-against-a-discrete-rigid-body"><code class="docutils literal notranslate"><span class="pre">surfacetodiscreterigidbodypenalty</span></code> - Integrated contact against a discrete rigid body</a></li>
+<li class="toctree-l2"><a class="reference internal" href="constraints.html#tie-surface-to-surface-tie-dof-elimination"><code class="docutils literal notranslate"><span class="pre">tie</span></code> - Surface-to-surface tie (DOF elimination)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="constraints.html#contested-slave-degrees-of-freedom">Contested slave degrees of freedom</a></li>
+<li class="toctree-l2"><a class="reference internal" href="constraints.html#multi-point-constraints-and-dirichlet-boundary-conditions">Multi-point constraints and Dirichlet boundary conditions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="constraints.html#hangingnode-hanging-node-coupling-for-adaptive-mesh-refinement"><code class="docutils literal notranslate"><span class="pre">hangingnode</span></code> - Hanging-node coupling for adaptive mesh refinement</a></li>
 <li class="toctree-l2"><a class="reference internal" href="constraints.html#implementing-your-own-constraints">Implementing your own constraints</a></li>
 </ul>
 </li>
-<li class="toctree-l1"><a class="reference internal" href="dofmanager.html">DOF manager</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofmanager.DofManager"><code class="docutils literal notranslate"><span class="pre">DofManager</span></code></a></li>
+<li class="toctree-l1"><a class="reference internal" href="rigidbodies.html">Rigid bodies</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="rigidbodies.html#kinematics">Kinematics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="rigidbodies.html#mass-properties">Mass properties</a></li>
+<li class="toctree-l2"><a class="reference internal" href="rigidbodies.html#surface-query">Surface query</a></li>
+<li class="toctree-l2"><a class="reference internal" href="rigidbodies.html#creating-a-discrete-rigid-body">Creating a discrete rigid body</a></li>
+<li class="toctree-l2"><a class="reference internal" href="rigidbodies.html#api">API</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="contacttheory.html">Contact mechanics: theory</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="contacttheory.html#formulation">Formulation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="contacttheory.html#surface-discretization-and-load-transfer">Surface discretization and load transfer</a></li>
+<li class="toctree-l2"><a class="reference internal" href="contacttheory.html#framework-integration-and-verification">Framework integration and verification</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="dofmanager.html">Degree of Freedom (DOF) Manager and Numerics</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="dofmanager.html#module-edelweissfe.numerics.dofmanager">DofManager</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dofmanager.html#module-edelweissfe.numerics.dofvector">DofVector</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dofmanager.html#module-edelweissfe.numerics.scatterdofvector">ScatterDofVector</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dofmanager.html#module-edelweissfe.numerics.vijsystemmatrix">VIJSystemMatrix</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dofmanager.html#module-edelweissfe.numerics.vijentitybase">VIJEntityBase</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dofmanager.html#module-edelweissfe.numerics.parallelizationutilities">Parallelization Utilities</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="assembly.html">System matrix assembly</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="assembly.html#the-two-paths">The two paths</a></li>
+<li class="toctree-l2"><a class="reference internal" href="assembly.html#why-the-direct-path-is-also-faster">Why the direct path is also faster</a></li>
+<li class="toctree-l2"><a class="reference internal" href="assembly.html#the-one-definition-of-the-pattern">The one definition of the pattern</a></li>
+<li class="toctree-l2"><a class="reference internal" href="assembly.html#building-only-the-pattern">Building only the pattern</a></li>
+<li class="toctree-l2"><a class="reference internal" href="assembly.html#private-copies-or-atomics">Private copies, or atomics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="assembly.html#validation">Validation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="assembly.html#reference">Reference</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="fieldoutputmanager.html">Field outputs</a><ul>
@@ -169,6 +240,7 @@
 <li class="toctree-l2"><a class="reference internal" href="fieldoutputmanager.html#edelweissfe.utils.fieldoutput._FieldOutputBase"><code class="docutils literal notranslate"><span class="pre">_FieldOutputBase</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="fieldoutputmanager.html#edelweissfe.utils.fieldoutput.ElementFieldOutput"><code class="docutils literal notranslate"><span class="pre">ElementFieldOutput</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="fieldoutputmanager.html#edelweissfe.utils.fieldoutput.NodeFieldOutput"><code class="docutils literal notranslate"><span class="pre">NodeFieldOutput</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="fieldoutputmanager.html#edelweissfe.utils.fieldoutput.RigidBodyFieldOutput"><code class="docutils literal notranslate"><span class="pre">RigidBodyFieldOutput</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="fieldoutputmanager.html#edelweissfe.utils.fieldoutput.ExpressionFieldOutput"><code class="docutils literal notranslate"><span class="pre">ExpressionFieldOutput</span></code></a></li>
 </ul>
 </li>
@@ -181,6 +253,7 @@
 <li class="toctree-l2"><a class="reference internal" href="elements.html#provider-marmot">Provider <code class="docutils literal notranslate"><span class="pre">marmot</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="elements.html#provider-marmotsingleqpelement">Provider <code class="docutils literal notranslate"><span class="pre">marmotsingleqpelement</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="elements.html#provider-edelweiss">Provider <code class="docutils literal notranslate"><span class="pre">edelweiss</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="elements.html#contact-facet-elements">Contact facet elements</a></li>
 <li class="toctree-l2"><a class="reference internal" href="elements.html#implementing-your-own-elements">Implementing your own elements</a></li>
 </ul>
 </li>
@@ -188,11 +261,14 @@
 <li class="toctree-l2"><a class="reference internal" href="exceptions.html#edelweissfe.utils.exceptions.ConditionalStop"><code class="docutils literal notranslate"><span class="pre">ConditionalStop</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="exceptions.html#edelweissfe.utils.exceptions.CutbackRequest"><code class="docutils literal notranslate"><span class="pre">CutbackRequest</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="exceptions.html#edelweissfe.utils.exceptions.DivergingSolution"><code class="docutils literal notranslate"><span class="pre">DivergingSolution</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="exceptions.html#edelweissfe.utils.exceptions.IncrementFailed"><code class="docutils literal notranslate"><span class="pre">IncrementFailed</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="exceptions.html#edelweissfe.utils.exceptions.InputExecption"><code class="docutils literal notranslate"><span class="pre">InputExecption</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="exceptions.html#edelweissfe.utils.exceptions.ReachedMaxIncrements"><code class="docutils literal notranslate"><span class="pre">ReachedMaxIncrements</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="exceptions.html#edelweissfe.utils.exceptions.ReachedMaxIterations"><code class="docutils literal notranslate"><span class="pre">ReachedMaxIterations</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="exceptions.html#edelweissfe.utils.exceptions.ReachedMinIncrementSize"><code class="docutils literal notranslate"><span class="pre">ReachedMinIncrementSize</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="exceptions.html#edelweissfe.utils.exceptions.RestartError"><code class="docutils literal notranslate"><span class="pre">RestartError</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="exceptions.html#edelweissfe.utils.exceptions.StepFailed"><code class="docutils literal notranslate"><span class="pre">StepFailed</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="exceptions.html#edelweissfe.utils.exceptions.TopologyError"><code class="docutils literal notranslate"><span class="pre">TopologyError</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="exceptions.html#edelweissfe.utils.exceptions.WrongDomain"><code class="docutils literal notranslate"><span class="pre">WrongDomain</span></code></a></li>
 </ul>
 </li>
@@ -202,13 +278,17 @@
 <li class="toctree-l2"><a class="reference internal" href="generators.html#pipegen-a-3d-pipe-mesh-generator"><code class="docutils literal notranslate"><span class="pre">pipegen</span></code> - A 3D pipe mesh generator</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generators.html#cubit-a-cubit-mesh-generator"><code class="docutils literal notranslate"><span class="pre">cubit</span></code> - A cubit mesh generator</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generators.html#findclosestnode-find-the-closest-node"><code class="docutils literal notranslate"><span class="pre">findclosestnode</span></code> - Find the closest node</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generators.html#cylindergenerator-a-structured-hex-mesh-generator-for-cylindrical-geometries"><code class="docutils literal notranslate"><span class="pre">cylindergenerator</span></code> - A structured hex mesh generator for cylindrical geometries</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generators.html#cuboidlatticegenerator-a-cuboid-lattice-mesh-generator"><code class="docutils literal notranslate"><span class="pre">cuboidlatticegenerator</span></code> - A cuboid lattice mesh generator</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generators.html#microstructuregenerator-a-unit-cell-based-microstructure-mesh-generator"><code class="docutils literal notranslate"><span class="pre">microstructuregenerator</span></code> - A unit-cell-based microstructure mesh generator</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generators.html#discreterigidbodygenerator-a-discrete-rigid-body-from-a-surface-mesh-file"><code class="docutils literal notranslate"><span class="pre">discreterigidbodygenerator</span></code> - A discrete rigid body from a surface mesh file</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generators.html#executepythoncode-script-model-generation-using-python"><code class="docutils literal notranslate"><span class="pre">executepythoncode</span></code> - Script model generation using Python</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generators.html#surfaceelementgenerator-contact-facet-elements-from-a-surface"><code class="docutils literal notranslate"><span class="pre">surfaceElementGenerator</span></code> - Contact facet elements from a *surface</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="journal.html">Journal</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="journal.html#edelweissfe.journal.journal.Journal"><code class="docutils literal notranslate"><span class="pre">Journal</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="journal.html#edelweissfe.journal.journal.displayWidth"><code class="docutils literal notranslate"><span class="pre">displayWidth()</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="materials.html">Materials</a><ul>
@@ -217,6 +297,49 @@
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="mesh.html">Creating finite element meshes</a></li>
+<li class="toctree-l1"><a class="reference internal" href="modelmodifiers.html">Model modifiers</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="modelmodifiers.html#hadaptivity-hanging-node-h-adaptivity-for-hex20"><code class="docutils literal notranslate"><span class="pre">hAdaptivity</span></code> - Hanging-node h-adaptivity for HEX20</a></li>
+<li class="toctree-l2"><a class="reference internal" href="modelmodifiers.html#batching-refinement-across-increments">Batching refinement across increments</a></li>
+<li class="toctree-l2"><a class="reference internal" href="modelmodifiers.html#module-edelweissfe.adaptivity.statetransfer">State-variable transfer strategies</a></li>
+<li class="toctree-l2"><a class="reference internal" href="modelmodifiers.html#predictor-after-a-refinement">Predictor after a refinement</a></li>
+<li class="toctree-l2"><a class="reference internal" href="modelmodifiers.html#re-equilibration-after-a-refinement">Re-equilibration after a refinement</a></li>
+<li class="toctree-l2"><a class="reference internal" href="modelmodifiers.html#refinement-under-a-dynamic-solver">Refinement under a dynamic solver</a></li>
+<li class="toctree-l2"><a class="reference internal" href="modelmodifiers.html#compatibility-with-facet-based-contact-and-tie">Compatibility with facet-based contact and tie</a></li>
+<li class="toctree-l2"><a class="reference internal" href="modelmodifiers.html#transparency-for-ordinary-amr-unaware-consumers">Transparency for ordinary (AMR-unaware) consumers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="modelmodifiers.html#surfacesnap-analytical-surface-node-snapping-for-amr-refined-curved-boundaries"><code class="docutils literal notranslate"><span class="pre">surfaceSnap</span></code> - Analytical-surface node snapping for AMR-refined curved boundaries</a></li>
+<li class="toctree-l2"><a class="reference internal" href="modelmodifiers.html#restart-checkpointing">Restart / checkpointing</a></li>
+<li class="toctree-l2"><a class="reference internal" href="modelmodifiers.html#implementing-your-own-model-modifiers">Implementing your own model modifiers</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="topologypipeline.html">The topology pipeline: how a model changes itself</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="topologypipeline.html#one-increment-three-phases">One increment, three phases</a></li>
+<li class="toctree-l2"><a class="reference internal" href="topologypipeline.html#writing-a-model-modifier-plan-and-apply">Writing a model modifier: <code class="docutils literal notranslate"><span class="pre">plan</span></code> and <code class="docutils literal notranslate"><span class="pre">apply</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="topologypipeline.html#why-the-split-exists-restart">Why the split exists: restart</a></li>
+<li class="toctree-l2"><a class="reference internal" href="topologypipeline.html#element-and-node-numbers">Element and node numbers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="topologypipeline.html#reacting-to-a-change-three-tiers-deliberately">Reacting to a change: three tiers, deliberately</a></li>
+<li class="toctree-l2"><a class="reference internal" href="topologypipeline.html#why-pull-and-not-a-push-notification">Why pull, and not a push notification</a></li>
+<li class="toctree-l2"><a class="reference internal" href="topologypipeline.html#a-checklist-for-a-new-modifier">A checklist for a new modifier</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="restart.html">Restart</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="restart.html#the-rule">The rule</a></li>
+<li class="toctree-l2"><a class="reference internal" href="restart.html#one-increment-and-where-the-checkpoint-is-written">One increment, and where the checkpoint is written</a></li>
+<li class="toctree-l2"><a class="reference internal" href="restart.html#restoring-a-checkpoint">Restoring a checkpoint</a></li>
+<li class="toctree-l2"><a class="reference internal" href="restart.html#adding-something-that-carries-state-between-increments">Adding something that carries state between increments</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="adaptivitytheory.html">Adaptive refinement: error estimation and marking</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="adaptivitytheory.html#the-adaptive-loop-and-where-markers-sit">The adaptive loop and where markers sit</a></li>
+<li class="toctree-l2"><a class="reference internal" href="adaptivitytheory.html#motivation-gradient-enhanced-damage">Motivation: gradient-enhanced damage</a></li>
+<li class="toctree-l2"><a class="reference internal" href="adaptivitytheory.html#recovery-based-a-posteriori-error-estimation">Recovery-based a posteriori error estimation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="adaptivitytheory.html#marking-which-of-the-ranked-elements-to-refine">Marking: which of the ranked elements to refine</a></li>
+<li class="toctree-l2"><a class="reference internal" href="adaptivitytheory.html#reactive-and-predictive-marking-why-more-than-one-marker">Reactive and predictive marking: why more than one marker</a></li>
+<li class="toctree-l2"><a class="reference internal" href="adaptivitytheory.html#usage">Usage</a></li>
+<li class="toctree-l2"><a class="reference internal" href="adaptivitytheory.html#module-edelweissfe.adaptivity.marking">Implementation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="adaptivitytheory.html#limitations-and-extensions">Limitations and extensions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="adaptivitytheory.html#references">References</a></li>
+</ul>
+</li>
 <li class="toctree-l1"><a class="reference internal" href="output.html">Outputmanagers</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="output.html#module-edelweissfe.outputmanagers.ensight"><code class="docutils literal notranslate"><span class="pre">ensight</span></code> - Export to Ensight Gold format</a></li>
 <li class="toctree-l2"><a class="reference internal" href="output.html#module-edelweissfe.outputmanagers.monitor"><code class="docutils literal notranslate"><span class="pre">monitor</span></code> - Monitor quantities in the terminal</a></li>
@@ -227,10 +350,22 @@
 <li class="toctree-l2"><a class="reference internal" href="output.html#module-edelweissfe.outputmanagers.statusfile"><code class="docutils literal notranslate"><span class="pre">statusfile</span></code> - Write the status of the simulation to a file</a></li>
 <li class="toctree-l2"><a class="reference internal" href="output.html#module-edelweissfe.outputmanagers.meshdatatofile"><code class="docutils literal notranslate"><span class="pre">meshdatatofile</span></code> - Write the (generated) mesh data to a file</a></li>
 <li class="toctree-l2"><a class="reference internal" href="output.html#module-edelweissfe.outputmanagers.computetimemonitor"><code class="docutils literal notranslate"><span class="pre">computetimemonitor</span></code> - Print and write compute times per increment</a></li>
+<li class="toctree-l2"><a class="reference internal" href="output.html#module-edelweissfe.outputmanagers.restart"><code class="docutils literal notranslate"><span class="pre">restart</span></code> - Write restart checkpoints during the analysis</a></li>
 </ul>
 </li>
-<li class="toctree-l1"><a class="reference internal" href="parallelization.html">Parallelization</a></li>
-<li class="toctree-l1"><a class="reference internal" href="phenomena.html">Physical phenomena</a></li>
+<li class="toctree-l1"><a class="reference internal" href="parallelization.html">Parallelization</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="parallelization.html#array-operations-on-the-thread-pool">Array operations on the thread pool</a></li>
+<li class="toctree-l2"><a class="reference internal" href="parallelization.html#do-not-set-omp-proc-bind-or-omp-places">Do not set <code class="docutils literal notranslate"><span class="pre">OMP_PROC_BIND</span></code> or <code class="docutils literal notranslate"><span class="pre">OMP_PLACES</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="parallelization.html#thread-local-buffers-in-the-element-loop">Thread-local buffers in the element loop</a></li>
+<li class="toctree-l2"><a class="reference internal" href="parallelization.html#load-balancing-of-the-element-loop">Load balancing of the element loop</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="phenomena.html">Physical phenomena</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="phenomena.html#edelweissfe.config.phenomena.carriesKineticEnergy"><code class="docutils literal notranslate"><span class="pre">carriesKineticEnergy()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="phenomena.html#edelweissfe.config.phenomena.carriesLinearMomentum"><code class="docutils literal notranslate"><span class="pre">carriesLinearMomentum()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="phenomena.html#edelweissfe.config.phenomena.getInertiaKind"><code class="docutils literal notranslate"><span class="pre">getInertiaKind()</span></code></a></li>
+</ul>
+</li>
 <li class="toctree-l1"><a class="reference internal" href="plotter.html">Plotting</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="plotter.html#edelweissfe.utils.plotter.Plotter"><code class="docutils literal notranslate"><span class="pre">Plotter</span></code></a></li>
 </ul>
@@ -266,7 +401,8 @@
 <li class="toctree-l1"><a class="reference internal" href="utils.html">Utilities</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="utils.html#matrix-conversion-from-coo-sparse-format-to-csr-format">Matrix conversion from COO sparse format to CSR format</a></li>
 <li class="toctree-l2"><a class="reference internal" href="utils.html#gathering-efficiently-of-element-results">Gathering efficiently of element results</a></li>
-<li class="toctree-l2"><a class="reference internal" href="utils.html#adaptive-time-stepping">Adaptive time stepping</a></li>
+<li class="toctree-l2"><a class="reference internal" href="utils.html#module-edelweissfe.timesteppers.base.timestepperbase">Time stepping</a></li>
+<li class="toctree-l2"><a class="reference internal" href="utils.html#parent-element-faces-and-facet-quadrature">Parent element faces and facet quadrature</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="variables.html">Variables</a><ul>

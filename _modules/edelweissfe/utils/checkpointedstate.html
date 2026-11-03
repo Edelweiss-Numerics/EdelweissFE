@@ -1,0 +1,258 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>edelweissfe.utils.checkpointedstate &mdash; EdelweissFE v22.07 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=cfdaff8d" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/custom.css?v=37fbe429" />
+
+  
+      <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../_static/documentation_options.js?v=17e2f33f"></script>
+      <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../index.html" class="icon icon-home">
+            EdelweissFE
+              <img src="../../../_static/edelweiss_fe_logo.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../features.html">Features</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../prerequisites.html">Prerequisites</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../documentation/index.html">Documentation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../contributors.html">Contributors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../publications.html">Publications</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">EdelweissFE</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">edelweissfe.utils.checkpointedstate</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for edelweissfe.utils.checkpointedstate</h1><div class="highlight"><pre>
+<span></span><span class="ch">#!/usr/bin/env python3</span>
+<span class="c1"># -*- coding: utf-8 -*-</span>
+<span class="c1">#  ---------------------------------------------------------------------</span>
+<span class="c1">#</span>
+<span class="c1">#  _____    _      _              _         _____ _____</span>
+<span class="c1"># | ____|__| | ___| |_      _____(_)___ ___|  ___| ____|</span>
+<span class="c1"># |  _| / _` |/ _ \ \ \ /\ / / _ \ / __/ __| |_  |  _|</span>
+<span class="c1"># | |__| (_| |  __/ |\ V  V /  __/ \__ \__ \  _| | |___</span>
+<span class="c1"># |_____\__,_|\___|_| \_/\_/ \___|_|___/___/_|   |_____|</span>
+<span class="c1">#</span>
+<span class="c1">#</span>
+<span class="c1">#  Unit of Strength of Materials and Structural Analysis</span>
+<span class="c1">#  University of Innsbruck,</span>
+<span class="c1">#  2017 - today</span>
+<span class="c1">#</span>
+<span class="c1">#  Matthias Neuner matthias.neuner@uibk.ac.at</span>
+<span class="c1">#</span>
+<span class="c1">#  This file is part of EdelweissFE.</span>
+<span class="c1">#</span>
+<span class="c1">#  This library is free software; you can redistribute it and/or</span>
+<span class="c1">#  modify it under the terms of the GNU Lesser General Public</span>
+<span class="c1">#  License as published by the Free Software Foundation; either</span>
+<span class="c1">#  version 2.1 of the License, or (at your option) any later version.</span>
+<span class="c1">#</span>
+<span class="c1">#  The full text of the license can be found in the file LICENSE.md at</span>
+<span class="c1">#  the top level directory of EdelweissFE.</span>
+<span class="c1">#  ---------------------------------------------------------------------</span>
+<span class="sd">"""The state a component carries from one increment to the next, written to and read from a restart</span>
+<span class="sd">checkpoint as it is.</span>
+
+<span class="sd">A component *declares* that state: a mapping of attribute name to type, for instance the implicit</span>
+<span class="sd">solver's</span>
+
+<span class="sd">.. code-block:: python</span>
+
+<span class="sd">    checkpointedState = {"prevTimeStep": TimeStep, "dU": np.ndarray}</span>
+
+<span class="sd">and :func:`packState` / :func:`unpackState` turn the declared attributes into the flat mapping of</span>
+<span class="sd">arrays a checkpoint stores, and back. An empty mapping declares that a component carries nothing</span>
+<span class="sd">between increments. A component whose declaration is still None has not been declared at all, and</span>
+<span class="sd">cannot be checkpointed.</span>
+
+<span class="sd">An attribute that is None is simply left out, and read back as None. A ``dict`` maps strings to</span>
+<span class="sd">floats. An attribute whose type is none of the plain ones is a helper object that declares its own</span>
+<span class="sd">``checkpointedState``; its state is stored under the attribute's name as a prefix.</span>
+<span class="sd">"""</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.timesteppers.timestep</span><span class="w"> </span><span class="kn">import</span> <span class="n">TimeStep</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.utils.exceptions</span><span class="w"> </span><span class="kn">import</span> <span class="n">RestartError</span>
+
+<span class="c1">#: How each type a declared attribute may have is stored ...</span>
+<span class="n">_TO_ARRAY</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="nb">float</span><span class="p">:</span> <span class="k">lambda</span> <span class="n">value</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">),</span>
+    <span class="nb">int</span><span class="p">:</span> <span class="k">lambda</span> <span class="n">value</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">),</span>
+    <span class="nb">bool</span><span class="p">:</span> <span class="k">lambda</span> <span class="n">value</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">),</span>
+    <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">,</span>
+    <span class="nb">list</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">,</span>
+    <span class="nb">set</span><span class="p">:</span> <span class="k">lambda</span> <span class="n">value</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="nb">sorted</span><span class="p">(</span><span class="n">value</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">bytes</span><span class="p">),</span>
+    <span class="n">TimeStep</span><span class="p">:</span> <span class="k">lambda</span> <span class="n">t</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span>
+        <span class="p">[</span><span class="n">t</span><span class="o">.</span><span class="n">number</span><span class="p">,</span> <span class="n">t</span><span class="o">.</span><span class="n">stepProgressIncrement</span><span class="p">,</span> <span class="n">t</span><span class="o">.</span><span class="n">stepProgress</span><span class="p">,</span> <span class="n">t</span><span class="o">.</span><span class="n">timeIncrement</span><span class="p">,</span> <span class="n">t</span><span class="o">.</span><span class="n">stepTime</span><span class="p">,</span> <span class="n">t</span><span class="o">.</span><span class="n">totalTime</span><span class="p">]</span>
+    <span class="p">),</span>
+<span class="p">}</span>
+<span class="c1">#: ... and read back.</span>
+<span class="n">_FROM_ARRAY</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="nb">float</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+    <span class="nb">int</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="nb">bool</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
+    <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">,</span>
+    <span class="nb">list</span><span class="p">:</span> <span class="nb">list</span><span class="p">,</span>
+    <span class="nb">set</span><span class="p">:</span> <span class="k">lambda</span> <span class="n">a</span><span class="p">:</span> <span class="p">{</span><span class="n">entry</span><span class="o">.</span><span class="n">decode</span><span class="p">()</span> <span class="k">for</span> <span class="n">entry</span> <span class="ow">in</span> <span class="n">a</span><span class="p">},</span>
+    <span class="n">TimeStep</span><span class="p">:</span> <span class="k">lambda</span> <span class="n">a</span><span class="p">:</span> <span class="n">TimeStep</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">a</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span> <span class="nb">float</span><span class="p">(</span><span class="n">a</span><span class="p">[</span><span class="mi">1</span><span class="p">]),</span> <span class="nb">float</span><span class="p">(</span><span class="n">a</span><span class="p">[</span><span class="mi">2</span><span class="p">]),</span> <span class="nb">float</span><span class="p">(</span><span class="n">a</span><span class="p">[</span><span class="mi">3</span><span class="p">]),</span> <span class="nb">float</span><span class="p">(</span><span class="n">a</span><span class="p">[</span><span class="mi">4</span><span class="p">]),</span> <span class="nb">float</span><span class="p">(</span><span class="n">a</span><span class="p">[</span><span class="mi">5</span><span class="p">])),</span>
+<span class="p">}</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_declaration</span><span class="p">(</span><span class="n">component</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+    <span class="n">declaration</span> <span class="o">=</span> <span class="n">component</span><span class="o">.</span><span class="n">checkpointedState</span>
+    <span class="k">if</span> <span class="n">declaration</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">RestartError</span><span class="p">(</span>
+            <span class="s2">"</span><span class="si">{:}</span><span class="s2"> does not declare the state it carries between increments (checkpointedState), so it "</span>
+            <span class="s2">"cannot be checkpointed"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="nb">type</span><span class="p">(</span><span class="n">component</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="p">)</span>
+        <span class="p">)</span>
+    <span class="k">return</span> <span class="n">declaration</span>
+
+
+<div class="viewcode-block" id="packState">
+<a class="viewcode-back" href="../../../documentation/output.html#edelweissfe.utils.checkpointedstate.packState">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">packState</span><span class="p">(</span><span class="n">component</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""The declared state of ``component``, as a flat mapping of arrays.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    component</span>
+<span class="sd">        Any object with a ``checkpointedState`` declaration.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    dict[str, numpy.ndarray]</span>
+<span class="sd">        One array per declared attribute that is not None.</span>
+<span class="sd">    """</span>
+
+    <span class="n">state</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">kind</span> <span class="ow">in</span> <span class="n">_declaration</span><span class="p">(</span><span class="n">component</span><span class="p">)</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="n">value</span> <span class="o">=</span> <span class="n">component</span><span class="o">.</span><span class="vm">__dict__</span><span class="p">[</span><span class="n">name</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">continue</span>
+        <span class="k">if</span> <span class="n">kind</span> <span class="ow">is</span> <span class="nb">dict</span><span class="p">:</span>
+            <span class="n">state</span><span class="p">[</span><span class="n">name</span> <span class="o">+</span> <span class="s2">".keys"</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">value</span><span class="o">.</span><span class="n">keys</span><span class="p">()),</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">bytes</span><span class="p">)</span>
+            <span class="n">state</span><span class="p">[</span><span class="n">name</span> <span class="o">+</span> <span class="s2">".values"</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">value</span><span class="o">.</span><span class="n">values</span><span class="p">()),</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">kind</span> <span class="ow">in</span> <span class="n">_TO_ARRAY</span><span class="p">:</span>
+            <span class="n">state</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">_TO_ARRAY</span><span class="p">[</span><span class="n">kind</span><span class="p">](</span><span class="n">value</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">state</span> <span class="o">|=</span> <span class="p">{</span><span class="n">name</span> <span class="o">+</span> <span class="s2">"."</span> <span class="o">+</span> <span class="n">key</span><span class="p">:</span> <span class="n">array</span> <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">array</span> <span class="ow">in</span> <span class="n">packState</span><span class="p">(</span><span class="n">value</span><span class="p">)</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span>
+    <span class="k">return</span> <span class="n">state</span></div>
+
+
+
+<div class="viewcode-block" id="unpackState">
+<a class="viewcode-back" href="../../../documentation/output.html#edelweissfe.utils.checkpointedstate.unpackState">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">unpackState</span><span class="p">(</span><span class="n">component</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]):</span>
+<span class="w">    </span><span class="sd">"""Set the declared attributes of ``component`` from what :func:`packState` returned.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    component</span>
+<span class="sd">        Any object with a ``checkpointedState`` declaration.</span>
+<span class="sd">    state</span>
+<span class="sd">        The mapping of arrays.</span>
+<span class="sd">    """</span>
+
+    <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">kind</span> <span class="ow">in</span> <span class="n">_declaration</span><span class="p">(</span><span class="n">component</span><span class="p">)</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="k">if</span> <span class="n">kind</span> <span class="ow">is</span> <span class="nb">dict</span><span class="p">:</span>
+            <span class="n">keys</span> <span class="o">=</span> <span class="n">state</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">name</span> <span class="o">+</span> <span class="s2">".keys"</span><span class="p">)</span>
+            <span class="n">component</span><span class="o">.</span><span class="vm">__dict__</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="kc">None</span> <span class="k">if</span> <span class="n">keys</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="p">{</span><span class="n">k</span><span class="o">.</span><span class="n">decode</span><span class="p">():</span> <span class="nb">float</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">keys</span><span class="p">,</span> <span class="n">state</span><span class="p">[</span><span class="n">name</span> <span class="o">+</span> <span class="s2">".values"</span><span class="p">])}</span>
+            <span class="p">)</span>
+        <span class="k">elif</span> <span class="n">kind</span> <span class="ow">in</span> <span class="n">_FROM_ARRAY</span><span class="p">:</span>
+            <span class="n">component</span><span class="o">.</span><span class="vm">__dict__</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">_FROM_ARRAY</span><span class="p">[</span><span class="n">kind</span><span class="p">](</span><span class="n">state</span><span class="p">[</span><span class="n">name</span><span class="p">])</span> <span class="k">if</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">state</span> <span class="k">else</span> <span class="kc">None</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">prefix</span> <span class="o">=</span> <span class="n">name</span> <span class="o">+</span> <span class="s2">"."</span>
+            <span class="n">nested</span> <span class="o">=</span> <span class="p">{</span><span class="n">key</span><span class="p">[</span><span class="nb">len</span><span class="p">(</span><span class="n">prefix</span><span class="p">)</span> <span class="p">:]:</span> <span class="n">array</span> <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">array</span> <span class="ow">in</span> <span class="n">state</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">key</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="n">prefix</span><span class="p">)}</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">nested</span><span class="p">:</span>
+                <span class="n">component</span><span class="o">.</span><span class="vm">__dict__</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+                <span class="k">continue</span>
+            <span class="n">helper</span> <span class="o">=</span> <span class="n">component</span><span class="o">.</span><span class="vm">__dict__</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">name</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">helper</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">helper</span> <span class="o">=</span> <span class="n">kind</span><span class="o">.</span><span class="fm">__new__</span><span class="p">(</span><span class="n">kind</span><span class="p">)</span>
+            <span class="n">unpackState</span><span class="p">(</span><span class="n">helper</span><span class="p">,</span> <span class="n">nested</span><span class="p">)</span>
+            <span class="n">component</span><span class="o">.</span><span class="vm">__dict__</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">helper</span></div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Matthias Neuner.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

@@ -1,0 +1,775 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>System matrix assembly &mdash; EdelweissFE v22.07 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=cfdaff8d" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=37fbe429" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=17e2f33f"></script>
+      <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Field outputs" href="fieldoutputmanager.html" />
+    <link rel="prev" title="Degree of Freedom (DOF) Manager and Numerics" href="dofmanager.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            EdelweissFE
+              <img src="../_static/edelweiss_fe_logo.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../features.html">Features</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../prerequisites.html">Prerequisites</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation.html">Installation</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">Documentation</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="syntax.html">Input file syntax</a></li>
+<li class="toctree-l2"><a class="reference internal" href="inputsystem.html">The input system: how <code class="docutils literal notranslate"><span class="pre">.inp</span></code> grammar is defined</a></li>
+<li class="toctree-l2"><a class="reference internal" href="jobs.html">Inputfile driven simulations</a></li>
+<li class="toctree-l2"><a class="reference internal" href="models.html">Models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="solvers.html">Solvers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="linsolvers.html">Linear solvers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="steps.html">Steps</a></li>
+<li class="toctree-l2"><a class="reference internal" href="analyticalfields.html">Analytical fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="constraints.html">Constraints</a></li>
+<li class="toctree-l2"><a class="reference internal" href="rigidbodies.html">Rigid bodies</a></li>
+<li class="toctree-l2"><a class="reference internal" href="contacttheory.html">Contact mechanics: theory</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dofmanager.html">Degree of Freedom (DOF) Manager and Numerics</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">System matrix assembly</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#the-two-paths">The two paths</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#why-the-direct-path-is-also-faster">Why the direct path is also faster</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#the-one-definition-of-the-pattern">The one definition of the pattern</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#building-only-the-pattern">Building only the pattern</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#private-copies-or-atomics">Private copies, or atomics</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#validation">Validation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#reference">Reference</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.numerics.csrgeneratorv2.DirectCSRAssembler"><code class="docutils literal notranslate"><span class="pre">DirectCSRAssembler</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.numerics.csrgeneratorv2.AliasedCSRMatrix"><code class="docutils literal notranslate"><span class="pre">AliasedCSRMatrix</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="fieldoutputmanager.html">Field outputs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="fields.html">Fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="elements.html">Elements</a></li>
+<li class="toctree-l2"><a class="reference internal" href="exceptions.html">Exceptions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generators.html">Generators</a></li>
+<li class="toctree-l2"><a class="reference internal" href="journal.html">Journal</a></li>
+<li class="toctree-l2"><a class="reference internal" href="materials.html">Materials</a></li>
+<li class="toctree-l2"><a class="reference internal" href="mesh.html">Creating finite element meshes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="modelmodifiers.html">Model modifiers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="topologypipeline.html">The topology pipeline: how a model changes itself</a></li>
+<li class="toctree-l2"><a class="reference internal" href="restart.html">Restart</a></li>
+<li class="toctree-l2"><a class="reference internal" href="adaptivitytheory.html">Adaptive refinement: error estimation and marking</a></li>
+<li class="toctree-l2"><a class="reference internal" href="output.html">Outputmanagers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="parallelization.html">Parallelization</a></li>
+<li class="toctree-l2"><a class="reference internal" href="phenomena.html">Physical phenomena</a></li>
+<li class="toctree-l2"><a class="reference internal" href="plotter.html">Plotting</a></li>
+<li class="toctree-l2"><a class="reference internal" href="points.html">Points</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sections.html">Sections</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sets.html">Sets</a></li>
+<li class="toctree-l2"><a class="reference internal" href="stepactions.html">Step actions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="utils.html">Utilities</a></li>
+<li class="toctree-l2"><a class="reference internal" href="variables.html">Variables</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../contributors.html">Contributors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../publications.html">Publications</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">EdelweissFE</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="index.html">Documentation</a></li>
+      <li class="breadcrumb-item active">System matrix assembly</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/documentation/assembly.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="system-matrix-assembly">
+<h1>System matrix assembly<a class="headerlink" href="#system-matrix-assembly" title="Link to this heading"></a></h1>
+<p>Assembling a sparse system matrix from element, cell or particle contributions can be done two ways,
+and EdelweissFE provides both. Which one is appropriate is a memory question far more than a speed one,
+so this page describes what each costs as well as what each does.</p>
+<p>Both paths are in <code class="docutils literal notranslate"><span class="pre">edelweissfe.numerics.csrgeneratorv2</span></code>, backed by the C++ header
+<code class="docutils literal notranslate"><span class="pre">edelweissfe/numerics/_csrcore.h</span></code>.</p>
+<section id="the-two-paths">
+<h2>The two paths<a class="headerlink" href="#the-two-paths" title="Link to this heading"></a></h2>
+<p><strong>Stage, then gather</strong> (<a class="reference internal" href="utils.html#edelweissfe.numerics.csrgeneratorv2.CSRGenerator" title="edelweissfe.numerics.csrgeneratorv2.CSRGenerator"><code class="xref py py-class docutils literal notranslate"><span class="pre">CSRGenerator</span></code></a>). Every entity writes
+its dense block into its own slice of one long <em>VIJ</em> (COO triplet) value array. Contributions to the
+same matrix entry land in different slots, and a second pass then sums the duplicates into CSR. The
+addressing is a <em>gather</em>: for each of the <code class="docutils literal notranslate"><span class="pre">nnz</span></code> output entries, read the value-array positions that
+feed it.</p>
+<p><strong>Scatter directly</strong> (<a class="reference internal" href="#edelweissfe.numerics.csrgeneratorv2.DirectCSRAssembler" title="edelweissfe.numerics.csrgeneratorv2.DirectCSRAssembler"><code class="xref py py-class docutils literal notranslate"><span class="pre">DirectCSRAssembler</span></code></a>). Each entity’s
+block is pushed straight into the CSR data array, because every COO pair knows its destination slot in
+advance – <code class="docutils literal notranslate"><span class="pre">indptr[row]</span> <span class="pre">+</span> <span class="pre">offset</span></code>, where <code class="docutils literal notranslate"><span class="pre">offset</span></code> is the position of the column within that row. No
+value array is ever materialised.</p>
+<table class="docutils align-default" id="id1" style="width: 100%">
+<caption><span class="caption-text">What each path stores, per COO pair or per nnz</span><a class="headerlink" href="#id1" title="Link to this table"></a></caption>
+<colgroup>
+<col style="width: 40.0%" />
+<col style="width: 30.0%" />
+<col style="width: 30.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Array</p></th>
+<th class="head"><p>Stage-then-gather</p></th>
+<th class="head"><p>Direct</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">I</span></code> / <code class="docutils literal notranslate"><span class="pre">J</span></code> COO indices (owned by the DofManager)</p></td>
+<td><p>4 + 4 bytes / pair</p></td>
+<td><p>4 + 4 bytes / pair</p></td>
+</tr>
+<tr class="row-odd"><td><p>VIJ value array</p></td>
+<td><p><strong>8 bytes / pair</strong></p></td>
+<td><p>–</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">gather_sources</span></code></p></td>
+<td><p><strong>4 bytes / pair</strong></p></td>
+<td><p>–</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">assembly_ptr</span></code></p></td>
+<td><p>4 bytes / nnz</p></td>
+<td><p>–</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">offsets</span></code> (within-row position)</p></td>
+<td><p>–</p></td>
+<td><p><strong>2 bytes / pair</strong></p></td>
+</tr>
+<tr class="row-odd"><td><p>private CSR copies</p></td>
+<td><p>–</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">nBuffers</span></code> x 8 bytes / nnz</p></td>
+</tr>
+<tr class="row-even"><td><p>CSR pattern and data</p></td>
+<td><p>4 + 8 bytes / nnz</p></td>
+<td><p>4 + 8 bytes / nnz</p></td>
+</tr>
+</tbody>
+</table>
+<p>The two entries in bold on the left are why this matters: the more duplicate contributions land on
+the same matrix entry – which grows with the number of entities touching a DOF, not with the DOF
+count itself – the larger the value array and <code class="docutils literal notranslate"><span class="pre">gather_sources</span></code> become relative to the CSR result
+they produce. Their size is set by the number of COO pairs; the CSR pattern’s is set by <code class="docutils literal notranslate"><span class="pre">nnz</span></code>. A
+discretisation where many entities contribute to the same entries (a wide stencil, or overlapping
+supports) can have the staging array and gather map dwarf the actual result by a wide margin.</p>
+</section>
+<section id="why-the-direct-path-is-also-faster">
+<h2>Why the direct path is also faster<a class="headerlink" href="#why-the-direct-path-is-also-faster" title="Link to this heading"></a></h2>
+<p>Three effects:</p>
+<ul class="simple">
+<li><p><strong>Nothing has to be cleared.</strong> The staging array must be zeroed every Newton iteration; that cost
+scales with the number of COO pairs, not with <code class="docutils literal notranslate"><span class="pre">nnz</span></code>. The direct path clears only the private CSR
+copies, sized by <code class="docutils literal notranslate"><span class="pre">nnz</span></code>.</p></li>
+<li><p><strong>Nothing has to be re-read.</strong> The gather random-accesses the staging array, which can be many times
+larger than the CSR data the scatter touches instead.</p></li>
+<li><p><strong>The evaluation itself is not slower</strong>, because each entity writes into a small reused scratch block
+that stays in cache instead of a slab of a much larger array.</p></li>
+</ul>
+<p>The relative sizes of these three effects depend on how many duplicate contributions land per matrix
+entry for a given discretisation and thread count – measure on the model at hand rather than assuming
+a fixed ratio.</p>
+</section>
+<section id="the-one-definition-of-the-pattern">
+<h2>The one definition of the pattern<a class="headerlink" href="#the-one-definition-of-the-pattern" title="Link to this heading"></a></h2>
+<p><a class="reference internal" href="#edelweissfe.numerics.csrgeneratorv2.DirectCSRAssembler" title="edelweissfe.numerics.csrgeneratorv2.DirectCSRAssembler"><code class="xref py py-class docutils literal notranslate"><span class="pre">DirectCSRAssembler</span></code></a> <strong>borrows</strong> its pattern from an existing
+<a class="reference internal" href="utils.html#edelweissfe.numerics.csrgeneratorv2.CSRGenerator" title="edelweissfe.numerics.csrgeneratorv2.CSRGenerator"><code class="xref py py-class docutils literal notranslate"><span class="pre">CSRGenerator</span></code></a> rather than deriving its own. This is
+deliberate: there is exactly one definition of what the CSR pattern is, and the two assembly paths
+cannot drift apart. The generator must outlive the assembler.</p>
+<p>The offset map is built by binary-searching each <code class="docutils literal notranslate"><span class="pre">(row,</span> <span class="pre">col)</span></code> pair in the borrowed pattern, and stores
+the <em>within-row</em> position, which is why 2 bytes suffice: row length is set by the stencil, not by the
+problem size, so it stays well within a <code class="docutils literal notranslate"><span class="pre">uint16</span></code> even for a wide stencil. A pair that cannot be
+mapped, or an offset that does not fit, raises rather than being silently misplaced.</p>
+</section>
+<section id="building-only-the-pattern">
+<h2>Building only the pattern<a class="headerlink" href="#building-only-the-pattern" title="Link to this heading"></a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">CSRGenerator(systemMatrix,</span> <span class="pre">patternOnly=True)</span></code> builds <code class="docutils literal notranslate"><span class="pre">indptr</span></code> and <code class="docutils literal notranslate"><span class="pre">indices</span></code> and nothing else.
+Two reasons, and the second is the one that decides how large a model can be:</p>
+<ul class="simple">
+<li><p><strong>The sort payload halves.</strong> With the gather map, the sort element is a key plus an origin index, which
+pads to 16 bytes per pair; without it, a bare 8-byte key. That array is the largest single allocation
+in the build.</p></li>
+<li><p><strong>It removes every 32-bit pair index.</strong> <code class="docutils literal notranslate"><span class="pre">gather_sources</span></code>, <code class="docutils literal notranslate"><span class="pre">assembly_ptr</span></code> and the sort element’s
+origin field all index into the COO list, which is why a full build refuses more than <code class="docutils literal notranslate"><span class="pre">INT32_MAX</span></code>
+pairs. For a discretisation with many duplicate contributions per matrix entry, that pair-count limit
+can bite well before memory does. With <code class="docutils literal notranslate"><span class="pre">patternOnly</span></code> the only remaining 32-bit quantity is <code class="docutils literal notranslate"><span class="pre">nnz</span></code>,
+which grows only with the CSR result, not with the number of contributions.</p></li>
+</ul>
+<p>A generator built this way, or one that has given its map back via
+<a class="reference internal" href="utils.html#edelweissfe.numerics.csrgeneratorv2.CSRGenerator.releaseGatherMap" title="edelweissfe.numerics.csrgeneratorv2.CSRGenerator.releaseGatherMap"><code class="xref py py-meth docutils literal notranslate"><span class="pre">releaseGatherMap()</span></code></a>, <strong>raises</strong> if asked to
+gather. That is deliberate: the alternative is a <code class="docutils literal notranslate"><span class="pre">nogil</span></code> loop reading released vectors, and a matrix
+that is quietly wrong is worse than one that is loudly unavailable.</p>
+<p>Dropping the gather map lowers peak memory and shortens the pattern build, since half the sort payload
+and the 32-bit index arrays it removes never need writing in the first place.</p>
+</section>
+<section id="private-copies-or-atomics">
+<h2>Private copies, or atomics<a class="headerlink" href="#private-copies-or-atomics" title="Link to this heading"></a></h2>
+<p>Threads scattering into one CSR array must not collide. The default is one private copy of the CSR data
+per thread, summed at the end: no synchronisation, a fixed summation order, and therefore
+bit-reproducible results – at <code class="docutils literal notranslate"><span class="pre">nThreads</span></code> x <code class="docutils literal notranslate"><span class="pre">nnz</span></code> x 8 bytes.
+<a class="reference internal" href="#edelweissfe.numerics.csrgeneratorv2.DirectCSRAssembler.setNumBuffers" title="edelweissfe.numerics.csrgeneratorv2.DirectCSRAssembler.setNumBuffers"><code class="xref py py-meth docutils literal notranslate"><span class="pre">setNumBuffers()</span></code></a> trades that memory for
+atomics: fewer private copies means threads share one and synchronise the scatter with atomics
+instead, down to a single, fully atomic copy at <code class="docutils literal notranslate"><span class="pre">n</span> <span class="pre">==</span> <span class="pre">1</span></code>.</p>
+<p>Two things worth knowing, from measuring this tradeoff on a real assembly:</p>
+<ul class="simple">
+<li><p><strong>The penalty is the atomic instruction itself, not contention.</strong> Most of the slowdown from going
+fully atomic already shows up after dropping from one copy per thread to just a handful of shared
+copies – so an intermediate setting pays nearly all of the time cost for only part of the memory
+saving, and isn’t a good middle ground in practice.</p></li>
+<li><p><strong>What atomics actually cost is exact reproducibility, not correctness.</strong> The summation order
+becomes dependent on thread interleaving, so re-running the same computation no longer returns
+bit-identical values – results still agree to round-off, verifiably: an internal control that
+re-evaluates the same kernel twice reports exactly zero difference with private copies and a
+round-off-scale difference with atomics.</p></li>
+</ul>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Once the staging array is gone the assembly is usually no longer what sets peak memory, so the
+memory saving from atomics may buy nothing in practice while the reproducibility loss is real.
+Measure where your peak actually is before switching.</p>
+</div>
+</section>
+<section id="validation">
+<h2>Validation<a class="headerlink" href="#validation" title="Link to this heading"></a></h2>
+<p>The addressing is validated <strong>exactly, without a floating-point tolerance</strong>, using an integer trick:
+set every value in the staging array to <code class="docutils literal notranslate"><span class="pre">1</span></code> so each CSR entry becomes the <em>count</em> of contributing
+pairs, then to its own index <code class="docutils literal notranslate"><span class="pre">k</span></code> so it becomes the <em>sum of their indices</em>. Both are integers far
+inside 2<sup>53</sup>, so a bitwise comparison against
+<a class="reference internal" href="utils.html#edelweissfe.numerics.csrgeneratorv2.CSRGenerator.updateCSR" title="edelweissfe.numerics.csrgeneratorv2.CSRGenerator.updateCSR"><code class="xref py py-meth docutils literal notranslate"><span class="pre">updateCSR()</span></code></a> validates the grouping exactly
+rather than approximately. A transposition or an off-by-one shows up as an unmistakable mismatch instead
+of a judgement call about how large a deviation is acceptable.</p>
+<p><a class="reference internal" href="#edelweissfe.numerics.csrgeneratorv2.DirectCSRAssembler.assembleFromVIJ" title="edelweissfe.numerics.csrgeneratorv2.DirectCSRAssembler.assembleFromVIJ"><code class="xref py py-meth docutils literal notranslate"><span class="pre">assembleFromVIJ()</span></code></a> exists for this purpose:
+it pushes a whole staging array through the offset map, so the two paths can be compared on identical
+values with the physics held fixed.</p>
+</section>
+<section id="reference">
+<h2>Reference<a class="headerlink" href="#reference" title="Link to this heading"></a></h2>
+<p><a class="reference internal" href="utils.html#edelweissfe.numerics.csrgeneratorv2.CSRGenerator" title="edelweissfe.numerics.csrgeneratorv2.CSRGenerator"><code class="xref py py-class docutils literal notranslate"><span class="pre">CSRGenerator</span></code></a> and the C++ engine behind it are described
+under <a class="reference internal" href="utils.html"><span class="doc">Utilities</span></a>; only the direct-scatter side is documented here.</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="edelweissfe.numerics.csrgeneratorv2.DirectCSRAssembler">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">edelweissfe.numerics.csrgeneratorv2.</span></span><span class="sig-name descname"><span class="pre">DirectCSRAssembler</span></span><a class="headerlink" href="#edelweissfe.numerics.csrgeneratorv2.DirectCSRAssembler" title="Link to this definition"></a></dt>
+<dd><p>Scatters entity blocks straight into a CSR data array, with no VIJ staging array.</p>
+<p>The alternative to <a class="reference internal" href="utils.html#edelweissfe.numerics.csrgeneratorv2.CSRGenerator" title="edelweissfe.numerics.csrgeneratorv2.CSRGenerator"><code class="xref py py-class docutils literal notranslate"><span class="pre">CSRGenerator</span></code></a>’s stage-then-gather. It borrows an existing pattern
+rather than deriving its own, so there is exactly one definition of the CSR pattern and the two
+paths cannot drift apart – and <a class="reference internal" href="#edelweissfe.numerics.csrgeneratorv2.DirectCSRAssembler.assembleFromVIJ" title="edelweissfe.numerics.csrgeneratorv2.DirectCSRAssembler.assembleFromVIJ"><code class="xref py py-meth docutils literal notranslate"><span class="pre">assembleFromVIJ()</span></code></a> exists so the addressing can be checked
+against <code class="docutils literal notranslate"><span class="pre">CSRGenerator.updateCSR</span></code> on real models rather than argued about.</p>
+<p>Reduction defaults to one private CSR copy per thread – no synchronisation and a fixed summation
+order, so results are bit-reproducible, at <code class="docutils literal notranslate"><span class="pre">nThreads</span> <span class="pre">*</span> <span class="pre">nnz</span> <span class="pre">*</span> <span class="pre">8</span></code> bytes. <a class="reference internal" href="#edelweissfe.numerics.csrgeneratorv2.DirectCSRAssembler.setNumBuffers" title="edelweissfe.numerics.csrgeneratorv2.DirectCSRAssembler.setNumBuffers"><code class="xref py py-meth docutils literal notranslate"><span class="pre">setNumBuffers()</span></code></a>
+trades that memory for atomics; see the header’s design note for why the earlier “atomics are
+1.57-2.13x slower” figure does not settle the question.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>generator</strong> – A <a class="reference internal" href="utils.html#edelweissfe.numerics.csrgeneratorv2.CSRGenerator" title="edelweissfe.numerics.csrgeneratorv2.CSRGenerator"><code class="xref py py-class docutils literal notranslate"><span class="pre">CSRGenerator</span></code></a> whose pattern is borrowed. It must outlive this object.</p></li>
+<li><p><strong>systemMatrix</strong> – The VIJ system matrix supplying the <code class="docutils literal notranslate"><span class="pre">I</span></code>/<code class="docutils literal notranslate"><span class="pre">J</span></code> index arrays the map is built from.</p></li>
+<li><p><strong>numThreads</strong> – Threads used for the map build, the scatter and the reduction.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Attributes<span class="colon">:</span></dt>
+<dd class="field-even"><dl class="simple">
+<dt><a class="reference internal" href="#edelweissfe.numerics.csrgeneratorv2.DirectCSRAssembler.corePointer" title="edelweissfe.numerics.csrgeneratorv2.DirectCSRAssembler.corePointer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">corePointer</span></code></a></dt><dd><p>Address of the underlying <code class="docutils literal notranslate"><span class="pre">CSRDirectAssembler</span></code>, for a threaded caller in another extension.</p>
+</dd>
+<dt><strong>csrMatrix</strong></dt><dd></dd>
+<dt><a class="reference internal" href="#edelweissfe.numerics.csrgeneratorv2.DirectCSRAssembler.memoryBytes" title="edelweissfe.numerics.csrgeneratorv2.DirectCSRAssembler.memoryBytes"><code class="xref py py-obj docutils literal notranslate"><span class="pre">memoryBytes</span></code></a></dt><dd><p>Bytes held by the offset map plus the private buffers.</p>
+</dd>
+<dt><a class="reference internal" href="#edelweissfe.numerics.csrgeneratorv2.DirectCSRAssembler.numBuffers" title="edelweissfe.numerics.csrgeneratorv2.DirectCSRAssembler.numBuffers"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numBuffers</span></code></a></dt><dd><p>How many private CSR copies are currently held.</p>
+</dd>
+</dl>
+</dd>
+</dl>
+<p class="rubric">Methods</p>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.numerics.csrgeneratorv2.DirectCSRAssembler.assembleFromVIJ" title="edelweissfe.numerics.csrgeneratorv2.DirectCSRAssembler.assembleFromVIJ"><code class="xref py py-obj docutils literal notranslate"><span class="pre">assembleFromVIJ</span></code></a>(V)</p></td>
+<td><p>Scatter a VIJ value array into CSR through the map, and return the CSR matrix.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.numerics.csrgeneratorv2.DirectCSRAssembler.beginAssembly" title="edelweissfe.numerics.csrgeneratorv2.DirectCSRAssembler.beginAssembly"><code class="xref py py-obj docutils literal notranslate"><span class="pre">beginAssembly</span></code></a>()</p></td>
+<td><p>Zero the private buffers.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.numerics.csrgeneratorv2.DirectCSRAssembler.reduce" title="edelweissfe.numerics.csrgeneratorv2.DirectCSRAssembler.reduce"><code class="xref py py-obj docutils literal notranslate"><span class="pre">reduce</span></code></a>()</p></td>
+<td><p>Sum the private buffers into the CSR matrix and return it.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.numerics.csrgeneratorv2.DirectCSRAssembler.registerEntities" title="edelweissfe.numerics.csrgeneratorv2.DirectCSRAssembler.registerEntities"><code class="xref py py-obj docutils literal notranslate"><span class="pre">registerEntities</span></code></a>(mapStarts, nDofs)</p></td>
+<td><p>Give each entity its slice of the offset map, once per connectivity change.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.numerics.csrgeneratorv2.DirectCSRAssembler.scatterBlock" title="edelweissfe.numerics.csrgeneratorv2.DirectCSRAssembler.scatterBlock"><code class="xref py py-obj docutils literal notranslate"><span class="pre">scatterBlock</span></code></a>(tid, entity, block)</p></td>
+<td><p>Scatter one entity's dense block from a scratch buffer into thread <code class="docutils literal notranslate"><span class="pre">tid</span></code>'s private CSR.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.numerics.csrgeneratorv2.DirectCSRAssembler.setNumBuffers" title="edelweissfe.numerics.csrgeneratorv2.DirectCSRAssembler.setNumBuffers"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setNumBuffers</span></code></a>(n)</p></td>
+<td><p>Set how many private CSR copies to keep, reallocating them.</p></td>
+</tr>
+</tbody>
+</table>
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.numerics.csrgeneratorv2.DirectCSRAssembler.assembleFromVIJ">
+<span class="sig-name descname"><span class="pre">assembleFromVIJ</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">V</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#edelweissfe.numerics.csrgeneratorv2.DirectCSRAssembler.assembleFromVIJ" title="Link to this definition"></a></dt>
+<dd><p>Scatter a VIJ value array into CSR through the map, and return the CSR matrix.</p>
+<p>Equivalence path for validation and measurement. The fused assembly hands each entity’s
+block in directly and never builds <code class="docutils literal notranslate"><span class="pre">V</span></code>.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.numerics.csrgeneratorv2.DirectCSRAssembler.beginAssembly">
+<span class="sig-name descname"><span class="pre">beginAssembly</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#edelweissfe.numerics.csrgeneratorv2.DirectCSRAssembler.beginAssembly" title="Link to this definition"></a></dt>
+<dd><p>Zero the private buffers. Call once before the entity loop.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.numerics.csrgeneratorv2.DirectCSRAssembler.reduce">
+<span class="sig-name descname"><span class="pre">reduce</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#edelweissfe.numerics.csrgeneratorv2.DirectCSRAssembler.reduce" title="Link to this definition"></a></dt>
+<dd><p>Sum the private buffers into the CSR matrix and return it.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.numerics.csrgeneratorv2.DirectCSRAssembler.registerEntities">
+<span class="sig-name descname"><span class="pre">registerEntities</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mapStarts</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nDofs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#edelweissfe.numerics.csrgeneratorv2.DirectCSRAssembler.registerEntities" title="Link to this definition"></a></dt>
+<dd><p>Give each entity its slice of the offset map, once per connectivity change.</p>
+<p><code class="docutils literal notranslate"><span class="pre">mapStarts[e]</span></code> is entity e’s offset into the VIJ ordering – the same value the DofManager
+already records in <code class="docutils literal notranslate"><span class="pre">idcsOfHigherOrderEntitiesInVIJ</span></code> – and <code class="docutils literal notranslate"><span class="pre">nDofs[e]</span></code> its local DOF count.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.numerics.csrgeneratorv2.DirectCSRAssembler.scatterBlock">
+<span class="sig-name descname"><span class="pre">scatterBlock</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tid</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">entity</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">block</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#edelweissfe.numerics.csrgeneratorv2.DirectCSRAssembler.scatterBlock" title="Link to this definition"></a></dt>
+<dd><p>Scatter one entity’s dense block from a scratch buffer into thread <code class="docutils literal notranslate"><span class="pre">tid</span></code>’s private CSR.</p>
+<p>Race-free by construction. Intended to be called from inside a threaded entity loop; this
+Python-level binding exists for testing and for the constraint contributions, which are
+assembled sequentially and account for under 2% of runtime.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.numerics.csrgeneratorv2.DirectCSRAssembler.setNumBuffers">
+<span class="sig-name descname"><span class="pre">setNumBuffers</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">n</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#edelweissfe.numerics.csrgeneratorv2.DirectCSRAssembler.setNumBuffers" title="Link to this definition"></a></dt>
+<dd><p>Set how many private CSR copies to keep, reallocating them.</p>
+<p><code class="docutils literal notranslate"><span class="pre">n</span> <span class="pre">==</span> <span class="pre">numThreads</span></code> is the default: one copy per thread, no synchronisation, fixed summation
+order and therefore bit-reproducible results. Any smaller <code class="docutils literal notranslate"><span class="pre">n</span></code> makes threads share a copy
+and synchronise the scatter with atomics, saving <code class="docutils literal notranslate"><span class="pre">(numThreads</span> <span class="pre">-</span> <span class="pre">n)</span> <span class="pre">*</span> <span class="pre">nnz</span> <span class="pre">*</span> <span class="pre">8</span></code> bytes at the
+cost of reproducibility – <code class="docutils literal notranslate"><span class="pre">n</span> <span class="pre">==</span> <span class="pre">1</span></code> is the fully atomic case. Values are clamped to
+<code class="docutils literal notranslate"><span class="pre">[1,</span> <span class="pre">numThreads]</span></code>.</p>
+<p>Not to be called during an assembly: it releases and reallocates the buffers.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="edelweissfe.numerics.csrgeneratorv2.DirectCSRAssembler.corePointer">
+<span class="sig-name descname"><span class="pre">corePointer</span></span><a class="headerlink" href="#edelweissfe.numerics.csrgeneratorv2.DirectCSRAssembler.corePointer" title="Link to this definition"></a></dt>
+<dd><p>Address of the underlying <code class="docutils literal notranslate"><span class="pre">CSRDirectAssembler</span></code>, for a threaded caller in another extension.</p>
+<p>EdelweissMeshfree’s particle kernel calls <code class="docutils literal notranslate"><span class="pre">scatterBlock</span></code> from inside its <code class="docutils literal notranslate"><span class="pre">prange</span></code>, which
+cannot go through Python. It re-declares the C++ class (from <code class="docutils literal notranslate"><span class="pre">edelweissfe.numerics.get_include()</span></code>)
+and casts this address back, so the scatter – including the column-major traversal and its
+measured loop order – exists in exactly one place.</p>
+<p>The assembler must outlive any caller holding this.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="edelweissfe.numerics.csrgeneratorv2.DirectCSRAssembler.memoryBytes">
+<span class="sig-name descname"><span class="pre">memoryBytes</span></span><a class="headerlink" href="#edelweissfe.numerics.csrgeneratorv2.DirectCSRAssembler.memoryBytes" title="Link to this definition"></a></dt>
+<dd><p>Bytes held by the offset map plus the private buffers.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="edelweissfe.numerics.csrgeneratorv2.DirectCSRAssembler.numBuffers">
+<span class="sig-name descname"><span class="pre">numBuffers</span></span><a class="headerlink" href="#edelweissfe.numerics.csrgeneratorv2.DirectCSRAssembler.numBuffers" title="Link to this definition"></a></dt>
+<dd><p>How many private CSR copies are currently held. Equal to <code class="docutils literal notranslate"><span class="pre">numThreads</span></code> unless changed.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="edelweissfe.numerics.csrgeneratorv2.AliasedCSRMatrix">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">edelweissfe.numerics.csrgeneratorv2.</span></span><span class="sig-name descname"><span class="pre">AliasedCSRMatrix</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">arg1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">shape</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dtype</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">copy</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">maxprint</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#edelweissfe.numerics.csrgeneratorv2.AliasedCSRMatrix" title="Link to this definition"></a></dt>
+<dd><p>The csr_matrix returned by <a class="reference internal" href="utils.html#edelweissfe.numerics.csrgeneratorv2.CSRGenerator.updateInPlace" title="edelweissfe.numerics.csrgeneratorv2.CSRGenerator.updateInPlace"><code class="xref py py-meth docutils literal notranslate"><span class="pre">CSRGenerator.updateInPlace()</span></code></a>.</p>
+<p>Its <code class="docutils literal notranslate"><span class="pre">data</span></code>/<code class="docutils literal notranslate"><span class="pre">indices</span></code>/<code class="docutils literal notranslate"><span class="pre">indptr</span></code> buffers are owned by the generator’s C++ core,
+which rewrites <code class="docutils literal notranslate"><span class="pre">data</span></code> in place on every subsequent <code class="docutils literal notranslate"><span class="pre">updateInPlace</span></code> call via a
+gather/scatter map fixed once at construction time. Structurally mutating this
+matrix (<code class="docutils literal notranslate"><span class="pre">eliminate_zeros()</span></code>, <code class="docutils literal notranslate"><span class="pre">prune()</span></code>, <code class="docutils literal notranslate"><span class="pre">sum_duplicates()</span></code>, <code class="docutils literal notranslate"><span class="pre">resize()</span></code>, or
+reassigning <code class="docutils literal notranslate"><span class="pre">.data</span></code>/<code class="docutils literal notranslate"><span class="pre">.indices</span></code>/<code class="docutils literal notranslate"><span class="pre">.indptr</span></code> to arrays of a different length)
+would silently desynchronize that fixed map from the (now compacted/reshaped)
+matrix – every subsequent update would then write numerically correct values into
+the wrong <code class="docutils literal notranslate"><span class="pre">(row,</span> <span class="pre">col)</span></code> slots, with no error or warning. See GitHub issue #72.</p>
+<p>This subclass turns that into a loud failure instead of silent corruption. If you
+need to reduce/reshape the pattern for a one-off use, copy the matrix first –
+<code class="docutils literal notranslate"><span class="pre">.copy()</span></code> (here and via <a class="reference internal" href="utils.html#edelweissfe.numerics.csrgeneratorv2.CSRGenerator.updateCSR" title="edelweissfe.numerics.csrgeneratorv2.CSRGenerator.updateCSR"><code class="xref py py-meth docutils literal notranslate"><span class="pre">CSRGenerator.updateCSR()</span></code></a>) always returns a plain,
+unrestricted <code class="docutils literal notranslate"><span class="pre">csr_matrix</span></code>.</p>
+<p>The guard only applies once <a class="reference internal" href="utils.html#edelweissfe.numerics.csrgeneratorv2.CSRGenerator" title="edelweissfe.numerics.csrgeneratorv2.CSRGenerator"><code class="xref py py-class docutils literal notranslate"><span class="pre">CSRGenerator</span></code></a> marks construction complete
+(<code class="docutils literal notranslate"><span class="pre">_locked</span> <span class="pre">=</span> <span class="pre">True</span></code>): scipy’s own <code class="docutils literal notranslate"><span class="pre">csr_matrix.__init__</span></code> calls <code class="docutils literal notranslate"><span class="pre">self.prune()</span></code>
+internally as part of its format check, which must go through unhindered.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Attributes<span class="colon">:</span></dt>
+<dd class="field-odd"><dl class="simple">
+<dt><code class="xref py py-obj docutils literal notranslate"><span class="pre">T</span></code></dt><dd><p>Transpose.</p>
+</dd>
+<dt><strong>dtype</strong></dt><dd></dd>
+<dt><code class="xref py py-obj docutils literal notranslate"><span class="pre">format</span></code></dt><dd><p>Format string for matrix.</p>
+</dd>
+<dt><code class="xref py py-obj docutils literal notranslate"><span class="pre">has_canonical_format</span></code></dt><dd><p>Whether the array/matrix has sorted indices and no duplicates</p>
+</dd>
+<dt><code class="xref py py-obj docutils literal notranslate"><span class="pre">has_sorted_indices</span></code></dt><dd><p>Whether the indices are sorted</p>
+</dd>
+<dt><strong>imag</strong></dt><dd></dd>
+<dt><code class="xref py py-obj docutils literal notranslate"><span class="pre">mT</span></code></dt><dd><p>Matrix transpose.</p>
+</dd>
+<dt><strong>ndim</strong></dt><dd></dd>
+<dt><a class="reference internal" href="linsolveapi.html#edelweissfe.linsolve.composition.systemmatrix.SystemMatrix.nnz" title="edelweissfe.linsolve.composition.systemmatrix.SystemMatrix.nnz"><code class="xref py py-obj docutils literal notranslate"><span class="pre">nnz</span></code></a></dt><dd><p>Number of stored values, including explicit zeros.</p>
+</dd>
+<dt><strong>real</strong></dt><dd></dd>
+<dt><code class="xref py py-obj docutils literal notranslate"><span class="pre">shape</span></code></dt><dd><p>Shape of the matrix</p>
+</dd>
+<dt><a class="reference internal" href="linsolveapi.html#edelweissfe.linsolve.composition.base.SetUpContext.size" title="edelweissfe.linsolve.composition.base.SetUpContext.size"><code class="xref py py-obj docutils literal notranslate"><span class="pre">size</span></code></a></dt><dd><p>Number of stored values.</p>
+</dd>
+</dl>
+</dd>
+</dl>
+<p class="rubric">Methods</p>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">arcsin</span></code>()</p></td>
+<td><p>Element-wise arcsin.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">arcsinh</span></code>()</p></td>
+<td><p>Element-wise arcsinh.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">arctan</span></code>()</p></td>
+<td><p>Element-wise arctan.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">arctanh</span></code>()</p></td>
+<td><p>Element-wise arctanh.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">argmax</span></code>([axis, out, explicit])</p></td>
+<td><p>Return indices of maximum elements along an axis.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">argmin</span></code>([axis, out, explicit])</p></td>
+<td><p>Return indices of minimum elements along an axis.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">asformat</span></code>(format[, copy])</p></td>
+<td><p>Return this array/matrix in the passed format.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">asfptype</span></code>()</p></td>
+<td><p>Upcast matrix to a floating point format (if necessary)</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">astype</span></code>(dtype[, casting, copy])</p></td>
+<td><p>Cast the array/matrix elements to a specified type.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">ceil</span></code>()</p></td>
+<td><p>Element-wise ceil.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">check_format</span></code>([full_check])</p></td>
+<td><p>Check whether the array/matrix respects the CSR or CSC format.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">conj</span></code>([copy])</p></td>
+<td><p>Element-wise complex conjugation.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">conjugate</span></code>([copy])</p></td>
+<td><p>Element-wise complex conjugation.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">count_nonzero</span></code>([axis])</p></td>
+<td><p>Number of non-zero entries.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">deg2rad</span></code>()</p></td>
+<td><p>Element-wise deg2rad.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">diagonal</span></code>([k])</p></td>
+<td><p>Returns the kth diagonal of the array/matrix.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">dot</span></code>(other)</p></td>
+<td><p>Ordinary dot product.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">expm1</span></code>()</p></td>
+<td><p>Element-wise expm1.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">floor</span></code>()</p></td>
+<td><p>Element-wise floor.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">getH</span></code>()</p></td>
+<td><p>Return the Hermitian transpose of this matrix.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_shape</span></code>()</p></td>
+<td><p>Get the shape of the matrix</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">getcol</span></code>(j)</p></td>
+<td><p>Returns a copy of column j of the matrix, as an (m x 1) sparse matrix (column vector).</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">getformat</span></code>()</p></td>
+<td><p>Matrix storage format</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">getmaxprint</span></code>()</p></td>
+<td><p>Maximum number of elements to display when printed.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">getnnz</span></code>([axis])</p></td>
+<td><p>Number of stored values, including explicit zeros.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">getrow</span></code>(i)</p></td>
+<td><p>Returns a copy of row i of the matrix, as a (1 x n) sparse matrix (row vector).</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">log1p</span></code>()</p></td>
+<td><p>Element-wise log1p.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">max</span></code>([axis, out, explicit])</p></td>
+<td><p>Return the maximum of the array/matrix or maximum along an axis.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">maximum</span></code>(other)</p></td>
+<td><p>Element-wise maximum between this and another array/matrix.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">mean</span></code>([axis, dtype, out])</p></td>
+<td><p>Compute the arithmetic mean along the specified axis.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">min</span></code>([axis, out, explicit])</p></td>
+<td><p>Return the minimum of the array/matrix or maximum along an axis.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">minimum</span></code>(other)</p></td>
+<td><p>Element-wise minimum between this and another array/matrix.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">multiply</span></code>(other)</p></td>
+<td><p>Element-wise multiplication by another array/matrix.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">nanmax</span></code>([axis, out, explicit])</p></td>
+<td><p>Return the maximum, ignoring any Nans, along an axis.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">nanmin</span></code>([axis, out, explicit])</p></td>
+<td><p>Return the minimum, ignoring any Nans, along an axis.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">nonzero</span></code>()</p></td>
+<td><p>Nonzero indices of the array/matrix.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">power</span></code>(n[, dtype])</p></td>
+<td><p>This function performs element-wise power.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">rad2deg</span></code>()</p></td>
+<td><p>Element-wise rad2deg.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">reshape</span></code>(self, shape[, order, copy])</p></td>
+<td><p>Gives a new shape to a sparse array/matrix without changing its data.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">rint</span></code>()</p></td>
+<td><p>Element-wise rint.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">set_shape</span></code>(shape)</p></td>
+<td><p>Set the shape of the matrix in-place</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setdiag</span></code>(values[, k])</p></td>
+<td><p>Set diagonal or off-diagonal elements of the array/matrix.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">sign</span></code>()</p></td>
+<td><p>Element-wise sign.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">sin</span></code>()</p></td>
+<td><p>Element-wise sin.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">sinh</span></code>()</p></td>
+<td><p>Element-wise sinh.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">sort_indices</span></code>()</p></td>
+<td><p>Sort the indices of this array/matrix <em>in place</em>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">sorted_indices</span></code>()</p></td>
+<td><p>Return a copy of this array/matrix with sorted indices.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">sqrt</span></code>()</p></td>
+<td><p>Element-wise sqrt.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">sum</span></code>([axis, dtype, out])</p></td>
+<td><p>Sum the array/matrix elements over a given axis.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">tan</span></code>()</p></td>
+<td><p>Element-wise tan.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">tanh</span></code>()</p></td>
+<td><p>Element-wise tanh.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">toarray</span></code>([order, out])</p></td>
+<td><p>Return a dense ndarray representation of this sparse array/matrix.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">tobsr</span></code>([blocksize, copy])</p></td>
+<td><p>Convert this array/matrix to Block Sparse Row format.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">tocoo</span></code>([copy])</p></td>
+<td><p>Convert this array/matrix to COOrdinate format.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">tocsc</span></code>([copy])</p></td>
+<td><p>Convert this array/matrix to Compressed Sparse Column format.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">tocsr</span></code>([copy])</p></td>
+<td><p>Convert this array/matrix to Compressed Sparse Row format.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">todense</span></code>([order, out])</p></td>
+<td><p>Return a dense representation of this sparse matrix.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">todia</span></code>([copy])</p></td>
+<td><p>Convert this array/matrix to sparse DIAgonal format.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">todok</span></code>([copy])</p></td>
+<td><p>Convert this array/matrix to Dictionary Of Keys format.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">tolil</span></code>([copy])</p></td>
+<td><p>Convert this array/matrix to List of Lists format.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">trace</span></code>([offset])</p></td>
+<td><p>Returns the sum along diagonals of the sparse array/matrix.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">transpose</span></code>([axes, copy])</p></td>
+<td><p>Reverses the dimensions of the sparse array/matrix.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">trunc</span></code>()</p></td>
+<td><p>Element-wise trunc.</p></td>
+</tr>
+</tbody>
+</table>
+<table class="docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><strong>copy</strong></p></td>
+<td></td>
+</tr>
+<tr class="row-even"><td><p><strong>eliminate_zeros</strong></p></td>
+<td></td>
+</tr>
+<tr class="row-odd"><td><p><strong>prune</strong></p></td>
+<td></td>
+</tr>
+<tr class="row-even"><td><p><strong>resize</strong></p></td>
+<td></td>
+</tr>
+<tr class="row-odd"><td><p><strong>sum_duplicates</strong></p></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.numerics.csrgeneratorv2.AliasedCSRMatrix.copy">
+<span class="sig-name descname"><span class="pre">copy</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#edelweissfe.numerics.csrgeneratorv2.AliasedCSRMatrix.copy" title="Link to this definition"></a></dt>
+<dd><p>Returns a copy of this array/matrix.</p>
+<p>No data/indices will be shared between the returned value and current
+array/matrix.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>A copy of this array/matrix.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>sparse array/matrix</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.numerics.csrgeneratorv2.AliasedCSRMatrix.eliminate_zeros">
+<span class="sig-name descname"><span class="pre">eliminate_zeros</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#edelweissfe.numerics.csrgeneratorv2.AliasedCSRMatrix.eliminate_zeros" title="Link to this definition"></a></dt>
+<dd><p>Remove zero entries from the array/matrix.</p>
+<p>This is an <em>in place</em> operation.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.numerics.csrgeneratorv2.AliasedCSRMatrix.prune">
+<span class="sig-name descname"><span class="pre">prune</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#edelweissfe.numerics.csrgeneratorv2.AliasedCSRMatrix.prune" title="Link to this definition"></a></dt>
+<dd><p>Remove empty space after all non-zero elements.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.numerics.csrgeneratorv2.AliasedCSRMatrix.resize">
+<span class="sig-name descname"><span class="pre">resize</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">shape</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#edelweissfe.numerics.csrgeneratorv2.AliasedCSRMatrix.resize" title="Link to this definition"></a></dt>
+<dd><p>Resize the array/matrix in-place to dimensions given by <code class="docutils literal notranslate"><span class="pre">shape</span></code>.</p>
+<p>Any elements that lie within the new shape will remain at the same
+indices, while non-zero elements lying outside the new shape are
+removed.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>*shape</strong> (<em>int</em>) – number of rows and columns in the new array/matrix</p>
+</dd>
+</dl>
+<div class="admonition-notes admonition">
+<p class="admonition-title">Notes</p>
+<p>The semantics are not identical to <cite>numpy.ndarray.resize</cite> or
+<cite>numpy.resize</cite>. Here, the same data will be maintained at each index
+before and after reshape, if that index is within the new bounds. In
+numpy, resizing maintains contiguity of the array, moving elements
+around in the logical array but not within a flattened representation.</p>
+<p>We give no guarantees about whether the underlying data attributes
+(arrays, etc.) will be modified in place or replaced with new objects.</p>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.numerics.csrgeneratorv2.AliasedCSRMatrix.sum_duplicates">
+<span class="sig-name descname"><span class="pre">sum_duplicates</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#edelweissfe.numerics.csrgeneratorv2.AliasedCSRMatrix.sum_duplicates" title="Link to this definition"></a></dt>
+<dd><p>Eliminate duplicate entries by adding them together.</p>
+<p>This is an <em>in place</em> operation.</p>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="dofmanager.html" class="btn btn-neutral float-left" title="Degree of Freedom (DOF) Manager and Numerics" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="fieldoutputmanager.html" class="btn btn-neutral float-right" title="Field outputs" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Matthias Neuner.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

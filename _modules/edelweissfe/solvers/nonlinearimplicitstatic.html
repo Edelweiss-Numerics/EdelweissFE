@@ -14,8 +14,8 @@
       <script src="../../../_static/jquery.js?v=5d32c60e"></script>
       <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
       <script src="../../../_static/documentation_options.js?v=17e2f33f"></script>
-      <script src="../../../_static/doctools.js?v=9bcbadda"></script>
-      <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../../../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../../../genindex.html" />
     <link rel="search" title="Search" href="../../../search.html" /> 
@@ -106,47 +106,194 @@
 
 <span class="c1"># @author: Matthias Neuner</span>
 
-<span class="kn">import</span><span class="w"> </span><span class="nn">json</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">time</span><span class="w"> </span><span class="kn">import</span> <span class="n">perf_counter</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">scipy.sparse</span><span class="w"> </span><span class="kn">import</span> <span class="n">csr_matrix</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">edelweissfe.utils.performancetiming</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">performancetiming</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.config.linsolve</span><span class="w"> </span><span class="kn">import</span> <span class="n">getDefaultLinSolver</span><span class="p">,</span> <span class="n">getLinSolverByName</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.config.linsolve</span><span class="w"> </span><span class="kn">import</span> <span class="n">createLinearSolver</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.constraints.base.constraintbase</span><span class="w"> </span><span class="kn">import</span> <span class="n">ConstraintBase</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.models.femodel</span><span class="w"> </span><span class="kn">import</span> <span class="n">FEModel</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.csrgenerator</span><span class="w"> </span><span class="kn">import</span> <span class="n">CSRGenerator</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.csrgeneratorv2</span><span class="w"> </span><span class="kn">import</span> <span class="n">CSRGenerator</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.dofmanager</span><span class="w"> </span><span class="kn">import</span> <span class="n">DofManager</span><span class="p">,</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">VIJSystemMatrix</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.parallelizationutilities</span><span class="w"> </span><span class="kn">import</span> <span class="n">forEachSliceInParallel</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.outputmanagers.base.outputmanagerbase</span><span class="w"> </span><span class="kn">import</span> <span class="n">OutputManagerBase</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.solvers.base.dirichlet</span><span class="w"> </span><span class="kn">import</span> <span class="n">applyDirichletK</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.solvers.base.convergencecriteria</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">AbaqusConvergenceCriterion</span><span class="p">,</span>
+    <span class="n">ConvergenceCriterionBase</span><span class="p">,</span>
+    <span class="n">LegacyConvergenceCriterion</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.solvers.base.convergencetable</span><span class="w"> </span><span class="kn">import</span> <span class="n">ConvergenceTable</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.solvers.base.dirichlet</span><span class="w"> </span><span class="kn">import</span> <span class="n">applyDirichletToStiffness</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.solvers.base.nonlinearsolverbase</span><span class="w"> </span><span class="kn">import</span> <span class="n">NonlinearSolverBase</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.stepactions.base.stepactionbase</span><span class="w"> </span><span class="kn">import</span> <span class="n">StepActionBase</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.stepactions.options</span><span class="w"> </span><span class="kn">import</span> <span class="n">inputLanguage</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.timesteppers.timestep</span><span class="w"> </span><span class="kn">import</span> <span class="n">TimeStep</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.utils.exceptions</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
-    <span class="n">ConditionalStop</span><span class="p">,</span>
     <span class="n">CutbackRequest</span><span class="p">,</span>
     <span class="n">DivergingSolution</span><span class="p">,</span>
-    <span class="n">ReachedMaxIncrements</span><span class="p">,</span>
+    <span class="n">IncrementFailed</span><span class="p">,</span>
     <span class="n">ReachedMaxIterations</span><span class="p">,</span>
-    <span class="n">ReachedMinIncrementSize</span><span class="p">,</span>
-    <span class="n">StepFailed</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.utils.fieldoutput</span><span class="w"> </span><span class="kn">import</span> <span class="n">FieldOutputController</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.utils.schema</span><span class="w"> </span><span class="kn">import</span> <span class="n">schemaField</span>
 
-<span class="n">kw</span> <span class="o">=</span> <span class="n">inputLanguage</span><span class="p">[</span><span class="s2">&quot;step&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">getModule</span><span class="p">(</span><span class="s2">&quot;adaptive&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">getKeyword</span><span class="p">(</span><span class="s2">&quot;options&quot;</span><span class="p">)</span>
-<span class="n">kw</span><span class="o">.</span><span class="n">addOptionalArg</span><span class="p">(</span><span class="s2">&quot;defaultMaxIter&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="nb">int</span><span class="p">,</span> <span class="mi">10</span><span class="p">)</span>
-<span class="n">kw</span><span class="o">.</span><span class="n">addOptionalArg</span><span class="p">(</span><span class="s2">&quot;defaultCriticalIter&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="nb">int</span><span class="p">,</span> <span class="mi">5</span><span class="p">)</span>
-<span class="n">kw</span><span class="o">.</span><span class="n">addOptionalArg</span><span class="p">(</span><span class="s2">&quot;defaultMaxGrowingIter&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="nb">int</span><span class="p">,</span> <span class="mi">10</span><span class="p">)</span>
-<span class="n">kw</span><span class="o">.</span><span class="n">addOptionalArg</span><span class="p">(</span><span class="s2">&quot;extrapolation&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="s2">&quot;linear&quot;</span><span class="p">)</span>
-<span class="n">kw</span><span class="o">.</span><span class="n">addOptionalArg</span><span class="p">(</span><span class="s2">&quot;linsolver&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="s2">&quot;pardiso&quot;</span><span class="p">)</span>
-<span class="n">kw</span><span class="o">.</span><span class="n">addOptionalArg</span><span class="p">(</span><span class="s2">&quot;linsolverConfigFile&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
+
+<div class="viewcode-block" id="NISTSchema">
+<a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NISTSchema">[docs]</a>
+<span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">NISTSchema</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""The options of the ``*solver`` datalines and of an ``&gt;&gt;options`` block routed to this</span>
+<span class="sd">    solver, owned by this module and never mutated from outside it.</span>
+
+<span class="sd">    Mirrors :attr:`NIST.SolverSpecificOptions` one-for-one; that dict remains the actual source of</span>
+<span class="sd">    truth consulted at runtime (``self.options``, a plain mutable dict) -- this schema exists so the</span>
+<span class="sd">    registry and the name-based ``&gt;&gt;options`` override mechanism have a typed description of what</span>
+<span class="sd">    this solver accepts, without requiring every internal ``self.options[...]`` access to become a</span>
+<span class="sd">    dataclass attribute access.</span>
+<span class="sd">    """</span>
+
+    <span class="n">defaultMaxIter</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">schemaField</span><span class="p">(</span>
+        <span class="n">description</span><span class="o">=</span><span class="s2">"The default maximum number of iterations."</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">int</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="mi">10</span>
+    <span class="p">)</span>
+    <span class="n">defaultCriticalIter</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">schemaField</span><span class="p">(</span>
+        <span class="n">description</span><span class="o">=</span><span class="s2">"The default number of critical iterations."</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">int</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="mi">5</span>
+    <span class="p">)</span>
+    <span class="n">defaultMaxGrowingIter</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">schemaField</span><span class="p">(</span>
+        <span class="n">description</span><span class="o">=</span><span class="s2">"The default number of allowed residual growths."</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">int</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="mi">10</span>
+    <span class="p">)</span>
+    <span class="n">extrapolation</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">schemaField</span><span class="p">(</span>
+        <span class="n">description</span><span class="o">=</span><span class="s2">"The extrapolation strategy for new increments (off|linear)."</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">str</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="s2">"linear"</span>
+    <span class="p">)</span>
+    <span class="n">extrapolateAfterModelChange</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">schemaField</span><span class="p">(</span>
+        <span class="n">description</span><span class="o">=</span><span class="p">(</span>
+            <span class="s2">"Whether to extrapolate the predictor on the increment FOLLOWING a model change (adaptive mesh "</span>
+            <span class="s2">"refinement). Set False to start that increment from a zero predictor, avoiding extrapolation of "</span>
+            <span class="s2">"the one-off warm-start/remesh settling transient."</span>
+        <span class="p">),</span>
+        <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">,</span>
+        <span class="n">default</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">equilibrateAfterModelChange</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">schemaField</span><span class="p">(</span>
+        <span class="n">description</span><span class="o">=</span><span class="p">(</span>
+            <span class="s2">"Whether to insert one constant-load, zero-time re-equilibration increment immediately after an "</span>
+            <span class="s2">"adaptive mesh refinement, before advancing the load. When True, the warm-started refined mesh is "</span>
+            <span class="s2">"first settled to equilibrium at the last converged load level (no load advance, no Dirichlet "</span>
+            <span class="s2">"increment, zero time increment) so the subsequent load-advancing increment starts from an "</span>
+            <span class="s2">"equilibrated state. Intended for softening problems where remeshing near the process zone "</span>
+            <span class="s2">"otherwise couples the load advance with the warm-start settling transient in one solve. Note: "</span>
+            <span class="s2">"the equilibration solve integrates materials with dT=0, which suits rate-independent models; "</span>
+            <span class="s2">"rate-dependent materials see no time advance during it (by design)."</span>
+        <span class="p">),</span>
+        <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">,</span>
+        <span class="n">default</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">linsolver</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">schemaField</span><span class="p">(</span>
+        <span class="n">description</span><span class="o">=</span><span class="p">(</span>
+            <span class="s2">"The linear solver: the name of a *linearSolver block, or a type of linear solver with its defaults (e.g. "</span>
+            <span class="s2">"pardiso, superlu, blockamg)."</span>
+        <span class="p">),</span>
+        <span class="n">dtype</span><span class="o">=</span><span class="nb">str</span><span class="p">,</span>
+        <span class="n">default</span><span class="o">=</span><span class="s2">"pardiso"</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">pruneCondensedMatrixZeros</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">schemaField</span><span class="p">(</span>
+        <span class="n">description</span><span class="o">=</span><span class="p">(</span>
+            <span class="s2">"Compact explicitly stored zeros out of the multi-point-constraint-condensed system "</span>
+            <span class="s2">"matrix before solving. Pruning removes whichever entries happen to be exactly zero on "</span>
+            <span class="s2">"this particular iteration, so the pattern changes on almost every Newton iteration -- "</span>
+            <span class="s2">"which defeats any linear solver that relies on a stable pattern across iterations (e.g. "</span>
+            <span class="s2">"blockamg reusing a per-field AMG hierarchy built for the old one). Left unset (the "</span>
+            <span class="s2">"default), the choice is automatic: pruned if the linear solver in force reports that it "</span>
+            <span class="s2">"needs it "</span>
+            <span class="s2">"(:attr:`~edelweissfe.linsolve.base.LinearSolver.needsPrunedSystemMatrix`), which a "</span>
+            <span class="s2">"direct factorization does -- PARDISO's reordering is sensitive to the extra structural "</span>
+            <span class="s2">"entries on these path-dependent condensed systems, and keeping them has been observed to "</span>
+            <span class="s2">"drift from the converged reference path -- and a Krylov solver with an AMG preconditioner "</span>
+            <span class="s2">"does not: it gives the same iterations with and without the stored zeros, and pruning "</span>
+            <span class="s2">"costs it a copy of the matrix and a pass over it in every Newton iteration. An explicit "</span>
+            <span class="s2">"True/False here always wins over the automatic choice; turn pruning off for a direct "</span>
+            <span class="s2">"solver only after verifying the load path against a reference run."</span>
+        <span class="p">),</span>
+        <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">,</span>
+        <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">documentedDefault</span><span class="o">=</span><span class="s2">"auto"</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">useThreadedMPCCondensation</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">schemaField</span><span class="p">(</span>
+        <span class="n">description</span><span class="o">=</span><span class="p">(</span>
+            <span class="s2">"Condense the multi-point-constraint system matrix, T^T K T + C, in place, with an "</span>
+            <span class="s2">"OpenMP-threaded kernel, instead of with SciPy's single-threaded CSR routines, which build a "</span>
+            <span class="s2">"second matrix. The CSR pattern of K gains, once per equation system, the entries where a "</span>
+            <span class="s2">"master collects the couplings of its slaves; the result does not depend on the number of "</span>
+            <span class="s2">"threads. Explicit zeros (the slave columns among them) are pruned from a copy according to "</span>
+            <span class="s2">"pruneCondensedMatrixZeros. Off by default."</span>
+        <span class="p">),</span>
+        <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">,</span>
+        <span class="n">default</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">reportPerformanceFrequency</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">schemaField</span><span class="p">(</span>
+        <span class="n">description</span><span class="o">=</span><span class="p">(</span>
+            <span class="s2">"Print the cumulative performance table (totals since the start of the step) every this "</span>
+            <span class="s2">"many increments, in addition to the one printed at the end of the step. 0 (default) "</span>
+            <span class="s2">"disables the periodic report."</span>
+        <span class="p">),</span>
+        <span class="n">dtype</span><span class="o">=</span><span class="nb">int</span><span class="p">,</span>
+        <span class="n">default</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+        <span class="n">optionName</span><span class="o">=</span><span class="s2">"report-performance-frequency"</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">convergenceCriterion</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">schemaField</span><span class="p">(</span>
+        <span class="n">description</span><span class="o">=</span><span class="p">(</span>
+            <span class="s2">"The convergence criterion of the Newton iterations, legacy (the original EdelweissFE one) or abaqus "</span>
+            <span class="s2">"(the one of Abaqus/Standard); see edelweissfe.solvers.base.convergencecriteria."</span>
+        <span class="p">),</span>
+        <span class="n">dtype</span><span class="o">=</span><span class="nb">str</span><span class="p">,</span>
+        <span class="n">default</span><span class="o">=</span><span class="s2">"legacy"</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">abaqusResidualTolerance</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">schemaField</span><span class="p">(</span>
+        <span class="n">description</span><span class="o">=</span><span class="s2">"abaqus criterion: R_n, the flux residual tolerance relative to the time average flux."</span><span class="p">,</span>
+        <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">,</span>
+        <span class="n">default</span><span class="o">=</span><span class="mf">5e-3</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">abaqusCorrectionTolerance</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">schemaField</span><span class="p">(</span>
+        <span class="n">description</span><span class="o">=</span><span class="s2">"abaqus criterion: C_n, the correction tolerance relative to the largest increment of the field."</span><span class="p">,</span>
+        <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">,</span>
+        <span class="n">default</span><span class="o">=</span><span class="mf">1e-2</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">abaqusResidualToleranceAlternative</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">schemaField</span><span class="p">(</span>
+        <span class="n">description</span><span class="o">=</span><span class="s2">"abaqus criterion: R_p, the flux residual tolerance used from iteration I_p on."</span><span class="p">,</span>
+        <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">,</span>
+        <span class="n">default</span><span class="o">=</span><span class="mf">2e-2</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">abaqusIterationsForAlternativeTolerance</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">schemaField</span><span class="p">(</span>
+        <span class="n">description</span><span class="o">=</span><span class="s2">"abaqus criterion: I_p, the iteration from which on R_p is used."</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">int</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="mi">9</span>
+    <span class="p">)</span>
+    <span class="n">abaqusZeroFluxThreshold</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">schemaField</span><span class="p">(</span>
+        <span class="n">description</span><span class="o">=</span><span class="s2">"abaqus criterion: epsilon, below which (relative to the time average flux) a field carries no flux."</span><span class="p">,</span>
+        <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">,</span>
+        <span class="n">default</span><span class="o">=</span><span class="mf">1e-5</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">abaqusZeroFluxCorrectionTolerance</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">schemaField</span><span class="p">(</span>
+        <span class="n">description</span><span class="o">=</span><span class="s2">"abaqus criterion: C_epsilon, the relative correction tolerance of a field without flux."</span><span class="p">,</span>
+        <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">,</span>
+        <span class="n">default</span><span class="o">=</span><span class="mf">1e-3</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">abaqusLinearResidualTolerance</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">schemaField</span><span class="p">(</span>
+        <span class="n">description</span><span class="o">=</span><span class="s2">"abaqus criterion: R_l, below which a field is converged irrespective of its correction."</span><span class="p">,</span>
+        <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">,</span>
+        <span class="n">default</span><span class="o">=</span><span class="mf">1e-8</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">abaqusInitialTimeAveragedFlux</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">schemaField</span><span class="p">(</span>
+        <span class="n">description</span><span class="o">=</span><span class="s2">"abaqus criterion: q~0, the time average flux of a field that has not carried flux yet (first step)."</span><span class="p">,</span>
+        <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">,</span>
+        <span class="n">default</span><span class="o">=</span><span class="mf">1e-2</span><span class="p">,</span>
+    <span class="p">)</span></div>
+
 
 
 <div class="viewcode-block" id="NIST">
 <a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST">[docs]</a>
 <span class="k">class</span><span class="w"> </span><span class="nc">NIST</span><span class="p">(</span><span class="n">NonlinearSolverBase</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;This is the Nonlinear Implicit STatic -- solver.</span>
+<span class="w">    </span><span class="sd">"""This is the Nonlinear Implicit STatic -- solver.</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
@@ -154,235 +301,500 @@
 <span class="sd">        A dictionary containing the job information.</span>
 <span class="sd">    journal</span>
 <span class="sd">        The journal instance for logging.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
+<span class="sd">    """</span>
 
-    <span class="n">identification</span> <span class="o">=</span> <span class="s2">&quot;NISTSolver&quot;</span>
+    <span class="n">identification</span> <span class="o">=</span> <span class="s2">"NISTSolver"</span>
+
+    <span class="n">supportsMPC</span> <span class="o">=</span> <span class="kc">True</span>
+    <span class="n">supportsModelModifiers</span> <span class="o">=</span> <span class="kc">True</span>
+
+    <span class="c1">#: Option schema for this solver, per OptionSchemaProvider.</span>
+    <span class="n">schema</span> <span class="o">=</span> <span class="n">NISTSchema</span>
 
     <span class="n">SolverSpecificOptions</span> <span class="o">=</span> <span class="p">{</span>
-        <span class="s2">&quot;defaultMaxIter&quot;</span><span class="p">:</span> <span class="mi">10</span><span class="p">,</span>
-        <span class="s2">&quot;defaultCriticalIter&quot;</span><span class="p">:</span> <span class="mi">5</span><span class="p">,</span>
-        <span class="s2">&quot;defaultMaxGrowingIter&quot;</span><span class="p">:</span> <span class="mi">10</span><span class="p">,</span>
-        <span class="s2">&quot;extrapolation&quot;</span><span class="p">:</span> <span class="s2">&quot;linear&quot;</span><span class="p">,</span>
-        <span class="s2">&quot;linsolver&quot;</span><span class="p">:</span> <span class="s2">&quot;pardiso&quot;</span><span class="p">,</span>
-        <span class="s2">&quot;linsolverConfigFile&quot;</span><span class="p">:</span> <span class="s2">&quot;&quot;</span><span class="p">,</span>
+        <span class="s2">"defaultMaxIter"</span><span class="p">:</span> <span class="mi">10</span><span class="p">,</span>
+        <span class="s2">"defaultCriticalIter"</span><span class="p">:</span> <span class="mi">5</span><span class="p">,</span>
+        <span class="s2">"defaultMaxGrowingIter"</span><span class="p">:</span> <span class="mi">10</span><span class="p">,</span>
+        <span class="s2">"extrapolation"</span><span class="p">:</span> <span class="s2">"linear"</span><span class="p">,</span>
+        <span class="s2">"extrapolateAfterModelChange"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="s2">"equilibrateAfterModelChange"</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="s2">"linsolver"</span><span class="p">:</span> <span class="s2">""</span><span class="p">,</span>
+        <span class="s2">"pruneCondensedMatrixZeros"</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="s2">"useThreadedMPCCondensation"</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="s2">"report-performance-frequency"</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span>
+        <span class="s2">"convergenceCriterion"</span><span class="p">:</span> <span class="s2">"legacy"</span><span class="p">,</span>
+        <span class="s2">"abaqusResidualTolerance"</span><span class="p">:</span> <span class="mf">5e-3</span><span class="p">,</span>
+        <span class="s2">"abaqusCorrectionTolerance"</span><span class="p">:</span> <span class="mf">1e-2</span><span class="p">,</span>
+        <span class="s2">"abaqusResidualToleranceAlternative"</span><span class="p">:</span> <span class="mf">2e-2</span><span class="p">,</span>
+        <span class="s2">"abaqusIterationsForAlternativeTolerance"</span><span class="p">:</span> <span class="mi">9</span><span class="p">,</span>
+        <span class="s2">"abaqusZeroFluxThreshold"</span><span class="p">:</span> <span class="mf">1e-5</span><span class="p">,</span>
+        <span class="s2">"abaqusZeroFluxCorrectionTolerance"</span><span class="p">:</span> <span class="mf">1e-3</span><span class="p">,</span>
+        <span class="s2">"abaqusLinearResidualTolerance"</span><span class="p">:</span> <span class="mf">1e-8</span><span class="p">,</span>
+        <span class="s2">"abaqusInitialTimeAveragedFlux"</span><span class="p">:</span> <span class="mf">1e-2</span><span class="p">,</span>
     <span class="p">}</span>
+
+    <span class="c1">#: The convergence criterion of the current step.</span>
+    <span class="n">convergenceCriterion</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="c1">#: The predictor's state between increments: the last accepted increment and its dU.</span>
+    <span class="n">checkpointedState</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"prevTimeStep"</span><span class="p">:</span> <span class="n">TimeStep</span><span class="p">,</span> <span class="s2">"dU"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">}</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">jobInfo</span><span class="p">,</span> <span class="n">journal</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">journal</span> <span class="o">=</span> <span class="n">journal</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">fieldCorrectionTolerances</span> <span class="o">=</span> <span class="n">jobInfo</span><span class="p">[</span><span class="s2">&quot;fieldCorrectionTolerance&quot;</span><span class="p">]</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">fluxResidualTolerances</span> <span class="o">=</span> <span class="n">jobInfo</span><span class="p">[</span><span class="s2">&quot;fluxResidualTolerance&quot;</span><span class="p">]</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">fluxResidualTolerancesAlt</span> <span class="o">=</span> <span class="n">jobInfo</span><span class="p">[</span><span class="s2">&quot;fluxResidualToleranceAlternative&quot;</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">fieldCorrectionTolerances</span> <span class="o">=</span> <span class="n">jobInfo</span><span class="p">[</span><span class="s2">"fieldCorrectionTolerance"</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">fluxResidualTolerances</span> <span class="o">=</span> <span class="n">jobInfo</span><span class="p">[</span><span class="s2">"fluxResidualTolerance"</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">fluxResidualTolerancesAlt</span> <span class="o">=</span> <span class="n">jobInfo</span><span class="p">[</span><span class="s2">"fluxResidualToleranceAlternative"</span><span class="p">]</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">options</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">SolverSpecificOptions</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_updateOptions</span><span class="p">(</span><span class="n">kwargs</span><span class="p">,</span> <span class="n">journal</span><span class="p">)</span>
+        <span class="c1"># the *solver datalines belong only to this solver: unknown entries are typos</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_updateOptions</span><span class="p">(</span><span class="n">kwargs</span><span class="p">,</span> <span class="n">journal</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="c1">#: The ``*linearSolver`` blocks of the input file by name, which linsolver= may name (none without an input file).</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">linearSolverDefinitions</span> <span class="o">=</span> <span class="n">jobInfo</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"linearSolvers"</span><span class="p">,</span> <span class="p">{})</span>
+        <span class="c1">#: The linear solver, and the ``linsolver`` it was made for (see :meth:`selectLinearSolverForStep`).</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">linSolver</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">linSolverName</span> <span class="o">=</span> <span class="kc">None</span>
 
-<div class="viewcode-block" id="NIST.solveStep">
-<a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.solveStep">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">solveStep</span><span class="p">(</span>
+        <span class="c1">#: The last accepted increment, from which the predictor extrapolates (None: no extrapolation).</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">prevTimeStep</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="c1">#: The solution increment of the last accepted increment.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dU</span> <span class="o">=</span> <span class="kc">None</span>
+
+<div class="viewcode-block" id="NIST.selectLinearSolverForStep">
+<a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.selectLinearSolverForStep">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">selectLinearSolverForStep</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Make :attr:`linSolver` the linear solver the step about to begin names (``linsolver``): the one of the</span>
+<span class="sd">        previous step if it names the same, else a new one.</span>
+
+<span class="sd">        A kept solver builds anew for the step's equation system (``setModel``) and frees what it built before. A new</span>
+<span class="sd">        solver per step would leave the previous one to Python's cyclic garbage collector whenever its tree refers</span>
+<span class="sd">        back to itself (a function in a solver script, whose globals hold the tree), and the steps' matrices would</span>
+<span class="sd">        pile up."""</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">linSolver</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s2">"linsolver"</span><span class="p">]</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">linSolverName</span><span class="p">:</span>
+            <span class="k">return</span>
+        <span class="c1"># the previous one goes before the new one is made</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">linSolver</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">linSolver</span> <span class="o">=</span> <span class="n">createLinearSolver</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s2">"linsolver"</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">linearSolverDefinitions</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">linSolverName</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s2">"linsolver"</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">linSolver</span><span class="o">.</span><span class="n">setJournal</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">journal</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="NIST.forgetEquationSystem">
+<a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.forgetEquationSystem">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">forgetEquationSystem</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Drop the equation system of the last build -- the DOF manager, the system matrix and its CSR generator,</span>
+<span class="sd">        the multi-point-constraint condensation, the DOF vectors -- so that it is gone before the next one is built,</span>
+<span class="sd">        never both at once."""</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">csrGenerator</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">mpcTransformation</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_U</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dU</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_P</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_K</span> <span class="o">=</span> <span class="kc">None</span></div>
+
+
+<div class="viewcode-block" id="NIST.beginStep">
+<a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.beginStep">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">beginStep</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">step</span><span class="p">,</span>
         <span class="n">model</span><span class="p">:</span> <span class="n">FEModel</span><span class="p">,</span>
         <span class="n">fieldOutputController</span><span class="p">:</span> <span class="n">FieldOutputController</span><span class="p">,</span>
         <span class="n">outputmanagers</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">OutputManagerBase</span><span class="p">],</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">bool</span><span class="p">,</span> <span class="n">FEModel</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Public interface to solve for a step.</span>
+    <span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Set up the linear solver, and start the step; see</span>
+<span class="sd">        :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.beginStep`.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
-<span class="sd">        stepNumber</span>
-<span class="sd">            The step number.</span>
 <span class="sd">        step</span>
-<span class="sd">            The dictionary containing the step definition.</span>
-<span class="sd">        stepActions</span>
-<span class="sd">            The dictionary containing all step actions.</span>
+<span class="sd">            The step to be solved.</span>
 <span class="sd">        model</span>
-<span class="sd">            The  model tree.</span>
+<span class="sd">            The model tree.</span>
 <span class="sd">        fieldOutputController</span>
 <span class="sd">            The field output controller.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
+<span class="sd">        outputmanagers</span>
+<span class="sd">            The output managers.</span>
+<span class="sd">        """</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">journal</span><span class="o">.</span><span class="n">message</span><span class="p">(</span><span class="s2">&quot;Creating monolithic equation system&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">identification</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span> <span class="o">=</span> <span class="n">DofManager</span><span class="p">(</span>
-            <span class="n">model</span><span class="o">.</span><span class="n">nodeFields</span><span class="o">.</span><span class="n">values</span><span class="p">(),</span>
-            <span class="n">model</span><span class="o">.</span><span class="n">scalarVariables</span><span class="o">.</span><span class="n">values</span><span class="p">(),</span>
-            <span class="n">model</span><span class="o">.</span><span class="n">elements</span><span class="o">.</span><span class="n">values</span><span class="p">(),</span>
-            <span class="n">model</span><span class="o">.</span><span class="n">constraints</span><span class="o">.</span><span class="n">values</span><span class="p">(),</span>
-            <span class="n">model</span><span class="o">.</span><span class="n">nodeSets</span><span class="o">.</span><span class="n">values</span><span class="p">(),</span>
-        <span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">journal</span><span class="o">.</span><span class="n">message</span><span class="p">(</span>
-            <span class="s2">&quot;total size of eq. system: </span><span class="si">{:}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">nDof</span><span class="p">),</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">identification</span><span class="p">,</span>
-            <span class="mi">0</span><span class="p">,</span>
-        <span class="p">)</span>
+        <span class="c1"># self.options already reflects every &gt;&gt;options block applied so far (see applyOptionsOverride).</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">selectLinearSolverForStep</span><span class="p">()</span>
 
+        <span class="n">convergenceCriterion</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">createConvergenceCriterion</span><span class="p">()</span>
+        <span class="n">convergenceCriterion</span><span class="o">.</span><span class="n">startStep</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">convergenceCriterion</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">convergenceCriterion</span> <span class="o">=</span> <span class="n">convergenceCriterion</span>
+
+        <span class="c1"># The equation system (DofManager, VIJ pattern, CSR structure) is (re)built lazily in the first increment,</span>
+        <span class="c1"># and whenever the topology update reports a change of the mesh or of a constraint's DOF footprint.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">forgetEquationSystem</span><span class="p">()</span>
+
+        <span class="c1"># A step starts without a predictor state; a resumed step takes over the checkpointed one.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">prevTimeStep</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dU</span> <span class="o">=</span> <span class="kc">None</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">validateModelCapabilities</span><span class="p">(</span><span class="n">model</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">applyStepActionsAtStepStart</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">step</span><span class="p">)</span>
+
+        <span class="c1"># The timing table and the step's wall clock must start together.</span>
+        <span class="n">performancetiming</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_stepWallClockTic</span> <span class="o">=</span> <span class="n">perf_counter</span><span class="p">()</span></div>
+
+
+<div class="viewcode-block" id="NIST.prepareIncrement">
+<a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.prepareIncrement">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">prepareIncrement</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">step</span><span class="p">,</span> <span class="n">model</span><span class="p">:</span> <span class="n">FEModel</span><span class="p">,</span> <span class="n">isRetry</span><span class="p">:</span> <span class="nb">bool</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""The topology update, at the start of every increment; see</span>
+<span class="sd">        :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.prepareIncrement`.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        step</span>
+<span class="sd">            The step being solved.</span>
+<span class="sd">        model</span>
+<span class="sd">            The model tree.</span>
+<span class="sd">        isRetry</span>
+<span class="sd">            True if the increment is retried after a cutback: the model modifiers already decided on</span>
+<span class="sd">            the state the retry starts from.</span>
+<span class="sd">        """</span>
+
+        <span class="c1"># Before the topology update, so that its messages head this increment's block.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">journal</span><span class="o">.</span><span class="n">printSeperationLine</span><span class="p">()</span>
 
-        <span class="n">presentVariableNames</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">idcsOfFieldsInDofVector</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
+        <span class="n">topologyUpdate</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">updateTopologyAndConnectivity</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">step</span><span class="p">,</span> <span class="n">offerModelModifiers</span><span class="o">=</span><span class="ow">not</span> <span class="n">isRetry</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_modelHasChanged</span> <span class="o">=</span> <span class="n">topologyUpdate</span><span class="o">.</span><span class="n">topologyChanged</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_connectivityHasChanged</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">topologyUpdate</span><span class="o">.</span><span class="n">meshDependentsRefreshed</span> <span class="ow">or</span> <span class="n">topologyUpdate</span><span class="o">.</span><span class="n">constraintConnectivityChanged</span>
+        <span class="p">)</span></div>
 
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">idcsOfScalarVariablesInDofVector</span><span class="p">:</span>
-            <span class="n">presentVariableNames</span> <span class="o">+=</span> <span class="p">[</span>
-                <span class="s2">&quot;scalar variables&quot;</span><span class="p">,</span>
-            <span class="p">]</span>
 
-        <span class="n">nVariables</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">presentVariableNames</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">iterationHeader</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;</span><span class="si">{:^25}</span><span class="s2">&quot;</span> <span class="o">*</span> <span class="n">nVariables</span><span class="p">)</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="o">*</span><span class="n">presentVariableNames</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">iterationHeader2</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot; </span><span class="si">{:&lt;10}</span><span class="s2">  </span><span class="si">{:&lt;10}</span><span class="s2">  &quot;</span><span class="p">)</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="s2">&quot;||R||∞&quot;</span><span class="p">,</span> <span class="s2">&quot;||ddU||∞&quot;</span><span class="p">)</span> <span class="o">*</span> <span class="n">nVariables</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">iterationMessageTemplate</span> <span class="o">=</span> <span class="s2">&quot;</span><span class="si">{:11.2e}{:1}{:11.2e}{:1}</span><span class="s2"> &quot;</span>
+<div class="viewcode-block" id="NIST.attemptIncrement">
+<a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.attemptIncrement">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">attemptIncrement</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">step</span><span class="p">,</span> <span class="n">model</span><span class="p">:</span> <span class="n">FEModel</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">:</span> <span class="n">TimeStep</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Solve the increment by Newton's method, rebuilding the equation system first if the topology</span>
+<span class="sd">        update changed the model, and re-equilibrating a changed model first if so configured; see</span>
+<span class="sd">        :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.attemptIncrement`.</span>
 
-        <span class="n">U</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
-        <span class="n">K</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">constructVIJSystemMatrix</span><span class="p">()</span>
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        step</span>
+<span class="sd">            The step being solved.</span>
+<span class="sd">        model</span>
+<span class="sd">            The model tree.</span>
+<span class="sd">        timeStep</span>
+<span class="sd">            The increment.</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">csrGenerator</span> <span class="o">=</span> <span class="n">CSRGenerator</span><span class="p">(</span><span class="n">K</span><span class="p">)</span>
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        IncrementFailed</span>
+<span class="sd">            If Newton's method does not converge, or a material requests a cutback.</span>
+<span class="sd">        """</span>
 
-        <span class="k">try</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_updateOptions</span><span class="p">(</span><span class="n">step</span><span class="o">.</span><span class="n">actions</span><span class="p">[</span><span class="s2">&quot;options&quot;</span><span class="p">][</span><span class="s2">&quot;NISTSolver&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">options</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">journal</span><span class="p">)</span>
-        <span class="k">except</span> <span class="ne">KeyError</span><span class="p">:</span>
-            <span class="k">pass</span>
-
-        <span class="n">extrapolation</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s2">&quot;extrapolation&quot;</span><span class="p">]</span>
-        <span class="n">linsolverOptions</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s2">&quot;linsolverConfigFile&quot;</span><span class="p">]</span>
-        <span class="n">linsolverOptionDict</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="nb">open</span><span class="p">(</span><span class="n">linsolverOptions</span><span class="p">,</span> <span class="s2">&quot;r&quot;</span><span class="p">))</span> <span class="k">if</span> <span class="n">linsolverOptions</span> <span class="k">else</span> <span class="s2">&quot;&quot;</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">linSolver</span> <span class="o">=</span> <span class="p">(</span>
-            <span class="n">getLinSolverByName</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s2">&quot;linsolver&quot;</span><span class="p">],</span> <span class="n">linsolverOptionDict</span><span class="p">)</span>
-            <span class="k">if</span> <span class="s2">&quot;linsolver&quot;</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">options</span>
-            <span class="k">else</span> <span class="n">getDefaultLinSolver</span><span class="p">()</span>
-        <span class="p">)</span>
-
+        <span class="n">extrapolation</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s2">"extrapolation"</span><span class="p">]</span>
+        <span class="n">equilibrateAfterModelChange</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s2">"equilibrateAfterModelChange"</span><span class="p">]</span>
+        <span class="n">reportPerformanceFrequency</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s2">"report-performance-frequency"</span><span class="p">]</span>
+        <span class="n">stepWallClockTic</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stepWallClockTic</span>
         <span class="n">maxIter</span> <span class="o">=</span> <span class="n">step</span><span class="o">.</span><span class="n">maxIter</span>
-        <span class="n">criticalIter</span> <span class="o">=</span> <span class="n">step</span><span class="o">.</span><span class="n">criticalIter</span>
         <span class="n">maxGrowingIter</span> <span class="o">=</span> <span class="n">step</span><span class="o">.</span><span class="n">maxGrowIter</span>
         <span class="n">cutbackFactor</span> <span class="o">=</span> <span class="n">step</span><span class="o">.</span><span class="n">cutbackFactor</span>
+        <span class="n">modelHasChanged</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_modelHasChanged</span>
+        <span class="n">connectivityHasChanged</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_connectivityHasChanged</span>
 
-        <span class="n">U</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
-        <span class="n">P</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
-        <span class="n">dU</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
+        <span class="c1"># The header of this increment's block; all messages below are nested one level deeper.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">journal</span><span class="o">.</span><span class="n">message</span><span class="p">(</span>
+            <span class="s2">"increment </span><span class="si">{:}</span><span class="s2">: </span><span class="si">{:8f}</span><span class="s2">, </span><span class="si">{:8f}</span><span class="s2">; time </span><span class="si">{:10f}</span><span class="s2"> to </span><span class="si">{:10f}</span><span class="s2">"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+                <span class="n">timeStep</span><span class="o">.</span><span class="n">number</span><span class="p">,</span>
+                <span class="n">timeStep</span><span class="o">.</span><span class="n">stepProgressIncrement</span><span class="p">,</span>
+                <span class="n">timeStep</span><span class="o">.</span><span class="n">stepProgress</span><span class="p">,</span>
+                <span class="n">timeStep</span><span class="o">.</span><span class="n">totalTime</span> <span class="o">-</span> <span class="n">timeStep</span><span class="o">.</span><span class="n">timeIncrement</span><span class="p">,</span>
+                <span class="n">timeStep</span><span class="o">.</span><span class="n">totalTime</span><span class="p">,</span>
+            <span class="p">),</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">identification</span><span class="p">,</span>
+            <span class="n">level</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+        <span class="p">)</span>
 
-        <span class="k">for</span> <span class="n">fieldName</span><span class="p">,</span> <span class="n">field</span> <span class="ow">in</span> <span class="n">model</span><span class="o">.</span><span class="n">nodeFields</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
-            <span class="n">U</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">writeNodeFieldToDofVector</span><span class="p">(</span><span class="n">U</span><span class="p">,</span> <span class="n">field</span><span class="p">,</span> <span class="s2">&quot;U&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">reportPerformanceFrequency</span> <span class="ow">and</span> <span class="n">timeStep</span><span class="o">.</span><span class="n">number</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="ow">and</span> <span class="n">timeStep</span><span class="o">.</span><span class="n">number</span> <span class="o">%</span> <span class="n">reportPerformanceFrequency</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">journal</span><span class="o">.</span><span class="n">printPrettyTable</span><span class="p">(</span>
+                <span class="n">performancetiming</span><span class="o">.</span><span class="n">makePrettyTable</span><span class="p">(</span><span class="n">wallTime</span><span class="o">=</span><span class="n">perf_counter</span><span class="p">()</span> <span class="o">-</span> <span class="n">stepWallClockTic</span><span class="p">),</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">identification</span><span class="p">,</span>
+            <span class="p">)</span>
 
-        <span class="k">for</span> <span class="n">variable</span> <span class="ow">in</span> <span class="n">model</span><span class="o">.</span><span class="n">scalarVariables</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
-            <span class="n">U</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">idcsOfScalarVariablesInDofVector</span><span class="p">[</span><span class="n">variable</span><span class="p">]]</span> <span class="o">=</span> <span class="n">variable</span><span class="o">.</span><span class="n">value</span>
+        <span class="k">if</span> <span class="n">modelHasChanged</span> <span class="ow">or</span> <span class="n">connectivityHasChanged</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">with</span> <span class="n">performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"equation system rebuild"</span><span class="p">):</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">forgetEquationSystem</span><span class="p">()</span>
+                <span class="k">with</span> <span class="n">performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"dof manager"</span><span class="p">):</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span> <span class="o">=</span> <span class="n">DofManager</span><span class="p">(</span>
+                        <span class="n">model</span><span class="o">.</span><span class="n">nodeFields</span><span class="o">.</span><span class="n">values</span><span class="p">(),</span>
+                        <span class="n">model</span><span class="o">.</span><span class="n">scalarVariables</span><span class="o">.</span><span class="n">values</span><span class="p">(),</span>
+                        <span class="n">model</span><span class="o">.</span><span class="n">elements</span><span class="o">.</span><span class="n">values</span><span class="p">(),</span>
+                        <span class="n">model</span><span class="o">.</span><span class="n">constraints</span><span class="o">.</span><span class="n">values</span><span class="p">(),</span>
+                        <span class="n">model</span><span class="o">.</span><span class="n">nodeSets</span><span class="o">.</span><span class="n">values</span><span class="p">(),</span>
+                    <span class="p">)</span>
+                <span class="c1"># the cache is keyed on the DofManager; drop it so the old manager can be freed</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_dirichletIndicesCache</span> <span class="o">=</span> <span class="kc">None</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">journal</span><span class="o">.</span><span class="n">message</span><span class="p">(</span>
+                    <span class="s2">"eq. system rebuilt: </span><span class="si">{:}</span><span class="s2"> dof"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">nDof</span><span class="p">),</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">identification</span><span class="p">,</span>
+                    <span class="mi">2</span><span class="p">,</span>
+                <span class="p">)</span>
 
-        <span class="n">prevTimeStep</span> <span class="o">=</span> <span class="kc">None</span>
+                <span class="c1"># Fields are laid out in contiguous slices: report the block structure per field.</span>
+                <span class="k">for</span> <span class="n">fieldName</span><span class="p">,</span> <span class="n">fieldIndices</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">idcsOfFieldsInDofVector</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">journal</span><span class="o">.</span><span class="n">message</span><span class="p">(</span>
+                        <span class="s2">"field '</span><span class="si">{:}</span><span class="s2">': </span><span class="si">{:}</span><span class="s2"> dof, [</span><span class="si">{:}</span><span class="s2">, </span><span class="si">{:}</span><span class="s2">)"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+                            <span class="n">fieldName</span><span class="p">,</span>
+                            <span class="n">fieldIndices</span><span class="o">.</span><span class="n">stop</span> <span class="o">-</span> <span class="n">fieldIndices</span><span class="o">.</span><span class="n">start</span><span class="p">,</span>
+                            <span class="n">fieldIndices</span><span class="o">.</span><span class="n">start</span><span class="p">,</span>
+                            <span class="n">fieldIndices</span><span class="o">.</span><span class="n">stop</span><span class="p">,</span>
+                        <span class="p">),</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">identification</span><span class="p">,</span>
+                        <span class="mi">2</span><span class="p">,</span>
+                    <span class="p">)</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">applyStepActionsAtStepStart</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">step</span><span class="o">.</span><span class="n">actions</span><span class="p">)</span>
+                <span class="c1"># Re-pushed on every (re)build so the linear solver tracks the mesh across AMR.</span>
+                <span class="k">with</span> <span class="n">performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"linear solver setup"</span><span class="p">):</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">linSolver</span><span class="o">.</span><span class="n">setModel</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="p">)</span>
+
+                <span class="n">presentVariableNames</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">idcsOfFieldsInDofVector</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
+
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">idcsOfScalarVariablesInDofVector</span><span class="p">:</span>
+                    <span class="n">presentVariableNames</span> <span class="o">+=</span> <span class="p">[</span>
+                        <span class="s2">"scalar variables"</span><span class="p">,</span>
+                    <span class="p">]</span>
+
+                <span class="bp">self</span><span class="o">.</span><span class="n">convergenceTable</span> <span class="o">=</span> <span class="n">ConvergenceTable</span><span class="p">(</span><span class="n">presentVariableNames</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">linSolver</span><span class="o">.</span><span class="n">reportsSolveSummary</span><span class="p">)</span>
+
+                <span class="k">with</span> <span class="n">performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"system matrix pattern"</span><span class="p">):</span>
+                    <span class="n">K</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">constructVIJSystemMatrix</span><span class="p">()</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">csrGenerator</span> <span class="o">=</span> <span class="n">CSRGenerator</span><span class="p">(</span><span class="n">K</span><span class="p">)</span>
+
+                <span class="n">U</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
+                <span class="n">P</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
+                <span class="n">dU</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
+
+                <span class="k">for</span> <span class="n">fieldName</span><span class="p">,</span> <span class="n">field</span> <span class="ow">in</span> <span class="n">model</span><span class="o">.</span><span class="n">nodeFields</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                    <span class="n">U</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">writeNodeFieldToDofVector</span><span class="p">(</span><span class="n">U</span><span class="p">,</span> <span class="n">field</span><span class="p">,</span> <span class="s2">"U"</span><span class="p">)</span>
+
+                <span class="k">for</span> <span class="n">variable</span> <span class="ow">in</span> <span class="n">model</span><span class="o">.</span><span class="n">scalarVariables</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+                    <span class="n">U</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">idcsOfScalarVariablesInDofVector</span><span class="p">[</span><span class="n">variable</span><span class="p">]]</span> <span class="o">=</span> <span class="n">variable</span><span class="o">.</span><span class="n">value</span>
+
+                <span class="k">with</span> <span class="n">performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"mpc transformation build"</span><span class="p">):</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">mpcTransformation</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">buildMPCTransformation</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">step</span><span class="o">.</span><span class="n">actions</span><span class="p">)</span>
+                <span class="k">with</span> <span class="n">performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"mpc dirichlet conflict check"</span><span class="p">):</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">checkMPCDirichletConflicts</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">mpcTransformation</span><span class="p">,</span> <span class="n">step</span><span class="o">.</span><span class="n">actions</span><span class="p">)</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">mpcTransformation</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="c1"># Room in the CSR pattern for the entries the condensation adds, so that it can be done in place</span>
+                    <span class="k">with</span> <span class="n">performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"mpc condensed pattern"</span><span class="p">):</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">csrGenerator</span><span class="o">.</span><span class="n">addToPattern</span><span class="p">(</span>
+                            <span class="bp">self</span><span class="o">.</span><span class="n">mpcTransformation</span><span class="o">.</span><span class="n">condensedPatternFillIn</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">csrGenerator</span><span class="o">.</span><span class="n">csrMatrix</span><span class="p">)</span>
+                        <span class="p">)</span>
+
+                <span class="c1"># After a topology change, the last dU belongs to a different DOF layout: do not</span>
+                <span class="c1"># extrapolate this increment.</span>
+                <span class="k">if</span> <span class="n">modelHasChanged</span> <span class="ow">or</span> <span class="n">connectivityHasChanged</span><span class="p">:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">prevTimeStep</span> <span class="o">=</span> <span class="kc">None</span>
+                <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">dU</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="n">dU</span><span class="p">[:]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">dU</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_U</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dU</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_P</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_K</span> <span class="o">=</span> <span class="n">U</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">P</span><span class="p">,</span> <span class="n">K</span>
+        <span class="c1"># the equation system of this increment, just built or kept from the last one</span>
+        <span class="n">U</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">P</span><span class="p">,</span> <span class="n">K</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_U</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dU</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_P</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_K</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">incrementStatus</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">"step"</span><span class="p">:</span> <span class="n">step</span><span class="o">.</span><span class="n">number</span><span class="p">,</span>
+            <span class="s2">"inc"</span><span class="p">:</span> <span class="n">timeStep</span><span class="o">.</span><span class="n">number</span><span class="p">,</span>
+            <span class="s2">"iters"</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>
+            <span class="s2">"converged"</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+            <span class="s2">"time inc"</span><span class="p">:</span> <span class="n">timeStep</span><span class="o">.</span><span class="n">timeIncrement</span><span class="p">,</span>
+            <span class="s2">"time end"</span><span class="p">:</span> <span class="n">timeStep</span><span class="o">.</span><span class="n">totalTime</span><span class="p">,</span>
+            <span class="s2">"notes"</span><span class="p">:</span> <span class="s2">""</span><span class="p">,</span>
+        <span class="p">}</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">tableHeaderWritten</span> <span class="o">=</span> <span class="kc">False</span>
+
+        <span class="k">if</span> <span class="n">modelHasChanged</span> <span class="ow">and</span> <span class="n">equilibrateAfterModelChange</span><span class="p">:</span>
+            <span class="c1"># Settle the refined mesh at the LAST converged load: a time step with zero step-progress</span>
+            <span class="c1"># and time increment holds all loads and yields a zero Dirichlet increment.</span>
+            <span class="n">equilibrationTimeStep</span> <span class="o">=</span> <span class="n">TimeStep</span><span class="p">(</span>
+                <span class="n">timeStep</span><span class="o">.</span><span class="n">number</span><span class="p">,</span>
+                <span class="mf">0.0</span><span class="p">,</span>
+                <span class="n">timeStep</span><span class="o">.</span><span class="n">stepProgress</span> <span class="o">-</span> <span class="n">timeStep</span><span class="o">.</span><span class="n">stepProgressIncrement</span><span class="p">,</span>
+                <span class="mf">0.0</span><span class="p">,</span>
+                <span class="n">timeStep</span><span class="o">.</span><span class="n">stepTime</span> <span class="o">-</span> <span class="n">timeStep</span><span class="o">.</span><span class="n">timeIncrement</span><span class="p">,</span>
+                <span class="n">timeStep</span><span class="o">.</span><span class="n">totalTime</span> <span class="o">-</span> <span class="n">timeStep</span><span class="o">.</span><span class="n">timeIncrement</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">journal</span><span class="o">.</span><span class="n">message</span><span class="p">(</span>
+                <span class="s2">"Model changed: re-equilibrating at constant load before advancing"</span><span class="p">,</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">identification</span><span class="p">,</span>
+                <span class="mi">1</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">U</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">P</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">solveIncrement</span><span class="p">(</span>
+                    <span class="n">U</span><span class="p">,</span>
+                    <span class="n">dU</span><span class="p">,</span>
+                    <span class="n">P</span><span class="p">,</span>
+                    <span class="n">K</span><span class="p">,</span>
+                    <span class="n">step</span><span class="o">.</span><span class="n">actions</span><span class="p">,</span>
+                    <span class="n">model</span><span class="p">,</span>
+                    <span class="n">equilibrationTimeStep</span><span class="p">,</span>
+                    <span class="kc">None</span><span class="p">,</span>
+                    <span class="n">extrapolation</span><span class="p">,</span>
+                    <span class="n">maxIter</span><span class="p">,</span>
+                    <span class="n">maxGrowingIter</span><span class="p">,</span>
+                <span class="p">)</span>
+            <span class="k">except</span> <span class="p">(</span><span class="n">CutbackRequest</span><span class="p">,</span> <span class="n">ReachedMaxIterations</span><span class="p">,</span> <span class="n">DivergingSolution</span><span class="p">)</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">journal</span><span class="o">.</span><span class="n">message</span><span class="p">(</span>
+                    <span class="s2">"Re-equilibration after model change failed (</span><span class="si">{:}</span><span class="s2">); cutting back"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)),</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">identification</span><span class="p">,</span>
+                    <span class="mi">1</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">prevTimeStep</span> <span class="o">=</span> <span class="kc">None</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">incrementStatus</span><span class="p">[</span><span class="s2">"iters"</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">inf</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">incrementStatus</span><span class="p">[</span><span class="s2">"notes"</span><span class="p">]</span> <span class="o">=</span> <span class="s2">"re-equilibration failed: </span><span class="si">{:}</span><span class="s2">"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">))</span>
+                <span class="k">raise</span> <span class="n">IncrementFailed</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">),</span> <span class="n">cutbackFactor</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">e</span>
+
+            <span class="c1"># Commit the settled state as a converged sub-increment (no output): elements integrate</span>
+            <span class="c1"># incrementally from the committed state, so otherwise U and the internal state disagree.</span>
+            <span class="k">for</span> <span class="n">fieldName</span><span class="p">,</span> <span class="n">field</span> <span class="ow">in</span> <span class="n">model</span><span class="o">.</span><span class="n">nodeFields</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">writeDofVectorToNodeField</span><span class="p">(</span><span class="n">U</span><span class="p">,</span> <span class="n">field</span><span class="p">,</span> <span class="s2">"U"</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">writeDofVectorToNodeField</span><span class="p">(</span><span class="n">P</span><span class="p">,</span> <span class="n">field</span><span class="p">,</span> <span class="s2">"P"</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">writeDofVectorToNodeField</span><span class="p">(</span><span class="n">dU</span><span class="p">,</span> <span class="n">field</span><span class="p">,</span> <span class="s2">"dU"</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">variable</span> <span class="ow">in</span> <span class="n">model</span><span class="o">.</span><span class="n">scalarVariables</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+                <span class="n">variable</span><span class="o">.</span><span class="n">value</span> <span class="o">=</span> <span class="n">U</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">idcsOfScalarVariablesInDofVector</span><span class="p">[</span><span class="n">variable</span><span class="p">]]</span>
+            <span class="n">model</span><span class="o">.</span><span class="n">advanceToTime</span><span class="p">(</span><span class="n">equilibrationTimeStep</span><span class="o">.</span><span class="n">totalTime</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_U</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dU</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_P</span> <span class="o">=</span> <span class="n">U</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">P</span>
 
         <span class="k">try</span><span class="p">:</span>
-            <span class="k">for</span> <span class="n">timeStep</span> <span class="ow">in</span> <span class="n">step</span><span class="o">.</span><span class="n">getTimeStep</span><span class="p">():</span>
-                <span class="n">statusInfoDict</span> <span class="o">=</span> <span class="p">{</span>
-                    <span class="s2">&quot;step&quot;</span><span class="p">:</span> <span class="n">step</span><span class="o">.</span><span class="n">number</span><span class="p">,</span>
-                    <span class="s2">&quot;inc&quot;</span><span class="p">:</span> <span class="n">timeStep</span><span class="o">.</span><span class="n">number</span><span class="p">,</span>
-                    <span class="s2">&quot;iters&quot;</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>
-                    <span class="s2">&quot;converged&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
-                    <span class="s2">&quot;time inc&quot;</span><span class="p">:</span> <span class="n">timeStep</span><span class="o">.</span><span class="n">timeIncrement</span><span class="p">,</span>
-                    <span class="s2">&quot;time end&quot;</span><span class="p">:</span> <span class="n">timeStep</span><span class="o">.</span><span class="n">totalTime</span><span class="p">,</span>
-                    <span class="s2">&quot;notes&quot;</span><span class="p">:</span> <span class="s2">&quot;&quot;</span><span class="p">,</span>
-                <span class="p">}</span>
+            <span class="n">U</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">P</span><span class="p">,</span> <span class="n">iterationCounter</span><span class="p">,</span> <span class="n">incrementResidualHistory</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">solveIncrement</span><span class="p">(</span>
+                <span class="n">U</span><span class="p">,</span>
+                <span class="n">dU</span><span class="p">,</span>
+                <span class="n">P</span><span class="p">,</span>
+                <span class="n">K</span><span class="p">,</span>
+                <span class="n">step</span><span class="o">.</span><span class="n">actions</span><span class="p">,</span>
+                <span class="n">model</span><span class="p">,</span>
+                <span class="n">timeStep</span><span class="p">,</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">prevTimeStep</span><span class="p">,</span>
+                <span class="n">extrapolation</span><span class="p">,</span>
+                <span class="n">maxIter</span><span class="p">,</span>
+                <span class="n">maxGrowingIter</span><span class="p">,</span>
+            <span class="p">)</span>
 
-                <span class="bp">self</span><span class="o">.</span><span class="n">journal</span><span class="o">.</span><span class="n">printSeperationLine</span><span class="p">()</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">journal</span><span class="o">.</span><span class="n">message</span><span class="p">(</span>
-                    <span class="s2">&quot;increment </span><span class="si">{:}</span><span class="s2">: </span><span class="si">{:8f}</span><span class="s2">, </span><span class="si">{:8f}</span><span class="s2">; time </span><span class="si">{:10f}</span><span class="s2"> to </span><span class="si">{:10f}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
-                        <span class="n">timeStep</span><span class="o">.</span><span class="n">number</span><span class="p">,</span>
-                        <span class="n">timeStep</span><span class="o">.</span><span class="n">stepProgressIncrement</span><span class="p">,</span>
-                        <span class="n">timeStep</span><span class="o">.</span><span class="n">stepProgress</span><span class="p">,</span>
-                        <span class="n">timeStep</span><span class="o">.</span><span class="n">totalTime</span> <span class="o">-</span> <span class="n">timeStep</span><span class="o">.</span><span class="n">timeIncrement</span><span class="p">,</span>
-                        <span class="n">timeStep</span><span class="o">.</span><span class="n">totalTime</span><span class="p">,</span>
-                    <span class="p">),</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">identification</span><span class="p">,</span>
-                    <span class="n">level</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
-                <span class="p">)</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">journal</span><span class="o">.</span><span class="n">message</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">iterationHeader</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">identification</span><span class="p">,</span> <span class="n">level</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">journal</span><span class="o">.</span><span class="n">message</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">iterationHeader2</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">identification</span><span class="p">,</span> <span class="n">level</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+        <span class="k">except</span> <span class="n">CutbackRequest</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">prevTimeStep</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">incrementStatus</span><span class="p">[</span><span class="s2">"iters"</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">inf</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">incrementStatus</span><span class="p">[</span><span class="s2">"notes"</span><span class="p">]</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)</span>
+            <span class="k">raise</span> <span class="n">IncrementFailed</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">),</span> <span class="nb">max</span><span class="p">(</span><span class="n">e</span><span class="o">.</span><span class="n">cutbackSize</span><span class="p">,</span> <span class="n">cutbackFactor</span><span class="p">))</span> <span class="kn">from</span><span class="w"> </span><span class="nn">e</span>
 
-                <span class="k">try</span><span class="p">:</span>
-                    <span class="n">U</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">P</span><span class="p">,</span> <span class="n">iterationCounter</span><span class="p">,</span> <span class="n">incrementResidualHistory</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">solveIncrement</span><span class="p">(</span>
-                        <span class="n">U</span><span class="p">,</span>
-                        <span class="n">dU</span><span class="p">,</span>
-                        <span class="n">P</span><span class="p">,</span>
-                        <span class="n">K</span><span class="p">,</span>
-                        <span class="n">step</span><span class="o">.</span><span class="n">actions</span><span class="p">,</span>
-                        <span class="n">model</span><span class="p">,</span>
-                        <span class="n">timeStep</span><span class="p">,</span>
-                        <span class="n">prevTimeStep</span><span class="p">,</span>
-                        <span class="n">extrapolation</span><span class="p">,</span>
-                        <span class="n">maxIter</span><span class="p">,</span>
-                        <span class="n">maxGrowingIter</span><span class="p">,</span>
-                    <span class="p">)</span>
+        <span class="k">except</span> <span class="p">(</span><span class="n">ReachedMaxIterations</span><span class="p">,</span> <span class="n">DivergingSolution</span><span class="p">)</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">prevTimeStep</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">incrementStatus</span><span class="p">[</span><span class="s2">"iters"</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">inf</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">incrementStatus</span><span class="p">[</span><span class="s2">"notes"</span><span class="p">]</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)</span>
+            <span class="k">raise</span> <span class="n">IncrementFailed</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">),</span> <span class="n">cutbackFactor</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">e</span>
 
-                <span class="k">except</span> <span class="n">CutbackRequest</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">journal</span><span class="o">.</span><span class="n">message</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">),</span> <span class="bp">self</span><span class="o">.</span><span class="n">identification</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
-                    <span class="n">step</span><span class="o">.</span><span class="n">discardAndChangeIncrement</span><span class="p">(</span><span class="nb">max</span><span class="p">(</span><span class="n">e</span><span class="o">.</span><span class="n">cutbackSize</span><span class="p">,</span> <span class="n">cutbackFactor</span><span class="p">))</span>
-                    <span class="n">prevTimeStep</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_U</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dU</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_P</span> <span class="o">=</span> <span class="n">U</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">P</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_iterationCounter</span> <span class="o">=</span> <span class="n">iterationCounter</span></div>
 
-                    <span class="n">statusInfoDict</span><span class="p">[</span><span class="s2">&quot;iters&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">inf</span>
-                    <span class="n">statusInfoDict</span><span class="p">[</span><span class="s2">&quot;notes&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)</span>
 
-                    <span class="k">for</span> <span class="n">man</span> <span class="ow">in</span> <span class="n">outputmanagers</span><span class="p">:</span>
-                        <span class="n">man</span><span class="o">.</span><span class="n">finalizeFailedIncrement</span><span class="p">(</span>
-                            <span class="n">statusInfoDict</span><span class="o">=</span><span class="n">statusInfoDict</span><span class="p">,</span>
-                        <span class="p">)</span>
+<div class="viewcode-block" id="NIST.acceptIncrement">
+<a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.acceptIncrement">[docs]</a>
+    <span class="nd">@performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"accept increment"</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">acceptIncrement</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">step</span><span class="p">,</span> <span class="n">model</span><span class="p">:</span> <span class="n">FEModel</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">:</span> <span class="n">TimeStep</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Commit the converged increment to the model, and keep the predictor's state; see</span>
+<span class="sd">        :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.acceptIncrement`.</span>
 
-                <span class="k">except</span> <span class="p">(</span><span class="n">ReachedMaxIterations</span><span class="p">,</span> <span class="n">DivergingSolution</span><span class="p">)</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">journal</span><span class="o">.</span><span class="n">message</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">),</span> <span class="bp">self</span><span class="o">.</span><span class="n">identification</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
-                    <span class="n">step</span><span class="o">.</span><span class="n">discardAndChangeIncrement</span><span class="p">(</span><span class="n">cutbackFactor</span><span class="p">)</span>
-                    <span class="n">prevTimeStep</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        step</span>
+<span class="sd">            The step being solved.</span>
+<span class="sd">        model</span>
+<span class="sd">            The model tree.</span>
+<span class="sd">        timeStep</span>
+<span class="sd">            The converged increment.</span>
+<span class="sd">        """</span>
 
-                    <span class="n">statusInfoDict</span><span class="p">[</span><span class="s2">&quot;iters&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">inf</span>
-                    <span class="n">statusInfoDict</span><span class="p">[</span><span class="s2">&quot;notes&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)</span>
+        <span class="n">U</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">P</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_U</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dU</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_P</span>
+        <span class="n">iterationCounter</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_iterationCounter</span>
 
-                    <span class="k">for</span> <span class="n">man</span> <span class="ow">in</span> <span class="n">outputmanagers</span><span class="p">:</span>
-                        <span class="n">man</span><span class="o">.</span><span class="n">finalizeFailedIncrement</span><span class="p">(</span>
-                            <span class="n">statusInfoDict</span><span class="o">=</span><span class="n">statusInfoDict</span><span class="p">,</span>
-                        <span class="p">)</span>
-
-                <span class="k">else</span><span class="p">:</span>
-                    <span class="n">prevTimeStep</span> <span class="o">=</span> <span class="n">timeStep</span>
-
-                    <span class="k">if</span> <span class="n">iterationCounter</span> <span class="o">&gt;=</span> <span class="n">criticalIter</span><span class="p">:</span>
-                        <span class="n">step</span><span class="o">.</span><span class="n">preventIncrementIncrease</span><span class="p">()</span>
-
-                    <span class="c1"># write results to nodes:</span>
-                    <span class="k">for</span> <span class="n">fieldName</span><span class="p">,</span> <span class="n">field</span> <span class="ow">in</span> <span class="n">model</span><span class="o">.</span><span class="n">nodeFields</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
-                        <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">writeDofVectorToNodeField</span><span class="p">(</span><span class="n">U</span><span class="p">,</span> <span class="n">field</span><span class="p">,</span> <span class="s2">&quot;U&quot;</span><span class="p">)</span>
-                        <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">writeDofVectorToNodeField</span><span class="p">(</span><span class="n">P</span><span class="p">,</span> <span class="n">field</span><span class="p">,</span> <span class="s2">&quot;P&quot;</span><span class="p">)</span>
-                        <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">writeDofVectorToNodeField</span><span class="p">(</span><span class="n">dU</span><span class="p">,</span> <span class="n">field</span><span class="p">,</span> <span class="s2">&quot;dU&quot;</span><span class="p">)</span>
-
-                    <span class="k">for</span> <span class="n">variable</span> <span class="ow">in</span> <span class="n">model</span><span class="o">.</span><span class="n">scalarVariables</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
-                        <span class="n">variable</span><span class="o">.</span><span class="n">value</span> <span class="o">=</span> <span class="n">U</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">idcsOfScalarVariablesInDofVector</span><span class="p">[</span><span class="n">variable</span><span class="p">]]</span>
-
-                    <span class="n">model</span><span class="o">.</span><span class="n">advanceToTime</span><span class="p">(</span><span class="n">timeStep</span><span class="o">.</span><span class="n">totalTime</span><span class="p">)</span>
-
-                    <span class="bp">self</span><span class="o">.</span><span class="n">journal</span><span class="o">.</span><span class="n">message</span><span class="p">(</span>
-                        <span class="s2">&quot;Converged in </span><span class="si">{:}</span><span class="s2"> iteration(s)&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">iterationCounter</span><span class="p">),</span>
-                        <span class="bp">self</span><span class="o">.</span><span class="n">identification</span><span class="p">,</span>
-                        <span class="mi">1</span><span class="p">,</span>
-                    <span class="p">)</span>
-
-                    <span class="n">statusInfoDict</span><span class="p">[</span><span class="s2">&quot;iters&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">iterationCounter</span>
-                    <span class="n">statusInfoDict</span><span class="p">[</span><span class="s2">&quot;converged&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">True</span>
-
-                    <span class="n">fieldOutputController</span><span class="o">.</span><span class="n">finalizeIncrement</span><span class="p">()</span>
-                    <span class="k">for</span> <span class="n">man</span> <span class="ow">in</span> <span class="n">outputmanagers</span><span class="p">:</span>
-                        <span class="n">man</span><span class="o">.</span><span class="n">finalizeIncrement</span><span class="p">(</span>
-                            <span class="n">statusInfoDict</span><span class="o">=</span><span class="n">statusInfoDict</span><span class="p">,</span>
-                        <span class="p">)</span>
-
-        <span class="k">except</span> <span class="p">(</span><span class="n">ReachedMaxIncrements</span><span class="p">,</span> <span class="n">ReachedMinIncrementSize</span><span class="p">):</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">journal</span><span class="o">.</span><span class="n">errorMessage</span><span class="p">(</span><span class="s2">&quot;Incrementation failed&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">identification</span><span class="p">)</span>
-            <span class="k">raise</span> <span class="n">StepFailed</span><span class="p">()</span>
-
-        <span class="k">except</span> <span class="n">ConditionalStop</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">journal</span><span class="o">.</span><span class="n">message</span><span class="p">(</span><span class="s2">&quot;Conditional Stop&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">identification</span><span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">applyStepActionsAtStepEnd</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">step</span><span class="o">.</span><span class="n">actions</span><span class="p">)</span>
-
+        <span class="c1"># After a model change, dU contains the remesh settling transient: optionally do not extrapolate it.</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_modelHasChanged</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s2">"extrapolateAfterModelChange"</span><span class="p">]:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">prevTimeStep</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">applyStepActionsAtStepEnd</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">step</span><span class="o">.</span><span class="n">actions</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">prevTimeStep</span> <span class="o">=</span> <span class="n">timeStep</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dU</span> <span class="o">=</span> <span class="n">dU</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">convergenceCriterion</span><span class="o">.</span><span class="n">acceptIncrement</span><span class="p">()</span>
 
-        <span class="k">finally</span><span class="p">:</span>
-            <span class="n">prettyTable</span> <span class="o">=</span> <span class="n">performancetiming</span><span class="o">.</span><span class="n">makePrettyTable</span><span class="p">()</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">journal</span><span class="o">.</span><span class="n">printPrettyTable</span><span class="p">(</span><span class="n">prettyTable</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">identification</span><span class="p">)</span>
-            <span class="n">performancetiming</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span></div>
+        <span class="k">if</span> <span class="n">iterationCounter</span> <span class="o">&gt;=</span> <span class="n">step</span><span class="o">.</span><span class="n">criticalIter</span><span class="p">:</span>
+            <span class="n">step</span><span class="o">.</span><span class="n">timeStepper</span><span class="o">.</span><span class="n">preventIncrementIncrease</span><span class="p">()</span>
+
+        <span class="k">with</span> <span class="n">performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"write results to nodes"</span><span class="p">):</span>
+            <span class="k">for</span> <span class="n">fieldName</span><span class="p">,</span> <span class="n">field</span> <span class="ow">in</span> <span class="n">model</span><span class="o">.</span><span class="n">nodeFields</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">writeDofVectorToNodeField</span><span class="p">(</span><span class="n">U</span><span class="p">,</span> <span class="n">field</span><span class="p">,</span> <span class="s2">"U"</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">writeDofVectorToNodeField</span><span class="p">(</span><span class="n">P</span><span class="p">,</span> <span class="n">field</span><span class="p">,</span> <span class="s2">"P"</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">writeDofVectorToNodeField</span><span class="p">(</span><span class="n">dU</span><span class="p">,</span> <span class="n">field</span><span class="p">,</span> <span class="s2">"dU"</span><span class="p">)</span>
+
+            <span class="k">for</span> <span class="n">variable</span> <span class="ow">in</span> <span class="n">model</span><span class="o">.</span><span class="n">scalarVariables</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+                <span class="n">variable</span><span class="o">.</span><span class="n">value</span> <span class="o">=</span> <span class="n">U</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">idcsOfScalarVariablesInDofVector</span><span class="p">[</span><span class="n">variable</span><span class="p">]]</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">updateRigidBodies</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">)</span>
+
+        <span class="k">with</span> <span class="n">performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"advance model time"</span><span class="p">):</span>
+            <span class="n">model</span><span class="o">.</span><span class="n">advanceToTime</span><span class="p">(</span><span class="n">timeStep</span><span class="o">.</span><span class="n">totalTime</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">journal</span><span class="o">.</span><span class="n">message</span><span class="p">(</span>
+            <span class="s2">"Converged in </span><span class="si">{:}</span><span class="s2"> iteration(s)"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">iterationCounter</span><span class="p">),</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">identification</span><span class="p">,</span>
+            <span class="mi">1</span><span class="p">,</span>
+        <span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">incrementStatus</span><span class="p">[</span><span class="s2">"iters"</span><span class="p">]</span> <span class="o">=</span> <span class="n">iterationCounter</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">incrementStatus</span><span class="p">[</span><span class="s2">"converged"</span><span class="p">]</span> <span class="o">=</span> <span class="kc">True</span></div>
+
+
+<div class="viewcode-block" id="NIST.endStep">
+<a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.endStep">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">endStep</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">step</span><span class="p">,</span> <span class="n">model</span><span class="p">:</span> <span class="n">FEModel</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Report the step's performance timing.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        step</span>
+<span class="sd">            The step that was solved.</span>
+<span class="sd">        model</span>
+<span class="sd">            The model tree.</span>
+<span class="sd">        """</span>
+
+        <span class="n">prettyTable</span> <span class="o">=</span> <span class="n">performancetiming</span><span class="o">.</span><span class="n">makePrettyTable</span><span class="p">(</span><span class="n">wallTime</span><span class="o">=</span><span class="n">perf_counter</span><span class="p">()</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stepWallClockTic</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">journal</span><span class="o">.</span><span class="n">printPrettyTable</span><span class="p">(</span><span class="n">prettyTable</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">identification</span><span class="p">)</span>
+        <span class="n">performancetiming</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span></div>
+
+
+<div class="viewcode-block" id="NIST.createConvergenceCriterion">
+<a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.createConvergenceCriterion">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">createConvergenceCriterion</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ConvergenceCriterionBase</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Create the convergence criterion selected by the option ``convergenceCriterion``.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        ConvergenceCriterionBase</span>
+<span class="sd">            The convergence criterion.</span>
+<span class="sd">        """</span>
+        <span class="n">criterion</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s2">"convergenceCriterion"</span><span class="p">]</span>
+
+        <span class="k">if</span> <span class="n">criterion</span> <span class="o">==</span> <span class="s2">"legacy"</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">LegacyConvergenceCriterion</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">fluxResidualTolerances</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">fluxResidualTolerancesAlt</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">fieldCorrectionTolerances</span>
+            <span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">criterion</span> <span class="o">==</span> <span class="s2">"abaqus"</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">AbaqusConvergenceCriterion</span><span class="p">(</span>
+                <span class="n">residualTolerance</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s2">"abaqusResidualTolerance"</span><span class="p">],</span>
+                <span class="n">correctionTolerance</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s2">"abaqusCorrectionTolerance"</span><span class="p">],</span>
+                <span class="n">residualToleranceAlternative</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s2">"abaqusResidualToleranceAlternative"</span><span class="p">],</span>
+                <span class="n">iterationsForAlternativeTolerance</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s2">"abaqusIterationsForAlternativeTolerance"</span><span class="p">],</span>
+                <span class="n">zeroFluxThreshold</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s2">"abaqusZeroFluxThreshold"</span><span class="p">],</span>
+                <span class="n">zeroFluxCorrectionTolerance</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s2">"abaqusZeroFluxCorrectionTolerance"</span><span class="p">],</span>
+                <span class="n">linearResidualTolerance</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s2">"abaqusLinearResidualTolerance"</span><span class="p">],</span>
+                <span class="n">initialTimeAveragedFlux</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s2">"abaqusInitialTimeAveragedFlux"</span><span class="p">],</span>
+            <span class="p">)</span>
+
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"Unknown convergence criterion '</span><span class="si">{:}</span><span class="s2">', use 'legacy' or 'abaqus'"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">criterion</span><span class="p">))</span></div>
 
 
 <div class="viewcode-block" id="NIST.solveIncrement">
@@ -401,7 +813,7 @@
         <span class="n">maxIter</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
         <span class="n">maxGrowingIter</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">DofVector</span><span class="p">,</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">DofVector</span><span class="p">,</span> <span class="nb">int</span><span class="p">,</span> <span class="nb">dict</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Standard Newton-Raphson scheme to solve for an increment.</span>
+<span class="w">        </span><span class="sd">"""Standard Newton-Raphson scheme to solve for an increment.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
@@ -439,7 +851,7 @@
 <span class="sd">                - the new reaction vector</span>
 <span class="sd">                - the number of required iterations</span>
 <span class="sd">                - the history of residuals per field</span>
-<span class="sd">        &quot;&quot;&quot;</span>
+<span class="sd">        """</span>
 
         <span class="n">iterationCounter</span> <span class="o">=</span> <span class="mi">0</span>
         <span class="n">incrementResidualHistory</span> <span class="o">=</span> <span class="nb">dict</span><span class="o">.</span><span class="n">fromkeys</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">idcsOfFieldsInDofVector</span><span class="p">,</span> <span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mi">0</span><span class="p">))</span>
@@ -449,47 +861,73 @@
 
         <span class="n">R</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
         <span class="n">F</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
+        <span class="n">FConstraints</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
         <span class="n">PExt</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
         <span class="n">U_np</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
         <span class="n">ddU</span> <span class="o">=</span> <span class="kc">None</span>
 
-        <span class="n">dirichlets</span> <span class="o">=</span> <span class="n">stepActions</span><span class="p">[</span><span class="s2">&quot;dirichlet&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">()</span>
-        <span class="n">nodeforces</span> <span class="o">=</span> <span class="n">stepActions</span><span class="p">[</span><span class="s2">&quot;nodeforces&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">()</span>
-        <span class="n">distributedLoads</span> <span class="o">=</span> <span class="n">stepActions</span><span class="p">[</span><span class="s2">&quot;distributedload&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">()</span>
-        <span class="n">bodyForces</span> <span class="o">=</span> <span class="n">stepActions</span><span class="p">[</span><span class="s2">&quot;bodyforce&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">()</span>
+        <span class="n">dirichlets</span> <span class="o">=</span> <span class="n">stepActions</span><span class="p">[</span><span class="s2">"dirichlet"</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">()</span>
+        <span class="n">nodeforces</span> <span class="o">=</span> <span class="n">stepActions</span><span class="p">[</span><span class="s2">"nodeforces"</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">()</span>
+        <span class="n">distributedLoads</span> <span class="o">=</span> <span class="n">stepActions</span><span class="p">[</span><span class="s2">"distributedload"</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">()</span>
+        <span class="n">bodyForces</span> <span class="o">=</span> <span class="n">stepActions</span><span class="p">[</span><span class="s2">"bodyforce"</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">()</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">applyStepActionsAtIncrementStart</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">,</span> <span class="n">stepActions</span><span class="p">)</span>
+        <span class="k">with</span> <span class="n">performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"step actions at increment start"</span><span class="p">):</span>
+            <span class="c1"># Find which global DOFs the Dirichlet BCs constrain, once up front.</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">locateConstrainedDofs</span><span class="p">(</span><span class="n">dirichlets</span><span class="p">)</span>
 
-        <span class="n">dU</span><span class="p">,</span> <span class="n">isExtrapolatedIncrement</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">extrapolateLastIncrement</span><span class="p">(</span>
-            <span class="n">extrapolation</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">dirichlets</span><span class="p">,</span> <span class="n">prevTimeStep</span><span class="p">,</span> <span class="n">model</span>
-        <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">applyStepActionsAtIncrementStart</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">,</span> <span class="n">stepActions</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">initializeIncrement</span><span class="p">(</span><span class="n">U_n</span><span class="p">,</span> <span class="n">stepActions</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">)</span>
+
+        <span class="k">with</span> <span class="n">performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"predictor"</span><span class="p">):</span>
+            <span class="n">dU</span><span class="p">,</span> <span class="n">isExtrapolatedIncrement</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">extrapolateLastIncrement</span><span class="p">(</span>
+                <span class="n">extrapolation</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">dirichlets</span><span class="p">,</span> <span class="n">prevTimeStep</span><span class="p">,</span> <span class="n">model</span>
+            <span class="p">)</span>
 
         <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
-            <span class="k">for</span> <span class="n">geostatic</span> <span class="ow">in</span> <span class="n">stepActions</span><span class="p">[</span><span class="s2">&quot;geostatic&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+            <span class="k">for</span> <span class="n">geostatic</span> <span class="ow">in</span> <span class="n">stepActions</span><span class="p">[</span><span class="s2">"geostatic"</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
                 <span class="n">geostatic</span><span class="o">.</span><span class="n">applyAtIterationStart</span><span class="p">()</span>
 
-            <span class="n">U_np</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">U_n</span>
-            <span class="n">U_np</span> <span class="o">+=</span> <span class="n">dU</span>
+            <span class="k">with</span> <span class="n">performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"reset residual and tangent"</span><span class="p">):</span>
+                <span class="n">U_np</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">U_n</span>
+                <span class="n">U_np</span> <span class="o">+=</span> <span class="n">dU</span>
 
-            <span class="n">P</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">K</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">F</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">PExt</span><span class="p">[:]</span> <span class="o">=</span> <span class="mf">0.0</span>
+                <span class="n">P</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">F</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">FConstraints</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">PExt</span><span class="p">[:]</span> <span class="o">=</span> <span class="mf">0.0</span>
+                <span class="c1"># K holds the entries of all element matrices, far too many to zero on a single thread</span>
+                <span class="n">forEachSliceInParallel</span><span class="p">(</span><span class="k">lambda</span> <span class="n">s</span><span class="p">:</span> <span class="n">K</span><span class="p">[</span><span class="n">s</span><span class="p">]</span><span class="o">.</span><span class="n">fill</span><span class="p">(</span><span class="mf">0.0</span><span class="p">),</span> <span class="nb">len</span><span class="p">(</span><span class="n">K</span><span class="p">))</span>
 
             <span class="n">P</span><span class="p">,</span> <span class="n">K</span><span class="p">,</span> <span class="n">F</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">computeElements</span><span class="p">(</span><span class="n">elements</span><span class="p">,</span> <span class="n">U_np</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">P</span><span class="p">,</span> <span class="n">K</span><span class="p">,</span> <span class="n">F</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">)</span>
             <span class="n">PExt</span><span class="p">,</span> <span class="n">K</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">assembleLoads</span><span class="p">(</span><span class="n">nodeforces</span><span class="p">,</span> <span class="n">distributedLoads</span><span class="p">,</span> <span class="n">bodyForces</span><span class="p">,</span> <span class="n">U_np</span><span class="p">,</span> <span class="n">PExt</span><span class="p">,</span> <span class="n">K</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">)</span>
-            <span class="n">PExt</span><span class="p">,</span> <span class="n">K</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">assembleConstraints</span><span class="p">(</span><span class="n">constraints</span><span class="p">,</span> <span class="n">U_np</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">PExt</span><span class="p">,</span> <span class="n">K</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">)</span>
+            <span class="n">PExt</span><span class="p">,</span> <span class="n">K</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">assembleConstraints</span><span class="p">(</span><span class="n">constraints</span><span class="p">,</span> <span class="n">U_np</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">PExt</span><span class="p">,</span> <span class="n">K</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">,</span> <span class="n">FConstraints</span><span class="p">)</span>
 
-            <span class="n">R</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">P</span>
+            <span class="n">R</span><span class="p">[:]</span> <span class="o">=</span> <span class="o">-</span><span class="n">P</span>
             <span class="n">R</span> <span class="o">+=</span> <span class="n">PExt</span>
 
+            <span class="bp">self</span><span class="o">.</span><span class="n">assembleAdditionalTerms</span><span class="p">(</span><span class="n">dU</span><span class="p">,</span> <span class="n">R</span><span class="p">,</span> <span class="n">F</span><span class="p">,</span> <span class="n">K</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">)</span>
+
+            <span class="c1"># Condense BEFORE the Dirichlet handling: T^T folds slave rows into master rows, which may</span>
+            <span class="c1"># carry a prescribed delta.</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">mpcTransformation</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">R</span><span class="p">[:]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">mpcTransformation</span><span class="o">.</span><span class="n">transformResidual</span><span class="p">(</span><span class="n">R</span><span class="p">,</span> <span class="n">dU</span><span class="p">)</span>
+
+            <span class="c1"># --- Impose the Dirichlet (prescribed-value) boundary conditions ---</span>
+            <span class="c1"># For each constrained DOF i we overwrite its row of the linearized system</span>
+            <span class="c1"># K ddU = R  so that the linear solve returns a *known* value for the</span>
+            <span class="c1"># increment ddU[i]:</span>
+            <span class="c1">#     R: set R[i] to the value ddU[i] must take</span>
+            <span class="c1">#     K: zero row i, set K[i, i] = 1, and eliminate column i: R[r] -= K[r, i] R[i]</span>
+            <span class="c1">#        for every other row r, then K[r, i] = 0   (see applyDirichletToStiffness)</span>
+            <span class="c1"># Together these give  ddU[i] = R[i]  exactly, and keep a symmetric K symmetric.</span>
             <span class="k">if</span> <span class="n">iterationCounter</span> <span class="o">==</span> <span class="mi">0</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">isExtrapolatedIncrement</span> <span class="ow">and</span> <span class="n">dirichlets</span><span class="p">:</span>
-                <span class="c1"># first iteration? apply dirichlet bcs and unconditionally solve</span>
-                <span class="n">R</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">applyDirichlet</span><span class="p">(</span><span class="n">timeStep</span><span class="p">,</span> <span class="n">R</span><span class="p">,</span> <span class="n">dirichlets</span><span class="p">)</span>
+                <span class="c1"># First iteration: the constrained DOFs still move by their prescribed increment.</span>
+                <span class="n">R</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">applyDirichletToResidual</span><span class="p">(</span><span class="n">timeStep</span><span class="p">,</span> <span class="n">R</span><span class="p">,</span> <span class="n">dirichlets</span><span class="p">)</span>
             <span class="k">else</span><span class="p">:</span>
-                <span class="c1"># iteration cycle 1 or higher, time to check the convergence</span>
+                <span class="c1"># Later iterations: zero increment, which also removes them from the convergence check.</span>
                 <span class="k">for</span> <span class="n">dirichlet</span> <span class="ow">in</span> <span class="n">dirichlets</span><span class="p">:</span>
-                    <span class="n">R</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">findDirichletIndices</span><span class="p">(</span><span class="n">dirichlet</span><span class="p">)]</span> <span class="o">=</span> <span class="mf">0.0</span>
+                    <span class="n">R</span><span class="p">[</span><span class="n">dirichlet</span><span class="o">.</span><span class="n">constrainedDofIndices</span><span class="p">]</span> <span class="o">=</span> <span class="mf">0.0</span>
 
                 <span class="n">converged</span><span class="p">,</span> <span class="n">nodesWithLargestResidual</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">checkConvergence</span><span class="p">(</span>
-                    <span class="n">R</span><span class="p">,</span> <span class="n">ddU</span><span class="p">,</span> <span class="n">F</span><span class="p">,</span> <span class="n">iterationCounter</span><span class="p">,</span> <span class="n">incrementResidualHistory</span>
+                    <span class="n">R</span><span class="p">,</span> <span class="n">ddU</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">F</span><span class="p">,</span> <span class="n">FConstraints</span><span class="p">,</span> <span class="n">iterationCounter</span><span class="p">,</span> <span class="n">incrementResidualHistory</span>
                 <span class="p">)</span>
 
                 <span class="k">if</span> <span class="n">converged</span><span class="p">:</span>
@@ -497,128 +935,144 @@
 
                 <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">checkDivergingSolution</span><span class="p">(</span><span class="n">incrementResidualHistory</span><span class="p">,</span> <span class="n">maxGrowingIter</span><span class="p">):</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">printResidualOutlierNodes</span><span class="p">(</span><span class="n">nodesWithLargestResidual</span><span class="p">)</span>
-                    <span class="k">raise</span> <span class="n">DivergingSolution</span><span class="p">(</span><span class="s2">&quot;Residual grew </span><span class="si">{:}</span><span class="s2"> times, cutting back&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">maxGrowingIter</span><span class="p">))</span>
+                    <span class="k">raise</span> <span class="n">DivergingSolution</span><span class="p">(</span><span class="s2">"Residual grew </span><span class="si">{:}</span><span class="s2"> times, cutting back"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">maxGrowingIter</span><span class="p">))</span>
 
                 <span class="k">if</span> <span class="n">iterationCounter</span> <span class="o">==</span> <span class="n">maxIter</span><span class="p">:</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">printResidualOutlierNodes</span><span class="p">(</span><span class="n">nodesWithLargestResidual</span><span class="p">)</span>
-                    <span class="k">raise</span> <span class="n">ReachedMaxIterations</span><span class="p">(</span><span class="s2">&quot;Reached max. iterations in current increment, cutting back&quot;</span><span class="p">)</span>
+                    <span class="k">raise</span> <span class="n">ReachedMaxIterations</span><span class="p">(</span><span class="s2">"Reached max. iterations in current increment, cutting back"</span><span class="p">)</span>
 
             <span class="n">K_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">assembleStiffnessCSR</span><span class="p">(</span><span class="n">K</span><span class="p">)</span>
-            <span class="n">K_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">applyDirichletK</span><span class="p">(</span><span class="n">K_</span><span class="p">,</span> <span class="n">dirichlets</span><span class="p">)</span>
+
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">mpcTransformation</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">K_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">mpcTransformation</span><span class="o">.</span><span class="n">transformSystemMatrix</span><span class="p">(</span><span class="n">K_</span><span class="p">)</span>
+
+            <span class="c1"># identity rows, and the columns eliminated into R</span>
+            <span class="n">K_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">applyDirichletToStiffness</span><span class="p">(</span><span class="n">K_</span><span class="p">,</span> <span class="n">dirichlets</span><span class="p">,</span> <span class="n">R</span><span class="p">)</span>
 
             <span class="n">ddU</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">linearSolve</span><span class="p">(</span><span class="n">K_</span><span class="p">,</span> <span class="n">R</span><span class="p">)</span>
+
+            <span class="c1"># add the master-interpolated part at the slave DOFs</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">mpcTransformation</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">ddU</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">mpcTransformation</span><span class="o">.</span><span class="n">recoverSlaveSolution</span><span class="p">(</span><span class="n">ddU</span><span class="p">)</span>
+
             <span class="n">dU</span> <span class="o">+=</span> <span class="n">ddU</span>
             <span class="n">iterationCounter</span> <span class="o">+=</span> <span class="mi">1</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">finalizeIncrement</span><span class="p">(</span><span class="n">model</span><span class="p">)</span>
 
         <span class="k">return</span> <span class="n">U_np</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">P</span><span class="p">,</span> <span class="n">iterationCounter</span><span class="p">,</span> <span class="n">incrementResidualHistory</span></div>
 
 
-<div class="viewcode-block" id="NIST.computeDistributedLoads">
-<a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.computeDistributedLoads">[docs]</a>
-    <span class="nd">@performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">&quot;distributed loads&quot;</span><span class="p">)</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">computeDistributedLoads</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span>
-        <span class="n">distributedLoads</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">StepActionBase</span><span class="p">],</span>
-        <span class="n">U_np</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
-        <span class="n">PExt</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
-        <span class="n">K</span><span class="p">:</span> <span class="n">VIJSystemMatrix</span><span class="p">,</span>
-        <span class="n">timeStep</span><span class="p">:</span> <span class="n">TimeStep</span><span class="p">,</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">DofVector</span><span class="p">,</span> <span class="n">VIJSystemMatrix</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Loop over all distributed loads acting on elements, and evaluate them.</span>
-<span class="sd">        Assembles into the global external load vector and the system matrix.</span>
+<div class="viewcode-block" id="NIST.initializeIncrement">
+<a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.initializeIncrement">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">initializeIncrement</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">U_n</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">stepActions</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span> <span class="n">model</span><span class="p">:</span> <span class="n">FEModel</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">:</span> <span class="n">TimeStep</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Prepare what :meth:`assembleAdditionalTerms` needs during this increment's Newton</span>
+<span class="sd">        iterations. Called by :meth:`solveIncrement` once per increment, after the step actions have</span>
+<span class="sd">        been applied at the increment's start and before the increment is extrapolated.</span>
+
+<span class="sd">        A static analysis needs nothing here. A dynamic one, for example, assembles its mass matrix</span>
+<span class="sd">        here and computes the terms the time integration adds to the stiffness for this time</span>
+<span class="sd">        increment -- see :class:`~edelweissfe.solvers.nonlinearimplicitdynamic.NonlinearImplicitDynamic`.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
-<span class="sd">        distributedLoads</span>
-<span class="sd">            The list of distributed loads.</span>
-<span class="sd">        U_np</span>
-<span class="sd">            The current solution vector.</span>
-<span class="sd">        PExt</span>
-<span class="sd">            The external load vector to be augmented.</span>
-<span class="sd">        K</span>
-<span class="sd">            The system matrix to be augmented.</span>
+<span class="sd">        U_n</span>
+<span class="sd">            The solution at the start of the increment.</span>
+<span class="sd">        stepActions</span>
+<span class="sd">            The active step actions.</span>
+<span class="sd">        model</span>
+<span class="sd">            The model tree.</span>
 <span class="sd">        timeStep</span>
-<span class="sd">            The current time step.</span>
-
-<span class="sd">        Returns</span>
-<span class="sd">        -------</span>
-<span class="sd">        tuple[DofVector,VIJSystemMatrix]</span>
-<span class="sd">            The augmented load vector and system matrix.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-
-        <span class="n">time</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">timeStep</span><span class="o">.</span><span class="n">stepTime</span><span class="p">,</span> <span class="n">timeStep</span><span class="o">.</span><span class="n">totalTime</span><span class="p">])</span>
-        <span class="n">dT</span> <span class="o">=</span> <span class="n">timeStep</span><span class="o">.</span><span class="n">timeIncrement</span>
-
-        <span class="k">for</span> <span class="n">dLoad</span> <span class="ow">in</span> <span class="n">distributedLoads</span><span class="p">:</span>
-            <span class="n">load</span> <span class="o">=</span> <span class="n">dLoad</span><span class="o">.</span><span class="n">getCurrentLoad</span><span class="p">(</span><span class="n">timeStep</span><span class="p">)</span>
-            <span class="k">for</span> <span class="n">faceID</span><span class="p">,</span> <span class="n">elementSet</span> <span class="ow">in</span> <span class="n">dLoad</span><span class="o">.</span><span class="n">surface</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
-                <span class="k">for</span> <span class="n">el</span> <span class="ow">in</span> <span class="n">elementSet</span><span class="p">:</span>
-                    <span class="n">Ke</span> <span class="o">=</span> <span class="n">K</span><span class="p">[</span><span class="n">el</span><span class="p">]</span>
-                    <span class="n">Pe</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">el</span><span class="o">.</span><span class="n">nDof</span><span class="p">)</span>
-
-                    <span class="n">el</span><span class="o">.</span><span class="n">computeDistributedLoad</span><span class="p">(</span><span class="n">dLoad</span><span class="o">.</span><span class="n">loadType</span><span class="p">,</span> <span class="n">Pe</span><span class="p">,</span> <span class="n">Ke</span><span class="p">,</span> <span class="n">faceID</span><span class="p">,</span> <span class="n">load</span><span class="p">,</span> <span class="n">U_np</span><span class="p">[</span><span class="n">el</span><span class="p">],</span> <span class="n">time</span><span class="p">,</span> <span class="n">dT</span><span class="p">)</span>
-
-                    <span class="n">PExt</span><span class="p">[</span><span class="n">el</span><span class="p">]</span> <span class="o">+=</span> <span class="n">Pe</span>
-
-        <span class="k">return</span> <span class="n">PExt</span><span class="p">,</span> <span class="n">K</span></div>
+<span class="sd">            The time step.</span>
+<span class="sd">        """</span></div>
 
 
-<div class="viewcode-block" id="NIST.computeBodyForces">
-<a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.computeBodyForces">[docs]</a>
-    <span class="nd">@performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">&quot;body forces&quot;</span><span class="p">)</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">computeBodyForces</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span>
-        <span class="n">bodyForces</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">StepActionBase</span><span class="p">],</span>
-        <span class="n">U_np</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
-        <span class="n">PExt</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
-        <span class="n">K</span><span class="p">:</span> <span class="n">VIJSystemMatrix</span><span class="p">,</span>
-        <span class="n">timeStep</span><span class="p">:</span> <span class="n">TimeStep</span><span class="p">,</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">DofVector</span><span class="p">,</span> <span class="n">VIJSystemMatrix</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Loop over all body forces loads acting on elements, and evaluate them.</span>
-<span class="sd">        Assembles into the global external load vector and the system matrix.</span>
+<div class="viewcode-block" id="NIST.assembleAdditionalTerms">
+<a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.assembleAdditionalTerms">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">assembleAdditionalTerms</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">dU</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">R</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">F</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">K</span><span class="p">:</span> <span class="n">VIJSystemMatrix</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">:</span> <span class="n">TimeStep</span>
+    <span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Assemble terms of the equation system beyond the internal and external forces. Called</span>
+<span class="sd">        by :meth:`solveIncrement` in every Newton iteration, next to :meth:`computeElements`,</span>
+<span class="sd">        :meth:`assembleLoads` and :meth:`assembleConstraints`: right after the residual</span>
+<span class="sd">        :math:`R = P_\\mathrm{ext} - P_\\mathrm{int}` is formed, and before the</span>
+<span class="sd">        multi-point-constraint condensation, the Dirichlet handling, the convergence test and the</span>
+<span class="sd">        linear solve -- which therefore all act on what is added here.</span>
+
+<span class="sd">        A static analysis has no such terms. A dynamic one, for example, subtracts the inertia force</span>
+<span class="sd">        :math:`M \\ddot{u}` from the residual and adds the corresponding mass term to the stiffness</span>
+<span class="sd">        -- see :class:`~edelweissfe.solvers.nonlinearimplicitdynamic.NonlinearImplicitDynamic`.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
-<span class="sd">        distributedLoads</span>
-<span class="sd">            The list of distributed loads.</span>
-<span class="sd">        U_np</span>
-<span class="sd">            The current solution vector.</span>
-<span class="sd">        PExt</span>
-<span class="sd">            The external load vector to be augmented.</span>
+<span class="sd">        dU</span>
+<span class="sd">            The current trial solution increment.</span>
+<span class="sd">        R</span>
+<span class="sd">            The residual, to be augmented in place.</span>
+<span class="sd">        F</span>
+<span class="sd">            The reference flux scale of the convergence test, to be augmented in place.</span>
 <span class="sd">        K</span>
-<span class="sd">            The system matrix to be augmented.</span>
-<span class="sd">        increment</span>
-<span class="sd">            The increment.</span>
-
-<span class="sd">        Returns</span>
-<span class="sd">        -------</span>
-<span class="sd">        tuple[DofVector,VIJSystemMatrix]</span>
-<span class="sd">            The augmented load vector and system matrix.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-
-        <span class="n">time</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">timeStep</span><span class="o">.</span><span class="n">stepTime</span><span class="p">,</span> <span class="n">timeStep</span><span class="o">.</span><span class="n">totalTime</span><span class="p">])</span>
-        <span class="n">dT</span> <span class="o">=</span> <span class="n">timeStep</span><span class="o">.</span><span class="n">timeIncrement</span>
-
-        <span class="k">for</span> <span class="n">bForce</span> <span class="ow">in</span> <span class="n">bodyForces</span><span class="p">:</span>
-            <span class="n">force</span> <span class="o">=</span> <span class="n">bForce</span><span class="o">.</span><span class="n">getCurrentLoad</span><span class="p">(</span><span class="n">timeStep</span><span class="p">)</span>
-            <span class="k">for</span> <span class="n">el</span> <span class="ow">in</span> <span class="n">bForce</span><span class="o">.</span><span class="n">elementSet</span><span class="p">:</span>
-                <span class="n">Pe</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">el</span><span class="o">.</span><span class="n">nDof</span><span class="p">)</span>
-                <span class="n">Ke</span> <span class="o">=</span> <span class="n">K</span><span class="p">[</span><span class="n">el</span><span class="p">]</span>
-
-                <span class="n">el</span><span class="o">.</span><span class="n">computeBodyForce</span><span class="p">(</span><span class="n">Pe</span><span class="p">,</span> <span class="n">Ke</span><span class="p">,</span> <span class="n">force</span><span class="p">,</span> <span class="n">U_np</span><span class="p">[</span><span class="n">el</span><span class="p">],</span> <span class="n">time</span><span class="p">,</span> <span class="n">dT</span><span class="p">)</span>
-
-                <span class="n">PExt</span><span class="p">[</span><span class="n">el</span><span class="p">]</span> <span class="o">+=</span> <span class="n">Pe</span>
-
-        <span class="k">return</span> <span class="n">PExt</span><span class="p">,</span> <span class="n">K</span></div>
+<span class="sd">            The tangent in VIJ layout, to be augmented in place.</span>
+<span class="sd">        timeStep</span>
+<span class="sd">            The time step.</span>
+<span class="sd">        """</span></div>
 
 
-    <span class="nd">@performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">&quot;dirichlet K on CSR&quot;</span><span class="p">)</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">applyDirichletK</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">K</span><span class="p">:</span> <span class="n">csr_matrix</span><span class="p">,</span> <span class="n">dirichlets</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">StepActionBase</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">csr_matrix</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">applyDirichletK</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">K</span><span class="p">,</span> <span class="n">dirichlets</span><span class="p">)</span>
+<div class="viewcode-block" id="NIST.finalizeIncrement">
+<a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.finalizeIncrement">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">finalizeIncrement</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">:</span> <span class="n">FEModel</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Store what the converged increment leaves behind. Called by :meth:`solveIncrement` once</span>
+<span class="sd">        its Newton loop has converged -- only for an accepted increment, since a failing one leaves</span>
+<span class="sd">        by exception before it.</span>
+
+<span class="sd">        A static analysis stores nothing here. A dynamic one, for example, stores the velocity and</span>
+<span class="sd">        acceleration of the converged increment, as the starting point of the next one.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        model</span>
+<span class="sd">            The model tree.</span>
+<span class="sd">        """</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_shouldPruneCondensedMatrixZeros</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Whether to compact exact zeros out of the multi-point-condensed system matrix before this</span>
+<span class="sd">        solve -- see ``pruneCondensedMatrixZeros`` (:class:`NISTSchema`). An explicit True/False in</span>
+<span class="sd">        the input file always wins; left unset (``None``), the currently active ``self.linSolver``</span>
+<span class="sd">        decides, polymorphically, via</span>
+<span class="sd">        :attr:`~edelweissfe.linsolve.base.LinearSolver.needsPrunedSystemMatrix`."""</span>
+        <span class="n">explicit</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s2">"pruneCondensedMatrixZeros"</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">explicit</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">explicit</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">linSolver</span><span class="o">.</span><span class="n">needsPrunedSystemMatrix</span>
+
+<div class="viewcode-block" id="NIST.applyDirichletToStiffness">
+<a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.applyDirichletToStiffness">[docs]</a>
+    <span class="nd">@performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"dirichlet K on CSR"</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">applyDirichletToStiffness</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">K</span><span class="p">:</span> <span class="n">csr_matrix</span><span class="p">,</span> <span class="n">dirichlets</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">StepActionBase</span><span class="p">],</span> <span class="n">rhs</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">csr_matrix</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Impose the Dirichlet BCs on the system matrix -- and, given the right-hand side(s) ``rhs``</span>
+<span class="sd">        (modified in place), eliminate the constrained DOFs from the columns as well; see</span>
+<span class="sd">        :func:`edelweissfe.solvers.base.dirichlet.applyDirichletToStiffness`."""</span>
+        <span class="n">K</span> <span class="o">=</span> <span class="n">applyDirichletToStiffness</span><span class="p">(</span><span class="n">K</span><span class="p">,</span> <span class="n">dirichlets</span><span class="p">,</span> <span class="n">rhs</span><span class="p">)</span>
+
+        <span class="c1"># Compacting the explicit zeros out of a condensed K (see _shouldPruneCondensedMatrixZeros): PARDISO's</span>
+        <span class="c1"># reordering of these poorly conditioned, path-dependent (contact/friction) systems is sensitive enough to</span>
+        <span class="c1"># the extra structural entries to drift from the reference path; but the pattern then changes from one</span>
+        <span class="c1"># Newton iteration to the next, so a solver like blockamg, which reuses its hierarchy, keeps them.</span>
+        <span class="c1">#</span>
+        <span class="c1"># The CSR generator's own matrix (the threaded condensation works in place on it) must never be compacted:</span>
+        <span class="c1"># the generator scatters every update into its full-length buffer via a fixed map. A copy is pruned instead.</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">mpcTransformation</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_shouldPruneCondensedMatrixZeros</span><span class="p">():</span>
+            <span class="k">if</span> <span class="n">K</span> <span class="ow">is</span> <span class="bp">self</span><span class="o">.</span><span class="n">csrGenerator</span><span class="o">.</span><span class="n">csrMatrix</span><span class="p">:</span>
+                <span class="n">K</span> <span class="o">=</span> <span class="n">K</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+            <span class="n">K</span><span class="o">.</span><span class="n">eliminate_zeros</span><span class="p">()</span>
+
+        <span class="k">return</span> <span class="n">K</span></div>
+
 
 <div class="viewcode-block" id="NIST.computeElements">
 <a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.computeElements">[docs]</a>
-    <span class="nd">@performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">&quot;elements&quot;</span><span class="p">)</span>
+    <span class="nd">@performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"elements"</span><span class="p">)</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">computeElements</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">elements</span><span class="p">:</span> <span class="nb">list</span><span class="p">,</span>
@@ -629,8 +1083,8 @@
         <span class="n">F</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
         <span class="n">timeStep</span><span class="p">:</span> <span class="n">TimeStep</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">DofVector</span><span class="p">,</span> <span class="n">VIJSystemMatrix</span><span class="p">,</span> <span class="n">DofVector</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Loop over all elements, and evalute them.</span>
-<span class="sd">        Is is called by solveStep() in each iteration.</span>
+<span class="w">        </span><span class="sd">"""Loop over all elements, and evalute them.</span>
+<span class="sd">        Is called by solveIncrement() in each iteration.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
@@ -655,16 +1109,16 @@
 <span class="sd">            - The modified reaction vector.</span>
 <span class="sd">            - The modified system matrix.</span>
 <span class="sd">            - The modified accumulated flux vector.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
+<span class="sd">        """</span>
 
-        <span class="n">time</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">timeStep</span><span class="o">.</span><span class="n">stepTime</span><span class="p">,</span> <span class="n">timeStep</span><span class="o">.</span><span class="n">totalTime</span><span class="p">])</span>
+        <span class="n">time</span> <span class="o">=</span> <span class="n">timeStep</span><span class="o">.</span><span class="n">totalTime</span>
         <span class="n">dT</span> <span class="o">=</span> <span class="n">timeStep</span><span class="o">.</span><span class="n">timeIncrement</span>
 
         <span class="k">for</span> <span class="n">el</span> <span class="ow">in</span> <span class="n">elements</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
             <span class="n">Ke</span> <span class="o">=</span> <span class="n">K</span><span class="p">[</span><span class="n">el</span><span class="p">]</span>
             <span class="n">Pe</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">el</span><span class="o">.</span><span class="n">nDof</span><span class="p">)</span>
 
-            <span class="n">el</span><span class="o">.</span><span class="n">computeYourself</span><span class="p">(</span><span class="n">Ke</span><span class="p">,</span> <span class="n">Pe</span><span class="p">,</span> <span class="n">U_np</span><span class="p">[</span><span class="n">el</span><span class="p">],</span> <span class="n">dU</span><span class="p">[</span><span class="n">el</span><span class="p">],</span> <span class="n">time</span><span class="p">,</span> <span class="n">dT</span><span class="p">)</span>
+            <span class="n">el</span><span class="o">.</span><span class="n">computeKernels</span><span class="p">(</span><span class="n">Ke</span><span class="p">,</span> <span class="n">Pe</span><span class="p">,</span> <span class="n">U_np</span><span class="p">[</span><span class="n">el</span><span class="p">],</span> <span class="n">dU</span><span class="p">[</span><span class="n">el</span><span class="p">],</span> <span class="n">time</span><span class="p">,</span> <span class="n">dT</span><span class="p">)</span>
 
             <span class="n">P</span><span class="p">[</span><span class="n">el</span><span class="p">]</span> <span class="o">+=</span> <span class="n">Pe</span>
             <span class="n">F</span><span class="p">[</span><span class="n">el</span><span class="p">]</span> <span class="o">+=</span> <span class="nb">abs</span><span class="p">(</span><span class="n">Pe</span><span class="p">)</span>
@@ -674,7 +1128,7 @@
 
 <div class="viewcode-block" id="NIST.assembleConstraints">
 <a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.assembleConstraints">[docs]</a>
-    <span class="nd">@performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">&quot;assemble constraints&quot;</span><span class="p">)</span>
+    <span class="nd">@performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"assemble constraints"</span><span class="p">)</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">assembleConstraints</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">constraints</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">ConstraintBase</span><span class="p">],</span>
@@ -683,9 +1137,10 @@
         <span class="n">PExt</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
         <span class="n">K</span><span class="p">:</span> <span class="n">VIJSystemMatrix</span><span class="p">,</span>
         <span class="n">timeStep</span><span class="p">:</span> <span class="n">TimeStep</span><span class="p">,</span>
+        <span class="n">FConstraints</span><span class="p">:</span> <span class="n">DofVector</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">DofVector</span><span class="p">,</span> <span class="n">VIJSystemMatrix</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Loop over all elements, and evaluate them.</span>
-<span class="sd">        Is is called by solveStep() in each iteration.</span>
+<span class="w">        </span><span class="sd">"""Loop over all constraints, and evaluate them.</span>
+<span class="sd">        Is called by solveIncrement() in each iteration.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
@@ -699,79 +1154,28 @@
 <span class="sd">            The external load vector.</span>
 <span class="sd">        K</span>
 <span class="sd">            The system matrix.</span>
-<span class="sd">        dT</span>
-<span class="sd">            The time increment.</span>
-<span class="sd">        time</span>
-<span class="sd">            The step and total time.</span>
+<span class="sd">        timeStep</span>
+<span class="sd">            The time step.</span>
+<span class="sd">        FConstraints</span>
+<span class="sd">            The vector of accumulated absolute constraint fluxes for convergence checks, if given.</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
-<span class="sd">        tuple[DofVector,VIJSystemMatrix,DofVector]</span>
+<span class="sd">        tuple[DofVector,VIJSystemMatrix]</span>
 <span class="sd">            - The modified external load vector.</span>
 <span class="sd">            - The modified system matrix.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
+<span class="sd">        """</span>
 
         <span class="k">for</span> <span class="n">constraint</span> <span class="ow">in</span> <span class="n">constraints</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
-            <span class="n">K_flat</span> <span class="o">=</span> <span class="n">K</span><span class="p">[</span><span class="n">constraint</span><span class="p">]</span>
+            <span class="n">Kc</span> <span class="o">=</span> <span class="n">K</span><span class="p">[</span><span class="n">constraint</span><span class="p">]</span>
             <span class="n">Pc</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">constraint</span><span class="o">.</span><span class="n">nDof</span><span class="p">)</span>
-
-            <span class="k">if</span> <span class="n">constraint</span><span class="o">.</span><span class="n">getVIJContributionSize</span><span class="p">()</span> <span class="o">==</span> <span class="n">constraint</span><span class="o">.</span><span class="n">nDof</span><span class="o">**</span><span class="mi">2</span><span class="p">:</span>
-                <span class="n">Kc</span> <span class="o">=</span> <span class="n">K_flat</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">constraint</span><span class="o">.</span><span class="n">nDof</span><span class="p">,</span> <span class="n">constraint</span><span class="o">.</span><span class="n">nDof</span><span class="p">,</span> <span class="n">order</span><span class="o">=</span><span class="s2">&quot;F&quot;</span><span class="p">)</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="n">Kc</span> <span class="o">=</span> <span class="n">K_flat</span>
 
             <span class="n">constraint</span><span class="o">.</span><span class="n">applyConstraint</span><span class="p">(</span><span class="n">U_np</span><span class="p">[</span><span class="n">constraint</span><span class="p">],</span> <span class="n">dU</span><span class="p">[</span><span class="n">constraint</span><span class="p">],</span> <span class="n">Pc</span><span class="p">,</span> <span class="n">Kc</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">)</span>
 
             <span class="c1"># instead of PExt[constraint] += Pe, np.add.at allows for repeated indices</span>
             <span class="n">np</span><span class="o">.</span><span class="n">add</span><span class="o">.</span><span class="n">at</span><span class="p">(</span><span class="n">PExt</span><span class="p">,</span> <span class="n">PExt</span><span class="o">.</span><span class="n">entitiesInDofVector</span><span class="p">[</span><span class="n">constraint</span><span class="p">],</span> <span class="n">Pc</span><span class="p">)</span>
-
-        <span class="k">return</span> <span class="n">PExt</span><span class="p">,</span> <span class="n">K</span></div>
-
-
-<div class="viewcode-block" id="NIST.assembleLoads">
-<a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.assembleLoads">[docs]</a>
-    <span class="nd">@performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">&quot;assemble loads&quot;</span><span class="p">)</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">assembleLoads</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span>
-        <span class="n">nodeForces</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">StepActionBase</span><span class="p">],</span>
-        <span class="n">distributedLoads</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">StepActionBase</span><span class="p">],</span>
-        <span class="n">bodyForces</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">StepActionBase</span><span class="p">],</span>
-        <span class="n">U_np</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
-        <span class="n">PExt</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
-        <span class="n">K</span><span class="p">:</span> <span class="n">VIJSystemMatrix</span><span class="p">,</span>
-        <span class="n">timeStep</span><span class="p">:</span> <span class="n">TimeStep</span><span class="p">,</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">DofVector</span><span class="p">,</span> <span class="n">VIJSystemMatrix</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Assemble all loads into a right hand side vector.</span>
-
-<span class="sd">        Parameters</span>
-<span class="sd">        ----------</span>
-<span class="sd">        nodeForces</span>
-<span class="sd">            The list of concentrated (nodal) loads.</span>
-<span class="sd">        distributedLoads</span>
-<span class="sd">            The list of distributed (surface) loads.</span>
-<span class="sd">        bodyForces</span>
-<span class="sd">            The list of body (volumetric) loads.</span>
-<span class="sd">        U_np</span>
-<span class="sd">            The current solution vector.</span>
-<span class="sd">        PExt</span>
-<span class="sd">            The external load vector.</span>
-<span class="sd">        K</span>
-<span class="sd">            The system matrix.</span>
-<span class="sd">        timeStep</span>
-<span class="sd">            The current time step.</span>
-
-<span class="sd">        Returns</span>
-<span class="sd">        -------</span>
-<span class="sd">        tuple[DofVector,VIJSystemMatrix]</span>
-<span class="sd">            - The augmented external load vector.</span>
-<span class="sd">            - The augmented system matrix.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">for</span> <span class="n">cLoad</span> <span class="ow">in</span> <span class="n">nodeForces</span><span class="p">:</span>
-            <span class="n">PExt</span><span class="p">[</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">idcsOfFieldsOnNodeSetsInDofVector</span><span class="p">[</span><span class="n">cLoad</span><span class="o">.</span><span class="n">field</span><span class="p">][</span><span class="n">cLoad</span><span class="o">.</span><span class="n">nodeSet</span><span class="p">]</span>
-            <span class="p">]</span> <span class="o">+=</span> <span class="n">cLoad</span><span class="o">.</span><span class="n">getCurrentLoad</span><span class="p">(</span><span class="n">timeStep</span><span class="p">)</span><span class="o">.</span><span class="n">flatten</span><span class="p">()</span>
-        <span class="n">PExt</span><span class="p">,</span> <span class="n">K</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">computeDistributedLoads</span><span class="p">(</span><span class="n">distributedLoads</span><span class="p">,</span> <span class="n">U_np</span><span class="p">,</span> <span class="n">PExt</span><span class="p">,</span> <span class="n">K</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">)</span>
-        <span class="n">PExt</span><span class="p">,</span> <span class="n">K</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">computeBodyForces</span><span class="p">(</span><span class="n">bodyForces</span><span class="p">,</span> <span class="n">U_np</span><span class="p">,</span> <span class="n">PExt</span><span class="p">,</span> <span class="n">K</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">FConstraints</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">np</span><span class="o">.</span><span class="n">add</span><span class="o">.</span><span class="n">at</span><span class="p">(</span><span class="n">FConstraints</span><span class="p">,</span> <span class="n">FConstraints</span><span class="o">.</span><span class="n">entitiesInDofVector</span><span class="p">[</span><span class="n">constraint</span><span class="p">],</span> <span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">Pc</span><span class="p">))</span>
 
         <span class="k">return</span> <span class="n">PExt</span><span class="p">,</span> <span class="n">K</span></div>
 </div>

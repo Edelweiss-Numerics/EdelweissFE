@@ -1,0 +1,498 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Field-split AMG: measurements behind the defaults &mdash; EdelweissFE v22.07 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=cfdaff8d" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=37fbe429" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=17e2f33f"></script>
+      <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+      <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-mml-chtml.js"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Linear solvers: Python API" href="linsolveapi.html" />
+    <link rel="prev" title="Theory: the field-split AMG preconditioner" href="blockamgtheory.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            EdelweissFE
+              <img src="../_static/edelweiss_fe_logo.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../features.html">Features</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../prerequisites.html">Prerequisites</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation.html">Installation</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">Documentation</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="syntax.html">Input file syntax</a></li>
+<li class="toctree-l2"><a class="reference internal" href="inputsystem.html">The input system: how <code class="docutils literal notranslate"><span class="pre">.inp</span></code> grammar is defined</a></li>
+<li class="toctree-l2"><a class="reference internal" href="jobs.html">Inputfile driven simulations</a></li>
+<li class="toctree-l2"><a class="reference internal" href="models.html">Models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="solvers.html">Solvers</a></li>
+<li class="toctree-l2 current"><a class="reference internal" href="linsolvers.html">Linear solvers</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="linsolvers.html#direct-or-iterative">Direct or iterative</a></li>
+<li class="toctree-l3"><a class="reference internal" href="linsolvers.html#one-adapter-for-every-type">One adapter for every type</a></li>
+<li class="toctree-l3"><a class="reference internal" href="linsolvers.html#the-options-of-each-type">The options of each type</a></li>
+<li class="toctree-l3 current"><a class="reference internal" href="linsolvers.html#the-pages-on-linear-solvers">The pages on linear solvers</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="composedlinsolvers.html">Composing a linear solver</a></li>
+<li class="toctree-l4"><a class="reference internal" href="composedlinsolversreference.html">Composed linear solvers: reference</a></li>
+<li class="toctree-l4"><a class="reference internal" href="blockamgtheory.html">Theory: the field-split AMG preconditioner</a></li>
+<li class="toctree-l4 current"><a class="current reference internal" href="#">Field-split AMG: measurements behind the defaults</a></li>
+<li class="toctree-l4"><a class="reference internal" href="linsolveapi.html">Linear solvers: Python API</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="steps.html">Steps</a></li>
+<li class="toctree-l2"><a class="reference internal" href="analyticalfields.html">Analytical fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="constraints.html">Constraints</a></li>
+<li class="toctree-l2"><a class="reference internal" href="rigidbodies.html">Rigid bodies</a></li>
+<li class="toctree-l2"><a class="reference internal" href="contacttheory.html">Contact mechanics: theory</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dofmanager.html">Degree of Freedom (DOF) Manager and Numerics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="assembly.html">System matrix assembly</a></li>
+<li class="toctree-l2"><a class="reference internal" href="fieldoutputmanager.html">Field outputs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="fields.html">Fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="elements.html">Elements</a></li>
+<li class="toctree-l2"><a class="reference internal" href="exceptions.html">Exceptions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generators.html">Generators</a></li>
+<li class="toctree-l2"><a class="reference internal" href="journal.html">Journal</a></li>
+<li class="toctree-l2"><a class="reference internal" href="materials.html">Materials</a></li>
+<li class="toctree-l2"><a class="reference internal" href="mesh.html">Creating finite element meshes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="modelmodifiers.html">Model modifiers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="topologypipeline.html">The topology pipeline: how a model changes itself</a></li>
+<li class="toctree-l2"><a class="reference internal" href="restart.html">Restart</a></li>
+<li class="toctree-l2"><a class="reference internal" href="adaptivitytheory.html">Adaptive refinement: error estimation and marking</a></li>
+<li class="toctree-l2"><a class="reference internal" href="output.html">Outputmanagers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="parallelization.html">Parallelization</a></li>
+<li class="toctree-l2"><a class="reference internal" href="phenomena.html">Physical phenomena</a></li>
+<li class="toctree-l2"><a class="reference internal" href="plotter.html">Plotting</a></li>
+<li class="toctree-l2"><a class="reference internal" href="points.html">Points</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sections.html">Sections</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sets.html">Sets</a></li>
+<li class="toctree-l2"><a class="reference internal" href="stepactions.html">Step actions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="utils.html">Utilities</a></li>
+<li class="toctree-l2"><a class="reference internal" href="variables.html">Variables</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../contributors.html">Contributors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../publications.html">Publications</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">EdelweissFE</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="index.html">Documentation</a></li>
+          <li class="breadcrumb-item"><a href="linsolvers.html">Linear solvers</a></li>
+      <li class="breadcrumb-item active">Field-split AMG: measurements behind the defaults</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/documentation/fieldsplitmeasurements.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="field-split-amg-measurements-behind-the-defaults">
+<h1>Field-split AMG: measurements behind the defaults<a class="headerlink" href="#field-split-amg-measurements-behind-the-defaults" title="Link to this heading"></a></h1>
+<p>The defaults of the field-split preconditioner (<a class="reference internal" href="blockamgtheory.html"><span class="doc">Theory: the field-split AMG preconditioner</span></a>) – those of the components and of the
+<code class="docutils literal notranslate"><span class="pre">blockAMG()</span></code> preset – were chosen by measurement. This page collects those measurements, as the provenance of the
+defaults; the theory page explains the method without them. Most were taken on two captured models, a gradient-enhanced
+damage cylinder through its damage onset and a contact anchor model with many multi-point-constraint slaves, offline on
+captured systems (dumped with <code class="docutils literal notranslate"><span class="pre">dumps</span></code>, <a class="reference internal" href="composedlinsolversreference.html#composed-solve-dumps"><span class="std std-ref">Dumps of the solves</span></a>) and live.</p>
+<p>Many of them were taken before the composition existed, when the method was one monolithic solver; the composition
+reproduces that solver’s outer iterations, rebuild decisions and solutions, and replaced it.</p>
+<section id="the-full-rigid-body-near-null-space">
+<span id="measured-rigid-body-nullspace"></span><h2>The full rigid-body near-null-space<a class="headerlink" href="#the-full-rigid-body-near-null-space" title="Link to this heading"></a></h2>
+<p>See <a class="reference internal" href="blockamgtheory.html#blockamg-chebyshev"><span class="std std-ref">Near-null-space and the Chebyshev smoother</span></a>.</p>
+<p>On real captured systems the full rigid-body basis needed fewer isolated per-field
+outer iterations than translations alone, and – unlike translations alone – was robust to both
+thread count and the Chebyshev power-iteration setting. That was on the scalar backend; the block
+backend’s hierarchy takes the translations only (see <code class="docutils literal notranslate"><span class="pre">backendBlockSize</span></code>).</p>
+</section>
+<section id="the-spectral-radius-estimate-of-the-chebyshev-smoother">
+<span id="measured-power-iterations"></span><h2>The spectral radius estimate of the Chebyshev smoother<a class="headerlink" href="#the-spectral-radius-estimate-of-the-chebyshev-smoother" title="Link to this heading"></a></h2>
+<p>See <a class="reference internal" href="blockamgtheory.html#blockamg-chebyshev"><span class="std std-ref">Near-null-space and the Chebyshev smoother</span></a>.</p>
+<p><strong>Why it changed.</strong> AMGCL estimated the spectral radius by power iteration from a start vector seeded per OpenMP
+thread. With a short power iteration, one captured solve needed far more outer iterations at one thread count than at
+another, nothing else differing, while the true spectral radius barely moved between the solves of that run. A long
+power iteration removed that sensitivity, but made the estimate the most expensive stage of the setup.</p>
+<p><strong>The estimate against a reference eigensolver.</strong> On the scaled displacement blocks and the coarse operators of the
+corner-node interpolation of captured systems, markedly nonsymmetric ones among them, Arnoldi and Lanczos from the same
+row-seeded start vector agree to about three digits; Arnoldi is kept, since it holds for nonsymmetric matrices. With
+the default number of steps, its estimate <span class="math notranslate nohighlight">\(|\theta| + r\)</span> lay slightly above the spectral radius on every
+operator, well within the smoother’s margin; more steps bring it closer, and too few can leave it well below, where
+the rigid-body coarse level of a small 2D beam of the test suite diverged.</p>
+<p><strong>Outer iterations, setup and wall time</strong>, on the displacement block alone of the captured systems of
+<a class="reference internal" href="#measured-scaled-corner-node-interpolation"><span class="std std-ref">The corner-node two-level cycle with scaled weights and a composed coarse solve</span></a> and of the damage cylinder after its onset, for <code class="docutils literal notranslate"><span class="pre">AMG()</span></code>, the
+rigid-body coarse level and the scaled corner-node interpolation, at several thread counts: the default Arnoldi steps
+needed about the outer iterations of the former long power iteration, for a fraction of its setup and clearly less wall
+time, and their outer iterations no longer depend on the thread count at all. A start vector seeded per row alone
+already removes the thread-count dependence of a power iteration. An adaptive number of steps, stopping once the
+residual norm of the dominant Ritz pair is small against its Ritz value, needed the same outer iterations with more
+setup on the small coarse AMG levels, so the estimate takes a fixed number of steps. The contact anchor systems the
+former long power iteration was chosen on were not measured again.</p>
+</section>
+<section id="the-translations-of-a-block-backend">
+<span id="measured-block-translations"></span><h2>The translations of a block backend<a class="headerlink" href="#the-translations-of-a-block-backend" title="Link to this heading"></a></h2>
+<p>See <a class="reference internal" href="blockamgtheory.html#blockamg-block-nullspace"><span class="std std-ref">The near-null-space of a block backend</span></a>.</p>
+<p>Displacement block alone, on captured systems of the damage cylinder: AMGCL’s constant blocks of
+<span class="math notranslate nohighlight">\(\hat A_{uu}\)</span> leave row residuals far from exact, against near-exact residuals for the translations
+<span class="math notranslate nohighlight">\(D^{-1} t\)</span>.</p>
+<p>Full system, offline, on the captured sequences and on isolated systems of both reference models, the
+configuration with and without the translations as near-null-space (<code class="docutils literal notranslate"><span class="pre">nearNullspace</span></code>), outer iterations only: clearly
+fewer on the damage cylinder, both in its onset sequence and on its isolated systems; on the contact
+model about the same in its sequence, whose hierarchies were rebuilt more often, and fewer on its
+isolated systems. A control with unit weights needed exactly the iterations of AMGCL’s identity blocks,
+system by system, on the cylinder’s isolated systems. With <code class="docutils literal notranslate"><span class="pre">&quot;relax&quot;:</span> <span class="pre">{&quot;scale&quot;:</span> <span class="pre">true}</span></code> added, the
+translations needed the same outer iterations as a hierarchy built on <span class="math notranslate nohighlight">\(A_{uu}\)</span> itself, solve by
+solve, on both sequences: the aggregates that differ between the two made no measurable difference. The
+Jacobi-scaled smoother itself gave fewer outer iterations on the cylinder and more on the contact model,
+where it also triggered more rebuilds; live, it made neither the L-shaped panel nor the damage cylinder
+faster.</p>
+<p>Live, the defaults with and without the translations, from the start of each run or over the same window,
+judged per simulated time where the two runs took different load paths: on an L-shaped concrete panel
+(with quadratic and with linear elements, and with adaptive refinement), a notched three-point bending
+beam and an anchor pry-out, fewer outer iterations, fewer solves stopping at the iteration cap – almost
+none left on the panel and the beam – and faster runs, with matching load-displacement curves where the
+runs completed; on the damage cylinder fewer Newton iterations and a faster run. On the contact model
+fewer Newton iterations but more outer iterations, level within the run-to-run noise. Hence the
+default. The translations are the near-null-space of the elastic operator, so they help less once
+softening makes the operator indefinite: on the damage cylinder after its damage onset, the outer
+iterations per simulated time were the same with and without them, and more solves stopped at the cap
+with them.</p>
+</section>
+<section id="the-order-of-the-block-gauss-seidel-sweep">
+<span id="measured-sweep-order"></span><h2>The order of the block Gauss–Seidel sweep<a class="headerlink" href="#the-order-of-the-block-gauss-seidel-sweep" title="Link to this heading"></a></h2>
+<p>See <a class="reference internal" href="blockamgtheory.html#blockamg-block-gauss-seidel"><span class="std std-ref">The block Gauss–Seidel sweep: Multiplicative</span></a>.</p>
+<p>Damage first against displacement first, offline on the captured systems of the damage cylinder and
+the contact model: identical outer iteration counts, and somewhat more time per outer iteration. On
+these models the preconditioner’s strength is its per-field AMG cycles, not the coupling.</p>
+</section>
+<section id="gap-compensation">
+<span id="measured-gap-compensation"></span><h2>Gap compensation<a class="headerlink" href="#gap-compensation" title="Link to this heading"></a></h2>
+<p>See <a class="reference internal" href="blockamgtheory.html#blockamg-gap-compensation"><span class="std std-ref">Gap-compensated tolerance: ResidualGapCompensation</span></a>.</p>
+<p>Gap compensation is a live option only on the scaled system. Per increment it
+is a clear win there: on a live window of a reference model it substantially cut both the number of
+true-residual restarts and the outer iterations needed, with no cutbacks or material return-mapping
+failures. But the scaled system, left uncompensated, happens
+to over-solve every system by a large factor, and the Newton iteration quietly relies on that:
+converging merely inside the requested tolerance costs Newton extra iterations per
+increment, which is enough to park the run above the adaptive time stepper’s <code class="docutils literal notranslate"><span class="pre">criticalIter</span></code>
+threshold and so stop it from growing the time increment. In the same window the uncompensated
+path grew its increment and covered more simulated time, while the compensated one never grew.
+Judged per unit of <em>simulated time</em> rather than per increment, the per-increment saving is largely
+or wholly given back. Hence this stays opt-in, for a model still run with
+<code class="docutils literal notranslate"><span class="pre">krylovOnScaledSystem</span> <span class="pre">=</span> <span class="pre">true</span></code>; <code class="docutils literal notranslate"><span class="pre">safetyFactor</span></code> is the knob between the two regimes there –
+smaller values solve more accurately and behave more like the uncompensated path – and its
+optimum has not been explored.</p>
+</section>
+<section id="the-rigid-body-coarse-level">
+<span id="measured-rigid-body-coarse-level"></span><h2>The rigid-body coarse level<a class="headerlink" href="#the-rigid-body-coarse-level" title="Link to this heading"></a></h2>
+<p>See <a class="reference internal" href="blockamgtheory.html#blockamg-rigid-body-coarse-level"><span class="std std-ref">Rigid-body coarse level: TwoLevel(coarseSpace=RigidBodyModesPerAggregate())</span></a>.</p>
+<p>Outer iterations of the field-split preconditioner to a relative residual of 1e-6 on the displacement block alone (one cycle per
+outer iteration, the hierarchies built for the system): AMGCL’s hierarchy on the translations (<code class="docutils literal notranslate"><span class="pre">false</span></code>), the
+rigid-body coarse level (the default), and its control with the translations alone – the same construction on the
+translations, <span class="math notranslate nohighlight">\(M = B\)</span>. The first system is the elastic stiffness of the testfile deck
+<code class="docutils literal notranslate"><span class="pre">testfiles/edelweiss-only/CantileverBeamHexa20BlockAMGRigidBody</span></code>, a slender cantilever of quadratic hexahedra; the
+others are captured systems of larger models.</p>
+<table class="docutils align-default" style="width: 100%">
+<thead>
+<tr class="row-odd"><th class="head"><p>system (unknowns)</p></th>
+<th class="head"><p>translations</p></th>
+<th class="head"><p>rigid-body coarse level</p></th>
+<th class="head"><p>control</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>slender cantilever, the testfile deck (3663)</p></td>
+<td><p>307</p></td>
+<td><p>18</p></td>
+<td><p>306</p></td>
+</tr>
+<tr class="row-odd"><td><p>tunnel segment, elastic (1.37 M)</p></td>
+<td><p>67</p></td>
+<td><p>22</p></td>
+<td><p>69</p></td>
+</tr>
+<tr class="row-even"><td><p>tunnel segment, damaged (1.37 M)</p></td>
+<td><p>61</p></td>
+<td><p>36</p></td>
+<td><p>62</p></td>
+</tr>
+<tr class="row-odd"><td><p>damage cylinder, solve 16 (0.63 M)</p></td>
+<td><p>38</p></td>
+<td><p>28</p></td>
+<td><p>39</p></td>
+</tr>
+<tr class="row-even"><td><p>damage cylinder, solve 26 (0.63 M)</p></td>
+<td><p>70</p></td>
+<td><p>59</p></td>
+<td><p>69</p></td>
+</tr>
+<tr class="row-odd"><td><p>edge breakout, solve 8 (0.81 M)</p></td>
+<td><p>22</p></td>
+<td><p>20</p></td>
+<td><p>22</p></td>
+</tr>
+<tr class="row-even"><td><p>edge breakout, solve 20 (0.81 M)</p></td>
+<td><p>23</p></td>
+<td><p>22</p></td>
+<td><p>23</p></td>
+</tr>
+</tbody>
+</table>
+<p>The control needs the iterations of the hierarchy on the translations within two: the gain is the rotations’. On
+the larger models the setup took up to 1.2 times that of the hierarchy on the translations, and the solve, setup
+included, 0.61 of its time on the elastic tunnel system and 0.84 to 0.95 on the others. In a simulation, the
+testfile deck run with <code class="docutils literal notranslate"><span class="pre">verbosity=info</span></code> shows the same: each linear solve reaches its tolerance in some 20
+outer iterations, and Newton converges in two; with the coarse level switched off, every solve stops at the
+iteration cap with a relative residual of about 1e-2, and Newton needs five.</p>
+<p>Live, from the start of each run on the same workstation, one run at a time and each capped at 10 minutes, the
+hierarchy on the translations against the rigid-body coarse level for the displacement field:</p>
+<ul class="simple">
+<li><p>the L-shaped concrete panel (<code class="docutils literal notranslate"><span class="pre">examples/WinklerL</span></code>, quadratic elements, damage): with the rigid-body coarse level
+the run completed in 581 s, while the translations had covered 88% of the load path when stopped at 600 s;
+24.7 against 28.3 outer iterations per solve, at most 61 against one solve at the cap of 100. The
+load-displacement curves agree to 2e-4 of the peak load.</p></li>
+<li><p>a coarser tunnel segment with embedded bars with bond-slip (0.28 M unknowns, <code class="docutils literal notranslate"><span class="pre">SchurComplement</span></code>, the rigid-body
+coarse level on the displacement field of the remaining nodes), run to its end: 46 against 65 s of computation,
+13 against 21 Newton iterations and linear solves, and 9.1 against 14.7 outer iterations per solve. The final
+load agrees to 2e-4.</p></li>
+<li><p>the damage cylinder (0.84 M unknowns, implicit dynamics): simulated time 0.215 against 0.185 in the same time,
+and 7.9 against 12.6 outer iterations per solve. The load agrees to 3e-4 at the same simulated times.</p></li>
+</ul>
+</section>
+<section id="the-corner-node-two-level-cycle-with-scaled-weights-and-a-composed-coarse-solve">
+<span id="measured-scaled-corner-node-interpolation"></span><h2>The corner-node two-level cycle with scaled weights and a composed coarse solve<a class="headerlink" href="#the-corner-node-two-level-cycle-with-scaled-weights-and-a-composed-coarse-solve" title="Link to this heading"></a></h2>
+<p>See <a class="reference internal" href="blockamgtheory.html#blockamg-p-multigrid"><span class="std std-ref">p-multigrid: TwoLevel(coarseSpace=CornerNodeInterpolation(coarseSolve))</span></a>.</p>
+<p>Offline, outer iterations and solve time (setup included) to a relative residual of 1e-6 on the displacement block
+alone, one cycle per outer iteration, on the captured systems of <a class="reference internal" href="#measured-rigid-body-coarse-level"><span class="std std-ref">The rigid-body coarse level</span></a>: the tunnel
+segment, elastic and damaged, and sequences of the damage cylinder and of the edge breakout.</p>
+<p>Against the former corner-node two-level cycle – the plain weights <span class="math notranslate nohighlight">\(\tfrac12, \tfrac12\)</span> and an AMG coarse solve
+inside its C++ cycle – the scaled weights with the coarse solve
+<code class="docutils literal notranslate"><span class="pre">DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModesPerAggregate()))</span></code> needed many times fewer outer iterations on the
+tunnel segment, several times fewer on the damage cylinder and fewer on the edge breakout, and less time on every
+system. They also needed fewer outer iterations than the rigid-body coarse level on the whole field on every system;
+with the fine spectral radius estimated by fewer power iterations than the default trees of the time, they were also
+faster on almost every system, while those long power iterations, on the fine level of the cycle above all, took back
+much of that gain in setup (the estimate that replaced them: <a class="reference internal" href="#measured-power-iterations"><span class="std std-ref">The spectral radius estimate of the Chebyshev smoother</span></a>). The iterations agree
+with those of the offline prototype the method was developed in. Calling the coarse component back from the C++ cycle,
+with the restriction and the prolongation, is a small part of an application next to the fine Chebyshev sweep.</p>
+<p>Other coarse solves on the corner-node field: <code class="docutils literal notranslate"><span class="pre">TwoLevel(coarseSpace=RigidBodyModesPerAggregate())</span></code> without the
+second scaling needed the same iterations where the scaling varies little along the edges (the tunnel, the cylinder),
+and many more on the edge breakout, where midside diagonals are far smaller than their corners’;
+<code class="docutils literal notranslate"><span class="pre">DiagonalScaling(AMG(backendBlockSize=1))</span></code>, an AMG hierarchy with the rigid-body modes of the corners, needed as
+many or more iterations and more time on every system.</p>
+<p>These measurements were taken with the smoother of the time, degree 16 on both levels of the corner-node two-level
+cycle; the default is now degree 8 (<a class="reference internal" href="#measured-corner-node-two-level-smoother"><span class="std std-ref">The smoother of the corner-node two-level cycle</span></a>).</p>
+</section>
+<section id="rebuilding-the-preconditioner-for-every-solve">
+<span id="measured-rebuild-every-solve"></span><h2>Rebuilding the preconditioner for every solve<a class="headerlink" href="#rebuilding-the-preconditioner-for-every-solve" title="Link to this heading"></a></h2>
+<p>See <a class="reference internal" href="blockamgtheory.html#blockamg-per-field-amg"><span class="std std-ref">Per-field AMG hierarchies: AMG</span></a> and the reuse rules on <a class="reference internal" href="blockamgtheory.html"><span class="doc">Theory: the field-split AMG preconditioner</span></a>.</p>
+<p>Live, on the contact anchor model with many multi-point-constraint slaves, over a window of increments: two runs
+from the same checkpoint, the reuse rules of <code class="docutils literal notranslate"><span class="pre">RebuildPolicy</span></code> against <code class="docutils literal notranslate"><span class="pre">reusePreconditioner=False</span></code>, a new
+preconditioner for every solve. The two runs took slightly different paths (other hierarchies, other linear solutions
+within the tolerance), with about the same Newton iterations and simulated time reached.</p>
+<p>A new preconditioner for every solve was faster over the window. A reused preconditioner needed several times the
+outer iterations of a fresh one, and a share of its solves stopped at the iteration cap, against none with a new
+preconditioner for every solve; the far cheaper Krylov solves outweighed the more frequent builds. Offline replays of
+captured solves had shown the opposite, a reused preconditioner only a few iterations behind a fresh one and reuse
+faster: they did not reproduce how far a live Jacobian moves between solves. Not yet measured live on a second model.</p>
+</section>
+<section id="the-smoother-of-the-corner-node-two-level-cycle">
+<span id="measured-corner-node-two-level-smoother"></span><h2>The smoother of the corner-node two-level cycle<a class="headerlink" href="#the-smoother-of-the-corner-node-two-level-cycle" title="Link to this heading"></a></h2>
+<p>See <a class="reference internal" href="blockamgtheory.html#blockamg-p-multigrid"><span class="std std-ref">p-multigrid: TwoLevel(coarseSpace=CornerNodeInterpolation(coarseSolve))</span></a> and <a class="reference internal" href="composedlinsolversreference.html#composed-default-field-trees"><span class="std std-ref">Default field trees</span></a>.</p>
+<p>The Chebyshev smoother – its degree, the lower end of its interval relative to the spectral radius, and the cycle,
+V(0,1) or V(1,1) – was swept for the three displacement preconditioners, <code class="docutils literal notranslate"><span class="pre">AMG()</span></code>,
+<code class="docutils literal notranslate"><span class="pre">TwoLevel(coarseSpace=RigidBodyModesPerAggregate())</span></code> and <code class="docutils literal notranslate"><span class="pre">TwoLevel(coarseSpace=CornerNodeInterpolation())</span></code>,
+offline on the displacement block alone: <code class="docutils literal notranslate"><span class="pre">LGMRES(DiagonalScaling(.))</span></code> to a true relative residual of 1e-6, setup
+included, first on three systems (the damaged tunnel lining, a late solve of the damage cylinder and of the edge
+breakout), then on the systems of <a class="reference internal" href="#measured-scaled-corner-node-interpolation"><span class="std std-ref">The corner-node two-level cycle with scaled weights and a composed coarse solve</span></a> and two post-onset cylinder solves.
+Every solve reached the tolerance. The smoother of <code class="docutils literal notranslate"><span class="pre">CornerNodeInterpolation</span></code> was set on both of its levels (the
+fine level and the rigid-body coarse level of its coarse solve), the others on every level they smooth.</p>
+<ul class="simple">
+<li><p><strong>For</strong> <code class="docutils literal notranslate"><span class="pre">AMG()</span></code> <strong>and the rigid-body coarse level, degree 16 is within the run-to-run scatter of the best
+setting.</strong> The optimum is flat along a ridge: a wider interval needs a higher degree (degree 16 on 0.01 to 1.1,
+degree 8 on 0.03 to 1.1 and V(1,1) with degree 4 on 0.03 to 1.1 tie). A lower degree made the tunnel lining faster
+and the late cylinder solves slower, at more than twice the iterations, and moved no time overall. They keep
+degree 16.</p></li>
+<li><p><strong>For the corner-node two-level cycle, degree 16 is stronger than it pays.</strong> The optimum is flat over degrees 6 to
+10 and lower ends 0.02 to 0.05; degree 8 on 0.03 to 1.1 was faster on both levels than on the fine level alone.</p></li>
+<li><p>A lower end of 0.1 lost everywhere; V(0,1) beat V(1,1) at the same number of polynomial applications for all three
+preconditioners.</p></li>
+<li><p>The outer iterations of the corner-node two-level cycle did not depend on the number of threads, and the gain was
+larger at fewer threads.</p></li>
+</ul>
+<p>On all systems, the default <code class="docutils literal notranslate"><span class="pre">TwoLevel(coarseSpace=CornerNodeInterpolation())</span></code> (degree 8 on 0.03 to 1.1) against the
+former default written out,
+<code class="docutils literal notranslate"><span class="pre">TwoLevel(coarseSpace=CornerNodeInterpolation(DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModesPerAggregate(),</span>
+<span class="pre">amgclTree=t))),</span> <span class="pre">amgclTree=t)</span></code> with <code class="docutils literal notranslate"><span class="pre">t</span> <span class="pre">=</span> <span class="pre">defaultFieldTree(3)</span></code>, needed more outer iterations on every system, but
+fewer than twice as many, at half the matrix products per smoothing sweep: it was faster or as fast on every system,
+most on the tunnel lining and the damage cylinder; the edge breakout, whose time is mostly the setup, ties. The
+iterations of <code class="docutils literal notranslate"><span class="pre">AMG()</span></code> and of <code class="docutils literal notranslate"><span class="pre">TwoLevel(coarseSpace=RigidBodyModesPerAggregate())</span></code> with their defaults are unchanged
+by this default.</p>
+<p>Not yet measured live: with Newton in the loop, and with the hierarchies reused over several solves.</p>
+</section>
+<section id="the-two-level-cycle-written-out">
+<span id="measured-two-level-written-out"></span><h2>The two-level cycle written out<a class="headerlink" href="#the-two-level-cycle-written-out" title="Link to this heading"></a></h2>
+<p>See <a class="reference internal" href="composedlinsolvers.html#composed-two-level-two-ways"><span class="std std-ref">The two-level cycle: two ways, on purpose</span></a>.</p>
+<p>The corner-node two-level cycle in C++, <code class="docutils literal notranslate"><span class="pre">TwoLevel(coarseSpace=CornerNodeInterpolation(coarseSolve))</span></code>, against the
+same cycle written out, <code class="docutils literal notranslate"><span class="pre">Multiplicative([CoarseCorrection(cornerNodeInterpolation,</span> <span class="pre">coarseSolve),</span> <span class="pre">smoother])</span></code>: the same
+<span class="math notranslate nohighlight">\(P\)</span> (bit for bit), the same coarse solve, and as the smoother AMGCL’s Chebyshev relaxation (degree 8, on the
+scalar double-precision matrix: EdelweissFE has no Chebyshev component). Offline, on the displacement blocks of three
+captured systems (a tunnel lining, a damage cylinder, an edge breakout), each inside <code class="docutils literal notranslate"><span class="pre">LGMRES(DiagonalScaling(.))</span></code> to
+<span class="math notranslate nohighlight">\(10^{-6}\)</span>, in repetitions.</p>
+<p>Both forms need the same iterations on every system, and the written-out cycle takes markedly more wall time, in its
+applications and in its set-up. Forming <code class="docutils literal notranslate"><span class="pre">CoarseCorrection</span></code>’s products with <span class="math notranslate nohighlight">\(P\)</span> and <span class="math notranslate nohighlight">\(P^T A P\)</span> threaded,
+instead of in SciPy, made each of them several times faster and the written-out cycle faster as a whole, most in the
+set-up, but not as fast as the C++ cycle. In one application of the written-out cycle the smoother takes most of the
+time; the residual of <code class="docutils literal notranslate"><span class="pre">Multiplicative</span></code> and the coarse correction take a small share each. The C++ cycle smooths on its
+fine level stored in single-precision 3x3 node blocks, half the bytes per product; the same C++ cycle on
+double-precision scalar entries (<code class="docutils literal notranslate"><span class="pre">backendBlockSize=1,</span> <span class="pre">backendPrecision=&quot;double&quot;</span></code>) was slower per application on every
+system. What remains of the difference is that smoother, and in the set-up the bench script’s own search for the
+Dirichlet rows in NumPy, on one thread.</p>
+</section>
+<section id="why-the-defaults-are-what-they-are">
+<span id="measured-defaults"></span><h2>Why the defaults are what they are<a class="headerlink" href="#why-the-defaults-are-what-they-are" title="Link to this heading"></a></h2>
+<p>The defaults of the <code class="docutils literal notranslate"><span class="pre">blockAMG()</span></code> preset are not a separate “recommended configuration” layered
+on top of different shipped defaults – they <em>are</em> the code’s defaults (those of
+<a class="reference internal" href="linsolveapi.html#edelweissfe.linsolve.composition.presets.blockAMG" title="edelweissfe.linsolve.composition.presets.blockAMG"><code class="xref py py-func docutils literal notranslate"><span class="pre">blockAMG()</span></code></a> and of its components). They are the winner of a systematic comparison, against the <strong>former</strong> defaults, on two
+captured models (a gradient-enhanced damage cylinder through its damage onset, and a
+contact anchor model with many multi-point-constraint slaves):</p>
+<ul class="simple">
+<li><p><strong>3x3 blocks stored in float</strong> (set up in double, see <code class="docutils literal notranslate"><span class="pre">backendPrecision</span></code>) cut the cost per outer
+iteration.</p></li>
+<li><p><strong>One high-degree post-smoothing sweep</strong> (<code class="docutils literal notranslate"><span class="pre">npre</span> <span class="pre">=</span> <span class="pre">0</span></code>, <code class="docutils literal notranslate"><span class="pre">npost</span> <span class="pre">=</span> <span class="pre">1</span></code>, Chebyshev degree 16, instead
+of a symmetric V(1,1) cycle at degree 5) and <strong>smoothed aggregation’s own spectral-radius estimate</strong>
+for its prolongation smoother (<code class="docutils literal notranslate"><span class="pre">estimate_spectral_radius</span></code>, 20 power iterations) cut outer
+iterations for the same number of preconditioner applications.</p></li>
+<li><p><strong>The translations of the equilibrated block</strong> as a block hierarchy’s near-null-space
+(<code class="docutils literal notranslate"><span class="pre">nearNullspace</span></code>, the default on a block backend), instead of AMGCL’s identity blocks, which are <span class="math notranslate nohighlight">\(D\)</span>-weighted
+translations (see <a class="reference internal" href="blockamgtheory.html#blockamg-block-nullspace"><span class="std std-ref">the near-null-space of a block backend</span></a>). Measured
+later than the rest, live on more models than these two, with and without them: fewer outer iterations
+and fewer solves stopping at the iteration cap on most models, with the same physical results. The
+exceptions are the damage cylinder after its damage onset, with more cap hits at the same outer iterations
+per simulated time, and the contact model, with more outer iterations at fewer Newton iterations; both
+ran no slower. The translations are the near-null-space of the elastic operator, and help less on a
+softening, indefinite one.</p></li>
+<li><p><strong>The rigid-body coarse level</strong> for the 3D displacement field (<code class="docutils literal notranslate"><span class="pre">rigidBodyModesPerAggregate</span></code>), which holds the rotations
+the translations cannot: offline, on captured systems of three models and of the testfile deck, never more outer
+iterations than the hierarchy on the translations and up to three times fewer on a bending-dominated one, at a setup
+of up to 1.2 times; live, faster on all three models measured, with the same results (see
+<a class="reference internal" href="blockamgtheory.html#blockamg-rigid-body-coarse-level"><span class="std std-ref">Rigid-body coarse level: TwoLevel(coarseSpace=RigidBodyModesPerAggregate())</span></a>).</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">LGMRES(restart=50)</span></code> matches the outer-iteration cap (<code class="docutils literal notranslate"><span class="pre">maxIterations</span> <span class="pre">=</span> <span class="pre">100</span></code>), so
+LGMRES restarts at most once within it; <code class="docutils literal notranslate"><span class="pre">augmentationVectors</span></code> only allocates its augmentation vectors without
+ever exhausting them before the cap.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">RebuildPolicy(stalenessFactor=3)</span></code>, where hierarchies are reused (<code class="docutils literal notranslate"><span class="pre">reusePreconditioner=True</span></code>; since
+<a class="reference internal" href="#measured-rebuild-every-solve"><span class="std std-ref">Rebuilding the preconditioner for every solve</span></a> not the default), reuses them longer than the former factor of 1.5, which fired on
+noise at small iteration counts; with the cap of 100 it can fire only while the solve the
+hierarchies were built for took fewer than about 34 iterations – beyond that, only a cap hit (or a
+new increment, a pattern change) rebuilds them.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">EisenstatWalkerTolerance(maximum=1e-3)</span></code> is not about the linear solver at all: through a damage onset, Newton needs
+linear solves about ten times tighter than the Eisenstat–Walker forcing allowed at a maximum of 1e-2.
+<code class="docutils literal notranslate"><span class="pre">minimum</span> <span class="pre">=</span> <span class="pre">1e-4</span></code> was measured against <code class="docutils literal notranslate"><span class="pre">1e-3</span></code>: the looser value cost Newton extra
+iterations already before the damage onset, and more wall-clock to match.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">krylovOnScaledSystem</span> <span class="pre">=</span> <span class="pre">false</span></code> converges the true residual directly, so the gap compensation and
+the true-residual restarts of the scaled system have nothing to do and are left at their own, otherwise
+inert, defaults.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">pruneCondensedMatrixZeros</span></code> (a nonlinear-solver option, not a component’s) now defaults to
+“pruned only for a solver that needs it”: a direct factorization does, a tree of Krylov solvers and AMG does not
+(same iterations with and without the stored zeros), and one whose Krylov solve reuses its preconditioner never has
+it – so on a model with multi-point constraints the hierarchies can be reused
+(<code class="docutils literal notranslate"><span class="pre">reusePreconditioner=True</span></code>) without more settings; the former setup needed this set by hand (see the reuse rules
+on <a class="reference internal" href="blockamgtheory.html"><span class="doc">Theory: the field-split AMG preconditioner</span></a>).</p></li>
+</ul>
+<p>Measured live, from the same checkpoints, the defaults against the former defaults (no per-model settings in
+either run): the contact model’s increments finished markedly faster; on the damage cylinder, the
+former defaults had still not cleared the damage-onset increment in a comparable time budget, while
+the current defaults carried the run through it and beyond.</p>
+<section id="how-the-settings-got-there">
+<h3>How the settings got there<a class="headerlink" href="#how-the-settings-got-there" title="Link to this heading"></a></h3>
+<p>How the settings got there, live against the production settings the reference runs had used: both
+the contact model and the damage cylinder solved faster, judged per Newton iteration on the cylinder,
+with a forcing maximum of 1e-2 and on the scaled system. On the
+cylinder that setting took Newton more iterations per increment before the damage onset and failed
+the onset increment outright (a cutback); a maximum of 1e-3 restores the fewer-iteration path,
+converges the onset increment and reaches the same load, and is neutral on the contact model.
+<code class="docutils literal notranslate"><span class="pre">krylovOnScaledSystem</span> <span class="pre">=</span> <span class="pre">false</span></code> then saves a further amount on the cylinder, with fewer Newton
+iterations, and on the contact model. Offline, on captured consecutive systems of both models, the
+same configuration with a 200-iteration cap needed less wall-clock than with
+the displacement blocks stored in double, at identical outer iteration counts.</p>
+<p>All of the above, except the offline 200-iteration-cap comparison just above, was measured with the
+outer-iteration cap at 50 (<code class="docutils literal notranslate"><span class="pre">maxIterations</span></code>). The default cap is 100 instead: more forgiving on
+a model that has not yet been characterised on this solver, at the cost of a capped solve possibly
+spending up to twice the iterations before its hierarchies are rebuilt.</p>
+</section>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="blockamgtheory.html" class="btn btn-neutral float-left" title="Theory: the field-split AMG preconditioner" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="linsolveapi.html" class="btn btn-neutral float-right" title="Linear solvers: Python API" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Matthias Neuner.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

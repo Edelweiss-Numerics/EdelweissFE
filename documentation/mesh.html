@@ -15,12 +15,12 @@
       <script src="../_static/jquery.js?v=5d32c60e"></script>
       <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
       <script src="../_static/documentation_options.js?v=17e2f33f"></script>
-      <script src="../_static/doctools.js?v=9bcbadda"></script>
-      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Outputmanagers" href="output.html" />
+    <link rel="next" title="Model modifiers" href="modelmodifiers.html" />
     <link rel="prev" title="Materials" href="materials.html" /> 
 </head>
 
@@ -50,6 +50,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../installation.html">Installation</a></li>
 <li class="toctree-l1 current"><a class="reference internal" href="index.html">Documentation</a><ul class="current">
 <li class="toctree-l2"><a class="reference internal" href="syntax.html">Input file syntax</a></li>
+<li class="toctree-l2"><a class="reference internal" href="inputsystem.html">The input system: how <code class="docutils literal notranslate"><span class="pre">.inp</span></code> grammar is defined</a></li>
 <li class="toctree-l2"><a class="reference internal" href="jobs.html">Inputfile driven simulations</a></li>
 <li class="toctree-l2"><a class="reference internal" href="models.html">Models</a></li>
 <li class="toctree-l2"><a class="reference internal" href="solvers.html">Solvers</a></li>
@@ -57,7 +58,10 @@
 <li class="toctree-l2"><a class="reference internal" href="steps.html">Steps</a></li>
 <li class="toctree-l2"><a class="reference internal" href="analyticalfields.html">Analytical fields</a></li>
 <li class="toctree-l2"><a class="reference internal" href="constraints.html">Constraints</a></li>
-<li class="toctree-l2"><a class="reference internal" href="dofmanager.html">DOF manager</a></li>
+<li class="toctree-l2"><a class="reference internal" href="rigidbodies.html">Rigid bodies</a></li>
+<li class="toctree-l2"><a class="reference internal" href="contacttheory.html">Contact mechanics: theory</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dofmanager.html">Degree of Freedom (DOF) Manager and Numerics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="assembly.html">System matrix assembly</a></li>
 <li class="toctree-l2"><a class="reference internal" href="fieldoutputmanager.html">Field outputs</a></li>
 <li class="toctree-l2"><a class="reference internal" href="fields.html">Fields</a></li>
 <li class="toctree-l2"><a class="reference internal" href="elements.html">Elements</a></li>
@@ -66,6 +70,10 @@
 <li class="toctree-l2"><a class="reference internal" href="journal.html">Journal</a></li>
 <li class="toctree-l2"><a class="reference internal" href="materials.html">Materials</a></li>
 <li class="toctree-l2 current"><a class="current reference internal" href="#">Creating finite element meshes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="modelmodifiers.html">Model modifiers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="topologypipeline.html">The topology pipeline: how a model changes itself</a></li>
+<li class="toctree-l2"><a class="reference internal" href="restart.html">Restart</a></li>
+<li class="toctree-l2"><a class="reference internal" href="adaptivitytheory.html">Adaptive refinement: error estimation and marking</a></li>
 <li class="toctree-l2"><a class="reference internal" href="output.html">Outputmanagers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="parallelization.html">Parallelization</a></li>
 <li class="toctree-l2"><a class="reference internal" href="phenomena.html">Physical phenomena</a></li>
@@ -157,8 +165,8 @@ is using the keywords</p>
 1.8e4, 0.22
 
 <span class="k">*section</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">section1</span>,<span class="nv"> material</span><span class="ow">=</span><span class="m">myMaterial</span>,<span class="nv"> type</span><span class="ow">=</span><span class="m">solid</span>
-<span class="c c-Singleline">** element set &#39;all&#39; is automatically created</span>
-<span class="c c-Singleline">** we could also use the set &#39;theOnlyElement&#39;</span>
+<span class="c c-Singleline">** element set 'all' is automatically created</span>
+<span class="c c-Singleline">** we could also use the set 'theOnlyElement'</span>
 all
 
 <span class="k">*surface</span>,<span class="nv"> type</span><span class="ow">=</span><span class="m">element</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">surfaceRight</span>
@@ -178,13 +186,13 @@ all,        4
 <span class="k">*step</span>,<span class="nv"> solver</span><span class="ow">=</span><span class="m">theSolver</span>
 <span class="nv">maxInc</span><span class="ow">=</span><span class="m">1e0</span>,<span class="nv"> minInc</span><span class="ow">=</span><span class="m">1e0</span>,<span class="nv"> maxNumInc</span><span class="ow">=</span><span class="m">10</span>,<span class="nv"> maxIter</span><span class="ow">=</span><span class="m">25</span>,<span class="nv"> stepLength</span><span class="ow">=</span><span class="m">1</span>
 <span class="c c-Singleline">** The second step: apply the load</span>
-&gt;&gt;distributedload,<span class="nv"> name</span><span class="ow">=</span><span class="m">dload</span>,<span class="nv"> surface</span><span class="ow">=</span><span class="m">surfaceRight</span>,<span class="nv"> type</span><span class="ow">=</span><span class="m">pressure</span>,<span class="nv"> magnitude</span><span class="ow">=</span><span class="m">0.15</span>,<span class="nv"> f(t)</span><span class="ow">=</span><span class="s">&#39;t**2&#39;</span>
+&gt;&gt;distributedload,<span class="nv"> name</span><span class="ow">=</span><span class="m">dload</span>,<span class="nv"> surface</span><span class="ow">=</span><span class="m">surfaceRight</span>,<span class="nv"> type</span><span class="ow">=</span><span class="m">pressure</span>,<span class="nv"> magnitude</span><span class="ow">=</span><span class="m">0.15</span>,<span class="nv"> f(t)</span><span class="ow">=</span><span class="s">'t**2'</span>
 
 <span class="k">*fieldOutput</span>
 <span class="c c-Singleline">** The results we are interested in</span>
-&gt;&gt;perElement,<span class="nv"> name</span><span class="ow">=</span><span class="m">strain</span>,<span class="nv">       elSet</span><span class="ow">=</span><span class="m">all</span>,<span class="nv"> result</span><span class="ow">=</span><span class="m">strain</span>,<span class="nv"> quadraturePoint</span><span class="ow">=</span><span class="m">0:8</span>,<span class="nv"> f(x)</span><span class="ow">=</span><span class="s">&#39;np.mean(x,axis=1)&#39;</span>
-&gt;&gt;perElement,<span class="nv"> name</span><span class="ow">=</span><span class="m">stress</span>,<span class="nv">       elSet</span><span class="ow">=</span><span class="m">all</span>,<span class="nv"> result</span><span class="ow">=</span><span class="m">stress</span>,<span class="nv"> quadraturePoint</span><span class="ow">=</span><span class="m">0:8</span>,<span class="nv"> f(x)</span><span class="ow">=</span><span class="s">&#39;np.mean(x,axis=1)&#39;</span>
-&gt;&gt;perNode,<span class="nv"> name</span><span class="ow">=</span><span class="m">RF_left</span>,<span class="nv">      nSet</span><span class="ow">=</span><span class="m">left</span>,<span class="nv"> field</span><span class="ow">=</span><span class="m">displacement</span>,<span class="nv"> result</span><span class="ow">=</span><span class="m">P</span>,<span class="nv"> f(x)</span><span class="ow">=</span><span class="s">&#39;np.sum(x[:,1])&#39;</span>
+&gt;&gt;perElement,<span class="nv"> name</span><span class="ow">=</span><span class="m">strain</span>,<span class="nv">       elSet</span><span class="ow">=</span><span class="m">all</span>,<span class="nv"> result</span><span class="ow">=</span><span class="m">strain</span>,<span class="nv"> quadraturePoint</span><span class="ow">=</span><span class="m">0:8</span>,<span class="nv"> f(x)</span><span class="ow">=</span><span class="s">'np.mean(x,axis=1)'</span>
+&gt;&gt;perElement,<span class="nv"> name</span><span class="ow">=</span><span class="m">stress</span>,<span class="nv">       elSet</span><span class="ow">=</span><span class="m">all</span>,<span class="nv"> result</span><span class="ow">=</span><span class="m">stress</span>,<span class="nv"> quadraturePoint</span><span class="ow">=</span><span class="m">0:8</span>,<span class="nv"> f(x)</span><span class="ow">=</span><span class="s">'np.mean(x,axis=1)'</span>
+&gt;&gt;perNode,<span class="nv"> name</span><span class="ow">=</span><span class="m">RF_left</span>,<span class="nv">      nSet</span><span class="ow">=</span><span class="m">left</span>,<span class="nv"> field</span><span class="ow">=</span><span class="m">displacement</span>,<span class="nv"> result</span><span class="ow">=</span><span class="m">P</span>,<span class="nv"> f(x)</span><span class="ow">=</span><span class="s">'np.sum(x[:,1])'</span>
 &gt;&gt;perNode,<span class="nv"> name</span><span class="ow">=</span><span class="m">displacement</span>,<span class="nv"> elSet</span><span class="ow">=</span><span class="m">theOnlyElement</span>,<span class="nv"> field</span><span class="ow">=</span><span class="m">displacement</span>,<span class="nv"> result</span><span class="ow">=</span><span class="m">U</span>
 
 <span class="k">*output</span>,<span class="nv"> type</span><span class="ow">=</span><span class="m">ensight</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">myEnsightOutput</span>
@@ -207,7 +215,7 @@ all,        4
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
         <a href="materials.html" class="btn btn-neutral float-left" title="Materials" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="output.html" class="btn btn-neutral float-right" title="Outputmanagers" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="modelmodifiers.html" class="btn btn-neutral float-right" title="Model modifiers" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>

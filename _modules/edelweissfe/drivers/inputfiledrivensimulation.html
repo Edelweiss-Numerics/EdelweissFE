@@ -14,8 +14,8 @@
       <script src="../../../_static/jquery.js?v=5d32c60e"></script>
       <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
       <script src="../../../_static/documentation_options.js?v=17e2f33f"></script>
-      <script src="../../../_static/doctools.js?v=9bcbadda"></script>
-      <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../../../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../../../genindex.html" />
     <link rel="search" title="Search" href="../../../search.html" /> 
@@ -105,16 +105,17 @@
 <span class="c1"># Created on Tue Jan  17 19:10:42 2017</span>
 
 <span class="c1"># @author: Matthias Neuner</span>
-<span class="sd">&quot;&quot;&quot;This is the main module of EdelweissFE.</span>
+<span class="sd">"""This is the main module of EdelweissFE.</span>
 
 <span class="sd">Heart is the ``*job`` keyword, which defines the spatial dimension</span>
 <span class="sd">A ``*job`` definition consists of multiple ``*steps``, associated with that job.</span>
-<span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">"""</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">time</span><span class="w"> </span><span class="kn">import</span> <span class="n">time</span> <span class="k">as</span> <span class="n">getCurrentTime</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.config.configurator</span><span class="w"> </span><span class="kn">import</span> <span class="n">loadConfiguration</span><span class="p">,</span> <span class="n">updateConfiguration</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.config.phenomena</span><span class="w"> </span><span class="kn">import</span> <span class="n">domainMapping</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.config.linsolve</span><span class="w"> </span><span class="kn">import</span> <span class="n">linearSolverDefinitionsFromInputFile</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.config.phenomena</span><span class="w"> </span><span class="kn">import</span> <span class="n">carriesLinearMomentum</span><span class="p">,</span> <span class="n">domainMapping</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.config.solvers</span><span class="w"> </span><span class="kn">import</span> <span class="n">getSolverByName</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.helpers.inputfilehelpers</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">createFieldOutputFromInputFile</span><span class="p">,</span>
@@ -126,7 +127,9 @@
 <span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.journal.journal</span><span class="w"> </span><span class="kn">import</span> <span class="n">Journal</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.models.femodel</span><span class="w"> </span><span class="kn">import</span> <span class="n">FEModel</span><span class="p">,</span> <span class="n">printPrettyModelSummary</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.utils.exceptions</span><span class="w"> </span><span class="kn">import</span> <span class="n">StepFailed</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">performancetiming</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.utils.checkpoint</span><span class="w"> </span><span class="kn">import</span> <span class="n">ResumeCheckpoint</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.utils.exceptions</span><span class="w"> </span><span class="kn">import</span> <span class="n">RestartError</span><span class="p">,</span> <span class="n">StepFailed</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.utils.fieldoutput</span><span class="w"> </span><span class="kn">import</span> <span class="n">FieldOutputController</span>
 
 
@@ -135,7 +138,7 @@
 <span class="k">def</span><span class="w"> </span><span class="nf">finiteElementSimulation</span><span class="p">(</span>
     <span class="n">inputfile</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span> <span class="n">verbose</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span> <span class="n">suppressPlots</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">FEModel</span><span class="p">,</span> <span class="n">FieldOutputController</span><span class="p">]:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;This is core function of the finite element analysis.</span>
+<span class="w">    </span><span class="sd">"""This is core function of the finite element analysis.</span>
 <span class="sd">    Based on the keyword ``*job``, the finite element model is defined.</span>
 
 <span class="sd">    It assembles</span>
@@ -164,21 +167,21 @@
 <span class="sd">        A tuple containing</span>
 <span class="sd">            - The final model tree</span>
 <span class="sd">            - The fieldoutput controller containing all processed results.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
+<span class="sd">    """</span>
 
-    <span class="n">identification</span> <span class="o">=</span> <span class="s2">&quot;feCore&quot;</span>
+    <span class="n">identification</span> <span class="o">=</span> <span class="s2">"feCore"</span>
 
     <span class="n">journal</span> <span class="o">=</span> <span class="n">Journal</span><span class="p">(</span><span class="n">verbose</span><span class="o">=</span><span class="n">verbose</span><span class="p">)</span>
 
-    <span class="n">job</span> <span class="o">=</span> <span class="n">inputfile</span><span class="p">[</span><span class="s2">&quot;job&quot;</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
-    <span class="n">jobName</span> <span class="o">=</span> <span class="n">job</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">]</span>
+    <span class="n">job</span> <span class="o">=</span> <span class="n">inputfile</span><span class="p">[</span><span class="s2">"job"</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
+    <span class="n">jobName</span> <span class="o">=</span> <span class="n">job</span><span class="p">[</span><span class="s2">"name"</span><span class="p">]</span>
 
-    <span class="n">domainSize</span> <span class="o">=</span> <span class="n">domainMapping</span><span class="p">[</span><span class="n">job</span><span class="p">[</span><span class="s2">&quot;domain&quot;</span><span class="p">]]</span>
+    <span class="n">domainSize</span> <span class="o">=</span> <span class="n">domainMapping</span><span class="p">[</span><span class="n">job</span><span class="p">[</span><span class="s2">"domain"</span><span class="p">]]</span>
 
     <span class="n">journal</span><span class="o">.</span><span class="n">printSeperationLine</span><span class="p">()</span>
 
     <span class="n">journal</span><span class="o">.</span><span class="n">message</span><span class="p">(</span>
-        <span class="s2">&quot;Setting up finite element model&quot;</span><span class="p">,</span>
+        <span class="s2">"Setting up finite element model"</span><span class="p">,</span>
         <span class="n">identification</span><span class="p">,</span>
         <span class="mi">0</span><span class="p">,</span>
     <span class="p">)</span>
@@ -189,13 +192,13 @@
     <span class="n">model</span> <span class="o">=</span> <span class="n">FEModel</span><span class="p">(</span><span class="n">domainSize</span><span class="p">)</span>
     <span class="n">model</span> <span class="o">=</span> <span class="n">fillFEModelFromInputFile</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">inputfile</span><span class="p">,</span> <span class="n">journal</span><span class="p">)</span>
     <span class="n">model</span><span class="o">.</span><span class="n">prepareYourself</span><span class="p">(</span><span class="n">journal</span><span class="p">)</span>
-    <span class="n">model</span><span class="o">.</span><span class="n">advanceToTime</span><span class="p">(</span><span class="n">job</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;startTime&quot;</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">))</span>
+    <span class="n">model</span><span class="o">.</span><span class="n">advanceToTime</span><span class="p">(</span><span class="n">job</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"startTime"</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">))</span>
     <span class="n">toc</span> <span class="o">=</span> <span class="n">getCurrentTime</span><span class="p">()</span>
-    <span class="n">jobInfo</span><span class="p">[</span><span class="s2">&quot;model setup time&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">toc</span> <span class="o">-</span> <span class="n">tic</span>
+    <span class="n">jobInfo</span><span class="p">[</span><span class="s2">"model setup time"</span><span class="p">]</span> <span class="o">=</span> <span class="n">toc</span> <span class="o">-</span> <span class="n">tic</span>
 
     <span class="n">journal</span><span class="o">.</span><span class="n">printTable</span><span class="p">(</span>
         <span class="p">[</span>
-            <span class="p">(</span><span class="s2">&quot;Model setup time &quot;</span><span class="p">,</span> <span class="s2">&quot;</span><span class="si">{:10.4f}</span><span class="s2">s&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">jobInfo</span><span class="p">[</span><span class="s2">&quot;model setup time&quot;</span><span class="p">])),</span>
+            <span class="p">(</span><span class="s2">"Model setup time "</span><span class="p">,</span> <span class="s2">"</span><span class="si">{:10.4f}</span><span class="s2">s"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">jobInfo</span><span class="p">[</span><span class="s2">"model setup time"</span><span class="p">])),</span>
         <span class="p">],</span>
         <span class="n">identification</span><span class="p">,</span>
         <span class="n">level</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
@@ -204,23 +207,53 @@
     <span class="n">printPrettyModelSummary</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">journal</span><span class="p">)</span>
     <span class="n">journal</span><span class="o">.</span><span class="n">printSeperationLine</span><span class="p">()</span>
 
-    <span class="n">jobInfo</span><span class="p">[</span><span class="s2">&quot;computationTime&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="mf">0.0</span>
+    <span class="n">jobInfo</span><span class="p">[</span><span class="s2">"computationTime"</span><span class="p">]</span> <span class="o">=</span> <span class="mf">0.0</span>
 
     <span class="n">jobInfo</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">job</span><span class="p">)</span>
     <span class="n">jobInfo</span> <span class="o">=</span> <span class="n">loadConfiguration</span><span class="p">(</span><span class="n">jobInfo</span><span class="p">)</span>
-    <span class="k">for</span> <span class="n">updateConfig</span> <span class="ow">in</span> <span class="n">inputfile</span><span class="p">[</span><span class="s2">&quot;updateConfiguration&quot;</span><span class="p">]:</span>
+    <span class="k">for</span> <span class="n">updateConfig</span> <span class="ow">in</span> <span class="n">inputfile</span><span class="p">[</span><span class="s2">"updateConfiguration"</span><span class="p">]:</span>
         <span class="n">updateConfiguration</span><span class="p">(</span><span class="n">updateConfig</span><span class="p">,</span> <span class="n">jobInfo</span><span class="p">,</span> <span class="n">journal</span><span class="p">)</span>
 
-    <span class="c1"># Create the default entries &#39;U&#39; (flux) and &#39;P&#39; (effort)</span>
+    <span class="c1"># Create the entries 'U' (flux) and 'P' (effort) on every node field, and 'V' (velocity) and 'A'</span>
+    <span class="c1"># (acceleration) on the mass-carrying ones (zero unless a dynamic solver writes them). Must happen</span>
+    <span class="c1"># before the field outputs are initialized, so that ``result=V``/``result=A`` outputs are valid.</span>
     <span class="k">for</span> <span class="n">nodeField</span> <span class="ow">in</span> <span class="n">model</span><span class="o">.</span><span class="n">nodeFields</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
-        <span class="n">nodeField</span><span class="o">.</span><span class="n">createFieldValueEntry</span><span class="p">(</span><span class="s2">&quot;U&quot;</span><span class="p">)</span>
-        <span class="n">nodeField</span><span class="o">.</span><span class="n">createFieldValueEntry</span><span class="p">(</span><span class="s2">&quot;P&quot;</span><span class="p">)</span>
+        <span class="n">nodeField</span><span class="o">.</span><span class="n">createFieldValueEntry</span><span class="p">(</span><span class="s2">"U"</span><span class="p">)</span>
+        <span class="n">nodeField</span><span class="o">.</span><span class="n">createFieldValueEntry</span><span class="p">(</span><span class="s2">"P"</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">carriesLinearMomentum</span><span class="p">(</span><span class="n">nodeField</span><span class="o">.</span><span class="n">name</span><span class="p">):</span>
+            <span class="n">nodeField</span><span class="o">.</span><span class="n">createFieldValueEntry</span><span class="p">(</span><span class="s2">"V"</span><span class="p">)</span>
+            <span class="n">nodeField</span><span class="o">.</span><span class="n">createFieldValueEntry</span><span class="p">(</span><span class="s2">"A"</span><span class="p">)</span>
 
-    <span class="n">model</span><span class="o">.</span><span class="n">_linkFieldVariableObjects</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">nodeSets</span><span class="p">[</span><span class="s2">&quot;all&quot;</span><span class="p">])</span>
+    <span class="n">model</span><span class="o">.</span><span class="n">_linkFieldVariableObjects</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">nodeSets</span><span class="p">[</span><span class="s2">"all"</span><span class="p">])</span>
+
+    <span class="c1"># *restart, readFrom=...: the model rebuilt from the .inp file gets its converged state and</span>
+    <span class="c1"># model.time overwritten from the checkpoint. Must run after the node field entries are created</span>
+    <span class="c1"># and after advanceToTime (which would reset model.time). Steps before the checkpoint's step are</span>
+    <span class="c1"># skipped; AMR topology changes are replayed; resuming past a `modelupdate` is refused.</span>
+    <span class="n">restartDefinitions</span> <span class="o">=</span> <span class="n">inputfile</span><span class="p">[</span><span class="s2">"restart"</span><span class="p">]</span>
+    <span class="n">resumeCheckpoint</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">resumeStepNumber</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="k">if</span> <span class="n">restartDefinitions</span> <span class="ow">and</span> <span class="n">restartDefinitions</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"readFrom"</span><span class="p">):</span>
+        <span class="n">resumeCheckpoint</span> <span class="o">=</span> <span class="n">ResumeCheckpoint</span><span class="p">(</span><span class="n">restartDefinitions</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="s2">"readFrom"</span><span class="p">])</span>
+        <span class="n">resumeStepNumber</span> <span class="o">=</span> <span class="n">resumeCheckpoint</span><span class="o">.</span><span class="n">stepNumber</span>
+        <span class="n">tic</span> <span class="o">=</span> <span class="n">getCurrentTime</span><span class="p">()</span>
+        <span class="n">resumeCheckpoint</span><span class="o">.</span><span class="n">restoreModel</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">journal</span><span class="p">)</span>
+        <span class="n">restoreTime</span> <span class="o">=</span> <span class="n">getCurrentTime</span><span class="p">()</span> <span class="o">-</span> <span class="n">tic</span>
+        <span class="n">journal</span><span class="o">.</span><span class="n">message</span><span class="p">(</span>
+            <span class="s2">"Resuming from restart checkpoint </span><span class="si">{:}</span><span class="s2"> (step </span><span class="si">{:}</span><span class="s2">, time </span><span class="si">{:}</span><span class="s2">)"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+                <span class="n">resumeCheckpoint</span><span class="o">.</span><span class="n">fileName</span><span class="p">,</span> <span class="n">resumeStepNumber</span><span class="p">,</span> <span class="n">model</span><span class="o">.</span><span class="n">time</span>
+            <span class="p">),</span>
+            <span class="n">identification</span><span class="p">,</span>
+            <span class="mi">0</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="c1"># Report the timing of the topology replay here; the step's timers start from zero later.</span>
+        <span class="k">if</span> <span class="n">model</span><span class="o">.</span><span class="n">topology</span><span class="o">.</span><span class="n">history</span><span class="p">:</span>
+            <span class="n">journal</span><span class="o">.</span><span class="n">printPrettyTable</span><span class="p">(</span><span class="n">performancetiming</span><span class="o">.</span><span class="n">makePrettyTable</span><span class="p">(</span><span class="n">wallTime</span><span class="o">=</span><span class="n">restoreTime</span><span class="p">),</span> <span class="n">identification</span><span class="p">)</span>
 
     <span class="n">plotter</span> <span class="o">=</span> <span class="n">createPlotterFromInputFile</span><span class="p">(</span><span class="n">inputfile</span><span class="p">,</span> <span class="n">journal</span><span class="p">)</span>
     <span class="n">stepManager</span> <span class="o">=</span> <span class="n">createStepManagerFromInputFile</span><span class="p">(</span><span class="n">inputfile</span><span class="p">)</span>
     <span class="n">fieldOutputController</span> <span class="o">=</span> <span class="n">createFieldOutputFromInputFile</span><span class="p">(</span><span class="n">inputfile</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">journal</span><span class="p">)</span>
+    <span class="n">model</span><span class="o">.</span><span class="n">fieldOutputController</span> <span class="o">=</span> <span class="n">fieldOutputController</span>
     <span class="n">fieldOutputController</span><span class="o">.</span><span class="n">initializeJob</span><span class="p">()</span>
 
     <span class="n">outputManagers</span> <span class="o">=</span> <span class="n">createOutputManagersFromInputFile</span><span class="p">(</span>
@@ -229,55 +262,86 @@
     <span class="k">for</span> <span class="n">outputManager</span> <span class="ow">in</span> <span class="n">outputManagers</span><span class="p">:</span>
         <span class="n">outputManager</span><span class="o">.</span><span class="n">initializeJob</span><span class="p">()</span>
 
+    <span class="c1"># the *linearSolver blocks, which a *solver's linsolver= may name; checked here, created per step by each solver</span>
+    <span class="n">jobInfo</span><span class="p">[</span><span class="s2">"linearSolvers"</span><span class="p">]</span> <span class="o">=</span> <span class="n">linearSolverDefinitionsFromInputFile</span><span class="p">(</span><span class="n">inputfile</span><span class="p">)</span>
     <span class="n">solvers</span> <span class="o">=</span> <span class="n">createSolversFromInputFile</span><span class="p">(</span><span class="n">inputfile</span><span class="p">,</span> <span class="n">jobInfo</span><span class="p">,</span> <span class="n">journal</span><span class="p">)</span>
 
     <span class="k">if</span> <span class="ow">not</span> <span class="n">solvers</span><span class="p">:</span>
         <span class="kn">from</span><span class="w"> </span><span class="nn">warnings</span><span class="w"> </span><span class="kn">import</span> <span class="n">warn</span>
 
         <span class="n">warn</span><span class="p">(</span>
-            <span class="s2">&quot;Warning, not defining a Solver is deprecated; Define solver using *solver keyword&quot;</span><span class="p">,</span>
+            <span class="s2">"Warning, not defining a Solver is deprecated; Define solver using *solver keyword"</span><span class="p">,</span>
             <span class="ne">DeprecationWarning</span><span class="p">,</span>
             <span class="n">stacklevel</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
         <span class="p">)</span>
 
-    <span class="n">defaultSolver</span> <span class="o">=</span> <span class="n">getSolverByName</span><span class="p">(</span><span class="n">job</span><span class="p">[</span><span class="s2">&quot;solver&quot;</span><span class="p">])</span>
-    <span class="n">solvers</span><span class="p">[</span><span class="s2">&quot;default&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">defaultSolver</span><span class="p">(</span><span class="n">jobInfo</span><span class="p">,</span> <span class="n">journal</span><span class="p">)</span>
+    <span class="n">defaultSolver</span> <span class="o">=</span> <span class="n">getSolverByName</span><span class="p">(</span><span class="n">job</span><span class="p">[</span><span class="s2">"solver"</span><span class="p">])</span>
+    <span class="n">solvers</span><span class="p">[</span><span class="s2">"default"</span><span class="p">]</span> <span class="o">=</span> <span class="n">defaultSolver</span><span class="p">(</span><span class="n">jobInfo</span><span class="p">,</span> <span class="n">journal</span><span class="p">)</span>
+
+    <span class="c1"># Looked up by name from a &gt;&gt;options block (edelweissfe.stepactions.options).</span>
+    <span class="n">model</span><span class="o">.</span><span class="n">solvers</span> <span class="o">=</span> <span class="n">solvers</span>
+    <span class="n">model</span><span class="o">.</span><span class="n">outputManagers</span> <span class="o">=</span> <span class="p">{</span><span class="n">outputManager</span><span class="o">.</span><span class="n">name</span><span class="p">:</span> <span class="n">outputManager</span> <span class="k">for</span> <span class="n">outputManager</span> <span class="ow">in</span> <span class="n">outputManagers</span><span class="p">}</span>
 
     <span class="k">try</span><span class="p">:</span>
-        <span class="k">for</span> <span class="n">step</span> <span class="ow">in</span> <span class="n">stepManager</span><span class="o">.</span><span class="n">dequeueStep</span><span class="p">(</span><span class="n">jobInfo</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">fieldOutputController</span><span class="p">,</span> <span class="n">journal</span><span class="p">,</span> <span class="n">solvers</span><span class="p">,</span> <span class="n">outputManagers</span><span class="p">):</span>
-            <span class="n">tic</span> <span class="o">=</span> <span class="n">getCurrentTime</span><span class="p">()</span>
-            <span class="n">step</span><span class="o">.</span><span class="n">solve</span><span class="p">()</span>
-            <span class="n">toc</span> <span class="o">=</span> <span class="n">getCurrentTime</span><span class="p">()</span>
-            <span class="n">stepTime</span> <span class="o">=</span> <span class="n">toc</span> <span class="o">-</span> <span class="n">tic</span>
-            <span class="n">jobInfo</span><span class="p">[</span><span class="s2">&quot;computationTime&quot;</span><span class="p">]</span> <span class="o">+=</span> <span class="n">stepTime</span>
+        <span class="k">for</span> <span class="n">step</span> <span class="ow">in</span> <span class="n">stepManager</span><span class="o">.</span><span class="n">generateSteps</span><span class="p">(</span><span class="n">jobInfo</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">fieldOutputController</span><span class="p">,</span> <span class="n">journal</span><span class="p">,</span> <span class="n">solvers</span><span class="p">,</span> <span class="n">outputManagers</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">resumeStepNumber</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">step</span><span class="o">.</span><span class="n">actions</span><span class="p">[</span><span class="s2">"modelupdate"</span><span class="p">]:</span>
+                    <span class="k">raise</span> <span class="n">RestartError</span><span class="p">(</span>
+                        <span class="s2">"step </span><span class="si">{:}</span><span class="s2"> has a modelupdate, whose effect is not recorded in a checkpoint, so "</span>
+                        <span class="s2">"the run cannot be resumed after it"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">step</span><span class="o">.</span><span class="n">number</span><span class="p">)</span>
+                    <span class="p">)</span>
+                <span class="k">if</span> <span class="n">step</span><span class="o">.</span><span class="n">number</span> <span class="o">&lt;</span> <span class="n">resumeStepNumber</span><span class="p">:</span>
+                    <span class="c1"># Constructed (so its step actions exist) but not solved: it ran before the checkpoint.</span>
+                    <span class="k">continue</span>
+            <span class="n">resumeFrom</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="k">if</span> <span class="n">step</span><span class="o">.</span><span class="n">number</span> <span class="o">==</span> <span class="n">resumeStepNumber</span><span class="p">:</span>
+                <span class="n">resumeFrom</span><span class="p">,</span> <span class="n">resumeStepNumber</span> <span class="o">=</span> <span class="n">resumeCheckpoint</span><span class="p">,</span> <span class="kc">None</span>
 
-            <span class="n">journal</span><span class="o">.</span><span class="n">printTable</span><span class="p">(</span>
-                <span class="p">[</span>
-                    <span class="p">(</span><span class="s2">&quot;Step computation time&quot;</span><span class="p">,</span> <span class="s2">&quot;</span><span class="si">{:10.4f}</span><span class="s2">s&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">stepTime</span><span class="p">)),</span>
-                <span class="p">],</span>
+            <span class="n">tic</span> <span class="o">=</span> <span class="n">getCurrentTime</span><span class="p">()</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">step</span><span class="o">.</span><span class="n">solve</span><span class="p">(</span><span class="n">resumeFrom</span><span class="p">)</span>
+            <span class="k">finally</span><span class="p">:</span>
+                <span class="c1"># In finally, so a failing step still counts its elapsed time.</span>
+                <span class="n">toc</span> <span class="o">=</span> <span class="n">getCurrentTime</span><span class="p">()</span>
+                <span class="n">stepTime</span> <span class="o">=</span> <span class="n">toc</span> <span class="o">-</span> <span class="n">tic</span>
+                <span class="n">jobInfo</span><span class="p">[</span><span class="s2">"computationTime"</span><span class="p">]</span> <span class="o">+=</span> <span class="n">stepTime</span>
+
+                <span class="n">journal</span><span class="o">.</span><span class="n">printTable</span><span class="p">(</span>
+                    <span class="p">[</span>
+                        <span class="p">(</span><span class="s2">"Step computation time"</span><span class="p">,</span> <span class="s2">"</span><span class="si">{:10.4f}</span><span class="s2">s"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">stepTime</span><span class="p">)),</span>
+                    <span class="p">],</span>
+                    <span class="n">identification</span><span class="p">,</span>
+                    <span class="n">level</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+                <span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">resumeStepNumber</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">journal</span><span class="o">.</span><span class="n">errorMessage</span><span class="p">(</span>
+                <span class="s2">"Restart checkpoint's step </span><span class="si">{:}</span><span class="s2"> was never reached -- nothing was resumed"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">resumeStepNumber</span><span class="p">),</span>
                 <span class="n">identification</span><span class="p">,</span>
-                <span class="n">level</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
             <span class="p">)</span>
 
     <span class="k">except</span> <span class="ne">KeyboardInterrupt</span><span class="p">:</span>
-        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;&quot;</span><span class="p">)</span>
-        <span class="n">journal</span><span class="o">.</span><span class="n">errorMessage</span><span class="p">(</span><span class="s2">&quot;Interrupted by user&quot;</span><span class="p">,</span> <span class="n">identification</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">""</span><span class="p">)</span>
+        <span class="n">journal</span><span class="o">.</span><span class="n">errorMessage</span><span class="p">(</span><span class="s2">"Interrupted by user"</span><span class="p">,</span> <span class="n">identification</span><span class="p">)</span>
 
-    <span class="k">except</span> <span class="n">StepFailed</span><span class="p">:</span>
-        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;&quot;</span><span class="p">)</span>
-        <span class="n">journal</span><span class="o">.</span><span class="n">errorMessage</span><span class="p">(</span><span class="s2">&quot;Simulation failed&quot;</span><span class="p">,</span> <span class="n">identification</span><span class="p">)</span>
+    <span class="k">except</span> <span class="n">StepFailed</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">""</span><span class="p">)</span>
+        <span class="n">message</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)</span>
+        <span class="n">journal</span><span class="o">.</span><span class="n">errorMessage</span><span class="p">(</span>
+            <span class="s2">"Simulation failed: </span><span class="si">{:}</span><span class="s2">"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">message</span><span class="p">)</span> <span class="k">if</span> <span class="n">message</span> <span class="k">else</span> <span class="s2">"Simulation failed"</span><span class="p">,</span> <span class="n">identification</span>
+        <span class="p">)</span>
 
     <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;&quot;</span><span class="p">)</span>
-        <span class="n">journal</span><span class="o">.</span><span class="n">errorMessage</span><span class="p">(</span><span class="s2">&quot;Simulation failed due to unhandled exception&quot;</span><span class="p">,</span> <span class="n">identification</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">""</span><span class="p">)</span>
+        <span class="n">journal</span><span class="o">.</span><span class="n">errorMessage</span><span class="p">(</span><span class="s2">"Simulation failed due to unhandled exception"</span><span class="p">,</span> <span class="n">identification</span><span class="p">)</span>
         <span class="k">raise</span> <span class="n">e</span>
 
     <span class="k">finally</span><span class="p">:</span>
         <span class="n">journal</span><span class="o">.</span><span class="n">printTable</span><span class="p">(</span>
             <span class="p">[</span>
                 <span class="p">(</span>
-                    <span class="s2">&quot;Job computation time&quot;</span><span class="p">,</span>
-                    <span class="s2">&quot;</span><span class="si">{:10.4f}</span><span class="s2">s&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">jobInfo</span><span class="p">[</span><span class="s2">&quot;computationTime&quot;</span><span class="p">]),</span>
+                    <span class="s2">"Job computation time"</span><span class="p">,</span>
+                    <span class="s2">"</span><span class="si">{:10.4f}</span><span class="s2">s"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">jobInfo</span><span class="p">[</span><span class="s2">"computationTime"</span><span class="p">]),</span>
                 <span class="p">),</span>
             <span class="p">],</span>
             <span class="n">identification</span><span class="p">,</span>
@@ -292,6 +356,9 @@
         <span class="n">plotter</span><span class="o">.</span><span class="n">finalize</span><span class="p">()</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">suppressPlots</span><span class="p">:</span>
             <span class="n">plotter</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+
+        <span class="k">if</span> <span class="n">resumeCheckpoint</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">resumeCheckpoint</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
 
     <span class="k">return</span> <span class="n">model</span><span class="p">,</span> <span class="n">fieldOutputController</span></div>
 

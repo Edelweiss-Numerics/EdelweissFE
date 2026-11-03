@@ -15,13 +15,13 @@
       <script src="../_static/jquery.js?v=5d32c60e"></script>
       <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
       <script src="../_static/documentation_options.js?v=17e2f33f"></script>
-      <script src="../_static/doctools.js?v=9bcbadda"></script>
-      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
     <link rel="next" title="Analytical fields" href="analyticalfields.html" />
-    <link rel="prev" title="Linear solvers" href="linsolvers.html" /> 
+    <link rel="prev" title="Linear solvers: Python API" href="linsolveapi.html" /> 
 </head>
 
 <body class="wy-body-for-nav"> 
@@ -50,6 +50,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../installation.html">Installation</a></li>
 <li class="toctree-l1 current"><a class="reference internal" href="index.html">Documentation</a><ul class="current">
 <li class="toctree-l2"><a class="reference internal" href="syntax.html">Input file syntax</a></li>
+<li class="toctree-l2"><a class="reference internal" href="inputsystem.html">The input system: how <code class="docutils literal notranslate"><span class="pre">.inp</span></code> grammar is defined</a></li>
 <li class="toctree-l2"><a class="reference internal" href="jobs.html">Inputfile driven simulations</a></li>
 <li class="toctree-l2"><a class="reference internal" href="models.html">Models</a></li>
 <li class="toctree-l2"><a class="reference internal" href="solvers.html">Solvers</a></li>
@@ -57,8 +58,12 @@
 <li class="toctree-l2 current"><a class="current reference internal" href="#">Steps</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="#edelweissfe.steps.base.stepbase.StepBase"><code class="docutils literal notranslate"><span class="pre">StepBase</span></code></a><ul>
 <li class="toctree-l4"><a class="reference internal" href="#edelweissfe.steps.base.stepbase.StepBase.solve"><code class="docutils literal notranslate"><span class="pre">StepBase.solve()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.steps.base.stepbase.StepBase.length"><code class="docutils literal notranslate"><span class="pre">StepBase.length</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.steps.base.stepbase.StepBase.number"><code class="docutils literal notranslate"><span class="pre">StepBase.number</span></code></a></li>
 </ul>
 </li>
+<li class="toctree-l3"><a class="reference internal" href="#edelweissfe.steps.base.stepbase.StepIncrementationSchema"><code class="docutils literal notranslate"><span class="pre">StepIncrementationSchema</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#increment-control-of-adaptive-steps">Increment control of adaptive steps</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#module-edelweissfe.steps.adaptivestep"><code class="docutils literal notranslate"><span class="pre">AdaptiveStep</span></code> - A classical adpative step for transient simulations</a><ul>
 <li class="toctree-l4"><a class="reference internal" href="#edelweissfe.steps.adaptivestep.AdaptiveStep"><code class="docutils literal notranslate"><span class="pre">AdaptiveStep</span></code></a></li>
 </ul>
@@ -71,7 +76,10 @@
 </li>
 <li class="toctree-l2"><a class="reference internal" href="analyticalfields.html">Analytical fields</a></li>
 <li class="toctree-l2"><a class="reference internal" href="constraints.html">Constraints</a></li>
-<li class="toctree-l2"><a class="reference internal" href="dofmanager.html">DOF manager</a></li>
+<li class="toctree-l2"><a class="reference internal" href="rigidbodies.html">Rigid bodies</a></li>
+<li class="toctree-l2"><a class="reference internal" href="contacttheory.html">Contact mechanics: theory</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dofmanager.html">Degree of Freedom (DOF) Manager and Numerics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="assembly.html">System matrix assembly</a></li>
 <li class="toctree-l2"><a class="reference internal" href="fieldoutputmanager.html">Field outputs</a></li>
 <li class="toctree-l2"><a class="reference internal" href="fields.html">Fields</a></li>
 <li class="toctree-l2"><a class="reference internal" href="elements.html">Elements</a></li>
@@ -80,6 +88,10 @@
 <li class="toctree-l2"><a class="reference internal" href="journal.html">Journal</a></li>
 <li class="toctree-l2"><a class="reference internal" href="materials.html">Materials</a></li>
 <li class="toctree-l2"><a class="reference internal" href="mesh.html">Creating finite element meshes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="modelmodifiers.html">Model modifiers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="topologypipeline.html">The topology pipeline: how a model changes itself</a></li>
+<li class="toctree-l2"><a class="reference internal" href="restart.html">Restart</a></li>
+<li class="toctree-l2"><a class="reference internal" href="adaptivitytheory.html">Adaptive refinement: error estimation and marking</a></li>
 <li class="toctree-l2"><a class="reference internal" href="output.html">Outputmanagers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="parallelization.html">Parallelization</a></li>
 <li class="toctree-l2"><a class="reference internal" href="phenomena.html">Physical phenomena</a></li>
@@ -128,99 +140,152 @@ have a distinct (physical) runtime, and may contain multiple StepActions.
 Subsequent Steps inherit StepActions, and they may be updated.</p>
 <dl class="py class">
 <dt class="sig sig-object py" id="edelweissfe.steps.base.stepbase.StepBase">
-<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">edelweissfe.steps.base.stepbase.</span></span><span class="sig-name descname"><span class="pre">StepBase</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">number</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fieldOutputController</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">journal</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">jobInfo</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">solver</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">outputManagers</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">stepActions</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/steps/base/stepbase.html#StepBase"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.steps.base.stepbase.StepBase" title="Link to this definition"></a></dt>
-<dd><p>This is a simulation step.</p>
-<p>It has a specific runtime, and it holds StepActions to executed.</p>
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">edelweissfe.steps.base.stepbase.</span></span><span class="sig-name descname"><span class="pre">StepBase</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">number</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fieldOutputController</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">journal</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">jobInfo</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">solver</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">outputManagers</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">stepActions</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/steps/base/stepbase.html#StepBase"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.steps.base.stepbase.StepBase" title="Link to this definition"></a></dt>
+<dd><p>Base class for simulation steps.</p>
+<p>A step has a specific runtime, holds the StepActions to be executed,
+and delegates the incrementation to a time stepper, which is created by the
+concrete step type.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>number</strong> (<em>int</em>) – The number of this step. For information purposes only.</p></li>
+<li><p><strong>number</strong> (<em>int</em>) – The (unique) number of this step.</p></li>
 <li><p><strong>model</strong> (<a class="reference internal" href="models.html#edelweissfe.models.femodel.FEModel" title="edelweissfe.models.femodel.FEModel"><em>FEModel</em></a>) – The current state of the model.</p></li>
 <li><p><strong>fieldOutputController</strong> (<a class="reference internal" href="fieldoutputmanager.html#edelweissfe.utils.fieldoutput.FieldOutputController" title="edelweissfe.utils.fieldoutput.FieldOutputController"><em>FieldOutputController</em></a>) – The FieldOutputController instance for processing results.</p></li>
 <li><p><strong>journal</strong> (<a class="reference internal" href="journal.html#edelweissfe.journal.journal.Journal" title="edelweissfe.journal.journal.Journal"><em>Journal</em></a>) – The Journal instance for logging purposes.</p></li>
-<li><p><strong>jobInfo</strong> (<em>dict</em>) – Additional information about the job</p></li>
-<li><p><strong>solvers</strong> – The instances of solvers available to this step.</p></li>
+<li><p><strong>jobInfo</strong> (<em>dict</em>) – Additional information about the job.</p></li>
+<li><p><strong>solver</strong> – The solver instance to be used for this step.</p></li>
 <li><p><strong>outputManagers</strong> (<em>list</em>) – The OutputManagers used.</p></li>
-<li><p><strong>stepActions</strong> (<em>dict</em>) – The collection of actions for this step.</p></li>
-<li><p><strong>**kwargs</strong> – Additional options for the step.</p></li>
+<li><p><strong>stepActions</strong> (<em>dict</em>) – The collection of actions for this step, grouped by action type.</p></li>
+<li><p><strong>**kwargs</strong> – The options for this step.</p></li>
 </ul>
 </dd>
 </dl>
 <p class="rubric">Methods</p>
 <table class="autosummary longtable docutils align-default">
 <tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.steps.base.stepbase.StepBase.solve" title="edelweissfe.steps.base.stepbase.StepBase.solve"><code class="xref py py-obj docutils literal notranslate"><span class="pre">solve</span></code></a>()</p></td>
-<td><p>Let a step be solved.</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.steps.base.stepbase.StepBase.solve" title="edelweissfe.steps.base.stepbase.StepBase.solve"><code class="xref py py-obj docutils literal notranslate"><span class="pre">solve</span></code></a>([resumeFrom])</p></td>
+<td><p>Solve this step, increment by increment.</p></td>
 </tr>
 </tbody>
 </table>
 <dl class="py method">
 <dt class="sig sig-object py" id="edelweissfe.steps.base.stepbase.StepBase.solve">
-<span class="sig-name descname"><span class="pre">solve</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/steps/base/stepbase.html#StepBase.solve"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.steps.base.stepbase.StepBase.solve" title="Link to this definition"></a></dt>
-<dd><p>Let a step be solved.</p>
+<span class="sig-name descname"><span class="pre">solve</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">resumeFrom</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/steps/base/stepbase.html#StepBase.solve"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.steps.base.stepbase.StepBase.solve" title="Link to this definition"></a></dt>
+<dd><p>Solve this step, increment by increment.</p>
+<p>The increment loop, the same for every solver:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>begin the step
+while the step is not finished:
+    prepare the increment     topology update when due
+    propose an increment      time stepper
+    attempt it                solver; if it fails: reject it, retry smaller
+    accept it                 solver, then time stepper
+    write output              field outputs, output managers, restart checkpoint last
+end the step
+</pre></div>
+</div>
+<p>A restart checkpoint is written after an accepted increment, as the last output, so it holds
+exactly the state the next increment starts from – and a resumed step simply continues
+this loop. It begins like any step, and then takes over the checkpointed state, in this one
+place.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Returns<span class="colon">:</span></dt>
-<dd class="field-odd"><p>The updated model.</p>
-</dd>
-<dt class="field-even">Return type<span class="colon">:</span></dt>
-<dd class="field-even"><p><a class="reference internal" href="models.html#edelweissfe.models.femodel.FEModel" title="edelweissfe.models.femodel.FEModel">FEModel</a></p>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>resumeFrom</strong> – The <a class="reference internal" href="output.html#edelweissfe.utils.checkpoint.ResumeCheckpoint" title="edelweissfe.utils.checkpoint.ResumeCheckpoint"><code class="xref py py-class docutils literal notranslate"><span class="pre">ResumeCheckpoint</span></code></a> this step continues from, or
+None.</p>
 </dd>
 </dl>
 </dd></dl>
 
+<dl class="py attribute">
+<dt class="sig sig-object py" id="edelweissfe.steps.base.stepbase.StepBase.length">
+<span class="sig-name descname"><span class="pre">length</span></span><a class="headerlink" href="#edelweissfe.steps.base.stepbase.StepBase.length" title="Link to this definition"></a></dt>
+<dd><p>The duration of the step.</p>
 </dd></dl>
 
+<dl class="py attribute">
+<dt class="sig sig-object py" id="edelweissfe.steps.base.stepbase.StepBase.number">
+<span class="sig-name descname"><span class="pre">number</span></span><a class="headerlink" href="#edelweissfe.steps.base.stepbase.StepBase.number" title="Link to this definition"></a></dt>
+<dd><p>The (unique) number of the step.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="edelweissfe.steps.base.stepbase.StepIncrementationSchema">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">edelweissfe.steps.base.stepbase.</span></span><span class="sig-name descname"><span class="pre">StepIncrementationSchema</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">stepLength</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">startInc</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">maxInc</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">minInc</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.0001</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">maxNumInc</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1000</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">maxIter</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">10</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">criticalIter</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">5</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">maxGrowIter</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">10</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cutbackFactor</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.25</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">increaseFactor</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1.1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">goodIncrementsBeforeIncrease</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">3</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/steps/base/stepbase.html#StepIncrementationSchema"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.steps.base.stepbase.StepIncrementationSchema" title="Link to this definition"></a></dt>
+<dd><p>The standard incrementation options common to every step type (<code class="docutils literal notranslate"><span class="pre">*step</span></code> keyword
+datalines), owned by this module and never mutated from outside it.</p>
+<p>Every concrete <a class="reference internal" href="#edelweissfe.steps.base.stepbase.StepBase" title="edelweissfe.steps.base.stepbase.StepBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">StepBase</span></code></a> subclass shares exactly this option set – there is no
+per-step-type variation – so it is declared once here rather than once per step type.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>stepLength</strong> (<em>float</em>)</p></li>
+<li><p><strong>startInc</strong> (<em>float</em>)</p></li>
+<li><p><strong>maxInc</strong> (<em>float</em>)</p></li>
+<li><p><strong>minInc</strong> (<em>float</em>)</p></li>
+<li><p><strong>maxNumInc</strong> (<em>int</em>)</p></li>
+<li><p><strong>maxIter</strong> (<em>int</em>)</p></li>
+<li><p><strong>criticalIter</strong> (<em>int</em>)</p></li>
+<li><p><strong>maxGrowIter</strong> (<em>int</em>)</p></li>
+<li><p><strong>cutbackFactor</strong> (<em>float</em>)</p></li>
+<li><p><strong>increaseFactor</strong> (<em>float</em>)</p></li>
+<li><p><strong>goodIncrementsBeforeIncrease</strong> (<em>int</em>)</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<section id="increment-control-of-adaptive-steps">
+<h2>Increment control of adaptive steps<a class="headerlink" href="#increment-control-of-adaptive-steps" title="Link to this heading"></a></h2>
+<p>An adaptive step cuts the increment back by <code class="docutils literal notranslate"><span class="pre">cutbackFactor</span></code> when an increment fails, and grows it by
+<code class="docutils literal notranslate"><span class="pre">increaseFactor</span></code> once <code class="docutils literal notranslate"><span class="pre">goodIncrementsBeforeIncrease</span></code> good increments have passed, counted from the step start
+(the zero increment included) or from the last cutback, which itself counts as one; after that, every further good
+increment lets the next one grow. With <code class="docutils literal notranslate"><span class="pre">goodIncrementsBeforeIncrease=1</span></code> the increment grows again right after the
+increment retried after a cutback. An increment that needed at least
+<code class="docutils literal notranslate"><span class="pre">criticalIter</span></code> iterations does not let the next one grow. The defaults (<code class="docutils literal notranslate"><span class="pre">increaseFactor=1.1</span></code>,
+<code class="docutils literal notranslate"><span class="pre">goodIncrementsBeforeIncrease=3</span></code>) recover slowly from a cutback: from a quarter of the previous size it takes about
+17 increments to get back. In softening problems with frequent cutbacks, a faster growth is usually much cheaper,
+with <code class="docutils literal notranslate"><span class="pre">criticalIter</span></code> keeping the increment from growing while Newton struggles, e.g.:</p>
+<div class="highlight-edelweiss notranslate"><div class="highlight"><pre><span></span><span class="k">*step</span>,<span class="nv"> solver</span><span class="ow">=</span><span class="m">theSolver</span>
+<span class="nv">maxInc</span><span class="ow">=</span><span class="m">5e-3</span>,<span class="nv"> minInc</span><span class="ow">=</span><span class="m">1e-6</span>,<span class="nv"> maxIter</span><span class="ow">=</span><span class="m">25</span>,<span class="nv"> criticalIter</span><span class="ow">=</span><span class="m">10</span>,<span class="nv"> increaseFactor</span><span class="ow">=</span><span class="m">1.5</span>,<span class="nv"> goodIncrementsBeforeIncrease</span><span class="ow">=</span><span class="m">1</span>
+</pre></div>
+</div>
+</section>
 <section id="module-edelweissfe.steps.adaptivestep">
 <span id="adaptivestep-a-classical-adpative-step-for-transient-simulations"></span><h2><code class="docutils literal notranslate"><span class="pre">AdaptiveStep</span></code> - A classical adpative step for transient simulations<a class="headerlink" href="#module-edelweissfe.steps.adaptivestep" title="Link to this heading"></a></h2>
 <dl class="py class">
 <dt class="sig sig-object py" id="edelweissfe.steps.adaptivestep.AdaptiveStep">
-<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">edelweissfe.steps.adaptivestep.</span></span><span class="sig-name descname"><span class="pre">AdaptiveStep</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/steps/adaptivestep.html#AdaptiveStep"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.steps.adaptivestep.AdaptiveStep" title="Link to this definition"></a></dt>
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">edelweissfe.steps.adaptivestep.</span></span><span class="sig-name descname"><span class="pre">AdaptiveStep</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">number</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fieldOutputController</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">journal</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">jobInfo</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">solver</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">outputManagers</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">stepActions</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/steps/adaptivestep.html#AdaptiveStep"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.steps.adaptivestep.AdaptiveStep" title="Link to this definition"></a></dt>
 <dd><p>An adaptive incremental step to be used in nonlinear simulations with implicit time integration.</p>
 <p class="rubric">Methods</p>
 <table class="autosummary longtable docutils align-default">
 <tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.steps.adaptivestep.AdaptiveStep.solve" title="edelweissfe.steps.adaptivestep.AdaptiveStep.solve"><code class="xref py py-obj docutils literal notranslate"><span class="pre">solve</span></code></a>()</p></td>
-<td><p>Let a step be solved.</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.steps.adaptivestep.AdaptiveStep.schema" title="edelweissfe.steps.adaptivestep.AdaptiveStep.schema"><code class="xref py py-obj docutils literal notranslate"><span class="pre">schema</span></code></a></p></td>
+<td><p>Option schema for this step; all step types share the same incrementation options.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">solve</span></code>([resumeFrom])</p></td>
+<td><p>Solve this step, increment by increment.</p></td>
 </tr>
 </tbody>
 </table>
-<table class="docutils align-default">
-<tbody>
-<tr class="row-odd"><td><p><strong>discardAndChangeIncrement</strong></p></td>
-<td></td>
-</tr>
-<tr class="row-even"><td><p><strong>getTimeStep</strong></p></td>
-<td></td>
-</tr>
-<tr class="row-odd"><td><p><strong>preventIncrementIncrease</strong></p></td>
-<td></td>
-</tr>
-</tbody>
-</table>
-<dl class="py method">
-<dt class="sig sig-object py" id="edelweissfe.steps.adaptivestep.AdaptiveStep.solve">
-<span class="sig-name descname"><span class="pre">solve</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/steps/adaptivestep.html#AdaptiveStep.solve"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.steps.adaptivestep.AdaptiveStep.solve" title="Link to this definition"></a></dt>
-<dd><p>Let a step be solved.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Returns<span class="colon">:</span></dt>
-<dd class="field-odd"><p>The updated model.</p>
-</dd>
-<dt class="field-even">Return type<span class="colon">:</span></dt>
-<dd class="field-even"><p><a class="reference internal" href="models.html#edelweissfe.models.femodel.FEModel" title="edelweissfe.models.femodel.FEModel">FEModel</a></p>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>number</strong> (<em>int</em>)</p></li>
+<li><p><strong>model</strong> (<a class="reference internal" href="models.html#edelweissfe.models.femodel.FEModel" title="edelweissfe.models.femodel.FEModel"><em>FEModel</em></a>)</p></li>
+<li><p><strong>fieldOutputController</strong> (<a class="reference internal" href="fieldoutputmanager.html#edelweissfe.utils.fieldoutput.FieldOutputController" title="edelweissfe.utils.fieldoutput.FieldOutputController"><em>FieldOutputController</em></a>)</p></li>
+<li><p><strong>journal</strong> (<a class="reference internal" href="journal.html#edelweissfe.journal.journal.Journal" title="edelweissfe.journal.journal.Journal"><em>Journal</em></a>)</p></li>
+<li><p><strong>jobInfo</strong> (<em>dict</em>)</p></li>
+<li><p><strong>outputManagers</strong> (<em>list</em>)</p></li>
+<li><p><strong>stepActions</strong> (<em>dict</em>)</p></li>
+</ul>
 </dd>
 </dl>
-</dd></dl>
-
 <dl class="py attribute">
-<dt class="sig sig-object py" id="edelweissfe.steps.adaptivestep.AdaptiveStep.length">
-<span class="sig-name descname"><span class="pre">length</span></span><a class="headerlink" href="#edelweissfe.steps.adaptivestep.AdaptiveStep.length" title="Link to this definition"></a></dt>
-<dd><p>The durcation of the step.</p>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="edelweissfe.steps.adaptivestep.AdaptiveStep.number">
-<span class="sig-name descname"><span class="pre">number</span></span><a class="headerlink" href="#edelweissfe.steps.adaptivestep.AdaptiveStep.number" title="Link to this definition"></a></dt>
-<dd><p>The (unique) number of the step.</p>
+<dt class="sig sig-object py" id="edelweissfe.steps.adaptivestep.AdaptiveStep.schema">
+<span class="sig-name descname"><span class="pre">schema</span></span><a class="headerlink" href="#edelweissfe.steps.adaptivestep.AdaptiveStep.schema" title="Link to this definition"></a></dt>
+<dd><p>Option schema for this step; all step types share the same incrementation options.</p>
+<p>alias of <a class="reference internal" href="#edelweissfe.steps.base.stepbase.StepIncrementationSchema" title="edelweissfe.steps.base.stepbase.StepIncrementationSchema"><code class="xref py py-class docutils literal notranslate"><span class="pre">StepIncrementationSchema</span></code></a></p>
 </dd></dl>
 
 </dd></dl>
@@ -230,56 +295,38 @@ Subsequent Steps inherit StepActions, and they may be updated.</p>
 <span id="adaptivestepforexplicitsimulations-an-adaptive-step-for-explicit-simulations"></span><h2><code class="docutils literal notranslate"><span class="pre">AdaptiveStepForExplicitSimulations</span></code> - An adaptive step for explicit simulations<a class="headerlink" href="#module-edelweissfe.steps.adaptivestepforexplicitsimulations" title="Link to this heading"></a></h2>
 <dl class="py class">
 <dt class="sig sig-object py" id="edelweissfe.steps.adaptivestepforexplicitsimulations.AdaptiveStepForExplicitSimulations">
-<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">edelweissfe.steps.adaptivestepforexplicitsimulations.</span></span><span class="sig-name descname"><span class="pre">AdaptiveStepForExplicitSimulations</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/steps/adaptivestepforexplicitsimulations.html#AdaptiveStepForExplicitSimulations"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.steps.adaptivestepforexplicitsimulations.AdaptiveStepForExplicitSimulations" title="Link to this definition"></a></dt>
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">edelweissfe.steps.adaptivestepforexplicitsimulations.</span></span><span class="sig-name descname"><span class="pre">AdaptiveStepForExplicitSimulations</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">number</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fieldOutputController</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">journal</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">jobInfo</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">solver</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">outputManagers</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">stepActions</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/steps/adaptivestepforexplicitsimulations.html#AdaptiveStepForExplicitSimulations"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.steps.adaptivestepforexplicitsimulations.AdaptiveStepForExplicitSimulations" title="Link to this definition"></a></dt>
 <dd><p>An adaptive incremental step to be used in nonlinear simulations with explicit time integration.</p>
 <p class="rubric">Methods</p>
 <table class="autosummary longtable docutils align-default">
 <tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.steps.adaptivestepforexplicitsimulations.AdaptiveStepForExplicitSimulations.solve" title="edelweissfe.steps.adaptivestepforexplicitsimulations.AdaptiveStepForExplicitSimulations.solve"><code class="xref py py-obj docutils literal notranslate"><span class="pre">solve</span></code></a>()</p></td>
-<td><p>Let a step be solved.</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.steps.adaptivestepforexplicitsimulations.AdaptiveStepForExplicitSimulations.schema" title="edelweissfe.steps.adaptivestepforexplicitsimulations.AdaptiveStepForExplicitSimulations.schema"><code class="xref py py-obj docutils literal notranslate"><span class="pre">schema</span></code></a></p></td>
+<td><p>Option schema for this step, per OptionSchemaProvider.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">solve</span></code>([resumeFrom])</p></td>
+<td><p>Solve this step, increment by increment.</p></td>
 </tr>
 </tbody>
 </table>
-<table class="docutils align-default">
-<tbody>
-<tr class="row-odd"><td><p><strong>changeIncrementSize</strong></p></td>
-<td></td>
-</tr>
-<tr class="row-even"><td><p><strong>discardAndChangeIncrement</strong></p></td>
-<td></td>
-</tr>
-<tr class="row-odd"><td><p><strong>getTimeStep</strong></p></td>
-<td></td>
-</tr>
-<tr class="row-even"><td><p><strong>preventIncrementIncrease</strong></p></td>
-<td></td>
-</tr>
-</tbody>
-</table>
-<dl class="py method">
-<dt class="sig sig-object py" id="edelweissfe.steps.adaptivestepforexplicitsimulations.AdaptiveStepForExplicitSimulations.solve">
-<span class="sig-name descname"><span class="pre">solve</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/steps/adaptivestepforexplicitsimulations.html#AdaptiveStepForExplicitSimulations.solve"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.steps.adaptivestepforexplicitsimulations.AdaptiveStepForExplicitSimulations.solve" title="Link to this definition"></a></dt>
-<dd><p>Let a step be solved.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Returns<span class="colon">:</span></dt>
-<dd class="field-odd"><p>The updated model.</p>
-</dd>
-<dt class="field-even">Return type<span class="colon">:</span></dt>
-<dd class="field-even"><p><a class="reference internal" href="models.html#edelweissfe.models.femodel.FEModel" title="edelweissfe.models.femodel.FEModel">FEModel</a></p>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>number</strong> (<em>int</em>)</p></li>
+<li><p><strong>model</strong> (<a class="reference internal" href="models.html#edelweissfe.models.femodel.FEModel" title="edelweissfe.models.femodel.FEModel"><em>FEModel</em></a>)</p></li>
+<li><p><strong>fieldOutputController</strong> (<a class="reference internal" href="fieldoutputmanager.html#edelweissfe.utils.fieldoutput.FieldOutputController" title="edelweissfe.utils.fieldoutput.FieldOutputController"><em>FieldOutputController</em></a>)</p></li>
+<li><p><strong>journal</strong> (<a class="reference internal" href="journal.html#edelweissfe.journal.journal.Journal" title="edelweissfe.journal.journal.Journal"><em>Journal</em></a>)</p></li>
+<li><p><strong>jobInfo</strong> (<em>dict</em>)</p></li>
+<li><p><strong>outputManagers</strong> (<em>list</em>)</p></li>
+<li><p><strong>stepActions</strong> (<em>dict</em>)</p></li>
+</ul>
 </dd>
 </dl>
-</dd></dl>
-
 <dl class="py attribute">
-<dt class="sig sig-object py" id="edelweissfe.steps.adaptivestepforexplicitsimulations.AdaptiveStepForExplicitSimulations.length">
-<span class="sig-name descname"><span class="pre">length</span></span><a class="headerlink" href="#edelweissfe.steps.adaptivestepforexplicitsimulations.AdaptiveStepForExplicitSimulations.length" title="Link to this definition"></a></dt>
-<dd><p>The durcation of the step.</p>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="edelweissfe.steps.adaptivestepforexplicitsimulations.AdaptiveStepForExplicitSimulations.number">
-<span class="sig-name descname"><span class="pre">number</span></span><a class="headerlink" href="#edelweissfe.steps.adaptivestepforexplicitsimulations.AdaptiveStepForExplicitSimulations.number" title="Link to this definition"></a></dt>
-<dd><p>The (unique) number of the step.</p>
+<dt class="sig sig-object py" id="edelweissfe.steps.adaptivestepforexplicitsimulations.AdaptiveStepForExplicitSimulations.schema">
+<span class="sig-name descname"><span class="pre">schema</span></span><a class="headerlink" href="#edelweissfe.steps.adaptivestepforexplicitsimulations.AdaptiveStepForExplicitSimulations.schema" title="Link to this definition"></a></dt>
+<dd><p>Option schema for this step, per OptionSchemaProvider. Shared with
+<a class="reference internal" href="#edelweissfe.steps.adaptivestep.AdaptiveStep" title="edelweissfe.steps.adaptivestep.AdaptiveStep"><code class="xref py py-class docutils literal notranslate"><span class="pre">AdaptiveStep</span></code></a> – see that class’s own docstring.</p>
+<p>alias of <a class="reference internal" href="#edelweissfe.steps.base.stepbase.StepIncrementationSchema" title="edelweissfe.steps.base.stepbase.StepIncrementationSchema"><code class="xref py py-class docutils literal notranslate"><span class="pre">StepIncrementationSchema</span></code></a></p>
 </dd></dl>
 
 </dd></dl>
@@ -291,7 +338,7 @@ Subsequent Steps inherit StepActions, and they may be updated.</p>
            </div>
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
-        <a href="linsolvers.html" class="btn btn-neutral float-left" title="Linear solvers" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="linsolveapi.html" class="btn btn-neutral float-left" title="Linear solvers: Python API" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
         <a href="analyticalfields.html" class="btn btn-neutral float-right" title="Analytical fields" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 

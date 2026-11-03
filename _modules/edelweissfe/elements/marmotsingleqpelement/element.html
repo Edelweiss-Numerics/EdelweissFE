@@ -14,8 +14,8 @@
       <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
       <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
       <script src="../../../../_static/documentation_options.js?v=17e2f33f"></script>
-      <script src="../../../../_static/doctools.js?v=9bcbadda"></script>
-      <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../../../../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../../../../genindex.html" />
     <link rel="search" title="Search" href="../../../../search.html" /> 
@@ -91,6 +91,7 @@
 <span class="c1">#  2017 - today</span>
 <span class="c1">#</span>
 <span class="c1">#  Matthias Neuner matthias.neuner@uibk.ac.at</span>
+<span class="c1">#  Alexander Dummer alexander.dummer@uibk.ac.at</span>
 <span class="c1">#</span>
 <span class="c1">#  This file is part of EdelweissFE.</span>
 <span class="c1">#</span>
@@ -105,34 +106,35 @@
 <span class="c1"># Created on Wed Aug 31 08:35:06 2022</span>
 <span class="c1"># @author: matthias</span>
 
+<span class="sd">"""</span>
+<span class="sd">A single quadrature point 'element' which drives a Marmot material directly, such that</span>
+<span class="sd">materials can be investigated without any spatial discretization.</span>
+
+<span class="sd">The element itself is agnostic of the material's base class. Everything base class</span>
+<span class="sd">specific, i.e., the coupled fields, the layout of the state variables and how the</span>
+<span class="sd">material response translates into the residual and the tangent, is delegated to a</span>
+<span class="sd">material driver in :mod:`~edelweissfe.elements.marmotsingleqpelement.materialdrivers`.</span>
+<span class="sd">"""</span>
+
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.elements.base.baseelement</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseElement</span>
-
-<span class="c1"># from edelweissfe.elements.marmotsingleqpelement.marmotmaterialgradientenhancedhypoelasticwrapper import (</span>
-<span class="c1">#     MarmotMaterialGradientEnhancedHypoElasticWrapper,</span>
-<span class="c1"># )</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.elements.marmotsingleqpelement.marmotmaterialhypoelasticwrapper</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
-    <span class="n">MarmotMaterialHypoElasticWrapper</span><span class="p">,</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.elements.marmotsingleqpelement.materialdrivers</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">materialDriverForMaterialType</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.points.node</span><span class="w"> </span><span class="kn">import</span> <span class="n">Node</span>
-
-<span class="n">marmotMaterialWrappers</span> <span class="o">=</span> <span class="p">{</span>
-    <span class="s2">&quot;MarmotMaterialHypoElastic&quot;</span><span class="p">:</span> <span class="n">MarmotMaterialHypoElasticWrapper</span><span class="p">,</span>
-    <span class="c1"># &quot;MarmotMaterialGradientEnhancedHypoElastic&quot;: MarmotMaterialGradientEnhancedHypoElasticWrapper,</span>
-<span class="p">}</span>
 
 
 <div class="viewcode-block" id="MarmotMaterialWrappingElement">
 <a class="viewcode-back" href="../../../../documentation/elements.html#edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement">[docs]</a>
 <span class="k">class</span><span class="w"> </span><span class="nc">MarmotMaterialWrappingElement</span><span class="p">(</span><span class="n">BaseElement</span><span class="p">):</span>
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">materialType</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">elNumber</span><span class="p">:</span> <span class="nb">int</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;This element serves as a wrapper for MarmotMaterials,</span>
+<span class="w">        </span><span class="sd">"""This element serves as a driver for MarmotMaterials,</span>
 <span class="sd">        cf. `Marmot &lt;https://github.com/MAteRialMOdelingToolbox/Marmot/&gt;`_.</span>
 
 <span class="sd">        It has a single quadrature point, and one (dummy) node.</span>
-<span class="sd">        For interfacing with specific Marmot materials,</span>
-<span class="sd">        specialized material wrappers are used.</span>
+<span class="sd">        For interfacing with the different Marmot material base classes,</span>
+<span class="sd">        specialized material drivers are used.</span>
 
 <span class="sd">        The element allows to run quadrature point simulations investigating materials</span>
 <span class="sd">        for development purposes.</span>
@@ -140,25 +142,43 @@
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
 <span class="sd">        materialType</span>
-<span class="sd">            The Marmot material class which should be represented, e.g., MarmotMaterialHypoElastic.</span>
+<span class="sd">            The Marmot material base class which should be driven, e.g.,</span>
+<span class="sd">            MarmotMaterialHypoElastic.</span>
 <span class="sd">        elNumber</span>
-<span class="sd">            The number of the element.&quot;&quot;&quot;</span>
+<span class="sd">            The number of the element."""</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_elNumber</span> <span class="o">=</span> <span class="n">elNumber</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_materialType</span> <span class="o">=</span> <span class="n">materialType</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_nNodes</span> <span class="o">=</span> <span class="mi">1</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_nSpatialDimensions</span> <span class="o">=</span> <span class="mi">0</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_ensightType</span> <span class="o">=</span> <span class="s2">&quot;point&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_ensightType</span> <span class="o">=</span> <span class="s2">"point"</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_hasMaterial</span> <span class="o">=</span> <span class="kc">False</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">_marmotMaterialWrapper</span> <span class="o">=</span> <span class="n">marmotMaterialWrappers</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_materialType</span><span class="p">]()</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_fields</span> <span class="o">=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_marmotMaterialWrapper</span><span class="o">.</span><span class="n">fields</span><span class="p">,)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_nDof</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_marmotMaterialWrapper</span><span class="o">.</span><span class="n">nU</span>
+        <span class="c1"># How the driven material is rebuilt by updateMaterialProperty: by its Marmot name, or by</span>
+        <span class="c1"># the type of the already constructed material instance (then the name is None).</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_materialName</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_materialClass</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="c1"># The characteristic element length communicated to the material, if any, which a</span>
+        <span class="c1"># rebuilt material has to be told again.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_characteristicElementLength</span> <span class="o">=</span> <span class="kc">None</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_driver</span> <span class="o">=</span> <span class="n">materialDriverForMaterialType</span><span class="p">(</span><span class="n">materialType</span><span class="p">)()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_fields</span> <span class="o">=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_driver</span><span class="o">.</span><span class="n">fields</span><span class="p">,)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_nDof</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_driver</span><span class="o">.</span><span class="n">nDof</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_dofIndicesPermutation</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_nDof</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">int</span><span class="p">)</span>
+
+        <span class="c1"># A scratch sink for the tangent computeKernelsExplicit() has no use for, reused across</span>
+        <span class="c1"># calls instead of allocating it fresh every time.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_KeScratch</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">_nDof</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_nDof</span><span class="p">))</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">elNumber</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_elNumber</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">elType</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The material driven at the single quadrature point stands for the element type."""</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_materialType</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">nNodes</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
@@ -195,7 +215,7 @@
 <div class="viewcode-block" id="MarmotMaterialWrappingElement.setNodes">
 <a class="viewcode-back" href="../../../../documentation/elements.html#edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.setNodes">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">setNodes</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">nodes</span><span class="p">:</span> <span class="nb">list</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Assign the nodes.</span>
+<span class="w">        </span><span class="sd">"""Assign the nodes.</span>
 
 <span class="sd">        Only the first node is considered.</span>
 
@@ -203,7 +223,7 @@
 <span class="sd">        ----------</span>
 <span class="sd">        nodes</span>
 <span class="sd">            The list of node instances.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
+<span class="sd">        """</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_nodes</span> <span class="o">=</span> <span class="n">nodes</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_nodeCoordinates</span> <span class="o">=</span> <span class="n">nodes</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">coordinates</span>
@@ -213,10 +233,10 @@
 <div class="viewcode-block" id="MarmotMaterialWrappingElement.setProperties">
 <a class="viewcode-back" href="../../../../documentation/elements.html#edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.setProperties">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">setProperties</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">elementProperties</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Not used by this wrapper&quot;&quot;&quot;</span>
+<span class="w">        </span><span class="sd">"""</span>
+<span class="sd">        Not used by this driver"""</span>
 
-        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;This should not be called for this material wrapper!&quot;</span><span class="p">)</span></div>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"This should not be called for this material driver!"</span><span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="MarmotMaterialWrappingElement.initializeElement">
@@ -224,38 +244,106 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">initializeElement</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
     <span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Not used by this wrapper&quot;&quot;&quot;</span></div>
+<span class="w">        </span><span class="sd">"""</span>
+<span class="sd">        Not used by this driver"""</span></div>
 
 
 <div class="viewcode-block" id="MarmotMaterialWrappingElement.setMaterial">
 <a class="viewcode-back" href="../../../../documentation/elements.html#edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.setMaterial">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">setMaterial</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">materialName</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">materialProperties</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Assign a material and material properties to the underlying Wrapper.</span>
-<span class="sd">        Furthermore, create two sets of state vars:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">setMaterial</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">materialNameOrInstance</span><span class="p">,</span> <span class="n">materialProperties</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Assign a material to the underlying driver, either a Marmot material by name and</span>
+<span class="sd">        properties, or an already constructed one (e.g. a native EdelweissFE material, honoring</span>
+<span class="sd">        the same interface as its Marmot point-wise counterpart). Furthermore, create two sets</span>
+<span class="sd">        of state vars:</span>
 
 <span class="sd">            * the actual set,</span>
 <span class="sd">            * and a temporary set for backup in nonlinear iteration schemes</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
-<span class="sd">        materialName</span>
-<span class="sd">            The name of the requested material.</span>
+<span class="sd">        materialNameOrInstance</span>
+<span class="sd">            The name of the requested Marmot material, or an already constructed material.</span>
 <span class="sd">        materialProperties</span>
-<span class="sd">            The properties for he requested material.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
+<span class="sd">            The properties for the requested Marmot material; omitted when passing an already</span>
+<span class="sd">            constructed material.</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">_materialProperties</span> <span class="o">=</span> <span class="n">materialProperties</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_marmotMaterialWrapper</span><span class="o">.</span><span class="n">createMaterial</span><span class="p">(</span><span class="n">materialName</span><span class="o">.</span><span class="n">upper</span><span class="p">(),</span> <span class="n">materialProperties</span><span class="p">)</span>
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        TypeError</span>
+<span class="sd">            If ``materialNameOrInstance`` is a ``str`` and ``materialProperties`` is missing, or</span>
+<span class="sd">            if it is an already constructed material and ``materialProperties`` is given anyway --</span>
+<span class="sd">            dispatching on type rather than only on whether ``materialProperties`` is ``None``</span>
+<span class="sd">            catches a caller passing a bare material name and forgetting the properties</span>
+<span class="sd">            immediately, instead of silently storing the string as the "material" and failing</span>
+<span class="sd">            much later with a confusing ``AttributeError`` out of ``computeKernels``.</span>
+<span class="sd">        """</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">_nStateVars</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_marmotMaterialWrapper</span><span class="o">.</span><span class="n">getNumberOfRequiredStateVars</span><span class="p">()</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">materialNameOrInstance</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">materialProperties</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                    <span class="s2">"setMaterial() requires materialProperties when materialNameOrInstance is "</span>
+                    <span class="s2">"a material name; omit it only when passing an already constructed material."</span>
+                <span class="p">)</span>
+
+            <span class="bp">self</span><span class="o">.</span><span class="n">_materialName</span> <span class="o">=</span> <span class="n">materialNameOrInstance</span><span class="o">.</span><span class="n">upper</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_materialProperties</span> <span class="o">=</span> <span class="n">materialProperties</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_driver</span><span class="o">.</span><span class="n">createMaterial</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_materialName</span><span class="p">,</span> <span class="n">materialProperties</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">materialProperties</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                    <span class="s2">"setMaterial() does not take materialProperties when materialNameOrInstance "</span>
+                    <span class="s2">"is an already constructed material."</span>
+                <span class="p">)</span>
+
+            <span class="bp">self</span><span class="o">.</span><span class="n">_materialName</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_materialClass</span> <span class="o">=</span> <span class="nb">type</span><span class="p">(</span><span class="n">materialNameOrInstance</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_materialProperties</span> <span class="o">=</span> <span class="n">materialNameOrInstance</span><span class="o">.</span><span class="n">materialProperties</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_driver</span><span class="o">.</span><span class="n">setMaterial</span><span class="p">(</span><span class="n">materialNameOrInstance</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_nStateVars</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_driver</span><span class="o">.</span><span class="n">getNumberOfRequiredStateVars</span><span class="p">()</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_stateVars</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_nStateVars</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_stateVarsTemp</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_nStateVars</span><span class="p">)</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">_marmotMaterialWrapper</span><span class="o">.</span><span class="n">assignStateVars</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_stateVarsTemp</span><span class="p">)</span>
+        <span class="c1"># The temporary state vars are only ever overwritten in place, hence the driver</span>
+        <span class="c1"># may hold persistent views into them.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_driver</span><span class="o">.</span><span class="n">assignStateVars</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_stateVarsTemp</span><span class="p">)</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_hasMaterial</span> <span class="o">=</span> <span class="kc">True</span></div>
+
+
+<div class="viewcode-block" id="MarmotMaterialWrappingElement.updateMaterialProperty">
+<a class="viewcode-back" href="../../../../documentation/elements.html#edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.updateMaterialProperty">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">updateMaterialProperty</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">index</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="nb">float</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Change one entry of the property vector of the driven material, keeping the state.</span>
+
+<span class="sd">        The material is rebuilt from its modified property vector and handed the very same state</span>
+<span class="sd">        variable arrays again, which are neither reset nor re-initialized. A characteristic element</span>
+<span class="sd">        length communicated before is communicated to the rebuilt material again.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        index</span>
+<span class="sd">            The index of the property in the material's property vector.</span>
+<span class="sd">        value</span>
+<span class="sd">            The new value of the property.</span>
+<span class="sd">        """</span>
+
+        <span class="n">materialProperties</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_materialProperties</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="n">materialProperties</span><span class="p">[</span><span class="n">index</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_materialName</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_driver</span><span class="o">.</span><span class="n">createMaterial</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_materialName</span><span class="p">,</span> <span class="n">materialProperties</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_driver</span><span class="o">.</span><span class="n">setMaterial</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_materialClass</span><span class="p">(</span><span class="n">materialProperties</span><span class="p">))</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_materialProperties</span> <span class="o">=</span> <span class="n">materialProperties</span>
+
+        <span class="c1"># The driver keeps persistent views into the temporary state vars only.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_driver</span><span class="o">.</span><span class="n">assignStateVars</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_stateVarsTemp</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_characteristicElementLength</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_driver</span><span class="o">.</span><span class="n">setCharacteristicElementLength</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_characteristicElementLength</span><span class="p">)</span></div>
 
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_initializeStateVarsTemp</span><span class="p">(</span>
@@ -268,88 +356,111 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">setInitialCondition</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">stateType</span><span class="p">,</span> <span class="n">values</span><span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_initializeStateVarsTemp</span><span class="p">()</span>
 
-        <span class="k">if</span> <span class="n">stateType</span> <span class="o">==</span> <span class="s2">&quot;initialize material&quot;</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_marmotMaterialWrapper</span><span class="o">.</span><span class="n">initializeYourself</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">stateType</span> <span class="o">==</span> <span class="s2">"initialize material"</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_driver</span><span class="o">.</span><span class="n">initializeYourself</span><span class="p">()</span>
 
-        <span class="k">if</span> <span class="n">stateType</span> <span class="o">==</span> <span class="s2">&quot;characteristic element length&quot;</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_marmotMaterialWrapper</span><span class="o">.</span><span class="n">setCharacteristicElementLength</span><span class="p">(</span><span class="n">values</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">stateType</span> <span class="o">==</span> <span class="s2">"characteristic element length"</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_characteristicElementLength</span> <span class="o">=</span> <span class="n">values</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_driver</span><span class="o">.</span><span class="n">setCharacteristicElementLength</span><span class="p">(</span><span class="n">values</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">acceptLastState</span><span class="p">()</span></div>
 
 
-<div class="viewcode-block" id="MarmotMaterialWrappingElement.computeYourself">
-<a class="viewcode-back" href="../../../../documentation/elements.html#edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.computeYourself">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">computeYourself</span><span class="p">(</span>
+<div class="viewcode-block" id="MarmotMaterialWrappingElement.computeKernels">
+<a class="viewcode-back" href="../../../../documentation/elements.html#edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.computeKernels">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">computeKernels</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
-        <span class="n">Ke</span><span class="p">,</span>
-        <span class="n">Pe</span><span class="p">,</span>
-        <span class="n">U</span><span class="p">,</span>
-        <span class="n">dU</span><span class="p">,</span>
-        <span class="n">time</span><span class="p">,</span>
-        <span class="n">dTime</span><span class="p">,</span>
+        <span class="n">Ke</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+        <span class="n">Pe</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+        <span class="n">U</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+        <span class="n">dU</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+        <span class="n">time</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+        <span class="n">dTime</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
     <span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_initializeStateVarsTemp</span><span class="p">()</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">_marmotMaterialWrapper</span><span class="o">.</span><span class="n">computeYourself</span><span class="p">(</span><span class="n">Ke</span><span class="p">,</span> <span class="n">Pe</span><span class="p">,</span> <span class="n">U</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">time</span><span class="p">,</span> <span class="n">dTime</span><span class="p">)</span>
-
-        <span class="n">Pe</span> <span class="o">*=</span> <span class="o">-</span><span class="mi">1</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_driver</span><span class="o">.</span><span class="n">computeKernels</span><span class="p">(</span><span class="n">Ke</span><span class="p">,</span> <span class="n">Pe</span><span class="p">,</span> <span class="n">U</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">time</span><span class="p">,</span> <span class="n">dTime</span><span class="p">)</span></div>
 
 
-<div class="viewcode-block" id="MarmotMaterialWrappingElement.computeYourselfExplicit">
-<a class="viewcode-back" href="../../../../documentation/elements.html#edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.computeYourselfExplicit">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">computeYourselfExplicit</span><span class="p">(</span>
+<div class="viewcode-block" id="MarmotMaterialWrappingElement.computeKernelsExplicit">
+<a class="viewcode-back" href="../../../../documentation/elements.html#edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.computeKernelsExplicit">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">computeKernelsExplicit</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
-        <span class="n">Pe</span><span class="p">,</span>
-        <span class="n">U</span><span class="p">,</span>
-        <span class="n">dU</span><span class="p">,</span>
-        <span class="n">time</span><span class="p">,</span>
-        <span class="n">dTime</span><span class="p">,</span>
+        <span class="n">Pe</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+        <span class="n">U</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+        <span class="n">dU</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+        <span class="n">time</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+        <span class="n">dTime</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
     <span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Evaluate the material for explicit dynamics, computing and discarding the tangent.</span>
+
+<span class="sd">        Unlike the native ``MarmotElementWrapper``, none of Marmot's point-wise</span>
+<span class="sd">        ``computeStress``/``computePlaneStress``/``computeUniaxialStress`` routines this driver</span>
+<span class="sd">        calls offer a tangent-free variant -- the tangent is always computed as part of the same</span>
+<span class="sd">        call that produces the stress, so there is currently no cheaper path available here.</span>
+<span class="sd">        """</span>
+
         <span class="bp">self</span><span class="o">.</span><span class="n">_initializeStateVarsTemp</span><span class="p">()</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">_marmotMaterialWrapper</span><span class="o">.</span><span class="n">computeYourselfExplicit</span><span class="p">(</span><span class="n">Pe</span><span class="p">,</span> <span class="n">U</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">time</span><span class="p">,</span> <span class="n">dTime</span><span class="p">)</span>
-
-        <span class="n">Pe</span> <span class="o">*=</span> <span class="o">-</span><span class="mi">1</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_driver</span><span class="o">.</span><span class="n">computeKernels</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_KeScratch</span><span class="p">,</span> <span class="n">Pe</span><span class="p">,</span> <span class="n">U</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">time</span><span class="p">,</span> <span class="n">dTime</span><span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="MarmotMaterialWrappingElement.computeLumpedInertia">
 <a class="viewcode-back" href="../../../../documentation/elements.html#edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.computeLumpedInertia">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">computeLumpedInertia</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">Me</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Not implemented for this wrapper.&quot;&quot;&quot;</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">computeLumpedInertia</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">Me</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Not implemented for this driver."""</span>
 
-        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;This should not be called for this wrapper.&quot;</span><span class="p">)</span></div>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"This should not be called for this driver."</span><span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="MarmotMaterialWrappingElement.computeCriticalTimeStepForExplicitDynamics">
 <a class="viewcode-back" href="../../../../documentation/elements.html#edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.computeCriticalTimeStepForExplicitDynamics">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">computeCriticalTimeStepForExplicitDynamics</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">Q</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Not implemented for this wrapper.&quot;&quot;&quot;</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">computeCriticalTimeStepForExplicitDynamics</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">Q</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Not implemented for this driver."""</span>
 
-        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;This should not be called for this wrapper.&quot;</span><span class="p">)</span></div>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"This should not be called for this driver."</span><span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="MarmotMaterialWrappingElement.computeDistributedLoad">
 <a class="viewcode-back" href="../../../../documentation/elements.html#edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.computeDistributedLoad">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">computeDistributedLoad</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">loadType</span><span class="p">,</span> <span class="n">P</span><span class="p">,</span> <span class="n">K</span><span class="p">,</span> <span class="n">faceID</span><span class="p">,</span> <span class="n">load</span><span class="p">,</span> <span class="n">U</span><span class="p">,</span> <span class="n">time</span><span class="p">,</span> <span class="n">dTime</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Not implemented for this wrapper.&quot;&quot;&quot;</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">computeDistributedLoad</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">loadType</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">P</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+        <span class="n">K</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+        <span class="n">faceID</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">load</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+        <span class="n">U</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+        <span class="n">time</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+        <span class="n">dTime</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+    <span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Not implemented for this driver."""</span>
 
-        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;This should not be called for this wrapper.&quot;</span><span class="p">)</span></div>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"This should not be called for this driver."</span><span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="MarmotMaterialWrappingElement.computeInternalEnergy">
 <a class="viewcode-back" href="../../../../documentation/elements.html#edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.computeInternalEnergy">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">computeInternalEnergy</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Not implemented for this wrapper.&quot;&quot;&quot;</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">computeInternalEnergy</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Not implemented for this driver."""</span>
 
-        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;This should not be called for this wrapper.&quot;</span><span class="p">)</span></div>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"This should not be called for this driver."</span><span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="MarmotMaterialWrappingElement.computeBodyForce">
 <a class="viewcode-back" href="../../../../documentation/elements.html#edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.computeBodyForce">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">computeBodyForce</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">P</span><span class="p">,</span> <span class="n">K</span><span class="p">,</span> <span class="n">load</span><span class="p">,</span> <span class="n">U</span><span class="p">,</span> <span class="n">time</span><span class="p">,</span> <span class="n">dTime</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Not implemented for this wrapper.&quot;&quot;&quot;</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">computeBodyForce</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">P</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+        <span class="n">K</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+        <span class="n">load</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+        <span class="n">U</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+        <span class="n">time</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+        <span class="n">dTime</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+    <span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Not implemented for this driver."""</span>
 
-        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;This should not be called for this wrapper.&quot;</span><span class="p">)</span></div>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"This should not be called for this driver."</span><span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="MarmotMaterialWrappingElement.acceptLastState">
@@ -357,7 +468,7 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">acceptLastState</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
     <span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Accept the computed state.&quot;&quot;&quot;</span>
+<span class="w">        </span><span class="sd">"""Accept the computed state."""</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_stateVars</span><span class="p">[:]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stateVarsTemp</span></div>
 
@@ -370,21 +481,39 @@
         <span class="k">pass</span></div>
 
 
+<div class="viewcode-block" id="MarmotMaterialWrappingElement.getStateVars">
+<a class="viewcode-back" href="../../../../documentation/elements.html#edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.getStateVars">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">getStateVars</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Return a copy of the converged state-variable buffer."""</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stateVars</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span></div>
+
+
+<div class="viewcode-block" id="MarmotMaterialWrappingElement.setStateVars">
+<a class="viewcode-back" href="../../../../documentation/elements.html#edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.setStateVars">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">setStateVars</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">values</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Overwrite the converged and trial state-variable buffers in place (so the</span>
+<span class="sd">        Marmot material wrapper's assigned pointer to the trial buffer stays valid)."""</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_stateVars</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">values</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_stateVarsTemp</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">values</span></div>
+
+
 <div class="viewcode-block" id="MarmotMaterialWrappingElement.getResultArray">
 <a class="viewcode-back" href="../../../../documentation/elements.html#edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.getResultArray">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">getResultArray</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">result</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">quadraturePoint</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">getPersistentView</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_marmotMaterialWrapper</span><span class="o">.</span><span class="n">getResultArray</span><span class="p">(</span><span class="n">result</span><span class="p">,</span> <span class="n">getPersistentView</span><span class="p">)</span></div>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_driver</span><span class="o">.</span><span class="n">getResultArray</span><span class="p">(</span><span class="n">result</span><span class="p">,</span> <span class="n">getPersistentView</span><span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="MarmotMaterialWrappingElement.getCoordinatesAtCenter">
 <a class="viewcode-back" href="../../../../documentation/elements.html#edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.getCoordinatesAtCenter">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">getCoordinatesAtCenter</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the only node&#39;s coordinates.</span>
+<span class="w">        </span><span class="sd">"""Return the only node's coordinates.</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
 <span class="sd">        np.ndarray</span>
-<span class="sd">            The node&#39;s coordinates.&quot;&quot;&quot;</span>
+<span class="sd">            The node's coordinates."""</span>
 
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_nodeCoordinates</span></div>
 
@@ -392,12 +521,12 @@
 <div class="viewcode-block" id="MarmotMaterialWrappingElement.getCoordinatesAtQuadraturePoints">
 <a class="viewcode-back" href="../../../../documentation/elements.html#edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.getCoordinatesAtQuadraturePoints">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">getCoordinatesAtQuadraturePoints</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the only qp&#39;s coordinates.</span>
+<span class="w">        </span><span class="sd">"""Return the only qp's coordinates.</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
 <span class="sd">        np.ndarray</span>
-<span class="sd">            The qp&#39;s coordinates.&quot;&quot;&quot;</span>
+<span class="sd">            The qp's coordinates."""</span>
 
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_qpCoordinates</span></div>
 
@@ -405,21 +534,21 @@
 <div class="viewcode-block" id="MarmotMaterialWrappingElement.getNumberOfQuadraturePoints">
 <a class="viewcode-back" href="../../../../documentation/elements.html#edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.getNumberOfQuadraturePoints">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">getNumberOfQuadraturePoints</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the only qp&#39;s coordinates.</span>
+<span class="w">        </span><span class="sd">"""Return the only qp's coordinates.</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
 <span class="sd">        np.ndarray</span>
-<span class="sd">            The qp&#39;s coordinates.&quot;&quot;&quot;</span>
+<span class="sd">            The qp's coordinates."""</span>
 
         <span class="k">return</span> <span class="mi">1</span></div>
 
 
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">visualizationNodes</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">Node</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;The nodes for visualization. Commonly, these are the same as the nodes of the entity.</span>
+<span class="w">        </span><span class="sd">"""The nodes for visualization. Commonly, these are the same as the nodes of the entity.</span>
 <span class="sd">        However, in some cases, the visualization nodes are different from the nodes of the entity, e.g., in case of mixed formulations.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
+<span class="sd">        """</span>
 
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_nodes</span></div>
 

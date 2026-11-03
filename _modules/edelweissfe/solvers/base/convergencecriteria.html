@@ -1,0 +1,523 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>edelweissfe.solvers.base.convergencecriteria &mdash; EdelweissFE v22.07 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=cfdaff8d" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css?v=37fbe429" />
+
+  
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=17e2f33f"></script>
+      <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            EdelweissFE
+              <img src="../../../../_static/edelweiss_fe_logo.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../features.html">Features</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../prerequisites.html">Prerequisites</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../documentation/index.html">Documentation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../contributors.html">Contributors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../publications.html">Publications</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">EdelweissFE</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">edelweissfe.solvers.base.convergencecriteria</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for edelweissfe.solvers.base.convergencecriteria</h1><div class="highlight"><pre>
+<span></span><span class="ch">#!/usr/bin/env python3</span>
+<span class="c1"># -*- coding: utf-8 -*-</span>
+<span class="c1">#  ---------------------------------------------------------------------</span>
+<span class="c1">#</span>
+<span class="c1">#  _____    _      _              _         _____ _____</span>
+<span class="c1"># | ____|__| | ___| |_      _____(_)___ ___|  ___| ____|</span>
+<span class="c1"># |  _| / _` |/ _ \ \ \ /\ / / _ \ / __/ __| |_  |  _|</span>
+<span class="c1"># | |__| (_| |  __/ |\ V  V /  __/ \__ \__ \  _| | |___</span>
+<span class="c1"># |_____\__,_|\___|_| \_/\_/ \___|_|___/___/_|   |_____|</span>
+<span class="c1">#</span>
+<span class="c1">#</span>
+<span class="c1">#  Unit of Strength of Materials and Structural Analysis</span>
+<span class="c1">#  University of Innsbruck,</span>
+<span class="c1">#  2017 - today</span>
+<span class="c1">#</span>
+<span class="c1">#  Matthias Neuner matthias.neuner@uibk.ac.at</span>
+<span class="c1">#</span>
+<span class="c1">#  This file is part of EdelweissFE.</span>
+<span class="c1">#</span>
+<span class="c1">#  This library is free software; you can redistribute it and/or</span>
+<span class="c1">#  modify it under the terms of the GNU Lesser General Public</span>
+<span class="c1">#  License as published by the Free Software Foundation; either</span>
+<span class="c1">#  version 2.1 of the License, or (at your option) any later version.</span>
+<span class="c1">#</span>
+<span class="c1">#  The full text of the license can be found in the file LICENSE.md at</span>
+<span class="c1">#  the top level directory of EdelweissFE.</span>
+<span class="c1">#  ---------------------------------------------------------------------</span>
+<span class="sd">"""Field-wise convergence criteria for the Newton-Raphson iterations of the implicit solvers.</span>
+
+<span class="sd">Two criteria are available, selected by the solver option ``convergenceCriterion``:</span>
+
+<span class="sd">``legacy`` (default)</span>
+<span class="sd">    The original EdelweissFE criterion. A field is converged if</span>
+
+<span class="sd">    .. math::</span>
+
+<span class="sd">        r_{\\max} \\leq \\max(R \\, \\bar{q}, 10^{-7}) \\quad \\text{and} \\quad c_{\\max} &lt; C,</span>
+
+<span class="sd">    with the *absolute* correction tolerance :math:`C` (``fieldCorrectionTolerance``), the residual tolerance</span>
+<span class="sd">    :math:`R` (``fluxResidualTolerance``, ``fluxResidualToleranceAlternative`` from iteration 15 on), and the</span>
+<span class="sd">    spatial average flux :math:`\\bar{q}` of the *current* iteration, computed from the element fluxes only.</span>
+
+<span class="sd">``abaqus``</span>
+<span class="sd">    The criterion of Abaqus/Standard ("Convergence criteria for nonlinear problems", Abaqus Analysis User's</span>
+<span class="sd">    Guide), with its default parameters as printed in the ``.msg`` file of an Abaqus run without ``*CONTROLS``.</span>
+<span class="sd">    A field is converged if</span>
+
+<span class="sd">    .. math::</span>
+
+<span class="sd">        r_{\\max} \\leq R_n \\, \\tilde{q} \\quad \\text{and} \\quad c_{\\max} \\leq C_n \\, \\Delta u_{\\max},</span>
+
+<span class="sd">    with :math:`R_n` replaced by :math:`R_p` from iteration :math:`I_p` on. :math:`\\Delta u_{\\max}` is the</span>
+<span class="sd">    largest increment of the field in the current increment, so the correction criterion is *relative*.</span>
+<span class="sd">    :math:`\\tilde{q}` is the *time average* flux: the spatial average flux :math:`\\bar{q}` averaged over all</span>
+<span class="sd">    converged increments of the step in which the field carried flux, and the current iteration. The spatial</span>
+<span class="sd">    average :math:`\\bar{q}` includes the fluxes of constraints (e.g., contact forces). Until a field has carried</span>
+<span class="sd">    flux, :math:`\\tilde{q}` is the time average flux of the previous step or, in the first step, the initial value</span>
+<span class="sd">    :math:`\\tilde{q}^0` (Abaqus' "initial value of time average force", ``1e-2``).</span>
+
+<span class="sd">    A field whose current spatial average flux is below :math:`\\varepsilon \\, \\tilde{q}` carries no flux; it is</span>
+<span class="sd">    converged if :math:`c_{\\max} \\leq C_\\varepsilon \\, \\Delta u_{\\max}`. A field with</span>
+<span class="sd">    :math:`r_{\\max} \\leq R_l \\, \\tilde{q}` is converged irrespective of the correction (linear case).</span>
+
+<span class="sd">    Not implemented: the estimate of the next correction from the convergence rate (Abaqus accepts an increment</span>
+<span class="sd">    if it predicts a small enough correction), and the detection of inactive regions for the spatial average.</span>
+<span class="sd">    Both make Abaqus' criterion *more* permissive than this implementation.</span>
+<span class="sd">"""</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">ABC</span><span class="p">,</span> <span class="n">abstractmethod</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.dofmanager</span><span class="w"> </span><span class="kn">import</span> <span class="n">DofManager</span><span class="p">,</span> <span class="n">DofVector</span>
+
+
+<div class="viewcode-block" id="FieldConvergence">
+<a class="viewcode-back" href="../../../../documentation/solvers.html#edelweissfe.solvers.base.convergencecriteria.FieldConvergence">[docs]</a>
+<span class="nd">@dataclass</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">FieldConvergence</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""The convergence state of one field in one iteration.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    fluxResidual</span>
+<span class="sd">        The largest absolute flux residual :math:`r_{\\max}`.</span>
+<span class="sd">    fluxResidualConverged</span>
+<span class="sd">        True if the flux residual criterion is satisfied.</span>
+<span class="sd">    correction</span>
+<span class="sd">        The largest absolute correction :math:`c_{\\max}`.</span>
+<span class="sd">    correctionConverged</span>
+<span class="sd">        True if the correction criterion is satisfied.</span>
+<span class="sd">    indexOfLargestResidual</span>
+<span class="sd">        The index of :math:`r_{\\max}` in the dof vector of the field.</span>
+<span class="sd">    """</span>
+
+    <span class="n">fluxResidual</span><span class="p">:</span> <span class="nb">float</span>
+    <span class="n">fluxResidualConverged</span><span class="p">:</span> <span class="nb">bool</span>
+    <span class="n">correction</span><span class="p">:</span> <span class="nb">float</span>
+    <span class="n">correctionConverged</span><span class="p">:</span> <span class="nb">bool</span>
+    <span class="n">indexOfLargestResidual</span><span class="p">:</span> <span class="nb">int</span></div>
+
+
+
+<div class="viewcode-block" id="ConvergenceCriterionBase">
+<a class="viewcode-back" href="../../../../documentation/solvers.html#edelweissfe.solvers.base.convergencecriteria.ConvergenceCriterionBase">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">ConvergenceCriterionBase</span><span class="p">(</span><span class="n">ABC</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Base class for the field-wise convergence criteria of the implicit solvers."""</span>
+
+<div class="viewcode-block" id="ConvergenceCriterionBase.startStep">
+<a class="viewcode-back" href="../../../../documentation/solvers.html#edelweissfe.solvers.base.convergencecriteria.ConvergenceCriterionBase.startStep">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">startStep</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">previousCriterion</span><span class="p">:</span> <span class="s2">"ConvergenceCriterionBase | None"</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Called at the beginning of each step.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        previousCriterion</span>
+<span class="sd">            The criterion of the previous step, if any.</span>
+<span class="sd">        """</span></div>
+
+
+<div class="viewcode-block" id="ConvergenceCriterionBase.timeAveragedFluxesAtStepEnd">
+<a class="viewcode-back" href="../../../../documentation/solvers.html#edelweissfe.solvers.base.convergencecriteria.ConvergenceCriterionBase.timeAveragedFluxesAtStepEnd">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">timeAveragedFluxesAtStepEnd</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""The time average fluxes at the end of the step, used as reference by the criterion of the next step.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        dict[str,float]</span>
+<span class="sd">            The time average flux per field; empty for criteria without time averaging.</span>
+<span class="sd">        """</span>
+        <span class="k">return</span> <span class="p">{}</span></div>
+
+
+<div class="viewcode-block" id="ConvergenceCriterionBase.acceptIncrement">
+<a class="viewcode-back" href="../../../../documentation/solvers.html#edelweissfe.solvers.base.convergencecriteria.ConvergenceCriterionBase.acceptIncrement">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">acceptIncrement</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Called once an increment is converged and accepted."""</span></div>
+
+
+<div class="viewcode-block" id="ConvergenceCriterionBase.checkField">
+<a class="viewcode-back" href="../../../../documentation/solvers.html#edelweissfe.solvers.base.convergencecriteria.ConvergenceCriterionBase.checkField">[docs]</a>
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">checkField</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">field</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">R</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+        <span class="n">ddU</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">dU</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+        <span class="n">spatialAveragedFlux</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+        <span class="n">iterationCounter</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">FieldConvergence</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Check the convergence of a single field.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        field</span>
+<span class="sd">            The name of the field.</span>
+<span class="sd">        R</span>
+<span class="sd">            The residual of the field.</span>
+<span class="sd">        ddU</span>
+<span class="sd">            The current correction of the field, None if no correction was computed yet in this increment.</span>
+<span class="sd">        dU</span>
+<span class="sd">            The current increment of the field.</span>
+<span class="sd">        spatialAveragedFlux</span>
+<span class="sd">            The spatial average flux :math:`\\bar{q}` of the field in the current iteration.</span>
+<span class="sd">        iterationCounter</span>
+<span class="sd">            The current iteration number.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        FieldConvergence</span>
+<span class="sd">            The convergence state of the field.</span>
+<span class="sd">        """</span></div>
+
+
+<div class="viewcode-block" id="ConvergenceCriterionBase.computeSpatialAveragedFluxes">
+<a class="viewcode-back" href="../../../../documentation/solvers.html#edelweissfe.solvers.base.convergencecriteria.ConvergenceCriterionBase.computeSpatialAveragedFluxes">[docs]</a>
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">computeSpatialAveragedFluxes</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">F</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">FConstraints</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">theDofManager</span><span class="p">:</span> <span class="n">DofManager</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""Compute the spatial average flux of every field.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        F</span>
+<span class="sd">            The accumulated absolute element fluxes.</span>
+<span class="sd">        FConstraints</span>
+<span class="sd">            The accumulated absolute constraint fluxes.</span>
+<span class="sd">        theDofManager</span>
+<span class="sd">            The DofManager.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        dict[str,float]</span>
+<span class="sd">            The spatial average flux of every field.</span>
+<span class="sd">        """</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="LegacyConvergenceCriterion">
+<a class="viewcode-back" href="../../../../documentation/solvers.html#edelweissfe.solvers.base.convergencecriteria.LegacyConvergenceCriterion">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">LegacyConvergenceCriterion</span><span class="p">(</span><span class="n">ConvergenceCriterionBase</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""The original EdelweissFE criterion; see the module documentation.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    fluxResidualTolerances</span>
+<span class="sd">        The relative flux residual tolerances per field.</span>
+<span class="sd">    fluxResidualTolerancesAlt</span>
+<span class="sd">        The relative flux residual tolerances per field from iteration 15 on.</span>
+<span class="sd">    fieldCorrectionTolerances</span>
+<span class="sd">        The absolute correction tolerances per field.</span>
+<span class="sd">    """</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">fluxResidualTolerances</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span> <span class="n">fluxResidualTolerancesAlt</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span> <span class="n">fieldCorrectionTolerances</span><span class="p">:</span> <span class="nb">dict</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">fluxResidualTolerances</span> <span class="o">=</span> <span class="n">fluxResidualTolerances</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">fluxResidualTolerancesAlt</span> <span class="o">=</span> <span class="n">fluxResidualTolerancesAlt</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">fieldCorrectionTolerances</span> <span class="o">=</span> <span class="n">fieldCorrectionTolerances</span>
+
+<div class="viewcode-block" id="LegacyConvergenceCriterion.checkField">
+<a class="viewcode-back" href="../../../../documentation/solvers.html#edelweissfe.solvers.base.convergencecriteria.LegacyConvergenceCriterion.checkField">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">checkField</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">field</span><span class="p">,</span> <span class="n">R</span><span class="p">,</span> <span class="n">ddU</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">spatialAveragedFlux</span><span class="p">,</span> <span class="n">iterationCounter</span><span class="p">):</span>
+        <span class="n">fluxResidualTolerances</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">fluxResidualTolerances</span> <span class="k">if</span> <span class="n">iterationCounter</span> <span class="o">&lt;</span> <span class="mi">15</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">fluxResidualTolerancesAlt</span>
+        <span class="p">)</span>
+
+        <span class="n">indexOfMax</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">argmax</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">R</span><span class="p">))</span>
+        <span class="n">fluxResidual</span> <span class="o">=</span> <span class="nb">abs</span><span class="p">(</span><span class="n">R</span><span class="p">[</span><span class="n">indexOfMax</span><span class="p">])</span>
+        <span class="n">correction</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">ddU</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">inf</span><span class="p">)</span> <span class="k">if</span> <span class="n">ddU</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="mf">0.0</span>
+
+        <span class="k">return</span> <span class="n">FieldConvergence</span><span class="p">(</span>
+            <span class="n">fluxResidual</span><span class="p">,</span>
+            <span class="n">fluxResidual</span> <span class="o">&lt;=</span> <span class="nb">max</span><span class="p">(</span><span class="n">fluxResidualTolerances</span><span class="p">[</span><span class="n">field</span><span class="p">]</span> <span class="o">*</span> <span class="n">spatialAveragedFlux</span><span class="p">,</span> <span class="mf">1e-7</span><span class="p">),</span>
+            <span class="n">correction</span><span class="p">,</span>
+            <span class="n">correction</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">fieldCorrectionTolerances</span><span class="p">[</span><span class="n">field</span><span class="p">],</span>
+            <span class="n">indexOfMax</span><span class="p">,</span>
+        <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="LegacyConvergenceCriterion.computeSpatialAveragedFluxes">
+<a class="viewcode-back" href="../../../../documentation/solvers.html#edelweissfe.solvers.base.convergencecriteria.LegacyConvergenceCriterion.computeSpatialAveragedFluxes">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">computeSpatialAveragedFluxes</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">F</span><span class="p">,</span> <span class="n">FConstraints</span><span class="p">,</span> <span class="n">theDofManager</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="n">field</span><span class="p">:</span> <span class="nb">max</span><span class="p">(</span><span class="mf">1e-10</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">F</span><span class="p">[</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">idcsOfFieldsInDofVector</span><span class="p">[</span><span class="n">field</span><span class="p">]],</span> <span class="mi">1</span><span class="p">)</span> <span class="o">/</span> <span class="n">nDof</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">field</span><span class="p">,</span> <span class="n">nDof</span> <span class="ow">in</span> <span class="n">theDofManager</span><span class="o">.</span><span class="n">nAccumulatedNodalFluxesFieldwise</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+        <span class="p">}</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="AbaqusConvergenceCriterion">
+<a class="viewcode-back" href="../../../../documentation/solvers.html#edelweissfe.solvers.base.convergencecriteria.AbaqusConvergenceCriterion">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">AbaqusConvergenceCriterion</span><span class="p">(</span><span class="n">ConvergenceCriterionBase</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""The criterion of Abaqus/Standard; see the module documentation.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    residualTolerance</span>
+<span class="sd">        :math:`R_n`, the flux residual tolerance relative to the time average flux.</span>
+<span class="sd">    correctionTolerance</span>
+<span class="sd">        :math:`C_n`, the correction tolerance relative to the largest increment of the field.</span>
+<span class="sd">    residualToleranceAlternative</span>
+<span class="sd">        :math:`R_p`, the flux residual tolerance used from iteration :math:`I_p` on.</span>
+<span class="sd">    iterationsForAlternativeTolerance</span>
+<span class="sd">        :math:`I_p`.</span>
+<span class="sd">    zeroFluxThreshold</span>
+<span class="sd">        :math:`\\varepsilon`, below which a field is considered to carry no flux, relative to the time average flux.</span>
+<span class="sd">    zeroFluxCorrectionTolerance</span>
+<span class="sd">        :math:`C_\\varepsilon`, the correction tolerance of a field without flux.</span>
+<span class="sd">    linearResidualTolerance</span>
+<span class="sd">        :math:`R_l`, below which a field is converged irrespective of its correction.</span>
+<span class="sd">    initialTimeAveragedFlux</span>
+<span class="sd">        :math:`\\tilde{q}^0`, the time average flux of a field that has not carried flux yet, in the first step.</span>
+<span class="sd">    """</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">residualTolerance</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">5e-3</span><span class="p">,</span>
+        <span class="n">correctionTolerance</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1e-2</span><span class="p">,</span>
+        <span class="n">residualToleranceAlternative</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">2e-2</span><span class="p">,</span>
+        <span class="n">iterationsForAlternativeTolerance</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">9</span><span class="p">,</span>
+        <span class="n">zeroFluxThreshold</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1e-5</span><span class="p">,</span>
+        <span class="n">zeroFluxCorrectionTolerance</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1e-3</span><span class="p">,</span>
+        <span class="n">linearResidualTolerance</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1e-8</span><span class="p">,</span>
+        <span class="n">initialTimeAveragedFlux</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1e-2</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">residualTolerance</span> <span class="o">=</span> <span class="n">residualTolerance</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">correctionTolerance</span> <span class="o">=</span> <span class="n">correctionTolerance</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">residualToleranceAlternative</span> <span class="o">=</span> <span class="n">residualToleranceAlternative</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">iterationsForAlternativeTolerance</span> <span class="o">=</span> <span class="n">iterationsForAlternativeTolerance</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">zeroFluxThreshold</span> <span class="o">=</span> <span class="n">zeroFluxThreshold</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">zeroFluxCorrectionTolerance</span> <span class="o">=</span> <span class="n">zeroFluxCorrectionTolerance</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">linearResidualTolerance</span> <span class="o">=</span> <span class="n">linearResidualTolerance</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">initialTimeAveragedFlux</span> <span class="o">=</span> <span class="n">initialTimeAveragedFlux</span>
+
+        <span class="c1"># Per field: the sum and the number of the spatial average fluxes of the converged increments with flux.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_sumOfConvergedSpatialAveragedFluxes</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_nIncrementsWithFlux</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="c1"># Per field: the time average flux of the previous step, the reference for the zero flux check in the</span>
+        <span class="c1"># first increment of a step.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_timeAveragedFluxOfPreviousStep</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="c1"># Per field: the spatial average flux of the last checked iteration, recorded if the increment is accepted.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_spatialAveragedFluxOfLastIteration</span> <span class="o">=</span> <span class="p">{}</span>
+
+<div class="viewcode-block" id="AbaqusConvergenceCriterion.startStep">
+<a class="viewcode-back" href="../../../../documentation/solvers.html#edelweissfe.solvers.base.convergencecriteria.AbaqusConvergenceCriterion.startStep">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">startStep</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">previousCriterion</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">previousCriterion</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_timeAveragedFluxOfPreviousStep</span> <span class="o">=</span> <span class="n">previousCriterion</span><span class="o">.</span><span class="n">timeAveragedFluxesAtStepEnd</span><span class="p">()</span></div>
+
+
+<div class="viewcode-block" id="AbaqusConvergenceCriterion.timeAveragedFluxesAtStepEnd">
+<a class="viewcode-back" href="../../../../documentation/solvers.html#edelweissfe.solvers.base.convergencecriteria.AbaqusConvergenceCriterion.timeAveragedFluxesAtStepEnd">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">timeAveragedFluxesAtStepEnd</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">fields</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_timeAveragedFluxOfPreviousStep</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span> <span class="o">|</span> <span class="bp">self</span><span class="o">.</span><span class="n">_nIncrementsWithFlux</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span>
+        <span class="k">return</span> <span class="p">{</span><span class="n">field</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_timeAveragedFluxOfConvergedIncrements</span><span class="p">(</span><span class="n">field</span><span class="p">)</span> <span class="k">for</span> <span class="n">field</span> <span class="ow">in</span> <span class="n">fields</span><span class="p">}</span></div>
+
+
+<div class="viewcode-block" id="AbaqusConvergenceCriterion.acceptIncrement">
+<a class="viewcode-back" href="../../../../documentation/solvers.html#edelweissfe.solvers.base.convergencecriteria.AbaqusConvergenceCriterion.acceptIncrement">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">acceptIncrement</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">for</span> <span class="n">field</span><span class="p">,</span> <span class="n">spatialAveragedFlux</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_spatialAveragedFluxOfLastIteration</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_carriesFlux</span><span class="p">(</span><span class="n">field</span><span class="p">,</span> <span class="n">spatialAveragedFlux</span><span class="p">):</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_sumOfConvergedSpatialAveragedFluxes</span><span class="p">[</span><span class="n">field</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_sumOfConvergedSpatialAveragedFluxes</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">field</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span> <span class="o">+</span> <span class="n">spatialAveragedFlux</span>
+                <span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_nIncrementsWithFlux</span><span class="p">[</span><span class="n">field</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_nIncrementsWithFlux</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">field</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_spatialAveragedFluxOfLastIteration</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_timeAveragedFluxOfConvergedIncrements</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">field</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+        <span class="n">nIncrements</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_nIncrementsWithFlux</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">field</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">nIncrements</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_timeAveragedFluxOfPreviousStep</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">field</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">initialTimeAveragedFlux</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sumOfConvergedSpatialAveragedFluxes</span><span class="p">[</span><span class="n">field</span><span class="p">]</span> <span class="o">/</span> <span class="n">nIncrements</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_carriesFlux</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">field</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">spatialAveragedFlux</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">spatialAveragedFlux</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">zeroFluxThreshold</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">_timeAveragedFluxOfConvergedIncrements</span><span class="p">(</span><span class="n">field</span><span class="p">)</span>
+
+<div class="viewcode-block" id="AbaqusConvergenceCriterion.timeAveragedFlux">
+<a class="viewcode-back" href="../../../../documentation/solvers.html#edelweissfe.solvers.base.convergencecriteria.AbaqusConvergenceCriterion.timeAveragedFlux">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">timeAveragedFlux</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">field</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">spatialAveragedFlux</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The time average flux :math:`\\tilde{q}`, including the current iteration if the field carries flux.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        field</span>
+<span class="sd">            The name of the field.</span>
+<span class="sd">        spatialAveragedFlux</span>
+<span class="sd">            The spatial average flux :math:`\\bar{q}` of the field in the current iteration.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        float</span>
+<span class="sd">            The time average flux.</span>
+<span class="sd">        """</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_carriesFlux</span><span class="p">(</span><span class="n">field</span><span class="p">,</span> <span class="n">spatialAveragedFlux</span><span class="p">):</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_timeAveragedFluxOfConvergedIncrements</span><span class="p">(</span><span class="n">field</span><span class="p">)</span>
+
+        <span class="n">nIncrements</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_nIncrementsWithFlux</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">field</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+        <span class="k">return</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_sumOfConvergedSpatialAveragedFluxes</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">field</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span> <span class="o">+</span> <span class="n">spatialAveragedFlux</span><span class="p">)</span> <span class="o">/</span> <span class="p">(</span><span class="n">nIncrements</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="AbaqusConvergenceCriterion.checkField">
+<a class="viewcode-back" href="../../../../documentation/solvers.html#edelweissfe.solvers.base.convergencecriteria.AbaqusConvergenceCriterion.checkField">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">checkField</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">field</span><span class="p">,</span> <span class="n">R</span><span class="p">,</span> <span class="n">ddU</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">spatialAveragedFlux</span><span class="p">,</span> <span class="n">iterationCounter</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_spatialAveragedFluxOfLastIteration</span><span class="p">[</span><span class="n">field</span><span class="p">]</span> <span class="o">=</span> <span class="n">spatialAveragedFlux</span>
+
+        <span class="n">indexOfMax</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">argmax</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">R</span><span class="p">))</span>
+        <span class="n">fluxResidual</span> <span class="o">=</span> <span class="nb">abs</span><span class="p">(</span><span class="n">R</span><span class="p">[</span><span class="n">indexOfMax</span><span class="p">])</span>
+        <span class="n">correction</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">ddU</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">inf</span><span class="p">)</span> <span class="k">if</span> <span class="n">ddU</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="mf">0.0</span>
+        <span class="n">largestIncrement</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">dU</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">inf</span><span class="p">)</span>
+        <span class="n">timeAveragedFlux</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">timeAveragedFlux</span><span class="p">(</span><span class="n">field</span><span class="p">,</span> <span class="n">spatialAveragedFlux</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_carriesFlux</span><span class="p">(</span><span class="n">field</span><span class="p">,</span> <span class="n">spatialAveragedFlux</span><span class="p">):</span>
+            <span class="c1"># A field without flux and without residual (e.g., a nonlocal field before the onset of damage) has</span>
+            <span class="c1"># nothing left to iterate on, even if its correction is pure round-off of the size of its increment.</span>
+            <span class="n">correctionConverged</span> <span class="o">=</span> <span class="n">fluxResidual</span> <span class="o">==</span> <span class="mf">0.0</span> <span class="ow">or</span> <span class="p">(</span>
+                <span class="n">ddU</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">correction</span> <span class="o">&lt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">zeroFluxCorrectionTolerance</span> <span class="o">*</span> <span class="n">largestIncrement</span>
+            <span class="p">)</span>
+            <span class="k">return</span> <span class="n">FieldConvergence</span><span class="p">(</span><span class="n">fluxResidual</span><span class="p">,</span> <span class="kc">True</span><span class="p">,</span> <span class="n">correction</span><span class="p">,</span> <span class="n">correctionConverged</span><span class="p">,</span> <span class="n">indexOfMax</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">fluxResidual</span> <span class="o">&lt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">linearResidualTolerance</span> <span class="o">*</span> <span class="n">timeAveragedFlux</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">FieldConvergence</span><span class="p">(</span><span class="n">fluxResidual</span><span class="p">,</span> <span class="kc">True</span><span class="p">,</span> <span class="n">correction</span><span class="p">,</span> <span class="kc">True</span><span class="p">,</span> <span class="n">indexOfMax</span><span class="p">)</span>
+
+        <span class="n">residualTolerance</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">residualTolerance</span>
+            <span class="k">if</span> <span class="n">iterationCounter</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">iterationsForAlternativeTolerance</span>
+            <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">residualToleranceAlternative</span>
+        <span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">FieldConvergence</span><span class="p">(</span>
+            <span class="n">fluxResidual</span><span class="p">,</span>
+            <span class="n">fluxResidual</span> <span class="o">&lt;=</span> <span class="n">residualTolerance</span> <span class="o">*</span> <span class="n">timeAveragedFlux</span><span class="p">,</span>
+            <span class="n">correction</span><span class="p">,</span>
+            <span class="n">ddU</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">correction</span> <span class="o">&lt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">correctionTolerance</span> <span class="o">*</span> <span class="n">largestIncrement</span><span class="p">,</span>
+            <span class="n">indexOfMax</span><span class="p">,</span>
+        <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="AbaqusConvergenceCriterion.computeSpatialAveragedFluxes">
+<a class="viewcode-back" href="../../../../documentation/solvers.html#edelweissfe.solvers.base.convergencecriteria.AbaqusConvergenceCriterion.computeSpatialAveragedFluxes">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">computeSpatialAveragedFluxes</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">F</span><span class="p">,</span> <span class="n">FConstraints</span><span class="p">,</span> <span class="n">theDofManager</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="n">field</span><span class="p">:</span> <span class="p">(</span>
+                <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">F</span><span class="p">[</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">idcsOfFieldsInDofVector</span><span class="p">[</span><span class="n">field</span><span class="p">]],</span> <span class="mi">1</span><span class="p">)</span>
+                <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">FConstraints</span><span class="p">[</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">idcsOfFieldsInDofVector</span><span class="p">[</span><span class="n">field</span><span class="p">]],</span> <span class="mi">1</span><span class="p">)</span>
+            <span class="p">)</span>
+            <span class="o">/</span> <span class="n">nDof</span>
+            <span class="k">for</span> <span class="n">field</span><span class="p">,</span> <span class="n">nDof</span> <span class="ow">in</span> <span class="n">theDofManager</span><span class="o">.</span><span class="n">nAccumulatedNodalFluxesFieldwise</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+        <span class="p">}</span></div>
+</div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Matthias Neuner.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

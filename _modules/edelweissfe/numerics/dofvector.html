@@ -1,0 +1,272 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>edelweissfe.numerics.dofvector &mdash; EdelweissFE v22.07 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=cfdaff8d" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/custom.css?v=37fbe429" />
+
+  
+      <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../_static/documentation_options.js?v=17e2f33f"></script>
+      <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../index.html" class="icon icon-home">
+            EdelweissFE
+              <img src="../../../_static/edelweiss_fe_logo.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../features.html">Features</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../prerequisites.html">Prerequisites</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../documentation/index.html">Documentation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../contributors.html">Contributors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../publications.html">Publications</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">EdelweissFE</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">edelweissfe.numerics.dofvector</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for edelweissfe.numerics.dofvector</h1><div class="highlight"><pre>
+<span></span><span class="ch">#!/usr/bin/env python3</span>
+<span class="c1"># -*- coding: utf-8 -*-</span>
+<span class="c1">#  ---------------------------------------------------------------------</span>
+<span class="c1">#</span>
+<span class="c1">#  _____    _      _              _         _____ _____</span>
+<span class="c1"># | ____|__| | ___| |_      _____(_)___ ___|  ___| ____|</span>
+<span class="c1"># |  _| / _` |/ _ \ \ \ /\ / / _ \ / __/ __| |_  |  _|</span>
+<span class="c1"># | |__| (_| |  __/ |\ V  V /  __/ \__ \__ \  _| | |___</span>
+<span class="c1"># |_____\__,_|\___|_| \_/\_/ \___|_|___/___/_|   |_____|</span>
+<span class="c1">#</span>
+<span class="c1">#</span>
+<span class="c1">#  Unit of Strength of Materials and Structural Analysis</span>
+<span class="c1">#  University of Innsbruck,</span>
+<span class="c1">#  2017 - today</span>
+<span class="c1">#</span>
+<span class="c1">#  Matthias Neuner matthias.neuner@uibk.ac.at</span>
+<span class="c1">#</span>
+<span class="c1">#  This file is part of EdelweissFE.</span>
+<span class="c1">#</span>
+<span class="c1">#  This library is free software; you can redistribute it and/or</span>
+<span class="c1">#  modify it under the terms of the GNU Lesser General Public</span>
+<span class="c1">#  License as published by the Free Software Foundation; either</span>
+<span class="c1">#  version 2.1 of the License, or (at your option) any later version.</span>
+<span class="c1">#</span>
+<span class="c1">#  The full text of the license can be found in the file LICENSE.md at</span>
+<span class="c1">#  the top level directory of EdelweissFE.</span>
+<span class="c1">#  ---------------------------------------------------------------------</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">edelweissfe.numerics.scatterdofvector</span>
+
+
+<div class="viewcode-block" id="DofVector">
+<a class="viewcode-back" href="../../../documentation/dofmanager.html#edelweissfe.numerics.dofvector.DofVector">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">DofVector</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""</span>
+<span class="sd">    Represents a Degree-of-Freedom (DOF) vector with entity-aware indexing.</span>
+
+<span class="sd">    A `DofVector` is a 1D NumPy array subclass augmented with metadata mapping simulation</span>
+<span class="sd">    entities (such as elements, constraints, or node sets) to their respective DOF indices.</span>
+<span class="sd">    This enables direct indexing and assignment using entity objects as keys.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    nDof : int</span>
+<span class="sd">        The total number of degrees of freedom (length of the vector).</span>
+<span class="sd">    entitiesInDofVector : dict, optional</span>
+<span class="sd">        A dictionary mapping entities (or entity keys) to their index arrays or slices</span>
+<span class="sd">        in the DofVector.</span>
+<span class="sd">    """</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__new__</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">nDof</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">entitiesInDofVector</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
+        <span class="n">obj</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">nDof</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="bp">cls</span><span class="p">)</span>
+        <span class="n">obj</span><span class="o">.</span><span class="n">entitiesInDofVector</span> <span class="o">=</span> <span class="n">entitiesInDofVector</span> <span class="k">if</span> <span class="n">entitiesInDofVector</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="p">{}</span>
+        <span class="n">obj</span><span class="o">.</span><span class="n">_scatterTemplate</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="c1">#: Plain-ndarray alias of the same buffer, built lazily on first entity access so</span>
+        <span class="c1">#: that the hot path never triggers numpy subclass wrapping. See __getitem__.</span>
+        <span class="n">obj</span><span class="o">.</span><span class="n">_plainView</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">return</span> <span class="n">obj</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">__array_finalize__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">obj</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">obj</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">entitiesInDofVector</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="s2">"entitiesInDofVector"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_scatterTemplate</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="s2">"_scatterTemplate"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_plainView</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__getitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">):</span>
+        <span class="c1"># Hot path (called per element per increment): try the entity dictionary first, skipping an isinstance()</span>
+        <span class="c1"># chain, and return a plain ndarray view, skipping numpy's subclass wrapping. Non-entity keys (ints,</span>
+        <span class="c1"># slices, arrays) fall through to normal ndarray indexing at the cost of one exception.</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">indices</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">entitiesInDofVector</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
+        <span class="k">except</span> <span class="p">(</span><span class="ne">KeyError</span><span class="p">,</span> <span class="ne">TypeError</span><span class="p">):</span>
+            <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__getitem__</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">asPlainArray</span><span class="p">()[</span><span class="n">indices</span><span class="p">]</span>
+
+<div class="viewcode-block" id="DofVector.asPlainArray">
+<a class="viewcode-back" href="../../../documentation/dofmanager.html#edelweissfe.numerics.dofvector.DofVector.asPlainArray">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">asPlainArray</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The same buffer seen as a plain :class:`numpy.ndarray`, built once and cached.</span>
+
+<span class="sd">        Indexing through this bypasses the subclass wrapping that dominates hot-path access -- see</span>
+<span class="sd">        :meth:`__getitem__`. It aliases this vector rather than copying it, so writes through it are</span>
+<span class="sd">        writes to this vector. Callers that index a DofVector repeatedly in a loop should take this</span>
+<span class="sd">        once outside the loop instead of calling ``view(np.ndarray)`` themselves.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        np.ndarray</span>
+<span class="sd">            A plain-ndarray view of this vector's buffer.</span>
+<span class="sd">        """</span>
+
+        <span class="n">plainView</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_plainView</span>
+        <span class="k">if</span> <span class="n">plainView</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">plainView</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_plainView</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">plainView</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__setitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="p">(</span><span class="nb">int</span><span class="p">,</span> <span class="nb">slice</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="nb">list</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">)):</span>
+            <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__setitem__</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
+            <span class="k">return</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__setitem__</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">entitiesInDofVector</span><span class="p">[</span><span class="n">key</span><span class="p">],</span> <span class="n">value</span><span class="p">)</span>
+        <span class="k">except</span> <span class="p">(</span><span class="ne">KeyError</span><span class="p">,</span> <span class="ne">TypeError</span><span class="p">):</span>
+            <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__setitem__</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
+
+<div class="viewcode-block" id="DofVector.copy">
+<a class="viewcode-back" href="../../../documentation/dofmanager.html#edelweissfe.numerics.dofvector.DofVector.copy">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">copy</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">order</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"C"</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"DofVector"</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""</span>
+<span class="sd">        Create a copy of this DofVector.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        order : str, optional</span>
+<span class="sd">            The memory layout order ('C' for C-contiguous, 'F' for Fortran-contiguous). Default is 'C'.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        DofVector</span>
+<span class="sd">            A new `DofVector` instance with copied array data and an independent copy of `entitiesInDofVector`.</span>
+<span class="sd">        """</span>
+        <span class="n">newDofVector</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">copy</span><span class="p">(</span><span class="n">order</span><span class="p">)</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="n">DofVector</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">entitiesInDofVector</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">newDofVector</span><span class="o">.</span><span class="n">entitiesInDofVector</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">entitiesInDofVector</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">newDofVector</span></div>
+
+
+<div class="viewcode-block" id="DofVector.createScatterVector">
+<a class="viewcode-back" href="../../../documentation/dofmanager.html#edelweissfe.numerics.dofvector.DofVector.createScatterVector">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">createScatterVector</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"edelweissfe.numerics.scatterdofvector.ScatterDofVector"</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""</span>
+<span class="sd">        Create a scatter vector for ALL entities registered in this DofVector.</span>
+
+<span class="sd">        The underlying layout (entity lookup map and scatter indices) is computed once</span>
+<span class="sd">        and cached, so repeated calls (e.g. once per Newton iteration) only allocate</span>
+<span class="sd">        the zero-initialized data buffer.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        ScatterDofVector</span>
+<span class="sd">            A `ScatterDofVector` initialized with this vector's entity mapping and total DOF count.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If `entitiesInDofVector` is None or uninitialized.</span>
+<span class="sd">        """</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">entitiesInDofVector</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"Cannot create a ScatterDofVector: entitiesInDofVector is None."</span><span class="p">)</span>
+
+        <span class="c1"># The template is inherited across views/copies, but entitiesInDofVector may since have been replaced</span>
+        <span class="c1"># (e.g. by copy()): do not reuse a template built for a stale mapping.</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_scatterTemplate</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">_scatterTemplate</span><span class="o">.</span><span class="n">entitiesInDofVector</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">entitiesInDofVector</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_scatterTemplate</span> <span class="o">=</span> <span class="n">edelweissfe</span><span class="o">.</span><span class="n">numerics</span><span class="o">.</span><span class="n">scatterdofvector</span><span class="o">.</span><span class="n">ScatterDofVectorTemplate</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">entitiesInDofVector</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">size</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="n">edelweissfe</span><span class="o">.</span><span class="n">numerics</span><span class="o">.</span><span class="n">scatterdofvector</span><span class="o">.</span><span class="n">ScatterDofVector</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_scatterTemplate</span><span class="p">)</span></div>
+</div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Matthias Neuner.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

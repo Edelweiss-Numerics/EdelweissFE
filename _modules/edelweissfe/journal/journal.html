@@ -14,8 +14,8 @@
       <script src="../../../_static/jquery.js?v=5d32c60e"></script>
       <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
       <script src="../../../_static/documentation_options.js?v=17e2f33f"></script>
-      <script src="../../../_static/doctools.js?v=9bcbadda"></script>
-      <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../../../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../../../genindex.html" />
     <link rel="search" title="Search" href="../../../search.html" /> 
@@ -105,20 +105,30 @@
 <span class="c1"># Created on Sun Jan 15 11:30:59 2017</span>
 
 <span class="c1"># @author: Matthias Neuner</span>
-<span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">"""</span>
 <span class="sd">This module provides journaling capabilities,</span>
 <span class="sd">which can be used troughout EdelweissFE.</span>
-<span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">"""</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">math</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">textwrap</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">unicodedata</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">prettytable</span><span class="w"> </span><span class="kn">import</span> <span class="n">PrettyTable</span>
+
+
+<div class="viewcode-block" id="displayWidth">
+<a class="viewcode-back" href="../../../documentation/journal.html#edelweissfe.journal.journal.displayWidth">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">displayWidth</span><span class="p">(</span><span class="n">text</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""The columns a text takes on the terminal: a combining character (the tilde of ``S̃``) takes none."""</span>
+    <span class="k">return</span> <span class="nb">sum</span><span class="p">(</span><span class="mi">1</span> <span class="k">for</span> <span class="n">character</span> <span class="ow">in</span> <span class="n">text</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">unicodedata</span><span class="o">.</span><span class="n">combining</span><span class="p">(</span><span class="n">character</span><span class="p">))</span></div>
+
 
 
 <div class="viewcode-block" id="Journal">
 <a class="viewcode-back" href="../../../documentation/journal.html#edelweissfe.journal.journal.Journal">[docs]</a>
 <span class="k">class</span><span class="w"> </span><span class="nc">Journal</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;This class provides an interface to present messages to the user via console</span>
+<span class="w">    </span><span class="sd">"""This class provides an interface to present messages to the user via console</span>
 <span class="sd">    output and/or file output.</span>
 <span class="sd">    Information messages can be sorted by the importance level.</span>
 <span class="sd">    Suppressing certain levels of output is possible.</span>
@@ -131,7 +141,20 @@
 <span class="sd">        Write to a file.</span>
 <span class="sd">    suppressFromLevel</span>
 <span class="sd">        Suppress certain levels.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
+<span class="sd">    """</span>
+
+    <span class="c1"># Class-level width settings to ensure all instances synchronize formatting</span>
+    <span class="n">linewidth</span> <span class="o">=</span> <span class="mi">120</span>
+    <span class="n">leftColumn</span> <span class="o">=</span> <span class="mi">100</span>
+    <span class="n">leftColumnMaxSize</span> <span class="o">=</span> <span class="mi">120</span>
+    <span class="n">outputWidths</span> <span class="o">=</span> <span class="p">{</span><span class="mi">0</span><span class="p">:</span> <span class="mi">99</span><span class="p">,</span> <span class="mi">1</span><span class="p">:</span> <span class="mi">96</span><span class="p">,</span> <span class="mi">2</span><span class="p">:</span> <span class="mi">95</span><span class="p">}</span>
+    <span class="n">_rightColumn</span> <span class="o">=</span> <span class="mi">20</span>
+    <span class="n">errorMessageTemplate</span> <span class="o">=</span> <span class="s2">" &gt; &gt; &gt; </span><span class="si">{:&lt;88}{:&gt;18}</span><span class="s2"> &lt; &lt; &lt; "</span>
+    <span class="n">leveledOutput</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="mi">0</span><span class="p">:</span> <span class="s2">" </span><span class="si">{:&lt;100}{:&gt;18}</span><span class="s2"> "</span><span class="p">,</span>
+        <span class="mi">1</span><span class="p">:</span> <span class="s2">"   </span><span class="si">{:&lt;98}{:&gt;18}</span><span class="s2"> "</span><span class="p">,</span>
+        <span class="mi">2</span><span class="p">:</span> <span class="s2">"     </span><span class="si">{:&lt;96}{:&gt;18}</span><span class="s2"> "</span><span class="p">,</span>
+    <span class="p">}</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
@@ -142,7 +165,6 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_suppressLvl</span> <span class="o">=</span> <span class="n">suppressFromLevel</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_verbose</span> <span class="o">=</span> <span class="n">verbose</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_fileHandle</span> <span class="o">=</span> <span class="kc">None</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">setNewLineWidth</span><span class="p">(</span><span class="n">newWidth</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span> <span class="n">leftColumn</span><span class="o">=</span><span class="mi">80</span><span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">setFileOutput</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">fileHandle</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
         <span class="k">if</span> <span class="n">fileHandle</span><span class="p">:</span>
@@ -152,8 +174,9 @@
 
 <div class="viewcode-block" id="Journal.setNewLineWidth">
 <a class="viewcode-back" href="../../../documentation/journal.html#edelweissfe.journal.journal.Journal.setNewLineWidth">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">setNewLineWidth</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">newWidth</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">100</span><span class="p">,</span> <span class="n">leftColumn</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">80</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Set the line width of the log file.</span>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">setNewLineWidth</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">newWidth</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">100</span><span class="p">,</span> <span class="n">leftColumn</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">80</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Set the line width of the log file.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
@@ -161,29 +184,29 @@
 <span class="sd">            New total width.</span>
 <span class="sd">        leftColumn</span>
 <span class="sd">            Width of the main column.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
+<span class="sd">        """</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">linewidth</span> <span class="o">=</span> <span class="n">newWidth</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">leftColumn</span> <span class="o">=</span> <span class="n">leftColumn</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">leftColumnMaxSize</span> <span class="o">=</span> <span class="mi">120</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">outputWidths</span> <span class="o">=</span> <span class="p">{}</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">outputWidths</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">leftColumn</span> <span class="o">-</span> <span class="mi">1</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">outputWidths</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="n">leftColumn</span> <span class="o">-</span> <span class="mi">4</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">outputWidths</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">=</span> <span class="n">leftColumn</span> <span class="o">-</span> <span class="mi">5</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_rightColumn</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">linewidth</span> <span class="o">-</span> <span class="n">leftColumn</span>
+        <span class="bp">cls</span><span class="o">.</span><span class="n">linewidth</span> <span class="o">=</span> <span class="n">newWidth</span>
+        <span class="bp">cls</span><span class="o">.</span><span class="n">leftColumn</span> <span class="o">=</span> <span class="n">leftColumn</span>
+        <span class="bp">cls</span><span class="o">.</span><span class="n">leftColumnMaxSize</span> <span class="o">=</span> <span class="mi">120</span>
+        <span class="bp">cls</span><span class="o">.</span><span class="n">outputWidths</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">cls</span><span class="o">.</span><span class="n">outputWidths</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">leftColumn</span> <span class="o">-</span> <span class="mi">1</span>
+        <span class="bp">cls</span><span class="o">.</span><span class="n">outputWidths</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="n">leftColumn</span> <span class="o">-</span> <span class="mi">4</span>
+        <span class="bp">cls</span><span class="o">.</span><span class="n">outputWidths</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">=</span> <span class="n">leftColumn</span> <span class="o">-</span> <span class="mi">5</span>
+        <span class="bp">cls</span><span class="o">.</span><span class="n">_rightColumn</span> <span class="o">=</span> <span class="bp">cls</span><span class="o">.</span><span class="n">linewidth</span> <span class="o">-</span> <span class="n">leftColumn</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">errorMessageTemplate</span> <span class="o">=</span> <span class="s2">&quot; &gt; &gt; &gt; {{:&lt;</span><span class="si">{:}</span><span class="s2">}}{{:&gt;</span><span class="si">{:}</span><span class="s2">}} &lt; &lt; &lt; &quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">leftColumn</span> <span class="o">-</span> <span class="mi">12</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_rightColumn</span> <span class="o">-</span> <span class="mi">2</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">leveledOutput</span> <span class="o">=</span> <span class="p">{</span>
-            <span class="mi">0</span><span class="p">:</span> <span class="s2">&quot; {{:&lt;</span><span class="si">{:}</span><span class="s2">}}{{:&gt;</span><span class="si">{:}</span><span class="s2">}} &quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">leftColumn</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_rightColumn</span> <span class="o">-</span> <span class="mi">2</span><span class="p">),</span>
-            <span class="mi">1</span><span class="p">:</span> <span class="s2">&quot;   {{:&lt;</span><span class="si">{:}</span><span class="s2">}}{{:&gt;</span><span class="si">{:}</span><span class="s2">}} &quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">leftColumn</span> <span class="o">-</span> <span class="mi">2</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_rightColumn</span> <span class="o">-</span> <span class="mi">2</span><span class="p">),</span>
-            <span class="mi">2</span><span class="p">:</span> <span class="s2">&quot;     {{:&lt;</span><span class="si">{:}</span><span class="s2">}}{{:&gt;</span><span class="si">{:}</span><span class="s2">}} &quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">leftColumn</span> <span class="o">-</span> <span class="mi">4</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_rightColumn</span> <span class="o">-</span> <span class="mi">2</span><span class="p">),</span>
+        <span class="bp">cls</span><span class="o">.</span><span class="n">errorMessageTemplate</span> <span class="o">=</span> <span class="s2">" &gt; &gt; &gt; {{:&lt;</span><span class="si">{:}</span><span class="s2">}}{{:&gt;</span><span class="si">{:}</span><span class="s2">}} &lt; &lt; &lt; "</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">leftColumn</span> <span class="o">-</span> <span class="mi">12</span><span class="p">,</span> <span class="bp">cls</span><span class="o">.</span><span class="n">_rightColumn</span> <span class="o">-</span> <span class="mi">2</span><span class="p">)</span>
+        <span class="bp">cls</span><span class="o">.</span><span class="n">leveledOutput</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="mi">0</span><span class="p">:</span> <span class="s2">" {{:&lt;</span><span class="si">{:}</span><span class="s2">}}{{:&gt;</span><span class="si">{:}</span><span class="s2">}} "</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">leftColumn</span><span class="p">,</span> <span class="bp">cls</span><span class="o">.</span><span class="n">_rightColumn</span> <span class="o">-</span> <span class="mi">2</span><span class="p">),</span>
+            <span class="mi">1</span><span class="p">:</span> <span class="s2">"   {{:&lt;</span><span class="si">{:}</span><span class="s2">}}{{:&gt;</span><span class="si">{:}</span><span class="s2">}} "</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">leftColumn</span> <span class="o">-</span> <span class="mi">2</span><span class="p">,</span> <span class="bp">cls</span><span class="o">.</span><span class="n">_rightColumn</span> <span class="o">-</span> <span class="mi">2</span><span class="p">),</span>
+            <span class="mi">2</span><span class="p">:</span> <span class="s2">"     {{:&lt;</span><span class="si">{:}</span><span class="s2">}}{{:&gt;</span><span class="si">{:}</span><span class="s2">}} "</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">leftColumn</span> <span class="o">-</span> <span class="mi">4</span><span class="p">,</span> <span class="bp">cls</span><span class="o">.</span><span class="n">_rightColumn</span> <span class="o">-</span> <span class="mi">2</span><span class="p">),</span>
         <span class="p">}</span></div>
 
 
 <div class="viewcode-block" id="Journal.message">
 <a class="viewcode-back" href="../../../documentation/journal.html#edelweissfe.journal.journal.Journal.message">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">message</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">message</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">senderIdentification</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">level</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Write message to log.</span>
+<span class="w">        </span><span class="sd">"""Write message to log. Lines longer than the message column are wrapped.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
@@ -193,26 +216,131 @@
 <span class="sd">            The name of the sender.</span>
 <span class="sd">        level</span>
 <span class="sd">            Level of message.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
+<span class="sd">        """</span>
 
-        <span class="n">lines</span> <span class="o">=</span> <span class="n">message</span><span class="o">.</span><span class="n">splitlines</span><span class="p">()</span>
+        <span class="n">wrap_width</span> <span class="o">=</span> <span class="n">Journal</span><span class="o">.</span><span class="n">_messageWidth</span><span class="p">(</span><span class="n">level</span><span class="p">)</span>
+
+        <span class="n">wrapped_lines</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="n">message</span><span class="o">.</span><span class="n">splitlines</span><span class="p">():</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">line</span><span class="p">)</span> <span class="o">&gt;</span> <span class="n">wrap_width</span><span class="p">:</span>
+                <span class="n">wrapped_lines</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">textwrap</span><span class="o">.</span><span class="n">wrap</span><span class="p">(</span><span class="n">line</span><span class="p">,</span> <span class="n">width</span><span class="o">=</span><span class="n">wrap_width</span><span class="p">))</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">wrapped_lines</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">line</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_writeLines</span><span class="p">(</span><span class="n">wrapped_lines</span><span class="p">,</span> <span class="n">senderIdentification</span><span class="p">,</span> <span class="n">level</span><span class="p">,</span> <span class="n">senderOnEveryLine</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span></div>
+
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_messageWidth</span><span class="p">(</span><span class="n">level</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The characters a line of the given level may have before it is wrapped: the message column, less the</span>
+<span class="sd">        indentation of the level (see :attr:`leveledOutput`)."""</span>
+        <span class="k">return</span> <span class="n">Journal</span><span class="o">.</span><span class="n">leftColumn</span> <span class="o">-</span> <span class="p">{</span><span class="mi">0</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">:</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">:</span> <span class="mi">4</span><span class="p">}</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">level</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+
+<div class="viewcode-block" id="Journal.framedMessage">
+<a class="viewcode-back" href="../../../documentation/journal.html#edelweissfe.journal.journal.Journal.framedMessage">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">framedMessage</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">message</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">senderIdentification</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">title</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">level</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Write a message inside a frame, a block that stands apart from the lines around it. The frame is as wide as</span>
+<span class="sd">        the message column. A line longer than the frame is wrapped below itself, its continuation indented under its</span>
+<span class="sd">        own text, and the ``│`` of a tree drawn with ``├─`` and ``└─`` carried on, so that such a tree stays readable.</span>
+<span class="sd">        The sender is on the first line only.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        message</span>
+<span class="sd">            The message; a line break starts a new line of the frame.</span>
+<span class="sd">        senderIdentification</span>
+<span class="sd">            The name of the sender.</span>
+<span class="sd">        title</span>
+<span class="sd">            The title in the upper border of the frame.</span>
+<span class="sd">        level</span>
+<span class="sd">            Level of message.</span>
+<span class="sd">        """</span>
+
+        <span class="n">frameWidth</span> <span class="o">=</span> <span class="n">Journal</span><span class="o">.</span><span class="n">_messageWidth</span><span class="p">(</span><span class="n">level</span><span class="p">)</span>
+        <span class="n">innerWidth</span> <span class="o">=</span> <span class="n">frameWidth</span> <span class="o">-</span> <span class="mi">4</span>
+
+        <span class="n">lines</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="n">message</span><span class="o">.</span><span class="n">splitlines</span><span class="p">():</span>
+            <span class="n">lines</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">Journal</span><span class="o">.</span><span class="n">_wrapHanging</span><span class="p">(</span><span class="n">line</span><span class="p">,</span> <span class="n">innerWidth</span><span class="p">))</span>
+
+        <span class="n">upperBorder</span> <span class="o">=</span> <span class="s2">"+- </span><span class="si">{:}</span><span class="s2"> "</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">title</span><span class="p">)</span><span class="o">.</span><span class="n">ljust</span><span class="p">(</span><span class="n">frameWidth</span> <span class="o">-</span> <span class="mi">1</span><span class="p">,</span> <span class="s2">"-"</span><span class="p">)</span> <span class="o">+</span> <span class="s2">"+"</span>
+        <span class="n">lowerBorder</span> <span class="o">=</span> <span class="s2">"+"</span> <span class="o">+</span> <span class="s2">"-"</span> <span class="o">*</span> <span class="p">(</span><span class="n">frameWidth</span> <span class="o">-</span> <span class="mi">2</span><span class="p">)</span> <span class="o">+</span> <span class="s2">"+"</span>
+        <span class="n">framedLines</span> <span class="o">=</span> <span class="p">[</span><span class="n">upperBorder</span><span class="p">]</span>
         <span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="n">lines</span><span class="p">:</span>
-            <span class="k">while</span> <span class="nb">len</span><span class="p">(</span><span class="n">line</span><span class="p">)</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">leftColumn</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">leftColumn</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">leftColumnMaxSize</span><span class="p">:</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">setNewLineWidth</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">linewidth</span> <span class="o">+</span> <span class="mi">5</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">leftColumn</span> <span class="o">+</span> <span class="mi">5</span><span class="p">)</span>
+            <span class="n">padding</span> <span class="o">=</span> <span class="s2">" "</span> <span class="o">*</span> <span class="p">(</span><span class="n">innerWidth</span> <span class="o">-</span> <span class="n">displayWidth</span><span class="p">(</span><span class="n">line</span><span class="p">))</span>
+            <span class="n">framedLines</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">"| "</span> <span class="o">+</span> <span class="n">line</span> <span class="o">+</span> <span class="n">padding</span> <span class="o">+</span> <span class="s2">" |"</span><span class="p">)</span>
+        <span class="n">framedLines</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">lowerBorder</span><span class="p">)</span>
 
-            <span class="n">theLine</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">leveledOutput</span><span class="p">[</span><span class="n">level</span><span class="p">]</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">line</span><span class="p">,</span> <span class="n">senderIdentification</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_writeLines</span><span class="p">(</span><span class="n">framedLines</span><span class="p">,</span> <span class="n">senderIdentification</span><span class="p">,</span> <span class="n">level</span><span class="p">,</span> <span class="n">senderOnEveryLine</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span></div>
+
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_wrapHanging</span><span class="p">(</span><span class="n">line</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">width</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""The line wrapped to the width, its continuation lines indented by two more characters than the text of the</span>
+<span class="sd">        line starts at. What leads a line of a tree (spaces and ``│├└─``) continues as spaces, and as ``│`` where the</span>
+<span class="sd">        tree goes on below."""</span>
+        <span class="k">if</span> <span class="n">displayWidth</span><span class="p">(</span><span class="n">line</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="n">width</span><span class="p">:</span>
+            <span class="k">return</span> <span class="p">[</span><span class="n">line</span><span class="p">]</span>
+        <span class="n">leading</span> <span class="o">=</span> <span class="n">line</span><span class="p">[:</span> <span class="nb">len</span><span class="p">(</span><span class="n">line</span><span class="p">)</span> <span class="o">-</span> <span class="nb">len</span><span class="p">(</span><span class="n">line</span><span class="o">.</span><span class="n">lstrip</span><span class="p">(</span><span class="s2">" │├└─"</span><span class="p">))]</span>
+        <span class="n">continuation</span> <span class="o">=</span> <span class="s2">""</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="s2">"│"</span> <span class="k">if</span> <span class="n">character</span> <span class="ow">in</span> <span class="s2">"│├"</span> <span class="k">else</span> <span class="s2">" "</span> <span class="k">for</span> <span class="n">character</span> <span class="ow">in</span> <span class="n">leading</span><span class="p">)</span> <span class="o">+</span> <span class="s2">"  "</span>
+        <span class="k">return</span> <span class="n">textwrap</span><span class="o">.</span><span class="n">wrap</span><span class="p">(</span>
+            <span class="n">line</span><span class="p">,</span> <span class="n">width</span><span class="o">=</span><span class="n">width</span><span class="p">,</span> <span class="n">subsequent_indent</span><span class="o">=</span><span class="n">continuation</span><span class="p">,</span> <span class="n">break_long_words</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">break_on_hyphens</span><span class="o">=</span><span class="kc">False</span>
+        <span class="p">)</span> <span class="ow">or</span> <span class="p">[</span><span class="s2">""</span><span class="p">]</span>
+
+<div class="viewcode-block" id="Journal.preformatted">
+<a class="viewcode-back" href="../../../documentation/journal.html#edelweissfe.journal.journal.Journal.preformatted">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">preformatted</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">lines</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span> <span class="n">senderIdentification</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">level</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Write lines whose layout must be kept, such as the rows of a table, to log. They are never wrapped:</span>
+<span class="sd">        a line longer than the message column pushes the sender to the right instead. Each line carries the</span>
+<span class="sd">        sender.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        lines</span>
+<span class="sd">            The lines.</span>
+<span class="sd">        senderIdentification</span>
+<span class="sd">            The name of the sender.</span>
+<span class="sd">        level</span>
+<span class="sd">            Level of message.</span>
+<span class="sd">        """</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_writeLines</span><span class="p">(</span><span class="n">lines</span><span class="p">,</span> <span class="n">senderIdentification</span><span class="p">,</span> <span class="n">level</span><span class="p">,</span> <span class="n">senderOnEveryLine</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_writeLines</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">lines</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span> <span class="n">senderIdentification</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">level</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">senderOnEveryLine</span><span class="p">:</span> <span class="nb">bool</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Write lines to the terminal and the log file, with the sender in the right column.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        lines</span>
+<span class="sd">            The lines, already fitted to the message column (or deliberately not).</span>
+<span class="sd">        senderIdentification</span>
+<span class="sd">            The name of the sender.</span>
+<span class="sd">        level</span>
+<span class="sd">            Level of message.</span>
+<span class="sd">        senderOnEveryLine</span>
+<span class="sd">            Put the sender on every line, rather than on the first one only.</span>
+<span class="sd">        """</span>
+
+        <span class="c1"># Abbreviate senderIdentification if it is too long</span>
+        <span class="n">max_sender_len</span> <span class="o">=</span> <span class="n">Journal</span><span class="o">.</span><span class="n">_rightColumn</span> <span class="o">-</span> <span class="mi">2</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">senderIdentification</span><span class="p">)</span> <span class="o">&gt;</span> <span class="n">max_sender_len</span><span class="p">:</span>
+            <span class="n">senderIdentification</span> <span class="o">=</span> <span class="n">senderIdentification</span><span class="p">[:</span> <span class="n">max_sender_len</span> <span class="o">-</span> <span class="mi">3</span><span class="p">]</span> <span class="o">+</span> <span class="s2">"..."</span>
+
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">line</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">lines</span><span class="p">):</span>
+            <span class="n">sender</span> <span class="o">=</span> <span class="n">senderIdentification</span> <span class="k">if</span> <span class="n">i</span> <span class="o">==</span> <span class="mi">0</span> <span class="ow">or</span> <span class="n">senderOnEveryLine</span> <span class="k">else</span> <span class="s2">""</span>
+            <span class="n">theLine</span> <span class="o">=</span> <span class="n">Journal</span><span class="o">.</span><span class="n">leveledOutput</span><span class="p">[</span><span class="n">level</span><span class="p">]</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">line</span><span class="p">,</span> <span class="n">sender</span><span class="p">)</span>
             <span class="k">if</span> <span class="n">level</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">_suppressLvl</span><span class="p">:</span>
                 <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_verbose</span><span class="p">:</span>
                     <span class="nb">print</span><span class="p">(</span><span class="n">theLine</span><span class="p">)</span>
 
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_fileHandle</span><span class="p">:</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_fileHandle</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">theLine</span> <span class="o">+</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="p">)</span></div>
-
+                <span class="bp">self</span><span class="o">.</span><span class="n">_fileHandle</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">theLine</span> <span class="o">+</span> <span class="s2">"</span><span class="se">\n</span><span class="s2">"</span><span class="p">)</span>
 
 <div class="viewcode-block" id="Journal.errorMessage">
 <a class="viewcode-back" href="../../../documentation/journal.html#edelweissfe.journal.journal.Journal.errorMessage">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">errorMessage</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">errorMessage</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">senderIdentification</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Print an error message.</span>
+<span class="w">        </span><span class="sd">"""Print an error message.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
@@ -220,13 +348,13 @@
 <span class="sd">            The message.</span>
 <span class="sd">        senderIdentification</span>
 <span class="sd">            The name of the sender.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
+<span class="sd">        """</span>
 
         <span class="n">theLine</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">errorMessageTemplate</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">errorMessage</span><span class="p">,</span> <span class="n">senderIdentification</span><span class="p">)</span>
         <span class="nb">print</span><span class="p">(</span><span class="n">theLine</span><span class="p">)</span>
 
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_fileHandle</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_fileHandle</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">theLine</span> <span class="o">+</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="p">)</span></div>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_fileHandle</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">theLine</span> <span class="o">+</span> <span class="s2">"</span><span class="se">\n</span><span class="s2">"</span><span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="Journal.printSeperationLine">
@@ -234,14 +362,14 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">printSeperationLine</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
     <span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Write a seperation file to log.&quot;&quot;&quot;</span>
+<span class="w">        </span><span class="sd">"""Write a seperation file to log."""</span>
 
-        <span class="n">theLine</span> <span class="o">=</span> <span class="s2">&quot;+&quot;</span> <span class="o">+</span> <span class="s2">&quot;-&quot;</span> <span class="o">*</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">linewidth</span> <span class="o">-</span> <span class="mi">2</span><span class="p">)</span> <span class="o">+</span> <span class="s2">&quot;+&quot;</span>
+        <span class="n">theLine</span> <span class="o">=</span> <span class="s2">"+"</span> <span class="o">+</span> <span class="s2">"-"</span> <span class="o">*</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">linewidth</span> <span class="o">-</span> <span class="mi">2</span><span class="p">)</span> <span class="o">+</span> <span class="s2">"+"</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_verbose</span><span class="p">:</span>
             <span class="nb">print</span><span class="p">(</span><span class="n">theLine</span><span class="p">)</span>
 
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_fileHandle</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_fileHandle</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">theLine</span> <span class="o">+</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="p">)</span></div>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_fileHandle</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">theLine</span> <span class="o">+</span> <span class="s2">"</span><span class="se">\n</span><span class="s2">"</span><span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="Journal.printTable">
@@ -253,7 +381,7 @@
         <span class="n">level</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
         <span class="n">printHeaderRow</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
     <span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Print a pretty table.</span>
+<span class="w">        </span><span class="sd">"""Print a pretty table.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
@@ -265,13 +393,13 @@
 <span class="sd">            The level of the mesage.</span>
 <span class="sd">        printHeaderRow</span>
 <span class="sd">            Special formatting for first row.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
+<span class="sd">        """</span>
 
         <span class="n">nCols</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">table</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
 
         <span class="n">cellWidth</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">math</span><span class="o">.</span><span class="n">floor</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">outputWidths</span><span class="p">[</span><span class="n">level</span><span class="p">]</span> <span class="o">/</span> <span class="n">nCols</span><span class="p">))</span> <span class="o">-</span> <span class="mi">3</span>
-        <span class="n">rowBar</span> <span class="o">=</span> <span class="s2">&quot;+&quot;</span> <span class="o">+</span> <span class="p">((</span><span class="s2">&quot;-&quot;</span> <span class="o">*</span> <span class="n">cellWidth</span><span class="p">)</span> <span class="o">+</span> <span class="s2">&quot;+&quot;</span><span class="p">)</span> <span class="o">*</span> <span class="n">nCols</span>
-        <span class="n">rowString</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;|</span><span class="si">{:}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="s2">&quot;{:&quot;</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">cellWidth</span><span class="p">)</span> <span class="o">+</span> <span class="s2">&quot;}&quot;</span><span class="p">))</span> <span class="o">*</span> <span class="n">nCols</span> <span class="o">+</span> <span class="s2">&quot;|&quot;</span>
+        <span class="n">rowBar</span> <span class="o">=</span> <span class="s2">"+"</span> <span class="o">+</span> <span class="p">((</span><span class="s2">"-"</span> <span class="o">*</span> <span class="n">cellWidth</span><span class="p">)</span> <span class="o">+</span> <span class="s2">"+"</span><span class="p">)</span> <span class="o">*</span> <span class="n">nCols</span>
+        <span class="n">rowString</span> <span class="o">=</span> <span class="p">(</span><span class="s2">"|</span><span class="si">{:}</span><span class="s2">"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="s2">"{:"</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">cellWidth</span><span class="p">)</span> <span class="o">+</span> <span class="s2">"}"</span><span class="p">))</span> <span class="o">*</span> <span class="n">nCols</span> <span class="o">+</span> <span class="s2">"|"</span>
 
         <span class="k">if</span> <span class="n">printHeaderRow</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">message</span><span class="p">(</span><span class="n">rowBar</span><span class="p">,</span> <span class="n">senderIdentification</span><span class="p">,</span> <span class="n">level</span><span class="p">)</span>
@@ -291,7 +419,7 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">setVerbose</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
     <span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Set highest verbosity.&quot;&quot;&quot;</span>
+<span class="w">        </span><span class="sd">"""Set highest verbosity."""</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_suppressLvl</span> <span class="o">=</span> <span class="mi">3</span></div>
 
@@ -299,17 +427,21 @@
 <div class="viewcode-block" id="Journal.squelch">
 <a class="viewcode-back" href="../../../documentation/journal.html#edelweissfe.journal.journal.Journal.squelch">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">squelch</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">level</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Suppress all messages.</span>
+<span class="w">        </span><span class="sd">"""Suppress all messages.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
 <span class="sd">        level</span>
 <span class="sd">            The priority level of the message.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
+<span class="sd">        """</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_suppressLvl</span> <span class="o">=</span> <span class="n">level</span></div>
 </div>
 
+
+
+<span class="c1"># Initialize the class-level formats exactly once</span>
+<span class="n">Journal</span><span class="o">.</span><span class="n">setNewLineWidth</span><span class="p">(</span><span class="n">newWidth</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span> <span class="n">leftColumn</span><span class="o">=</span><span class="mi">80</span><span class="p">)</span>
 </pre></div>
 
            </div>

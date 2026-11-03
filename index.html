@@ -15,9 +15,9 @@
       <script src="_static/jquery.js?v=5d32c60e"></script>
       <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
       <script src="_static/documentation_options.js?v=17e2f33f"></script>
-      <script src="_static/doctools.js?v=9bcbadda"></script>
-      <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
-      <script async="async" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+      <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-mml-chtml.js"></script>
     <script src="_static/js/theme.js"></script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
@@ -119,7 +119,7 @@ Usually, EdelweissFE is used for developing and debugging constitutive models un
 <div class="code-block-caption"><span class="caption-text">File: <code class="docutils literal notranslate"><span class="pre">examples/CantileverBeam/test3D.inp</span></code></span><a class="headerlink" href="#id2" title="Link to this code"></a></div>
 <div class="highlight-edelweiss notranslate"><div class="highlight"><pre><span></span><span class="k">*material</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">LinearElastic</span>,<span class="nv"> id</span><span class="ow">=</span><span class="m">linearelastic</span>,<span class="nv"> provider</span><span class="ow">=</span><span class="m">edelweiss</span>
 <span class="c c-Singleline">**Isotropic material</span>
-<span class="c c-Singleline">**E    nu -&gt; elasticity module and poisson&#39;s ratio</span>
+<span class="c c-Singleline">**E    nu -&gt; elasticity module and poisson's ratio</span>
 1.8e4, 0.22
 
 <span class="c c-Singleline">** make job</span>
@@ -157,11 +157,11 @@ all
 <span class="c c-Singleline">** set step size between 1 and 1e-9, 1000 iterations, 25 max iterations and step length 1</span>
 <span class="k">*step</span>,<span class="nv"> solver</span><span class="ow">=</span><span class="m">theSolver</span>
 <span class="nv">maxInc</span><span class="ow">=</span><span class="m">1e0</span>,<span class="nv"> minInc</span><span class="ow">=</span><span class="m">1e-9</span>,<span class="nv"> maxNumInc</span><span class="ow">=</span><span class="m">1000</span>,<span class="nv"> maxIter</span><span class="ow">=</span><span class="m">25</span>,<span class="nv"> stepLength</span><span class="ow">=</span><span class="m">1</span>
-&gt;&gt;options,<span class="nv"> category</span><span class="ow">=</span><span class="m">NISTSolver</span>,<span class="nv"> extrapolation</span><span class="ow">=</span><span class="m">off</span>
+&gt;&gt;options,<span class="nv"> name</span><span class="ow">=</span><span class="m">theSolver</span>,<span class="nv"> extrapolation</span><span class="ow">=</span><span class="m">off</span>
 <span class="c c-Singleline">** fix one side (fixed support)</span>
 &gt;&gt;dirichlet,<span class="nv"> name</span><span class="ow">=</span><span class="m">Left</span>,<span class="nv">  nSet</span><span class="ow">=</span><span class="m">gen_left</span>,<span class="nv"> field</span><span class="ow">=</span><span class="m">displacement</span>,<span class="nv"> 1</span><span class="ow">=</span><span class="m">0.0</span>,<span class="nv"> 2</span><span class="ow">=</span><span class="m">0.0</span>,<span class="nv"> 3</span><span class="ow">=</span><span class="m">.0</span>
 <span class="c c-Singleline">** set load in z to 0.012N for all the points on right back</span>
-&gt;&gt;nodeforces,<span class="nv"> name</span><span class="ow">=</span><span class="m">cloadTop</span>,<span class="nv"> nSet</span><span class="ow">=</span><span class="m">gen_rightBack</span>,<span class="nv"> components</span><span class="ow">=</span><span class="s">&#39;0, 0, .012&#39;</span>,<span class="nv"> field</span><span class="ow">=</span><span class="m">displacement</span>
+&gt;&gt;nodeforces,<span class="nv"> name</span><span class="ow">=</span><span class="m">cloadTop</span>,<span class="nv"> nSet</span><span class="ow">=</span><span class="m">gen_rightBack</span>,<span class="nv"> components</span><span class="ow">=</span><span class="s">'0, 0, .012'</span>,<span class="nv"> field</span><span class="ow">=</span><span class="m">displacement</span>
 </pre></div>
 </div>
 </div>

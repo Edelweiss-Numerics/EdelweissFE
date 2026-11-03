@@ -1,0 +1,339 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>edelweissfe.utils.polyhedronmassproperties &mdash; EdelweissFE v22.07 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=cfdaff8d" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/custom.css?v=37fbe429" />
+
+  
+      <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../_static/documentation_options.js?v=17e2f33f"></script>
+      <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../index.html" class="icon icon-home">
+            EdelweissFE
+              <img src="../../../_static/edelweiss_fe_logo.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../features.html">Features</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../prerequisites.html">Prerequisites</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../documentation/index.html">Documentation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../contributors.html">Contributors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../publications.html">Publications</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">EdelweissFE</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">edelweissfe.utils.polyhedronmassproperties</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for edelweissfe.utils.polyhedronmassproperties</h1><div class="highlight"><pre>
+<span></span><span class="ch">#!/usr/bin/env python3</span>
+<span class="c1"># -*- coding: utf-8 -*-</span>
+<span class="c1">#  ---------------------------------------------------------------------</span>
+<span class="c1">#</span>
+<span class="c1">#  _____    _      _              _         _____ _____</span>
+<span class="c1"># | ____|__| | ___| |_      _____(_)___ ___|  ___| ____|</span>
+<span class="c1"># |  _| / _` |/ _ \ \ \ /\ / / _ \ / __/ __| |_  |  _|</span>
+<span class="c1"># | |__| (_| |  __/ |\ V  V /  __/ \__ \__ \  _| | |___</span>
+<span class="c1"># |_____\__,_|\___|_| \_/\_/ \___|_|___/___/_|   |_____|</span>
+<span class="c1">#</span>
+<span class="c1">#</span>
+<span class="c1">#  Unit of Strength of Materials and Structural Analysis</span>
+<span class="c1">#  University of Innsbruck,</span>
+<span class="c1">#  2017 - today</span>
+<span class="c1">#</span>
+<span class="c1">#  Matthias Neuner matthias.neuner@uibk.ac.at</span>
+<span class="c1">#</span>
+<span class="c1">#  This file is part of EdelweissFE.</span>
+<span class="c1">#</span>
+<span class="c1">#  This library is free software; you can redistribute it and/or</span>
+<span class="c1">#  modify it under the terms of the GNU Lesser General Public</span>
+<span class="c1">#  License as published by the Free Software Foundation; either</span>
+<span class="c1">#  version 2.1 of the License, or (at your option) any later version.</span>
+<span class="c1">#</span>
+<span class="c1">#  The full text of the license can be found in the file LICENSE.md at</span>
+<span class="c1">#  the top level directory of EdelweissFE.</span>
+<span class="c1">#  ---------------------------------------------------------------------</span>
+<span class="sd">"""</span>
+<span class="sd">Exact mass properties (volume, mass, center of mass, and inertia tensor) of an</span>
+<span class="sd">arbitrary closed polyhedral surface mesh, computed via divergence-theorem</span>
+<span class="sd">integration over signed tetrahedra.</span>
+
+<span class="sd">This module has no dependency on any particular mesh library (PyVista, VTK,</span>
+<span class="sd">...) or on EdelweissFE's model/entity classes: it operates purely on raw</span>
+<span class="sd">vertex coordinates and face connectivity, so it can be reused wherever exact</span>
+<span class="sd">mass properties of a solid described by its boundary surface are needed</span>
+<span class="sd">(e.g. rigid bodies, indenters, generators reading mesh files).</span>
+<span class="sd">"""</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">NamedTuple</span><span class="p">,</span> <span class="n">Sequence</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+
+
+<div class="viewcode-block" id="PolyhedronMassProperties">
+<a class="viewcode-back" href="../../../documentation/rigidbodies.html#edelweissfe.utils.polyhedronmassproperties.PolyhedronMassProperties">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">PolyhedronMassProperties</span><span class="p">(</span><span class="n">NamedTuple</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Mass properties of a homogeneous solid polyhedron.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    volume : float</span>
+<span class="sd">        The enclosed volume of the polyhedron.</span>
+<span class="sd">    mass : float</span>
+<span class="sd">        The total mass, ``density * volume``.</span>
+<span class="sd">    centerOfMass : numpy.ndarray, shape (3,)</span>
+<span class="sd">        The center of mass, in the same coordinate frame as the input vertices.</span>
+<span class="sd">    inertia : numpy.ndarray, shape (3, 3)</span>
+<span class="sd">        The (symmetric) inertia tensor about the center of mass, expressed in</span>
+<span class="sd">        the same (global, non-rotated) axes as the input vertices.</span>
+<span class="sd">    """</span>
+
+    <span class="n">volume</span><span class="p">:</span> <span class="nb">float</span>
+    <span class="n">mass</span><span class="p">:</span> <span class="nb">float</span>
+    <span class="n">centerOfMass</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+    <span class="n">inertia</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span></div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_triangulateFaces</span><span class="p">(</span><span class="n">faces</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">Sequence</span><span class="p">[</span><span class="nb">int</span><span class="p">]])</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Fan-triangulate a sequence of planar, convex polygonal faces.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    faces : sequence of sequence of int</span>
+<span class="sd">        Each entry lists the vertex indices of one face, in consistent</span>
+<span class="sd">        (counter-clockwise, viewed from outside the solid) winding order.</span>
+<span class="sd">        Faces may have different numbers of vertices (e.g. a mix of</span>
+<span class="sd">        triangles and quadrilaterals).</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    numpy.ndarray, shape (nTriangles, 3)</span>
+<span class="sd">        The vertex-index triples of the triangulated faces. Triangular faces</span>
+<span class="sd">        are passed through unchanged; any other planar convex polygon is</span>
+<span class="sd">        fan-triangulated from its first vertex.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If any face references fewer than 3 vertices.</span>
+<span class="sd">    """</span>
+    <span class="n">triangles</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">face</span> <span class="ow">in</span> <span class="n">faces</span><span class="p">:</span>
+        <span class="n">face</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">face</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">int</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">face</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">&lt;</span> <span class="mi">3</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"Each face must reference at least 3 vertices."</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">face</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">-</span> <span class="mi">1</span><span class="p">):</span>
+            <span class="n">triangles</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">face</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">face</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">face</span><span class="p">[</span><span class="n">i</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]))</span>
+    <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">triangles</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">int</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="computePolyhedronMassProperties">
+<a class="viewcode-back" href="../../../documentation/rigidbodies.html#edelweissfe.utils.polyhedronmassproperties.computePolyhedronMassProperties">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">computePolyhedronMassProperties</span><span class="p">(</span>
+    <span class="n">vertices</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+    <span class="n">faces</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">Sequence</span><span class="p">[</span><span class="nb">int</span><span class="p">]],</span>
+    <span class="n">density</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">PolyhedronMassProperties</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Compute the exact mass properties of a closed polyhedral surface mesh.</span>
+
+<span class="sd">    Computes the volume, mass, center of mass, and inertia tensor of the</span>
+<span class="sd">    homogeneous solid enclosed by a closed (watertight), consistently</span>
+<span class="sd">    oriented polyhedral surface, via divergence-theorem integration over</span>
+<span class="sd">    signed tetrahedra formed between the coordinate origin and each face</span>
+<span class="sd">    [1]_. The result is exact (up to floating-point round-off) for any</span>
+<span class="sd">    polyhedron describable by its boundary faces -- it is not limited to</span>
+<span class="sd">    canonical primitives such as boxes, cylinders, or spheres.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    vertices : numpy.ndarray, shape (nVertices, 3)</span>
+<span class="sd">        The Cartesian coordinates of all vertices referenced by `faces`.</span>
+<span class="sd">    faces : sequence of sequence of int</span>
+<span class="sd">        The faces of the closed surface, each given as the (0-based) indices</span>
+<span class="sd">        of its vertices in `vertices`, in consistent winding order (all</span>
+<span class="sd">        faces oriented outward, or all oriented inward -- a single globally</span>
+<span class="sd">        reversed mesh is detected and corrected automatically). Faces may be</span>
+<span class="sd">        triangles, quadrilaterals, or other planar convex polygons.</span>
+<span class="sd">    density : float, optional</span>
+<span class="sd">        The (uniform) mass density of the solid. Default is 1.0, in which</span>
+<span class="sd">        case `mass` numerically equals `volume`.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    PolyhedronMassProperties</span>
+<span class="sd">        A named tuple with fields `volume`, `mass`, `centerOfMass`, and</span>
+<span class="sd">        `inertia` (the latter about the center of mass).</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If the computed volume is (numerically) zero, which indicates that</span>
+<span class="sd">        `faces` does not describe a closed, watertight surface.</span>
+
+<span class="sd">    Notes</span>
+<span class="sd">    -----</span>
+<span class="sd">    The surface must be closed (watertight) and consistently wound for the</span>
+<span class="sd">    result to be meaningful; this is not verified here, as doing so requires</span>
+<span class="sd">    a topological check of the mesh (e.g. that every edge is shared by</span>
+<span class="sd">    exactly two oppositely-wound faces), which is outside the scope of this</span>
+<span class="sd">    purely geometric utility.</span>
+
+<span class="sd">    References</span>
+<span class="sd">    ----------</span>
+<span class="sd">    .. [1] B. Mirtich, "Fast and accurate computation of polyhedral mass</span>
+<span class="sd">           properties," Journal of Graphics Tools, 1(2), 1996.</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    &gt;&gt;&gt; import numpy as np</span>
+<span class="sd">    &gt;&gt;&gt; vertices = np.array([[0,0,0],[1,0,0],[1,1,0],[0,1,0],</span>
+<span class="sd">    ...                       [0,0,1],[1,0,1],[1,1,1],[0,1,1]], dtype=float)</span>
+<span class="sd">    &gt;&gt;&gt; faces = [[0,3,2,1],[4,5,6,7],[0,1,5,4],[1,2,6,5],[2,3,7,6],[3,0,4,7]]</span>
+<span class="sd">    &gt;&gt;&gt; props = computePolyhedronMassProperties(vertices, faces)</span>
+<span class="sd">    &gt;&gt;&gt; round(props.volume, 6)</span>
+<span class="sd">    1.0</span>
+<span class="sd">    &gt;&gt;&gt; np.allclose(props.centerOfMass, [0.5, 0.5, 0.5])</span>
+<span class="sd">    True</span>
+<span class="sd">    """</span>
+    <span class="n">verts</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">vertices</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span>
+    <span class="n">triangles</span> <span class="o">=</span> <span class="n">_triangulateFaces</span><span class="p">(</span><span class="n">faces</span><span class="p">)</span>
+
+    <span class="n">a</span> <span class="o">=</span> <span class="n">verts</span><span class="p">[</span><span class="n">triangles</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">]]</span>
+    <span class="n">b</span> <span class="o">=</span> <span class="n">verts</span><span class="p">[</span><span class="n">triangles</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">]]</span>
+    <span class="n">c</span> <span class="o">=</span> <span class="n">verts</span><span class="p">[</span><span class="n">triangles</span><span class="p">[:,</span> <span class="mi">2</span><span class="p">]]</span>
+
+    <span class="c1"># Signed volume of the tetrahedron spanned by the origin and each face.</span>
+    <span class="n">signedVolumes</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span><span class="s2">"ij,ij-&gt;i"</span><span class="p">,</span> <span class="n">a</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">cross</span><span class="p">(</span><span class="n">b</span><span class="p">,</span> <span class="n">c</span><span class="p">))</span> <span class="o">/</span> <span class="mf">6.0</span>
+    <span class="n">volume</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">signedVolumes</span><span class="p">)</span>
+
+    <span class="c1"># Zero check relative to the summed absolute tetrahedron volumes, independent of the mesh's length unit.</span>
+    <span class="n">volumeScale</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">signedVolumes</span><span class="p">))</span>
+    <span class="k">if</span> <span class="n">volumeScale</span> <span class="o">==</span> <span class="mf">0.0</span> <span class="ow">or</span> <span class="nb">abs</span><span class="p">(</span><span class="n">volume</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mf">1e-10</span> <span class="o">*</span> <span class="n">volumeScale</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="s2">"The computed volume is (numerically) zero; `faces` does not "</span>
+            <span class="s2">"describe a closed, watertight polyhedral surface."</span>
+        <span class="p">)</span>
+
+    <span class="c1"># First moment of each tetrahedron about the origin: V * centroid, where</span>
+    <span class="c1"># the centroid of a tetrahedron with one vertex at the origin is the</span>
+    <span class="c1"># average of its four vertices.</span>
+    <span class="n">firstMoment</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">signedVolumes</span><span class="p">[:,</span> <span class="kc">None</span><span class="p">]</span> <span class="o">*</span> <span class="p">(</span><span class="n">a</span> <span class="o">+</span> <span class="n">b</span> <span class="o">+</span> <span class="n">c</span><span class="p">)</span> <span class="o">/</span> <span class="mf">4.0</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+
+    <span class="c1"># Second moment tensor of each tetrahedron about the origin, via the</span>
+    <span class="c1"># closed-form integral over the reference simplex:</span>
+    <span class="c1">#   int x_i x_j dV = (V / 20) * (S_i S_j + a_i a_j + b_i b_j + c_i c_j)</span>
+    <span class="c1"># with S = a + b + c.</span>
+    <span class="n">S</span> <span class="o">=</span> <span class="n">a</span> <span class="o">+</span> <span class="n">b</span> <span class="o">+</span> <span class="n">c</span>
+    <span class="n">outerProducts</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">np</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span><span class="s2">"fi,fj-&gt;fij"</span><span class="p">,</span> <span class="n">S</span><span class="p">,</span> <span class="n">S</span><span class="p">)</span>
+        <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span><span class="s2">"fi,fj-&gt;fij"</span><span class="p">,</span> <span class="n">a</span><span class="p">,</span> <span class="n">a</span><span class="p">)</span>
+        <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span><span class="s2">"fi,fj-&gt;fij"</span><span class="p">,</span> <span class="n">b</span><span class="p">,</span> <span class="n">b</span><span class="p">)</span>
+        <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span><span class="s2">"fi,fj-&gt;fij"</span><span class="p">,</span> <span class="n">c</span><span class="p">,</span> <span class="n">c</span><span class="p">)</span>
+    <span class="p">)</span>
+    <span class="n">secondMomentOrigin</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span><span class="s2">"f,fij-&gt;ij"</span><span class="p">,</span> <span class="n">signedVolumes</span> <span class="o">/</span> <span class="mf">20.0</span><span class="p">,</span> <span class="n">outerProducts</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">volume</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="c1"># The mesh is consistently wound, but inward (all normals point into</span>
+        <span class="c1"># the solid); flip all accumulated quantities to correct it.</span>
+        <span class="n">volume</span> <span class="o">=</span> <span class="o">-</span><span class="n">volume</span>
+        <span class="n">firstMoment</span> <span class="o">=</span> <span class="o">-</span><span class="n">firstMoment</span>
+        <span class="n">secondMomentOrigin</span> <span class="o">=</span> <span class="o">-</span><span class="n">secondMomentOrigin</span>
+
+    <span class="n">centerOfMass</span> <span class="o">=</span> <span class="n">firstMoment</span> <span class="o">/</span> <span class="n">volume</span>
+    <span class="n">mass</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">density</span> <span class="o">*</span> <span class="n">volume</span><span class="p">)</span>
+    <span class="n">volume</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">volume</span><span class="p">)</span>
+
+    <span class="c1"># Convert the raw second-moment tensor into the standard inertia tensor</span>
+    <span class="c1"># about the origin, I = density * (trace(M) * Identity - M), then shift</span>
+    <span class="c1"># to the center of mass via the parallel axis theorem.</span>
+    <span class="n">inertiaOrigin</span> <span class="o">=</span> <span class="n">density</span> <span class="o">*</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">trace</span><span class="p">(</span><span class="n">secondMomentOrigin</span><span class="p">)</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span> <span class="o">-</span> <span class="n">secondMomentOrigin</span><span class="p">)</span>
+    <span class="n">d</span> <span class="o">=</span> <span class="n">centerOfMass</span>
+    <span class="n">inertiaCenterOfMass</span> <span class="o">=</span> <span class="n">inertiaOrigin</span> <span class="o">-</span> <span class="n">mass</span> <span class="o">*</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">d</span><span class="p">,</span> <span class="n">d</span><span class="p">)</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span> <span class="o">-</span> <span class="n">np</span><span class="o">.</span><span class="n">outer</span><span class="p">(</span><span class="n">d</span><span class="p">,</span> <span class="n">d</span><span class="p">))</span>
+
+    <span class="k">return</span> <span class="n">PolyhedronMassProperties</span><span class="p">(</span>
+        <span class="n">volume</span><span class="o">=</span><span class="n">volume</span><span class="p">,</span>
+        <span class="n">mass</span><span class="o">=</span><span class="n">mass</span><span class="p">,</span>
+        <span class="n">centerOfMass</span><span class="o">=</span><span class="n">centerOfMass</span><span class="p">,</span>
+        <span class="n">inertia</span><span class="o">=</span><span class="n">inertiaCenterOfMass</span><span class="p">,</span>
+    <span class="p">)</span></div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Matthias Neuner.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

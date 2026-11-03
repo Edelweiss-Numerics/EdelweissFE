@@ -1,0 +1,737 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>edelweissfe.linsolve.composition.solver &mdash; EdelweissFE v22.07 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=cfdaff8d" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css?v=37fbe429" />
+
+  
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=17e2f33f"></script>
+      <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            EdelweissFE
+              <img src="../../../../_static/edelweiss_fe_logo.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../features.html">Features</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../prerequisites.html">Prerequisites</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../documentation/index.html">Documentation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../contributors.html">Contributors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../publications.html">Publications</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">EdelweissFE</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">edelweissfe.linsolve.composition.solver</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for edelweissfe.linsolve.composition.solver</h1><div class="highlight"><pre>
+<span></span><span class="ch">#!/usr/bin/env python3</span>
+<span class="c1"># -*- coding: utf-8 -*-</span>
+<span class="c1">#  ---------------------------------------------------------------------</span>
+<span class="c1">#</span>
+<span class="c1">#  _____    _      _              _         _____ _____</span>
+<span class="c1"># | ____|__| | ___| |_      _____(_)___ ___|  ___| ____|</span>
+<span class="c1"># |  _| / _` |/ _ \ \ \ /\ / / _ \ / __/ __| |_  |  _|</span>
+<span class="c1"># | |__| (_| |  __/ |\ V  V /  __/ \__ \__ \  _| | |___</span>
+<span class="c1"># |_____\__,_|\___|_| \_/\_/ \___|_|___/___/_|   |_____|</span>
+<span class="c1">#</span>
+<span class="c1">#</span>
+<span class="c1">#  Unit of Strength of Materials and Structural Analysis</span>
+<span class="c1">#  University of Innsbruck,</span>
+<span class="c1">#  2017 - today</span>
+<span class="c1">#</span>
+<span class="c1">#  Matthias Neuner matthias.neuner@uibk.ac.at</span>
+<span class="c1">#</span>
+<span class="c1">#  This file is part of EdelweissFE.</span>
+<span class="c1">#</span>
+<span class="c1">#  This library is free software; you can redistribute it and/or</span>
+<span class="c1">#  modify it under the terms of the GNU Lesser General Public</span>
+<span class="c1">#  License as published by the Free Software Foundation; either</span>
+<span class="c1">#  version 2.1 of the License, or (at your option) any later version.</span>
+<span class="c1">#</span>
+<span class="c1">#  The full text of the license can be found in the file LICENSE.md at</span>
+<span class="c1">#  the top level directory of EdelweissFE.</span>
+<span class="c1">#  ---------------------------------------------------------------------</span>
+<span class="sd">"""The one adapter between a nonlinear solver and a composed solver: :class:`ComposedLinearSolver`, and the solver</span>
+<span class="sd">script of ``*linearSolver, type=custom`` (:func:`loadSolverScript`).</span>
+
+<span class="sd">The nonlinear solver calls its linear solver as ``x = solver(A, b)`` once per Newton iteration.</span>
+<span class="sd">:class:`ComposedLinearSolver` turns that call into the life cycle of a composed solver: it finds what changed since</span>
+<span class="sd">the last call (a new pattern, a resized system, a jump of the right-hand side that marks a new increment),</span>
+<span class="sd">hands the changed matrix down the tree (:meth:`~edelweissfe.linsolve.composition.base.Preconditioner.update`), and</span>
+<span class="sd">applies the root to :math:`b`. It is also what reports on the solves: the journal, the warnings, the dumps</span>
+<span class="sd">(:mod:`~edelweissfe.linsolve.composition.solvedumps`), and the hot reload of a solver script. Every type of linear</span>
+<span class="sd">solver is a tree behind this adapter (:mod:`edelweissfe.linsolve.types`); a direct solver is a tree of one leaf.</span>
+
+<span class="sd">In an input file, a solver script is the ``custom`` type::</span>
+
+<span class="sd">    *linearSolver, name=mySolver, type=custom</span>
+<span class="sd">    script=solver.py</span>
+
+<span class="sd">    *solver, solver=NIST, name=theSolver</span>
+<span class="sd">    linsolver=mySolver</span>
+
+<span class="sd">``solver.py`` builds the tree with plain constructors and binds it to the global ``linearSolver``; it holds only the</span>
+<span class="sd">math, the adapter's settings (verbosity, dumps, hot reload) are data lines of the block::</span>
+
+<span class="sd">    linearSolver = LGMRES(DiagonalScaling(...))</span>
+<span class="sd">"""</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">dataclasses</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">hashlib</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">runpy</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">time</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">edelweissfe.utils.performancetiming</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">performancetiming</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.linsolve.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">FieldBlock</span><span class="p">,</span> <span class="n">LinearSolver</span><span class="p">,</span> <span class="n">LinearSolveSummary</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.linsolve.composition.base</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">MatrixChange</span><span class="p">,</span>
+    <span class="n">Preconditioner</span><span class="p">,</span>
+    <span class="n">SetUpContext</span><span class="p">,</span>
+    <span class="n">requireEachComponentOnce</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.linsolve.composition.solvedumps</span><span class="w"> </span><span class="kn">import</span> <span class="n">SolveDumps</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.linsolve.composition.systemmatrix</span><span class="w"> </span><span class="kn">import</span> <span class="n">SystemMatrix</span>
+
+<span class="n">_IDENTIFICATION</span> <span class="o">=</span> <span class="s2">"ComposedSolver"</span>
+<span class="n">_VERBOSITY_LEVELS</span> <span class="o">=</span> <span class="p">(</span><span class="s2">"silent"</span><span class="p">,</span> <span class="s2">"warning"</span><span class="p">,</span> <span class="s2">"info"</span><span class="p">,</span> <span class="s2">"debug"</span><span class="p">)</span>
+<span class="n">_WARNING_MARKER</span> <span class="o">=</span> <span class="s2">"⚠ "</span>
+
+
+<div class="viewcode-block" id="tileFieldBlocks">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.solver.tileFieldBlocks">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">tileFieldBlocks</span><span class="p">(</span><span class="n">fieldStructure</span><span class="p">:</span> <span class="s2">"list | None"</span><span class="p">,</span> <span class="n">n</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">owner</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""The field blocks tiling ``[0, n)``, in dof order, with any trailing dofs not covered by a node field (e.g.</span>
+<span class="sd">    scalar variables) folded into a final scalar block.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    fieldStructure</span>
+<span class="sd">        The field blocks of the model, as :meth:`~edelweissfe.linsolve.base.LinearSolver.setModel` derived them.</span>
+<span class="sd">    n</span>
+<span class="sd">        The number of dofs.</span>
+<span class="sd">    owner</span>
+<span class="sd">        The name error messages start with.</span>
+<span class="sd">    """</span>
+    <span class="k">if</span> <span class="n">fieldStructure</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+            <span class="s2">"</span><span class="si">{:}</span><span class="s2">: field structure not set. It is derived from setModel() (or, at the lower "</span>
+            <span class="s2">"level, setFieldStructure()); this solver must be driven by a caller that calls one of "</span>
+            <span class="s2">"those."</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">owner</span><span class="p">)</span>
+        <span class="p">)</span>
+    <span class="n">blocks</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">fieldStructure</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">field</span><span class="p">:</span> <span class="n">field</span><span class="o">.</span><span class="n">start</span><span class="p">)</span>
+    <span class="n">cursor</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="k">for</span> <span class="n">block</span> <span class="ow">in</span> <span class="n">blocks</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">block</span><span class="o">.</span><span class="n">start</span> <span class="o">!=</span> <span class="n">cursor</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">"</span><span class="si">{:}</span><span class="s2">: field '</span><span class="si">{:}</span><span class="s2">' starts at </span><span class="si">{:}</span><span class="s2">, expected </span><span class="si">{:}</span><span class="s2"> -- fields must tile the DOF "</span>
+                <span class="s2">"vector contiguously"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">owner</span><span class="p">,</span> <span class="n">block</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">block</span><span class="o">.</span><span class="n">start</span><span class="p">,</span> <span class="n">cursor</span><span class="p">)</span>
+            <span class="p">)</span>
+        <span class="n">cursor</span> <span class="o">=</span> <span class="n">block</span><span class="o">.</span><span class="n">stop</span>
+    <span class="k">if</span> <span class="n">cursor</span> <span class="o">&lt;</span> <span class="n">n</span><span class="p">:</span>
+        <span class="c1"># DOFs past the last node field: scalar variables. One scalar block.</span>
+        <span class="n">blocks</span> <span class="o">=</span> <span class="n">blocks</span> <span class="o">+</span> <span class="p">[</span><span class="n">FieldBlock</span><span class="p">(</span><span class="s2">"scalar variables"</span><span class="p">,</span> <span class="n">cursor</span><span class="p">,</span> <span class="n">n</span><span class="p">,</span> <span class="mi">1</span><span class="p">)]</span>
+    <span class="k">elif</span> <span class="n">cursor</span> <span class="o">!=</span> <span class="n">n</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"</span><span class="si">{:}</span><span class="s2">: field blocks cover </span><span class="si">{:}</span><span class="s2"> dofs, but the matrix is </span><span class="si">{:}</span><span class="s2">x</span><span class="si">{:}</span><span class="s2">"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">owner</span><span class="p">,</span> <span class="n">cursor</span><span class="p">,</span> <span class="n">n</span><span class="p">,</span> <span class="n">n</span><span class="p">))</span>
+    <span class="k">return</span> <span class="n">blocks</span></div>
+
+
+
+<div class="viewcode-block" id="ComposedLinearSolver">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.solver.ComposedLinearSolver">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">ComposedLinearSolver</span><span class="p">(</span><span class="n">LinearSolver</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""A composed solver (the ``root`` of a tree of preconditioners, usually a Krylov solver) as a</span>
+<span class="sd">    :class:`~edelweissfe.linsolve.base.LinearSolver`, callable as ``x = solver(A, b)``: the driver of the tree.</span>
+
+<span class="sd">    Per call it finds what changed and hands it down the tree as a</span>
+<span class="sd">    :class:`~edelweissfe.linsolve.composition.base.MatrixChange`: ``"first"`` (nothing built yet), ``"model"``</span>
+<span class="sd">    (after :meth:`setModel`), ``"reload"`` (a new tree from a hot reload), ``"amr"`` (another field layout or size),</span>
+<span class="sd">    ``"pattern"`` (another number of stored entries, an O(1) proxy for the sparsity pattern), or only new values.</span>
+<span class="sd">    Whether a right-hand side jumped by more than ``residualGrowthFactor`` (a new increment) is passed along too; the</span>
+<span class="sd">    Krylov solver decides what it means.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    root</span>
+<span class="sd">        The composed solver.</span>
+<span class="sd">    residualGrowthFactor</span>
+<span class="sd">        A right-hand side this many times larger than the previous one marks a new increment (a cutback after a</span>
+<span class="sd">        diverged attempt starts below its last residual, and is not one).</span>
+<span class="sd">    verbosity</span>
+<span class="sd">        ``"silent"``, ``"warning"`` (default: nothing on a normal solve; a warning for a slow or unconverged one),</span>
+<span class="sd">        ``"info"`` (the structure of the solver at the first solve, in a frame, and the "linear solve" column of the</span>
+<span class="sd">        nonlinear solver's table) or ``"debug"`` (also each true-residual restart of a Krylov solve, and why the</span>
+<span class="sd">        preconditioner was rebuilt or reused, in that column).</span>
+<span class="sd">    warningOuterIterations</span>
+<span class="sd">        A solve with more outer iterations than this gets a warning (a sign that the preconditioner no longer fits).</span>
+<span class="sd">        A solve that misses its tolerance gets a warning of its own, whatever this says.</span>
+<span class="sd">    dumps</span>
+<span class="sd">        A :class:`~edelweissfe.linsolve.composition.solvedumps.SolveDumps`: write the systems of chosen solves to disk,</span>
+<span class="sd">        for an offline replay. ``None`` (default): none.</span>
+<span class="sd">    nodeCoordinates</span>
+<span class="sd">        ``{fieldName: (nNodes, dimension) array}``, coordinates to use instead of the model's (an offline replay).</span>
+<span class="sd">    midsideCorners</span>
+<span class="sd">        ``{fieldName: (isCorner, edgeEndpoints)}``, midside corners to use instead of those derived from the model.</span>
+<span class="sd">    """</span>
+
+    <span class="n">identification</span> <span class="o">=</span> <span class="n">_IDENTIFICATION</span>
+
+    <span class="c1">#: Instances created in this process: the ordinal of an instance names its dumps, so that the dumps of</span>
+    <span class="c1">#: several solvers (one per analysis step, say) never overwrite each other.</span>
+    <span class="n">_instancesCreated</span> <span class="o">=</span> <span class="mi">0</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">root</span><span class="p">:</span> <span class="n">Preconditioner</span><span class="p">,</span>
+        <span class="n">residualGrowthFactor</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">4.0</span><span class="p">,</span>
+        <span class="n">verbosity</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"warning"</span><span class="p">,</span>
+        <span class="n">warningOuterIterations</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">100</span><span class="p">,</span>
+        <span class="n">dumps</span><span class="p">:</span> <span class="n">SolveDumps</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">nodeCoordinates</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">midsideCorners</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">root</span><span class="p">,</span> <span class="n">Preconditioner</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                <span class="s2">"ComposedLinearSolver: its root must be a composed solver (a Preconditioner such as LGMRES(...)), "</span>
+                <span class="s2">"got </span><span class="si">{!r}</span><span class="s2">"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">root</span><span class="p">)</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="n">verbosity</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">_VERBOSITY_LEVELS</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">"ComposedLinearSolver: verbosity must be one of </span><span class="si">{:}</span><span class="s2">, got </span><span class="si">{!r}</span><span class="s2">"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">_VERBOSITY_LEVELS</span><span class="p">,</span> <span class="n">verbosity</span><span class="p">)</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">residualGrowthFactor</span> <span class="o">&gt;</span> <span class="mf">1.0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"ComposedLinearSolver: residualGrowthFactor must be greater than 1"</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">warningOuterIterations</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"ComposedLinearSolver: warningOuterIterations must not be negative"</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">root</span> <span class="o">=</span> <span class="n">root</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">residualGrowthFactor</span> <span class="o">=</span> <span class="n">residualGrowthFactor</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">verbosity</span> <span class="o">=</span> <span class="n">verbosity</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">warningOuterIterations</span> <span class="o">=</span> <span class="n">warningOuterIterations</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dumps</span> <span class="o">=</span> <span class="n">dumps</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_givenCoordinates</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="n">name</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">coordinates</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span> <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">coordinates</span> <span class="ow">in</span> <span class="p">(</span><span class="n">nodeCoordinates</span> <span class="ow">or</span> <span class="p">{})</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+        <span class="p">}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_givenMidsideCorners</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">midsideCorners</span> <span class="ow">or</span> <span class="p">{})</span>
+        <span class="c1">#: The solver script the tree was built by (see :meth:`fromScript`), ``None`` for a tree built in Python.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">script</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="c1">#: Whether the tree is built again whenever the solver script changes on disk (see :meth:`_hotReload`).</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">hotReload</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="c1"># the contents of the script the tree was last built from</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_scriptStamp</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="c1"># the tree a hot reload replaced, until the new tree has been set up (see _hotReload)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_rootBeforeReload</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_reloaded</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_coordinateCache</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_midsideCornersCache</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="c1">#: The stored entries of the last matrix: a new count is a new sparsity pattern.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">lastNnz</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="c1">#: The right-hand side norm of the last solve, ``None`` before the first one and after a new model.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">lastResidualNorm</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_fields</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_modelChanged</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_solveCount</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_previousIterations</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_lastSolveSummary</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_instanceOrdinal</span> <span class="o">=</span> <span class="n">ComposedLinearSolver</span><span class="o">.</span><span class="n">_instancesCreated</span>
+        <span class="n">ComposedLinearSolver</span><span class="o">.</span><span class="n">_instancesCreated</span> <span class="o">+=</span> <span class="mi">1</span>
+
+<div class="viewcode-block" id="ComposedLinearSolver.fromScript">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.solver.ComposedLinearSolver.fromScript">[docs]</a>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">fromScript</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">script</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">hotReload</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span> <span class="o">**</span><span class="n">settings</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"ComposedLinearSolver"</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The composed solver of a solver script (see :func:`loadSolverScript`) behind the adapter.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        script</span>
+<span class="sd">            The solver script.</span>
+<span class="sd">        hotReload</span>
+<span class="sd">            Build the tree again whenever the script changed on disk, before a solve, and continue with it (see</span>
+<span class="sd">            :meth:`_hotReload`).</span>
+<span class="sd">        **settings</span>
+<span class="sd">            The settings of the adapter, see :class:`ComposedLinearSolver`.</span>
+<span class="sd">        """</span>
+        <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">script</span><span class="p">,</span> <span class="s2">"rb"</span><span class="p">)</span> <span class="k">as</span> <span class="n">scriptFile</span><span class="p">:</span>
+            <span class="n">stamp</span> <span class="o">=</span> <span class="n">scriptFile</span><span class="o">.</span><span class="n">read</span><span class="p">()</span>
+        <span class="n">solver</span> <span class="o">=</span> <span class="bp">cls</span><span class="p">(</span><span class="n">loadSolverScript</span><span class="p">(</span><span class="n">script</span><span class="p">),</span> <span class="o">**</span><span class="n">settings</span><span class="p">)</span>
+        <span class="n">solver</span><span class="o">.</span><span class="n">script</span> <span class="o">=</span> <span class="n">script</span>
+        <span class="n">solver</span><span class="o">.</span><span class="n">hotReload</span> <span class="o">=</span> <span class="n">hotReload</span>
+        <span class="n">solver</span><span class="o">.</span><span class="n">_scriptStamp</span> <span class="o">=</span> <span class="n">stamp</span>
+        <span class="k">return</span> <span class="n">solver</span></div>
+
+
+    <span class="c1"># ----- what the nonlinear solver hands over -----</span>
+
+<div class="viewcode-block" id="ComposedLinearSolver.setModel">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.solver.ComposedLinearSolver.setModel">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">setModel</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">dofManager</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Take the model: the field layout (base class), and for the tree what is derived from it. What the tree built</span>
+<span class="sd">        for the previous model is forgotten right away: the tree is built anew at the next solve, and the nonlinear</span>
+<span class="sd">        solver builds the new equation system before that."""</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">root</span><span class="o">.</span><span class="n">forget</span><span class="p">()</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">setModel</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">dofManager</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_coordinateCache</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_midsideCornersCache</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_modelChanged</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">lastResidualNorm</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">root</span><span class="o">.</span><span class="n">setModel</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">dofManager</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="ComposedLinearSolver.coordinatesOf">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.solver.ComposedLinearSolver.coordinatesOf">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">coordinatesOf</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">fieldName</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"np.ndarray | None"</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The node coordinates of a field in its dof order: given ones first, else the model's, else ``None``."""</span>
+        <span class="k">if</span> <span class="n">fieldName</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_givenCoordinates</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_givenCoordinates</span><span class="p">[</span><span class="n">fieldName</span><span class="p">]</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_model</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">fieldName</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_model</span><span class="o">.</span><span class="n">nodeFields</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="n">fieldName</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_coordinateCache</span><span class="p">:</span>
+            <span class="n">nodeField</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_model</span><span class="o">.</span><span class="n">nodeFields</span><span class="p">[</span><span class="n">fieldName</span><span class="p">]</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_coordinateCache</span><span class="p">[</span><span class="n">fieldName</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">node</span><span class="o">.</span><span class="n">coordinates</span> <span class="k">for</span> <span class="n">node</span> <span class="ow">in</span> <span class="n">nodeField</span><span class="o">.</span><span class="n">nodes</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_coordinateCache</span><span class="p">[</span><span class="n">fieldName</span><span class="p">]</span></div>
+
+
+<div class="viewcode-block" id="ComposedLinearSolver.midsideCornersOf">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.solver.ComposedLinearSolver.midsideCornersOf">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">midsideCornersOf</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">fieldName</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""The midside corners of a field (which nodes are corners, and the corners of each midside node): a given one</span>
+<span class="sd">        first, else derived from the model, else ``None``. An element whose topology the corner-node interpolation</span>
+<span class="sd">        does not know is an error (:class:`~edelweissfe.numerics.p1topology.UnsupportedElementTopology`)."""</span>
+        <span class="k">if</span> <span class="n">fieldName</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_givenMidsideCorners</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_givenMidsideCorners</span><span class="p">[</span><span class="n">fieldName</span><span class="p">]</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_model</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="n">fieldName</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_midsideCornersCache</span><span class="p">:</span>
+            <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.p1topology</span><span class="w"> </span><span class="kn">import</span> <span class="n">buildMidsideCorners</span>
+
+            <span class="k">with</span> <span class="n">performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"midside corners"</span><span class="p">):</span>
+                <span class="n">isCorner</span><span class="p">,</span> <span class="n">edgeEndpoints</span><span class="p">,</span> <span class="n">conflictingRows</span> <span class="o">=</span> <span class="n">buildMidsideCorners</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_model</span><span class="p">,</span> <span class="n">fieldName</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">conflictingRows</span><span class="o">.</span><span class="n">size</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_log</span><span class="p">(</span>
+                    <span class="s2">"info"</span><span class="p">,</span>
+                    <span class="s2">"</span><span class="si">{:}</span><span class="s2"> nodes of the field '</span><span class="si">{:}</span><span class="s2">' get conflicting edge endpoints from different elements (e.g. at an "</span>
+                    <span class="s2">"AMR refinement interface): they are corners of the corner-node interpolation"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+                        <span class="n">conflictingRows</span><span class="o">.</span><span class="n">size</span><span class="p">,</span> <span class="n">fieldName</span>
+                    <span class="p">),</span>
+                <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_midsideCornersCache</span><span class="p">[</span><span class="n">fieldName</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="n">isCorner</span><span class="p">,</span> <span class="n">edgeEndpoints</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_midsideCornersCache</span><span class="p">[</span><span class="n">fieldName</span><span class="p">]</span></div>
+
+
+    <span class="c1"># ----- the solve -----</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">needsPrunedSystemMatrix</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Whether the tree factorizes (a block of) the system matrix directly</span>
+<span class="sd">        (:attr:`~edelweissfe.linsolve.composition.base.Preconditioner.containsDirectSolver`), whose reordering is</span>
+<span class="sd">        sensitive to explicitly stored zeros, and no Krylov solver of the tree keeps its preconditioner across solves</span>
+<span class="sd">        (:attr:`~edelweissfe.linsolve.composition.base.Preconditioner.reusesPreconditioner`), which a pattern pruned</span>
+<span class="sd">        anew in every iteration would defeat. A tree of Krylov solvers and AMG, the default, does not need it."""</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">root</span><span class="o">.</span><span class="n">containsDirectSolver</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">root</span><span class="o">.</span><span class="n">reusesPreconditioner</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">reportsSolveSummary</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The "linear solve" column of the nonlinear solver: the outer iterations of a Krylov solve, at verbosity</span>
+<span class="sd">        ``"info"`` or ``"debug"``."""</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">verbosity</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"info"</span><span class="p">,</span> <span class="s2">"debug"</span><span class="p">)</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">root</span><span class="o">.</span><span class="n">containsKrylovSolver</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">lastSolveSummary</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"LinearSolveSummary | None"</span><span class="p">:</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_lastSolveSummary</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_log</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">level</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">message</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Show ``message`` if the verbosity reaches ``level``: in the journal, or printed without one. A warning is</span>
+<span class="sd">        marked "⚠"."""</span>
+        <span class="k">if</span> <span class="n">_VERBOSITY_LEVELS</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">verbosity</span><span class="p">)</span> <span class="o">&lt;</span> <span class="n">_VERBOSITY_LEVELS</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="n">level</span><span class="p">):</span>
+            <span class="k">return</span>
+        <span class="k">if</span> <span class="n">level</span> <span class="o">==</span> <span class="s2">"warning"</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">message</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="n">_WARNING_MARKER</span><span class="p">):</span>
+            <span class="n">message</span> <span class="o">=</span> <span class="n">_WARNING_MARKER</span> <span class="o">+</span> <span class="n">message</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_journal</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_journal</span><span class="o">.</span><span class="n">message</span><span class="p">(</span><span class="n">message</span><span class="p">,</span> <span class="n">_IDENTIFICATION</span><span class="p">,</span> <span class="n">level</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="nb">print</span><span class="p">(</span><span class="n">message</span><span class="p">,</span> <span class="n">flush</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_logFramed</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">level</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">title</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">message</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Show ``message`` in a frame with ``title`` if the verbosity reaches ``level``: in the journal, or printed</span>
+<span class="sd">        without one."""</span>
+        <span class="k">if</span> <span class="n">_VERBOSITY_LEVELS</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">verbosity</span><span class="p">)</span> <span class="o">&lt;</span> <span class="n">_VERBOSITY_LEVELS</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="n">level</span><span class="p">):</span>
+            <span class="k">return</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_journal</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_journal</span><span class="o">.</span><span class="n">framedMessage</span><span class="p">(</span><span class="n">message</span><span class="p">,</span> <span class="n">_IDENTIFICATION</span><span class="p">,</span> <span class="n">title</span><span class="p">,</span> <span class="n">level</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="nb">print</span><span class="p">(</span><span class="n">title</span> <span class="o">+</span> <span class="s2">":</span><span class="se">\n</span><span class="s2">"</span> <span class="o">+</span> <span class="n">message</span><span class="p">,</span> <span class="n">flush</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_changeFor</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">A</span><span class="p">:</span> <span class="n">SystemMatrix</span><span class="p">,</span> <span class="n">fields</span><span class="p">:</span> <span class="nb">list</span><span class="p">,</span> <span class="n">residualNorm</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">MatrixChange</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""What changed since the last solve."""</span>
+        <span class="n">context</span> <span class="o">=</span> <span class="n">SetUpContext</span><span class="p">(</span>
+            <span class="n">fields</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(</span><span class="n">fields</span><span class="p">),</span>
+            <span class="n">coordinatesOf</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">coordinatesOf</span><span class="p">,</span>
+            <span class="n">midsideCornersOf</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">midsideCornersOf</span><span class="p">,</span>
+            <span class="n">model</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_model</span><span class="p">,</span>
+            <span class="n">journal</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_journal</span><span class="p">,</span>
+            <span class="n">log</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_log</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_fields</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">reason</span> <span class="o">=</span> <span class="s2">"first"</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">_modelChanged</span><span class="p">:</span>
+            <span class="n">reason</span> <span class="o">=</span> <span class="s2">"model"</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">_reloaded</span><span class="p">:</span>
+            <span class="n">reason</span> <span class="o">=</span> <span class="s2">"reload"</span>
+        <span class="k">elif</span> <span class="n">fields</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_fields</span><span class="p">:</span>
+            <span class="n">reason</span> <span class="o">=</span> <span class="s2">"amr"</span>
+        <span class="k">elif</span> <span class="n">A</span><span class="o">.</span><span class="n">nnz</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">lastNnz</span><span class="p">:</span>
+            <span class="n">reason</span> <span class="o">=</span> <span class="s2">"pattern"</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">reason</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="n">newIncrement</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">lastResidualNorm</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">residualNorm</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">residualGrowthFactor</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">lastResidualNorm</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">MatrixChange</span><span class="p">(</span><span class="n">context</span><span class="p">,</span> <span class="n">reason</span><span class="p">,</span> <span class="n">newIncrement</span><span class="p">,</span> <span class="n">residualNorm</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">lastResidualNorm</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_notSolved</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">shape</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">,</span> <span class="n">reason</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""A declined solve: NaN, which reaches the nonlinear solver as a diverged solution (a cutback)."""</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_log</span><span class="p">(</span><span class="s2">"warning"</span><span class="p">,</span> <span class="s2">"solve #</span><span class="si">{:}</span><span class="s2">: </span><span class="si">{:}</span><span class="s2">; returning NaN without solving."</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_solveCount</span><span class="p">,</span> <span class="n">reason</span><span class="p">))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_lastSolveSummary</span> <span class="o">=</span> <span class="n">LinearSolveSummary</span><span class="p">(</span><span class="n">iters</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">residual</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="s2">"nan"</span><span class="p">),</span> <span class="n">residualMet</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">retries</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">(</span><span class="n">shape</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">A</span><span class="p">,</span> <span class="n">b</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Solve :math:`A x = b`, for one right-hand side ``b`` (a vector) or several (the columns of a matrix, e.g.</span>
+<span class="sd">        the two of an arc-length method), each with the same set-up of the tree."""</span>
+        <span class="n">start</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_solveCount</span> <span class="o">+=</span> <span class="mi">1</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">hotReload</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_hotReload</span><span class="p">()</span>
+        <span class="n">A</span> <span class="o">=</span> <span class="n">SystemMatrix</span><span class="p">(</span><span class="n">A</span><span class="p">)</span>
+        <span class="n">n</span> <span class="o">=</span> <span class="n">A</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="c1"># a direct solve needs no fields: a caller may not hand over any (EdelweissMeshfree's solvers)</span>
+        <span class="n">fields</span> <span class="o">=</span> <span class="p">[]</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_fieldStructure</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">tileFieldBlocks</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_fieldStructure</span><span class="p">,</span> <span class="n">n</span><span class="p">,</span> <span class="n">_IDENTIFICATION</span><span class="p">)</span>
+        <span class="n">b</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">b</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span>
+        <span class="n">rightHandSides</span> <span class="o">=</span> <span class="n">b</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">residualNorm</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">b</span><span class="p">))</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">residualNorm</span><span class="p">):</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_notSolved</span><span class="p">(</span><span class="n">b</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="s2">"the right-hand side is not finite"</span><span class="p">)</span>
+
+        <span class="n">change</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_changeFor</span><span class="p">(</span><span class="n">A</span><span class="p">,</span> <span class="n">fields</span><span class="p">,</span> <span class="n">residualNorm</span><span class="p">)</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">root</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">A</span><span class="p">,</span> <span class="n">change</span><span class="p">)</span>
+        <span class="k">except</span> <span class="p">(</span><span class="ne">FloatingPointError</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">LinAlgError</span><span class="p">)</span> <span class="k">as</span> <span class="n">error</span><span class="p">:</span>
+            <span class="c1"># a non-finite scaling, a singular matrix: the nonlinear solver cuts the increment back, and what the</span>
+            <span class="c1"># tree formed from A goes before the next matrix is assembled</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">root</span><span class="o">.</span><span class="n">finishSolve</span><span class="p">()</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_notSolved</span><span class="p">(</span><span class="n">b</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">error</span><span class="p">))</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">error</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_rootBeforeReload</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_rollBackHotReload</span><span class="p">(</span><span class="n">error</span><span class="p">)</span>
+            <span class="n">change</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_changeFor</span><span class="p">(</span><span class="n">A</span><span class="p">,</span> <span class="n">fields</span><span class="p">,</span> <span class="n">residualNorm</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">root</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">A</span><span class="p">,</span> <span class="n">change</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_rootBeforeReload</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_fields</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">_reloaded</span><span class="p">:</span>
+            <span class="c1"># after the first set-up: a combination made per field has made its corrections only then</span>
+            <span class="n">requireEachComponentOnce</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">root</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_logFramed</span><span class="p">(</span><span class="s2">"info"</span><span class="p">,</span> <span class="s2">"composed linear solver"</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">root</span><span class="p">)</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">_scriptLine</span><span class="p">())</span>
+        <span class="n">x</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">column_stack</span><span class="p">([</span><span class="bp">self</span><span class="o">.</span><span class="n">root</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">r</span><span class="p">))</span> <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">rightHandSides</span><span class="o">.</span><span class="n">T</span><span class="p">])</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">b</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+        <span class="n">record</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">root</span><span class="o">.</span><span class="n">solveRecord</span><span class="p">()</span>
+        <span class="n">condensedDofs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">root</span><span class="o">.</span><span class="n">condensedDofs</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">root</span><span class="o">.</span><span class="n">finishSolve</span><span class="p">()</span>
+
+        <span class="n">patternChanged</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">lastNnz</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">A</span><span class="o">.</span><span class="n">nnz</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">lastNnz</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_fields</span> <span class="o">=</span> <span class="n">fields</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_modelChanged</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_reloaded</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">lastNnz</span> <span class="o">=</span> <span class="n">A</span><span class="o">.</span><span class="n">nnz</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">lastResidualNorm</span> <span class="o">=</span> <span class="n">residualNorm</span>
+        <span class="k">if</span> <span class="n">record</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_report</span><span class="p">(</span><span class="n">record</span><span class="p">,</span> <span class="n">change</span><span class="p">,</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="o">-</span> <span class="n">start</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_lastSolveSummary</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">dumps</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_dump</span><span class="p">(</span><span class="n">A</span><span class="o">.</span><span class="n">A</span><span class="p">,</span> <span class="n">b</span><span class="p">,</span> <span class="n">fields</span><span class="p">,</span> <span class="n">record</span><span class="p">,</span> <span class="n">change</span><span class="p">,</span> <span class="n">patternChanged</span><span class="p">,</span> <span class="n">condensedDofs</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">record</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_previousIterations</span> <span class="o">=</span> <span class="n">record</span><span class="o">.</span><span class="n">iterations</span>
+        <span class="k">return</span> <span class="n">x</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_report</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">record</span><span class="p">,</span> <span class="n">change</span><span class="p">:</span> <span class="n">MatrixChange</span><span class="p">,</span> <span class="n">seconds</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The summary of a solve for the nonlinear solver's table, its line in the journal, and its warnings."""</span>
+        <span class="n">detailLines</span> <span class="o">=</span> <span class="p">()</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">verbosity</span> <span class="o">==</span> <span class="s2">"debug"</span><span class="p">:</span>
+            <span class="n">rebuilt</span> <span class="o">=</span> <span class="s2">"rebuilt(</span><span class="si">{:}</span><span class="s2">)"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">record</span><span class="o">.</span><span class="n">rebuildReason</span><span class="p">)</span> <span class="k">if</span> <span class="n">record</span><span class="o">.</span><span class="n">rebuildReason</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="s2">"reused"</span>
+            <span class="n">detailLines</span> <span class="o">=</span> <span class="p">(</span><span class="n">rebuilt</span><span class="p">,</span> <span class="s2">"η=</span><span class="si">{:.1e}</span><span class="s2"> · </span><span class="si">{:.1f}</span><span class="s2">s"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">record</span><span class="o">.</span><span class="n">eta</span><span class="p">,</span> <span class="n">seconds</span><span class="p">))</span>
+            <span class="k">if</span> <span class="n">record</span><span class="o">.</span><span class="n">rebuildReason</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">detailLines</span> <span class="o">+=</span> <span class="bp">self</span><span class="o">.</span><span class="n">root</span><span class="o">.</span><span class="n">setUpNotes</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_lastSolveSummary</span> <span class="o">=</span> <span class="n">LinearSolveSummary</span><span class="p">(</span>
+            <span class="n">iters</span><span class="o">=</span><span class="n">record</span><span class="o">.</span><span class="n">iterations</span><span class="p">,</span>
+            <span class="n">residual</span><span class="o">=</span><span class="n">record</span><span class="o">.</span><span class="n">residual</span><span class="p">,</span>
+            <span class="n">residualMet</span><span class="o">=</span><span class="n">record</span><span class="o">.</span><span class="n">converged</span><span class="p">,</span>
+            <span class="n">retries</span><span class="o">=</span><span class="n">record</span><span class="o">.</span><span class="n">trueResidualRestarts</span><span class="p">,</span>
+            <span class="n">detailLines</span><span class="o">=</span><span class="n">detailLines</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="n">record</span><span class="o">.</span><span class="n">iterations</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">warningOuterIterations</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_log</span><span class="p">(</span>
+                <span class="s2">"warning"</span><span class="p">,</span>
+                <span class="s2">"solve #</span><span class="si">{:}</span><span class="s2"> needed </span><span class="si">{:}</span><span class="s2"> outer Krylov iterations, above the warning threshold of </span><span class="si">{:}</span><span class="s2">. Likely a "</span>
+                <span class="s2">"preconditioner-quality problem, not a physics one -- worth checking whether the Jacobian changed "</span>
+                <span class="s2">"sharply since the last rebuild of the preconditioner."</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_solveCount</span><span class="p">,</span> <span class="n">record</span><span class="o">.</span><span class="n">iterations</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">warningOuterIterations</span>
+                <span class="p">),</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="n">record</span><span class="o">.</span><span class="n">converged</span><span class="p">:</span>
+            <span class="k">return</span>
+        <span class="k">if</span> <span class="n">record</span><span class="o">.</span><span class="n">capHit</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_log</span><span class="p">(</span>
+                <span class="s2">"warning"</span><span class="p">,</span>
+                <span class="s2">"solve #</span><span class="si">{:}</span><span class="s2"> did not converge: ‖r‖=</span><span class="si">{:.1e}</span><span class="s2"> still exceeds η=</span><span class="si">{:.1e}</span><span class="s2"> after </span><span class="si">{:}</span><span class="s2"> true-residual restarts, and "</span>
+                <span class="s2">"a pass of the Krylov solver stopped at its iteration cap. The cap is a budget, not a tolerance: a "</span>
+                <span class="s2">"solve that needs more is a preconditioning problem -- the preconditioner is rebuilt for the next "</span>
+                <span class="s2">"solve."</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_solveCount</span><span class="p">,</span> <span class="n">record</span><span class="o">.</span><span class="n">residual</span><span class="p">,</span> <span class="n">record</span><span class="o">.</span><span class="n">eta</span><span class="p">,</span> <span class="n">record</span><span class="o">.</span><span class="n">trueResidualRestarts</span><span class="p">),</span>
+            <span class="p">)</span>
+        <span class="k">elif</span> <span class="n">record</span><span class="o">.</span><span class="n">scaledSystem</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_log</span><span class="p">(</span>
+                <span class="s2">"warning"</span><span class="p">,</span>
+                <span class="s2">"solve #</span><span class="si">{:}</span><span class="s2"> did not fully converge: ‖r‖=</span><span class="si">{:.1e}</span><span class="s2"> still exceeds η=</span><span class="si">{:.1e}</span><span class="s2"> after </span><span class="si">{:}</span><span class="s2"> true-residual "</span>
+                <span class="s2">"restarts, though the Krylov solve converged its own (scaled) residual: the gap between the scaled and "</span>
+                <span class="s2">"the true residual, which more true-residual restarts or a ResidualGapCompensation close; a rebuilt "</span>
+                <span class="s2">"preconditioner does not."</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_solveCount</span><span class="p">,</span> <span class="n">record</span><span class="o">.</span><span class="n">residual</span><span class="p">,</span> <span class="n">record</span><span class="o">.</span><span class="n">eta</span><span class="p">,</span> <span class="n">record</span><span class="o">.</span><span class="n">trueResidualRestarts</span>
+                <span class="p">),</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_log</span><span class="p">(</span>
+                <span class="s2">"warning"</span><span class="p">,</span>
+                <span class="s2">"solve #</span><span class="si">{:}</span><span class="s2"> did not fully converge: ‖r‖=</span><span class="si">{:.1e}</span><span class="s2"> still exceeds η=</span><span class="si">{:.1e}</span><span class="s2">, though the Krylov solve "</span>
+                <span class="s2">"reported convergence on the same residual (rounding)."</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_solveCount</span><span class="p">,</span> <span class="n">record</span><span class="o">.</span><span class="n">residual</span><span class="p">,</span> <span class="n">record</span><span class="o">.</span><span class="n">eta</span>
+                <span class="p">),</span>
+            <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_dump</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">A</span><span class="p">,</span> <span class="n">b</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">fields</span><span class="p">:</span> <span class="nb">list</span><span class="p">,</span> <span class="n">record</span><span class="p">,</span> <span class="n">change</span><span class="p">:</span> <span class="n">MatrixChange</span><span class="p">,</span> <span class="n">patternChanged</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span> <span class="n">condensedDofs</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Hand a finished solve to the dumps, with its bookkeeping -- that of its Krylov solve in the names of its</span>
+<span class="sd">        :class:`~edelweissfe.linsolve.composition.krylov.SolveRecord`, if it has one (a direct solve has none, and is</span>
+<span class="sd">        never slow) -- and the geometry of its fields that a replay of the tree may need (:meth:`_dumpedGeometry`)."""</span>
+        <span class="n">state</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"patternChanged"</span><span class="p">:</span> <span class="n">patternChanged</span><span class="p">,</span> <span class="s2">"newIncrement"</span><span class="p">:</span> <span class="n">change</span><span class="o">.</span><span class="n">newIncrement</span><span class="p">}</span>
+        <span class="n">slow</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="k">if</span> <span class="n">record</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">state</span> <span class="o">=</span> <span class="p">{</span><span class="o">**</span><span class="n">dataclasses</span><span class="o">.</span><span class="n">asdict</span><span class="p">(</span><span class="n">record</span><span class="p">),</span> <span class="o">**</span><span class="n">state</span><span class="p">,</span> <span class="s2">"previousIterations"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_previousIterations</span><span class="p">}</span>
+            <span class="n">slow</span> <span class="o">=</span> <span class="n">record</span><span class="o">.</span><span class="n">iterations</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">dumps</span><span class="o">.</span><span class="n">thresholdOr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">warningOuterIterations</span><span class="p">)</span> <span class="ow">or</span> <span class="p">(</span>
+                <span class="n">record</span><span class="o">.</span><span class="n">capHit</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">record</span><span class="o">.</span><span class="n">converged</span>
+            <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dumps</span><span class="o">.</span><span class="n">afterSolve</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_instanceOrdinal</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_solveCount</span><span class="p">,</span>
+            <span class="n">A</span><span class="p">,</span>
+            <span class="n">b</span><span class="p">,</span>
+            <span class="n">fields</span><span class="p">,</span>
+            <span class="n">state</span><span class="p">,</span>
+            <span class="n">condensedDofs</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_dumpedGeometry</span><span class="p">(</span><span class="n">fields</span><span class="p">),</span>
+            <span class="n">slow</span><span class="o">=</span><span class="n">slow</span><span class="p">,</span>
+            <span class="n">log</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_log</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_dumpedGeometry</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">fields</span><span class="p">:</span> <span class="nb">list</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""What a replay without the model needs of the fields (``nodeCoordinates`` and ``midsideCorners`` of the</span>
+<span class="sd">        adapter): the node coordinates of every vector field, and the midside corners the tree asked for, as</span>
+<span class="sd">        ``{name: array}``."""</span>
+        <span class="n">geometry</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">field</span> <span class="ow">in</span> <span class="n">fields</span><span class="p">:</span>
+            <span class="n">coordinates</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">coordinatesOf</span><span class="p">(</span><span class="n">field</span><span class="o">.</span><span class="n">name</span><span class="p">)</span> <span class="k">if</span> <span class="n">field</span><span class="o">.</span><span class="n">dimension</span> <span class="o">&gt;</span> <span class="mi">1</span> <span class="k">else</span> <span class="kc">None</span>
+            <span class="k">if</span> <span class="n">coordinates</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">geometry</span><span class="p">[</span><span class="n">field</span><span class="o">.</span><span class="n">name</span> <span class="o">+</span> <span class="s2">"_coordinates"</span><span class="p">]</span> <span class="o">=</span> <span class="n">coordinates</span>
+        <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">midsideCorners</span> <span class="ow">in</span> <span class="p">{</span><span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">_midsideCornersCache</span><span class="p">,</span> <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">_givenMidsideCorners</span><span class="p">}</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">if</span> <span class="n">midsideCorners</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">geometry</span><span class="p">[</span><span class="n">name</span> <span class="o">+</span> <span class="s2">"_isCorner"</span><span class="p">],</span> <span class="n">geometry</span><span class="p">[</span><span class="n">name</span> <span class="o">+</span> <span class="s2">"_edgeEndpoints"</span><span class="p">]</span> <span class="o">=</span> <span class="n">midsideCorners</span>
+        <span class="k">return</span> <span class="n">geometry</span>
+
+    <span class="c1"># ----- the solver script -----</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_scriptLine</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">script</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="s2">""</span>
+        <span class="k">return</span> <span class="s2">"</span><span class="se">\n</span><span class="s2">from </span><span class="si">{:}</span><span class="s2"> (sha256 </span><span class="si">{:}</span><span class="s2">)"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">script</span><span class="p">,</span> <span class="n">_digest</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_scriptStamp</span><span class="p">))</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_hotReload</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Before a solve: if the solver script changed on disk, run it again and continue with the tree it builds;</span>
+<span class="sd">        what the run has learnt stays (the solve count, the residual history, the numbering of the dumps, so that a</span>
+<span class="sd">        reload never overwrites earlier dumps), and so do the settings of the adapter (data lines of the input file).</span>
+<span class="sd">        The new tree is set up on this solve (rebuild reason ``"reload"``), after the tree in force has forgotten what</span>
+<span class="sd">        it built (it is kept only to roll back to).</span>
+
+<span class="sd">        Editing a file a running process reads is racy, so this fails safely, and nothing about a bad edit can end</span>
+<span class="sd">        the run: a script that cannot be read or does not compile (e.g. half written by an editor) is retried on the</span>
+<span class="sd">        next solve; one that runs into an error, or defines no composed solver, is reported and the tree in force is</span>
+<span class="sd">        kept, until the script changes again; a new tree whose set-up fails is rolled back to the tree in force</span>
+<span class="sd">        (:meth:`_rollBackHotReload`). The contents themselves are the stamp, not the modification time, which coarse</span>
+<span class="sd">        file timestamps can leave unchanged across two quick edits.</span>
+<span class="sd">        """</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">script</span><span class="p">,</span> <span class="s2">"rb"</span><span class="p">)</span> <span class="k">as</span> <span class="n">scriptFile</span><span class="p">:</span>
+                <span class="n">stamp</span> <span class="o">=</span> <span class="n">scriptFile</span><span class="o">.</span><span class="n">read</span><span class="p">()</span>
+        <span class="k">except</span> <span class="ne">OSError</span> <span class="k">as</span> <span class="n">error</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_log</span><span class="p">(</span><span class="s2">"warning"</span><span class="p">,</span> <span class="s2">"hot reload: cannot read </span><span class="si">{:}</span><span class="s2">: </span><span class="si">{:}</span><span class="s2">"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">script</span><span class="p">,</span> <span class="n">error</span><span class="p">))</span>
+            <span class="k">return</span>
+        <span class="k">if</span> <span class="n">stamp</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">_scriptStamp</span><span class="p">:</span>
+            <span class="k">return</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="nb">compile</span><span class="p">(</span><span class="n">stamp</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">script</span><span class="p">,</span> <span class="s2">"exec"</span><span class="p">)</span>
+        <span class="k">except</span> <span class="p">(</span><span class="ne">SyntaxError</span><span class="p">,</span> <span class="ne">ValueError</span><span class="p">)</span> <span class="k">as</span> <span class="n">error</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_log</span><span class="p">(</span>
+                <span class="s2">"warning"</span><span class="p">,</span>
+                <span class="s2">"hot reload: </span><span class="si">{:}</span><span class="s2"> does not compile (</span><span class="si">{:}</span><span class="s2">); keeping the solver in force and retrying on the next "</span>
+                <span class="s2">"solve"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">script</span><span class="p">,</span> <span class="n">error</span><span class="p">),</span>
+            <span class="p">)</span>
+            <span class="k">return</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_scriptStamp</span> <span class="o">=</span> <span class="n">stamp</span>
+        <span class="n">header</span> <span class="o">=</span> <span class="s2">"hot reload of </span><span class="si">{:}</span><span class="s2"> (sha256 </span><span class="si">{:}</span><span class="s2">) at solve #</span><span class="si">{:}</span><span class="s2">"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">script</span><span class="p">,</span> <span class="n">_digest</span><span class="p">(</span><span class="n">stamp</span><span class="p">),</span> <span class="bp">self</span><span class="o">.</span><span class="n">_solveCount</span><span class="p">)</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">tree</span> <span class="o">=</span> <span class="n">loadSolverScript</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">script</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">error</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_log</span><span class="p">(</span>
+                <span class="s2">"warning"</span><span class="p">,</span>
+                <span class="s2">"</span><span class="si">{:}</span><span class="s2">: REJECTED, </span><span class="si">{:}</span><span class="s2">: </span><span class="si">{:}</span><span class="s2">; the solver in force is kept"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">header</span><span class="p">,</span> <span class="nb">type</span><span class="p">(</span><span class="n">error</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="p">,</span> <span class="n">error</span><span class="p">),</span>
+            <span class="p">)</span>
+            <span class="k">return</span>
+        <span class="c1"># the tree in force is kept to roll back to, but not what it built: never two built trees at once</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">root</span><span class="o">.</span><span class="n">forget</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_rootBeforeReload</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">root</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">root</span> <span class="o">=</span> <span class="n">tree</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_model</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">root</span><span class="o">.</span><span class="n">setModel</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_model</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dofManager</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_reloaded</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_log</span><span class="p">(</span><span class="s2">"warning"</span><span class="p">,</span> <span class="s2">"</span><span class="si">{:}</span><span class="s2">: the tree is replaced; it is set up on this solve:</span><span class="se">\n</span><span class="si">{:}</span><span class="s2">"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">header</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">root</span><span class="p">))</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_rollBackHotReload</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">error</span><span class="p">:</span> <span class="ne">Exception</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Back to the tree in force before the last hot reload, whose tree failed to set up (e.g. an AMGCL tree naming</span>
+<span class="sd">        an unknown smoother, which only the build can judge). The script stays recorded as seen, so it is not run again</span>
+<span class="sd">        until it changes. That tree forgot what it built at the reload, and is set up again on this solve (rebuild</span>
+<span class="sd">        reason ``"reload"``)."""</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">root</span><span class="o">.</span><span class="n">forget</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">root</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_rootBeforeReload</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_rootBeforeReload</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_log</span><span class="p">(</span>
+            <span class="s2">"warning"</span><span class="p">,</span>
+            <span class="s2">"hot reload of </span><span class="si">{:}</span><span class="s2"> at solve #</span><span class="si">{:}</span><span class="s2"> ROLLED BACK, the new tree failed to set up: </span><span class="si">{:}</span><span class="s2">: </span><span class="si">{:}</span><span class="s2">; the tree in force "</span>
+            <span class="s2">"before it is kept"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">script</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_solveCount</span><span class="p">,</span> <span class="nb">type</span><span class="p">(</span><span class="n">error</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="p">,</span> <span class="n">error</span><span class="p">),</span>
+        <span class="p">)</span></div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_digest</span><span class="p">(</span><span class="n">contents</span><span class="p">:</span> <span class="nb">bytes</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""The short hash of a solver script, by which the journal names the version in force."""</span>
+    <span class="k">return</span> <span class="n">hashlib</span><span class="o">.</span><span class="n">sha256</span><span class="p">(</span><span class="n">contents</span><span class="p">)</span><span class="o">.</span><span class="n">hexdigest</span><span class="p">()[:</span><span class="mi">12</span><span class="p">]</span>
+
+
+<div class="viewcode-block" id="loadSolverScript">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.solver.loadSolverScript">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">loadSolverScript</span><span class="p">(</span><span class="n">path</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Preconditioner</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""The composed solver a solver script defines: the tree of components it binds to its global ``linearSolver``.</span>
+
+<span class="sd">    The script holds only the math, e.g. ``linearSolver = LGMRES(DiagonalScaling(...))``; the settings of the adapter</span>
+<span class="sd">    (verbosity, dumps, hot reload) are data lines of its ``*linearSolver, type=custom`` block.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    path</span>
+<span class="sd">        The script.</span>
+<span class="sd">    """</span>
+    <span class="n">namespace</span> <span class="o">=</span> <span class="n">runpy</span><span class="o">.</span><span class="n">run_path</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+    <span class="k">if</span> <span class="s2">"linearSolver"</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">namespace</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"solver script </span><span class="si">{:}</span><span class="s2"> defines no 'linearSolver'"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">path</span><span class="p">))</span>
+    <span class="n">tree</span> <span class="o">=</span> <span class="n">namespace</span><span class="p">[</span><span class="s2">"linearSolver"</span><span class="p">]</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">tree</span><span class="p">,</span> <span class="n">LinearSolver</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+            <span class="s2">"solver script </span><span class="si">{:}</span><span class="s2">: 'linearSolver' is a </span><span class="si">{:}</span><span class="s2">, but a script holds only the math: bind the tree itself, "</span>
+            <span class="s2">"linearSolver = LGMRES(...); verbosity, dumps and hotReload are data lines of *linearSolver"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+                <span class="n">path</span><span class="p">,</span> <span class="nb">type</span><span class="p">(</span><span class="n">tree</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span>
+            <span class="p">)</span>
+        <span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">tree</span><span class="p">,</span> <span class="n">Preconditioner</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+            <span class="s2">"solver script </span><span class="si">{:}</span><span class="s2">: 'linearSolver' is a </span><span class="si">{:}</span><span class="s2">, not a composed solver: bind a tree of components, e.g. "</span>
+            <span class="s2">"linearSolver = LGMRES(AMG())"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="nb">type</span><span class="p">(</span><span class="n">tree</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="p">)</span>
+        <span class="p">)</span>
+    <span class="k">return</span> <span class="n">tree</span></div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Matthias Neuner.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

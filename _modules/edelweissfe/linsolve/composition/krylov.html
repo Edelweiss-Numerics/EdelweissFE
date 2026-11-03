@@ -1,0 +1,839 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>edelweissfe.linsolve.composition.krylov &mdash; EdelweissFE v22.07 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=cfdaff8d" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css?v=37fbe429" />
+
+  
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=17e2f33f"></script>
+      <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            EdelweissFE
+              <img src="../../../../_static/edelweiss_fe_logo.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../features.html">Features</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../prerequisites.html">Prerequisites</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../documentation/index.html">Documentation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../contributors.html">Contributors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../publications.html">Publications</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">EdelweissFE</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">edelweissfe.linsolve.composition.krylov</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for edelweissfe.linsolve.composition.krylov</h1><div class="highlight"><pre>
+<span></span><span class="ch">#!/usr/bin/env python3</span>
+<span class="c1"># -*- coding: utf-8 -*-</span>
+<span class="c1">#  ---------------------------------------------------------------------</span>
+<span class="c1">#</span>
+<span class="c1">#  _____    _      _              _         _____ _____</span>
+<span class="c1"># | ____|__| | ___| |_      _____(_)___ ___|  ___| ____|</span>
+<span class="c1"># |  _| / _` |/ _ \ \ \ /\ / / _ \ / __/ __| |_  |  _|</span>
+<span class="c1"># | |__| (_| |  __/ |\ V  V /  __/ \__ \__ \  _| | |___</span>
+<span class="c1"># |_____\__,_|\___|_| \_/\_/ \___|_|___/___/_|   |_____|</span>
+<span class="c1">#</span>
+<span class="c1">#</span>
+<span class="c1">#  Unit of Strength of Materials and Structural Analysis</span>
+<span class="c1">#  University of Innsbruck,</span>
+<span class="c1">#  2017 - today</span>
+<span class="c1">#</span>
+<span class="c1">#  Matthias Neuner matthias.neuner@uibk.ac.at</span>
+<span class="c1">#</span>
+<span class="c1">#  This file is part of EdelweissFE.</span>
+<span class="c1">#</span>
+<span class="c1">#  This library is free software; you can redistribute it and/or</span>
+<span class="c1">#  modify it under the terms of the GNU Lesser General Public</span>
+<span class="c1">#  License as published by the Free Software Foundation; either</span>
+<span class="c1">#  version 2.1 of the License, or (at your option) any later version.</span>
+<span class="c1">#</span>
+<span class="c1">#  The full text of the license can be found in the file LICENSE.md at</span>
+<span class="c1">#  the top level directory of EdelweissFE.</span>
+<span class="c1">#  ---------------------------------------------------------------------</span>
+<span class="sd">"""The outer Krylov solve: :class:`LGMRES` or :class:`FGMRES`, its tolerance per solve</span>
+<span class="sd">(:class:`EisenstatWalkerTolerance`, :class:`FixedTolerance`) and when it rebuilds its preconditioner</span>
+<span class="sd">(:class:`RebuildPolicy`).</span>
+
+<span class="sd">A Krylov method accelerates a basic iteration :math:`x \\leftarrow x + M^{-1}(b - A x)`: from the preconditioned</span>
+<span class="sd">residuals it builds a subspace and takes the best solution in it. LGMRES is restarted GMRES, augmented at each</span>
+<span class="sd">restart with a few error approximations of the previous cycles. AMGCL's implementation is used, right-preconditioned,</span>
+<span class="sd">so the residual it converges is the true one, :math:`\\lVert b - A x \\rVert / \\lVert b \\rVert`.</span>
+
+<span class="sd">Inside Newton's method, a linear solve need not be accurate while Newton is still far from converged: the forcing</span>
+<span class="sd">tolerance of Eisenstat and Walker asks for as much accuracy as the last Newton step earned. And the preconditioner</span>
+<span class="sd">need not be rebuilt for every Newton iteration: while the matrix changes little, the old one does nearly as well, and</span>
+<span class="sd">a rebuild costs more than the few extra iterations.</span>
+<span class="sd">"""</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">edelweissfe.utils.performancetiming</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">performancetiming</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.linsolve.composition.base</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">Description</span><span class="p">,</span>
+    <span class="n">MatrixChange</span><span class="p">,</span>
+    <span class="n">Preconditioner</span><span class="p">,</span>
+    <span class="n">SetUpContext</span><span class="p">,</span>
+    <span class="n">Step</span><span class="p">,</span>
+    <span class="n">requirePreconditioner</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="c1">#: The least excess over the reference outer iteration count that makes a reused preconditioner stale, on top of the</span>
+<span class="c1">#: staleness factor: at small counts a factor alone fires on noise.</span>
+<span class="n">STALENESS_MIN_EXCESS</span> <span class="o">=</span> <span class="mi">15</span>
+
+
+<div class="viewcode-block" id="eisenstatWalkerTolerance">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.krylov.eisenstatWalkerTolerance">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">eisenstatWalkerTolerance</span><span class="p">(</span>
+    <span class="n">residualNorm</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+    <span class="n">previousResidualNorm</span><span class="p">:</span> <span class="s2">"float | None"</span><span class="p">,</span>
+    <span class="n">previousEta</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+    <span class="n">newIncrement</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
+    <span class="n">minimum</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+    <span class="n">maximum</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+    <span class="n">gamma</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+    <span class="n">alpha</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""The Eisenstat--Walker "choice 2" forcing tolerance, clamped and safeguarded.</span>
+
+<span class="sd">    :math:`\\eta_k = \\gamma (\\lVert b_k \\rVert / \\lVert b_{k-1} \\rVert)^\\alpha`, with the classic safeguard</span>
+<span class="sd">    against over-solving (a large tightening step is only trusted if the previous tolerance was already small),</span>
+<span class="sd">    clamped to ``[minimum, maximum]``. The safeguard only acts while :math:`\\gamma \\eta_{k-1}^\\alpha` exceeds 0.1,</span>
+<span class="sd">    i.e. for a previous tolerance above about 0.26 at the classic parameters: never with a maximum below that. Falls</span>
+<span class="sd">    back to ``maximum`` with no history to compare against (the first solve, or the one right after a new-increment</span>
+<span class="sd">    jump -- the ratio across that jump does not reflect Newton convergence and is not meaningful). A previous norm of</span>
+<span class="sd">    exactly zero (typically an already-converged, e.g. linear-elastic, prior iterate) makes the ratio undefined rather</span>
+<span class="sd">    than just uninformative, and falls back the same way.</span>
+<span class="sd">    """</span>
+    <span class="k">if</span> <span class="n">previousResidualNorm</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">newIncrement</span> <span class="ow">or</span> <span class="n">previousResidualNorm</span> <span class="o">==</span> <span class="mf">0.0</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">maximum</span>
+    <span class="n">eta</span> <span class="o">=</span> <span class="n">gamma</span> <span class="o">*</span> <span class="p">(</span><span class="n">residualNorm</span> <span class="o">/</span> <span class="n">previousResidualNorm</span><span class="p">)</span> <span class="o">**</span> <span class="n">alpha</span>
+    <span class="n">safeguard</span> <span class="o">=</span> <span class="n">gamma</span> <span class="o">*</span> <span class="n">previousEta</span><span class="o">**</span><span class="n">alpha</span>
+    <span class="k">if</span> <span class="n">safeguard</span> <span class="o">&gt;</span> <span class="mf">0.1</span><span class="p">:</span>
+        <span class="n">eta</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">eta</span><span class="p">,</span> <span class="n">safeguard</span><span class="p">)</span>
+    <span class="k">return</span> <span class="nb">min</span><span class="p">(</span><span class="n">maximum</span><span class="p">,</span> <span class="nb">max</span><span class="p">(</span><span class="n">minimum</span><span class="p">,</span> <span class="n">eta</span><span class="p">))</span></div>
+
+
+
+<div class="viewcode-block" id="outerIterationsDrifted">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.krylov.outerIterationsDrifted">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">outerIterationsDrifted</span><span class="p">(</span><span class="n">iterations</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">referenceIterations</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">stalenessFactor</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Whether a solve with a reused preconditioner needed so many more outer iterations than the solve it was built</span>
+<span class="sd">    for (``referenceIterations``) that it should be rebuilt: more than both ``stalenessFactor`` times the reference</span>
+<span class="sd">    and the reference plus :data:`STALENESS_MIN_EXCESS`. The reference is the solve the preconditioner was built for,</span>
+<span class="sd">    not the previous one: compared with its predecessor only, a slow drift across several solves never trips."""</span>
+    <span class="k">return</span> <span class="n">iterations</span> <span class="o">&gt;</span> <span class="nb">max</span><span class="p">(</span><span class="n">stalenessFactor</span> <span class="o">*</span> <span class="n">referenceIterations</span><span class="p">,</span> <span class="n">referenceIterations</span> <span class="o">+</span> <span class="n">STALENESS_MIN_EXCESS</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="FixedTolerance">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.krylov.FixedTolerance">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">FixedTolerance</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""The same relative tolerance :math:`\\eta` for every solve.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    eta</span>
+<span class="sd">        :math:`\\lVert b - A x \\rVert \\leq \\eta \\lVert b \\rVert`.</span>
+<span class="sd">    """</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">eta</span><span class="p">:</span> <span class="nb">float</span><span class="p">):</span>
+        <span class="c1"># written as "not (valid)" so that NaN is refused too</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="mf">0.0</span> <span class="o">&lt;</span> <span class="n">eta</span> <span class="o">&lt;</span> <span class="mf">1.0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"FixedTolerance: needs 0 &lt; eta &lt; 1, got </span><span class="si">{!r}</span><span class="s2">"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">eta</span><span class="p">))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">eta</span> <span class="o">=</span> <span class="n">eta</span>
+
+<div class="viewcode-block" id="FixedTolerance.forSolve">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.krylov.FixedTolerance.forSolve">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">forSolve</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">change</span><span class="p">:</span> <span class="n">MatrixChange</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The tolerance of a solve."""</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">eta</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="k">return</span> <span class="s2">"FixedTolerance(</span><span class="si">{:g}</span><span class="s2">)"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">eta</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="EisenstatWalkerTolerance">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.krylov.EisenstatWalkerTolerance">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">EisenstatWalkerTolerance</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""The Eisenstat--Walker forcing tolerance per solve, see :func:`eisenstatWalkerTolerance`.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    minimum, maximum</span>
+<span class="sd">        The bounds of :math:`\\eta`.</span>
+<span class="sd">    gamma, alpha</span>
+<span class="sd">        The parameters of "choice 2".</span>
+<span class="sd">    """</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">minimum</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0e-4</span><span class="p">,</span> <span class="n">maximum</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0e-3</span><span class="p">,</span> <span class="n">gamma</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.9</span><span class="p">,</span> <span class="n">alpha</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.618033988749895</span>
+    <span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="mf">0.0</span> <span class="o">&lt;</span> <span class="n">minimum</span> <span class="o">&lt;=</span> <span class="n">maximum</span> <span class="o">&lt;</span> <span class="mf">1.0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">"EisenstatWalkerTolerance: needs 0 &lt; minimum &lt;= maximum &lt; 1, got </span><span class="si">{!r}</span><span class="s2">, </span><span class="si">{!r}</span><span class="s2">"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">minimum</span><span class="p">,</span> <span class="n">maximum</span><span class="p">)</span>
+            <span class="p">)</span>
+        <span class="c1"># the ranges of Eisenstat and Walker's choice 2</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="mf">0.0</span> <span class="o">&lt;</span> <span class="n">gamma</span> <span class="o">&lt;=</span> <span class="mf">1.0</span> <span class="ow">or</span> <span class="ow">not</span> <span class="mf">1.0</span> <span class="o">&lt;</span> <span class="n">alpha</span> <span class="o">&lt;=</span> <span class="mf">2.0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">"EisenstatWalkerTolerance: needs 0 &lt; gamma &lt;= 1 and 1 &lt; alpha &lt;= 2, got </span><span class="si">{!r}</span><span class="s2">, </span><span class="si">{!r}</span><span class="s2">"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">gamma</span><span class="p">,</span> <span class="n">alpha</span><span class="p">)</span>
+            <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">minimum</span> <span class="o">=</span> <span class="n">minimum</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">maximum</span> <span class="o">=</span> <span class="n">maximum</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">gamma</span> <span class="o">=</span> <span class="n">gamma</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">alpha</span> <span class="o">=</span> <span class="n">alpha</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">previousEta</span> <span class="o">=</span> <span class="n">maximum</span>
+
+<div class="viewcode-block" id="EisenstatWalkerTolerance.forSolve">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.krylov.EisenstatWalkerTolerance.forSolve">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">forSolve</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">change</span><span class="p">:</span> <span class="n">MatrixChange</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The tolerance of a solve, from its right-hand side norm and the previous one."""</span>
+        <span class="n">eta</span> <span class="o">=</span> <span class="n">eisenstatWalkerTolerance</span><span class="p">(</span>
+            <span class="n">change</span><span class="o">.</span><span class="n">residualNorm</span><span class="p">,</span>
+            <span class="n">change</span><span class="o">.</span><span class="n">previousResidualNorm</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">previousEta</span><span class="p">,</span>
+            <span class="n">change</span><span class="o">.</span><span class="n">newIncrement</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">minimum</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">maximum</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">gamma</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">alpha</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">previousEta</span> <span class="o">=</span> <span class="n">eta</span>
+        <span class="k">return</span> <span class="n">eta</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="k">return</span> <span class="s2">"EisenstatWalkerTolerance(minimum=</span><span class="si">{:g}</span><span class="s2">, maximum=</span><span class="si">{:g}</span><span class="s2">)"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">minimum</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">maximum</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="RebuildPolicy">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.krylov.RebuildPolicy">[docs]</a>
+<span class="nd">@dataclass</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">RebuildPolicy</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""When a Krylov solve rebuilds its preconditioner, beyond what the matrix itself demands (the first solve, a new</span>
+<span class="sd">    model, a resized system, a new sparsity pattern).</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    stalenessFactor</span>
+<span class="sd">        A solve that needs more outer iterations than this factor times those of the solve the preconditioner was</span>
+<span class="sd">        built for (see :func:`outerIterationsDrifted`) has it rebuilt for the next solve; so has a solve that hit the</span>
+<span class="sd">        iteration cap.</span>
+<span class="sd">    rebuildOnNewIncrement</span>
+<span class="sd">        Whether a new increment of the nonlinear solver rebuilds it.</span>
+<span class="sd">    reusePreconditioner</span>
+<span class="sd">        Whether it is reused across solves at all. ``False`` (the default) builds it anew for every solve: a</span>
+<span class="sd">        preconditioner reused from an earlier Jacobian costs more outer iterations than its build saves</span>
+<span class="sd">        (:ref:`measured-rebuild-every-solve`). ``True`` keeps it until one of the other reasons asks for a rebuild.</span>
+<span class="sd">    """</span>
+
+    <span class="n">stalenessFactor</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">3.0</span>
+    <span class="n">rebuildOnNewIncrement</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
+    <span class="n">reusePreconditioner</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">__post_init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">stalenessFactor</span> <span class="o">&gt;=</span> <span class="mf">1.0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"RebuildPolicy: stalenessFactor must be at least 1, got </span><span class="si">{!r}</span><span class="s2">"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">stalenessFactor</span><span class="p">))</span>
+
+<div class="viewcode-block" id="RebuildPolicy.decide">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.krylov.RebuildPolicy.decide">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">decide</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">change</span><span class="p">:</span> <span class="n">MatrixChange</span><span class="p">,</span> <span class="n">stale</span><span class="p">:</span> <span class="nb">bool</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">MatrixChange</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""``change``, with a rebuild added if this policy asks for one (in this order of reasons)."""</span>
+        <span class="k">if</span> <span class="n">change</span><span class="o">.</span><span class="n">newIncrement</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">rebuildOnNewIncrement</span><span class="p">:</span>
+            <span class="n">change</span> <span class="o">=</span> <span class="n">change</span><span class="o">.</span><span class="n">withRebuild</span><span class="p">(</span><span class="s2">"increment"</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">stale</span><span class="p">:</span>
+            <span class="n">change</span> <span class="o">=</span> <span class="n">change</span><span class="o">.</span><span class="n">withRebuild</span><span class="p">(</span><span class="s2">"stale"</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">reusePreconditioner</span><span class="p">:</span>
+            <span class="n">change</span> <span class="o">=</span> <span class="n">change</span><span class="o">.</span><span class="n">withRebuild</span><span class="p">(</span><span class="s2">"always"</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">change</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="ResidualGapCompensation">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.krylov.ResidualGapCompensation">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">ResidualGapCompensation</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""For a Krylov solve on a diagonally scaled matrix :math:`\\hat A = D A D` (``DiagonalScaling(LGMRES(...))``):</span>
+<span class="sd">    ask the first pass for :math:`s \\, \\eta / g` instead of :math:`\\eta`, with :math:`g` the gap between the true</span>
+<span class="sd">    and the scaled relative residual of the same iterate, learned from the previous solves, so that the pass lands on</span>
+<span class="sd">    the true-residual target without a true-residual restart; such a restart then tightens by the measured gap instead</span>
+<span class="sd">    of the fixed factor 0.01.</span>
+
+<span class="sd">    The Krylov method converges the scaled residual :math:`\\lVert D (b - A x) \\rVert`, while the solve is accepted</span>
+<span class="sd">    on the true one, :math:`\\lVert b - A x \\rVert / \\lVert b \\rVert`; their ratio was measured from close to one</span>
+<span class="sd">    (gradient-enhanced damage) to far larger (contact with multi-point constraints). Measured to save true-residual</span>
+<span class="sd">    restarts and iterations per increment, but the uncompensated scaled solve over-solves, and Newton relies on that:</span>
+<span class="sd">    per unit of simulated time the saving was largely given back. Hence it is opt-in.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    safetyFactor</span>
+<span class="sd">        :math:`s`: smaller is more accurate (closer to the uncompensated Newton path).</span>
+<span class="sd">    maxFactor</span>
+<span class="sd">        The upper bound of :math:`g`: one non-converged solve with an outsized gap would otherwise compound, through</span>
+<span class="sd">        the smoothing, into an ever tighter, unmeetable tolerance.</span>
+<span class="sd">    """</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">safetyFactor</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.3</span><span class="p">,</span> <span class="n">maxFactor</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1e3</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">safetyFactor</span> <span class="o">&gt;</span> <span class="mf">0.0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"ResidualGapCompensation: safetyFactor must be positive, got </span><span class="si">{!r}</span><span class="s2">"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">safetyFactor</span><span class="p">))</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">maxFactor</span> <span class="o">&gt;=</span> <span class="mf">1.0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"ResidualGapCompensation: maxFactor must be at least 1 (the gap is floored at 1)"</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">safetyFactor</span> <span class="o">=</span> <span class="n">safetyFactor</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">maxFactor</span> <span class="o">=</span> <span class="n">maxFactor</span>
+        <span class="c1">#: :math:`g`, smoothed over the solves (an exponential moving average with weight 1/2).</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">gap</span> <span class="o">=</span> <span class="mf">1.0</span>
+
+<div class="viewcode-block" id="ResidualGapCompensation.firstPassTolerance">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.krylov.ResidualGapCompensation.firstPassTolerance">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">firstPassTolerance</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">eta</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The tolerance of the first pass: :math:`s \\, \\eta / g`."""</span>
+        <span class="k">return</span> <span class="nb">max</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">safetyFactor</span> <span class="o">*</span> <span class="n">eta</span> <span class="o">/</span> <span class="nb">max</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">gap</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">),</span> <span class="mf">1e-14</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="ResidualGapCompensation.learn">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.krylov.ResidualGapCompensation.learn">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">learn</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">trueResidual</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">scaledResidual</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Take the gap of a solve's first pass into :math:`g`."""</span>
+        <span class="n">measuredGap</span> <span class="o">=</span> <span class="n">trueResidual</span> <span class="o">/</span> <span class="nb">max</span><span class="p">(</span><span class="n">scaledResidual</span><span class="p">,</span> <span class="mf">1e-300</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">measuredGap</span><span class="p">)</span> <span class="ow">and</span> <span class="n">measuredGap</span> <span class="o">&gt;</span> <span class="mf">0.0</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">gap</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="nb">max</span><span class="p">(</span><span class="mf">0.5</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">gap</span> <span class="o">+</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="n">measuredGap</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">),</span> <span class="bp">self</span><span class="o">.</span><span class="n">maxFactor</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="ResidualGapCompensation.restartTolerance">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.krylov.ResidualGapCompensation.restartTolerance">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">restartTolerance</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">eta</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">previousTolerance</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">trueResidual</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">scaledResidual</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""The tolerance of a true-residual restart: aimed at :math:`s \\, \\eta / g` of the current gap, and at least</span>
+<span class="sd">        half the previous one, so that the restarts end."""</span>
+        <span class="n">gap</span> <span class="o">=</span> <span class="n">trueResidual</span> <span class="o">/</span> <span class="nb">max</span><span class="p">(</span><span class="n">scaledResidual</span><span class="p">,</span> <span class="mf">1e-300</span><span class="p">)</span>
+        <span class="k">return</span> <span class="nb">max</span><span class="p">(</span><span class="nb">min</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">safetyFactor</span> <span class="o">*</span> <span class="n">eta</span> <span class="o">/</span> <span class="nb">max</span><span class="p">(</span><span class="n">gap</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">),</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="n">previousTolerance</span><span class="p">),</span> <span class="mf">1e-14</span><span class="p">)</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="k">return</span> <span class="s2">"ResidualGapCompensation(safetyFactor=</span><span class="si">{:g}</span><span class="s2">, maxFactor=</span><span class="si">{:g}</span><span class="s2">)"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">safetyFactor</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">maxFactor</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="SolveRecord">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.krylov.SolveRecord">[docs]</a>
+<span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">SolveRecord</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""What a Krylov solve did, for the journal, the convergence table and a degradation dump.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    iterations</span>
+<span class="sd">        Its outer iterations, true-residual restarts included.</span>
+<span class="sd">    residual</span>
+<span class="sd">        Its true relative residual :math:`\\lVert b - A x \\rVert / \\lVert b \\rVert`, in the physical variables of</span>
+<span class="sd">        its (sub-)problem.</span>
+<span class="sd">    eta</span>
+<span class="sd">        Its tolerance.</span>
+<span class="sd">    capHit</span>
+<span class="sd">        Whether a pass stopped at the iteration cap short of its tolerance.</span>
+<span class="sd">    trueResidualRestarts</span>
+<span class="sd">        How many warm-restarted passes followed the first (only on a diagonally scaled matrix).</span>
+<span class="sd">    rebuildReason</span>
+<span class="sd">        Why the preconditioner was rebuilt for it, or ``None`` (reused).</span>
+<span class="sd">    scaledSystem</span>
+<span class="sd">        Whether it ran on a diagonally scaled matrix (its own residual then is not the true one).</span>
+<span class="sd">    """</span>
+
+    <span class="n">iterations</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">residual</span><span class="p">:</span> <span class="nb">float</span>
+    <span class="n">eta</span><span class="p">:</span> <span class="nb">float</span>
+    <span class="n">capHit</span><span class="p">:</span> <span class="nb">bool</span>
+    <span class="n">trueResidualRestarts</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">rebuildReason</span><span class="p">:</span> <span class="s2">"str | None"</span>
+    <span class="n">scaledSystem</span><span class="p">:</span> <span class="nb">bool</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">converged</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Whether the true residual met the tolerance (written so that NaN is a miss)."""</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">residual</span> <span class="o">&lt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">eta</span></div>
+
+
+
+<div class="viewcode-block" id="KrylovSolver">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.krylov.KrylovSolver">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">KrylovSolver</span><span class="p">(</span><span class="n">Preconditioner</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""An outer Krylov solve :math:`A x = b`, right-preconditioned by ``preconditioner``, with AMGCL's implementation</span>
+<span class="sd">    of the method: what :class:`LGMRES` and :class:`FGMRES` share. As a component it is an approximate inverse of</span>
+<span class="sd">    :math:`A` like any other, solved to the tolerance of the solve -- but not a fixed linear operator</span>
+<span class="sd">    (:attr:`isFixedLinearOperator`).</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    preconditioner</span>
+<span class="sd">        :math:`M^{-1}`.</span>
+<span class="sd">    tolerance</span>
+<span class="sd">        The tolerance per solve: :class:`EisenstatWalkerTolerance` (default) or :class:`FixedTolerance`. May be replaced</span>
+<span class="sd">        between solves (an offline replay pins it to the live one).</span>
+<span class="sd">    maxIterations</span>
+<span class="sd">        The iteration cap of a solve (across restarts). A solve that reaches it returns its iterate.</span>
+<span class="sd">    rebuild</span>
+<span class="sd">        When the preconditioner is rebuilt, see :class:`RebuildPolicy`.</span>
+<span class="sd">    trueResidualRestarts</span>
+<span class="sd">        On a diagonally scaled matrix (``DiagonalScaling(LGMRES(...))``) the method converges the scaled residual,</span>
+<span class="sd">        while the solve is accepted on the true one, which can be larger (stiff rows are weighted down by</span>
+<span class="sd">        :math:`D`): a pass that misses :math:`\\eta` on the true residual is continued from its iterate, at most this</span>
+<span class="sd">        many times, with a tighter tolerance (0.01 times the previous, or see :class:`ResidualGapCompensation`). On an</span>
+<span class="sd">        unscaled matrix the residual the method converges is the true one, and a pass that misses :math:`\\eta` has</span>
+<span class="sd">        hit the iteration cap, which a warm restart would only extend: no true-residual restarts there.</span>
+<span class="sd">    residualGapCompensation</span>
+<span class="sd">        A :class:`ResidualGapCompensation`, or ``None`` (the default): only on a diagonally scaled matrix.</span>
+<span class="sd">    """</span>
+
+    <span class="c1">#: AMGCL's name of the method.</span>
+    <span class="n">method</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">preconditioner</span><span class="p">:</span> <span class="n">Preconditioner</span><span class="p">,</span>
+        <span class="n">tolerance</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">maxIterations</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">100</span><span class="p">,</span>
+        <span class="n">rebuild</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">trueResidualRestarts</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">2</span><span class="p">,</span>
+        <span class="n">residualGapCompensation</span><span class="p">:</span> <span class="n">ResidualGapCompensation</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="n">name</span> <span class="o">=</span> <span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span>
+        <span class="n">requirePreconditioner</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="s2">"preconditioner"</span><span class="p">,</span> <span class="n">preconditioner</span><span class="p">)</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">maxIterations</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"</span><span class="si">{:}</span><span class="s2">: maxIterations must be at least 1, got </span><span class="si">{:}</span><span class="s2">"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">maxIterations</span><span class="p">))</span>
+        <span class="k">if</span> <span class="n">trueResidualRestarts</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">"</span><span class="si">{:}</span><span class="s2">: trueResidualRestarts must not be negative, got </span><span class="si">{:}</span><span class="s2">"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">trueResidualRestarts</span><span class="p">)</span>
+            <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">preconditioner</span> <span class="o">=</span> <span class="n">preconditioner</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_checkPreconditioner</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">tolerance</span> <span class="o">=</span> <span class="n">tolerance</span> <span class="k">if</span> <span class="n">tolerance</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">EisenstatWalkerTolerance</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">maxIterations</span> <span class="o">=</span> <span class="n">maxIterations</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">rebuild</span> <span class="o">=</span> <span class="n">rebuild</span> <span class="k">if</span> <span class="n">rebuild</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">RebuildPolicy</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">trueResidualRestarts</span> <span class="o">=</span> <span class="n">trueResidualRestarts</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">residualGapCompensation</span> <span class="o">=</span> <span class="n">residualGapCompensation</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">A</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">eta</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_context</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="c1">#: Of the last solve: its outer iterations, its true relative residual, whether it stopped at the cap, and</span>
+        <span class="c1">#: whether the preconditioner was rebuilt for it (and why).</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">lastIterations</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">lastResidual</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">lastCapHit</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">lastTrueResidualRestarts</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">lastScaledSystem</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">lastRebuildReason</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_krylov</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="c1"># the outer iterations of the solve the preconditioner was built for, and whether the last solve made it stale</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_referenceIterations</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_stale</span> <span class="o">=</span> <span class="kc">False</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">containsKrylovSolver</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">True</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">reusesPreconditioner</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">rebuild</span><span class="o">.</span><span class="n">reusePreconditioner</span> <span class="ow">or</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">reusesPreconditioner</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">isFixedLinearOperator</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">False</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_checkPreconditioner</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Raise if the method cannot take this preconditioner: at construction, and again after the set-up, when a</span>
+<span class="sd">        combination has made its corrections."""</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_parameters</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""AMGCL's parameters of the method (its restart length, ...), in AMGCL's names."""</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_setUp</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">A</span><span class="p">,</span> <span class="n">context</span><span class="p">:</span> <span class="n">SetUpContext</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_update</span><span class="p">(</span><span class="n">A</span><span class="p">,</span> <span class="n">MatrixChange</span><span class="p">(</span><span class="n">context</span><span class="p">,</span> <span class="n">rebuildReason</span><span class="o">=</span><span class="s2">"first"</span><span class="p">))</span>
+
+<div class="viewcode-block" id="KrylovSolver.withRebuildReasons">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.krylov.KrylovSolver.withRebuildReasons">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">withRebuildReasons</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">change</span><span class="p">:</span> <span class="n">MatrixChange</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">MatrixChange</span><span class="p">:</span>
+        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">withRebuildReasons</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">rebuild</span><span class="o">.</span><span class="n">decide</span><span class="p">(</span><span class="n">change</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stale</span><span class="p">))</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">A</span><span class="p">,</span> <span class="n">change</span><span class="p">:</span> <span class="n">MatrixChange</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">change</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">rebuild</span><span class="o">.</span><span class="n">decide</span><span class="p">(</span><span class="n">change</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stale</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">A</span> <span class="o">=</span> <span class="n">A</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_context</span> <span class="o">=</span> <span class="n">change</span><span class="o">.</span><span class="n">context</span>
+        <span class="c1"># before the preconditioner forms the field split of A: that one pass then keeps A as this solve's operator</span>
+        <span class="n">A</span><span class="o">.</span><span class="n">useAsKrylovOperator</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">eta</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">tolerance</span><span class="o">.</span><span class="n">forSolve</span><span class="p">(</span><span class="n">change</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">lastRebuildReason</span> <span class="o">=</span> <span class="n">change</span><span class="o">.</span><span class="n">rebuildReason</span>
+        <span class="k">if</span> <span class="n">change</span><span class="o">.</span><span class="n">requiresRebuild</span><span class="p">:</span>
+            <span class="k">with</span> <span class="n">performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"hierarchy build"</span><span class="p">):</span>
+                <span class="c1"># all of the preconditioner is built anew: the old one goes first, never two at once</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">preconditioner</span><span class="o">.</span><span class="n">forget</span><span class="p">()</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">preconditioner</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">A</span><span class="p">,</span> <span class="n">change</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_stale</span> <span class="o">=</span> <span class="kc">False</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_checkPreconditioner</span><span class="p">()</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">preconditioner</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">A</span><span class="p">,</span> <span class="n">change</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_solverFor</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">n</span><span class="p">:</span> <span class="nb">int</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""AMGCL's solver for size ``n``: its scratch vectors are allocated for one size."""</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_krylov</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">_krylov</span><span class="o">.</span><span class="n">n</span> <span class="o">!=</span> <span class="n">n</span><span class="p">:</span>
+            <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.linsolve.amgcl.amgcl</span><span class="w"> </span><span class="kn">import</span> <span class="n">PyAMGCLKrylovSolver</span>
+
+            <span class="c1"># the scratch vectors for the old size go first</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_krylov</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_krylov</span> <span class="o">=</span> <span class="n">PyAMGCLKrylovSolver</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">method</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_parameters</span><span class="p">())</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_krylov</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_apply</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">b</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The solve: a first pass, and on a diagonally scaled matrix the true-residual restarts while the true residual</span>
+<span class="sd">        misses :math:`\\eta` (see ``trueResidualRestarts``)."""</span>
+        <span class="c1"># on D A D (DiagonalScaling(LGMRES(...))): the method converges the scaled residual, not the true one</span>
+        <span class="n">onScaledSystem</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">A</span><span class="o">.</span><span class="n">scaling</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+        <span class="n">eta</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">eta</span>
+        <span class="n">compensating</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">residualGapCompensation</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">onScaledSystem</span>
+        <span class="n">passTolerance</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">residualGapCompensation</span><span class="o">.</span><span class="n">firstPassTolerance</span><span class="p">(</span><span class="n">eta</span><span class="p">)</span> <span class="k">if</span> <span class="n">compensating</span> <span class="k">else</span> <span class="n">eta</span>
+        <span class="k">with</span> <span class="n">performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"outer Krylov solve"</span><span class="p">):</span>
+            <span class="n">x</span><span class="p">,</span> <span class="n">iterations</span><span class="p">,</span> <span class="n">capHit</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_pass</span><span class="p">(</span><span class="n">b</span><span class="p">,</span> <span class="n">passTolerance</span><span class="p">)</span>
+            <span class="n">trueResidual</span><span class="p">,</span> <span class="n">scaledResidual</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_residuals</span><span class="p">(</span><span class="n">b</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">onScaledSystem</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">compensating</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">residualGapCompensation</span><span class="o">.</span><span class="n">learn</span><span class="p">(</span><span class="n">trueResidual</span><span class="p">,</span> <span class="n">scaledResidual</span><span class="p">)</span>
+        <span class="n">trueResidualRestarts</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="k">with</span> <span class="n">performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"true-residual restarts"</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">compensating</span><span class="p">:</span>
+                <span class="n">passTolerance</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">eta</span><span class="p">,</span> <span class="n">passTolerance</span><span class="p">)</span>
+            <span class="k">while</span> <span class="n">onScaledSystem</span> <span class="ow">and</span> <span class="n">trueResidual</span> <span class="o">&gt;</span> <span class="n">eta</span> <span class="ow">and</span> <span class="n">trueResidualRestarts</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">trueResidualRestarts</span><span class="p">:</span>
+                <span class="n">trueResidualRestarts</span> <span class="o">+=</span> <span class="mi">1</span>
+                <span class="k">if</span> <span class="n">compensating</span><span class="p">:</span>
+                    <span class="n">passTolerance</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">residualGapCompensation</span><span class="o">.</span><span class="n">restartTolerance</span><span class="p">(</span>
+                        <span class="n">eta</span><span class="p">,</span> <span class="n">passTolerance</span><span class="p">,</span> <span class="n">trueResidual</span><span class="p">,</span> <span class="n">scaledResidual</span>
+                    <span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">passTolerance</span> <span class="o">*=</span> <span class="mf">0.01</span>
+                <span class="n">x</span><span class="p">,</span> <span class="n">passIterations</span><span class="p">,</span> <span class="n">passCapHit</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_pass</span><span class="p">(</span><span class="n">b</span><span class="p">,</span> <span class="n">passTolerance</span><span class="p">,</span> <span class="n">x0</span><span class="o">=</span><span class="n">x</span><span class="p">)</span>
+                <span class="n">trueResidual</span><span class="p">,</span> <span class="n">scaledResidual</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_residuals</span><span class="p">(</span><span class="n">b</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">onScaledSystem</span><span class="p">)</span>
+                <span class="n">iterations</span> <span class="o">+=</span> <span class="n">passIterations</span>
+                <span class="n">capHit</span> <span class="o">=</span> <span class="n">capHit</span> <span class="ow">or</span> <span class="n">passCapHit</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_context</span><span class="o">.</span><span class="n">message</span><span class="p">(</span>
+                    <span class="s2">"debug"</span><span class="p">,</span>
+                    <span class="s2">"</span><span class="si">{:}</span><span class="s2">:   true-residual restart </span><span class="si">{:}</span><span class="s2">/</span><span class="si">{:}</span><span class="s2"> eta=</span><span class="si">{:.1e}</span><span class="s2"> +</span><span class="si">{:}</span><span class="s2">it res=</span><span class="si">{:.1e}</span><span class="s2">"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+                        <span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="p">,</span>
+                        <span class="n">trueResidualRestarts</span><span class="p">,</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">trueResidualRestarts</span><span class="p">,</span>
+                        <span class="n">passTolerance</span><span class="p">,</span>
+                        <span class="n">passIterations</span><span class="p">,</span>
+                        <span class="n">trueResidual</span><span class="p">,</span>
+                    <span class="p">),</span>
+                <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">lastIterations</span> <span class="o">=</span> <span class="n">iterations</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">lastResidual</span> <span class="o">=</span> <span class="n">trueResidual</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">lastCapHit</span> <span class="o">=</span> <span class="n">capHit</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">lastTrueResidualRestarts</span> <span class="o">=</span> <span class="n">trueResidualRestarts</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">lastScaledSystem</span> <span class="o">=</span> <span class="n">onScaledSystem</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_judgeStaleness</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">x</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_pass</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">b</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">tolerance</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">x0</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""One pass of the method from ``x0`` (zero if ``None``): its iterate, its iterations, and whether it stopped at</span>
+<span class="sd">        the iteration cap short of ``tolerance`` (a pass may converge on exactly its last allowed iteration)."""</span>
+        <span class="n">krylov</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_solverFor</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">A</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+        <span class="n">x</span> <span class="o">=</span> <span class="n">krylov</span><span class="o">.</span><span class="n">solve</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">A</span><span class="o">.</span><span class="n">krylovOperator</span><span class="p">(),</span>
+            <span class="n">b</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">preconditioner</span><span class="p">,</span>
+            <span class="n">tolerance</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">maxIterations</span><span class="p">,</span>
+            <span class="n">x0</span><span class="o">=</span><span class="n">x0</span><span class="p">,</span>
+            <span class="n">onUnscaledOperator</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">A</span><span class="o">.</span><span class="n">scaling</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">capHit</span> <span class="o">=</span> <span class="n">krylov</span><span class="o">.</span><span class="n">lastIterations</span> <span class="o">&gt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">maxIterations</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">krylov</span><span class="o">.</span><span class="n">lastError</span> <span class="o">&lt;</span> <span class="n">tolerance</span>
+        <span class="k">return</span> <span class="n">x</span><span class="p">,</span> <span class="n">krylov</span><span class="o">.</span><span class="n">lastIterations</span><span class="p">,</span> <span class="n">capHit</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_residuals</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">b</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">x</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">onScaledSystem</span><span class="p">:</span> <span class="nb">bool</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The true relative residual of the iterate ``x`` -- in the physical variables of this (sub-)problem, the one</span>
+<span class="sd">        the solve is accepted on -- and on a scaled matrix its scaled one (NaN otherwise). On an unscaled matrix the</span>
+<span class="sd">        method recomputed :math:`b - A x` at its exit, and its residual is the true one."""</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">onScaledSystem</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_krylov</span><span class="o">.</span><span class="n">lastError</span><span class="p">,</span> <span class="nb">float</span><span class="p">(</span><span class="s2">"nan"</span><span class="p">)</span>
+        <span class="c1"># b - A x = D^-1 (b̂ - Â x̂) exactly: the true residual from the scaled one, without a product with A</span>
+        <span class="n">D</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">A</span><span class="o">.</span><span class="n">scaling</span>
+        <span class="n">r_scaled</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">A</span><span class="o">.</span><span class="n">krylovOperator</span><span class="p">()</span><span class="o">.</span><span class="n">residual</span><span class="p">(</span><span class="n">b</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">unscaled</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">r_scaled</span> <span class="o">/</span> <span class="n">D</span><span class="p">)</span> <span class="o">/</span> <span class="nb">max</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">b</span> <span class="o">/</span> <span class="n">D</span><span class="p">),</span> <span class="mf">1e-300</span><span class="p">),</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">r_scaled</span><span class="p">)</span> <span class="o">/</span> <span class="nb">max</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">b</span><span class="p">),</span> <span class="mf">1e-300</span><span class="p">),</span>
+        <span class="p">)</span>
+
+<div class="viewcode-block" id="KrylovSolver.finishSolve">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.krylov.KrylovSolver.finishSolve">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">finishSolve</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="c1"># the matrix (and the operator formed from it) belongs to this solve</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">A</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_context</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">finishSolve</span><span class="p">()</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_judgeStaleness</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Whether the preconditioner should be rebuilt before the next solve (see :class:`RebuildPolicy`)."""</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">lastRebuildReason</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">_referenceIterations</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_referenceIterations</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">lastIterations</span>
+            <span class="n">drifted</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">drifted</span> <span class="o">=</span> <span class="n">outerIterationsDrifted</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">lastIterations</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_referenceIterations</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">rebuild</span><span class="o">.</span><span class="n">stalenessFactor</span>
+            <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_stale</span> <span class="o">=</span> <span class="n">drifted</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">lastCapHit</span>
+
+<div class="viewcode-block" id="KrylovSolver.children">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.krylov.KrylovSolver.children">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">children</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">((</span><span class="s2">"preconditioner"</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">preconditioner</span><span class="p">),)</span></div>
+
+
+<div class="viewcode-block" id="KrylovSolver.solveRecord">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.krylov.KrylovSolver.solveRecord">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">solveRecord</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">SolveRecord</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">SolveRecord</span><span class="p">(</span>
+            <span class="n">iterations</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">lastIterations</span><span class="p">,</span>
+            <span class="n">residual</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">lastResidual</span><span class="p">,</span>
+            <span class="n">eta</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">eta</span><span class="p">,</span>
+            <span class="n">capHit</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">lastCapHit</span><span class="p">,</span>
+            <span class="n">trueResidualRestarts</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">lastTrueResidualRestarts</span><span class="p">,</span>
+            <span class="n">rebuildReason</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">lastRebuildReason</span><span class="p">,</span>
+            <span class="n">scaledSystem</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">lastScaledSystem</span><span class="p">,</span>
+        <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="KrylovSolver.describe">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.krylov.KrylovSolver.describe">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">describe</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Description</span><span class="p">:</span>
+        <span class="n">name</span> <span class="o">=</span> <span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span>
+        <span class="k">return</span> <span class="n">Description</span><span class="p">(</span>
+            <span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">,</span>
+            <span class="n">formula</span><span class="o">=</span><span class="n">name</span> <span class="o">+</span> <span class="s2">"(A, </span><span class="si">{preconditioner}</span><span class="s2">)⁻¹"</span><span class="p">,</span>
+            <span class="n">latex</span><span class="o">=</span><span class="s2">"</span><span class="se">\\</span><span class="s2">mathrm{"</span> <span class="o">+</span> <span class="n">name</span> <span class="o">+</span> <span class="s2">"}</span><span class="se">\\</span><span class="s2">left(A,</span><span class="se">\\</span><span class="s2">, </span><span class="si">{preconditioner}</span><span class="se">\\</span><span class="s2">right)^{-1}"</span><span class="p">,</span>
+            <span class="n">parameters</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_describedParameters</span><span class="p">(),</span>
+            <span class="n">steps</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_steps</span><span class="p">(),</span>
+        <span class="p">)</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_describedParameters</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The parameters the views show, in the names of this class (a method adds its own)."""</span>
+        <span class="n">parameters</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"tolerance"</span><span class="p">:</span> <span class="nb">repr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">tolerance</span><span class="p">),</span> <span class="s2">"maxIterations"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">maxIterations</span><span class="p">}</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">residualGapCompensation</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">parameters</span><span class="p">[</span><span class="s2">"residualGapCompensation"</span><span class="p">]</span> <span class="o">=</span> <span class="nb">repr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">residualGapCompensation</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">parameters</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_steps</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span></div>
+
+
+
+<div class="viewcode-block" id="LGMRES">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.krylov.LGMRES">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">LGMRES</span><span class="p">(</span><span class="n">KrylovSolver</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""LGMRES (Baker, Jessup and Manteuffel 2005): GMRES restarted every ``restart`` iterations, each cycle augmented</span>
+<span class="sd">    with ``augmentationVectors`` error approximations of the previous cycles, AMGCL's implementation.</span>
+<span class="sd">    Right-preconditioned: :math:`x = M^{-1} y` with :math:`y` from the Krylov space of :math:`A M^{-1}`, which is a</span>
+<span class="sd">    Krylov space only for a fixed linear :math:`M^{-1}` -- so LGMRES refuses a variable preconditioner (a Krylov solve</span>
+<span class="sd">    inside), for which :class:`FGMRES` is made.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    preconditioner, tolerance, maxIterations, rebuild, trueResidualRestarts, residualGapCompensation</span>
+<span class="sd">        See :class:`KrylovSolver`.</span>
+<span class="sd">    restart</span>
+<span class="sd">        The iterations of a cycle, :math:`m` (the Krylov vectors kept before a restart).</span>
+<span class="sd">    augmentationVectors</span>
+<span class="sd">        The error approximations of the previous cycles each cycle is augmented with, :math:`k`.</span>
+<span class="sd">    """</span>
+
+    <span class="n">method</span> <span class="o">=</span> <span class="s2">"lgmres"</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">preconditioner</span><span class="p">:</span> <span class="n">Preconditioner</span><span class="p">,</span>
+        <span class="n">tolerance</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">maxIterations</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">100</span><span class="p">,</span>
+        <span class="n">restart</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">50</span><span class="p">,</span>
+        <span class="n">augmentationVectors</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">3</span><span class="p">,</span>
+        <span class="n">rebuild</span><span class="p">:</span> <span class="n">RebuildPolicy</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">trueResidualRestarts</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">2</span><span class="p">,</span>
+        <span class="n">residualGapCompensation</span><span class="p">:</span> <span class="n">ResidualGapCompensation</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="k">if</span> <span class="n">restart</span> <span class="o">&lt;</span> <span class="mi">1</span> <span class="ow">or</span> <span class="n">augmentationVectors</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">"LGMRES: needs restart &gt;= 1 and augmentationVectors &gt;= 0, got </span><span class="si">{:}</span><span class="s2"> and </span><span class="si">{:}</span><span class="s2">"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+                    <span class="n">restart</span><span class="p">,</span> <span class="n">augmentationVectors</span>
+                <span class="p">)</span>
+            <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">restart</span> <span class="o">=</span> <span class="n">restart</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">augmentationVectors</span> <span class="o">=</span> <span class="n">augmentationVectors</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span>
+            <span class="n">preconditioner</span><span class="p">,</span> <span class="n">tolerance</span><span class="p">,</span> <span class="n">maxIterations</span><span class="p">,</span> <span class="n">rebuild</span><span class="p">,</span> <span class="n">trueResidualRestarts</span><span class="p">,</span> <span class="n">residualGapCompensation</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_checkPreconditioner</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">preconditioner</span><span class="o">.</span><span class="n">isFixedLinearOperator</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">"LGMRES: its preconditioner </span><span class="si">{:}</span><span class="s2"> is not a fixed linear operator (it contains a Krylov solve), which "</span>
+                <span class="s2">"LGMRES needs: use FGMRES (flexible GMRES) for a variable preconditioner"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">preconditioner</span><span class="o">.</span><span class="n">describe</span><span class="p">()</span><span class="o">.</span><span class="n">name</span>
+                <span class="p">)</span>
+            <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_parameters</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+        <span class="c1"># AMGCL's names: M the restart length, K the augmentation vectors</span>
+        <span class="k">return</span> <span class="p">{</span><span class="s2">"M"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">restart</span><span class="p">,</span> <span class="s2">"K"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">augmentationVectors</span><span class="p">}</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_describedParameters</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="o">**</span><span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">_describedParameters</span><span class="p">(),</span>
+            <span class="s2">"restart"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">restart</span><span class="p">,</span>
+            <span class="s2">"augmentationVectors"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">augmentationVectors</span><span class="p">,</span>
+        <span class="p">}</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_steps</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="n">Step</span><span class="p">(</span><span class="s2">"vₖ₊₁ ⟂ span(A M⁻¹ v₁ … A M⁻¹ vₖ)  (Arnoldi, augmented at restarts)"</span><span class="p">),</span>
+            <span class="n">Step</span><span class="p">(</span><span class="s2">"M⁻¹ vₖ, once per iteration"</span><span class="p">,</span> <span class="s2">"preconditioner"</span><span class="p">),</span>
+            <span class="n">Step</span><span class="p">(</span><span class="s2">"x = M⁻¹ Vₘ yₘ,  yₘ minimizes ‖b − A x‖"</span><span class="p">),</span>
+        <span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="FGMRES">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.krylov.FGMRES">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">FGMRES</span><span class="p">(</span><span class="n">KrylovSolver</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Flexible GMRES (Saad 1993), AMGCL's implementation: GMRES that keeps each preconditioned vector</span>
+<span class="sd">    :math:`z_k = M_k^{-1} v_k` and takes the solution from their span, :math:`x = Z_m y_m`, so the preconditioner may</span>
+<span class="sd">    change from one iteration to the next -- e.g. an inner Krylov solve to a loose tolerance. It stores twice the</span>
+<span class="sd">    vectors of GMRES (:math:`V` and :math:`Z`).</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    preconditioner, tolerance, maxIterations, rebuild, trueResidualRestarts, residualGapCompensation</span>
+<span class="sd">        See :class:`KrylovSolver`.</span>
+<span class="sd">    restart</span>
+<span class="sd">        The iterations of a cycle (the vectors kept before a restart).</span>
+<span class="sd">    """</span>
+
+    <span class="n">method</span> <span class="o">=</span> <span class="s2">"fgmres"</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">preconditioner</span><span class="p">:</span> <span class="n">Preconditioner</span><span class="p">,</span>
+        <span class="n">tolerance</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">maxIterations</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">100</span><span class="p">,</span>
+        <span class="n">restart</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">30</span><span class="p">,</span>
+        <span class="n">rebuild</span><span class="p">:</span> <span class="n">RebuildPolicy</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">trueResidualRestarts</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">2</span><span class="p">,</span>
+        <span class="n">residualGapCompensation</span><span class="p">:</span> <span class="n">ResidualGapCompensation</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="k">if</span> <span class="n">restart</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"FGMRES: needs restart &gt;= 1, got </span><span class="si">{:}</span><span class="s2">"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">restart</span><span class="p">))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">restart</span> <span class="o">=</span> <span class="n">restart</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span>
+            <span class="n">preconditioner</span><span class="p">,</span> <span class="n">tolerance</span><span class="p">,</span> <span class="n">maxIterations</span><span class="p">,</span> <span class="n">rebuild</span><span class="p">,</span> <span class="n">trueResidualRestarts</span><span class="p">,</span> <span class="n">residualGapCompensation</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_parameters</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+        <span class="c1"># AMGCL's name of the restart length</span>
+        <span class="k">return</span> <span class="p">{</span><span class="s2">"M"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">restart</span><span class="p">}</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_describedParameters</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">{</span><span class="o">**</span><span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">_describedParameters</span><span class="p">(),</span> <span class="s2">"restart"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">restart</span><span class="p">}</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_steps</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="n">Step</span><span class="p">(</span><span class="s2">"zₖ = Mₖ⁻¹ vₖ, once per iteration (Mₖ may change)"</span><span class="p">,</span> <span class="s2">"preconditioner"</span><span class="p">),</span>
+            <span class="n">Step</span><span class="p">(</span><span class="s2">"vₖ₊₁ ⟂ span(A z₁ … A zₖ)  (Arnoldi)"</span><span class="p">),</span>
+            <span class="n">Step</span><span class="p">(</span><span class="s2">"x = Zₘ yₘ,  yₘ minimizes ‖b − A x‖"</span><span class="p">),</span>
+        <span class="p">)</span></div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Matthias Neuner.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

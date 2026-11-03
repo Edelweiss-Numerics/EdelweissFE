@@ -14,8 +14,8 @@
       <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
       <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
       <script src="../../../../_static/documentation_options.js?v=17e2f33f"></script>
-      <script src="../../../../_static/doctools.js?v=9bcbadda"></script>
-      <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../../../../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../../../../genindex.html" />
     <link rel="search" title="Search" href="../../../../search.html" /> 
@@ -106,10 +106,10 @@
 
 <span class="c1"># @author: Matthias Neuner</span>
 
-<span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">"""</span>
 <span class="sd">Implementing your own finite elements can be done easily by subclassing from</span>
 <span class="sd">the abstract base class :class:`~BaseElement`.</span>
-<span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">"""</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">abstractmethod</span>
 
@@ -128,22 +128,21 @@
     <span class="nd">@property</span>
     <span class="nd">@abstractmethod</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">elNumber</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;The unique number of this element&quot;&quot;&quot;</span>
+<span class="w">        </span><span class="sd">"""The unique number of this element"""</span>
 
-<div class="viewcode-block" id="BaseElement.elType">
-<a class="viewcode-back" href="../../../../documentation/elements.html#edelweissfe.elements.base.baseelement.BaseElement.elType">[docs]</a>
+    <span class="nd">@property</span>
+    <span class="nd">@abstractmethod</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">elType</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;The type of this element.&quot;&quot;&quot;</span></div>
-
+<span class="w">        </span><span class="sd">"""The type of this element."""</span>
 
     <span class="nd">@property</span>
     <span class="nd">@abstractmethod</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">hasMaterial</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Flag to check if a material was assigned to this element.&quot;&quot;&quot;</span>
+<span class="w">        </span><span class="sd">"""Flag to check if a material was assigned to this element."""</span>
 
     <span class="nd">@abstractmethod</span>
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">elementType</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">elNumber</span><span class="p">:</span> <span class="nb">int</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Finite elements in EdelweissFE should be derived from this</span>
+<span class="w">        </span><span class="sd">"""Finite elements in EdelweissFE should be derived from this</span>
 <span class="sd">        base class in order to follow the general interface.</span>
 
 <span class="sd">        EdelweissFE expects the layout of the internal and external load vectors, P, PExt, (and the stiffness)</span>
@@ -165,33 +164,72 @@
 <span class="sd">            A string identifying the requested element formulation.</span>
 <span class="sd">        elNumber</span>
 <span class="sd">            A unique integer label used for all kinds of purposes.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
+<span class="sd">        """</span>
 
 <div class="viewcode-block" id="BaseElement.setNodes">
 <a class="viewcode-back" href="../../../../documentation/elements.html#edelweissfe.elements.base.baseelement.BaseElement.setNodes">[docs]</a>
     <span class="nd">@abstractmethod</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">setNodes</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">nodes</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Node</span><span class="p">]):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Assign the nodes to the element.</span>
+<span class="w">        </span><span class="sd">"""Assign the nodes to the element.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
 <span class="sd">        nodes</span>
 <span class="sd">            A list of nodes.</span>
-<span class="sd">        &quot;&quot;&quot;</span></div>
+<span class="sd">        """</span></div>
 
 
 <div class="viewcode-block" id="BaseElement.setProperties">
 <a class="viewcode-back" href="../../../../documentation/elements.html#edelweissfe.elements.base.baseelement.BaseElement.setProperties">[docs]</a>
     <span class="nd">@abstractmethod</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">setProperties</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">elementProperties</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Assign a set of properties to the element.</span>
+<span class="w">        </span><span class="sd">"""Assign a set of properties to the element.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
 <span class="sd">        elementProperties</span>
 <span class="sd">            A numpy array containing the element properties.</span>
-<span class="sd">        &quot;&quot;&quot;</span></div>
+<span class="sd">        """</span></div>
 
+
+<div class="viewcode-block" id="BaseElement.assignProperty">
+<a class="viewcode-back" href="../../../../documentation/elements.html#edelweissfe.elements.base.baseelement.BaseElement.assignProperty">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">assignProperty</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">propertyName</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">properties</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Assign a property of the element by name.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        propertyName</span>
+<span class="sd">            The name of the property.</span>
+<span class="sd">        properties</span>
+<span class="sd">            A numpy array containing the property values.</span>
+<span class="sd">        """</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="s2">"This element type does not support named property assignment."</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="BaseElement.getPropertyNames">
+<a class="viewcode-back" href="../../../../documentation/elements.html#edelweissfe.elements.base.baseelement.BaseElement.getPropertyNames">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">getPropertyNames</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""Get the names of all the valid properties of the element.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        list[str]</span>
+<span class="sd">            A list of valid property names.</span>
+<span class="sd">        """</span>
+        <span class="k">return</span> <span class="p">[]</span></div>
+
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">propertyNames</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""Get the names of all the valid properties of the element.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        list[str]</span>
+<span class="sd">            A list of valid property names.</span>
+<span class="sd">        """</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">getPropertyNames</span><span class="p">()</span>
 
 <div class="viewcode-block" id="BaseElement.initializeElement">
 <a class="viewcode-back" href="../../../../documentation/elements.html#edelweissfe.elements.base.baseelement.BaseElement.initializeElement">[docs]</a>
@@ -199,14 +237,14 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">initializeElement</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
     <span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Initalize the element to be ready for computing.&quot;&quot;&quot;</span></div>
+<span class="w">        </span><span class="sd">"""Initalize the element to be ready for computing."""</span></div>
 
 
 <div class="viewcode-block" id="BaseElement.setMaterial">
 <a class="viewcode-back" href="../../../../documentation/elements.html#edelweissfe.elements.base.baseelement.BaseElement.setMaterial">[docs]</a>
     <span class="nd">@abstractmethod</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">setMaterial</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">materialName</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">materialProperties</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Assign a material and material properties.</span>
+<span class="w">        </span><span class="sd">"""Assign a material and material properties.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
@@ -214,14 +252,38 @@
 <span class="sd">            The name of the requested material.</span>
 <span class="sd">        materialProperties</span>
 <span class="sd">            The numpy array containing the material properties.</span>
-<span class="sd">        &quot;&quot;&quot;</span></div>
+<span class="sd">        """</span></div>
+
+
+<div class="viewcode-block" id="BaseElement.updateMaterialProperty">
+<a class="viewcode-back" href="../../../../documentation/elements.html#edelweissfe.elements.base.baseelement.BaseElement.updateMaterialProperty">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">updateMaterialProperty</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">index</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="nb">float</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Change one entry of the property vector of the assigned material, during an analysis.</span>
+
+<span class="sd">        Unlike :meth:`setMaterial`, this keeps the state of the element: the state variables (e.g.</span>
+<span class="sd">        stress, plastic strain, damage) are neither reset nor re-initialized, and the arrays holding</span>
+<span class="sd">        them stay the same objects, so persistent result views (field outputs) remain valid. All</span>
+<span class="sd">        other properties, including any assigned per element (e.g. ``materialParameterFromField``),</span>
+<span class="sd">        are kept.</span>
+
+<span class="sd">        Elements without a material do not support this.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        index</span>
+<span class="sd">            The index of the property in the material's property vector.</span>
+<span class="sd">        value</span>
+<span class="sd">            The new value of the property.</span>
+<span class="sd">        """</span>
+
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> does not support changing the properties of its material."</span><span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="BaseElement.setInitialCondition">
 <a class="viewcode-back" href="../../../../documentation/elements.html#edelweissfe.elements.base.baseelement.BaseElement.setInitialCondition">[docs]</a>
     <span class="nd">@abstractmethod</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">setInitialCondition</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">stateType</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">values</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Assign initial conditions.</span>
+<span class="w">        </span><span class="sd">"""Assign initial conditions.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
@@ -229,7 +291,7 @@
 <span class="sd">            The type of initial state.</span>
 <span class="sd">        values</span>
 <span class="sd">            The numpy array describing the initial state.</span>
-<span class="sd">        &quot;&quot;&quot;</span></div>
+<span class="sd">        """</span></div>
 
 
 <div class="viewcode-block" id="BaseElement.computeDistributedLoad">
@@ -243,10 +305,10 @@
         <span class="n">faceID</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
         <span class="n">load</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
         <span class="n">U</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
-        <span class="n">time</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+        <span class="n">time</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
         <span class="n">dT</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
     <span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Evaluate residual and stiffness for given time, field, and field increment due to a surface load.</span>
+<span class="w">        </span><span class="sd">"""Evaluate residual and stiffness for given time, field, and field increment due to a surface load.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
@@ -263,25 +325,25 @@
 <span class="sd">        U</span>
 <span class="sd">            The current solution vector.</span>
 <span class="sd">        time</span>
-<span class="sd">            Array of step time and total time.</span>
+<span class="sd">            The current time.</span>
 <span class="sd">        dTime</span>
 <span class="sd">            The time increment.</span>
-<span class="sd">        &quot;&quot;&quot;</span></div>
+<span class="sd">        """</span></div>
 
 
-<div class="viewcode-block" id="BaseElement.computeYourself">
-<a class="viewcode-back" href="../../../../documentation/elements.html#edelweissfe.elements.base.baseelement.BaseElement.computeYourself">[docs]</a>
+<div class="viewcode-block" id="BaseElement.computeKernels">
+<a class="viewcode-back" href="../../../../documentation/elements.html#edelweissfe.elements.base.baseelement.BaseElement.computeKernels">[docs]</a>
     <span class="nd">@abstractmethod</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">computeYourself</span><span class="p">(</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">computeKernels</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">P</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
         <span class="n">K</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
         <span class="n">U</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
         <span class="n">dU</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
-        <span class="n">time</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+        <span class="n">time</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
         <span class="n">dT</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
     <span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Evaluate the internal forces and stiffness for given time, field, and field increment.</span>
+<span class="w">        </span><span class="sd">"""Evaluate the internal forces and stiffness for given time, field, and field increment.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
@@ -294,24 +356,24 @@
 <span class="sd">        dU</span>
 <span class="sd">            The current solution vector increment.</span>
 <span class="sd">        time</span>
-<span class="sd">            Array of step time and total time.</span>
+<span class="sd">            The current time.</span>
 <span class="sd">        dTime</span>
 <span class="sd">            The time increment.</span>
-<span class="sd">        &quot;&quot;&quot;</span></div>
+<span class="sd">        """</span></div>
 
 
-<div class="viewcode-block" id="BaseElement.computeYourselfExplicit">
-<a class="viewcode-back" href="../../../../documentation/elements.html#edelweissfe.elements.base.baseelement.BaseElement.computeYourselfExplicit">[docs]</a>
+<div class="viewcode-block" id="BaseElement.computeKernelsExplicit">
+<a class="viewcode-back" href="../../../../documentation/elements.html#edelweissfe.elements.base.baseelement.BaseElement.computeKernelsExplicit">[docs]</a>
     <span class="nd">@abstractmethod</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">computeYourselfExplicit</span><span class="p">(</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">computeKernelsExplicit</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">P</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
         <span class="n">U</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
         <span class="n">dU</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
-        <span class="n">time</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+        <span class="n">time</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
         <span class="n">dT</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
     <span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Evaluate the internal forces for given time, field, and field increment.</span>
+<span class="w">        </span><span class="sd">"""Evaluate the internal forces for given time, field, and field increment.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
@@ -322,10 +384,10 @@
 <span class="sd">        dU</span>
 <span class="sd">            The current solution vector increment.</span>
 <span class="sd">        time</span>
-<span class="sd">            Array of step time and total time.</span>
+<span class="sd">            The current time.</span>
 <span class="sd">        dTime</span>
 <span class="sd">            The time increment.</span>
-<span class="sd">        &quot;&quot;&quot;</span></div>
+<span class="sd">        """</span></div>
 
 
 <div class="viewcode-block" id="BaseElement.computeLumpedInertia">
@@ -335,14 +397,112 @@
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">M</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
     <span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Evaluate the internal forces for given time, field, and field increment.</span>
+<span class="w">        </span><span class="sd">"""Evaluate the diagonal of the lumped inertia of the element, over every field it carries.</span>
+
+<span class="sd">        The coefficient of each field's SECOND time derivative: mass on the displacement block,</span>
+<span class="sd">        and a micro-inertia on a non-local block that has been given one. A parabolic</span>
+<span class="sd">        gradient-enhanced field reports none, which is what tells the solver it is first order in</span>
+<span class="sd">        time; see computeLumpedDamping() for what integrates it then.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
 <span class="sd">        M</span>
-<span class="sd">            The diagonal of the lumped mass matrix to be defined.</span>
-<span class="sd">        &quot;&quot;&quot;</span></div>
+<span class="sd">            The diagonal of the lumped inertia to be defined.</span>
+<span class="sd">        """</span></div>
 
+
+<div class="viewcode-block" id="BaseElement.computeConsistentInertia">
+<a class="viewcode-back" href="../../../../documentation/elements.html#edelweissfe.elements.base.baseelement.BaseElement.computeConsistentInertia">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">computeConsistentInertia</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">M</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+    <span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Evaluate the consistent (full) inertia matrix of the element, over every field it</span>
+<span class="sd">        carries.</span>
+
+<span class="sd">        The counterpart of :meth:`computeLumpedInertia` for an implicit dynamic solver, which</span>
+<span class="sd">        assembles a sparse global mass matrix rather than dividing by a diagonal: the coefficient</span>
+<span class="sd">        matrix of each field's SECOND time derivative, :math:`\\int_\\Omega \\rho N^T N \\, dV` on</span>
+<span class="sd">        the displacement block. Written into ``M`` in the same layout the element uses for its</span>
+<span class="sd">        stiffness in ``computeKernels``, so that a slice of the VIJ system matrix can be handed over</span>
+<span class="sd">        directly and the assembled mass shares the stiffness' sparsity pattern.</span>
+
+<span class="sd">        Not abstract: an element formulation without one is refused at assembly time by the solver</span>
+<span class="sd">        that needs it, rather than every element being forced to implement a matrix only the</span>
+<span class="sd">        implicit dynamic solver reads.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        M</span>
+<span class="sd">            The consistent inertia to be defined, in the element's stiffness layout.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        NotImplementedError</span>
+<span class="sd">            If the element does not provide a consistent inertia.</span>
+<span class="sd">        """</span>
+
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
+            <span class="s2">"</span><span class="si">{:}</span><span class="s2"> does not provide a consistent inertia matrix (computeConsistentInertia)."</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="p">)</span>
+        <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="BaseElement.computeLumpedDamping">
+<a class="viewcode-back" href="../../../../documentation/elements.html#edelweissfe.elements.base.baseelement.BaseElement.computeLumpedDamping">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">computeLumpedDamping</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">C</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+    <span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Evaluate the diagonal of the lumped damping of the element, over every field it carries.</span>
+
+<span class="sd">        The coefficient of each field's FIRST time derivative: zero on the displacement block,</span>
+<span class="sd">        and the non-local viscosity on a non-local block -- always, whether or not that field also</span>
+<span class="sd">        carries a micro-inertia. A first-order field is integrated by this term alone; a</span>
+<span class="sd">        second-order one is damped by it. Carrying none is the ordinary case, so the default</span>
+<span class="sd">        leaves the buffer alone.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        C</span>
+<span class="sd">            The diagonal of the lumped damping, supplied zero-initialised and written in place.</span>
+<span class="sd">            Entries left untouched are read as "no damping here".</span>
+<span class="sd">        """</span></div>
+
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">initialVelocity</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The element's initial velocity, in DOF order, applied once as an</span>
+<span class="sd">        initial condition at the start of an explicit simulation.</span>
+
+<span class="sd">        Elements do not take part in the per-step momentum remap (that is a</span>
+<span class="sd">        particle/cell concern); a mass-bearing element such as</span>
+<span class="sd">        :class:`~edelweissfe.elements.pointmass.PointMass` instead declares its</span>
+<span class="sd">        initial velocity here, which the explicit solver seeds into the grid</span>
+<span class="sd">        velocity vector once. The default is rest.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        np.ndarray</span>
+<span class="sd">            The initial velocity of the element's DOFs (size ``nDof``).</span>
+<span class="sd">        """</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">nDof</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">hasKernels</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Whether this entity contributes to the internal force and carries a state of its own.</span>
+
+<span class="sd">        Not every entity in the element container is a finite element. A contact facet is kept</span>
+<span class="sd">        there for its nodes and its geometry alone: it has no material and no state, and its</span>
+<span class="sd">        kernels, its internal energy and its state acceptance are all no-ops. A solver that</span>
+<span class="sd">        touches every element on every increment may leave those out instead of calling into</span>
+<span class="sd">        them for nothing.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        bool</span>
+<span class="sd">            True for a finite element proper, False for an entity that carries geometry only.</span>
+<span class="sd">        """</span>
+        <span class="k">return</span> <span class="kc">True</span>
 
 <div class="viewcode-block" id="BaseElement.computeCriticalTimeStepForExplicitDynamics">
 <a class="viewcode-back" href="../../../../documentation/elements.html#edelweissfe.elements.base.baseelement.BaseElement.computeCriticalTimeStepForExplicitDynamics">[docs]</a>
@@ -351,7 +511,7 @@
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">Q</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Evaluate the critical time step for explicit dynamics.</span>
+<span class="w">        </span><span class="sd">"""Evaluate the critical time step for explicit dynamics.</span>
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
 <span class="sd">        Q</span>
@@ -361,20 +521,20 @@
 <span class="sd">        -------</span>
 <span class="sd">        float</span>
 <span class="sd">            The critical time step.</span>
-<span class="sd">        &quot;&quot;&quot;</span></div>
+<span class="sd">        """</span></div>
 
 
 <div class="viewcode-block" id="BaseElement.computeInternalEnergy">
 <a class="viewcode-back" href="../../../../documentation/elements.html#edelweissfe.elements.base.baseelement.BaseElement.computeInternalEnergy">[docs]</a>
     <span class="nd">@abstractmethod</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">computeInternalEnergy</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Evaluate the internal energy of the element.</span>
+<span class="w">        </span><span class="sd">"""Evaluate the internal energy of the element.</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
 <span class="sd">        float</span>
 <span class="sd">            The internal energy.</span>
-<span class="sd">        &quot;&quot;&quot;</span></div>
+<span class="sd">        """</span></div>
 
 
 <div class="viewcode-block" id="BaseElement.computeBodyForce">
@@ -386,10 +546,10 @@
         <span class="n">K</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
         <span class="n">load</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
         <span class="n">U</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
-        <span class="n">time</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+        <span class="n">time</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
         <span class="n">dTime</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
     <span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Evaluate residual and stiffness for given time, field, and field increment due to a body force load.</span>
+<span class="w">        </span><span class="sd">"""Evaluate residual and stiffness for given time, field, and field increment due to a body force load.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
@@ -402,10 +562,10 @@
 <span class="sd">        U</span>
 <span class="sd">            The current solution vector.</span>
 <span class="sd">        time</span>
-<span class="sd">            Array of step time and total time.</span>
+<span class="sd">            The current time.</span>
 <span class="sd">        dTime</span>
 <span class="sd">            The time increment.</span>
-<span class="sd">        &quot;&quot;&quot;</span></div>
+<span class="sd">        """</span></div>
 
 
 <div class="viewcode-block" id="BaseElement.acceptLastState">
@@ -414,7 +574,7 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">acceptLastState</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
     <span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Accept the computed state (in nonlinear iteration schemes).&quot;&quot;&quot;</span></div>
+<span class="w">        </span><span class="sd">"""Accept the computed state (in nonlinear iteration schemes)."""</span></div>
 
 
 <div class="viewcode-block" id="BaseElement.resetToLastValidState">
@@ -423,14 +583,65 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">resetToLastValidState</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
     <span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Rest to the last valid state.&quot;&quot;&quot;</span></div>
+<span class="w">        </span><span class="sd">"""Rest to the last valid state."""</span></div>
+
+
+<div class="viewcode-block" id="BaseElement.getStateVars">
+<a class="viewcode-back" href="../../../../documentation/elements.html#edelweissfe.elements.base.baseelement.BaseElement.getStateVars">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">getStateVars</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Return a copy of the element's flat (converged) quadrature-point state-variable buffer.</span>
+
+<span class="sd">        The buffer is laid out as ``nQuadraturePoints`` contiguous per-point blocks. Used by adaptive</span>
+<span class="sd">        mesh refinement to hand history down to child elements. Override in concrete elements that</span>
+<span class="sd">        carry a state buffer.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        np.ndarray</span>
+<span class="sd">            A copy of the converged state-variable buffer.</span>
+<span class="sd">        """</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="s2">"This element does not expose a state-variable buffer."</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="BaseElement.setStateVars">
+<a class="viewcode-back" href="../../../../documentation/elements.html#edelweissfe.elements.base.baseelement.BaseElement.setStateVars">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">setStateVars</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">values</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Overwrite the element's (converged and trial) state-variable buffer.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        values</span>
+<span class="sd">            The new state-variable buffer, same size as :meth:`getStateVars`.</span>
+<span class="sd">        """</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="s2">"This element does not expose a state-variable buffer."</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="BaseElement.getStateVarSlice">
+<a class="viewcode-back" href="../../../../documentation/elements.html#edelweissfe.elements.base.baseelement.BaseElement.getStateVarSlice">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">getStateVarSlice</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Locate a named state variable within a single per-quadrature-point state block.</span>
+
+<span class="sd">        Enables per-state-variable routing of adaptive-refinement state transfer (see</span>
+<span class="sd">        :class:`~edelweissfe.adaptivity.statetransfer.perstatevar.PerStateVarStateTransfer`).</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        name</span>
+<span class="sd">            The state-variable name (as understood by the underlying material / element).</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        tuple</span>
+<span class="sd">            ``(offset, size)`` of the named variable within one per-quadrature-point block.</span>
+<span class="sd">        """</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="s2">"This element does not expose named state-variable slices."</span><span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="BaseElement.getResultArray">
 <a class="viewcode-back" href="../../../../documentation/elements.html#edelweissfe.elements.base.baseelement.BaseElement.getResultArray">[docs]</a>
     <span class="nd">@abstractmethod</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">getResultArray</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">result</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">quadraturePoint</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">getPersistentView</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get the array of a result, possibly as a persistent view which is continiously</span>
+<span class="w">        </span><span class="sd">"""Get the array of a result, possibly as a persistent view which is continiously</span>
 <span class="sd">        updated by the element.</span>
 
 <span class="sd">        Parameters</span>
@@ -446,46 +657,46 @@
 <span class="sd">        -------</span>
 <span class="sd">        np.ndarray</span>
 <span class="sd">            The result.</span>
-<span class="sd">        &quot;&quot;&quot;</span></div>
+<span class="sd">        """</span></div>
 
 
 <div class="viewcode-block" id="BaseElement.getCoordinatesAtCenter">
 <a class="viewcode-back" href="../../../../documentation/elements.html#edelweissfe.elements.base.baseelement.BaseElement.getCoordinatesAtCenter">[docs]</a>
     <span class="nd">@abstractmethod</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">getCoordinatesAtCenter</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Compute the underlying MarmotElement centroid coordinates.</span>
+<span class="w">        </span><span class="sd">"""Compute the underlying MarmotElement centroid coordinates.</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
 <span class="sd">        np.ndarray</span>
-<span class="sd">            The element&#39;s central coordinates.</span>
-<span class="sd">        &quot;&quot;&quot;</span></div>
+<span class="sd">            The element's central coordinates.</span>
+<span class="sd">        """</span></div>
 
 
 <div class="viewcode-block" id="BaseElement.getCoordinatesAtQuadraturePoints">
 <a class="viewcode-back" href="../../../../documentation/elements.html#edelweissfe.elements.base.baseelement.BaseElement.getCoordinatesAtQuadraturePoints">[docs]</a>
     <span class="nd">@abstractmethod</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">getCoordinatesAtQuadraturePoints</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Compute the underlying MarmotElement qp coordinates.</span>
+<span class="w">        </span><span class="sd">"""Compute the underlying MarmotElement qp coordinates.</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
 <span class="sd">        np.ndarray</span>
-<span class="sd">            The element&#39;s qp coordinates.</span>
-<span class="sd">        &quot;&quot;&quot;</span></div>
+<span class="sd">            The element's qp coordinates.</span>
+<span class="sd">        """</span></div>
 
 
 <div class="viewcode-block" id="BaseElement.getNumberOfQuadraturePoints">
 <a class="viewcode-back" href="../../../../documentation/elements.html#edelweissfe.elements.base.baseelement.BaseElement.getNumberOfQuadraturePoints">[docs]</a>
     <span class="nd">@abstractmethod</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">getNumberOfQuadraturePoints</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Compute the underlying MarmotElement qp coordinates.</span>
+<span class="w">        </span><span class="sd">"""Compute the underlying MarmotElement qp coordinates.</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
 <span class="sd">        np.ndarray</span>
-<span class="sd">            The element&#39;s qp coordinates.</span>
-<span class="sd">        &quot;&quot;&quot;</span></div>
+<span class="sd">            The element's qp coordinates.</span>
+<span class="sd">        """</span></div>
 </div>
 
 </pre></div>

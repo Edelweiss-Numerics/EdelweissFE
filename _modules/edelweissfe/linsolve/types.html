@@ -1,0 +1,521 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>edelweissfe.linsolve.types &mdash; EdelweissFE v22.07 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=cfdaff8d" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/custom.css?v=37fbe429" />
+
+  
+      <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../_static/documentation_options.js?v=17e2f33f"></script>
+      <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../index.html" class="icon icon-home">
+            EdelweissFE
+              <img src="../../../_static/edelweiss_fe_logo.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../features.html">Features</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../prerequisites.html">Prerequisites</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../documentation/index.html">Documentation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../contributors.html">Contributors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../publications.html">Publications</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">EdelweissFE</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">edelweissfe.linsolve.types</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for edelweissfe.linsolve.types</h1><div class="highlight"><pre>
+<span></span><span class="ch">#!/usr/bin/env python3</span>
+<span class="c1"># -*- coding: utf-8 -*-</span>
+<span class="c1">#  ---------------------------------------------------------------------</span>
+<span class="c1">#</span>
+<span class="c1">#  _____    _      _              _         _____ _____</span>
+<span class="c1"># | ____|__| | ___| |_      _____(_)___ ___|  ___| ____|</span>
+<span class="c1"># |  _| / _` |/ _ \ \ \ /\ / / _ \ / __/ __| |_  |  _|</span>
+<span class="c1"># | |__| (_| |  __/ |\ V  V /  __/ \__ \__ \  _| | |___</span>
+<span class="c1"># |_____\__,_|\___|_| \_/\_/ \___|_|___/___/_|   |_____|</span>
+<span class="c1">#</span>
+<span class="c1">#</span>
+<span class="c1">#  Unit of Strength of Materials and Structural Analysis</span>
+<span class="c1">#  University of Innsbruck,</span>
+<span class="c1">#  2017 - today</span>
+<span class="c1">#</span>
+<span class="c1">#  Matthias Neuner matthias.neuner@uibk.ac.at</span>
+<span class="c1">#</span>
+<span class="c1">#  This file is part of EdelweissFE.</span>
+<span class="c1">#</span>
+<span class="c1">#  This library is free software; you can redistribute it and/or</span>
+<span class="c1">#  modify it under the terms of the GNU Lesser General Public</span>
+<span class="c1">#  License as published by the Free Software Foundation; either</span>
+<span class="c1">#  version 2.1 of the License, or (at your option) any later version.</span>
+<span class="c1">#</span>
+<span class="c1">#  The full text of the license can be found in the file LICENSE.md at</span>
+<span class="c1">#  the top level directory of EdelweissFE.</span>
+<span class="c1">#  ---------------------------------------------------------------------</span>
+
+<span class="sd">"""The types of linear solver: what ``linsolver=&lt;type&gt;`` (and, with its data lines, ``*linearSolver, type=&lt;type&gt;``)</span>
+<span class="sd">names.</span>
+
+<span class="sd">Every type is a composed solver behind the one adapter,</span>
+<span class="sd">:class:`~edelweissfe.linsolve.composition.solver.ComposedLinearSolver`: a type is the schema of its data lines and</span>
+<span class="sd">the tree they define (:meth:`LinearSolverType.tree`). A direct solver is a tree of one leaf, ``type=pardiso`` is</span>
+<span class="sd">``DirectSolver("pardiso")``. So what the adapter does -- the verbosity, the dumps, the "linear solve" column -- works</span>
+<span class="sd">the same for every type, and the data lines of :class:`LinearSolverSchema` are those of every type.</span>
+<span class="sd">"""</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.linsolve.composition.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">Preconditioner</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.linsolve.composition.direct</span><span class="w"> </span><span class="kn">import</span> <span class="n">DirectSolver</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.linsolve.composition.krylov</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">FixedTolerance</span><span class="p">,</span>
+    <span class="n">RebuildPolicy</span><span class="p">,</span>
+    <span class="n">ResidualGapCompensation</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.linsolve.composition.presets</span><span class="w"> </span><span class="kn">import</span> <span class="n">blockAMG</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.linsolve.composition.solvedumps</span><span class="w"> </span><span class="kn">import</span> <span class="n">SolveDumps</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.linsolve.composition.solver</span><span class="w"> </span><span class="kn">import</span> <span class="n">ComposedLinearSolver</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.utils.schema</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">OptionSchemaProvider</span><span class="p">,</span>
+    <span class="n">buildSchemaFromOptions</span><span class="p">,</span>
+    <span class="n">schemaField</span><span class="p">,</span>
+<span class="p">)</span>
+
+
+<div class="viewcode-block" id="LinearSolverSchema">
+<a class="viewcode-back" href="../../../documentation/linsolveapi.html#edelweissfe.linsolve.types.LinearSolverSchema">[docs]</a>
+<span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">LinearSolverSchema</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""The data lines of every type: how its solves are reported and dumped."""</span>
+
+    <span class="n">verbosity</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">schemaField</span><span class="p">(</span>
+        <span class="n">description</span><span class="o">=</span><span class="p">(</span>
+            <span class="s2">"silent, warning (a warning for a slow or unconverged solve), info (one line per solve, the structure of "</span>
+            <span class="s2">"the solver, and the 'linear solve' column of the nonlinear solver) or debug (also why a preconditioner "</span>
+            <span class="s2">"was rebuilt or reused)."</span>
+        <span class="p">),</span>
+        <span class="n">dtype</span><span class="o">=</span><span class="nb">str</span><span class="p">,</span>
+        <span class="n">default</span><span class="o">=</span><span class="s2">"warning"</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">warningOuterIterations</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">schemaField</span><span class="p">(</span>
+        <span class="n">description</span><span class="o">=</span><span class="s2">"A solve with more outer Krylov iterations than this is warned about, and is a slow solve."</span><span class="p">,</span>
+        <span class="n">dtype</span><span class="o">=</span><span class="nb">int</span><span class="p">,</span>
+        <span class="n">default</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">residualGrowthFactor</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">schemaField</span><span class="p">(</span>
+        <span class="n">description</span><span class="o">=</span><span class="s2">"A right-hand side this many times larger than the previous one marks a new increment."</span><span class="p">,</span>
+        <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">,</span>
+        <span class="n">default</span><span class="o">=</span><span class="mf">4.0</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">dumps</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">schemaField</span><span class="p">(</span>
+        <span class="n">description</span><span class="o">=</span><span class="p">(</span>
+            <span class="s2">"Which solves are written to disk for an offline replay: none, slow (above warningOuterIterations, or "</span>
+            <span class="s2">"stopped at the iteration cap), every, or the numbers of the solves separated by spaces, e.g. '12 13 14'."</span>
+        <span class="p">),</span>
+        <span class="n">dtype</span><span class="o">=</span><span class="nb">str</span><span class="p">,</span>
+        <span class="n">default</span><span class="o">=</span><span class="s2">"none"</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">dumpDirectory</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">schemaField</span><span class="p">(</span><span class="n">description</span><span class="o">=</span><span class="s2">"Where the dumps go."</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">str</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="s2">"linsolveDumps"</span><span class="p">)</span>
+    <span class="n">maxDumps</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">schemaField</span><span class="p">(</span>
+        <span class="n">description</span><span class="o">=</span><span class="s2">"The most systems dumped to dumpDirectory in the run (a disk guard)."</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">int</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="mi">10</span>
+    <span class="p">)</span>
+    <span class="n">dumpContextSolves</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">schemaField</span><span class="p">(</span>
+        <span class="n">description</span><span class="o">=</span><span class="s2">"How many of the solves preceding a dumped one are dumped with it."</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">int</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="mi">0</span>
+    <span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="solveDumpsOf">
+<a class="viewcode-back" href="../../../documentation/linsolveapi.html#edelweissfe.linsolve.types.solveDumpsOf">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">solveDumpsOf</span><span class="p">(</span><span class="n">configuration</span><span class="p">:</span> <span class="n">LinearSolverSchema</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"SolveDumps | None"</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""The dumps the data lines ask for, or ``None``."""</span>
+    <span class="k">if</span> <span class="n">configuration</span><span class="o">.</span><span class="n">dumps</span> <span class="o">==</span> <span class="s2">"none"</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="n">trigger</span> <span class="o">=</span> <span class="n">configuration</span><span class="o">.</span><span class="n">dumps</span> <span class="k">if</span> <span class="n">configuration</span><span class="o">.</span><span class="n">dumps</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"slow"</span><span class="p">,</span> <span class="s2">"every"</span><span class="p">)</span> <span class="k">else</span> <span class="n">configuration</span><span class="o">.</span><span class="n">dumps</span><span class="o">.</span><span class="n">split</span><span class="p">()</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">SolveDumps</span><span class="p">(</span>
+            <span class="n">configuration</span><span class="o">.</span><span class="n">dumpDirectory</span><span class="p">,</span>
+            <span class="n">trigger</span><span class="o">=</span><span class="n">trigger</span><span class="p">,</span>
+            <span class="n">maxDumps</span><span class="o">=</span><span class="n">configuration</span><span class="o">.</span><span class="n">maxDumps</span><span class="p">,</span>
+            <span class="n">contextSolves</span><span class="o">=</span><span class="n">configuration</span><span class="o">.</span><span class="n">dumpContextSolves</span><span class="p">,</span>
+        <span class="p">)</span>
+    <span class="k">except</span> <span class="ne">ValueError</span> <span class="k">as</span> <span class="n">error</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="s2">"linear solver: dumps=</span><span class="si">{!r}</span><span class="s2">: none, slow, every, or solve numbers separated by spaces (</span><span class="si">{:}</span><span class="s2">)"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+                <span class="n">configuration</span><span class="o">.</span><span class="n">dumps</span><span class="p">,</span> <span class="n">error</span>
+            <span class="p">)</span>
+        <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">error</span></div>
+
+
+
+<div class="viewcode-block" id="LinearSolverType">
+<a class="viewcode-back" href="../../../documentation/linsolveapi.html#edelweissfe.linsolve.types.LinearSolverType">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">LinearSolverType</span><span class="p">(</span><span class="n">OptionSchemaProvider</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""A type of linear solver: the schema of its data lines, and the composed solver they define."""</span>
+
+    <span class="n">schema</span> <span class="o">=</span> <span class="n">LinearSolverSchema</span>
+
+<div class="viewcode-block" id="LinearSolverType.tree">
+<a class="viewcode-back" href="../../../documentation/linsolveapi.html#edelweissfe.linsolve.types.LinearSolverType.tree">[docs]</a>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">tree</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">configuration</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Preconditioner</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The composed solver of these data lines."""</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span></div>
+
+
+<div class="viewcode-block" id="LinearSolverType.fromOptions">
+<a class="viewcode-back" href="../../../documentation/linsolveapi.html#edelweissfe.linsolve.types.LinearSolverType.fromOptions">[docs]</a>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">fromOptions</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">options</span><span class="p">:</span> <span class="nb">dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ComposedLinearSolver</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The linear solver of these options (the data lines, by name; unknown names raise)."""</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="o">.</span><span class="n">create</span><span class="p">(</span><span class="n">buildSchemaFromOptions</span><span class="p">(</span><span class="bp">cls</span><span class="o">.</span><span class="n">schema</span><span class="p">,</span> <span class="n">options</span><span class="p">))</span></div>
+
+
+<div class="viewcode-block" id="LinearSolverType.create">
+<a class="viewcode-back" href="../../../documentation/linsolveapi.html#edelweissfe.linsolve.types.LinearSolverType.create">[docs]</a>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">create</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">configuration</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ComposedLinearSolver</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The linear solver of these data lines: the tree behind the adapter."""</span>
+        <span class="k">return</span> <span class="n">ComposedLinearSolver</span><span class="p">(</span><span class="bp">cls</span><span class="o">.</span><span class="n">tree</span><span class="p">(</span><span class="n">configuration</span><span class="p">),</span> <span class="o">**</span><span class="bp">cls</span><span class="o">.</span><span class="n">adapterSettings</span><span class="p">(</span><span class="n">configuration</span><span class="p">))</span></div>
+
+
+<div class="viewcode-block" id="LinearSolverType.adapterSettings">
+<a class="viewcode-back" href="../../../documentation/linsolveapi.html#edelweissfe.linsolve.types.LinearSolverType.adapterSettings">[docs]</a>
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">adapterSettings</span><span class="p">(</span><span class="n">configuration</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The settings of the adapter (:class:`~edelweissfe.linsolve.composition.solver.ComposedLinearSolver`) in</span>
+<span class="sd">        the data lines every type shares (:class:`LinearSolverSchema`), as its keyword arguments."""</span>
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="s2">"residualGrowthFactor"</span><span class="p">:</span> <span class="n">configuration</span><span class="o">.</span><span class="n">residualGrowthFactor</span><span class="p">,</span>
+            <span class="s2">"verbosity"</span><span class="p">:</span> <span class="n">configuration</span><span class="o">.</span><span class="n">verbosity</span><span class="p">,</span>
+            <span class="s2">"warningOuterIterations"</span><span class="p">:</span> <span class="n">configuration</span><span class="o">.</span><span class="n">warningOuterIterations</span><span class="p">,</span>
+            <span class="s2">"dumps"</span><span class="p">:</span> <span class="n">solveDumpsOf</span><span class="p">(</span><span class="n">configuration</span><span class="p">),</span>
+        <span class="p">}</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="DirectSolverType">
+<a class="viewcode-back" href="../../../documentation/linsolveapi.html#edelweissfe.linsolve.types.DirectSolverType">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">DirectSolverType</span><span class="p">(</span><span class="n">LinearSolverType</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""A direct solver: the tree of one :class:`~edelweissfe.linsolve.composition.direct.DirectSolver` leaf on the</span>
+<span class="sd">    package :attr:`package`, factorized anew on every solve."""</span>
+
+    <span class="c1">#: The registered name of the direct solver package (registry category ``directsolver``).</span>
+    <span class="n">package</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="kc">None</span>
+
+<div class="viewcode-block" id="DirectSolverType.tree">
+<a class="viewcode-back" href="../../../documentation/linsolveapi.html#edelweissfe.linsolve.types.DirectSolverType.tree">[docs]</a>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">tree</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">configuration</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Preconditioner</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">DirectSolver</span><span class="p">(</span><span class="bp">cls</span><span class="o">.</span><span class="n">package</span><span class="p">)</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="SuperLU">
+<a class="viewcode-back" href="../../../documentation/linsolveapi.html#edelweissfe.linsolve.types.SuperLU">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">SuperLU</span><span class="p">(</span><span class="n">DirectSolverType</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""``superlu``: SciPy's own sparse LU, always available."""</span>
+
+    <span class="n">package</span> <span class="o">=</span> <span class="s2">"superlu"</span></div>
+
+
+
+<div class="viewcode-block" id="UMFPACK">
+<a class="viewcode-back" href="../../../documentation/linsolveapi.html#edelweissfe.linsolve.types.UMFPACK">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">UMFPACK</span><span class="p">(</span><span class="n">DirectSolverType</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""``umfpack``: UMFPACK through SciPy (SuperLU if ``scikit-umfpack`` is missing)."""</span>
+
+    <span class="n">package</span> <span class="o">=</span> <span class="s2">"umfpack"</span></div>
+
+
+
+<div class="viewcode-block" id="PardisoSchema">
+<a class="viewcode-back" href="../../../documentation/linsolveapi.html#edelweissfe.linsolve.types.PardisoSchema">[docs]</a>
+<span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">PardisoSchema</span><span class="p">(</span><span class="n">LinearSolverSchema</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""The data lines of ``pardiso``."""</span>
+
+    <span class="n">reuseSymbolicFactorization</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="n">schemaField</span><span class="p">(</span>
+        <span class="n">description</span><span class="o">=</span><span class="p">(</span>
+            <span class="s2">"Keep PARDISO's reordering and symbolic factorization while the sparsity pattern stays the same. Off by "</span>
+            <span class="s2">"default: it has been observed to give silently wrong results for some coupled problems."</span>
+        <span class="p">),</span>
+        <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">,</span>
+        <span class="n">default</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="Pardiso">
+<a class="viewcode-back" href="../../../documentation/linsolveapi.html#edelweissfe.linsolve.types.Pardiso">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">Pardiso</span><span class="p">(</span><span class="n">DirectSolverType</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""``pardiso``: Intel MKL PARDISO (the default linear solver, if built)."""</span>
+
+    <span class="n">schema</span> <span class="o">=</span> <span class="n">PardisoSchema</span>
+    <span class="n">package</span> <span class="o">=</span> <span class="s2">"pardiso"</span>
+
+<div class="viewcode-block" id="Pardiso.tree">
+<a class="viewcode-back" href="../../../documentation/linsolveapi.html#edelweissfe.linsolve.types.Pardiso.tree">[docs]</a>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">tree</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">configuration</span><span class="p">:</span> <span class="n">PardisoSchema</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Preconditioner</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">DirectSolver</span><span class="p">(</span><span class="bp">cls</span><span class="o">.</span><span class="n">package</span><span class="p">,</span> <span class="n">reuseSymbolicFactorization</span><span class="o">=</span><span class="n">configuration</span><span class="o">.</span><span class="n">reuseSymbolicFactorization</span><span class="p">)</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="PanuaPardiso">
+<a class="viewcode-back" href="../../../documentation/linsolveapi.html#edelweissfe.linsolve.types.PanuaPardiso">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">PanuaPardiso</span><span class="p">(</span><span class="n">DirectSolverType</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""``panuapardiso``: Panua PARDISO, if built."""</span>
+
+    <span class="n">package</span> <span class="o">=</span> <span class="s2">"panuapardiso"</span></div>
+
+
+
+<div class="viewcode-block" id="KLU">
+<a class="viewcode-back" href="../../../documentation/linsolveapi.html#edelweissfe.linsolve.types.KLU">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">KLU</span><span class="p">(</span><span class="n">DirectSolverType</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""``klu``: SuiteSparse's KLU, if built."""</span>
+
+    <span class="n">package</span> <span class="o">=</span> <span class="s2">"klu"</span></div>
+
+
+
+<div class="viewcode-block" id="PetscLU">
+<a class="viewcode-back" href="../../../documentation/linsolveapi.html#edelweissfe.linsolve.types.PetscLU">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">PetscLU</span><span class="p">(</span><span class="n">DirectSolverType</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""``petsclu``: PETSc's LU, if ``petsc4py`` is installed."""</span>
+
+    <span class="n">package</span> <span class="o">=</span> <span class="s2">"petsclu"</span></div>
+
+
+
+<div class="viewcode-block" id="Mumps">
+<a class="viewcode-back" href="../../../documentation/linsolveapi.html#edelweissfe.linsolve.types.Mumps">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">Mumps</span><span class="p">(</span><span class="n">DirectSolverType</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""``mumps``: MUMPS, if its Python bindings are installed."""</span>
+
+    <span class="n">package</span> <span class="o">=</span> <span class="s2">"mumps"</span></div>
+
+
+
+<div class="viewcode-block" id="CustomSchema">
+<a class="viewcode-back" href="../../../documentation/linsolveapi.html#edelweissfe.linsolve.types.CustomSchema">[docs]</a>
+<span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">CustomSchema</span><span class="p">(</span><span class="n">LinearSolverSchema</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""The data lines of ``custom``."""</span>
+
+    <span class="n">script</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">schemaField</span><span class="p">(</span>
+        <span class="n">description</span><span class="o">=</span><span class="p">(</span>
+            <span class="s2">"The solver script: a Python file that binds the composed solver, a tree of components, to its global "</span>
+            <span class="s2">"linearSolver (a path relative to the working directory)."</span>
+        <span class="p">),</span>
+        <span class="n">dtype</span><span class="o">=</span><span class="nb">str</span><span class="p">,</span>
+        <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">required</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">hotReload</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="n">schemaField</span><span class="p">(</span>
+        <span class="n">description</span><span class="o">=</span><span class="s2">"Build the solver again whenever the script changes on disk, before a solve."</span><span class="p">,</span>
+        <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">,</span>
+        <span class="n">default</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="Custom">
+<a class="viewcode-back" href="../../../documentation/linsolveapi.html#edelweissfe.linsolve.types.Custom">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">Custom</span><span class="p">(</span><span class="n">LinearSolverType</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""``custom``: the composed solver of a solver script, defined by you (see</span>
+<span class="sd">    :func:`~edelweissfe.linsolve.composition.solver.loadSolverScript`)."""</span>
+
+    <span class="n">schema</span> <span class="o">=</span> <span class="n">CustomSchema</span>
+
+<div class="viewcode-block" id="Custom.create">
+<a class="viewcode-back" href="../../../documentation/linsolveapi.html#edelweissfe.linsolve.types.Custom.create">[docs]</a>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">create</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">configuration</span><span class="p">:</span> <span class="n">CustomSchema</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ComposedLinearSolver</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">ComposedLinearSolver</span><span class="o">.</span><span class="n">fromScript</span><span class="p">(</span>
+            <span class="n">configuration</span><span class="o">.</span><span class="n">script</span><span class="p">,</span> <span class="n">hotReload</span><span class="o">=</span><span class="n">configuration</span><span class="o">.</span><span class="n">hotReload</span><span class="p">,</span> <span class="o">**</span><span class="bp">cls</span><span class="o">.</span><span class="n">adapterSettings</span><span class="p">(</span><span class="n">configuration</span><span class="p">)</span>
+        <span class="p">)</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="BlockAMGSchema">
+<a class="viewcode-back" href="../../../documentation/linsolveapi.html#edelweissfe.linsolve.types.BlockAMGSchema">[docs]</a>
+<span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">BlockAMGSchema</span><span class="p">(</span><span class="n">LinearSolverSchema</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""The data lines of ``blockamg``: the arguments of the preset</span>
+<span class="sd">    :func:`~edelweissfe.linsolve.composition.presets.blockAMG`."""</span>
+
+    <span class="n">rigidBodyModesPerAggregate</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="n">schemaField</span><span class="p">(</span>
+        <span class="n">description</span><span class="o">=</span><span class="p">(</span>
+            <span class="s2">"A (linear) 3D displacement field gets the two-level cycle on its rigid-body modes (else one AMG "</span>
+            <span class="s2">"hierarchy, on the translations)."</span>
+        <span class="p">),</span>
+        <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">,</span>
+        <span class="n">default</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">cornerNodeInterpolation</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="n">schemaField</span><span class="p">(</span>
+        <span class="n">description</span><span class="o">=</span><span class="p">(</span>
+            <span class="s2">"A quadratic 3D displacement field gets the two-level cycle on its corner nodes (else the case of a linear "</span>
+            <span class="s2">"one)."</span>
+        <span class="p">),</span>
+        <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">,</span>
+        <span class="n">default</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">tolerance</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">schemaField</span><span class="p">(</span>
+        <span class="n">description</span><span class="o">=</span><span class="s2">"A fixed relative tolerance per solve; unset: the Eisenstat-Walker forcing tolerance."</span><span class="p">,</span>
+        <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">,</span>
+        <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">maxIterations</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">schemaField</span><span class="p">(</span><span class="n">description</span><span class="o">=</span><span class="s2">"The outer iteration cap."</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">int</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="mi">100</span><span class="p">)</span>
+    <span class="n">reusePreconditioner</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="n">schemaField</span><span class="p">(</span>
+        <span class="n">description</span><span class="o">=</span><span class="p">(</span>
+            <span class="s2">"Keep the preconditioner across solves until a new increment or a stale preconditioner asks for a rebuild "</span>
+            <span class="s2">"(false: a new preconditioner for every solve)."</span>
+        <span class="p">),</span>
+        <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">,</span>
+        <span class="n">default</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">sweeps</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">schemaField</span><span class="p">(</span><span class="n">description</span><span class="o">=</span><span class="s2">"The block Gauss-Seidel sweeps over the fields."</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">int</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+    <span class="n">symmetric</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="n">schemaField</span><span class="p">(</span>
+        <span class="n">description</span><span class="o">=</span><span class="s2">"A symmetric block Gauss-Seidel sweep (forward, then backward)."</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="kc">False</span>
+    <span class="p">)</span>
+    <span class="n">krylovOnScaledSystem</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="n">schemaField</span><span class="p">(</span>
+        <span class="n">description</span><span class="o">=</span><span class="s2">"Run LGMRES on the diagonally scaled matrix, with true-residual restarts."</span><span class="p">,</span>
+        <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">,</span>
+        <span class="n">default</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">trueResidualRestarts</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">schemaField</span><span class="p">(</span>
+        <span class="n">description</span><span class="o">=</span><span class="s2">"The true-residual restarts (only with krylovOnScaledSystem)."</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">int</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="mi">2</span>
+    <span class="p">)</span>
+    <span class="n">residualGapCompensation</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="n">schemaField</span><span class="p">(</span>
+        <span class="n">description</span><span class="o">=</span><span class="p">(</span>
+            <span class="s2">"Tighten the first pass by the learnt gap between the scaled and the true residual (only with "</span>
+            <span class="s2">"krylovOnScaledSystem)."</span>
+        <span class="p">),</span>
+        <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">,</span>
+        <span class="n">default</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">dropTolerance</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">schemaField</span><span class="p">(</span>
+        <span class="n">description</span><span class="o">=</span><span class="s2">"Build every field's preconditioner on its block without the entries below this (relative)."</span><span class="p">,</span>
+        <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">,</span>
+        <span class="n">default</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">lumpDroppedEntries</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="n">schemaField</span><span class="p">(</span>
+        <span class="n">description</span><span class="o">=</span><span class="s2">"Add the dropped entries to the diagonal (keeps the row sums)."</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="kc">False</span>
+    <span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="BlockAMG">
+<a class="viewcode-back" href="../../../documentation/linsolveapi.html#edelweissfe.linsolve.types.BlockAMG">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">BlockAMG</span><span class="p">(</span><span class="n">LinearSolverType</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""``blockamg``: the preset :func:`~edelweissfe.linsolve.composition.presets.blockAMG`, block Gauss--Seidel over</span>
+<span class="sd">    the fields of the diagonally scaled matrix, inside LGMRES."""</span>
+
+    <span class="n">schema</span> <span class="o">=</span> <span class="n">BlockAMGSchema</span>
+
+<div class="viewcode-block" id="BlockAMG.tree">
+<a class="viewcode-back" href="../../../documentation/linsolveapi.html#edelweissfe.linsolve.types.BlockAMG.tree">[docs]</a>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">tree</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">configuration</span><span class="p">:</span> <span class="n">BlockAMGSchema</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Preconditioner</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">blockAMG</span><span class="p">(</span>
+            <span class="n">rigidBodyModesPerAggregate</span><span class="o">=</span><span class="n">configuration</span><span class="o">.</span><span class="n">rigidBodyModesPerAggregate</span><span class="p">,</span>
+            <span class="n">cornerNodeInterpolation</span><span class="o">=</span><span class="n">configuration</span><span class="o">.</span><span class="n">cornerNodeInterpolation</span><span class="p">,</span>
+            <span class="n">tolerance</span><span class="o">=</span><span class="kc">None</span> <span class="k">if</span> <span class="n">configuration</span><span class="o">.</span><span class="n">tolerance</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">FixedTolerance</span><span class="p">(</span><span class="n">configuration</span><span class="o">.</span><span class="n">tolerance</span><span class="p">),</span>
+            <span class="n">maxIterations</span><span class="o">=</span><span class="n">configuration</span><span class="o">.</span><span class="n">maxIterations</span><span class="p">,</span>
+            <span class="n">rebuild</span><span class="o">=</span><span class="n">RebuildPolicy</span><span class="p">(</span><span class="n">reusePreconditioner</span><span class="o">=</span><span class="n">configuration</span><span class="o">.</span><span class="n">reusePreconditioner</span><span class="p">),</span>
+            <span class="n">sweeps</span><span class="o">=</span><span class="n">configuration</span><span class="o">.</span><span class="n">sweeps</span><span class="p">,</span>
+            <span class="n">symmetric</span><span class="o">=</span><span class="n">configuration</span><span class="o">.</span><span class="n">symmetric</span><span class="p">,</span>
+            <span class="n">krylovOnScaledSystem</span><span class="o">=</span><span class="n">configuration</span><span class="o">.</span><span class="n">krylovOnScaledSystem</span><span class="p">,</span>
+            <span class="n">trueResidualRestarts</span><span class="o">=</span><span class="n">configuration</span><span class="o">.</span><span class="n">trueResidualRestarts</span><span class="p">,</span>
+            <span class="n">residualGapCompensation</span><span class="o">=</span><span class="n">ResidualGapCompensation</span><span class="p">()</span> <span class="k">if</span> <span class="n">configuration</span><span class="o">.</span><span class="n">residualGapCompensation</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
+            <span class="n">dropTolerance</span><span class="o">=</span><span class="n">configuration</span><span class="o">.</span><span class="n">dropTolerance</span><span class="p">,</span>
+            <span class="n">lumpDroppedEntries</span><span class="o">=</span><span class="n">configuration</span><span class="o">.</span><span class="n">lumpDroppedEntries</span><span class="p">,</span>
+        <span class="p">)</span></div>
+</div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Matthias Neuner.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

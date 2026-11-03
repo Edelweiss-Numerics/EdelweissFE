@@ -15,8 +15,8 @@
       <script src="../_static/jquery.js?v=5d32c60e"></script>
       <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
       <script src="../_static/documentation_options.js?v=17e2f33f"></script>
-      <script src="../_static/doctools.js?v=9bcbadda"></script>
-      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
@@ -50,6 +50,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../installation.html">Installation</a></li>
 <li class="toctree-l1 current"><a class="reference internal" href="index.html">Documentation</a><ul class="current">
 <li class="toctree-l2"><a class="reference internal" href="syntax.html">Input file syntax</a></li>
+<li class="toctree-l2"><a class="reference internal" href="inputsystem.html">The input system: how <code class="docutils literal notranslate"><span class="pre">.inp</span></code> grammar is defined</a></li>
 <li class="toctree-l2"><a class="reference internal" href="jobs.html">Inputfile driven simulations</a></li>
 <li class="toctree-l2"><a class="reference internal" href="models.html">Models</a></li>
 <li class="toctree-l2"><a class="reference internal" href="solvers.html">Solvers</a></li>
@@ -57,7 +58,10 @@
 <li class="toctree-l2"><a class="reference internal" href="steps.html">Steps</a></li>
 <li class="toctree-l2"><a class="reference internal" href="analyticalfields.html">Analytical fields</a></li>
 <li class="toctree-l2"><a class="reference internal" href="constraints.html">Constraints</a></li>
-<li class="toctree-l2"><a class="reference internal" href="dofmanager.html">DOF manager</a></li>
+<li class="toctree-l2"><a class="reference internal" href="rigidbodies.html">Rigid bodies</a></li>
+<li class="toctree-l2"><a class="reference internal" href="contacttheory.html">Contact mechanics: theory</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dofmanager.html">Degree of Freedom (DOF) Manager and Numerics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="assembly.html">System matrix assembly</a></li>
 <li class="toctree-l2"><a class="reference internal" href="fieldoutputmanager.html">Field outputs</a></li>
 <li class="toctree-l2"><a class="reference internal" href="fields.html">Fields</a></li>
 <li class="toctree-l2"><a class="reference internal" href="elements.html">Elements</a></li>
@@ -65,19 +69,26 @@
 <li class="toctree-l2"><a class="reference internal" href="generators.html">Generators</a></li>
 <li class="toctree-l2 current"><a class="current reference internal" href="#">Journal</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="#edelweissfe.journal.journal.Journal"><code class="docutils literal notranslate"><span class="pre">Journal</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.journal.journal.Journal.setNewLineWidth"><code class="docutils literal notranslate"><span class="pre">Journal.setNewLineWidth()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#edelweissfe.journal.journal.Journal.errorMessage"><code class="docutils literal notranslate"><span class="pre">Journal.errorMessage()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.journal.journal.Journal.framedMessage"><code class="docutils literal notranslate"><span class="pre">Journal.framedMessage()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#edelweissfe.journal.journal.Journal.message"><code class="docutils literal notranslate"><span class="pre">Journal.message()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.journal.journal.Journal.preformatted"><code class="docutils literal notranslate"><span class="pre">Journal.preformatted()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#edelweissfe.journal.journal.Journal.printSeperationLine"><code class="docutils literal notranslate"><span class="pre">Journal.printSeperationLine()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#edelweissfe.journal.journal.Journal.printTable"><code class="docutils literal notranslate"><span class="pre">Journal.printTable()</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.journal.journal.Journal.setNewLineWidth"><code class="docutils literal notranslate"><span class="pre">Journal.setNewLineWidth()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#edelweissfe.journal.journal.Journal.setVerbose"><code class="docutils literal notranslate"><span class="pre">Journal.setVerbose()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#edelweissfe.journal.journal.Journal.squelch"><code class="docutils literal notranslate"><span class="pre">Journal.squelch()</span></code></a></li>
 </ul>
 </li>
+<li class="toctree-l3"><a class="reference internal" href="#edelweissfe.journal.journal.displayWidth"><code class="docutils literal notranslate"><span class="pre">displayWidth()</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="materials.html">Materials</a></li>
 <li class="toctree-l2"><a class="reference internal" href="mesh.html">Creating finite element meshes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="modelmodifiers.html">Model modifiers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="topologypipeline.html">The topology pipeline: how a model changes itself</a></li>
+<li class="toctree-l2"><a class="reference internal" href="restart.html">Restart</a></li>
+<li class="toctree-l2"><a class="reference internal" href="adaptivitytheory.html">Adaptive refinement: error estimation and marking</a></li>
 <li class="toctree-l2"><a class="reference internal" href="output.html">Outputmanagers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="parallelization.html">Parallelization</a></li>
 <li class="toctree-l2"><a class="reference internal" href="phenomena.html">Physical phenomena</a></li>
@@ -122,11 +133,35 @@
   <section id="journal">
 <h1>Journal<a class="headerlink" href="#journal" title="Link to this heading"></a></h1>
 <p>Relevant module: <code class="docutils literal notranslate"><span class="pre">edelweissfe.journal.journal</span></code></p>
+<p>The journal writes two kinds of output, in two columns: the message on the left, its sender on the right.</p>
+<dl class="simple">
+<dt>Messages</dt><dd><p><a class="reference internal" href="#edelweissfe.journal.journal.Journal.message" title="edelweissfe.journal.journal.Journal.message"><code class="xref py py-meth docutils literal notranslate"><span class="pre">message()</span></code></a> is for text. Lines longer than the message column are
+wrapped, and only the first line carries the sender.</p>
+</dd>
+<dt>Preformatted lines</dt><dd><p><a class="reference internal" href="#edelweissfe.journal.journal.Journal.preformatted" title="edelweissfe.journal.journal.Journal.preformatted"><code class="xref py py-meth docutils literal notranslate"><span class="pre">preformatted()</span></code></a> is for lines whose layout carries meaning, such as
+the rows of a table. They are never wrapped: a line longer than the message column pushes the sender to the
+right instead. Every line carries the sender. The iteration table of the implicit solvers is written this
+way, see <a class="reference internal" href="solvers.html#module-edelweissfe.solvers.base.convergencetable" title="edelweissfe.solvers.base.convergencetable"><code class="xref py py-mod docutils literal notranslate"><span class="pre">edelweissfe.solvers.base.convergencetable</span></code></a>.</p>
+</dd>
+</dl>
+<p>The level of a message is its nesting depth in the log, and it follows where the message is written:</p>
+<dl class="simple">
+<dt>Level 0</dt><dd><p>The job: model setup and summaries.</p>
+</dd>
+<dt>Level 1</dt><dd><p>An increment: its header, the convergence verdict, cutbacks, monitors, model modifiers such as adaptive
+refinement, and restart checkpoints.</p>
+</dd>
+<dt>Level 2</dt><dd><p>Inside an increment: equation-system rebuilds, the iteration table, linear solver output, contact status.</p>
+</dd>
+</dl>
+<p>A warning keeps the level of the place it is raised and is marked <code class="docutils literal notranslate"><span class="pre">WARNING:</span></code> or <code class="docutils literal notranslate"><span class="pre">⚠</span></code> instead of being
+moved out to level 0. The implicit solvers open each increment’s block with a separator line before the topology
+update, so refinement and contact output head the increment they belong to.</p>
 <p id="module-edelweissfe.journal.journal">This module provides journaling capabilities,
 which can be used troughout EdelweissFE.</p>
 <dl class="py class">
 <dt class="sig sig-object py" id="edelweissfe.journal.journal.Journal">
-<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">edelweissfe.journal.journal.</span></span><span class="sig-name descname"><span class="pre">Journal</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">verbose</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">outputFile</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">suppressFromLevel</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">3</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/journal/journal.html#Journal"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.journal.journal.Journal" title="Link to this definition"></a></dt>
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">edelweissfe.journal.journal.</span></span><span class="sig-name descname"><span class="pre">Journal</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">verbose</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">outputFile</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">suppressFromLevel</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">3</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/journal/journal.html#Journal"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.journal.journal.Journal" title="Link to this definition"></a></dt>
 <dd><p>This class provides an interface to present messages to the user via console
 output and/or file output.
 Information messages can be sorted by the importance level.
@@ -146,8 +181,14 @@ Suppressing certain levels of output is possible.</p>
 <tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.journal.journal.Journal.errorMessage" title="edelweissfe.journal.journal.Journal.errorMessage"><code class="xref py py-obj docutils literal notranslate"><span class="pre">errorMessage</span></code></a>(errorMessage, senderIdentification)</p></td>
 <td><p>Print an error message.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.journal.journal.Journal.message" title="edelweissfe.journal.journal.Journal.message"><code class="xref py py-obj docutils literal notranslate"><span class="pre">message</span></code></a>(message, senderIdentification[, level])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.journal.journal.Journal.framedMessage" title="edelweissfe.journal.journal.Journal.framedMessage"><code class="xref py py-obj docutils literal notranslate"><span class="pre">framedMessage</span></code></a>(message, senderIdentification, ...)</p></td>
+<td><p>Write a message inside a frame, a block that stands apart from the lines around it.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.journal.journal.Journal.message" title="edelweissfe.journal.journal.Journal.message"><code class="xref py py-obj docutils literal notranslate"><span class="pre">message</span></code></a>(message, senderIdentification[, level])</p></td>
 <td><p>Write message to log.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.journal.journal.Journal.preformatted" title="edelweissfe.journal.journal.Journal.preformatted"><code class="xref py py-obj docutils literal notranslate"><span class="pre">preformatted</span></code></a>(lines, senderIdentification[, ...])</p></td>
+<td><p>Write lines whose layout must be kept, such as the rows of a table, to log.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.journal.journal.Journal.printSeperationLine" title="edelweissfe.journal.journal.Journal.printSeperationLine"><code class="xref py py-obj docutils literal notranslate"><span class="pre">printSeperationLine</span></code></a>()</p></td>
 <td><p>Write a seperation file to log.</p></td>
@@ -177,6 +218,20 @@ Suppressing certain levels of output is possible.</p>
 </tbody>
 </table>
 <dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.journal.journal.Journal.setNewLineWidth">
+<span class="property"><span class="k"><span class="pre">classmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">setNewLineWidth</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">newWidth</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">100</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">leftColumn</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">80</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/journal/journal.html#Journal.setNewLineWidth"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.journal.journal.Journal.setNewLineWidth" title="Link to this definition"></a></dt>
+<dd><p>Set the line width of the log file.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>newWidth</strong> (<em>int</em>) – New total width.</p></li>
+<li><p><strong>leftColumn</strong> (<em>int</em>) – Width of the main column.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
 <dt class="sig sig-object py" id="edelweissfe.journal.journal.Journal.errorMessage">
 <span class="sig-name descname"><span class="pre">errorMessage</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">errorMessage</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">senderIdentification</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/journal/journal.html#Journal.errorMessage"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.journal.journal.Journal.errorMessage" title="Link to this definition"></a></dt>
 <dd><p>Print an error message.</p>
@@ -191,13 +246,49 @@ Suppressing certain levels of output is possible.</p>
 </dd></dl>
 
 <dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.journal.journal.Journal.framedMessage">
+<span class="sig-name descname"><span class="pre">framedMessage</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">message</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">senderIdentification</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">title</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">level</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/journal/journal.html#Journal.framedMessage"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.journal.journal.Journal.framedMessage" title="Link to this definition"></a></dt>
+<dd><p>Write a message inside a frame, a block that stands apart from the lines around it. The frame is as wide as
+the message column. A line longer than the frame is wrapped below itself, its continuation indented under its
+own text, and the <code class="docutils literal notranslate"><span class="pre">│</span></code> of a tree drawn with <code class="docutils literal notranslate"><span class="pre">├─</span></code> and <code class="docutils literal notranslate"><span class="pre">└─</span></code> carried on, so that such a tree stays readable.
+The sender is on the first line only.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>message</strong> (<em>str</em>) – The message; a line break starts a new line of the frame.</p></li>
+<li><p><strong>senderIdentification</strong> (<em>str</em>) – The name of the sender.</p></li>
+<li><p><strong>title</strong> (<em>str</em>) – The title in the upper border of the frame.</p></li>
+<li><p><strong>level</strong> (<em>int</em>) – Level of message.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
 <dt class="sig sig-object py" id="edelweissfe.journal.journal.Journal.message">
 <span class="sig-name descname"><span class="pre">message</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">message</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">senderIdentification</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">level</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/journal/journal.html#Journal.message"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.journal.journal.Journal.message" title="Link to this definition"></a></dt>
-<dd><p>Write message to log.</p>
+<dd><p>Write message to log. Lines longer than the message column are wrapped.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>message</strong> (<em>str</em>) – The message.</p></li>
+<li><p><strong>senderIdentification</strong> (<em>str</em>) – The name of the sender.</p></li>
+<li><p><strong>level</strong> (<em>int</em>) – Level of message.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.journal.journal.Journal.preformatted">
+<span class="sig-name descname"><span class="pre">preformatted</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">lines</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">senderIdentification</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">level</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/journal/journal.html#Journal.preformatted"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.journal.journal.Journal.preformatted" title="Link to this definition"></a></dt>
+<dd><p>Write lines whose layout must be kept, such as the rows of a table, to log. They are never wrapped:
+a line longer than the message column pushes the sender to the right instead. Each line carries the
+sender.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>lines</strong> (<em>list</em><em>[</em><em>str</em><em>]</em>) – The lines.</p></li>
 <li><p><strong>senderIdentification</strong> (<em>str</em>) – The name of the sender.</p></li>
 <li><p><strong>level</strong> (<em>int</em>) – Level of message.</p></li>
 </ul>
@@ -228,20 +319,6 @@ Suppressing certain levels of output is possible.</p>
 </dd></dl>
 
 <dl class="py method">
-<dt class="sig sig-object py" id="edelweissfe.journal.journal.Journal.setNewLineWidth">
-<span class="sig-name descname"><span class="pre">setNewLineWidth</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">newWidth</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">100</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">leftColumn</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">80</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/journal/journal.html#Journal.setNewLineWidth"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.journal.journal.Journal.setNewLineWidth" title="Link to this definition"></a></dt>
-<dd><p>Set the line width of the log file.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>newWidth</strong> (<em>int</em>) – New total width.</p></li>
-<li><p><strong>leftColumn</strong> (<em>int</em>) – Width of the main column.</p></li>
-</ul>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
 <dt class="sig sig-object py" id="edelweissfe.journal.journal.Journal.setVerbose">
 <span class="sig-name descname"><span class="pre">setVerbose</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/journal/journal.html#Journal.setVerbose"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.journal.journal.Journal.setVerbose" title="Link to this definition"></a></dt>
 <dd><p>Set highest verbosity.</p>
@@ -258,6 +335,20 @@ Suppressing certain levels of output is possible.</p>
 </dl>
 </dd></dl>
 
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="edelweissfe.journal.journal.displayWidth">
+<span class="sig-prename descclassname"><span class="pre">edelweissfe.journal.journal.</span></span><span class="sig-name descname"><span class="pre">displayWidth</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">text</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/journal/journal.html#displayWidth"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.journal.journal.displayWidth" title="Link to this definition"></a></dt>
+<dd><p>The columns a text takes on the terminal: a combining character (the tilde of <code class="docutils literal notranslate"><span class="pre">S̃</span></code>) takes none.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>text</strong> (<em>str</em>)</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>int</p>
+</dd>
+</dl>
 </dd></dl>
 
 </section>

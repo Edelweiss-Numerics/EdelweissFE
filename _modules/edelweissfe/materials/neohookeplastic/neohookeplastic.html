@@ -5,7 +5,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>edelweissfe.materials.neohookeplastic.neohookepencegouformulationaplastic &mdash; EdelweissFE v22.07 documentation</title>
+  <title>edelweissfe.materials.neohookeplastic.neohookeplastic &mdash; EdelweissFE v22.07 documentation</title>
       <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=cfdaff8d" />
       <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css?v=37fbe429" />
@@ -14,8 +14,8 @@
       <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
       <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
       <script src="../../../../_static/documentation_options.js?v=17e2f33f"></script>
-      <script src="../../../../_static/doctools.js?v=9bcbadda"></script>
-      <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../../../../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../../../../genindex.html" />
     <link rel="search" title="Search" href="../../../../search.html" /> 
@@ -65,7 +65,7 @@
   <ul class="wy-breadcrumbs">
       <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
           <li class="breadcrumb-item"><a href="../../../index.html">Module code</a></li>
-      <li class="breadcrumb-item active">edelweissfe.materials.neohookeplastic.neohookepencegouformulationaplastic</li>
+      <li class="breadcrumb-item active">edelweissfe.materials.neohookeplastic.neohookeplastic</li>
       <li class="wy-breadcrumbs-aside">
       </li>
   </ul>
@@ -74,7 +74,7 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
              
-  <h1>Source code for edelweissfe.materials.neohookeplastic.neohookepencegouformulationaplastic</h1><div class="highlight"><pre>
+  <h1>Source code for edelweissfe.materials.neohookeplastic.neohookeplastic</h1><div class="highlight"><pre>
 <span></span><span class="ch">#!/usr/bin/env python3</span>
 <span class="c1"># -*- coding: utf-8 -*-</span>
 <span class="c1">#  ---------------------------------------------------------------------</span>
@@ -147,33 +147,8 @@
 <span class="n">dR_dETrial</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">vstack</span><span class="p">([</span><span class="o">-</span><span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">6</span><span class="p">),</span> <span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">([</span><span class="mi">6</span><span class="p">])]])</span>
 
 
-<span class="c1"># material-specific functions</span>
-<span class="k">def</span><span class="w"> </span><span class="nf">energyAndStressAndElasticTangent</span><span class="p">(</span><span class="n">Btr</span><span class="p">,</span> <span class="n">dF</span><span class="p">,</span> <span class="n">invFold</span><span class="p">,</span> <span class="n">Bold</span><span class="p">,</span> <span class="n">K</span><span class="p">,</span> <span class="n">mu</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Compute the energy, the Kirchhoff stress and the elastic tangent.</span>
-
-<span class="sd">    Parameters</span>
-<span class="sd">    ----------</span>
-<span class="sd">    Btr</span>
-<span class="sd">        The trial left Cauchy-Green tensor.</span>
-<span class="sd">    dF</span>
-<span class="sd">        The change of the deformation gradient since the last step.</span>
-<span class="sd">    invFold</span>
-<span class="sd">        The inverse of the deformation gradient from the last step.</span>
-<span class="sd">    Bold</span>
-<span class="sd">        The left Cauchy-Green tensor from the last step.</span>
-<span class="sd">    K</span>
-<span class="sd">        The bulk modulus.</span>
-<span class="sd">    mu</span>
-<span class="sd">        The shear modulus.</span>
-
-<span class="sd">    Returns</span>
-<span class="sd">    -------</span>
-<span class="sd">    double</span>
-<span class="sd">        The energy density.</span>
-<span class="sd">    np.ndarray</span>
-<span class="sd">        The Kirchhoff stress.</span>
-<span class="sd">    np.ndarray</span>
-<span class="sd">        The elastic tangent dKirchhoff/dDeformationGradient.&quot;&quot;&quot;</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_elasticWa</span><span class="p">(</span><span class="n">mu</span><span class="p">,</span> <span class="n">K</span><span class="p">,</span> <span class="n">Btr</span><span class="p">,</span> <span class="n">dF</span><span class="p">,</span> <span class="n">invFold</span><span class="p">,</span> <span class="n">Bold</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Energy, Kirchhoff stress and elastic tangent for formulation Wa."""</span>
 
     <span class="n">J</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">lin</span><span class="o">.</span><span class="n">det</span><span class="p">(</span><span class="n">Btr</span><span class="p">))</span>
     <span class="n">I1</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">trace</span><span class="p">(</span><span class="n">Btr</span><span class="p">)</span>
@@ -181,30 +156,16 @@
     <span class="n">lambdaBar</span> <span class="o">=</span> <span class="p">(</span><span class="n">K</span> <span class="o">-</span> <span class="mi">2</span> <span class="o">/</span> <span class="mi">3</span> <span class="o">*</span> <span class="n">mu</span><span class="p">)</span> <span class="o">*</span> <span class="p">(</span><span class="n">J</span><span class="o">**</span><span class="mi">2</span> <span class="o">-</span> <span class="n">J</span><span class="p">)</span> <span class="o">-</span> <span class="n">mu</span>
     <span class="n">muBar</span> <span class="o">=</span> <span class="p">(</span><span class="n">K</span> <span class="o">/</span> <span class="mi">2</span> <span class="o">-</span> <span class="n">mu</span> <span class="o">/</span> <span class="mi">3</span><span class="p">)</span> <span class="o">*</span> <span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="n">J</span><span class="o">**</span><span class="mi">2</span> <span class="o">-</span> <span class="n">J</span><span class="p">)</span>
     <span class="n">T</span> <span class="o">=</span> <span class="n">mu</span> <span class="o">*</span> <span class="n">Btr</span> <span class="o">+</span> <span class="n">lambdaBar</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span>
-    <span class="n">dB_dF</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span><span class="s2">&quot;ik,np,jp,ln-&gt;ijkl&quot;</span><span class="p">,</span> <span class="n">Ieye</span><span class="p">,</span> <span class="n">Bold</span><span class="p">,</span> <span class="n">dF</span><span class="p">,</span> <span class="n">invFold</span><span class="p">)</span> <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span>
-        <span class="s2">&quot;io,on,jk,ln-&gt;ijkl&quot;</span><span class="p">,</span> <span class="n">dF</span><span class="p">,</span> <span class="n">Bold</span><span class="p">,</span> <span class="n">Ieye</span><span class="p">,</span> <span class="n">invFold</span>
+    <span class="n">dB_dF</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span><span class="s2">"ik,np,jp,ln-&gt;ijkl"</span><span class="p">,</span> <span class="n">Ieye</span><span class="p">,</span> <span class="n">Bold</span><span class="p">,</span> <span class="n">dF</span><span class="p">,</span> <span class="n">invFold</span><span class="p">)</span> <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span>
+        <span class="s2">"io,on,jk,ln-&gt;ijkl"</span><span class="p">,</span> <span class="n">dF</span><span class="p">,</span> <span class="n">Bold</span><span class="p">,</span> <span class="n">Ieye</span><span class="p">,</span> <span class="n">invFold</span>
     <span class="p">)</span>
-    <span class="n">CTauF</span> <span class="o">=</span> <span class="n">mu</span> <span class="o">*</span> <span class="n">dB_dF</span> <span class="o">+</span> <span class="n">muBar</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span><span class="s2">&quot;ij,mn,mnkl-&gt;ijkl&quot;</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="n">invB</span><span class="o">.</span><span class="n">T</span><span class="p">,</span> <span class="n">dB_dF</span><span class="p">)</span>
+    <span class="n">CTauF</span> <span class="o">=</span> <span class="n">mu</span> <span class="o">*</span> <span class="n">dB_dF</span> <span class="o">+</span> <span class="n">muBar</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span><span class="s2">"ij,mn,mnkl-&gt;ijkl"</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="n">invB</span><span class="o">.</span><span class="n">T</span><span class="p">,</span> <span class="n">dB_dF</span><span class="p">)</span>
     <span class="n">energy</span> <span class="o">=</span> <span class="n">mu</span> <span class="o">/</span> <span class="mi">2</span> <span class="o">*</span> <span class="p">(</span><span class="n">I1</span> <span class="o">-</span> <span class="mi">3</span><span class="p">)</span> <span class="o">+</span> <span class="p">(</span><span class="n">K</span> <span class="o">/</span> <span class="mi">2</span> <span class="o">-</span> <span class="n">mu</span> <span class="o">/</span> <span class="mi">3</span><span class="p">)</span> <span class="o">*</span> <span class="p">(</span><span class="n">J</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> <span class="o">**</span> <span class="mi">2</span> <span class="o">-</span> <span class="n">mu</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">J</span><span class="p">)</span>
     <span class="k">return</span> <span class="p">(</span><span class="n">energy</span><span class="p">,</span> <span class="n">T</span><span class="p">,</span> <span class="n">CTauF</span><span class="p">)</span>
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">kirchhoffStress</span><span class="p">(</span><span class="n">e</span><span class="p">,</span> <span class="n">K</span><span class="p">,</span> <span class="n">mu</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Compute the Kirchhoff stress.</span>
-
-<span class="sd">    Parameters</span>
-<span class="sd">    ----------</span>
-<span class="sd">    e</span>
-<span class="sd">        The spatial logarithmic Hencky strain.</span>
-<span class="sd">    K</span>
-<span class="sd">        The bulk modulus.</span>
-<span class="sd">    mu</span>
-<span class="sd">        The shear modulus.</span>
-
-<span class="sd">    Returns</span>
-<span class="sd">    -------</span>
-<span class="sd">    np.ndarray</span>
-<span class="sd">        The Kirchhoff stress.&quot;&quot;&quot;</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_kirchhoffStressWa</span><span class="p">(</span><span class="n">mu</span><span class="p">,</span> <span class="n">K</span><span class="p">,</span> <span class="n">e</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Kirchhoff stress for formulation Wa."""</span>
 
     <span class="n">B</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">tensorExp</span><span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="n">e</span><span class="p">)</span>
     <span class="n">J</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">lin</span><span class="o">.</span><span class="n">det</span><span class="p">(</span><span class="n">B</span><span class="p">))</span>
@@ -213,35 +174,113 @@
     <span class="k">return</span> <span class="n">T</span>
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">dKirchhoff_dE</span><span class="p">(</span><span class="n">e</span><span class="p">,</span> <span class="n">K</span><span class="p">,</span> <span class="n">mu</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Compute the derivative of the Kirchhoff stress w.r.t. the spatial logarithmic Hencky strain.</span>
-
-<span class="sd">    Parameters</span>
-<span class="sd">    ----------</span>
-<span class="sd">    e</span>
-<span class="sd">        The spatial logarithmic Hencky strain.</span>
-<span class="sd">    K</span>
-<span class="sd">        The bulk modulus.</span>
-<span class="sd">    mu</span>
-<span class="sd">        The shear modulus.</span>
-
-<span class="sd">    Returns</span>
-<span class="sd">    -------</span>
-<span class="sd">    np.ndarray</span>
-<span class="sd">        The derivative of the Kirchhoff stress w.r.t. the spatial Hencky strain.&quot;&quot;&quot;</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_dKirchhoff_dEWa</span><span class="p">(</span><span class="n">mu</span><span class="p">,</span> <span class="n">K</span><span class="p">,</span> <span class="n">e</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Derivative of the Kirchhoff stress w.r.t. the spatial logarithmic Hencky strain for formulation Wa."""</span>
 
     <span class="n">B</span><span class="p">,</span> <span class="n">n</span> <span class="o">=</span> <span class="n">tensorExp</span><span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="n">e</span><span class="p">)</span>
     <span class="n">J</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">lin</span><span class="o">.</span><span class="n">det</span><span class="p">(</span><span class="n">B</span><span class="p">))</span>
-    <span class="n">dExpE</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span><span class="s2">&quot;ijmn,mnkl-&gt;ijkl&quot;</span><span class="p">,</span> <span class="n">dTensorExp_dA</span><span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="n">e</span><span class="p">,</span> <span class="n">n</span><span class="p">),</span> <span class="n">Ieye4D</span><span class="p">)</span>
-    <span class="k">return</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">mu</span> <span class="o">*</span> <span class="n">dExpE</span> <span class="o">+</span> <span class="p">(</span><span class="n">K</span> <span class="o">-</span> <span class="mi">2</span> <span class="o">/</span> <span class="mi">3</span> <span class="o">*</span> <span class="n">mu</span><span class="p">)</span> <span class="o">*</span> <span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="n">J</span><span class="o">**</span><span class="mi">2</span> <span class="o">-</span> <span class="n">J</span><span class="p">)</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span><span class="s2">&quot;ij,kl-&gt;ijkl&quot;</span><span class="p">,</span> <span class="n">Ieye</span><span class="p">,</span> <span class="n">Ieye</span><span class="p">)</span>
+    <span class="n">dExpE</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span><span class="s2">"ijmn,mnkl-&gt;ijkl"</span><span class="p">,</span> <span class="n">dTensorExp_dA</span><span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="n">e</span><span class="p">,</span> <span class="n">n</span><span class="p">),</span> <span class="n">Ieye4D</span><span class="p">)</span>
+    <span class="k">return</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">mu</span> <span class="o">*</span> <span class="n">dExpE</span> <span class="o">+</span> <span class="p">(</span><span class="n">K</span> <span class="o">-</span> <span class="mi">2</span> <span class="o">/</span> <span class="mi">3</span> <span class="o">*</span> <span class="n">mu</span><span class="p">)</span> <span class="o">*</span> <span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="n">J</span><span class="o">**</span><span class="mi">2</span> <span class="o">-</span> <span class="n">J</span><span class="p">)</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span><span class="s2">"ij,kl-&gt;ijkl"</span><span class="p">,</span> <span class="n">Ieye</span><span class="p">,</span> <span class="n">Ieye</span><span class="p">)</span>
 
 
-<div class="viewcode-block" id="NeoHookeanWaPlasticMaterial">
-<a class="viewcode-back" href="../../../../documentation/materials.html#edelweissfe.materials.neohookeplastic.neohookepencegouformulationaplastic.NeoHookeanWaPlasticMaterial">[docs]</a>
-<span class="k">class</span><span class="w"> </span><span class="nc">NeoHookeanWaPlasticMaterial</span><span class="p">(</span><span class="n">BaseHyperElasticMaterial</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Neo-Hookean Wa material according to [1] with the following energy density function.</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_elasticWb</span><span class="p">(</span><span class="n">mu</span><span class="p">,</span> <span class="n">K</span><span class="p">,</span> <span class="n">Btr</span><span class="p">,</span> <span class="n">dF</span><span class="p">,</span> <span class="n">invFold</span><span class="p">,</span> <span class="n">Bold</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Energy, Kirchhoff stress and elastic tangent for formulation Wb."""</span>
 
-<span class="sd">    W_a (I1, J) = mu/2 * (I1 - 3) + (K/2 - mu/3)(J - 1)² - mu ln(J).</span>
+    <span class="n">J</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">lin</span><span class="o">.</span><span class="n">det</span><span class="p">(</span><span class="n">Btr</span><span class="p">))</span>
+    <span class="n">I1</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">trace</span><span class="p">(</span><span class="n">Btr</span><span class="p">)</span>
+    <span class="n">invB</span> <span class="o">=</span> <span class="n">lin</span><span class="o">.</span><span class="n">inv</span><span class="p">(</span><span class="n">Btr</span><span class="p">)</span>
+    <span class="n">lambdaHat</span> <span class="o">=</span> <span class="n">K</span> <span class="o">/</span> <span class="mi">4</span> <span class="o">*</span> <span class="p">(</span><span class="n">J</span><span class="o">**</span><span class="mi">2</span> <span class="o">+</span> <span class="mi">1</span> <span class="o">/</span> <span class="n">J</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span> <span class="o">+</span> <span class="n">mu</span> <span class="o">*</span> <span class="n">I1</span> <span class="o">/</span> <span class="p">(</span><span class="mi">9</span> <span class="o">*</span> <span class="n">J</span> <span class="o">**</span> <span class="p">(</span><span class="mi">2</span> <span class="o">/</span> <span class="mi">3</span><span class="p">))</span>
+    <span class="n">muBar</span> <span class="o">=</span> <span class="n">mu</span> <span class="o">/</span> <span class="p">(</span><span class="mi">3</span> <span class="o">*</span> <span class="n">J</span> <span class="o">**</span> <span class="p">(</span><span class="mi">2</span> <span class="o">/</span> <span class="mi">3</span><span class="p">))</span>
+    <span class="n">lambdaBar</span> <span class="o">=</span> <span class="n">K</span> <span class="o">/</span> <span class="mi">4</span> <span class="o">*</span> <span class="p">(</span><span class="n">J</span><span class="o">**</span><span class="mi">2</span> <span class="o">-</span> <span class="mi">1</span> <span class="o">/</span> <span class="n">J</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span> <span class="o">-</span> <span class="n">muBar</span> <span class="o">*</span> <span class="n">I1</span>
+    <span class="n">T</span> <span class="o">=</span> <span class="mi">3</span> <span class="o">*</span> <span class="n">muBar</span> <span class="o">*</span> <span class="n">Btr</span> <span class="o">+</span> <span class="n">lambdaBar</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span>
+    <span class="n">dB_dF</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span><span class="s2">"ik,np,jp,ln-&gt;ijkl"</span><span class="p">,</span> <span class="n">Ieye</span><span class="p">,</span> <span class="n">Bold</span><span class="p">,</span> <span class="n">dF</span><span class="p">,</span> <span class="n">invFold</span><span class="p">)</span> <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span>
+        <span class="s2">"io,on,jk,ln-&gt;ijkl"</span><span class="p">,</span> <span class="n">dF</span><span class="p">,</span> <span class="n">Bold</span><span class="p">,</span> <span class="n">Ieye</span><span class="p">,</span> <span class="n">invFold</span>
+    <span class="p">)</span>
+    <span class="n">CTauF</span> <span class="o">=</span> <span class="n">muBar</span> <span class="o">*</span> <span class="p">(</span>
+        <span class="o">-</span><span class="n">np</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span><span class="s2">"ij,mn,mnkl-&gt;ijkl"</span><span class="p">,</span> <span class="n">Btr</span><span class="p">,</span> <span class="n">invB</span><span class="o">.</span><span class="n">T</span><span class="p">,</span> <span class="n">dB_dF</span><span class="p">)</span>
+        <span class="o">+</span> <span class="mi">3</span> <span class="o">*</span> <span class="n">dB_dF</span>
+        <span class="o">-</span> <span class="n">np</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span><span class="s2">"ij,mn,mnkl-&gt;ijkl"</span><span class="p">,</span> <span class="n">Ieye</span><span class="p">,</span> <span class="n">Ieye</span><span class="p">,</span> <span class="n">dB_dF</span><span class="p">)</span>
+    <span class="p">)</span> <span class="o">+</span> <span class="n">lambdaHat</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span><span class="s2">"ij,mn,mnkl-&gt;ijkl"</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span> <span class="n">invB</span><span class="o">.</span><span class="n">T</span><span class="p">,</span> <span class="n">dB_dF</span><span class="p">)</span>
+    <span class="n">energy</span> <span class="o">=</span> <span class="n">mu</span> <span class="o">/</span> <span class="mi">2</span> <span class="o">*</span> <span class="p">(</span><span class="n">I1</span> <span class="o">/</span> <span class="n">J</span> <span class="o">**</span> <span class="p">(</span><span class="mi">2</span> <span class="o">/</span> <span class="mi">3</span><span class="p">)</span> <span class="o">-</span> <span class="mi">3</span><span class="p">)</span> <span class="o">+</span> <span class="n">K</span> <span class="o">/</span> <span class="mi">8</span> <span class="o">*</span> <span class="p">(</span><span class="n">J</span><span class="o">**</span><span class="mi">2</span> <span class="o">+</span> <span class="mi">1</span> <span class="o">/</span> <span class="n">J</span><span class="o">**</span><span class="mi">2</span> <span class="o">-</span> <span class="mi">2</span><span class="p">)</span>
+    <span class="k">return</span> <span class="p">(</span><span class="n">energy</span><span class="p">,</span> <span class="n">T</span><span class="p">,</span> <span class="n">CTauF</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_kirchhoffStressWb</span><span class="p">(</span><span class="n">mu</span><span class="p">,</span> <span class="n">K</span><span class="p">,</span> <span class="n">e</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Kirchhoff stress for formulation Wb."""</span>
+
+    <span class="n">B</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">tensorExp</span><span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="n">e</span><span class="p">)</span>
+    <span class="n">I1</span> <span class="o">=</span> <span class="n">B</span><span class="o">.</span><span class="n">trace</span><span class="p">()</span>
+    <span class="n">J</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">lin</span><span class="o">.</span><span class="n">det</span><span class="p">(</span><span class="n">B</span><span class="p">))</span>
+    <span class="n">muBar</span> <span class="o">=</span> <span class="n">K</span> <span class="o">/</span> <span class="mi">4</span> <span class="o">*</span> <span class="p">(</span><span class="n">J</span><span class="o">**</span><span class="mi">2</span> <span class="o">-</span> <span class="mi">1</span> <span class="o">/</span> <span class="n">J</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span> <span class="o">-</span> <span class="n">mu</span> <span class="o">*</span> <span class="n">I1</span> <span class="o">/</span> <span class="p">(</span><span class="mi">3</span> <span class="o">*</span> <span class="n">J</span> <span class="o">**</span> <span class="p">(</span><span class="mi">2</span> <span class="o">/</span> <span class="mi">3</span><span class="p">))</span>
+    <span class="n">T</span> <span class="o">=</span> <span class="n">mu</span> <span class="o">/</span> <span class="n">J</span> <span class="o">**</span> <span class="p">(</span><span class="mi">2</span> <span class="o">/</span> <span class="mi">3</span><span class="p">)</span> <span class="o">*</span> <span class="n">B</span> <span class="o">+</span> <span class="n">muBar</span> <span class="o">*</span> <span class="n">Ieye</span>
+    <span class="k">return</span> <span class="n">T</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_dKirchhoff_dEWb</span><span class="p">(</span><span class="n">mu</span><span class="p">,</span> <span class="n">K</span><span class="p">,</span> <span class="n">e</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Derivative of the Kirchhoff stress w.r.t. the spatial logarithmic Hencky strain for formulation Wb."""</span>
+
+    <span class="n">B</span><span class="p">,</span> <span class="n">n</span> <span class="o">=</span> <span class="n">tensorExp</span><span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="n">e</span><span class="p">)</span>
+    <span class="n">J</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">lin</span><span class="o">.</span><span class="n">det</span><span class="p">(</span><span class="n">B</span><span class="p">))</span>
+    <span class="n">dExpE</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span><span class="s2">"ijmn,mnkl-&gt;ijkl"</span><span class="p">,</span> <span class="n">dTensorExp_dA</span><span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="n">e</span><span class="p">,</span> <span class="n">n</span><span class="p">),</span> <span class="n">Ieye4D</span><span class="p">)</span>
+    <span class="n">I1</span> <span class="o">=</span> <span class="n">B</span><span class="o">.</span><span class="n">trace</span><span class="p">()</span>
+    <span class="n">p</span> <span class="o">=</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">mu</span> <span class="o">/</span> <span class="n">J</span> <span class="o">**</span> <span class="p">(</span><span class="mi">2</span> <span class="o">/</span> <span class="mi">3</span><span class="p">)</span>
+    <span class="n">lambdaBar</span> <span class="o">=</span> <span class="n">K</span> <span class="o">/</span> <span class="mi">2</span> <span class="o">*</span> <span class="p">(</span><span class="n">J</span><span class="o">**</span><span class="mi">2</span> <span class="o">+</span> <span class="mi">1</span> <span class="o">/</span> <span class="n">J</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span> <span class="o">+</span> <span class="n">p</span> <span class="o">*</span> <span class="n">I1</span> <span class="o">/</span> <span class="mi">9</span>
+    <span class="n">dT_de</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">p</span> <span class="o">*</span> <span class="n">dExpE</span>
+        <span class="o">-</span> <span class="n">p</span> <span class="o">/</span> <span class="mi">3</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span><span class="s2">"ij,kl-&gt;ijkl"</span><span class="p">,</span> <span class="n">B</span><span class="p">,</span> <span class="n">Ieye</span><span class="p">)</span>
+        <span class="o">+</span> <span class="n">lambdaBar</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span><span class="s2">"ij,kl-&gt;ijkl"</span><span class="p">,</span> <span class="n">Ieye</span><span class="p">,</span> <span class="n">Ieye</span><span class="p">)</span>
+        <span class="o">-</span> <span class="n">p</span> <span class="o">/</span> <span class="mi">3</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span><span class="s2">"ij,mn,mnkl-&gt;ijkl"</span><span class="p">,</span> <span class="n">Ieye</span><span class="p">,</span> <span class="n">Ieye</span><span class="p">,</span> <span class="n">dExpE</span><span class="p">)</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="n">dT_de</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_elasticWc</span><span class="p">(</span><span class="n">mu</span><span class="p">,</span> <span class="n">K</span><span class="p">,</span> <span class="n">Btr</span><span class="p">,</span> <span class="n">dF</span><span class="p">,</span> <span class="n">invFold</span><span class="p">,</span> <span class="n">Bold</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Energy, Kirchhoff stress and elastic tangent for formulation Wc."""</span>
+
+    <span class="n">J</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">lin</span><span class="o">.</span><span class="n">det</span><span class="p">(</span><span class="n">Btr</span><span class="p">))</span>
+    <span class="n">I1</span> <span class="o">=</span> <span class="n">Btr</span><span class="o">.</span><span class="n">trace</span><span class="p">()</span>
+    <span class="n">invB</span> <span class="o">=</span> <span class="n">lin</span><span class="o">.</span><span class="n">inv</span><span class="p">(</span><span class="n">Btr</span><span class="p">)</span>
+    <span class="n">muBar</span> <span class="o">=</span> <span class="n">mu</span> <span class="o">*</span> <span class="n">J</span> <span class="o">**</span> <span class="p">(</span><span class="mi">2</span> <span class="o">/</span> <span class="mi">3</span> <span class="o">-</span> <span class="n">K</span> <span class="o">/</span> <span class="n">mu</span><span class="p">)</span>
+    <span class="n">lambdaBar</span> <span class="o">=</span> <span class="p">(</span><span class="n">K</span> <span class="o">/</span> <span class="n">mu</span> <span class="o">-</span> <span class="mi">2</span> <span class="o">/</span> <span class="mi">3</span><span class="p">)</span> <span class="o">*</span> <span class="n">muBar</span> <span class="o">/</span> <span class="mi">2</span>
+    <span class="n">T</span> <span class="o">=</span> <span class="n">mu</span> <span class="o">*</span> <span class="n">Btr</span> <span class="o">-</span> <span class="n">muBar</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span>
+    <span class="n">dB_dF</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span><span class="s2">"ik,np,jp,ln-&gt;ijkl"</span><span class="p">,</span> <span class="n">Ieye</span><span class="p">,</span> <span class="n">Bold</span><span class="p">,</span> <span class="n">dF</span><span class="p">,</span> <span class="n">invFold</span><span class="p">)</span> <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span>
+        <span class="s2">"io,on,jk,ln-&gt;ijkl"</span><span class="p">,</span> <span class="n">dF</span><span class="p">,</span> <span class="n">Bold</span><span class="p">,</span> <span class="n">Ieye</span><span class="p">,</span> <span class="n">invFold</span>
+    <span class="p">)</span>
+    <span class="n">CTauF</span> <span class="o">=</span> <span class="n">mu</span> <span class="o">*</span> <span class="n">dB_dF</span> <span class="o">+</span> <span class="n">lambdaBar</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span><span class="s2">"ij,mn,mnkl-&gt;ijkl"</span><span class="p">,</span> <span class="n">Ieye</span><span class="p">,</span> <span class="n">invB</span><span class="o">.</span><span class="n">T</span><span class="p">,</span> <span class="n">dB_dF</span><span class="p">)</span>
+    <span class="n">energy</span> <span class="o">=</span> <span class="n">mu</span> <span class="o">/</span> <span class="mi">2</span> <span class="o">*</span> <span class="p">(</span><span class="n">I1</span> <span class="o">-</span> <span class="mi">3</span><span class="p">)</span> <span class="o">+</span> <span class="mi">3</span> <span class="o">*</span> <span class="n">mu</span><span class="o">**</span><span class="mi">2</span> <span class="o">/</span> <span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="n">K</span> <span class="o">-</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">mu</span><span class="p">)</span> <span class="o">*</span> <span class="p">(</span><span class="n">J</span> <span class="o">**</span> <span class="p">(</span><span class="mi">2</span> <span class="o">/</span> <span class="mi">3</span> <span class="o">-</span> <span class="n">K</span> <span class="o">/</span> <span class="n">mu</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
+    <span class="k">return</span> <span class="p">(</span><span class="n">energy</span><span class="p">,</span> <span class="n">T</span><span class="p">,</span> <span class="n">CTauF</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_kirchhoffStressWc</span><span class="p">(</span><span class="n">mu</span><span class="p">,</span> <span class="n">K</span><span class="p">,</span> <span class="n">e</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Kirchhoff stress for formulation Wc."""</span>
+
+    <span class="n">B</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">tensorExp</span><span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="n">e</span><span class="p">)</span>
+    <span class="n">muBar</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">((</span><span class="mi">2</span> <span class="o">/</span> <span class="mi">3</span> <span class="o">-</span> <span class="n">K</span> <span class="o">/</span> <span class="n">mu</span><span class="p">)</span> <span class="o">*</span> <span class="n">e</span><span class="o">.</span><span class="n">trace</span><span class="p">())</span>
+    <span class="n">T</span> <span class="o">=</span> <span class="n">mu</span> <span class="o">*</span> <span class="p">(</span><span class="n">B</span> <span class="o">-</span> <span class="n">muBar</span> <span class="o">*</span> <span class="n">Ieye</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">T</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_dKirchhoff_dEWc</span><span class="p">(</span><span class="n">mu</span><span class="p">,</span> <span class="n">K</span><span class="p">,</span> <span class="n">e</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Derivative of the Kirchhoff stress w.r.t. the spatial logarithmic Hencky strain for formulation Wc."""</span>
+
+    <span class="n">B</span><span class="p">,</span> <span class="n">n</span> <span class="o">=</span> <span class="n">tensorExp</span><span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="n">e</span><span class="p">)</span>
+    <span class="n">J</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">lin</span><span class="o">.</span><span class="n">det</span><span class="p">(</span><span class="n">B</span><span class="p">))</span>
+    <span class="n">dExpE</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span><span class="s2">"ijmn,mnkl-&gt;ijkl"</span><span class="p">,</span> <span class="n">dTensorExp_dA</span><span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="n">e</span><span class="p">,</span> <span class="n">n</span><span class="p">),</span> <span class="n">Ieye4D</span><span class="p">)</span>
+    <span class="k">return</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">mu</span> <span class="o">*</span> <span class="n">dExpE</span> <span class="o">+</span> <span class="p">(</span><span class="n">K</span> <span class="o">-</span> <span class="mi">2</span> <span class="o">/</span> <span class="mi">3</span> <span class="o">*</span> <span class="n">mu</span><span class="p">)</span> <span class="o">*</span> <span class="n">J</span> <span class="o">**</span> <span class="p">(</span><span class="mi">2</span> <span class="o">/</span> <span class="mi">3</span> <span class="o">-</span> <span class="n">K</span> <span class="o">/</span> <span class="n">mu</span><span class="p">)</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span><span class="s2">"ij,kl-&gt;ijkl"</span><span class="p">,</span> <span class="n">Ieye</span><span class="p">,</span> <span class="n">Ieye</span><span class="p">)</span>
+
+
+<span class="n">_FORMULATIONS</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="mi">1</span><span class="p">:</span> <span class="p">(</span><span class="n">_elasticWa</span><span class="p">,</span> <span class="n">_kirchhoffStressWa</span><span class="p">,</span> <span class="n">_dKirchhoff_dEWa</span><span class="p">),</span>
+    <span class="mi">2</span><span class="p">:</span> <span class="p">(</span><span class="n">_elasticWb</span><span class="p">,</span> <span class="n">_kirchhoffStressWb</span><span class="p">,</span> <span class="n">_dKirchhoff_dEWb</span><span class="p">),</span>
+    <span class="mi">3</span><span class="p">:</span> <span class="p">(</span><span class="n">_elasticWc</span><span class="p">,</span> <span class="n">_kirchhoffStressWc</span><span class="p">,</span> <span class="n">_dKirchhoff_dEWc</span><span class="p">),</span>
+<span class="p">}</span>
+
+
+<div class="viewcode-block" id="NeoHookeanPlasticMaterial">
+<a class="viewcode-back" href="../../../../documentation/materials.html#edelweissfe.materials.neohookeplastic.neohookeplastic.NeoHookeanPlasticMaterial">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">NeoHookeanPlasticMaterial</span><span class="p">(</span><span class="n">BaseHyperElasticMaterial</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Shared J2-plasticity return-mapping implementation for the compressible neo-Hookean formulations</span>
+<span class="sd">    Wa/Wb/Wc according to [1], combined with isotropic hardening.</span>
 
 <span class="sd">    [1] Pence, T. J., &amp; Gou, K. (2015). On compressible versions of the incompressible neo-Hookean material.</span>
 <span class="sd">        Mathematics and Mechanics of Solids, 20(2), 157–182. https://doi.org/10.1177/1081286514544258</span>
@@ -249,52 +288,41 @@
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
 <span class="sd">    materialProperties</span>
-<span class="sd">        The numpy array containing the material properties for the requested material.&quot;&quot;&quot;</span>
+<span class="sd">        The numpy array containing the material properties for the requested material, in order:</span>
+<span class="sd">        formulation selector (1=Wa, 2=Wb, 3=Wc), mu, K, yieldStress, HLin, deltaYieldStress, delta,</span>
+<span class="sd">        and optionally the density."""</span>
 
-    <span class="nd">@property</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">materialProperties</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;The properties the material has.&quot;&quot;&quot;</span>
-
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_materialProperties</span>
-
-<div class="viewcode-block" id="NeoHookeanWaPlasticMaterial.getDensity">
-<a class="viewcode-back" href="../../../../documentation/materials.html#edelweissfe.materials.neohookeplastic.neohookepencegouformulationaplastic.NeoHookeanWaPlasticMaterial.getDensity">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">getDensity</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Returns the density of the material.</span>
-
-<span class="sd">        Returns</span>
-<span class="sd">        -------</span>
-<span class="sd">        float</span>
-<span class="sd">            The density of the material.&quot;&quot;&quot;</span>
-
-        <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s2">&quot;_density&quot;</span><span class="p">):</span>
-            <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s2">&quot;Density is not defined for this material.&quot;</span><span class="p">)</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_density</span></div>
-
-
-<div class="viewcode-block" id="NeoHookeanWaPlasticMaterial.getNumberOfRequiredStateVars">
-<a class="viewcode-back" href="../../../../documentation/materials.html#edelweissfe.materials.neohookeplastic.neohookepencegouformulationaplastic.NeoHookeanWaPlasticMaterial.getNumberOfRequiredStateVars">[docs]</a>
+<div class="viewcode-block" id="NeoHookeanPlasticMaterial.getNumberOfRequiredStateVars">
+<a class="viewcode-back" href="../../../../documentation/materials.html#edelweissfe.materials.neohookeplastic.neohookeplastic.NeoHookeanPlasticMaterial.getNumberOfRequiredStateVars">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">getNumberOfRequiredStateVars</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Returns number of needed material state Variables per integration point in the material.</span>
+<span class="w">        </span><span class="sd">"""Returns number of needed material state Variables per integration point in the material.</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
 <span class="sd">        int</span>
-<span class="sd">            Number of needed material state Vars.&quot;&quot;&quot;</span>
+<span class="sd">            Number of needed material state Vars."""</span>
 
         <span class="k">return</span> <span class="mi">20</span></div>
 
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">materialProperties</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_materialProperties</span> <span class="o">=</span> <span class="n">materialProperties</span>
+        <span class="n">formulation</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">materialProperties</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+        <span class="k">if</span> <span class="n">formulation</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">_FORMULATIONS</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span>
+                <span class="s2">"Unknown Neo-Hookean Pence-Gou formulation selector </span><span class="si">{:}</span><span class="s2">; must be 1 (Wa), 2 (Wb), or 3 (Wc)."</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+                    <span class="n">formulation</span>
+                <span class="p">)</span>
+            <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_elasticImpl</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_kirchhoffStressImpl</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dKirchhoff_dEImpl</span> <span class="o">=</span> <span class="n">_FORMULATIONS</span><span class="p">[</span><span class="n">formulation</span><span class="p">]</span>
         <span class="c1"># elasticity parameters</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_mu</span> <span class="o">=</span> <span class="n">materialProperties</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_K</span> <span class="o">=</span> <span class="n">materialProperties</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_mu</span> <span class="o">=</span> <span class="n">materialProperties</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_K</span> <span class="o">=</span> <span class="n">materialProperties</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span>
         <span class="c1"># plasticity parameters</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">yieldStress</span> <span class="o">=</span> <span class="n">materialProperties</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">HLin</span> <span class="o">=</span> <span class="n">materialProperties</span><span class="p">[</span><span class="mi">3</span><span class="p">]</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">deltaYieldStress</span> <span class="o">=</span> <span class="n">materialProperties</span><span class="p">[</span><span class="mi">4</span><span class="p">]</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">delta</span> <span class="o">=</span> <span class="n">materialProperties</span><span class="p">[</span><span class="mi">5</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">yieldStress</span> <span class="o">=</span> <span class="n">materialProperties</span><span class="p">[</span><span class="mi">3</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">HLin</span> <span class="o">=</span> <span class="n">materialProperties</span><span class="p">[</span><span class="mi">4</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">deltaYieldStress</span> <span class="o">=</span> <span class="n">materialProperties</span><span class="p">[</span><span class="mi">5</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">delta</span> <span class="o">=</span> <span class="n">materialProperties</span><span class="p">[</span><span class="mi">6</span><span class="p">]</span>
         <span class="c1"># isotropic hardening</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_fy</span> <span class="o">=</span> <span class="p">(</span>
             <span class="k">lambda</span> <span class="n">kappa_</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">yieldStress</span>
@@ -306,18 +334,27 @@
         <span class="c1"># derivative of fy dKappa</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_dfy_ddKappa</span> <span class="o">=</span> <span class="k">lambda</span> <span class="n">kappa_</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">HLin</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">deltaYieldStress</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">delta</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="bp">self</span><span class="o">.</span><span class="n">delta</span> <span class="o">*</span> <span class="n">kappa_</span><span class="p">)</span>
 
-        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">materialProperties</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">6</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_density</span> <span class="o">=</span> <span class="n">materialProperties</span><span class="p">[</span><span class="mi">6</span><span class="p">]</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">materialProperties</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">7</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_density</span> <span class="o">=</span> <span class="n">materialProperties</span><span class="p">[</span><span class="mi">7</span><span class="p">]</span>
 
-<div class="viewcode-block" id="NeoHookeanWaPlasticMaterial.assignCurrentStateVars">
-<a class="viewcode-back" href="../../../../documentation/materials.html#edelweissfe.materials.neohookeplastic.neohookepencegouformulationaplastic.NeoHookeanWaPlasticMaterial.assignCurrentStateVars">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_energyAndStressAndElasticTangent</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">Btr</span><span class="p">,</span> <span class="n">dF</span><span class="p">,</span> <span class="n">invFold</span><span class="p">,</span> <span class="n">Bold</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_elasticImpl</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_mu</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_K</span><span class="p">,</span> <span class="n">Btr</span><span class="p">,</span> <span class="n">dF</span><span class="p">,</span> <span class="n">invFold</span><span class="p">,</span> <span class="n">Bold</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_kirchhoffStress</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">e</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_kirchhoffStressImpl</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_mu</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_K</span><span class="p">,</span> <span class="n">e</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_dKirchhoff_dE</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">e</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dKirchhoff_dEImpl</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_mu</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_K</span><span class="p">,</span> <span class="n">e</span><span class="p">)</span>
+
+<div class="viewcode-block" id="NeoHookeanPlasticMaterial.assignCurrentStateVars">
+<a class="viewcode-back" href="../../../../documentation/materials.html#edelweissfe.materials.neohookeplastic.neohookeplastic.NeoHookeanPlasticMaterial.assignCurrentStateVars">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">assignCurrentStateVars</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">currentStateVars</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Assign new current state vars.</span>
+<span class="w">        </span><span class="sd">"""Assign new current state vars.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
 <span class="sd">        currentStateVars</span>
-<span class="sd">            Array containing the material state vars.&quot;&quot;&quot;</span>
+<span class="sd">            Array containing the material state vars."""</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_energy</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">currentStateVars</span><span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="mi">1</span><span class="p">],</span> <span class="p">(</span><span class="mi">1</span><span class="p">))</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_kappaOld</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">currentStateVars</span><span class="p">[</span><span class="mi">1</span><span class="p">:</span><span class="mi">2</span><span class="p">],</span> <span class="p">(</span><span class="mi">1</span><span class="p">))</span>
@@ -327,36 +364,8 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">_Fold</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span></div>
 
 
-<div class="viewcode-block" id="NeoHookeanWaPlasticMaterial.computePlaneKirchhoff">
-<a class="viewcode-back" href="../../../../documentation/materials.html#edelweissfe.materials.neohookeplastic.neohookepencegouformulationaplastic.NeoHookeanWaPlasticMaterial.computePlaneKirchhoff">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">computePlaneKirchhoff</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span>
-        <span class="n">stress</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
-        <span class="n">dStress_dDeformationGradient</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
-        <span class="n">deformationGradient</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
-        <span class="n">time</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
-        <span class="n">dTime</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
-    <span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Computes the stresses for a 2D material with plane stress.</span>
-
-<span class="sd">        Parameters</span>
-<span class="sd">        ----------</span>
-<span class="sd">        stress</span>
-<span class="sd">            Vector containing the stresses.</span>
-<span class="sd">        dStress_dDeformationGradient</span>
-<span class="sd">            Matrix containing dStress/dStrain.</span>
-<span class="sd">        deformationGradient</span>
-<span class="sd">            The deformation gradient at time step t.</span>
-<span class="sd">        time</span>
-<span class="sd">            Array of step time and total time.</span>
-<span class="sd">        dTime</span>
-<span class="sd">            Current time step size.&quot;&quot;&quot;</span>
-
-        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">computePlaneKirchhoff</span><span class="p">(</span><span class="n">stress</span><span class="p">,</span> <span class="n">dStress_dDeformationGradient</span><span class="p">,</span> <span class="n">deformationGradient</span><span class="p">,</span> <span class="n">time</span><span class="p">,</span> <span class="n">dTime</span><span class="p">)</span></div>
-
-
-<div class="viewcode-block" id="NeoHookeanWaPlasticMaterial.computeKirchhoff">
-<a class="viewcode-back" href="../../../../documentation/materials.html#edelweissfe.materials.neohookeplastic.neohookepencegouformulationaplastic.NeoHookeanWaPlasticMaterial.computeKirchhoff">[docs]</a>
+<div class="viewcode-block" id="NeoHookeanPlasticMaterial.computeKirchhoff">
+<a class="viewcode-back" href="../../../../documentation/materials.html#edelweissfe.materials.neohookeplastic.neohookeplastic.NeoHookeanPlasticMaterial.computeKirchhoff">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">computeKirchhoff</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">stress</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
@@ -365,7 +374,7 @@
         <span class="n">time</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
         <span class="n">dTime</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
     <span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Computes the stresses for a 3D material/2D material with plane strain.</span>
+<span class="w">        </span><span class="sd">"""Computes the stresses for a 3D material/2D material with plane strain.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
@@ -378,7 +387,7 @@
 <span class="sd">        time</span>
 <span class="sd">            Array of step time and total time.</span>
 <span class="sd">        dTime</span>
-<span class="sd">            Current time step size.&quot;&quot;&quot;</span>
+<span class="sd">            Current time step size."""</span>
 
         <span class="n">F</span> <span class="o">=</span> <span class="n">deformationGradient</span>
         <span class="n">invFold</span> <span class="o">=</span> <span class="n">lin</span><span class="o">.</span><span class="n">inv</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_Fold</span><span class="p">)</span>
@@ -387,9 +396,7 @@
         <span class="n">Bold</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">tensorExp</span><span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ee</span><span class="p">)</span>
         <span class="n">Btrial</span> <span class="o">=</span> <span class="n">dF</span> <span class="o">@</span> <span class="n">Bold</span> <span class="o">@</span> <span class="n">dF</span><span class="o">.</span><span class="n">T</span>
         <span class="n">e_eTrial</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">/</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">tensorLogarithmEig</span><span class="p">(</span><span class="n">Btrial</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_energy</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">trialKirchhoff</span><span class="p">,</span> <span class="n">CTauF</span> <span class="o">=</span> <span class="n">energyAndStressAndElasticTangent</span><span class="p">(</span>
-            <span class="n">Btrial</span><span class="p">,</span> <span class="n">dF</span><span class="p">,</span> <span class="n">invFold</span><span class="p">,</span> <span class="n">Bold</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_K</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_mu</span>
-        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_energy</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">trialKirchhoff</span><span class="p">,</span> <span class="n">CTauF</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_energyAndStressAndElasticTangent</span><span class="p">(</span><span class="n">Btrial</span><span class="p">,</span> <span class="n">dF</span><span class="p">,</span> <span class="n">invFold</span><span class="p">,</span> <span class="n">Bold</span><span class="p">)</span>
         <span class="c1"># handle zero strain</span>
         <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">dF</span> <span class="o">-</span> <span class="n">Ieye</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mf">1e-14</span><span class="p">):</span>
             <span class="n">dStress_dDeformationGradient</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">CTauF</span>
@@ -400,7 +407,7 @@
             <span class="c1"># small strain algorithm to solve for kappa and epsilon</span>
 
             <span class="k">def</span><span class="w"> </span><span class="nf">residuals</span><span class="p">(</span><span class="n">X</span><span class="p">):</span>
-<span class="w">                </span><span class="sd">&quot;&quot;&quot;Compute the residual and its differential for the plastic solving process.</span>
+<span class="w">                </span><span class="sd">"""Compute the residual and its differential for the plastic solving process.</span>
 
 <span class="sd">                Parameters</span>
 <span class="sd">                ----------</span>
@@ -412,12 +419,12 @@
 <span class="sd">                np.ndarray</span>
 <span class="sd">                    The residual vector.</span>
 <span class="sd">                np.ndarray</span>
-<span class="sd">                    The derivative of the residual vector w.r.t. X.&quot;&quot;&quot;</span>
+<span class="sd">                    The derivative of the residual vector w.r.t. X."""</span>
 
                 <span class="n">e_e</span> <span class="o">=</span> <span class="n">undoVoigtStrain</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="n">X</span><span class="p">[:</span><span class="mi">6</span><span class="p">])</span>
                 <span class="n">dKappa</span> <span class="o">=</span> <span class="n">X</span><span class="p">[</span><span class="mi">6</span><span class="p">]</span>
                 <span class="c1"># compute Kirchhoff stress and Tensor exponential row number</span>
-                <span class="n">kirchhoff</span> <span class="o">=</span> <span class="n">kirchhoffStress</span><span class="p">(</span><span class="n">e_e</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_K</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_mu</span><span class="p">)</span>
+                <span class="n">kirchhoff</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_kirchhoffStress</span><span class="p">(</span><span class="n">e_e</span><span class="p">)</span>
                 <span class="n">devKirchhoff</span> <span class="o">=</span> <span class="n">deviatoric</span><span class="p">(</span><span class="n">kirchhoff</span><span class="p">)</span>
                 <span class="n">devNormKirchhoff</span> <span class="o">=</span> <span class="n">deviatoricNorm</span><span class="p">(</span><span class="n">devKirchhoff</span><span class="p">)</span>
                 <span class="n">n</span> <span class="o">=</span> <span class="n">devKirchhoff</span> <span class="o">/</span> <span class="n">devNormKirchhoff</span>  <span class="c1"># projection direction</span>
@@ -425,9 +432,7 @@
                 <span class="n">Reps</span> <span class="o">=</span> <span class="n">doVoigtStrain</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="n">e_e</span> <span class="o">-</span> <span class="n">e_eTrial</span> <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="mi">3</span> <span class="o">/</span> <span class="mi">2</span><span class="p">)</span> <span class="o">*</span> <span class="n">dKappa</span> <span class="o">*</span> <span class="n">n</span><span class="p">)</span>
                 <span class="n">Rk</span> <span class="o">=</span> <span class="n">devNormKirchhoff</span> <span class="o">-</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="mi">2</span> <span class="o">/</span> <span class="mi">3</span><span class="p">)</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">_fy</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_kappaOld</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">+</span> <span class="n">dKappa</span><span class="p">)</span>
                 <span class="c1"># compute the residual derivations</span>
-                <span class="n">dT_de</span> <span class="o">=</span> <span class="p">(</span>
-                    <span class="n">doVoigtMatrix</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span><span class="s2">&quot;ijkl,klmn-&gt;ijmn&quot;</span><span class="p">,</span> <span class="n">IDev4D</span><span class="p">,</span> <span class="n">dKirchhoff_dE</span><span class="p">(</span><span class="n">e_e</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_K</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_mu</span><span class="p">)))</span> <span class="o">@</span> <span class="n">Ihs</span>
-                <span class="p">)</span>
+                <span class="n">dT_de</span> <span class="o">=</span> <span class="n">doVoigtMatrix</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span><span class="s2">"ijkl,klmn-&gt;ijmn"</span><span class="p">,</span> <span class="n">IDev4D</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dKirchhoff_dE</span><span class="p">(</span><span class="n">e_e</span><span class="p">)))</span> <span class="o">@</span> <span class="n">Ihs</span>
                 <span class="n">nv</span> <span class="o">=</span> <span class="n">doVoigtStress</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="n">n</span><span class="p">)</span>  <span class="c1"># make Voigt</span>
                 <span class="n">dReps_dEe</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">6</span><span class="p">)</span> <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="mi">3</span> <span class="o">/</span> <span class="mi">2</span><span class="p">)</span> <span class="o">*</span> <span class="n">dKappa</span> <span class="o">/</span> <span class="n">devNormKirchhoff</span> <span class="o">*</span> <span class="p">(</span>
                     <span class="n">dT_de</span> <span class="o">-</span> <span class="n">Ids</span> <span class="o">@</span> <span class="n">np</span><span class="o">.</span><span class="n">outer</span><span class="p">(</span><span class="n">nv</span><span class="p">,</span> <span class="n">nv</span><span class="p">)</span> <span class="o">@</span> <span class="n">dT_de</span>
@@ -445,7 +450,7 @@
             <span class="n">relTol</span> <span class="o">=</span> <span class="n">tol</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">_fy</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_kappaOld</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
             <span class="k">while</span> <span class="n">lin</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">R</span><span class="p">)</span> <span class="o">&gt;</span> <span class="n">relTol</span><span class="p">:</span>  <span class="c1"># check if residuals fulfill tolerances</span>
                 <span class="k">if</span> <span class="n">counter</span> <span class="o">==</span> <span class="n">maxIter</span><span class="p">:</span>
-                    <span class="k">raise</span> <span class="n">CutbackRequest</span><span class="p">(</span><span class="s2">&quot;J2 plasticity solving failed.&quot;</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">)</span>
+                    <span class="k">raise</span> <span class="n">CutbackRequest</span><span class="p">(</span><span class="s2">"J2 plasticity solving failed."</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">)</span>
                 <span class="c1"># compute residual and its derivation</span>
                 <span class="n">R</span><span class="p">,</span> <span class="n">dR_dX</span> <span class="o">=</span> <span class="n">residuals</span><span class="p">(</span><span class="n">X</span><span class="p">)</span>
                 <span class="n">X</span> <span class="o">-=</span> <span class="n">lin</span><span class="o">.</span><span class="n">solve</span><span class="p">(</span><span class="n">dR_dX</span><span class="p">,</span> <span class="n">R</span><span class="p">)</span>
@@ -455,7 +460,7 @@
 
             <span class="c1"># calculation of the elastoplastic consistent tangent</span>
             <span class="k">def</span><span class="w"> </span><span class="nf">elastoPlasticKirchhoffTangent</span><span class="p">(</span><span class="n">e</span><span class="p">):</span>
-<span class="w">                </span><span class="sd">&quot;&quot;&quot;Compute the elastoplastic Kirchhoff tangent dKirchhoff/dEtrial.</span>
+<span class="w">                </span><span class="sd">"""Compute the elastoplastic Kirchhoff tangent dKirchhoff/dEtrial.</span>
 
 <span class="sd">                Parameters</span>
 <span class="sd">                ----------</span>
@@ -465,25 +470,25 @@
 <span class="sd">                Returns</span>
 <span class="sd">                -------</span>
 <span class="sd">                np.ndarray</span>
-<span class="sd">                    The elastoplastic tangent dKirchhoff/dEtrial.&quot;&quot;&quot;</span>
+<span class="sd">                    The elastoplastic tangent dKirchhoff/dEtrial."""</span>
 
                 <span class="n">dX_dEtrial</span> <span class="o">=</span> <span class="o">-</span><span class="n">lin</span><span class="o">.</span><span class="n">solve</span><span class="p">(</span><span class="n">dR_dX</span><span class="p">,</span> <span class="n">dR_dETrial</span><span class="p">)</span>
-                <span class="n">dT_dE</span> <span class="o">=</span> <span class="n">doVoigtMatrix</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="n">dKirchhoff_dE</span><span class="p">(</span><span class="n">e</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_K</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_mu</span><span class="p">))</span> <span class="o">@</span> <span class="n">Ihs</span>
+                <span class="n">dT_dE</span> <span class="o">=</span> <span class="n">doVoigtMatrix</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dKirchhoff_dE</span><span class="p">(</span><span class="n">e</span><span class="p">))</span> <span class="o">@</span> <span class="n">Ihs</span>
                 <span class="k">return</span> <span class="n">undoVoigtMatrix</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="n">dT_dE</span> <span class="o">@</span> <span class="n">dX_dEtrial</span><span class="p">[:</span><span class="mi">6</span><span class="p">,</span> <span class="p">:</span><span class="mi">6</span><span class="p">])</span>
 
             <span class="c1"># update to back projected state</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_ee</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">undoVoigtStrain</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="n">X</span><span class="p">[:</span><span class="mi">6</span><span class="p">])</span>
             <span class="n">dT_dE</span> <span class="o">=</span> <span class="n">elastoPlasticKirchhoffTangent</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_ee</span><span class="p">)</span>
             <span class="c1"># calculate back projected kirchhoff stress and convert to Voigt</span>
-            <span class="n">T</span> <span class="o">=</span> <span class="n">kirchhoffStress</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_ee</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_K</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_mu</span><span class="p">)</span>
+            <span class="n">T</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_kirchhoffStress</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_ee</span><span class="p">)</span>
             <span class="n">stress</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">doVoigtStress</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="n">T</span><span class="p">)</span>
             <span class="c1"># compute elastoplastic consistent tangent</span>
             <span class="n">dEe_dB</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">/</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">dTensorLog_dA</span><span class="p">(</span><span class="n">Btrial</span><span class="p">)</span>
-            <span class="n">dB_dF</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span><span class="s2">&quot;ik,np,jp,ln-&gt;ijkl&quot;</span><span class="p">,</span> <span class="n">Ieye</span><span class="p">,</span> <span class="n">Bold</span><span class="p">,</span> <span class="n">dF</span><span class="p">,</span> <span class="n">invFold</span><span class="p">)</span> <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span>
-                <span class="s2">&quot;io,on,jk,ln-&gt;ijkl&quot;</span><span class="p">,</span> <span class="n">dF</span><span class="p">,</span> <span class="n">Bold</span><span class="p">,</span> <span class="n">Ieye</span><span class="p">,</span> <span class="n">invFold</span>
+            <span class="n">dB_dF</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span><span class="s2">"ik,np,jp,ln-&gt;ijkl"</span><span class="p">,</span> <span class="n">Ieye</span><span class="p">,</span> <span class="n">Bold</span><span class="p">,</span> <span class="n">dF</span><span class="p">,</span> <span class="n">invFold</span><span class="p">)</span> <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span>
+                <span class="s2">"io,on,jk,ln-&gt;ijkl"</span><span class="p">,</span> <span class="n">dF</span><span class="p">,</span> <span class="n">Bold</span><span class="p">,</span> <span class="n">Ieye</span><span class="p">,</span> <span class="n">invFold</span>
             <span class="p">)</span>
-            <span class="n">dEe_dF</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span><span class="s2">&quot;ijmn,mnkl-&gt;ijkl&quot;</span><span class="p">,</span> <span class="n">dEe_dB</span><span class="p">,</span> <span class="n">dB_dF</span><span class="p">)</span>
-            <span class="n">dStress_dDeformationGradient</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span><span class="s2">&quot;ijop,opkl-&gt;ijkl&quot;</span><span class="p">,</span> <span class="n">dT_dE</span><span class="p">,</span> <span class="n">dEe_dF</span><span class="p">)</span>
+            <span class="n">dEe_dF</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span><span class="s2">"ijmn,mnkl-&gt;ijkl"</span><span class="p">,</span> <span class="n">dEe_dB</span><span class="p">,</span> <span class="n">dB_dF</span><span class="p">)</span>
+            <span class="n">dStress_dDeformationGradient</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span><span class="s2">"ijop,opkl-&gt;ijkl"</span><span class="p">,</span> <span class="n">dT_dE</span><span class="p">,</span> <span class="n">dEe_dF</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>  <span class="c1"># elastic step</span>
             <span class="n">stress</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">doVoigtStress</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="n">trialKirchhoff</span><span class="p">)</span>
             <span class="n">dStress_dDeformationGradient</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">CTauF</span>
@@ -491,38 +496,10 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_Fold</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">F</span></div>
 
 
-<div class="viewcode-block" id="NeoHookeanWaPlasticMaterial.computeUniaxialKirchhoff">
-<a class="viewcode-back" href="../../../../documentation/materials.html#edelweissfe.materials.neohookeplastic.neohookepencegouformulationaplastic.NeoHookeanWaPlasticMaterial.computeUniaxialKirchhoff">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">computeUniaxialKirchhoff</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span>
-        <span class="n">stress</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
-        <span class="n">dStress_dDeformationGradient</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
-        <span class="n">deformationGradient</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
-        <span class="n">time</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
-        <span class="n">dTime</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
-    <span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Computes the stresses for a uniaxial stress state.</span>
-
-<span class="sd">        Parameters</span>
-<span class="sd">        ----------</span>
-<span class="sd">        stress</span>
-<span class="sd">            Vector containing the stresses.</span>
-<span class="sd">        dStress_dDeformationGradient</span>
-<span class="sd">            Matrix containing dStress/dStrain.</span>
-<span class="sd">        deformationGradient</span>
-<span class="sd">            The deformation gradient at time step t.</span>
-<span class="sd">        time</span>
-<span class="sd">            Array of step time and total time.</span>
-<span class="sd">        dTime</span>
-<span class="sd">            Current time step size.&quot;&quot;&quot;</span>
-
-        <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s2">&quot;Computing uniaxial stress is not possible with this material.&quot;</span><span class="p">)</span></div>
-
-
-<div class="viewcode-block" id="NeoHookeanWaPlasticMaterial.getResult">
-<a class="viewcode-back" href="../../../../documentation/materials.html#edelweissfe.materials.neohookeplastic.neohookepencegouformulationaplastic.NeoHookeanWaPlasticMaterial.getResult">[docs]</a>
+<div class="viewcode-block" id="NeoHookeanPlasticMaterial.getResult">
+<a class="viewcode-back" href="../../../../documentation/materials.html#edelweissfe.materials.neohookeplastic.neohookeplastic.NeoHookeanPlasticMaterial.getResult">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">getResult</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">result</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get the result, as a persistent view which is continiously</span>
+<span class="w">        </span><span class="sd">"""Get the result, as a persistent view which is continiously</span>
 <span class="sd">        updated by the material.</span>
 
 <span class="sd">        Parameters</span>
@@ -534,14 +511,14 @@
 <span class="sd">        -------</span>
 <span class="sd">        float</span>
 <span class="sd">            The result.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
+<span class="sd">        """</span>
 
-        <span class="k">if</span> <span class="n">result</span> <span class="o">==</span> <span class="s2">&quot;energy&quot;</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">result</span> <span class="o">==</span> <span class="s2">"energy"</span><span class="p">:</span>
             <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_energy</span>
-        <span class="k">elif</span> <span class="n">result</span> <span class="o">==</span> <span class="s2">&quot;kappa&quot;</span><span class="p">:</span>
+        <span class="k">elif</span> <span class="n">result</span> <span class="o">==</span> <span class="s2">"kappa"</span><span class="p">:</span>
             <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_kappaOld</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s2">&quot;This result doesn&#39;t exist for the current material.&quot;</span><span class="p">)</span></div>
+            <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s2">"This result doesn't exist for the current material."</span><span class="p">)</span></div>
 </div>
 
 </pre></div>

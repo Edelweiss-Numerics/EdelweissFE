@@ -15,8 +15,8 @@
       <script src="../_static/jquery.js?v=5d32c60e"></script>
       <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
       <script src="../_static/documentation_options.js?v=17e2f33f"></script>
-      <script src="../_static/doctools.js?v=9bcbadda"></script>
-      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
@@ -50,6 +50,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../installation.html">Installation</a></li>
 <li class="toctree-l1 current"><a class="reference internal" href="index.html">Documentation</a><ul class="current">
 <li class="toctree-l2"><a class="reference internal" href="syntax.html">Input file syntax</a></li>
+<li class="toctree-l2"><a class="reference internal" href="inputsystem.html">The input system: how <code class="docutils literal notranslate"><span class="pre">.inp</span></code> grammar is defined</a></li>
 <li class="toctree-l2"><a class="reference internal" href="jobs.html">Inputfile driven simulations</a></li>
 <li class="toctree-l2"><a class="reference internal" href="models.html">Models</a></li>
 <li class="toctree-l2"><a class="reference internal" href="solvers.html">Solvers</a></li>
@@ -57,7 +58,10 @@
 <li class="toctree-l2"><a class="reference internal" href="steps.html">Steps</a></li>
 <li class="toctree-l2"><a class="reference internal" href="analyticalfields.html">Analytical fields</a></li>
 <li class="toctree-l2"><a class="reference internal" href="constraints.html">Constraints</a></li>
-<li class="toctree-l2"><a class="reference internal" href="dofmanager.html">DOF manager</a></li>
+<li class="toctree-l2"><a class="reference internal" href="rigidbodies.html">Rigid bodies</a></li>
+<li class="toctree-l2"><a class="reference internal" href="contacttheory.html">Contact mechanics: theory</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dofmanager.html">Degree of Freedom (DOF) Manager and Numerics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="assembly.html">System matrix assembly</a></li>
 <li class="toctree-l2"><a class="reference internal" href="fieldoutputmanager.html">Field outputs</a></li>
 <li class="toctree-l2"><a class="reference internal" href="fields.html">Fields</a></li>
 <li class="toctree-l2"><a class="reference internal" href="elements.html">Elements</a></li>
@@ -66,6 +70,10 @@
 <li class="toctree-l2"><a class="reference internal" href="journal.html">Journal</a></li>
 <li class="toctree-l2"><a class="reference internal" href="materials.html">Materials</a></li>
 <li class="toctree-l2"><a class="reference internal" href="mesh.html">Creating finite element meshes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="modelmodifiers.html">Model modifiers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="topologypipeline.html">The topology pipeline: how a model changes itself</a></li>
+<li class="toctree-l2"><a class="reference internal" href="restart.html">Restart</a></li>
+<li class="toctree-l2"><a class="reference internal" href="adaptivitytheory.html">Adaptive refinement: error estimation and marking</a></li>
 <li class="toctree-l2"><a class="reference internal" href="output.html">Outputmanagers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="parallelization.html">Parallelization</a></li>
 <li class="toctree-l2"><a class="reference internal" href="phenomena.html">Physical phenomena</a></li>
@@ -130,18 +138,18 @@
 <p>Step actions define actions run during a simulation.
 They are defined within a <code class="docutils literal notranslate"><span class="pre">*step</span></code> definition, line by line,
 by specifying their <code class="docutils literal notranslate"><span class="pre">name</span></code> and a list of <code class="docutils literal notranslate"><span class="pre">option=value</span></code>, for example</p>
-<div class="highlight-edelweiss notranslate"><div class="highlight"><pre><span></span><span class="k">*step</span>,<span class="nv"> jobName</span><span class="ow">=</span><span class="m">myJob</span>,
-    dirichlet,<span class="nv"> name</span><span class="ow">=</span><span class="m">bottom</span>,<span class="nv">   nSet</span><span class="ow">=</span><span class="m">bottom</span>,<span class="nv">   field</span><span class="ow">=</span><span class="m">displacement</span>,<span class="nv"> 2</span><span class="ow">=</span><span class="m">0</span>,<span class="nv"> 1</span><span class="ow">=</span><span class="m">0</span>
-    dirichlet,<span class="nv"> name</span><span class="ow">=</span><span class="m">rightTop</span>,<span class="nv"> nSet</span><span class="ow">=</span><span class="m">rightTop</span>,<span class="nv"> field</span><span class="ow">=</span><span class="m">displacement</span>,<span class="nv"> 2</span><span class="ow">=</span><span class="m">0</span>,
-    distributedload,<span class="nv"> name</span><span class="ow">=</span><span class="m">dload1</span>,<span class="nv"> surface</span><span class="ow">=</span><span class="m">top</span>,<span class="nv">  type</span><span class="ow">=</span><span class="m">pressure</span>,<span class="nv"> magnitude</span><span class="ow">=</span><span class="m">10</span>,<span class="nv"> f(t)</span><span class="ow">=</span><span class="m">t*2</span>
-    distributedload,<span class="nv"> name</span><span class="ow">=</span><span class="m">dload2</span>,<span class="nv"> surface</span><span class="ow">=</span><span class="m">left</span>,<span class="nv"> type</span><span class="ow">=</span><span class="m">pressure</span>,<span class="nv"> magnitude</span><span class="ow">=</span><span class="m">50</span>,<span class="nv"> f(t)</span><span class="ow">=</span><span class="m">t</span>
+<div class="highlight-edelweiss notranslate"><div class="highlight"><pre><span></span><span class="k">*step</span>,<span class="nv"> solver</span><span class="ow">=</span><span class="m">mySolver</span>
+&gt;&gt;dirichlet,<span class="nv"> name</span><span class="ow">=</span><span class="m">bottom</span>,<span class="nv">   nSet</span><span class="ow">=</span><span class="m">bottom</span>,<span class="nv">   field</span><span class="ow">=</span><span class="m">displacement</span>,<span class="nv"> 2</span><span class="ow">=</span><span class="m">0</span>,<span class="nv"> 1</span><span class="ow">=</span><span class="m">0</span>
+&gt;&gt;dirichlet,<span class="nv"> name</span><span class="ow">=</span><span class="m">rightTop</span>,<span class="nv"> nSet</span><span class="ow">=</span><span class="m">rightTop</span>,<span class="nv"> field</span><span class="ow">=</span><span class="m">displacement</span>,<span class="nv"> 2</span><span class="ow">=</span><span class="m">0</span>,
+&gt;&gt;distributedload,<span class="nv"> name</span><span class="ow">=</span><span class="m">dload1</span>,<span class="nv"> surface</span><span class="ow">=</span><span class="m">top</span>,<span class="nv">  type</span><span class="ow">=</span><span class="m">pressure</span>,<span class="nv"> magnitude</span><span class="ow">=</span><span class="m">10</span>,<span class="nv"> f(t)</span><span class="ow">=</span><span class="m">t*2</span>
+&gt;&gt;distributedload,<span class="nv"> name</span><span class="ow">=</span><span class="m">dload2</span>,<span class="nv"> surface</span><span class="ow">=</span><span class="m">left</span>,<span class="nv"> type</span><span class="ow">=</span><span class="m">pressure</span>,<span class="nv"> magnitude</span><span class="ow">=</span><span class="m">50</span>,<span class="nv"> f(t)</span><span class="ow">=</span><span class="m">t</span>
 </pre></div>
 </div>
 <section id="bodyforce-bodyforce-loads">
 <h2><code class="docutils literal notranslate"><span class="pre">bodyforce</span></code> - Bodyforce loads<a class="headerlink" href="#bodyforce-bodyforce-loads" title="Link to this heading"></a></h2>
 <p>Relevant module: <code class="docutils literal notranslate"><span class="pre">edelweissfe.stepactions.bodyforce</span></code></p>
 <span class="target" id="module-edelweissfe.stepactions.bodyforce"></span><table class="docutils align-default" id="id1">
-<caption><span class="caption-text">Options: [bodyforce]</span><a class="headerlink" href="#id1" title="Link to this table"></a></caption>
+<caption><span class="caption-text">Options:</span><a class="headerlink" href="#id1" title="Link to this table"></a></caption>
 <thead>
 <tr class="row-odd"><th class="head"><p>Option</p></th>
 <th class="head"><p>Type / Default</p></th>
@@ -149,14 +157,6 @@ by specifying their <code class="docutils literal notranslate"><span class="pre"
 </tr>
 </thead>
 <tbody>
-<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">name</span></code></td>
-<td><p>str (required)</p></td>
-<td><p>Name of the step action.</p></td>
-</tr>
-<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">elSet</span></code></td>
-<td><p>str (required)</p></td>
-<td><p>The element set for application of the boundary condition.</p></td>
-</tr>
 <tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">forceVector</span></code></td>
 <td><p>str (required)</p></td>
 <td><p>The force vector.</p></td>
@@ -166,44 +166,13 @@ by specifying their <code class="docutils literal notranslate"><span class="pre"
 <td><p>Define an amplitude in the step progress interval [0…1]</p></td>
 </tr>
 <tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">delta</span></code></td>
-<td><p>str, default=0</p></td>
-<td><p>In subsequent steps only: define the updated force vector incrementally</p></td>
-</tr>
-</tbody>
-</table>
-<table class="docutils align-default" id="id2">
-<caption><span class="caption-text">Options: [bodyforce]</span><a class="headerlink" href="#id2" title="Link to this table"></a></caption>
-<thead>
-<tr class="row-odd"><th class="head"><p>Option</p></th>
-<th class="head"><p>Type / Default</p></th>
-<th class="head"><p>Description</p></th>
-</tr>
-</thead>
-<tbody>
-<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">name</span></code></td>
-<td><p>str (required)</p></td>
-<td><p>Name of the step action.</p></td>
-</tr>
-<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">elSet</span></code></td>
-<td><p>str (required)</p></td>
-<td><p>The element set for application of the boundary condition.</p></td>
-</tr>
-<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">forceVector</span></code></td>
-<td><p>str (required)</p></td>
-<td><p>The force vector.</p></td>
-</tr>
-<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">f(t)</span></code></td>
 <td><p>str, default=None</p></td>
-<td><p>Define an amplitude in the step progress interval [0…1]</p></td>
-</tr>
-<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">delta</span></code></td>
-<td><p>str, default=0</p></td>
 <td><p>In subsequent steps only: define the updated force vector incrementally</p></td>
 </tr>
 </tbody>
 </table>
-<div class="literal-block-wrapper docutils container" id="id3">
-<div class="code-block-caption"><span class="caption-text">Example: <code class="docutils literal notranslate"><span class="pre">testfiles/BodyForce3D/test.inp</span></code></span><a class="headerlink" href="#id3" title="Link to this code"></a></div>
+<div class="literal-block-wrapper docutils container" id="id2">
+<div class="code-block-caption"><span class="caption-text">Example: <code class="docutils literal notranslate"><span class="pre">testfiles/BodyForce3D/test.inp</span></code></span><a class="headerlink" href="#id2" title="Link to this code"></a></div>
 <div class="highlight-edelweiss notranslate"><div class="highlight"><pre><span></span><span class="k">*include</span>,<span class="nv"> input</span><span class="ow">=</span><span class="m">mesh.inp</span>
 
 <span class="k">*material</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">linearelastic</span>,<span class="nv"> id</span><span class="ow">=</span><span class="m">le</span>
@@ -228,15 +197,15 @@ all
 &gt;&gt;configuration,<span class="nv"> overwrite</span><span class="ow">=</span><span class="m">yes</span>
 
 <span class="k">*output</span>,<span class="nv"> type</span><span class="ow">=</span><span class="m">monitor</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">myNodeSetMonitor</span>
-<span class="nv">fieldOutput</span><span class="ow">=</span><span class="m">RF</span>,<span class="nv"> f(x)</span><span class="ow">=</span><span class="s">&#39;sum(x[:,0])&#39;</span>,<span class="nv"> label</span><span class="ow">=</span><span class="m">ForceX</span>
-<span class="nv">fieldOutput</span><span class="ow">=</span><span class="m">RF</span>,<span class="nv"> f(x)</span><span class="ow">=</span><span class="s">&#39;sum(x[:,1])&#39;</span>,<span class="nv"> label</span><span class="ow">=</span><span class="m">ForceY</span>
-<span class="nv">fieldOutput</span><span class="ow">=</span><span class="m">RF</span>,<span class="nv"> f(x)</span><span class="ow">=</span><span class="s">&#39;sum(x[:,2])&#39;</span>,<span class="nv"> label</span><span class="ow">=</span><span class="m">ForceZ</span>
+<span class="nv">fieldOutput</span><span class="ow">=</span><span class="m">RF</span>,<span class="nv"> f(x)</span><span class="ow">=</span><span class="s">'sum(x[:,0])'</span>,<span class="nv"> label</span><span class="ow">=</span><span class="m">ForceX</span>
+<span class="nv">fieldOutput</span><span class="ow">=</span><span class="m">RF</span>,<span class="nv"> f(x)</span><span class="ow">=</span><span class="s">'sum(x[:,1])'</span>,<span class="nv"> label</span><span class="ow">=</span><span class="m">ForceY</span>
+<span class="nv">fieldOutput</span><span class="ow">=</span><span class="m">RF</span>,<span class="nv"> f(x)</span><span class="ow">=</span><span class="s">'sum(x[:,2])'</span>,<span class="nv"> label</span><span class="ow">=</span><span class="m">ForceZ</span>
 
 <span class="k">*step</span>,<span class="nv"> solver</span><span class="ow">=</span><span class="m">theSolver</span>
 <span class="nv">maxInc</span><span class="ow">=</span><span class="m">1e-1</span>,<span class="nv"> minInc</span><span class="ow">=</span><span class="m">1e-5</span>,<span class="nv"> maxNumInc</span><span class="ow">=</span><span class="m">1000</span>,<span class="nv"> maxIter</span><span class="ow">=</span><span class="m">25</span>,<span class="nv"> stepLength</span><span class="ow">=</span><span class="m">1</span>
-&gt;&gt;options,<span class="nv"> category</span><span class="ow">=</span><span class="m">NISTSolver</span>,<span class="nv"> extrapolation</span><span class="ow">=</span><span class="m">linear</span>
+&gt;&gt;options,<span class="nv"> name</span><span class="ow">=</span><span class="m">theSolver</span>,<span class="nv"> extrapolation</span><span class="ow">=</span><span class="m">linear</span>
 &gt;&gt;dirichlet,<span class="nv"> name</span><span class="ow">=</span><span class="m">top</span>,<span class="nv">  nSet</span><span class="ow">=</span><span class="m">top</span>,<span class="nv">   field</span><span class="ow">=</span><span class="m">displacement</span>,<span class="nv"> 1</span><span class="ow">=</span><span class="m">0.0</span>,<span class="nv"> 2</span><span class="ow">=</span><span class="m">0.0</span>,<span class="nv"> 3</span><span class="ow">=</span><span class="m">.0</span>
-&gt;&gt;bodyforce,<span class="nv"> name</span><span class="ow">=</span><span class="m">bforce</span>,<span class="nv"> elSet</span><span class="ow">=</span><span class="m">all</span>,<span class="nv"> forceVector</span><span class="ow">=</span><span class="s">&#39;0.0, 10.0, 20.0&#39;</span>,<span class="nv"> f(t)</span><span class="ow">=</span><span class="m">t</span>
+&gt;&gt;bodyforce,<span class="nv"> name</span><span class="ow">=</span><span class="m">bforce</span>,<span class="nv"> elSet</span><span class="ow">=</span><span class="m">all</span>,<span class="nv"> forceVector</span><span class="ow">=</span><span class="s">'0.0, 10.0, 20.0'</span>,<span class="nv"> f(t)</span><span class="ow">=</span><span class="m">t</span>
 </pre></div>
 </div>
 </div>
@@ -244,8 +213,8 @@ all
 <section id="dirichlet-standard-dirichlet-bc">
 <h2><code class="docutils literal notranslate"><span class="pre">dirichlet</span></code> - Standard dirichlet BC<a class="headerlink" href="#dirichlet-standard-dirichlet-bc" title="Link to this heading"></a></h2>
 <p>Relevant module: <code class="docutils literal notranslate"><span class="pre">edelweissfe.stepactions.dirichlet</span></code></p>
-<span class="target" id="module-edelweissfe.stepactions.dirichlet"></span><table class="docutils align-default" id="id4">
-<caption><span class="caption-text">Options: [dirichlet]</span><a class="headerlink" href="#id4" title="Link to this table"></a></caption>
+<span class="target" id="module-edelweissfe.stepactions.dirichlet"></span><table class="docutils align-default" id="id3">
+<caption><span class="caption-text">Options:</span><a class="headerlink" href="#id3" title="Link to this table"></a></caption>
 <thead>
 <tr class="row-odd"><th class="head"><p>Option</p></th>
 <th class="head"><p>Type / Default</p></th>
@@ -253,14 +222,6 @@ all
 </tr>
 </thead>
 <tbody>
-<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">name</span></code></td>
-<td><p>str (required)</p></td>
-<td><p>Name of the step action.</p></td>
-</tr>
-<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">nSet</span></code></td>
-<td><p>str (required)</p></td>
-<td><p>The node set for application of the boundary condition.</p></td>
-</tr>
 <tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">field</span></code></td>
 <td><p>str (required)</p></td>
 <td><p>Field for which the boundary condition is active.</p></td>
@@ -293,18 +254,14 @@ all
 <td><p>str, default=None</p></td>
 <td><p>Prescribe values using a numpy ndarray for representation; use ‘x’ for ignored values.</p></td>
 </tr>
-<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">analyticalField</span></code></td>
-<td><p>str, default=None</p></td>
-<td><p>Scales the defined boundary condition</p></td>
-</tr>
-<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">f(t)</span></code></td>
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">f(t)</span></code></td>
 <td><p>str, default=None</p></td>
 <td><p>Define an amplitude in the step progress interval [0…1]</p></td>
 </tr>
 </tbody>
 </table>
-<table class="docutils align-default" id="id5">
-<caption><span class="caption-text">Options: [updateDirichlet]</span><a class="headerlink" href="#id5" title="Link to this table"></a></caption>
+<table class="docutils align-default" id="id4">
+<caption><span class="caption-text">Keyword: updatedirichlet</span><a class="headerlink" href="#id4" title="Link to this table"></a></caption>
 <thead>
 <tr class="row-odd"><th class="head"><p>Option</p></th>
 <th class="head"><p>Type / Default</p></th>
@@ -312,151 +269,33 @@ all
 </tr>
 </thead>
 <tbody>
-<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">name</span></code></td>
-<td><p>str (required)</p></td>
-<td><p>Name of the step action to update.</p></td>
-</tr>
-<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">1</span></code></td>
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">1</span></code></td>
 <td><p>float, default=None</p></td>
 <td><p>Prescribe first component of field.</p></td>
 </tr>
-<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">2</span></code></td>
+<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">2</span></code></td>
 <td><p>float, default=None</p></td>
 <td><p>Prescribe second component of field.</p></td>
 </tr>
-<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">3</span></code></td>
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">3</span></code></td>
 <td><p>float, default=None</p></td>
 <td><p>Prescribe third component of field.</p></td>
 </tr>
-<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">4</span></code></td>
+<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">4</span></code></td>
 <td><p>float, default=None</p></td>
 <td><p>Prescribe fourth component of field.</p></td>
 </tr>
-<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">5</span></code></td>
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">5</span></code></td>
 <td><p>float, default=None</p></td>
 <td><p>Prescribe fifth component of field.</p></td>
 </tr>
-<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">6</span></code></td>
+<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">6</span></code></td>
 <td><p>float, default=None</p></td>
 <td><p>Prescribe sixth component of field.</p></td>
 </tr>
-<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">components</span></code></td>
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">components</span></code></td>
 <td><p>str, default=None</p></td>
 <td><p>Prescribe values using a numpy ndarray for representation; use ‘x’ for ignored values.</p></td>
-</tr>
-<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">analyticalField</span></code></td>
-<td><p>str, default=None</p></td>
-<td><p>Scales the defined boundary condition</p></td>
-</tr>
-<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">f(t)</span></code></td>
-<td><p>str, default=None</p></td>
-<td><p>Define an amplitude in the step progress interval [0…1]</p></td>
-</tr>
-</tbody>
-</table>
-<table class="docutils align-default" id="id6">
-<caption><span class="caption-text">Options: [dirichlet]</span><a class="headerlink" href="#id6" title="Link to this table"></a></caption>
-<thead>
-<tr class="row-odd"><th class="head"><p>Option</p></th>
-<th class="head"><p>Type / Default</p></th>
-<th class="head"><p>Description</p></th>
-</tr>
-</thead>
-<tbody>
-<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">name</span></code></td>
-<td><p>str (required)</p></td>
-<td><p>Name of the step action.</p></td>
-</tr>
-<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">nSet</span></code></td>
-<td><p>str (required)</p></td>
-<td><p>The node set for application of the boundary condition.</p></td>
-</tr>
-<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">field</span></code></td>
-<td><p>str (required)</p></td>
-<td><p>Field for which the boundary condition is active.</p></td>
-</tr>
-<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">1</span></code></td>
-<td><p>float, default=None</p></td>
-<td><p>Prescribe first component of field.</p></td>
-</tr>
-<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">2</span></code></td>
-<td><p>float, default=None</p></td>
-<td><p>Prescribe second component of field.</p></td>
-</tr>
-<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">3</span></code></td>
-<td><p>float, default=None</p></td>
-<td><p>Prescribe third component of field.</p></td>
-</tr>
-<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">4</span></code></td>
-<td><p>float, default=None</p></td>
-<td><p>Prescribe fourth component of field.</p></td>
-</tr>
-<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">5</span></code></td>
-<td><p>float, default=None</p></td>
-<td><p>Prescribe fifth component of field.</p></td>
-</tr>
-<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">6</span></code></td>
-<td><p>float, default=None</p></td>
-<td><p>Prescribe sixth component of field.</p></td>
-</tr>
-<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">components</span></code></td>
-<td><p>str, default=None</p></td>
-<td><p>Prescribe values using a numpy ndarray for representation; use ‘x’ for ignored values.</p></td>
-</tr>
-<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">analyticalField</span></code></td>
-<td><p>str, default=None</p></td>
-<td><p>Scales the defined boundary condition</p></td>
-</tr>
-<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">f(t)</span></code></td>
-<td><p>str, default=None</p></td>
-<td><p>Define an amplitude in the step progress interval [0…1]</p></td>
-</tr>
-</tbody>
-</table>
-<table class="docutils align-default" id="id7">
-<caption><span class="caption-text">Options: [updateDirichlet]</span><a class="headerlink" href="#id7" title="Link to this table"></a></caption>
-<thead>
-<tr class="row-odd"><th class="head"><p>Option</p></th>
-<th class="head"><p>Type / Default</p></th>
-<th class="head"><p>Description</p></th>
-</tr>
-</thead>
-<tbody>
-<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">name</span></code></td>
-<td><p>str (required)</p></td>
-<td><p>Name of the step action to update.</p></td>
-</tr>
-<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">1</span></code></td>
-<td><p>float, default=None</p></td>
-<td><p>Prescribe first component of field.</p></td>
-</tr>
-<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">2</span></code></td>
-<td><p>float, default=None</p></td>
-<td><p>Prescribe second component of field.</p></td>
-</tr>
-<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">3</span></code></td>
-<td><p>float, default=None</p></td>
-<td><p>Prescribe third component of field.</p></td>
-</tr>
-<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">4</span></code></td>
-<td><p>float, default=None</p></td>
-<td><p>Prescribe fourth component of field.</p></td>
-</tr>
-<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">5</span></code></td>
-<td><p>float, default=None</p></td>
-<td><p>Prescribe fifth component of field.</p></td>
-</tr>
-<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">6</span></code></td>
-<td><p>float, default=None</p></td>
-<td><p>Prescribe sixth component of field.</p></td>
-</tr>
-<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">components</span></code></td>
-<td><p>str, default=None</p></td>
-<td><p>Prescribe values using a numpy ndarray for representation; use ‘x’ for ignored values.</p></td>
-</tr>
-<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">analyticalField</span></code></td>
-<td><p>str, default=None</p></td>
-<td><p>Scales the defined boundary condition</p></td>
 </tr>
 <tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">f(t)</span></code></td>
 <td><p>str, default=None</p></td>
@@ -468,8 +307,8 @@ all
 <section id="distributedload-distributed-surface-loads">
 <h2><code class="docutils literal notranslate"><span class="pre">distributedload</span></code> - Distributed surface loads<a class="headerlink" href="#distributedload-distributed-surface-loads" title="Link to this heading"></a></h2>
 <p>Relevant module: <code class="docutils literal notranslate"><span class="pre">edelweissfe.stepactions.distributedload</span></code></p>
-<span class="target" id="module-edelweissfe.stepactions.distributedload"></span><table class="docutils align-default" id="id8">
-<caption><span class="caption-text">Options: [distributedload]</span><a class="headerlink" href="#id8" title="Link to this table"></a></caption>
+<span class="target" id="module-edelweissfe.stepactions.distributedload"></span><table class="docutils align-default" id="id5">
+<caption><span class="caption-text">Options:</span><a class="headerlink" href="#id5" title="Link to this table"></a></caption>
 <thead>
 <tr class="row-odd"><th class="head"><p>Option</p></th>
 <th class="head"><p>Type / Default</p></th>
@@ -477,61 +316,30 @@ all
 </tr>
 </thead>
 <tbody>
-<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">name</span></code></td>
-<td><p>str (required)</p></td>
-<td><p>Name of the step action.</p></td>
-</tr>
-<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">surface</span></code></td>
-<td><p>str (required)</p></td>
-<td><p>Surface for application of the distributed load</p></td>
-</tr>
-<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">magnitude</span></code></td>
-<td><p>str (required)</p></td>
-<td><p>Magnitude of the distributed load</p></td>
-</tr>
-<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">type</span></code></td>
-<td><p>str (required)</p></td>
-<td><p>The load type, e.g., pressure or surface traction; Must be supported by the element type</p></td>
-</tr>
 <tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">field</span></code></td>
 <td><p>str, default=’displacement’</p></td>
 <td><p>Field for which the boundary condition is active.</p></td>
 </tr>
+<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">magnitude</span></code></td>
+<td><p>str (required)</p></td>
+<td><p>Magnitude of the distributed load</p></td>
+</tr>
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">type</span></code></td>
+<td><p>str (required)</p></td>
+<td><p>The load type, e.g., pressure or surface traction; Must be supported by the element type</p></td>
+</tr>
 <tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">f(t)</span></code></td>
 <td><p>str, default=None</p></td>
 <td><p>Define an amplitude in the step progress interval [0…1]</p></td>
-</tr>
-</tbody>
-</table>
-<table class="docutils align-default" id="id9">
-<caption><span class="caption-text">Options: [updatedistributedload]</span><a class="headerlink" href="#id9" title="Link to this table"></a></caption>
-<thead>
-<tr class="row-odd"><th class="head"><p>Option</p></th>
-<th class="head"><p>Type / Default</p></th>
-<th class="head"><p>Description</p></th>
-</tr>
-</thead>
-<tbody>
-<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">name</span></code></td>
-<td><p>str (required)</p></td>
-<td><p>Name of the step action to update.</p></td>
-</tr>
-<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">magnitude</span></code></td>
-<td><p>str, default=None</p></td>
-<td><p>Magnitude of the distributed load</p></td>
 </tr>
 <tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">delta</span></code></td>
 <td><p>str, default=None</p></td>
 <td><p>In subsequent steps only: define the new magnitude incrementally</p></td>
 </tr>
-<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">f(t)</span></code></td>
-<td><p>str, default=None</p></td>
-<td><p>Define an amplitude in the step progress interval [0…1]</p></td>
-</tr>
 </tbody>
 </table>
-<table class="docutils align-default" id="id10">
-<caption><span class="caption-text">Options: [distributedload]</span><a class="headerlink" href="#id10" title="Link to this table"></a></caption>
+<table class="docutils align-default" id="id6">
+<caption><span class="caption-text">Keyword: updatedistributedload</span><a class="headerlink" href="#id6" title="Link to this table"></a></caption>
 <thead>
 <tr class="row-odd"><th class="head"><p>Option</p></th>
 <th class="head"><p>Type / Default</p></th>
@@ -539,61 +347,22 @@ all
 </tr>
 </thead>
 <tbody>
-<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">name</span></code></td>
-<td><p>str (required)</p></td>
-<td><p>Name of the step action.</p></td>
-</tr>
-<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">surface</span></code></td>
-<td><p>str (required)</p></td>
-<td><p>Surface for application of the distributed load</p></td>
-</tr>
 <tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">magnitude</span></code></td>
-<td><p>str (required)</p></td>
-<td><p>Magnitude of the distributed load</p></td>
-</tr>
-<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">type</span></code></td>
-<td><p>str (required)</p></td>
-<td><p>The load type, e.g., pressure or surface traction; Must be supported by the element type</p></td>
-</tr>
-<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">field</span></code></td>
-<td><p>str, default=’displacement’</p></td>
-<td><p>Field for which the boundary condition is active.</p></td>
-</tr>
-<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">f(t)</span></code></td>
-<td><p>str, default=None</p></td>
-<td><p>Define an amplitude in the step progress interval [0…1]</p></td>
-</tr>
-</tbody>
-</table>
-<table class="docutils align-default" id="id11">
-<caption><span class="caption-text">Options: [updatedistributedload]</span><a class="headerlink" href="#id11" title="Link to this table"></a></caption>
-<thead>
-<tr class="row-odd"><th class="head"><p>Option</p></th>
-<th class="head"><p>Type / Default</p></th>
-<th class="head"><p>Description</p></th>
-</tr>
-</thead>
-<tbody>
-<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">name</span></code></td>
-<td><p>str (required)</p></td>
-<td><p>Name of the step action to update.</p></td>
-</tr>
-<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">magnitude</span></code></td>
 <td><p>str, default=None</p></td>
 <td><p>Magnitude of the distributed load</p></td>
 </tr>
-<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">delta</span></code></td>
+<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">delta</span></code></td>
 <td><p>str, default=None</p></td>
 <td><p>In subsequent steps only: define the new magnitude incrementally</p></td>
 </tr>
-<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">f(t)</span></code></td>
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">f(t)</span></code></td>
 <td><p>str, default=None</p></td>
 <td><p>Define an amplitude in the step progress interval [0…1]</p></td>
 </tr>
 </tbody>
 </table>
-<div class="literal-block-wrapper docutils container" id="id12">
-<div class="code-block-caption"><span class="caption-text">Example: <code class="docutils literal notranslate"><span class="pre">testfiles/marmot/DLoad/test.inp</span></code></span><a class="headerlink" href="#id12" title="Link to this code"></a></div>
+<div class="literal-block-wrapper docutils container" id="id7">
+<div class="code-block-caption"><span class="caption-text">Example: <code class="docutils literal notranslate"><span class="pre">testfiles/marmot/DLoad/test.inp</span></code></span><a class="headerlink" href="#id7" title="Link to this code"></a></div>
 <div class="highlight-edelweiss notranslate"><div class="highlight"><pre><span></span><span class="k">*modelGenerator</span>,<span class="nv"> generator</span><span class="ow">=</span><span class="m">planeRectQuad</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">gen</span>
 <span class="nv">elType</span><span class="ow">=</span><span class="m">CPE4</span>
 <span class="nv">nX</span><span class="ow">=</span><span class="m">20</span>
@@ -624,7 +393,7 @@ all
 &gt;&gt;perElement,<span class="nv"> name</span><span class="ow">=</span><span class="m">strain</span>,<span class="nv"> elSet</span><span class="ow">=</span><span class="m">all</span>,<span class="nv"> result</span><span class="ow">=</span><span class="m">strain</span>,<span class="nv"> quadraturePoint</span><span class="ow">=</span><span class="m">1</span>
 
 <span class="k">*output</span>,<span class="nv"> type</span><span class="ow">=</span><span class="m">monitor</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">ensightExport</span>
-<span class="nv">fieldOutput </span><span class="ow">=</span><span class="m"> RF</span>,<span class="nv"> f(x) </span><span class="ow">=</span><span class="s"> &#39;sum ( x[:, 1])&#39;</span>
+<span class="nv">fieldOutput </span><span class="ow">=</span><span class="m"> RF</span>,<span class="nv"> f(x) </span><span class="ow">=</span><span class="s"> 'sum ( x[:, 1])'</span>
 
 <span class="k">*output</span>,<span class="nv"> type</span><span class="ow">=</span><span class="m">ensight</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">ensightExport</span>
 &gt;&gt;perNode,<span class="nv">    fieldOutput</span><span class="ow">=</span><span class="m">displacement</span>
@@ -633,7 +402,7 @@ all
 &gt;&gt;configuration,<span class="nv"> overwrite</span><span class="ow">=</span><span class="m">yes</span>
 <span class="k">*step</span>,<span class="nv"> solver</span><span class="ow">=</span><span class="m">theSolver</span>
 <span class="nv">maxInc</span><span class="ow">=</span><span class="m">1e-1</span>,<span class="nv"> minInc</span><span class="ow">=</span><span class="m">1e-5</span>,<span class="nv"> maxNumInc</span><span class="ow">=</span><span class="m">1000</span>,<span class="nv"> maxIter</span><span class="ow">=</span><span class="m">25</span>,<span class="nv"> stepLength</span><span class="ow">=</span><span class="m">1</span>
-&gt;&gt;options,<span class="nv"> category</span><span class="ow">=</span><span class="m">NISTSolver</span>,<span class="nv"> extrapolation</span><span class="ow">=</span><span class="m">linear</span>
+&gt;&gt;options,<span class="nv"> name</span><span class="ow">=</span><span class="m">theSolver</span>,<span class="nv"> extrapolation</span><span class="ow">=</span><span class="m">linear</span>
 &gt;&gt;dirichlet,<span class="nv"> name</span><span class="ow">=</span><span class="m">left</span>,<span class="nv">  nSet</span><span class="ow">=</span><span class="m">gen_left</span>,<span class="nv">   field</span><span class="ow">=</span><span class="m">displacement</span>,<span class="nv"> 1</span><span class="ow">=</span><span class="m">0.0</span>,<span class="nv"> 2</span><span class="ow">=</span><span class="m">0.0</span>
 &gt;&gt;distributedload,<span class="nv"> name</span><span class="ow">=</span><span class="m">dload</span>,<span class="nv"> surface</span><span class="ow">=</span><span class="m">gen_top</span>,<span class="nv"> type</span><span class="ow">=</span><span class="m">pressure</span>,<span class="nv"> magnitude</span><span class="ow">=</span><span class="m">0.15</span>,<span class="nv"> f(t)</span><span class="ow">=</span><span class="m">t</span>
 </pre></div>
@@ -644,8 +413,8 @@ all
 <h2><code class="docutils literal notranslate"><span class="pre">geostatic</span></code> - Geostatic stress states<a class="headerlink" href="#geostatic-geostatic-stress-states" title="Link to this heading"></a></h2>
 <p>Relevant module: <code class="docutils literal notranslate"><span class="pre">edelweissfe.stepactions.geostatic</span></code></p>
 <p id="module-edelweissfe.stepactions.geostatic">Initialize materials to an geostatic stress state</p>
-<table class="docutils align-default" id="id13">
-<caption><span class="caption-text">Options: [geostatic]</span><a class="headerlink" href="#id13" title="Link to this table"></a></caption>
+<table class="docutils align-default" id="id8">
+<caption><span class="caption-text">Options:</span><a class="headerlink" href="#id8" title="Link to this table"></a></caption>
 <thead>
 <tr class="row-odd"><th class="head"><p>Option</p></th>
 <th class="head"><p>Type / Default</p></th>
@@ -653,85 +422,34 @@ all
 </tr>
 </thead>
 <tbody>
-<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">name</span></code></td>
-<td><p>str (required)</p></td>
-<td><p>Name of the step action.</p></td>
-</tr>
-<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">p1</span></code></td>
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">p1</span></code></td>
 <td><p>float (required)</p></td>
 <td><p>sig_x=sig_y=sig_z in first point.</p></td>
 </tr>
-<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">p2</span></code></td>
+<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">p2</span></code></td>
 <td><p>float, default=None</p></td>
 <td><p>sig_x=sig_y=sig_z in second point.</p></td>
 </tr>
-<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">h1</span></code></td>
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">h1</span></code></td>
 <td><p>float, default=1.0</p></td>
 <td><p>y coordinate of first point</p></td>
 </tr>
-<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">h2</span></code></td>
+<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">h2</span></code></td>
 <td><p>float, default=-1.0</p></td>
 <td><p>y coordinate of second point</p></td>
 </tr>
-<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">xLateral</span></code></td>
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">xLateral</span></code></td>
 <td><p>float, default=1.0</p></td>
 <td><p>ratio of sig_x/sig_y, default=1.0</p></td>
 </tr>
-<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">zLateral</span></code></td>
+<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">zLateral</span></code></td>
 <td><p>float, default=1.0</p></td>
 <td><p>ratio of sig_z/sig_y, default=1.0</p></td>
 </tr>
-<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">elSet</span></code></td>
-<td><p>str, default=’all’</p></td>
-<td><p>The element set for which the initaliziation is performed</p></td>
-</tr>
 </tbody>
 </table>
-<table class="docutils align-default" id="id14">
-<caption><span class="caption-text">Options: [geostatic]</span><a class="headerlink" href="#id14" title="Link to this table"></a></caption>
-<thead>
-<tr class="row-odd"><th class="head"><p>Option</p></th>
-<th class="head"><p>Type / Default</p></th>
-<th class="head"><p>Description</p></th>
-</tr>
-</thead>
-<tbody>
-<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">name</span></code></td>
-<td><p>str (required)</p></td>
-<td><p>Name of the step action.</p></td>
-</tr>
-<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">p1</span></code></td>
-<td><p>float (required)</p></td>
-<td><p>sig_x=sig_y=sig_z in first point.</p></td>
-</tr>
-<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">p2</span></code></td>
-<td><p>float, default=None</p></td>
-<td><p>sig_x=sig_y=sig_z in second point.</p></td>
-</tr>
-<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">h1</span></code></td>
-<td><p>float, default=1.0</p></td>
-<td><p>y coordinate of first point</p></td>
-</tr>
-<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">h2</span></code></td>
-<td><p>float, default=-1.0</p></td>
-<td><p>y coordinate of second point</p></td>
-</tr>
-<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">xLateral</span></code></td>
-<td><p>float, default=1.0</p></td>
-<td><p>ratio of sig_x/sig_y, default=1.0</p></td>
-</tr>
-<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">zLateral</span></code></td>
-<td><p>float, default=1.0</p></td>
-<td><p>ratio of sig_z/sig_y, default=1.0</p></td>
-</tr>
-<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">elSet</span></code></td>
-<td><p>str, default=’all’</p></td>
-<td><p>The element set for which the initaliziation is performed</p></td>
-</tr>
-</tbody>
-</table>
-<div class="literal-block-wrapper docutils container" id="id15">
-<div class="code-block-caption"><span class="caption-text">Example: <code class="docutils literal notranslate"><span class="pre">testfiles/marmot/GeoStatic/test.inp</span></code></span><a class="headerlink" href="#id15" title="Link to this code"></a></div>
+<div class="literal-block-wrapper docutils container" id="id9">
+<div class="code-block-caption"><span class="caption-text">Example: <code class="docutils literal notranslate"><span class="pre">testfiles/marmot/GeoStatic/test.inp</span></code></span><a class="headerlink" href="#id9" title="Link to this code"></a></div>
 <div class="highlight-edelweiss notranslate"><div class="highlight"><pre><span></span><span class="k">*modelGenerator</span>,<span class="nv"> generator</span><span class="ow">=</span><span class="m">planeRectQuad</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">gen</span>
 <span class="nv">l</span><span class="ow">=</span><span class="m">50</span>
 <span class="nv">h</span><span class="ow">=</span><span class="m">150</span>
@@ -748,12 +466,12 @@ all
 <span class="k">*job</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">cpe4job</span>,<span class="nv"> domain</span><span class="ow">=</span><span class="m">2d</span>
 <span class="k">*solver</span>,<span class="nv"> solver</span><span class="ow">=</span><span class="m">NIST</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">theSolver</span>
 <span class="k">*fieldOutput</span>
-&gt;&gt;perNode,<span class="nv"> name</span><span class="ow">=</span><span class="m">dispTop</span>,<span class="nv"> nSet</span><span class="ow">=</span><span class="m">gen_top</span>,<span class="nv">       field</span><span class="ow">=</span><span class="m">displacement</span>,<span class="nv"> result</span><span class="ow">=</span><span class="m">U</span>,<span class="nv"> f(x)</span><span class="ow">=</span><span class="s">&#39;mean(x[:,1])&#39;</span>
-&gt;&gt;perNode,<span class="nv"> name</span><span class="ow">=</span><span class="m">RFBottom</span>,<span class="nv"> nSet</span><span class="ow">=</span><span class="m">gen_bottom</span>,<span class="nv">    field</span><span class="ow">=</span><span class="m">displacement</span>,<span class="nv"> result</span><span class="ow">=</span><span class="m">P</span>,<span class="nv"> f(x)</span><span class="ow">=</span><span class="s">&#39;sum(x[:,1])&#39;</span>
+&gt;&gt;perNode,<span class="nv"> name</span><span class="ow">=</span><span class="m">dispTop</span>,<span class="nv"> nSet</span><span class="ow">=</span><span class="m">gen_top</span>,<span class="nv">       field</span><span class="ow">=</span><span class="m">displacement</span>,<span class="nv"> result</span><span class="ow">=</span><span class="m">U</span>,<span class="nv"> f(x)</span><span class="ow">=</span><span class="s">'mean(x[:,1])'</span>
+&gt;&gt;perNode,<span class="nv"> name</span><span class="ow">=</span><span class="m">RFBottom</span>,<span class="nv"> nSet</span><span class="ow">=</span><span class="m">gen_bottom</span>,<span class="nv">    field</span><span class="ow">=</span><span class="m">displacement</span>,<span class="nv"> result</span><span class="ow">=</span><span class="m">P</span>,<span class="nv"> f(x)</span><span class="ow">=</span><span class="s">'sum(x[:,1])'</span>
 &gt;&gt;perNode,<span class="nv"> elSet</span><span class="ow">=</span><span class="m">all</span>,<span class="nv">  field</span><span class="ow">=</span><span class="m">displacement</span>,<span class="nv"> result</span><span class="ow">=</span><span class="m">U</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">displacement</span>
-&gt;&gt;perElement,<span class="nv"> elSet</span><span class="ow">=</span><span class="m">all</span>,<span class="nv">  result</span><span class="ow">=</span><span class="m">stress</span>,<span class="nv">  name</span><span class="ow">=</span><span class="m">S11</span>,<span class="nv">  quadraturePoint</span><span class="ow">=</span><span class="m">1</span>,<span class="nv"> f(x)</span><span class="ow">=</span><span class="s">&#39;x[:,0]&#39;</span>
-&gt;&gt;perElement,<span class="nv"> elSet</span><span class="ow">=</span><span class="m">all</span>,<span class="nv">  result</span><span class="ow">=</span><span class="m">stress</span>,<span class="nv">  name</span><span class="ow">=</span><span class="m">S22</span>,<span class="nv">  quadraturePoint</span><span class="ow">=</span><span class="m">1</span>,<span class="nv"> f(x)</span><span class="ow">=</span><span class="s">&#39;x[:,1]&#39;</span>
-&gt;&gt;perElement,<span class="nv"> elSet</span><span class="ow">=</span><span class="m">all</span>,<span class="nv">  result</span><span class="ow">=</span><span class="m">stress</span>,<span class="nv">  name</span><span class="ow">=</span><span class="m">S33</span>,<span class="nv">  quadraturePoint</span><span class="ow">=</span><span class="m">1</span>,<span class="nv"> f(x)</span><span class="ow">=</span><span class="s">&#39;x[:,2]&#39;</span>
+&gt;&gt;perElement,<span class="nv"> elSet</span><span class="ow">=</span><span class="m">all</span>,<span class="nv">  result</span><span class="ow">=</span><span class="m">stress</span>,<span class="nv">  name</span><span class="ow">=</span><span class="m">S11</span>,<span class="nv">  quadraturePoint</span><span class="ow">=</span><span class="m">1</span>,<span class="nv"> f(x)</span><span class="ow">=</span><span class="s">'x[:,0]'</span>
+&gt;&gt;perElement,<span class="nv"> elSet</span><span class="ow">=</span><span class="m">all</span>,<span class="nv">  result</span><span class="ow">=</span><span class="m">stress</span>,<span class="nv">  name</span><span class="ow">=</span><span class="m">S22</span>,<span class="nv">  quadraturePoint</span><span class="ow">=</span><span class="m">1</span>,<span class="nv"> f(x)</span><span class="ow">=</span><span class="s">'x[:,1]'</span>
+&gt;&gt;perElement,<span class="nv"> elSet</span><span class="ow">=</span><span class="m">all</span>,<span class="nv">  result</span><span class="ow">=</span><span class="m">stress</span>,<span class="nv">  name</span><span class="ow">=</span><span class="m">S33</span>,<span class="nv">  quadraturePoint</span><span class="ow">=</span><span class="m">1</span>,<span class="nv"> f(x)</span><span class="ow">=</span><span class="s">'x[:,2]'</span>
 
 <span class="k">*output</span>,<span class="nv"> type</span><span class="ow">=</span><span class="m">monitor</span>
 <span class="nv">fieldOutput</span><span class="ow">=</span><span class="m">dispTop</span>
@@ -787,8 +505,8 @@ all
 <section id="indirectcontrol-indirect-displacement-control">
 <h2><code class="docutils literal notranslate"><span class="pre">indirectcontrol</span></code> - Indirect displacement control<a class="headerlink" href="#indirectcontrol-indirect-displacement-control" title="Link to this heading"></a></h2>
 <p>Relevant module: <code class="docutils literal notranslate"><span class="pre">edelweissfe.stepactions.indirectcontrol</span></code></p>
-<span class="target" id="module-edelweissfe.stepactions.indirectcontrol"></span><table class="docutils align-default" id="id16">
-<caption><span class="caption-text">Options: [indirectcontrol]</span><a class="headerlink" href="#id16" title="Link to this table"></a></caption>
+<span class="target" id="module-edelweissfe.stepactions.indirectcontrol"></span><table class="docutils align-default" id="id10">
+<caption><span class="caption-text">Options:</span><a class="headerlink" href="#id10" title="Link to this table"></a></caption>
 <thead>
 <tr class="row-odd"><th class="head"><p>Option</p></th>
 <th class="head"><p>Type / Default</p></th>
@@ -826,47 +544,8 @@ all
 </tr>
 </tbody>
 </table>
-<table class="docutils align-default" id="id17">
-<caption><span class="caption-text">Options: [indirectcontrol]</span><a class="headerlink" href="#id17" title="Link to this table"></a></caption>
-<thead>
-<tr class="row-odd"><th class="head"><p>Option</p></th>
-<th class="head"><p>Type / Default</p></th>
-<th class="head"><p>Description</p></th>
-</tr>
-</thead>
-<tbody>
-<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">dof1</span></code></td>
-<td><p>str (required)</p></td>
-<td><p>Degree of freedom for the constraint (model access expression).</p></td>
-</tr>
-<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">dof2</span></code></td>
-<td><p>str (required)</p></td>
-<td><p>Degree of freedom for the constraint (model access expression).</p></td>
-</tr>
-<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">cVector1</span></code></td>
-<td><p>str (required)</p></td>
-<td><p>c vector.</p></td>
-</tr>
-<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">cVector2</span></code></td>
-<td><p>str (required)</p></td>
-<td><p>c vector.</p></td>
-</tr>
-<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">L</span></code></td>
-<td><p>float (required)</p></td>
-<td><p>Final distance (e.g. crack opening)</p></td>
-</tr>
-<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">exportCVector</span></code></td>
-<td><p>str, default=’’</p></td>
-<td><p>File to export the computed c vector</p></td>
-</tr>
-<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">absolute</span></code></td>
-<td><p>bool, default=True</p></td>
-<td><p>Use absolute formulation</p></td>
-</tr>
-</tbody>
-</table>
-<div class="literal-block-wrapper docutils container" id="id18">
-<div class="code-block-caption"><span class="caption-text">Example: <code class="docutils literal notranslate"><span class="pre">testfiles/marmot/IndirectDisplacementControl/test.inp</span></code></span><a class="headerlink" href="#id18" title="Link to this code"></a></div>
+<div class="literal-block-wrapper docutils container" id="id11">
+<div class="code-block-caption"><span class="caption-text">Example: <code class="docutils literal notranslate"><span class="pre">testfiles/marmot/IndirectDisplacementControl/test.inp</span></code></span><a class="headerlink" href="#id11" title="Link to this code"></a></div>
 <div class="highlight-edelweiss notranslate"><div class="highlight"><pre><span></span><span class="k">*job</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">job</span>,<span class="nv"> domain</span><span class="ow">=</span><span class="m">3d</span>
 
 <span class="k">*solver</span>,<span class="nv"> solver</span><span class="ow">=</span><span class="m">NISTPArcLength</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">NISTPArcLen</span>
@@ -885,18 +564,18 @@ all
 100.0,      0.00,   10,         30,         35,         3.00,       0.85,       0.12,
 <span class="c c-Singleline">**Bh        Ch      Dh          As          softmod     l           m           omegaMax</span>
 0.003,      2.0,    1e-6,       15.0,       .1,         2,          1.05,       1,
-<span class="c c-Singleline">**derivativeMethod, dTThresholdElasticStiffness</span>
-1,                  1e-8
+<span class="c c-Singleline">**derivativeMethod, dTThresholdElasticStiffness, viscoplasticity</span>
+1,                  1e-8,       0
 
 <span class="k">*section</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">concrete</span>,<span class="nv"> material</span><span class="ow">=</span><span class="m">concrete</span>,<span class="nv"> type</span><span class="ow">=</span><span class="m">solid</span>
 all
 
 <span class="k">*modelGenerator</span>,<span class="nv"> generator</span><span class="ow">=</span><span class="m">findClosestNode</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">closestN1</span>,<span class="nv"> executeAfterManualGeneration</span><span class="ow">=</span><span class="m">True</span>
-<span class="nv">location</span><span class="ow">=</span><span class="s">&#39;40, 0, 0&#39;</span>
+<span class="nv">location</span><span class="ow">=</span><span class="s">'40, 0, 0'</span>
 <span class="nv">storeIn</span><span class="ow">=</span><span class="m">IDC1</span>
 
 <span class="k">*modelGenerator</span>,<span class="nv"> generator</span><span class="ow">=</span><span class="m">findClosestNode</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">closestN2</span>,<span class="nv"> executeAfterManualGeneration</span><span class="ow">=</span><span class="m">True</span>
-<span class="nv">location</span><span class="ow">=</span><span class="s">&#39;60, 0, 0&#39;</span>
+<span class="nv">location</span><span class="ow">=</span><span class="s">'60, 0, 0'</span>
 <span class="nv">storeIn</span><span class="ow">=</span><span class="m">IDC2</span>
 
 <span class="k">*step</span>,<span class="nv"> solver</span><span class="ow">=</span><span class="m">NISTPArcLen</span>
@@ -905,10 +584,10 @@ all
 
 <span class="k">*step</span>,<span class="nv"> solver</span><span class="ow">=</span><span class="m">NISTPArcLen</span>
 <span class="nv">maxInc</span><span class="ow">=</span><span class="m">1e-2</span>,<span class="nv"> startInc</span><span class="ow">=</span><span class="m">1e-2</span>,<span class="nv"> minInc</span><span class="ow">=</span><span class="m">1e-6</span>,<span class="nv"> maxNumInc</span><span class="ow">=</span><span class="m">100000</span>,<span class="nv"> maxIter</span><span class="ow">=</span><span class="m">25</span>,<span class="nv"> stepLength</span><span class="ow">=</span><span class="m">1</span>
-&gt;&gt;options,<span class="nv"> category</span><span class="ow">=</span><span class="m">Ensight</span>,<span class="nv"> intermediateSaveInterval</span><span class="ow">=</span><span class="m">1</span>,<span class="nv"> minDTForOutput</span><span class="ow">=</span><span class="m">0</span>
-&gt;&gt;options,<span class="nv"> category</span><span class="ow">=</span><span class="m">NISTArcLength</span>,<span class="nv"> arcLengthController</span><span class="ow">=</span><span class="m">indirectcontrol</span>,<span class="nv"> stopCondition</span><span class="ow">=</span><span class="s">&#39;fieldOutputs[&quot;I1pMax&quot;] &gt; 0.01&#39;</span>
+&gt;&gt;options,<span class="nv"> name</span><span class="ow">=</span><span class="m">test</span>,<span class="nv"> intermediateSaveInterval</span><span class="ow">=</span><span class="m">1</span>,<span class="nv"> minDTForOutput</span><span class="ow">=</span><span class="m">0</span>
+&gt;&gt;options,<span class="nv"> name</span><span class="ow">=</span><span class="m">NISTPArcLen</span>,<span class="nv"> arcLengthController</span><span class="ow">=</span><span class="m">indirectcontrol</span>,<span class="nv"> stopCondition</span><span class="ow">=</span><span class="s">'fieldOutputs["I1pMax"] &gt; 0.01'</span>
 
-&gt;&gt;indirectcontrol,<span class="nv"> dof1</span><span class="ow">=</span><span class="s">&#39;model.nodeSets[&quot;IDC1&quot;][0].fields[&quot;displacement&quot;]&#39;</span>,<span class="nv"> cVector1</span><span class="ow">=</span><span class="s">&#39;[-1,0,0]&#39;</span>,<span class="nv"> dof2</span><span class="ow">=</span><span class="s">&#39;model.nodeSets[&quot;IDC2&quot;][0].fields[&quot;displacement&quot;]&#39;</span>,<span class="nv"> cVector2</span><span class="ow">=</span><span class="s">&#39;[1,0,0]&#39;</span>,<span class="nv"> L</span><span class="ow">=</span><span class="m">1.</span>,
+&gt;&gt;indirectcontrol,<span class="nv"> dof1</span><span class="ow">=</span><span class="s">'model.nodeSets["IDC1"][0].fields["displacement"]'</span>,<span class="nv"> cVector1</span><span class="ow">=</span><span class="s">'[-1,0,0]'</span>,<span class="nv"> dof2</span><span class="ow">=</span><span class="s">'model.nodeSets["IDC2"][0].fields["displacement"]'</span>,<span class="nv"> cVector2</span><span class="ow">=</span><span class="s">'[1,0,0]'</span>,<span class="nv"> L</span><span class="ow">=</span><span class="m">1.</span>,
 
 &gt;&gt;dirichlet,<span class="nv"> name</span><span class="ow">=</span><span class="m">leftX</span>,<span class="nv"> nSet</span><span class="ow">=</span><span class="m">gen_left</span>,<span class="nv">  field</span><span class="ow">=</span><span class="m">displacement</span>,<span class="nv"> 1</span><span class="ow">=</span><span class="m">0.</span>
 &gt;&gt;dirichlet,<span class="nv"> name</span><span class="ow">=</span><span class="m">leftY</span>,<span class="nv"> nSet</span><span class="ow">=</span><span class="m">gen_left</span>,<span class="nv">  field</span><span class="ow">=</span><span class="m">displacement</span>,<span class="nv"> 2</span><span class="ow">=</span><span class="m">0.</span>
@@ -919,21 +598,21 @@ all
 &gt;&gt;perNode,<span class="nv"> name</span><span class="ow">=</span><span class="m">displacement</span>,<span class="nv">    elSet</span><span class="ow">=</span><span class="m">all</span>,<span class="nv"> field</span><span class="ow">=</span><span class="m">displacement</span>,<span class="nv"> result</span><span class="ow">=</span><span class="m">U</span>
 &gt;&gt;perNode,<span class="nv"> name</span><span class="ow">=</span><span class="m">nonlocal_damage</span>,<span class="nv"> elSet</span><span class="ow">=</span><span class="m">all</span>,<span class="nv"> field</span><span class="ow">=</span><span class="m">nonlocal damage</span>,<span class="nv"> result</span><span class="ow">=</span><span class="m">U</span>
 
-&gt;&gt;perElement,<span class="nv"> name</span><span class="ow">=</span><span class="m">strain</span>,<span class="nv"> elSet</span><span class="ow">=</span><span class="m">all</span>,<span class="nv"> result</span><span class="ow">=</span><span class="m">strain</span>,<span class="nv"> quadraturePoint</span><span class="ow">=</span><span class="m">0:8</span>,<span class="nv"> f(x)</span><span class="ow">=</span><span class="s">&#39;np.mean(x,axis=1)&#39;</span>
-&gt;&gt;perElement,<span class="nv"> name</span><span class="ow">=</span><span class="m">stress</span>,<span class="nv"> elSet</span><span class="ow">=</span><span class="m">all</span>,<span class="nv"> result</span><span class="ow">=</span><span class="m">stress</span>,<span class="nv"> quadraturePoint</span><span class="ow">=</span><span class="m">0:8</span>,<span class="nv"> f(x)</span><span class="ow">=</span><span class="s">&#39;np.mean(x,axis=1)&#39;</span>
-&gt;&gt;perElement,<span class="nv"> name</span><span class="ow">=</span><span class="m">omega</span>,<span class="nv">  elSet</span><span class="ow">=</span><span class="m">all</span>,<span class="nv"> result</span><span class="ow">=</span><span class="m">omega</span>,<span class="nv">  quadraturePoint</span><span class="ow">=</span><span class="m">0:8</span>,<span class="nv"> f(x)</span><span class="ow">=</span><span class="s">&#39;np.mean(x,axis=1)&#39;</span>
-&gt;&gt;perElement,<span class="nv"> name</span><span class="ow">=</span><span class="m">alphaP</span>,<span class="nv"> elSet</span><span class="ow">=</span><span class="m">all</span>,<span class="nv"> result</span><span class="ow">=</span><span class="m">alphaP</span>,<span class="nv"> quadraturePoint</span><span class="ow">=</span><span class="m">0:8</span>,<span class="nv"> f(x)</span><span class="ow">=</span><span class="s">&#39;np.mean(x,axis=1)&#39;</span>
-&gt;&gt;perElement,<span class="nv"> name</span><span class="ow">=</span><span class="m">alphaD</span>,<span class="nv"> elSet</span><span class="ow">=</span><span class="m">all</span>,<span class="nv"> result</span><span class="ow">=</span><span class="m">alphaD</span>,<span class="nv"> quadraturePoint</span><span class="ow">=</span><span class="m">0:8</span>,<span class="nv"> f(x)</span><span class="ow">=</span><span class="s">&#39;np.mean(x,axis=1)&#39;</span>
-&gt;&gt;perElement,<span class="nv"> name</span><span class="ow">=</span><span class="m">I1p</span>,<span class="nv">    elSet</span><span class="ow">=</span><span class="m">all</span>,<span class="nv"> result</span><span class="ow">=</span><span class="m">I1p</span>,<span class="nv">    quadraturePoint</span><span class="ow">=</span><span class="m">0:8</span>,<span class="nv"> f(x)</span><span class="ow">=</span><span class="s">&#39;np.mean(x,axis=1)&#39;</span>
+&gt;&gt;perElement,<span class="nv"> name</span><span class="ow">=</span><span class="m">strain</span>,<span class="nv"> elSet</span><span class="ow">=</span><span class="m">all</span>,<span class="nv"> result</span><span class="ow">=</span><span class="m">strain</span>,<span class="nv"> quadraturePoint</span><span class="ow">=</span><span class="m">0:8</span>,<span class="nv"> f(x)</span><span class="ow">=</span><span class="s">'np.mean(x,axis=1)'</span>
+&gt;&gt;perElement,<span class="nv"> name</span><span class="ow">=</span><span class="m">stress</span>,<span class="nv"> elSet</span><span class="ow">=</span><span class="m">all</span>,<span class="nv"> result</span><span class="ow">=</span><span class="m">stress</span>,<span class="nv"> quadraturePoint</span><span class="ow">=</span><span class="m">0:8</span>,<span class="nv"> f(x)</span><span class="ow">=</span><span class="s">'np.mean(x,axis=1)'</span>
+&gt;&gt;perElement,<span class="nv"> name</span><span class="ow">=</span><span class="m">omega</span>,<span class="nv">  elSet</span><span class="ow">=</span><span class="m">all</span>,<span class="nv"> result</span><span class="ow">=</span><span class="m">omega</span>,<span class="nv">  quadraturePoint</span><span class="ow">=</span><span class="m">0:8</span>,<span class="nv"> f(x)</span><span class="ow">=</span><span class="s">'np.mean(x,axis=1)'</span>
+&gt;&gt;perElement,<span class="nv"> name</span><span class="ow">=</span><span class="m">alphaP</span>,<span class="nv"> elSet</span><span class="ow">=</span><span class="m">all</span>,<span class="nv"> result</span><span class="ow">=</span><span class="m">alphaP</span>,<span class="nv"> quadraturePoint</span><span class="ow">=</span><span class="m">0:8</span>,<span class="nv"> f(x)</span><span class="ow">=</span><span class="s">'np.mean(x,axis=1)'</span>
+&gt;&gt;perElement,<span class="nv"> name</span><span class="ow">=</span><span class="m">alphaD</span>,<span class="nv"> elSet</span><span class="ow">=</span><span class="m">all</span>,<span class="nv"> result</span><span class="ow">=</span><span class="m">alphaD</span>,<span class="nv"> quadraturePoint</span><span class="ow">=</span><span class="m">0:8</span>,<span class="nv"> f(x)</span><span class="ow">=</span><span class="s">'np.mean(x,axis=1)'</span>
+&gt;&gt;perElement,<span class="nv"> name</span><span class="ow">=</span><span class="m">I1p</span>,<span class="nv">    elSet</span><span class="ow">=</span><span class="m">all</span>,<span class="nv"> result</span><span class="ow">=</span><span class="m">I1p</span>,<span class="nv">    quadraturePoint</span><span class="ow">=</span><span class="m">0:8</span>,<span class="nv"> f(x)</span><span class="ow">=</span><span class="s">'np.mean(x,axis=1)'</span>
 
-&gt;&gt;perElement,<span class="nv"> name</span><span class="ow">=</span><span class="m">I1pMax</span>,<span class="nv">    elSet</span><span class="ow">=</span><span class="m">all</span>,<span class="nv"> result</span><span class="ow">=</span><span class="m">I1p</span>,<span class="nv">    quadraturePoint</span><span class="ow">=</span><span class="m">0:8</span>,<span class="nv"> f(x)</span><span class="ow">=</span><span class="s">&#39;np.max(x)&#39;</span>,<span class="nv"> saveHistory</span><span class="ow">=</span><span class="m">true</span>
-&gt;&gt;perElement,<span class="nv"> name</span><span class="ow">=</span><span class="m">alphaDMax</span>,<span class="nv"> elSet</span><span class="ow">=</span><span class="m">all</span>,<span class="nv"> result</span><span class="ow">=</span><span class="m">alphaD</span>,<span class="nv"> quadraturePoint</span><span class="ow">=</span><span class="m">0:8</span>,<span class="nv"> f(x)</span><span class="ow">=</span><span class="s">&#39;np.max(x)&#39;</span>,<span class="nv"> saveHistory</span><span class="ow">=</span><span class="m">true</span>
-&gt;&gt;perElement,<span class="nv"> name</span><span class="ow">=</span><span class="m">omegaMax</span>,<span class="nv">  elSet</span><span class="ow">=</span><span class="m">all</span>,<span class="nv"> result</span><span class="ow">=</span><span class="m">omega</span>,<span class="nv">  quadraturePoint</span><span class="ow">=</span><span class="m">0:8</span>,<span class="nv"> f(x)</span><span class="ow">=</span><span class="s">&#39;np.max(x)&#39;</span>,<span class="nv"> saveHistory</span><span class="ow">=</span><span class="m">true</span>
+&gt;&gt;perElement,<span class="nv"> name</span><span class="ow">=</span><span class="m">I1pMax</span>,<span class="nv">    elSet</span><span class="ow">=</span><span class="m">all</span>,<span class="nv"> result</span><span class="ow">=</span><span class="m">I1p</span>,<span class="nv">    quadraturePoint</span><span class="ow">=</span><span class="m">0:8</span>,<span class="nv"> f(x)</span><span class="ow">=</span><span class="s">'np.max(x)'</span>,<span class="nv"> saveHistory</span><span class="ow">=</span><span class="m">true</span>
+&gt;&gt;perElement,<span class="nv"> name</span><span class="ow">=</span><span class="m">alphaDMax</span>,<span class="nv"> elSet</span><span class="ow">=</span><span class="m">all</span>,<span class="nv"> result</span><span class="ow">=</span><span class="m">alphaD</span>,<span class="nv"> quadraturePoint</span><span class="ow">=</span><span class="m">0:8</span>,<span class="nv"> f(x)</span><span class="ow">=</span><span class="s">'np.max(x)'</span>,<span class="nv"> saveHistory</span><span class="ow">=</span><span class="m">true</span>
+&gt;&gt;perElement,<span class="nv"> name</span><span class="ow">=</span><span class="m">omegaMax</span>,<span class="nv">  elSet</span><span class="ow">=</span><span class="m">all</span>,<span class="nv"> result</span><span class="ow">=</span><span class="m">omega</span>,<span class="nv">  quadraturePoint</span><span class="ow">=</span><span class="m">0:8</span>,<span class="nv"> f(x)</span><span class="ow">=</span><span class="s">'np.max(x)'</span>,<span class="nv"> saveHistory</span><span class="ow">=</span><span class="m">true</span>
 
 &gt;&gt;perElement,<span class="nv"> name</span><span class="ow">=</span><span class="m">alphaDWeak</span>,<span class="nv"> elSet</span><span class="ow">=</span><span class="m">gen_centerSliceX</span>,<span class="nv"> result</span><span class="ow">=</span><span class="m">alphaD</span>,<span class="nv"> quadraturePoint</span><span class="ow">=</span><span class="m">0:8</span>
 
-&gt;&gt;perNode,<span class="nv"> name</span><span class="ow">=</span><span class="m">U1</span>,<span class="nv">  nSet</span><span class="ow">=</span><span class="m">gen_right</span>,<span class="nv"> field</span><span class="ow">=</span><span class="m">displacement</span>,<span class="nv"> result</span><span class="ow">=</span><span class="m">U</span>,<span class="nv"> f(x)</span><span class="ow">=</span><span class="s">&#39;mean(x[:,0])&#39;</span>,<span class="nv"> saveHistory</span><span class="ow">=</span><span class="m">true</span>,<span class="nv"> export</span><span class="ow">=</span><span class="m">U</span>
-&gt;&gt;perNode,<span class="nv"> name</span><span class="ow">=</span><span class="m">RF1</span>,<span class="nv"> nSet</span><span class="ow">=</span><span class="m">gen_right</span>,<span class="nv"> field</span><span class="ow">=</span><span class="m">displacement</span>,<span class="nv"> result</span><span class="ow">=</span><span class="m">P</span>,<span class="nv"> f(x)</span><span class="ow">=</span><span class="s">&#39;sum(x[:,0])&#39;</span>,<span class="nv"> saveHistory</span><span class="ow">=</span><span class="m">true</span>,<span class="nv"> export</span><span class="ow">=</span><span class="m">RF</span>
+&gt;&gt;perNode,<span class="nv"> name</span><span class="ow">=</span><span class="m">U1</span>,<span class="nv">  nSet</span><span class="ow">=</span><span class="m">gen_right</span>,<span class="nv"> field</span><span class="ow">=</span><span class="m">displacement</span>,<span class="nv"> result</span><span class="ow">=</span><span class="m">U</span>,<span class="nv"> f(x)</span><span class="ow">=</span><span class="s">'mean(x[:,0])'</span>,<span class="nv"> saveHistory</span><span class="ow">=</span><span class="m">true</span>,<span class="nv"> export</span><span class="ow">=</span><span class="m">U</span>
+&gt;&gt;perNode,<span class="nv"> name</span><span class="ow">=</span><span class="m">RF1</span>,<span class="nv"> nSet</span><span class="ow">=</span><span class="m">gen_right</span>,<span class="nv"> field</span><span class="ow">=</span><span class="m">displacement</span>,<span class="nv"> result</span><span class="ow">=</span><span class="m">P</span>,<span class="nv"> f(x)</span><span class="ow">=</span><span class="s">'sum(x[:,0])'</span>,<span class="nv"> saveHistory</span><span class="ow">=</span><span class="m">true</span>,<span class="nv"> export</span><span class="ow">=</span><span class="m">RF</span>
 
 <span class="k">*output</span>,<span class="nv"> type</span><span class="ow">=</span><span class="m">ensight</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">test</span>
 &gt;&gt;perNode,<span class="nv"> fieldOutput</span><span class="ow">=</span><span class="m">displacement</span>
@@ -955,8 +634,8 @@ all
 <section id="indirectcontractioncontrol-indirect-displacement-contraction-ring-control">
 <h2><code class="docutils literal notranslate"><span class="pre">indirectcontractioncontrol</span></code> - Indirect displacement – contraction ring control<a class="headerlink" href="#indirectcontractioncontrol-indirect-displacement-contraction-ring-control" title="Link to this heading"></a></h2>
 <p>Relevant module: <code class="docutils literal notranslate"><span class="pre">edelweissfe.stepactions.indirectcontrol</span></code></p>
-<span class="target" id="module-edelweissfe.stepactions.indirectcontractioncontrol"></span><table class="docutils align-default" id="id19">
-<caption><span class="caption-text">Options: [indirectcontractioncontrol]</span><a class="headerlink" href="#id19" title="Link to this table"></a></caption>
+<span class="target" id="module-edelweissfe.stepactions.indirectcontractioncontrol"></span><table class="docutils align-default" id="id12">
+<caption><span class="caption-text">Options:</span><a class="headerlink" href="#id12" title="Link to this table"></a></caption>
 <thead>
 <tr class="row-odd"><th class="head"><p>Option</p></th>
 <th class="head"><p>Type / Default</p></th>
@@ -964,45 +643,6 @@ all
 </tr>
 </thead>
 <tbody>
-<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">name</span></code></td>
-<td><p>str (required)</p></td>
-<td><p>Name of the step action.</p></td>
-</tr>
-<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">contractionNSet</span></code></td>
-<td><p>str (required)</p></td>
-<td><p>The node set defining the contraction ring</p></td>
-</tr>
-<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">L</span></code></td>
-<td><p>float (required)</p></td>
-<td><p>Final distance (e.g. crack opening)</p></td>
-</tr>
-<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">exportCVector</span></code></td>
-<td><p>str, default=None</p></td>
-<td><p>File to export the computed c vector</p></td>
-</tr>
-<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">absolute</span></code></td>
-<td><p>bool, default=True</p></td>
-<td><p>Use absolute formulation</p></td>
-</tr>
-</tbody>
-</table>
-<table class="docutils align-default" id="id20">
-<caption><span class="caption-text">Options: [indirectcontractioncontrol]</span><a class="headerlink" href="#id20" title="Link to this table"></a></caption>
-<thead>
-<tr class="row-odd"><th class="head"><p>Option</p></th>
-<th class="head"><p>Type / Default</p></th>
-<th class="head"><p>Description</p></th>
-</tr>
-</thead>
-<tbody>
-<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">name</span></code></td>
-<td><p>str (required)</p></td>
-<td><p>Name of the step action.</p></td>
-</tr>
-<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">contractionNSet</span></code></td>
-<td><p>str (required)</p></td>
-<td><p>The node set defining the contraction ring</p></td>
-</tr>
 <tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">L</span></code></td>
 <td><p>float (required)</p></td>
 <td><p>Final distance (e.g. crack opening)</p></td>
@@ -1026,23 +666,8 @@ all
 <section id="modelupdate-update-the-model">
 <h2><code class="docutils literal notranslate"><span class="pre">modelupdate</span></code> - Update the model<a class="headerlink" href="#modelupdate-update-the-model" title="Link to this heading"></a></h2>
 <p>Relevant module: <code class="docutils literal notranslate"><span class="pre">edelweissfe.stepactions.modelupdate</span></code></p>
-<span class="target" id="module-edelweissfe.stepactions.modelupdate"></span><table class="docutils align-default" id="id21">
-<caption><span class="caption-text">Options: [modelupdate]</span><a class="headerlink" href="#id21" title="Link to this table"></a></caption>
-<thead>
-<tr class="row-odd"><th class="head"><p>Option</p></th>
-<th class="head"><p>Type / Default</p></th>
-<th class="head"><p>Description</p></th>
-</tr>
-</thead>
-<tbody>
-<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">update</span></code></td>
-<td><p>str (required)</p></td>
-<td><p>Model accessible, executable expression</p></td>
-</tr>
-</tbody>
-</table>
-<table class="docutils align-default" id="id22">
-<caption><span class="caption-text">Options: [modelupdate]</span><a class="headerlink" href="#id22" title="Link to this table"></a></caption>
+<span class="target" id="module-edelweissfe.stepactions.modelupdate"></span><table class="docutils align-default" id="id13">
+<caption><span class="caption-text">Options:</span><a class="headerlink" href="#id13" title="Link to this table"></a></caption>
 <thead>
 <tr class="row-odd"><th class="head"><p>Option</p></th>
 <th class="head"><p>Type / Default</p></th>
@@ -1060,8 +685,8 @@ all
 <section id="nodeforces-concentrated-node-forces">
 <h2><code class="docutils literal notranslate"><span class="pre">nodeforces</span></code> - Concentrated node forces<a class="headerlink" href="#nodeforces-concentrated-node-forces" title="Link to this heading"></a></h2>
 <p>Relevant module: <code class="docutils literal notranslate"><span class="pre">edelweissfe.stepactions.nodeforces</span></code></p>
-<span class="target" id="module-edelweissfe.stepactions.nodeforces"></span><table class="docutils align-default" id="id23">
-<caption><span class="caption-text">Options: [nodeforces]</span><a class="headerlink" href="#id23" title="Link to this table"></a></caption>
+<span class="target" id="module-edelweissfe.stepactions.nodeforces"></span><table class="docutils align-default" id="id14">
+<caption><span class="caption-text">Options:</span><a class="headerlink" href="#id14" title="Link to this table"></a></caption>
 <thead>
 <tr class="row-odd"><th class="head"><p>Option</p></th>
 <th class="head"><p>Type / Default</p></th>
@@ -1069,14 +694,6 @@ all
 </tr>
 </thead>
 <tbody>
-<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">name</span></code></td>
-<td><p>str (required)</p></td>
-<td><p>Name of the step action.</p></td>
-</tr>
-<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">nSet</span></code></td>
-<td><p>str (required)</p></td>
-<td><p>The node set for application of the boundary condition.</p></td>
-</tr>
 <tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">field</span></code></td>
 <td><p>str (required)</p></td>
 <td><p>Field for which the boundary condition is active.</p></td>
@@ -1115,8 +732,8 @@ all
 </tr>
 </tbody>
 </table>
-<table class="docutils align-default" id="id24">
-<caption><span class="caption-text">Options: [updateNodeforces]</span><a class="headerlink" href="#id24" title="Link to this table"></a></caption>
+<table class="docutils align-default" id="id15">
+<caption><span class="caption-text">Keyword: updatenodeforces</span><a class="headerlink" href="#id15" title="Link to this table"></a></caption>
 <thead>
 <tr class="row-odd"><th class="head"><p>Option</p></th>
 <th class="head"><p>Type / Default</p></th>
@@ -1124,148 +741,42 @@ all
 </tr>
 </thead>
 <tbody>
-<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">name</span></code></td>
-<td><p>str (required)</p></td>
-<td><p>Name of the step action to update.</p></td>
-</tr>
-<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">1</span></code></td>
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">1</span></code></td>
 <td><p>float, default=None</p></td>
 <td><p>Prescribe first component of field.</p></td>
 </tr>
-<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">2</span></code></td>
+<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">2</span></code></td>
 <td><p>float, default=None</p></td>
 <td><p>Prescribe second component of field.</p></td>
 </tr>
-<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">3</span></code></td>
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">3</span></code></td>
 <td><p>float, default=None</p></td>
 <td><p>Prescribe third component of field.</p></td>
 </tr>
-<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">4</span></code></td>
+<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">4</span></code></td>
 <td><p>float, default=None</p></td>
 <td><p>Prescribe fourth component of field.</p></td>
 </tr>
-<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">5</span></code></td>
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">5</span></code></td>
 <td><p>float, default=None</p></td>
 <td><p>Prescribe fifth component of field.</p></td>
 </tr>
-<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">6</span></code></td>
+<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">6</span></code></td>
 <td><p>float, default=None</p></td>
 <td><p>Prescribe sixth component of field.</p></td>
 </tr>
-<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">components</span></code></td>
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">components</span></code></td>
 <td><p>str, default=None</p></td>
 <td><p>Prescribe values using a numpy ndarray for representation; use ‘x’ for ignored values.</p></td>
 </tr>
-<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">f(t)</span></code></td>
+<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">f(t)</span></code></td>
 <td><p>str, default=None</p></td>
 <td><p>Define an amplitude in the step progress interval [0…1]</p></td>
 </tr>
 </tbody>
 </table>
-<table class="docutils align-default" id="id25">
-<caption><span class="caption-text">Options: [nodeforces]</span><a class="headerlink" href="#id25" title="Link to this table"></a></caption>
-<thead>
-<tr class="row-odd"><th class="head"><p>Option</p></th>
-<th class="head"><p>Type / Default</p></th>
-<th class="head"><p>Description</p></th>
-</tr>
-</thead>
-<tbody>
-<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">name</span></code></td>
-<td><p>str (required)</p></td>
-<td><p>Name of the step action.</p></td>
-</tr>
-<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">nSet</span></code></td>
-<td><p>str (required)</p></td>
-<td><p>The node set for application of the boundary condition.</p></td>
-</tr>
-<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">field</span></code></td>
-<td><p>str (required)</p></td>
-<td><p>Field for which the boundary condition is active.</p></td>
-</tr>
-<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">1</span></code></td>
-<td><p>float, default=None</p></td>
-<td><p>Prescribe first component of field.</p></td>
-</tr>
-<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">2</span></code></td>
-<td><p>float, default=None</p></td>
-<td><p>Prescribe second component of field.</p></td>
-</tr>
-<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">3</span></code></td>
-<td><p>float, default=None</p></td>
-<td><p>Prescribe third component of field.</p></td>
-</tr>
-<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">4</span></code></td>
-<td><p>float, default=None</p></td>
-<td><p>Prescribe fourth component of field.</p></td>
-</tr>
-<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">5</span></code></td>
-<td><p>float, default=None</p></td>
-<td><p>Prescribe fifth component of field.</p></td>
-</tr>
-<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">6</span></code></td>
-<td><p>float, default=None</p></td>
-<td><p>Prescribe sixth component of field.</p></td>
-</tr>
-<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">components</span></code></td>
-<td><p>str, default=None</p></td>
-<td><p>Prescribe values using a numpy ndarray for representation; use ‘x’ for ignored values.</p></td>
-</tr>
-<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">f(t)</span></code></td>
-<td><p>str, default=None</p></td>
-<td><p>Define an amplitude in the step progress interval [0…1]</p></td>
-</tr>
-</tbody>
-</table>
-<table class="docutils align-default" id="id26">
-<caption><span class="caption-text">Options: [updateNodeforces]</span><a class="headerlink" href="#id26" title="Link to this table"></a></caption>
-<thead>
-<tr class="row-odd"><th class="head"><p>Option</p></th>
-<th class="head"><p>Type / Default</p></th>
-<th class="head"><p>Description</p></th>
-</tr>
-</thead>
-<tbody>
-<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">name</span></code></td>
-<td><p>str (required)</p></td>
-<td><p>Name of the step action to update.</p></td>
-</tr>
-<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">1</span></code></td>
-<td><p>float, default=None</p></td>
-<td><p>Prescribe first component of field.</p></td>
-</tr>
-<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">2</span></code></td>
-<td><p>float, default=None</p></td>
-<td><p>Prescribe second component of field.</p></td>
-</tr>
-<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">3</span></code></td>
-<td><p>float, default=None</p></td>
-<td><p>Prescribe third component of field.</p></td>
-</tr>
-<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">4</span></code></td>
-<td><p>float, default=None</p></td>
-<td><p>Prescribe fourth component of field.</p></td>
-</tr>
-<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">5</span></code></td>
-<td><p>float, default=None</p></td>
-<td><p>Prescribe fifth component of field.</p></td>
-</tr>
-<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">6</span></code></td>
-<td><p>float, default=None</p></td>
-<td><p>Prescribe sixth component of field.</p></td>
-</tr>
-<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">components</span></code></td>
-<td><p>str, default=None</p></td>
-<td><p>Prescribe values using a numpy ndarray for representation; use ‘x’ for ignored values.</p></td>
-</tr>
-<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">f(t)</span></code></td>
-<td><p>str, default=None</p></td>
-<td><p>Define an amplitude in the step progress interval [0…1]</p></td>
-</tr>
-</tbody>
-</table>
-<div class="literal-block-wrapper docutils container" id="id27">
-<div class="code-block-caption"><span class="caption-text">Example: <code class="docutils literal notranslate"><span class="pre">testfiles/marmot/NodeForces/test.inp</span></code></span><a class="headerlink" href="#id27" title="Link to this code"></a></div>
+<div class="literal-block-wrapper docutils container" id="id16">
+<div class="code-block-caption"><span class="caption-text">Example: <code class="docutils literal notranslate"><span class="pre">testfiles/marmot/NodeForces/test.inp</span></code></span><a class="headerlink" href="#id16" title="Link to this code"></a></div>
 <div class="highlight-edelweiss notranslate"><div class="highlight"><pre><span></span><span class="k">*material</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">VonMises</span>,<span class="nv"> id</span><span class="ow">=</span><span class="m">mat</span>
 210000, 0.3, 550, 1000, 200, 1400
 
@@ -1287,7 +798,7 @@ all
 &gt;&gt;perNode,<span class="nv"> elSet</span><span class="ow">=</span><span class="m">all</span>,<span class="nv"> field</span><span class="ow">=</span><span class="m">displacement</span>,<span class="nv"> result</span><span class="ow">=</span><span class="m">U</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">displacement</span>
 
 <span class="k">*output</span>,<span class="nv"> type</span><span class="ow">=</span><span class="m">monitor</span>
-<span class="nv">fieldOutput</span><span class="ow">=</span><span class="m">RF</span>,<span class="nv"> f(x)</span><span class="ow">=</span><span class="s">&#39;mean(x[:,1])&#39;</span>
+<span class="nv">fieldOutput</span><span class="ow">=</span><span class="m">RF</span>,<span class="nv"> f(x)</span><span class="ow">=</span><span class="s">'mean(x[:,1])'</span>
 
 <span class="k">*output</span>,<span class="nv"> type</span><span class="ow">=</span><span class="m">ensight</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">esExport</span>
 &gt;&gt;perNode,<span class="nv"> fieldOutput</span><span class="ow">=</span><span class="m">displacement</span>
@@ -1310,8 +821,8 @@ all
 <section id="setfield-set-a-field-to-a-prescribed-value">
 <h2><code class="docutils literal notranslate"><span class="pre">setfield</span></code> - Set a field to a prescribed value<a class="headerlink" href="#setfield-set-a-field-to-a-prescribed-value" title="Link to this heading"></a></h2>
 <p>Relevant module: <code class="docutils literal notranslate"><span class="pre">edelweissfe.stepactions.setfield</span></code></p>
-<span class="target" id="module-edelweissfe.stepactions.setfield"></span><table class="docutils align-default" id="id28">
-<caption><span class="caption-text">Options: [setfield]</span><a class="headerlink" href="#id28" title="Link to this table"></a></caption>
+<span class="target" id="module-edelweissfe.stepactions.setfield"></span><table class="docutils align-default" id="id17">
+<caption><span class="caption-text">Options:</span><a class="headerlink" href="#id17" title="Link to this table"></a></caption>
 <thead>
 <tr class="row-odd"><th class="head"><p>Option</p></th>
 <th class="head"><p>Type / Default</p></th>
@@ -1319,48 +830,13 @@ all
 </tr>
 </thead>
 <tbody>
-<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">fieldOutput</span></code></td>
-<td><p>str (required)</p></td>
-<td><p>Field output to be set.</p></td>
-</tr>
-<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">type</span></code></td>
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">type</span></code></td>
 <td><p>str (required)</p></td>
 <td><p>Either ‘uniform’ or ‘analyticalField’.</p></td>
 </tr>
-<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">value</span></code></td>
+<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">value</span></code></td>
 <td><p>str (required)</p></td>
 <td><p>Scalar value if type ‘const’; name of analyticalField if type ‘analyticalField’</p></td>
-</tr>
-<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">name</span></code></td>
-<td><p>str, default=’setfield’</p></td>
-<td><p>Name of the step action.</p></td>
-</tr>
-</tbody>
-</table>
-<table class="docutils align-default" id="id29">
-<caption><span class="caption-text">Options: [setfield]</span><a class="headerlink" href="#id29" title="Link to this table"></a></caption>
-<thead>
-<tr class="row-odd"><th class="head"><p>Option</p></th>
-<th class="head"><p>Type / Default</p></th>
-<th class="head"><p>Description</p></th>
-</tr>
-</thead>
-<tbody>
-<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">fieldOutput</span></code></td>
-<td><p>str (required)</p></td>
-<td><p>Field output to be set.</p></td>
-</tr>
-<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">type</span></code></td>
-<td><p>str (required)</p></td>
-<td><p>Either ‘uniform’ or ‘analyticalField’.</p></td>
-</tr>
-<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">value</span></code></td>
-<td><p>str (required)</p></td>
-<td><p>Scalar value if type ‘const’; name of analyticalField if type ‘analyticalField’</p></td>
-</tr>
-<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">name</span></code></td>
-<td><p>str, default=’setfield’</p></td>
-<td><p>Name of the step action.</p></td>
 </tr>
 </tbody>
 </table>
@@ -1369,8 +845,8 @@ all
 <h2><code class="docutils literal notranslate"><span class="pre">setinitialconditions</span></code> - Set initial conditions to elements<a class="headerlink" href="#setinitialconditions-set-initial-conditions-to-elements" title="Link to this heading"></a></h2>
 <p>Relevant module: <code class="docutils literal notranslate"><span class="pre">edelweissfe.stepactions.setinitialconditions</span></code></p>
 <p id="module-edelweissfe.stepactions.setinitialconditions">Pass initial conditions to elements.</p>
-<table class="docutils align-default" id="id30">
-<caption><span class="caption-text">Options: [setinitialconditions]</span><a class="headerlink" href="#id30" title="Link to this table"></a></caption>
+<table class="docutils align-default" id="id18">
+<caption><span class="caption-text">Options:</span><a class="headerlink" href="#id18" title="Link to this table"></a></caption>
 <thead>
 <tr class="row-odd"><th class="head"><p>Option</p></th>
 <th class="head"><p>Type / Default</p></th>
@@ -1385,33 +861,6 @@ all
 <tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">values</span></code></td>
 <td><p>str (required)</p></td>
 <td><p>Comma separated property values.</p></td>
-</tr>
-<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">elSet</span></code></td>
-<td><p>str, default=’all’</p></td>
-<td><p>The element set for which the initaliziation is performed</p></td>
-</tr>
-</tbody>
-</table>
-<table class="docutils align-default" id="id31">
-<caption><span class="caption-text">Options: [setinitialconditions]</span><a class="headerlink" href="#id31" title="Link to this table"></a></caption>
-<thead>
-<tr class="row-odd"><th class="head"><p>Option</p></th>
-<th class="head"><p>Type / Default</p></th>
-<th class="head"><p>Description</p></th>
-</tr>
-</thead>
-<tbody>
-<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">property</span></code></td>
-<td><p>str (required)</p></td>
-<td><p>The name of the property to be initialized</p></td>
-</tr>
-<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">values</span></code></td>
-<td><p>str (required)</p></td>
-<td><p>Comma separated property values.</p></td>
-</tr>
-<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">elSet</span></code></td>
-<td><p>str, default=’all’</p></td>
-<td><p>The element set for which the initaliziation is performed</p></td>
 </tr>
 </tbody>
 </table>
@@ -1419,8 +868,15 @@ all
 <section id="changematerialproperty-change-a-material-property-during-a-step">
 <h2><code class="docutils literal notranslate"><span class="pre">changematerialproperty</span></code> - Change a material property during a step<a class="headerlink" href="#changematerialproperty-change-a-material-property-during-a-step" title="Link to this heading"></a></h2>
 <p>Relevant module: <code class="docutils literal notranslate"><span class="pre">edelweissfe.stepactions.changematerialproperty</span></code></p>
-<span class="target" id="module-edelweissfe.stepactions.changematerialproperty"></span><table class="docutils align-default" id="id32">
-<caption><span class="caption-text">Options: [changematerialproperty]</span><a class="headerlink" href="#id32" title="Link to this table"></a></caption>
+<p id="module-edelweissfe.stepactions.changematerialproperty">Change a property of a material during a step.</p>
+<p>At the start of every increment, one entry of the material’s property vector is set to a value
+prescribed as a function of the step time, for every element of every section using the material.
+The elements keep their state: a changed property affects how the state evolves from then on, but
+the state accumulated so far (stress, plastic strain, damage, …) is neither reset nor
+re-initialized. Properties an element was assigned individually (<code class="docutils literal notranslate"><span class="pre">materialParameterFromField</span></code>) are
+kept, apart from the changed one.</p>
+<table class="docutils align-default" id="id19">
+<caption><span class="caption-text">Options:</span><a class="headerlink" href="#id19" title="Link to this table"></a></caption>
 <thead>
 <tr class="row-odd"><th class="head"><p>Option</p></th>
 <th class="head"><p>Type / Default</p></th>
@@ -1428,14 +884,6 @@ all
 </tr>
 </thead>
 <tbody>
-<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">name</span></code></td>
-<td><p>str (required)</p></td>
-<td><p>Name of the step action.</p></td>
-</tr>
-<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">material</span></code></td>
-<td><p>str (required)</p></td>
-<td><p>The id of the material to be changed</p></td>
-</tr>
 <tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">index</span></code></td>
 <td><p>int (required)</p></td>
 <td><p>The index of the property in the material properties vector</p></td>
@@ -1446,35 +894,8 @@ all
 </tr>
 </tbody>
 </table>
-<table class="docutils align-default" id="id33">
-<caption><span class="caption-text">Options: [changematerialproperty]</span><a class="headerlink" href="#id33" title="Link to this table"></a></caption>
-<thead>
-<tr class="row-odd"><th class="head"><p>Option</p></th>
-<th class="head"><p>Type / Default</p></th>
-<th class="head"><p>Description</p></th>
-</tr>
-</thead>
-<tbody>
-<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">name</span></code></td>
-<td><p>str (required)</p></td>
-<td><p>Name of the step action.</p></td>
-</tr>
-<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">material</span></code></td>
-<td><p>str (required)</p></td>
-<td><p>The id of the material to be changed</p></td>
-</tr>
-<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">index</span></code></td>
-<td><p>int (required)</p></td>
-<td><p>The index of the property in the material properties vector</p></td>
-</tr>
-<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">f(t)</span></code></td>
-<td><p>str, default=None</p></td>
-<td><p>Define an amplitude in the step progress interval [0…1]</p></td>
-</tr>
-</tbody>
-</table>
-<div class="literal-block-wrapper docutils container" id="id34">
-<div class="code-block-caption"><span class="caption-text">Example: <code class="docutils literal notranslate"><span class="pre">testfiles/marmot/ChangeMaterialProperties/test.inp</span></code></span><a class="headerlink" href="#id34" title="Link to this code"></a></div>
+<div class="literal-block-wrapper docutils container" id="id20">
+<div class="code-block-caption"><span class="caption-text">Example: <code class="docutils literal notranslate"><span class="pre">testfiles/marmot/ChangeMaterialProperties/test.inp</span></code></span><a class="headerlink" href="#id20" title="Link to this code"></a></div>
 <div class="highlight-edelweiss notranslate"><div class="highlight"><pre><span></span><span class="k">*material</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">LinearElastic</span>,<span class="nv"> id</span><span class="ow">=</span><span class="m">myMaterial</span>
 <span class="c c-Singleline">**Isotropic</span>
 <span class="c c-Singleline">**E    nu</span>
@@ -1501,8 +922,8 @@ all
 <span class="k">*fieldOutput</span>
 &gt;&gt;perNode,<span class="nv"> elSet</span><span class="ow">=</span><span class="m">all</span>,<span class="nv"> field</span><span class="ow">=</span><span class="m">displacement</span>,<span class="nv"> result</span><span class="ow">=</span><span class="m">U</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">displacement</span>
 &gt;&gt;perNode,<span class="nv"> nSet</span><span class="ow">=</span><span class="m">gen_top</span>,<span class="nv"> field</span><span class="ow">=</span><span class="m">displacement</span>,<span class="nv"> result</span><span class="ow">=</span><span class="m">U</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">disp_top</span>
-&gt;&gt;perElement,<span class="nv"> elSet</span><span class="ow">=</span><span class="m">all</span>,<span class="nv"> result</span><span class="ow">=</span><span class="m">strain</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">strain</span>,<span class="nv"> quadraturePoint</span><span class="ow">=</span><span class="m">0:8</span>,<span class="nv"> f(x)</span><span class="ow">=</span><span class="s">&#39;np.mean(x,axis=1)&#39;</span>
-&gt;&gt;perElement,<span class="nv"> elSet</span><span class="ow">=</span><span class="m">all</span>,<span class="nv"> result</span><span class="ow">=</span><span class="m">stress</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">stress</span>,<span class="nv"> quadraturePoint</span><span class="ow">=</span><span class="m">0:8</span>,<span class="nv"> f(x)</span><span class="ow">=</span><span class="s">&#39;np.mean(x,axis=1)&#39;</span>
+&gt;&gt;perElement,<span class="nv"> elSet</span><span class="ow">=</span><span class="m">all</span>,<span class="nv"> result</span><span class="ow">=</span><span class="m">strain</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">strain</span>,<span class="nv"> quadraturePoint</span><span class="ow">=</span><span class="m">0:8</span>,<span class="nv"> f(x)</span><span class="ow">=</span><span class="s">'np.mean(x,axis=1)'</span>
+&gt;&gt;perElement,<span class="nv"> elSet</span><span class="ow">=</span><span class="m">all</span>,<span class="nv"> result</span><span class="ow">=</span><span class="m">stress</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">stress</span>,<span class="nv"> quadraturePoint</span><span class="ow">=</span><span class="m">0:8</span>,<span class="nv"> f(x)</span><span class="ow">=</span><span class="s">'np.mean(x,axis=1)'</span>
 
 <span class="k">*output</span>,<span class="nv"> type</span><span class="ow">=</span><span class="m">ensight</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">test</span>
 &gt;&gt;perNode,<span class="nv"> fieldOutput</span><span class="ow">=</span><span class="m">displacement</span>
@@ -1511,7 +932,7 @@ all
 &gt;&gt;configuration,<span class="nv"> overwrite</span><span class="ow">=</span><span class="m">yes</span>
 
 <span class="k">*output</span>,<span class="nv"> type</span><span class="ow">=</span><span class="m">monitor</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">dispMon</span>
-<span class="nv">fieldOutput</span><span class="ow">=</span><span class="m">disp_top</span>,<span class="nv"> f(x)</span><span class="ow">=</span><span class="s">&#39;mean(x[:,1])&#39;</span>
+<span class="nv">fieldOutput</span><span class="ow">=</span><span class="m">disp_top</span>,<span class="nv"> f(x)</span><span class="ow">=</span><span class="s">'mean(x[:,1])'</span>
 
 
 <span class="k">*step</span>,<span class="nv"> solver</span><span class="ow">=</span><span class="m">theSolver</span>
@@ -1523,7 +944,7 @@ all
 
 <span class="k">*step</span>,<span class="nv"> solver</span><span class="ow">=</span><span class="m">theSolver</span>
 <span class="nv">maxInc</span><span class="ow">=</span><span class="m">2e-2</span>,<span class="nv"> minInc</span><span class="ow">=</span><span class="m">1e-6</span>,<span class="nv"> maxNumInc</span><span class="ow">=</span><span class="m">1000</span>,<span class="nv"> maxIter</span><span class="ow">=</span><span class="m">25</span>,<span class="nv"> stepLength</span><span class="ow">=</span><span class="m">1</span>
-&gt;&gt;changeMaterialProperty,<span class="nv"> name</span><span class="ow">=</span><span class="m">chProp</span>,<span class="nv">  material</span><span class="ow">=</span><span class="m">myMaterial</span>,<span class="nv"> index</span><span class="ow">=</span><span class="m">0</span>,<span class="nv"> f(t)</span><span class="ow">=</span><span class="s">&#39;1000 - 500 * t&#39;</span>
+&gt;&gt;changeMaterialProperty,<span class="nv"> name</span><span class="ow">=</span><span class="m">chProp</span>,<span class="nv">  material</span><span class="ow">=</span><span class="m">myMaterial</span>,<span class="nv"> index</span><span class="ow">=</span><span class="m">0</span>,<span class="nv"> f(t)</span><span class="ow">=</span><span class="s">'1000 - 500 * t'</span>
 &gt;&gt;distributedload,<span class="nv"> name</span><span class="ow">=</span><span class="m">p_top</span>,<span class="nv"> surface</span><span class="ow">=</span><span class="m">gen_top</span>,<span class="nv"> magnitude</span><span class="ow">=</span><span class="m">1</span>,<span class="nv"> f(t)</span><span class="ow">=</span><span class="m">1</span>,<span class="nv"> type</span><span class="ow">=</span><span class="m">pressure</span>
 </pre></div>
 </div>
@@ -1534,18 +955,24 @@ all
 <p>Subclass from the step action base class in module <code class="docutils literal notranslate"><span class="pre">edelweissfe.stepactions.base.stepactionbase</span></code></p>
 <span class="target" id="module-edelweissfe.stepactions.base.stepactionbase"></span><dl class="py class">
 <dt class="sig sig-object py" id="edelweissfe.stepactions.base.stepactionbase.StepActionBase">
-<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">edelweissfe.stepactions.base.stepactionbase.</span></span><span class="sig-name descname"><span class="pre">StepActionBase</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">definition</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">jobInfo</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fieldOutputController</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dofmanager</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">journal</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/stepactions/base/stepactionbase.html#StepActionBase"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.stepactions.base.stepactionbase.StepActionBase" title="Link to this definition"></a></dt>
-<dd><p>This is the abase class for all step actions.
-User defined step actions can override the methods.</p>
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">edelweissfe.stepactions.base.stepactionbase.</span></span><span class="sig-name descname"><span class="pre">StepActionBase</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">definition</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">jobInfo</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fieldOutputController</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">journal</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/stepactions/base/stepactionbase.html#StepActionBase"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.stepactions.base.stepactionbase.StepActionBase" title="Link to this definition"></a></dt>
+<dd><p>This is the base class for all step actions.
+User defined step actions must implement the methods.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>name</strong> (<em>str</em>) – The name of this step action.</p></li>
-<li><p><strong>definition</strong> (<em>dict</em>) – A dictionary containing the options for this step action.</p></li>
-<li><p><strong>jobInfo</strong> (<em>dict</em>) – A dictionary containing the information about the job.</p></li>
-<li><p><strong>model</strong> (<a class="reference internal" href="models.html#edelweissfe.models.femodel.FEModel" title="edelweissfe.models.femodel.FEModel"><em>FEModel</em></a>) – A dictionary containing the model tree.</p></li>
-<li><p><strong>fieldOutputController</strong> (<a class="reference internal" href="fieldoutputmanager.html#edelweissfe.utils.fieldoutput.FieldOutputController" title="edelweissfe.utils.fieldoutput.FieldOutputController"><em>FieldOutputController</em></a>) – The fieldput controlling object.</p></li>
-<li><p><strong>journal</strong> (<a class="reference internal" href="journal.html#edelweissfe.journal.journal.Journal" title="edelweissfe.journal.journal.Journal"><em>Journal</em></a>) – The journal object for logging.</p></li>
+<dt class="field-odd">Attributes<span class="colon">:</span></dt>
+<dd class="field-odd"><dl class="simple">
+<dt><strong>checkpointedState</strong></dt><dd></dd>
+<dt><strong>schema</strong></dt><dd></dd>
+</dl>
+</dd>
+<dt class="field-even">Parameters<span class="colon">:</span></dt>
+<dd class="field-even"><ul class="simple">
+<li><p><strong>name</strong> (<em>str</em>)</p></li>
+<li><p><strong>definition</strong> (<em>dict</em>)</p></li>
+<li><p><strong>jobInfo</strong> (<em>dict</em>)</p></li>
+<li><p><strong>model</strong> (<a class="reference internal" href="models.html#edelweissfe.models.femodel.FEModel" title="edelweissfe.models.femodel.FEModel"><em>FEModel</em></a>)</p></li>
+<li><p><strong>fieldOutputController</strong> (<a class="reference internal" href="fieldoutputmanager.html#edelweissfe.utils.fieldoutput.FieldOutputController" title="edelweissfe.utils.fieldoutput.FieldOutputController"><em>FieldOutputController</em></a>)</p></li>
+<li><p><strong>journal</strong> (<a class="reference internal" href="journal.html#edelweissfe.journal.journal.Journal" title="edelweissfe.journal.journal.Journal"><em>Journal</em></a>)</p></li>
 </ul>
 </dd>
 </dl>
@@ -1561,11 +988,51 @@ User defined step actions can override the methods.</p>
 <tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.stepactions.base.stepactionbase.StepActionBase.applyAtStepStart" title="edelweissfe.stepactions.base.stepactionbase.StepActionBase.applyAtStepStart"><code class="xref py py-obj docutils literal notranslate"><span class="pre">applyAtStepStart</span></code></a>(model)</p></td>
 <td><p>Is called when a step starts.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.stepactions.base.stepactionbase.StepActionBase.updateStepAction" title="edelweissfe.stepactions.base.stepactionbase.StepActionBase.updateStepAction"><code class="xref py py-obj docutils literal notranslate"><span class="pre">updateStepAction</span></code></a>(definition, jobInfo, model, ...)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.stepactions.base.stepactionbase.StepActionBase.fromStepActionDefinition" title="edelweissfe.stepactions.base.stepactionbase.StepActionBase.fromStepActionDefinition"><code class="xref py py-obj docutils literal notranslate"><span class="pre">fromStepActionDefinition</span></code></a>(name, definition, ...)</p></td>
+<td><p>Create this step action from a parsed <code class="docutils literal notranslate"><span class="pre">.inp</span></code> step action definition.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.stepactions.base.stepactionbase.StepActionBase.getRestartData" title="edelweissfe.stepactions.base.stepactionbase.StepActionBase.getRestartData"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getRestartData</span></code></a>()</p></td>
+<td><p>The state this step action carries; by default the attributes declared in <a class="reference internal" href="#edelweissfe.stepactions.base.stepactionbase.StepActionBase.checkpointedState" title="edelweissfe.stepactions.base.stepactionbase.StepActionBase.checkpointedState"><code class="xref py py-attr docutils literal notranslate"><span class="pre">checkpointedState</span></code></a>.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.stepactions.base.stepactionbase.StepActionBase.setRestartData" title="edelweissfe.stepactions.base.stepactionbase.StepActionBase.setRestartData"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setRestartData</span></code></a>(data)</p></td>
+<td><p>Restore the state <a class="reference internal" href="#edelweissfe.stepactions.base.stepactionbase.StepActionBase.getRestartData" title="edelweissfe.stepactions.base.stepactionbase.StepActionBase.getRestartData"><code class="xref py py-meth docutils literal notranslate"><span class="pre">getRestartData()</span></code></a> returned.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.stepactions.base.stepactionbase.StepActionBase.updateStepAction" title="edelweissfe.stepactions.base.stepactionbase.StepActionBase.updateStepAction"><code class="xref py py-obj docutils literal notranslate"><span class="pre">updateStepAction</span></code></a>(definition, jobInfo, model, ...)</p></td>
 <td><p>Is called when an updated definition is present for a new step.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.stepactions.base.stepactionbase.StepActionBase.updateStepActionFromDefinition" title="edelweissfe.stepactions.base.stepactionbase.StepActionBase.updateStepActionFromDefinition"><code class="xref py py-obj docutils literal notranslate"><span class="pre">updateStepActionFromDefinition</span></code></a>(definition, ...)</p></td>
+<td><p>Update this step action from a parsed <code class="docutils literal notranslate"><span class="pre">.inp</span></code> step action definition.</p></td>
 </tr>
 </tbody>
 </table>
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.stepactions.base.stepactionbase.StepActionBase.fromStepActionDefinition">
+<span class="property"><span class="k"><span class="pre">classmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">fromStepActionDefinition</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">definition</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">jobInfo</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fieldOutputController</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">journal</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/stepactions/base/stepactionbase.html#StepActionBase.fromStepActionDefinition"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.stepactions.base.stepactionbase.StepActionBase.fromStepActionDefinition" title="Link to this definition"></a></dt>
+<dd><p>Create this step action from a parsed <code class="docutils literal notranslate"><span class="pre">.inp</span></code> step action definition.</p>
+<p>This is the one place a module’s input-file shape (numbered component options, a <code class="docutils literal notranslate"><span class="pre">f(t)</span></code>
+expression string, a node <em>set name</em>) is turned into the typed arguments its real
+constructor takes. Override it together with a typed <code class="docutils literal notranslate"><span class="pre">__init__</span></code>; leave it alone and the
+default dict-consuming constructor is used unchanged.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>name</strong> (<em>str</em>) – The name of the step action.</p></li>
+<li><p><strong>definition</strong> (<em>dict</em>) – The parsed option mapping for this step action.</p></li>
+<li><p><strong>jobInfo</strong> (<em>dict</em>) – A dictionary containing the information about the job.</p></li>
+<li><p><strong>model</strong> (<a class="reference internal" href="models.html#edelweissfe.models.femodel.FEModel" title="edelweissfe.models.femodel.FEModel"><em>FEModel</em></a>) – The model tree.</p></li>
+<li><p><strong>fieldOutputController</strong> (<a class="reference internal" href="fieldoutputmanager.html#edelweissfe.utils.fieldoutput.FieldOutputController" title="edelweissfe.utils.fieldoutput.FieldOutputController"><em>FieldOutputController</em></a>) – The field output controlling object.</p></li>
+<li><p><strong>journal</strong> (<a class="reference internal" href="journal.html#edelweissfe.journal.journal.Journal" title="edelweissfe.journal.journal.Journal"><em>Journal</em></a>) – The journal object for logging.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The constructed step action.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference internal" href="#edelweissfe.stepactions.base.stepactionbase.StepActionBase" title="edelweissfe.stepactions.base.stepactionbase.StepActionBase">StepActionBase</a></p>
+</dd>
+</dl>
+</dd></dl>
+
 <dl class="py method">
 <dt class="sig sig-object py" id="edelweissfe.stepactions.base.stepactionbase.StepActionBase.applyAtIncrementStart">
 <span class="sig-name descname"><span class="pre">applyAtIncrementStart</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">timeStep</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/stepactions/base/stepactionbase.html#StepActionBase.applyAtIncrementStart"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.stepactions.base.stepactionbase.StepActionBase.applyAtIncrementStart" title="Link to this definition"></a></dt>
@@ -1573,10 +1040,8 @@ User defined step actions can override the methods.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>U_n</strong> – The current converged solution vector at start of the increment.</p></li>
-<li><p><strong>P</strong> – The current reaction force vector.</p></li>
-<li><p><strong>increment</strong> – The defintion of the time increment.</p></li>
-<li><p><strong>timeStep</strong> (<em>TimeStep</em>)</p></li>
+<li><p><strong>model</strong> (<a class="reference internal" href="models.html#edelweissfe.models.femodel.FEModel" title="edelweissfe.models.femodel.FEModel"><em>FEModel</em></a>) – The current state of the model.</p></li>
+<li><p><strong>timeStep</strong> (<em>TimeStep</em>) – The definition of the time increment.</p></li>
 </ul>
 </dd>
 </dl>
@@ -1588,10 +1053,7 @@ User defined step actions can override the methods.</p>
 <dd><p>Is called when a step successfully finished.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>U</strong> – The current solution vector.</p></li>
-<li><p><strong>P</strong> – The current reaction force vector.</p></li>
-</ul>
+<dd class="field-odd"><p><strong>model</strong> (<a class="reference internal" href="models.html#edelweissfe.models.femodel.FEModel" title="edelweissfe.models.femodel.FEModel"><em>FEModel</em></a>) – The current state of the model.</p>
 </dd>
 </dl>
 </dd></dl>
@@ -1602,30 +1064,81 @@ User defined step actions can override the methods.</p>
 <dd><p>Is called when a step starts.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>U</strong> – The current solution vector.</p></li>
-<li><p><strong>P</strong> – The current reaction force vector.</p></li>
-</ul>
+<dd class="field-odd"><p><strong>model</strong> (<a class="reference internal" href="models.html#edelweissfe.models.femodel.FEModel" title="edelweissfe.models.femodel.FEModel"><em>FEModel</em></a>) – The current state of the model.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.stepactions.base.stepactionbase.StepActionBase.getRestartData">
+<span class="sig-name descname"><span class="pre">getRestartData</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/stepactions/base/stepactionbase.html#StepActionBase.getRestartData"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.stepactions.base.stepactionbase.StepActionBase.getRestartData" title="Link to this definition"></a></dt>
+<dd><p>The state this step action carries; by default the attributes declared in
+<a class="reference internal" href="#edelweissfe.stepactions.base.stepactionbase.StepActionBase.checkpointedState" title="edelweissfe.stepactions.base.stepactionbase.StepActionBase.checkpointedState"><code class="xref py py-attr docutils literal notranslate"><span class="pre">checkpointedState</span></code></a>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>A flat mapping of array name to array.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>dict[str, numpy.ndarray]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.stepactions.base.stepactionbase.StepActionBase.setRestartData">
+<span class="sig-name descname"><span class="pre">setRestartData</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/stepactions/base/stepactionbase.html#StepActionBase.setRestartData"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.stepactions.base.stepactionbase.StepActionBase.setRestartData" title="Link to this definition"></a></dt>
+<dd><p>Restore the state <a class="reference internal" href="#edelweissfe.stepactions.base.stepactionbase.StepActionBase.getRestartData" title="edelweissfe.stepactions.base.stepactionbase.StepActionBase.getRestartData"><code class="xref py py-meth docutils literal notranslate"><span class="pre">getRestartData()</span></code></a> returned.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>data</strong> (<em>dict</em><em>[</em><em>str</em><em>, </em><em>ndarray</em><em>]</em>) – The mapping of arrays.</p>
 </dd>
 </dl>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="edelweissfe.stepactions.base.stepactionbase.StepActionBase.updateStepAction">
-<span class="sig-name descname"><span class="pre">updateStepAction</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">definition</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">jobInfo</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fieldOutputController</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dofmanager</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">journal</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/stepactions/base/stepactionbase.html#StepActionBase.updateStepAction"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.stepactions.base.stepactionbase.StepActionBase.updateStepAction" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">updateStepAction</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">definition</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">jobInfo</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fieldOutputController</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">journal</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/stepactions/base/stepactionbase.html#StepActionBase.updateStepAction"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.stepactions.base.stepactionbase.StepActionBase.updateStepAction" title="Link to this definition"></a></dt>
 <dd><p>Is called when an updated definition is present for a new step.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>name</strong> – The name of this step action.</p></li>
 <li><p><strong>definition</strong> (<em>dict</em>) – A dictionary containing the options for this step action.</p></li>
 <li><p><strong>jobInfo</strong> (<em>dict</em>) – A dictionary containing the information about the job.</p></li>
-<li><p><strong>model</strong> (<a class="reference internal" href="models.html#edelweissfe.models.femodel.FEModel" title="edelweissfe.models.femodel.FEModel"><em>FEModel</em></a>) – A dictionary containing the model tree.</p></li>
-<li><p><strong>fieldOutputController</strong> (<a class="reference internal" href="fieldoutputmanager.html#edelweissfe.utils.fieldoutput.FieldOutputController" title="edelweissfe.utils.fieldoutput.FieldOutputController"><em>FieldOutputController</em></a>) – The fieldput controlling object.</p></li>
+<li><p><strong>model</strong> (<a class="reference internal" href="models.html#edelweissfe.models.femodel.FEModel" title="edelweissfe.models.femodel.FEModel"><em>FEModel</em></a>) – The model tree.</p></li>
+<li><p><strong>fieldOutputController</strong> (<a class="reference internal" href="fieldoutputmanager.html#edelweissfe.utils.fieldoutput.FieldOutputController" title="edelweissfe.utils.fieldoutput.FieldOutputController"><em>FieldOutputController</em></a>) – The field output controlling object.</p></li>
 <li><p><strong>journal</strong> (<a class="reference internal" href="journal.html#edelweissfe.journal.journal.Journal" title="edelweissfe.journal.journal.Journal"><em>Journal</em></a>) – The journal object for logging.</p></li>
 </ul>
 </dd>
 </dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.stepactions.base.stepactionbase.StepActionBase.updateStepActionFromDefinition">
+<span class="sig-name descname"><span class="pre">updateStepActionFromDefinition</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">definition</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">jobInfo</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fieldOutputController</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">journal</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/stepactions/base/stepactionbase.html#StepActionBase.updateStepActionFromDefinition"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.stepactions.base.stepactionbase.StepActionBase.updateStepActionFromDefinition" title="Link to this definition"></a></dt>
+<dd><p>Update this step action from a parsed <code class="docutils literal notranslate"><span class="pre">.inp</span></code> step action definition.</p>
+<p>The update counterpart of <a class="reference internal" href="#edelweissfe.stepactions.base.stepactionbase.StepActionBase.fromStepActionDefinition" title="edelweissfe.stepactions.base.stepactionbase.StepActionBase.fromStepActionDefinition"><code class="xref py py-meth docutils literal notranslate"><span class="pre">fromStepActionDefinition()</span></code></a>, needed as its own hook because a
+later step re-declaring an action reaches the <em>instance</em>, not the class. Override both or
+neither: a module whose constructor is typed but whose update path still consumed a dict
+would work only until the first multi-step input.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>definition</strong> (<em>dict</em>) – The parsed option mapping for this step action.</p></li>
+<li><p><strong>jobInfo</strong> (<em>dict</em>) – A dictionary containing the information about the job.</p></li>
+<li><p><strong>model</strong> (<a class="reference internal" href="models.html#edelweissfe.models.femodel.FEModel" title="edelweissfe.models.femodel.FEModel"><em>FEModel</em></a>) – The model tree.</p></li>
+<li><p><strong>fieldOutputController</strong> (<a class="reference internal" href="fieldoutputmanager.html#edelweissfe.utils.fieldoutput.FieldOutputController" title="edelweissfe.utils.fieldoutput.FieldOutputController"><em>FieldOutputController</em></a>) – The field output controlling object.</p></li>
+<li><p><strong>journal</strong> (<a class="reference internal" href="journal.html#edelweissfe.journal.journal.Journal" title="edelweissfe.journal.journal.Journal"><em>Journal</em></a>) – The journal object for logging.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="edelweissfe.stepactions.base.stepactionbase.StepActionBase.checkpointedState">
+<span class="sig-name descname"><span class="pre">checkpointedState</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">dict</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#edelweissfe.stepactions.base.stepactionbase.StepActionBase.checkpointedState" title="Link to this definition"></a></dt>
+<dd><p>The state this step action carries from one increment (and step) to the next, by attribute name and type;
+see <a class="reference internal" href="output.html#module-edelweissfe.utils.checkpointedstate" title="edelweissfe.utils.checkpointedstate"><code class="xref py py-mod docutils literal notranslate"><span class="pre">checkpointedstate</span></code></a>. Undeclared, <a class="reference internal" href="#edelweissfe.stepactions.base.stepactionbase.StepActionBase.getRestartData" title="edelweissfe.stepactions.base.stepactionbase.StepActionBase.getRestartData"><code class="xref py py-meth docutils literal notranslate"><span class="pre">getRestartData()</span></code></a> and
+<a class="reference internal" href="#edelweissfe.stepactions.base.stepactionbase.StepActionBase.setRestartData" title="edelweissfe.stepactions.base.stepactionbase.StepActionBase.setRestartData"><code class="xref py py-meth docutils literal notranslate"><span class="pre">setRestartData()</span></code></a> must be overridden for checkpointing.</p>
 </dd></dl>
 
 </dd></dl>

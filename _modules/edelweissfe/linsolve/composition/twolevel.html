@@ -1,0 +1,621 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>edelweissfe.linsolve.composition.twolevel &mdash; EdelweissFE v22.07 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=cfdaff8d" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css?v=37fbe429" />
+
+  
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=17e2f33f"></script>
+      <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            EdelweissFE
+              <img src="../../../../_static/edelweiss_fe_logo.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../features.html">Features</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../prerequisites.html">Prerequisites</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../documentation/index.html">Documentation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../contributors.html">Contributors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../publications.html">Publications</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">EdelweissFE</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">edelweissfe.linsolve.composition.twolevel</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for edelweissfe.linsolve.composition.twolevel</h1><div class="highlight"><pre>
+<span></span><span class="ch">#!/usr/bin/env python3</span>
+<span class="c1"># -*- coding: utf-8 -*-</span>
+<span class="c1">#  ---------------------------------------------------------------------</span>
+<span class="c1">#</span>
+<span class="c1">#  _____    _      _              _         _____ _____</span>
+<span class="c1"># | ____|__| | ___| |_      _____(_)___ ___|  ___| ____|</span>
+<span class="c1"># |  _| / _` |/ _ \ \ \ /\ / / _ \ / __/ __| |_  |  _|</span>
+<span class="c1"># | |__| (_| |  __/ |\ V  V /  __/ \__ \__ \  _| | |___</span>
+<span class="c1"># |_____\__,_|\___|_| \_/\_/ \___|_|___/___/_|   |_____|</span>
+<span class="c1">#</span>
+<span class="c1">#</span>
+<span class="c1">#  Unit of Strength of Materials and Structural Analysis</span>
+<span class="c1">#  University of Innsbruck,</span>
+<span class="c1">#  2017 - today</span>
+<span class="c1">#</span>
+<span class="c1">#  Matthias Neuner matthias.neuner@uibk.ac.at</span>
+<span class="c1">#</span>
+<span class="c1">#  This file is part of EdelweissFE.</span>
+<span class="c1">#</span>
+<span class="c1">#  This library is free software; you can redistribute it and/or</span>
+<span class="c1">#  modify it under the terms of the GNU Lesser General Public</span>
+<span class="c1">#  License as published by the Free Software Foundation; either</span>
+<span class="c1">#  version 2.1 of the License, or (at your option) any later version.</span>
+<span class="c1">#</span>
+<span class="c1">#  The full text of the license can be found in the file LICENSE.md at</span>
+<span class="c1">#  the top level directory of EdelweissFE.</span>
+<span class="c1">#  ---------------------------------------------------------------------</span>
+<span class="sd">"""A two-level cycle with a coarse space of its own: :class:`TwoLevel`.</span>
+
+<span class="sd">One cycle, for :math:`z \\approx A^{-1} r` with a prolongation :math:`P` from the coarse space:</span>
+
+<span class="sd">.. math::</span>
+
+<span class="sd">    z &amp;\\leftarrow S^{\\nu_1}(0, r)                       &amp;&amp; \\text{pre-smoothing (Chebyshev)} \\\\</span>
+<span class="sd">    z &amp;\\leftarrow z + P \\, A_c^{-1} P^T (r - A z)       &amp;&amp; \\text{coarse correction}, \\quad A_c = P^T A P \\\\</span>
+<span class="sd">    z &amp;\\leftarrow S^{\\nu_2}(z, r)                       &amp;&amp; \\text{post-smoothing}</span>
+
+<span class="sd">with :math:`A_c^{-1}` approximated. The coarse space decides what the cycle can correct:</span>
+
+<span class="sd">- :class:`RigidBodyModesPerAggregate`: all rigid-body modes of each aggregate of nodes (3 translations and 3 rotations</span>
+<span class="sd">  in 3D), where an AMG hierarchy on node-wise 3x3 blocks takes the translations alone; :math:`A_c^{-1}` is one V-cycle</span>
+<span class="sd">  of an AMG hierarchy;</span>
+<span class="sd">- :class:`CornerNodeInterpolation`: the linear interpolant of a quadratic field from its corner nodes (P1);</span>
+<span class="sd">  :math:`A_c^{-1}` is a component of its own on the corner-node field, by default ``DiagonalScaling(AMG())``. For a 3D</span>
+<span class="sd">  displacement field, ``DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModesPerAggregate()))`` makes three levels:</span>
+<span class="sd">  quadratic, linear, rigid-body modes of aggregates. On such a field the fine level smooths with the smoother of the</span>
+<span class="sd">  corner-node two-level cycle, a Chebyshev polynomial of degree 8 instead of 16</span>
+<span class="sd">  (:func:`~edelweissfe.linsolve.composition.amg.defaultCornerNodeTwoLevelTree`), and the ``blockamg`` preset gives the</span>
+<span class="sd">  coarse level the same.</span>
+
+<span class="sd">Why "two-level": the component is the fine level and one coarse correction, and its coarse problem is solved inexactly.</span>
+<span class="sd">The coarse space need not be a coarser mesh. With :class:`RigidBodyModesPerAggregate` it is</span>
+<span class="sd">spanned by aggregates of nodes, and the whole cycle is smoothed aggregation with all rigid-body modes on every level,</span>
+<span class="sd">the method Trilinos ML and MueLu use for elasticity (Vaněk, Mandel and Brezina, Computing 56, 1996). The first coarse</span>
+<span class="sd">level is built here, on the node-wise blocks of the fine level, with the modes scaled by the diagonal scaling and zero</span>
+<span class="sd">on the Dirichlet rows. The levels below are built by AMGCL, which takes the coefficients of the modes in the coarse</span>
+<span class="sd">space as its near null-space. ``prolongation="tentative"`` makes the first level plain aggregation. With</span>
+<span class="sd">:class:`CornerNodeInterpolation` the coarse level is a coarser grid, the corner nodes (p-multigrid): a field of its own,</span>
+<span class="sd">which its coarse component solves like any field (:mod:`~edelweissfe.linsolve.composition.cornernodetwolevelcycle`).</span>
+
+<span class="sd">The cycle runs in C++ (:mod:`~edelweissfe.linsolve.composition.rigidbodymodestwolevelcycle`,</span>
+<span class="sd">:mod:`~edelweissfe.linsolve.composition.cornernodetwolevelcycle`; the coarse component of</span>
+<span class="sd">:class:`CornerNodeInterpolation` is called back once per cycle). Its steps, written out in Python, are</span>
+<span class="sd">``Multiplicative([smoother, CoarseCorrection(P, coarseSolve), smoother])``</span>
+<span class="sd">(:mod:`~edelweissfe.linsolve.composition.combinators`). Both ways are kept on purpose: this one is faster per</span>
+<span class="sd">application, the spelled-out one shows the steps and takes any smoother or coarse space. Why, and what would</span>
+<span class="sd">end the exception: the "two-level cycle: two ways" section of ``doc/source/documentation/composedlinsolvers.rst``.</span>
+<span class="sd">"""</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">edelweissfe.utils.performancetiming</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">performancetiming</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.linsolve.composition.amg</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">AMG</span><span class="p">,</span>
+    <span class="n">backendOf</span><span class="p">,</span>
+    <span class="n">checkBackend</span><span class="p">,</span>
+    <span class="n">defaultCornerNodeTwoLevelTree</span><span class="p">,</span>
+    <span class="n">defaultFieldTree</span><span class="p">,</span>
+    <span class="n">fieldTreeOf</span><span class="p">,</span>
+    <span class="n">preconditionerMatrix</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.linsolve.composition.base</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">Description</span><span class="p">,</span>
+    <span class="n">Preconditioner</span><span class="p">,</span>
+    <span class="n">SetUpContext</span><span class="p">,</span>
+    <span class="n">Step</span><span class="p">,</span>
+    <span class="n">requirePreconditioner</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.linsolve.composition.diagonalscaling</span><span class="w"> </span><span class="kn">import</span> <span class="n">DiagonalScaling</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.linsolve.composition.systemmatrix</span><span class="w"> </span><span class="kn">import</span> <span class="n">SystemMatrix</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.linsolve.nullspace</span><span class="w"> </span><span class="kn">import</span> <span class="n">carriesRigidBodyModes</span>
+
+
+<div class="viewcode-block" id="CoarseSpace">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.twolevel.CoarseSpace">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">CoarseSpace</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""What spans the coarse level of a :class:`TwoLevel` cycle: it checks that it can be built for a field, and builds</span>
+<span class="sd">    the cycle on it. The cycle's own parameters (the fine smoother of the field's tree, the backend) come from</span>
+<span class="sd">    :class:`TwoLevel`, as ``cycle``, the keywords of</span>
+<span class="sd">    :meth:`~edelweissfe.linsolve.composition.twolevelcycle.TwoLevelCycle.cycleParameters`.</span>
+<span class="sd">    """</span>
+
+    <span class="c1">#: The name of the coarse space in the views.</span>
+    <span class="n">name</span> <span class="o">=</span> <span class="kc">None</span>
+
+<div class="viewcode-block" id="CoarseSpace.defaultTree">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.twolevel.CoarseSpace.defaultTree">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">defaultTree</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">field</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The AMGCL tree of a :class:`TwoLevel` cycle on this coarse space that is given none: the default tree of the</span>
+<span class="sd">        field's dimension (:func:`~edelweissfe.linsolve.composition.amg.defaultFieldTree`)."""</span>
+        <span class="k">return</span> <span class="n">defaultFieldTree</span><span class="p">(</span><span class="n">field</span><span class="o">.</span><span class="n">dimension</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="CoarseSpace.check">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.twolevel.CoarseSpace.check">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">check</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">field</span><span class="p">,</span> <span class="n">context</span><span class="p">:</span> <span class="n">SetUpContext</span><span class="p">,</span> <span class="n">cycle</span><span class="p">:</span> <span class="nb">dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Raise, naming the field, if the cycle cannot be built on this coarse space for the field: before anything is</span>
+<span class="sd">        built."""</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span></div>
+
+
+<div class="viewcode-block" id="CoarseSpace.build">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.twolevel.CoarseSpace.build">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">build</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">field</span><span class="p">,</span> <span class="n">matrix</span><span class="p">,</span> <span class="n">context</span><span class="p">:</span> <span class="n">SetUpContext</span><span class="p">,</span> <span class="n">cycle</span><span class="p">:</span> <span class="nb">dict</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""The two-level cycle on this coarse space for a field's matrix (SciPy CSR), built: a</span>
+<span class="sd">        :class:`~edelweissfe.linsolve.composition.twolevelcycle.TwoLevelCycle`.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        field</span>
+<span class="sd">            The field.</span>
+<span class="sd">        matrix</span>
+<span class="sd">            Its (scaled) matrix.</span>
+<span class="sd">        context</span>
+<span class="sd">            Its context: the node coordinates, the midside corners, the scaling.</span>
+<span class="sd">        cycle</span>
+<span class="sd">            The cycle's parameters, see</span>
+<span class="sd">            :meth:`~edelweissfe.linsolve.composition.twolevelcycle.TwoLevelCycle.cycleParameters`.</span>
+<span class="sd">        """</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span></div>
+
+
+<div class="viewcode-block" id="CoarseSpace.sizesOf">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.twolevel.CoarseSpace.sizesOf">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">sizesOf</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">cycle</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""What a built cycle reports about its coarse level (for the run statistics)."""</span>
+        <span class="k">return</span> <span class="p">{}</span></div>
+
+
+<div class="viewcode-block" id="CoarseSpace.children">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.twolevel.CoarseSpace.children">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">children</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The ``(role, component)`` pairs of the coarse space, children of the :class:`TwoLevel` that uses it: its</span>
+<span class="sd">        coarse solve, if that is a component (:class:`CornerNodeInterpolation`); none if the cycle solves on its own."""</span>
+        <span class="k">return</span> <span class="p">()</span></div>
+
+
+<div class="viewcode-block" id="CoarseSpace.coarseSolveStep">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.twolevel.CoarseSpace.coarseSolveStep">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">coarseSolveStep</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Step</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The coarse correction of the cycle, for the data-flow view."""</span>
+        <span class="k">return</span> <span class="n">Step</span><span class="p">(</span><span class="s2">"z += P A_c⁻¹ Pᵀ (r − A z),  A_c = Pᵀ A P,  A_c⁻¹ ≈ one AMG V-cycle"</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="CoarseSpace.describe">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.twolevel.CoarseSpace.describe">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">describe</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The settings of the coarse space, for the views."""</span>
+        <span class="k">return</span> <span class="p">{</span><span class="s2">"coarse space"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="s2">"coarse solve"</span><span class="p">:</span> <span class="s2">"AMG V-cycle"</span><span class="p">}</span></div>
+</div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_cycleFor</span><span class="p">(</span><span class="n">field</span><span class="p">,</span> <span class="n">cycleClass</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""The C++ cycle of the field, which checks its parameters as it is created, before the build has spent anything:</span>
+<span class="sd">    a rejection names the cycle in its message, and here the field too."""</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">cycleClass</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+    <span class="k">except</span> <span class="p">(</span><span class="ne">TypeError</span><span class="p">,</span> <span class="ne">ValueError</span><span class="p">)</span> <span class="k">as</span> <span class="n">error</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"TwoLevel on the field '</span><span class="si">{:}</span><span class="s2">': </span><span class="si">{:}</span><span class="s2">"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">field</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">error</span><span class="p">))</span> <span class="kn">from</span><span class="w"> </span><span class="nn">error</span>
+
+
+<div class="viewcode-block" id="RigidBodyModesPerAggregate">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.twolevel.RigidBodyModesPerAggregate">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">RigidBodyModesPerAggregate</span><span class="p">(</span><span class="n">CoarseSpace</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""The coarse space of all rigid-body modes per aggregate of nodes:</span>
+<span class="sd">    ``TwoLevel(coarseSpace=RigidBodyModesPerAggregate())``.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    prolongation</span>
+<span class="sd">        ``"smoothed"`` (:math:`P = (I - \\omega D_F^{-1} A_F) P_{\\mathrm{tent}}`) or ``"tentative"``</span>
+<span class="sd">        (:math:`P_{\\mathrm{tent}}`, the modes orthonormalized per aggregate).</span>
+<span class="sd">    coarseHierarchyPrecision</span>
+<span class="sd">        The value type of the AMG hierarchy that solves the coarse level: ``"double"`` or ``"float"``.</span>
+<span class="sd">    """</span>
+
+    <span class="n">name</span> <span class="o">=</span> <span class="s2">"rigid-body modes per aggregate"</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">prolongation</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"smoothed"</span><span class="p">,</span> <span class="n">coarseHierarchyPrecision</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"double"</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">prolongation</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"smoothed"</span><span class="p">,</span> <span class="s2">"tentative"</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">"RigidBodyModesPerAggregate: prolongation must be 'smoothed' or 'tentative', got </span><span class="si">{!r}</span><span class="s2">"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+                    <span class="n">prolongation</span>
+                <span class="p">)</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="n">coarseHierarchyPrecision</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"double"</span><span class="p">,</span> <span class="s2">"float"</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">"RigidBodyModesPerAggregate: coarseHierarchyPrecision must be 'double' or 'float', got </span><span class="si">{!r}</span><span class="s2">"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+                    <span class="n">coarseHierarchyPrecision</span>
+                <span class="p">)</span>
+            <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">prolongation</span> <span class="o">=</span> <span class="n">prolongation</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">coarseHierarchyPrecision</span> <span class="o">=</span> <span class="n">coarseHierarchyPrecision</span>
+
+<div class="viewcode-block" id="RigidBodyModesPerAggregate.check">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.twolevel.RigidBodyModesPerAggregate.check">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">check</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">field</span><span class="p">,</span> <span class="n">context</span><span class="p">:</span> <span class="n">SetUpContext</span><span class="p">,</span> <span class="n">cycle</span><span class="p">:</span> <span class="nb">dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Rigid-body modes are those of a 2D or 3D displacement field with node coordinates</span>
+<span class="sd">        (:func:`~edelweissfe.linsolve.nullspace.carriesRigidBodyModes`), on a block backend (the scalar backend takes</span>
+<span class="sd">        them as the near null-space of its hierarchy itself, ``AMG()``)."""</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">carriesRigidBodyModes</span><span class="p">(</span><span class="n">field</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">"TwoLevel: the rigid-body modes are those of a 2D or 3D displacement field, but the field '</span><span class="si">{:}</span><span class="s2">' is "</span>
+                <span class="s2">"another field (or has </span><span class="si">{:}</span><span class="s2"> component(s) per node): its near null-space is its translations, which "</span>
+                <span class="s2">"AMG() takes"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">field</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">field</span><span class="o">.</span><span class="n">dimension</span><span class="p">)</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="n">context</span><span class="o">.</span><span class="n">coordinates</span><span class="p">(</span><span class="n">field</span><span class="o">.</span><span class="n">name</span><span class="p">)</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">"TwoLevel: the rigid-body modes of the field '</span><span class="si">{:}</span><span class="s2">' need its node coordinates"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">field</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="n">cycle</span><span class="p">[</span><span class="s2">"backendBlockSize"</span><span class="p">]</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">"TwoLevel: the field '</span><span class="si">{:}</span><span class="s2">' is on the scalar backend (backendBlockSize 1), which takes the rigid-body "</span>
+                <span class="s2">"modes as the near null-space of AMG() itself; the rigid-body coarse level is for the block backends, "</span>
+                <span class="s2">"backendBlockSize 2 or 3"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">field</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
+            <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="RigidBodyModesPerAggregate.build">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.twolevel.RigidBodyModesPerAggregate.build">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">build</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">field</span><span class="p">,</span> <span class="n">matrix</span><span class="p">,</span> <span class="n">context</span><span class="p">:</span> <span class="n">SetUpContext</span><span class="p">,</span> <span class="n">cycle</span><span class="p">:</span> <span class="nb">dict</span><span class="p">):</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.linsolve.composition.rigidbodymodestwolevelcycle</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+            <span class="n">RigidBodyModesTwoLevelCycle</span><span class="p">,</span>
+        <span class="p">)</span>
+
+        <span class="n">built</span> <span class="o">=</span> <span class="n">_cycleFor</span><span class="p">(</span>
+            <span class="n">field</span><span class="p">,</span>
+            <span class="n">RigidBodyModesTwoLevelCycle</span><span class="p">,</span>
+            <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">_parameters</span><span class="p">(</span><span class="n">cycle</span><span class="p">),</span>
+        <span class="p">)</span>
+        <span class="k">with</span> <span class="n">performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"</span><span class="si">{:}</span><span class="s2"> rigid-body coarse level build"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">field</span><span class="o">.</span><span class="n">name</span><span class="p">)):</span>
+            <span class="n">built</span><span class="o">.</span><span class="n">build</span><span class="p">(</span><span class="n">matrix</span><span class="p">,</span> <span class="n">context</span><span class="o">.</span><span class="n">scalingOf</span><span class="p">(</span><span class="nb">slice</span><span class="p">(</span><span class="kc">None</span><span class="p">)),</span> <span class="n">context</span><span class="o">.</span><span class="n">coordinates</span><span class="p">(</span><span class="n">field</span><span class="o">.</span><span class="n">name</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">built</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_parameters</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">cycle</span><span class="p">:</span> <span class="nb">dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The keywords of the C++ cycle: the cycle's own, and this coarse space's."""</span>
+        <span class="k">return</span> <span class="nb">dict</span><span class="p">(</span><span class="n">cycle</span><span class="p">,</span> <span class="n">prolongation</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">prolongation</span><span class="p">,</span> <span class="n">coarseHierarchyPrecision</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">coarseHierarchyPrecision</span><span class="p">)</span>
+
+<div class="viewcode-block" id="RigidBodyModesPerAggregate.sizesOf">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.twolevel.RigidBodyModesPerAggregate.sizesOf">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">sizesOf</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">cycle</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">{</span><span class="s2">"aggregates"</span><span class="p">:</span> <span class="n">cycle</span><span class="o">.</span><span class="n">nAggregates</span><span class="p">,</span> <span class="s2">"coarse dofs"</span><span class="p">:</span> <span class="n">cycle</span><span class="o">.</span><span class="n">nCoarse</span><span class="p">,</span> <span class="s2">"dropped modes"</span><span class="p">:</span> <span class="n">cycle</span><span class="o">.</span><span class="n">droppedModes</span><span class="p">}</span></div>
+
+
+<div class="viewcode-block" id="RigidBodyModesPerAggregate.describe">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.twolevel.RigidBodyModesPerAggregate.describe">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">describe</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+        <span class="n">settings</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"coarse space"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="s2">"prolongation"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">prolongation</span><span class="p">,</span> <span class="s2">"coarse solve"</span><span class="p">:</span> <span class="s2">"AMG V-cycle"</span><span class="p">}</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">coarseHierarchyPrecision</span> <span class="o">!=</span> <span class="s2">"double"</span><span class="p">:</span>
+            <span class="n">settings</span><span class="p">[</span><span class="s2">"coarseHierarchyPrecision"</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">coarseHierarchyPrecision</span>
+        <span class="k">return</span> <span class="n">settings</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="CornerNodeInterpolation">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.twolevel.CornerNodeInterpolation">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">CornerNodeInterpolation</span><span class="p">(</span><span class="n">CoarseSpace</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""The coarse space of the linear interpolant of a quadratic field from its corner nodes (P1):</span>
+<span class="sd">    ``TwoLevel(coarseSpace=CornerNodeInterpolation(coarseSolve))``. Needs the field's corner/midside topology.</span>
+
+<span class="sd">    The prolongation interpolates the scaled variables of the field, :math:`P = D^{-1} P_{geo} D_c`, so that the</span>
+<span class="sd">    coarse operator :math:`A_c = P^T \\hat A P` is the P1 operator of the corner-node field, scaled by :math:`D_c` (see</span>
+<span class="sd">    :mod:`~edelweissfe.linsolve.composition.cornernodetwolevelcycle`). The coarse problem is set up as that field: the</span>
+<span class="sd">    same field on the coarse nodes -- the corner nodes, and a midside node with a free dof between two constrained ones</span>
+<span class="sd">    of its edge's corners (issue #223), which no interpolation from them could correct -- their coordinates, :math:`D_c`</span>
+<span class="sd">    as its scaling, an identity row for each Dirichlet coarse dof</span>
+<span class="sd">    (:meth:`~edelweissfe.linsolve.composition.base.SetUpContext.ofCoarseNodes`).</span>
+
+<span class="sd">    The coarse solve belongs to this coarse space for its whole life: each build sets it up anew on that build's</span>
+<span class="sd">    :math:`A_c`. So one ``CornerNodeInterpolation`` serves one :class:`TwoLevel`; under two, its coarse solve would sit</span>
+<span class="sd">    in two places of the tree, which the composed solver refuses.</span>
+
+<span class="sd">    Each level has its own tree. A :class:`TwoLevel` on this coarse space that is given no tree smooths a 3D</span>
+<span class="sd">    displacement field with a weaker Chebyshev polynomial than an AMG hierarchy (:meth:`defaultTree`, degree 8 instead</span>
+<span class="sd">    of 16); any other field keeps the default tree of its dimension. The coarse solve has the tree of its own</span>
+<span class="sd">    component; the ``blockamg`` preset gives it the same smoother</span>
+<span class="sd">    (:func:`~edelweissfe.linsolve.composition.presets.blockAMGFieldPreconditioner`).</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    coarseSolve</span>
+<span class="sd">        The coarse solve :math:`A_c^{-1}`, a component applied once per cycle. ``None``: ``DiagonalScaling(AMG())``,</span>
+<span class="sd">        which works on any field. For a 3D displacement field</span>
+<span class="sd">        ``DiagonalScaling(TwoLevel(coarseSpace=RigidBodyModesPerAggregate()))`` is faster</span>
+<span class="sd">        (:ref:`measured-scaled-corner-node-interpolation`).</span>
+<span class="sd">    """</span>
+
+    <span class="n">name</span> <span class="o">=</span> <span class="s2">"corner-node interpolation"</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">coarseSolve</span><span class="p">:</span> <span class="n">Preconditioner</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">coarseSolve</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">coarseSolve</span> <span class="o">=</span> <span class="n">DiagonalScaling</span><span class="p">(</span><span class="n">AMG</span><span class="p">())</span>
+        <span class="n">requirePreconditioner</span><span class="p">(</span><span class="s2">"CornerNodeInterpolation"</span><span class="p">,</span> <span class="s2">"coarseSolve"</span><span class="p">,</span> <span class="n">coarseSolve</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">coarseSolve</span> <span class="o">=</span> <span class="n">coarseSolve</span>
+
+<div class="viewcode-block" id="CornerNodeInterpolation.defaultTree">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.twolevel.CornerNodeInterpolation.defaultTree">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">defaultTree</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">field</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""For a 3D displacement field, the smoother of the corner-node two-level cycle</span>
+<span class="sd">        (:func:`~edelweissfe.linsolve.composition.amg.defaultCornerNodeTwoLevelTree`), where it was measured; any other</span>
+<span class="sd">        field keeps the default tree of its dimension, as on any coarse space."""</span>
+        <span class="k">if</span> <span class="n">field</span><span class="o">.</span><span class="n">dimension</span> <span class="o">==</span> <span class="mi">3</span> <span class="ow">and</span> <span class="n">carriesRigidBodyModes</span><span class="p">(</span><span class="n">field</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">defaultCornerNodeTwoLevelTree</span><span class="p">()</span>
+        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">defaultTree</span><span class="p">(</span><span class="n">field</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="CornerNodeInterpolation.check">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.twolevel.CornerNodeInterpolation.check">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">check</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">field</span><span class="p">,</span> <span class="n">context</span><span class="p">:</span> <span class="n">SetUpContext</span><span class="p">,</span> <span class="n">cycle</span><span class="p">:</span> <span class="nb">dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""It needs the field's midside corners."""</span>
+        <span class="k">if</span> <span class="n">context</span><span class="o">.</span><span class="n">midsideCorners</span><span class="p">(</span><span class="n">field</span><span class="o">.</span><span class="n">name</span><span class="p">)</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">"TwoLevel: the corner-node interpolation of the field '</span><span class="si">{:}</span><span class="s2">' needs its midside corners: from the "</span>
+                <span class="s2">"model, or given (midsideCorners) for a solve without one"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">field</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
+            <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="CornerNodeInterpolation.build">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.twolevel.CornerNodeInterpolation.build">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">build</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">field</span><span class="p">,</span> <span class="n">matrix</span><span class="p">,</span> <span class="n">context</span><span class="p">:</span> <span class="n">SetUpContext</span><span class="p">,</span> <span class="n">cycle</span><span class="p">:</span> <span class="nb">dict</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Build the cycle in C++, which returns :math:`A_c`, set up the coarse solve on it, and hand the coarse solve</span>
+<span class="sd">        to the cycle."""</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.linsolve.composition.cornernodetwolevelcycle</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+            <span class="n">CornerNodeTwoLevelCycle</span><span class="p">,</span>
+        <span class="p">)</span>
+
+        <span class="n">isCorner</span><span class="p">,</span> <span class="n">edgeEndpoints</span> <span class="o">=</span> <span class="n">context</span><span class="o">.</span><span class="n">midsideCorners</span><span class="p">(</span><span class="n">field</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
+        <span class="n">built</span> <span class="o">=</span> <span class="n">_cycleFor</span><span class="p">(</span>
+            <span class="n">field</span><span class="p">,</span>
+            <span class="n">CornerNodeTwoLevelCycle</span><span class="p">,</span>
+            <span class="n">isCorner</span><span class="p">,</span>
+            <span class="n">edgeEndpoints</span><span class="p">,</span>
+            <span class="o">**</span><span class="n">cycle</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">with</span> <span class="n">performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"</span><span class="si">{:}</span><span class="s2"> corner-node cycle build"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">field</span><span class="o">.</span><span class="n">name</span><span class="p">)):</span>
+            <span class="n">A_c</span> <span class="o">=</span> <span class="n">built</span><span class="o">.</span><span class="n">build</span><span class="p">(</span><span class="n">matrix</span><span class="p">,</span> <span class="n">context</span><span class="o">.</span><span class="n">scalingOf</span><span class="p">(</span><span class="nb">slice</span><span class="p">(</span><span class="kc">None</span><span class="p">)))</span>
+        <span class="k">if</span> <span class="n">A_c</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">coarseSolve</span><span class="o">.</span><span class="n">setUp</span><span class="p">(</span><span class="n">SystemMatrix</span><span class="p">(</span><span class="n">A_c</span><span class="p">),</span> <span class="n">context</span><span class="o">.</span><span class="n">ofCoarseNodes</span><span class="p">(</span><span class="n">field</span><span class="p">,</span> <span class="n">built</span><span class="o">.</span><span class="n">coarseNodes</span><span class="p">))</span>
+            <span class="n">built</span><span class="o">.</span><span class="n">setCoarseSolve</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">coarseSolve</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">built</span></div>
+
+
+<div class="viewcode-block" id="CornerNodeInterpolation.sizesOf">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.twolevel.CornerNodeInterpolation.sizesOf">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">sizesOf</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">cycle</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">{</span><span class="s2">"coarse dofs"</span><span class="p">:</span> <span class="n">cycle</span><span class="o">.</span><span class="n">nCoarse</span><span class="p">}</span></div>
+
+
+<div class="viewcode-block" id="CornerNodeInterpolation.children">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.twolevel.CornerNodeInterpolation.children">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">children</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">((</span><span class="s2">"coarseSolve"</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">coarseSolve</span><span class="p">),)</span></div>
+
+
+<div class="viewcode-block" id="CornerNodeInterpolation.coarseSolveStep">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.twolevel.CornerNodeInterpolation.coarseSolveStep">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">coarseSolveStep</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Step</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">Step</span><span class="p">(</span><span class="s2">"z += P A_c⁻¹ Pᵀ (r − A z),  A_c = Pᵀ A P  (corner nodes, scaled weights)"</span><span class="p">,</span> <span class="s2">"coarseSolve"</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="CornerNodeInterpolation.describe">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.twolevel.CornerNodeInterpolation.describe">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">describe</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">{</span><span class="s2">"coarse space"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="s2">"coarse solve"</span><span class="p">:</span> <span class="s2">"component"</span><span class="p">}</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="TwoLevel">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.twolevel.TwoLevel">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">TwoLevel</span><span class="p">(</span><span class="n">Preconditioner</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""A two-level cycle on a field's matrix with the coarse space ``coarseSpace``; see the module documentation.</span>
+
+<span class="sd">    Reused while only the values of the matrix change, like :class:`~edelweissfe.linsolve.composition.amg.AMG`.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    coarseSpace</span>
+<span class="sd">        A :class:`CoarseSpace`: :class:`RigidBodyModesPerAggregate` or :class:`CornerNodeInterpolation`.</span>
+<span class="sd">    amgclTree</span>
+<span class="sd">        The field's AMGCL tree: its ``relax`` (a Chebyshev polynomial), ``npre`` and ``npost`` are the fine smoother;</span>
+<span class="sd">        with :class:`RigidBodyModesPerAggregate` its coarsening also builds the coarse level, and the whole tree the AMG</span>
+<span class="sd">        hierarchy below. ``None``: the coarse space's default (:meth:`CoarseSpace.defaultTree`), the default tree of the</span>
+<span class="sd">        field's dimension (:func:`~edelweissfe.linsolve.composition.amg.defaultFieldTree`) for</span>
+<span class="sd">        :class:`RigidBodyModesPerAggregate`, and for :class:`CornerNodeInterpolation` on a 3D displacement field the</span>
+<span class="sd">        smoother of the corner-node two-level cycle</span>
+<span class="sd">        (:func:`~edelweissfe.linsolve.composition.amg.defaultCornerNodeTwoLevelTree`).</span>
+<span class="sd">    backendBlockSize, backendPrecision</span>
+<span class="sd">        The storage of the fine operator and of :math:`P`, :math:`P^T`, as for</span>
+<span class="sd">        :class:`~edelweissfe.linsolve.composition.amg.AMG`; ``None``: the field's default</span>
+<span class="sd">        (:func:`~edelweissfe.linsolve.composition.amg.backendOf`).</span>
+<span class="sd">    dropTolerance, lumpDroppedEntries</span>
+<span class="sd">        Build the cycle (its smoother, coarse level and hierarchy) on the filtered matrix, see</span>
+<span class="sd">        :func:`~edelweissfe.linsolve.composition.amg.droppedSmallEntries`; ``0`` (the default) builds it on the</span>
+<span class="sd">        matrix itself.</span>
+<span class="sd">    """</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">coarseSpace</span><span class="p">:</span> <span class="n">CoarseSpace</span><span class="p">,</span>
+        <span class="n">amgclTree</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">backendBlockSize</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">backendPrecision</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">dropTolerance</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">,</span>
+        <span class="n">lumpDroppedEntries</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">coarseSpace</span><span class="p">,</span> <span class="n">CoarseSpace</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                <span class="s2">"TwoLevel: coarseSpace must be a CoarseSpace such as RigidBodyModesPerAggregate() or "</span>
+                <span class="s2">"CornerNodeInterpolation(), got </span><span class="si">{!r}</span><span class="s2">"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">coarseSpace</span><span class="p">)</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">dropTolerance</span> <span class="o">&gt;=</span> <span class="mf">0.0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"TwoLevel: dropTolerance must not be negative, got </span><span class="si">{!r}</span><span class="s2">"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">dropTolerance</span><span class="p">))</span>
+        <span class="n">checkBackend</span><span class="p">(</span><span class="s2">"TwoLevel"</span><span class="p">,</span> <span class="n">backendBlockSize</span><span class="p">,</span> <span class="n">backendPrecision</span><span class="p">)</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">coarseSpace</span> <span class="o">=</span> <span class="n">coarseSpace</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">amgclTree</span> <span class="o">=</span> <span class="n">amgclTree</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">backendBlockSize</span> <span class="o">=</span> <span class="n">backendBlockSize</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">backendPrecision</span> <span class="o">=</span> <span class="n">backendPrecision</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dropTolerance</span> <span class="o">=</span> <span class="n">dropTolerance</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">lumpDroppedEntries</span> <span class="o">=</span> <span class="n">lumpDroppedEntries</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_forget</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">cycle</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_field</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_cycleParameters</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">field</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The cycle's parameters for the field: the tree and the backend, the defaults for what is not given</span>
+<span class="sd">        (see :meth:`~edelweissfe.linsolve.composition.twolevelcycle.TwoLevelCycle.cycleParameters`)."""</span>
+        <span class="n">amgclTree</span> <span class="o">=</span> <span class="n">fieldTreeOf</span><span class="p">(</span><span class="s2">"TwoLevel"</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">amgclTree</span><span class="p">,</span> <span class="n">field</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">coarseSpace</span><span class="o">.</span><span class="n">defaultTree</span><span class="p">)</span>
+        <span class="c1"># the near null-space belongs to AMG's hierarchy; a coarse space is its own</span>
+        <span class="n">backendBlockSize</span><span class="p">,</span> <span class="n">backendPrecision</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">backendOf</span><span class="p">(</span>
+            <span class="s2">"TwoLevel"</span><span class="p">,</span> <span class="n">field</span><span class="p">,</span> <span class="n">amgclTree</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">backendBlockSize</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">backendPrecision</span><span class="p">,</span> <span class="n">nearNullspace</span><span class="o">=</span><span class="kc">None</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="s2">"amgclTree"</span><span class="p">:</span> <span class="n">amgclTree</span><span class="p">,</span>
+            <span class="s2">"backendBlockSize"</span><span class="p">:</span> <span class="n">backendBlockSize</span><span class="p">,</span>
+            <span class="s2">"backendPrecision"</span><span class="p">:</span> <span class="n">backendPrecision</span><span class="p">,</span>
+        <span class="p">}</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_setUp</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">A</span><span class="p">,</span> <span class="n">context</span><span class="p">:</span> <span class="n">SetUpContext</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">field</span> <span class="o">=</span> <span class="n">context</span><span class="o">.</span><span class="n">onlyField</span><span class="p">(</span><span class="s2">"TwoLevel"</span><span class="p">)</span>
+        <span class="n">cycle</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_cycleParameters</span><span class="p">(</span><span class="n">field</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">coarseSpace</span><span class="o">.</span><span class="n">check</span><span class="p">(</span><span class="n">field</span><span class="p">,</span> <span class="n">context</span><span class="p">,</span> <span class="n">cycle</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_field</span> <span class="o">=</span> <span class="n">field</span>
+        <span class="n">matrix</span> <span class="o">=</span> <span class="n">preconditionerMatrix</span><span class="p">(</span><span class="n">A</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">dropTolerance</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">lumpDroppedEntries</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">statistics</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">cycle</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">coarseSpace</span><span class="o">.</span><span class="n">build</span><span class="p">(</span><span class="n">field</span><span class="p">,</span> <span class="n">matrix</span><span class="p">,</span> <span class="n">context</span><span class="p">,</span> <span class="n">cycle</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">statistics</span><span class="o">.</span><span class="n">sizes</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">rows</span><span class="o">=</span><span class="n">A</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">coarseSpace</span><span class="o">.</span><span class="n">sizesOf</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cycle</span><span class="p">))</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">A</span><span class="p">,</span> <span class="n">change</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="c1"># A_c is built above the coarse solve: rebuilt with it, also for reasons the coarse solve adds itself</span>
+        <span class="n">change</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">withRebuildReasons</span><span class="p">(</span><span class="n">change</span><span class="p">)</span>
+        <span class="c1"># only the values changed: the whole cycle, its coarse solve included, is kept</span>
+        <span class="k">if</span> <span class="n">change</span><span class="o">.</span><span class="n">requiresRebuild</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">cycle</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">setUp</span><span class="p">(</span><span class="n">A</span><span class="p">,</span> <span class="n">change</span><span class="o">.</span><span class="n">context</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_apply</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">r</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">cycle</span><span class="o">.</span><span class="n">applyPreconditioner</span><span class="p">(</span><span class="n">r</span><span class="p">)</span>
+
+<div class="viewcode-block" id="TwoLevel.children">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.twolevel.TwoLevel.children">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">children</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">:</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">coarseSpace</span><span class="o">.</span><span class="n">children</span><span class="p">()</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_parameters</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+        <span class="n">parameters</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">coarseSpace</span><span class="o">.</span><span class="n">describe</span><span class="p">()</span>
+        <span class="n">backend</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"backendBlockSize"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">backendBlockSize</span><span class="p">,</span> <span class="s2">"backendPrecision"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">backendPrecision</span><span class="p">}</span>
+        <span class="n">parameters</span><span class="o">.</span><span class="n">update</span><span class="p">({</span><span class="n">key</span><span class="p">:</span> <span class="n">value</span> <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">backend</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">})</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">dropTolerance</span> <span class="o">&gt;</span> <span class="mf">0.0</span><span class="p">:</span>
+            <span class="n">parameters</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">dropTolerance</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">dropTolerance</span><span class="p">,</span> <span class="n">lumpDroppedEntries</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">lumpDroppedEntries</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">parameters</span>
+
+<div class="viewcode-block" id="TwoLevel.describe">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.twolevel.TwoLevel.describe">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">describe</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Description</span><span class="p">:</span>
+        <span class="n">name</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_field</span><span class="o">.</span><span class="n">name</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_field</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="s2">"A"</span>
+        <span class="n">hasCoarseSolve</span> <span class="o">=</span> <span class="nb">bool</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">children</span><span class="p">())</span>
+        <span class="n">coarse</span> <span class="o">=</span> <span class="s2">"; A_c⁻¹ = </span><span class="si">{coarseSolve}</span><span class="s2">"</span> <span class="k">if</span> <span class="n">hasCoarseSolve</span> <span class="k">else</span> <span class="s2">""</span>
+        <span class="n">coarseLatex</span> <span class="o">=</span> <span class="s2">"; A_c^{-1} = </span><span class="si">{coarseSolve}</span><span class="s2">"</span> <span class="k">if</span> <span class="n">hasCoarseSolve</span> <span class="k">else</span> <span class="s2">""</span>
+        <span class="k">return</span> <span class="n">Description</span><span class="p">(</span>
+            <span class="n">name</span><span class="o">=</span><span class="s2">"TwoLevel"</span><span class="p">,</span>
+            <span class="n">formula</span><span class="o">=</span><span class="s2">"TwoLevel("</span> <span class="o">+</span> <span class="n">name</span> <span class="o">+</span> <span class="s2">"; "</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">coarseSpace</span><span class="o">.</span><span class="n">name</span> <span class="o">+</span> <span class="n">coarse</span> <span class="o">+</span> <span class="s2">")⁻¹"</span><span class="p">,</span>
+            <span class="n">latex</span><span class="o">=</span><span class="s2">"</span><span class="se">\\</span><span class="s2">mathrm</span><span class="si">{TL}</span><span class="s2">(A_{</span><span class="se">\\</span><span class="s2">text{"</span> <span class="o">+</span> <span class="n">name</span> <span class="o">+</span> <span class="s2">"}}"</span> <span class="o">+</span> <span class="n">coarseLatex</span> <span class="o">+</span> <span class="s2">")^{-1}"</span><span class="p">,</span>
+            <span class="n">parameters</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_parameters</span><span class="p">(),</span>
+            <span class="n">steps</span><span class="o">=</span><span class="p">(</span>
+                <span class="n">Step</span><span class="p">(</span><span class="s2">"z = S(0, r)   (pre-smoothing)"</span><span class="p">),</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">coarseSpace</span><span class="o">.</span><span class="n">coarseSolveStep</span><span class="p">(),</span>
+                <span class="n">Step</span><span class="p">(</span><span class="s2">"z = S(z, r)   (post-smoothing)"</span><span class="p">),</span>
+            <span class="p">),</span>
+        <span class="p">)</span></div>
+</div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Matthias Neuner.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

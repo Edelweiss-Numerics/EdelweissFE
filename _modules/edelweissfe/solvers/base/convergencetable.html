@@ -1,0 +1,262 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>edelweissfe.solvers.base.convergencetable &mdash; EdelweissFE v22.07 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=cfdaff8d" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css?v=37fbe429" />
+
+  
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=17e2f33f"></script>
+      <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            EdelweissFE
+              <img src="../../../../_static/edelweiss_fe_logo.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../features.html">Features</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../prerequisites.html">Prerequisites</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../documentation/index.html">Documentation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../contributors.html">Contributors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../publications.html">Publications</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">EdelweissFE</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">edelweissfe.solvers.base.convergencetable</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for edelweissfe.solvers.base.convergencetable</h1><div class="highlight"><pre>
+<span></span><span class="ch">#!/usr/bin/env python3</span>
+<span class="c1"># -*- coding: utf-8 -*-</span>
+<span class="c1">#  ---------------------------------------------------------------------</span>
+<span class="c1">#</span>
+<span class="c1">#  _____    _      _              _         _____ _____</span>
+<span class="c1"># | ____|__| | ___| |_      _____(_)___ ___|  ___| ____|</span>
+<span class="c1"># |  _| / _` |/ _ \ \ \ /\ / / _ \ / __/ __| |_  |  _|</span>
+<span class="c1"># | |__| (_| |  __/ |\ V  V /  __/ \__ \__ \  _| | |___</span>
+<span class="c1"># |_____\__,_|\___|_| \_/\_/ \___|_|___/___/_|   |_____|</span>
+<span class="c1">#</span>
+<span class="c1">#</span>
+<span class="c1">#  Unit of Strength of Materials and Structural Analysis</span>
+<span class="c1">#  University of Innsbruck,</span>
+<span class="c1">#  2017 - today</span>
+<span class="c1">#</span>
+<span class="c1">#  Matthias Neuner matthias.neuner@uibk.ac.at</span>
+<span class="c1">#</span>
+<span class="c1">#  This file is part of EdelweissFE.</span>
+<span class="c1">#</span>
+<span class="c1">#  This library is free software; you can redistribute it and/or</span>
+<span class="c1">#  modify it under the terms of the GNU Lesser General Public</span>
+<span class="c1">#  License as published by the Free Software Foundation; either</span>
+<span class="c1">#  version 2.1 of the License, or (at your option) any later version.</span>
+<span class="c1">#</span>
+<span class="c1">#  The full text of the license can be found in the file LICENSE.md at</span>
+<span class="c1">#  the top level directory of EdelweissFE.</span>
+<span class="c1">#  ---------------------------------------------------------------------</span>
+<span class="sd">"""The table of the Newton-Raphson iterations that the implicit solvers write to the journal.</span>
+
+<span class="sd">One column per field (and one for the scalar variables, if any), each showing the largest flux residual</span>
+<span class="sd">:math:`\\|R\\|_\\infty` and the largest correction :math:`\\|\\Delta\\Delta U\\|_\\infty` of the iteration, marked ``✓``</span>
+<span class="sd">once the convergence criterion is met. Linear solvers that report per-solve diagnostics (see</span>
+<span class="sd">:attr:`~edelweissfe.linsolve.base.LinearSolver.reportsSolveSummary`) get one more column with the solver's</span>
+<span class="sd">iteration count and achieved residual.</span>
+
+<span class="sd">The rows are written with :meth:`~edelweissfe.journal.journal.Journal.preformatted`, so they are never wrapped,</span>
+<span class="sd">however many columns the model has.</span>
+<span class="sd">"""</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.journal.journal</span><span class="w"> </span><span class="kn">import</span> <span class="n">displayWidth</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.linsolve.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">LinearSolveSummary</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.solvers.base.convergencecriteria</span><span class="w"> </span><span class="kn">import</span> <span class="n">FieldConvergence</span>
+
+
+<div class="viewcode-block" id="ConvergenceTable">
+<a class="viewcode-back" href="../../../../documentation/solvers.html#edelweissfe.solvers.base.convergencetable.ConvergenceTable">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">ConvergenceTable</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""The column layout of the iteration table: the header lines, and one row per iteration.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    columnNames</span>
+<span class="sd">        The names of the field columns, in the order of the rows' entries.</span>
+<span class="sd">    showLinearSolve</span>
+<span class="sd">        Add the "linear solve" column.</span>
+<span class="sd">    """</span>
+
+    <span class="c1">#: The width of one column: two 12 characters wide cells (a value and its ``✓`` marker), and one space.</span>
+    <span class="n">columnWidth</span> <span class="o">=</span> <span class="mi">25</span>
+    <span class="c1">#: The format of one field column in a row.</span>
+    <span class="n">fieldCell</span> <span class="o">=</span> <span class="s2">"</span><span class="si">{:11.2e}{:1}{:11.2e}{:1}</span><span class="s2"> "</span>
+    <span class="c1">#: The format of the two labels below a column name, each centered over its 12 characters wide cell.</span>
+    <span class="n">subHeaderCell</span> <span class="o">=</span> <span class="s2">"</span><span class="si">{:^12}{:^12}</span><span class="s2"> "</span>
+    <span class="c1">#: The space between the field columns and the "linear solve" column.</span>
+    <span class="n">linearSolveGap</span> <span class="o">=</span> <span class="s2">"   "</span>
+    <span class="c1">#: The marker of a linear solve that needed extra internal attempts, by the number of attempts.</span>
+    <span class="n">retriesSuperscript</span> <span class="o">=</span> <span class="p">{</span><span class="mi">0</span><span class="p">:</span> <span class="s2">""</span><span class="p">,</span> <span class="mi">1</span><span class="p">:</span> <span class="s2">"¹"</span><span class="p">,</span> <span class="mi">2</span><span class="p">:</span> <span class="s2">"²"</span><span class="p">,</span> <span class="mi">3</span><span class="p">:</span> <span class="s2">"³"</span><span class="p">}</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">columnNames</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span> <span class="n">showLinearSolve</span><span class="p">:</span> <span class="nb">bool</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">columnNames</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">columnNames</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">showLinearSolve</span> <span class="o">=</span> <span class="n">showLinearSolve</span>
+
+<div class="viewcode-block" id="ConvergenceTable.headerLines">
+<a class="viewcode-back" href="../../../../documentation/solvers.html#edelweissfe.solvers.base.convergencetable.ConvergenceTable.headerLines">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">headerLines</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""The two header lines: the column names, and the labels of the values below them.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        list[str]</span>
+<span class="sd">            The column-name line and the label line.</span>
+<span class="sd">        """</span>
+
+        <span class="n">names</span> <span class="o">=</span> <span class="s2">""</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="s2">"{:^</span><span class="si">{:}</span><span class="s2">}"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">columnWidth</span><span class="p">)</span> <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">columnNames</span><span class="p">)</span>
+        <span class="n">labels</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">subHeaderCell</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="s2">"||R||∞"</span><span class="p">,</span> <span class="s2">"||ddU||∞"</span><span class="p">)</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">columnNames</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">showLinearSolve</span><span class="p">:</span>
+            <span class="n">names</span> <span class="o">+=</span> <span class="bp">self</span><span class="o">.</span><span class="n">linearSolveGap</span> <span class="o">+</span> <span class="s2">"{:^</span><span class="si">{:}</span><span class="s2">}"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="s2">"linear solve"</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">columnWidth</span><span class="p">)</span>
+            <span class="n">labels</span> <span class="o">+=</span> <span class="bp">self</span><span class="o">.</span><span class="n">linearSolveGap</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">subHeaderCell</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="s2">"iters"</span><span class="p">,</span> <span class="s2">"‖r‖"</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="p">[</span><span class="n">names</span><span class="p">,</span> <span class="n">labels</span><span class="p">]</span></div>
+
+
+<div class="viewcode-block" id="ConvergenceTable.row">
+<a class="viewcode-back" href="../../../../documentation/solvers.html#edelweissfe.solvers.base.convergencetable.ConvergenceTable.row">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">row</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">fieldColumns</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">FieldConvergence</span><span class="p">],</span> <span class="n">linearSolve</span><span class="p">:</span> <span class="n">LinearSolveSummary</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The row of one iteration.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        fieldColumns</span>
+<span class="sd">            The convergence state of each column, in the order of the column names.</span>
+<span class="sd">        linearSolve</span>
+<span class="sd">            The diagnostics of the linear solve that produced this iteration's correction, or None if there</span>
+<span class="sd">            was none (the first iteration of an increment); the "linear solve" column is then left blank.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        str</span>
+<span class="sd">            The row.</span>
+<span class="sd">        """</span>
+
+        <span class="n">row</span> <span class="o">=</span> <span class="s2">""</span><span class="o">.</span><span class="n">join</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">fieldCell</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+                <span class="n">column</span><span class="o">.</span><span class="n">fluxResidual</span><span class="p">,</span>
+                <span class="s2">"✓"</span> <span class="k">if</span> <span class="n">column</span><span class="o">.</span><span class="n">fluxResidualConverged</span> <span class="k">else</span> <span class="s2">" "</span><span class="p">,</span>
+                <span class="n">column</span><span class="o">.</span><span class="n">correction</span><span class="p">,</span>
+                <span class="s2">"✓"</span> <span class="k">if</span> <span class="n">column</span><span class="o">.</span><span class="n">correctionConverged</span> <span class="k">else</span> <span class="s2">" "</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="k">for</span> <span class="n">column</span> <span class="ow">in</span> <span class="n">fieldColumns</span>
+        <span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">showLinearSolve</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">linearSolve</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">row</span> <span class="o">+=</span> <span class="bp">self</span><span class="o">.</span><span class="n">linearSolveGap</span> <span class="o">+</span> <span class="s2">" "</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">columnWidth</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">iterations</span> <span class="o">=</span> <span class="s2">"</span><span class="si">{:}{:}</span><span class="s2">"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">linearSolve</span><span class="o">.</span><span class="n">iters</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">retriesSuperscript</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">linearSolve</span><span class="o">.</span><span class="n">retries</span><span class="p">,</span> <span class="s2">""</span><span class="p">))</span>
+                <span class="n">row</span> <span class="o">+=</span> <span class="bp">self</span><span class="o">.</span><span class="n">linearSolveGap</span> <span class="o">+</span> <span class="s2">"</span><span class="si">{:^12}{:11.2e}{:1}</span><span class="s2"> "</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+                    <span class="n">iterations</span><span class="p">,</span> <span class="n">linearSolve</span><span class="o">.</span><span class="n">residual</span><span class="p">,</span> <span class="s2">"✓"</span> <span class="k">if</span> <span class="n">linearSolve</span><span class="o">.</span><span class="n">residualMet</span> <span class="k">else</span> <span class="s2">" "</span>
+                <span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">row</span></div>
+
+
+<div class="viewcode-block" id="ConvergenceTable.linearSolveDetailLine">
+<a class="viewcode-back" href="../../../../documentation/solvers.html#edelweissfe.solvers.base.convergencetable.ConvergenceTable.linearSolveDetailLine">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">linearSolveDetailLine</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">text</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""A line of linear solver detail, right-aligned inside the "linear solve" column, ending where the rows end.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        text</span>
+<span class="sd">            The detail, at most one column less one character wide to stay inside the column.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        str</span>
+<span class="sd">            The line, blank in front of the "linear solve" column.</span>
+<span class="sd">        """</span>
+
+        <span class="n">fieldColumnsWidth</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">columnWidth</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">columnNames</span><span class="p">)</span>
+        <span class="n">padding</span> <span class="o">=</span> <span class="s2">" "</span> <span class="o">*</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">columnWidth</span> <span class="o">-</span> <span class="mi">1</span> <span class="o">-</span> <span class="n">displayWidth</span><span class="p">(</span><span class="n">text</span><span class="p">))</span>
+        <span class="k">return</span> <span class="s2">" "</span> <span class="o">*</span> <span class="n">fieldColumnsWidth</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">linearSolveGap</span> <span class="o">+</span> <span class="n">padding</span> <span class="o">+</span> <span class="n">text</span> <span class="o">+</span> <span class="s2">" "</span></div>
+</div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Matthias Neuner.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

@@ -14,8 +14,8 @@
       <script src="../../../_static/jquery.js?v=5d32c60e"></script>
       <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
       <script src="../../../_static/documentation_options.js?v=17e2f33f"></script>
-      <script src="../../../_static/doctools.js?v=9bcbadda"></script>
-      <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../../../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../../../genindex.html" />
     <link rel="search" title="Search" href="../../../search.html" /> 
@@ -110,14 +110,14 @@
 <div class="viewcode-block" id="FieldVariable">
 <a class="viewcode-back" href="../../../documentation/variables.html#edelweissfe.variables.fieldvariable.FieldVariable">[docs]</a>
 <span class="k">class</span><span class="w"> </span><span class="nc">FieldVariable</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;This is a basic field variable, tied to a spatial position.</span>
+<span class="w">    </span><span class="sd">"""This is a basic field variable, tied to a spatial position.</span>
 <span class="sd">    Currently, it is a placeholder used to indicate the presence field variables at a certain location,</span>
 <span class="sd">    and associate them with e.g, nodes.</span>
 <span class="sd">    Furthermore, it allows us to adress them by their unique id (= hash value).</span>
 <span class="sd">    Unlike ScalarVariables, FieldVariable does not directly holds any results/values,</span>
 <span class="sd">    but rather, for performance reasons,</span>
 <span class="sd">    we store results in cumulative Fields, such as NodeField.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
+<span class="sd">    """</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">node</span><span class="p">,</span> <span class="n">field</span><span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">node</span> <span class="o">=</span> <span class="n">node</span>

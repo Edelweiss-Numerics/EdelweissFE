@@ -1,0 +1,349 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>edelweissfe.utils.checkpoint &mdash; EdelweissFE v22.07 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=cfdaff8d" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/custom.css?v=37fbe429" />
+
+  
+      <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../_static/documentation_options.js?v=17e2f33f"></script>
+      <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../index.html" class="icon icon-home">
+            EdelweissFE
+              <img src="../../../_static/edelweiss_fe_logo.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../features.html">Features</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../prerequisites.html">Prerequisites</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../documentation/index.html">Documentation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../contributors.html">Contributors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../publications.html">Publications</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">EdelweissFE</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">edelweissfe.utils.checkpoint</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for edelweissfe.utils.checkpoint</h1><div class="highlight"><pre>
+<span></span><span class="ch">#!/usr/bin/env python3</span>
+<span class="c1"># -*- coding: utf-8 -*-</span>
+<span class="c1">#  ---------------------------------------------------------------------</span>
+<span class="c1">#</span>
+<span class="c1">#  _____    _      _              _         _____ _____</span>
+<span class="c1"># | ____|__| | ___| |_      _____(_)___ ___|  ___| ____|</span>
+<span class="c1"># |  _| / _` |/ _ \ \ \ /\ / / _ \ / __/ __| |_  |  _|</span>
+<span class="c1"># | |__| (_| |  __/ |\ V  V /  __/ \__ \__ \  _| | |___</span>
+<span class="c1"># |_____\__,_|\___|_| \_/\_/ \___|_|___/___/_|   |_____|</span>
+<span class="c1">#</span>
+<span class="c1">#</span>
+<span class="c1">#  Unit of Strength of Materials and Structural Analysis</span>
+<span class="c1">#  University of Innsbruck,</span>
+<span class="c1">#  2017 - today</span>
+<span class="c1">#</span>
+<span class="c1">#  Matthias Neuner matthias.neuner@uibk.ac.at</span>
+<span class="c1">#</span>
+<span class="c1">#  This file is part of EdelweissFE.</span>
+<span class="c1">#</span>
+<span class="c1">#  This library is free software; you can redistribute it and/or</span>
+<span class="c1">#  modify it under the terms of the GNU Lesser General Public</span>
+<span class="c1">#  License as published by the Free Software Foundation; either</span>
+<span class="c1">#  version 2.1 of the License, or (at your option) any later version.</span>
+<span class="c1">#</span>
+<span class="c1">#  The full text of the license can be found in the file LICENSE.md at</span>
+<span class="c1">#  the top level directory of EdelweissFE.</span>
+<span class="c1">#  ---------------------------------------------------------------------</span>
+<span class="sd">"""Restart checkpoints: the one place that knows how a checkpoint file is laid out.</span>
+
+<span class="sd">A checkpoint is an HDF5 file holding</span>
+
+<span class="sd">- the attribute ``stepNumber``, the step the run was in;</span>
+<span class="sd">- the model's state, written by :meth:`~edelweissfe.models.femodel.FEModel.writeRestart`;</span>
+<span class="sd">- groups ``timestepper`` and ``solver`` with the time stepper's and the solver's state;</span>
+<span class="sd">- a group ``stepActions`` with the state of every step action, by type and name -- including what</span>
+<span class="sd">  the steps before carried over, e.g. an accumulated load, and whether an action is still active;</span>
+<span class="sd">- a group ``outputManagers`` with the state of every output manager;</span>
+<span class="sd">- a group ``fieldOutputs`` with the history of every field output, and how much of its export file</span>
+<span class="sd">  belongs to the run.</span>
+
+<span class="sd">Every component other than the model hands over its state as a mapping of arrays, through</span>
+<span class="sd">``getRestartData`` and ``setRestartData``; most just declare which of their attributes it is (see</span>
+<span class="sd">:mod:`~edelweissfe.utils.checkpointedstate`).</span>
+
+<span class="sd">:func:`writeCheckpoint` writes one, the restart output manager calls it; :class:`ResumeCheckpoint`</span>
+<span class="sd">reads one back, the driver uses it.</span>
+<span class="sd">"""</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">h5py</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.utils.exceptions</span><span class="w"> </span><span class="kn">import</span> <span class="n">RestartError</span>
+
+<span class="c1">#: The layout of a checkpoint. Raise it whenever a checkpoint gains or changes state: a run resumes</span>
+<span class="c1">#: only from checkpoints of its own layout.</span>
+<span class="n">CHECKPOINT_FORMAT_VERSION</span> <span class="o">=</span> <span class="mi">8</span>
+
+
+<div class="viewcode-block" id="writeRestartDataOf">
+<a class="viewcode-back" href="../../../documentation/output.html#edelweissfe.utils.checkpoint.writeRestartDataOf">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">writeRestartDataOf</span><span class="p">(</span><span class="n">group</span><span class="p">:</span> <span class="n">h5py</span><span class="o">.</span><span class="n">Group</span><span class="p">,</span> <span class="n">entities</span><span class="p">:</span> <span class="nb">dict</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Store the restart data of each entity in its own subgroup, named after it.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    group</span>
+<span class="sd">        The group to create the subgroups in.</span>
+<span class="sd">    entities</span>
+<span class="sd">        The entities, by name.</span>
+<span class="sd">    """</span>
+
+    <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">entity</span> <span class="ow">in</span> <span class="n">entities</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="n">entityGroup</span> <span class="o">=</span> <span class="n">group</span><span class="o">.</span><span class="n">create_group</span><span class="p">(</span><span class="n">name</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">entryName</span><span class="p">,</span> <span class="n">entryValues</span> <span class="ow">in</span> <span class="n">entity</span><span class="o">.</span><span class="n">getRestartData</span><span class="p">()</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="n">entityGroup</span><span class="o">.</span><span class="n">create_dataset</span><span class="p">(</span><span class="n">entryName</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="n">entryValues</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="readRestartDataInto">
+<a class="viewcode-back" href="../../../documentation/output.html#edelweissfe.utils.checkpoint.readRestartDataInto">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">readRestartDataInto</span><span class="p">(</span><span class="n">group</span><span class="p">:</span> <span class="n">h5py</span><span class="o">.</span><span class="n">Group</span><span class="p">,</span> <span class="n">entities</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span> <span class="n">newEntitiesStartAfresh</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Hand each entity the restart data :func:`writeRestartDataOf` stored for it.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    group</span>
+<span class="sd">        The group holding the subgroups.</span>
+<span class="sd">    entities</span>
+<span class="sd">        The entities, by name.</span>
+<span class="sd">    newEntitiesStartAfresh</span>
+<span class="sd">        If True, an entity the checkpoint holds nothing for keeps its initial state (an output</span>
+<span class="sd">        manager added for the resumed run). Otherwise it is refused: it does not belong to the</span>
+<span class="sd">        checkpointed run.</span>
+<span class="sd">    """</span>
+
+    <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">entity</span> <span class="ow">in</span> <span class="n">entities</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="k">if</span> <span class="n">name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">group</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">newEntitiesStartAfresh</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="k">raise</span> <span class="n">RestartError</span><span class="p">(</span><span class="s2">"the checkpoint holds no state for </span><span class="si">{:}</span><span class="s2">"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">name</span><span class="p">))</span>
+        <span class="n">entity</span><span class="o">.</span><span class="n">setRestartData</span><span class="p">({</span><span class="n">entryName</span><span class="p">:</span> <span class="n">values</span><span class="p">[()]</span> <span class="k">for</span> <span class="n">entryName</span><span class="p">,</span> <span class="n">values</span> <span class="ow">in</span> <span class="n">group</span><span class="p">[</span><span class="n">name</span><span class="p">]</span><span class="o">.</span><span class="n">items</span><span class="p">()})</span></div>
+
+
+
+<div class="viewcode-block" id="writeCheckpoint">
+<a class="viewcode-back" href="../../../documentation/output.html#edelweissfe.utils.checkpoint.writeCheckpoint">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">writeCheckpoint</span><span class="p">(</span><span class="n">fileName</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">step</span><span class="p">,</span> <span class="n">outputManagers</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span> <span class="n">serial</span><span class="p">:</span> <span class="nb">int</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Write a restart checkpoint of the converged state.</span>
+
+<span class="sd">    Written to a temporary file first, and renamed to ``fileName`` only once complete: a job killed</span>
+<span class="sd">    while writing leaves the previous checkpoint of that name intact, never a truncated one.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    fileName</span>
+<span class="sd">        The file to write; replaced if it exists.</span>
+<span class="sd">    model</span>
+<span class="sd">        The model tree.</span>
+<span class="sd">    step</span>
+<span class="sd">        The current step, whose time stepper and solver write their own state.</span>
+<span class="sd">    outputManagers</span>
+<span class="sd">        The output managers, by name.</span>
+<span class="sd">    serial</span>
+<span class="sd">        The number of this checkpoint in the sequence its writer writes, stored in the file: it</span>
+<span class="sd">        orders checkpoints independently of file times.</span>
+<span class="sd">    """</span>
+
+    <span class="n">temporaryFileName</span> <span class="o">=</span> <span class="n">fileName</span> <span class="o">+</span> <span class="s2">".tmp"</span>
+    <span class="k">with</span> <span class="n">h5py</span><span class="o">.</span><span class="n">File</span><span class="p">(</span><span class="n">temporaryFileName</span><span class="p">,</span> <span class="s2">"w"</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+        <span class="n">f</span><span class="o">.</span><span class="n">attrs</span><span class="p">[</span><span class="s2">"formatVersion"</span><span class="p">]</span> <span class="o">=</span> <span class="n">CHECKPOINT_FORMAT_VERSION</span>
+        <span class="n">f</span><span class="o">.</span><span class="n">attrs</span><span class="p">[</span><span class="s2">"serial"</span><span class="p">]</span> <span class="o">=</span> <span class="n">serial</span>
+        <span class="n">f</span><span class="o">.</span><span class="n">attrs</span><span class="p">[</span><span class="s2">"stepNumber"</span><span class="p">]</span> <span class="o">=</span> <span class="n">step</span><span class="o">.</span><span class="n">number</span>
+        <span class="n">model</span><span class="o">.</span><span class="n">writeRestart</span><span class="p">(</span><span class="n">f</span><span class="p">)</span>
+        <span class="n">writeRestartDataOf</span><span class="p">(</span><span class="n">f</span><span class="p">,</span> <span class="p">{</span><span class="s2">"timestepper"</span><span class="p">:</span> <span class="n">step</span><span class="o">.</span><span class="n">timeStepper</span><span class="p">,</span> <span class="s2">"solver"</span><span class="p">:</span> <span class="n">step</span><span class="o">.</span><span class="n">solver</span><span class="p">})</span>
+        <span class="n">stepActionsGroup</span> <span class="o">=</span> <span class="n">f</span><span class="o">.</span><span class="n">create_group</span><span class="p">(</span><span class="s2">"stepActions"</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">actionType</span><span class="p">,</span> <span class="n">actions</span> <span class="ow">in</span> <span class="n">step</span><span class="o">.</span><span class="n">actions</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="n">writeRestartDataOf</span><span class="p">(</span><span class="n">stepActionsGroup</span><span class="o">.</span><span class="n">create_group</span><span class="p">(</span><span class="n">actionType</span><span class="p">),</span> <span class="n">actions</span><span class="p">)</span>
+        <span class="n">writeRestartDataOf</span><span class="p">(</span><span class="n">f</span><span class="o">.</span><span class="n">create_group</span><span class="p">(</span><span class="s2">"outputManagers"</span><span class="p">),</span> <span class="n">outputManagers</span><span class="p">)</span>
+        <span class="n">writeRestartDataOf</span><span class="p">(</span><span class="n">f</span><span class="o">.</span><span class="n">create_group</span><span class="p">(</span><span class="s2">"fieldOutputs"</span><span class="p">),</span> <span class="n">step</span><span class="o">.</span><span class="n">fieldOutputController</span><span class="o">.</span><span class="n">fieldOutputs</span><span class="p">)</span>
+    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">temporaryFileName</span><span class="p">,</span> <span class="s2">"rb+"</span><span class="p">)</span> <span class="k">as</span> <span class="n">written</span><span class="p">:</span>
+        <span class="n">os</span><span class="o">.</span><span class="n">fsync</span><span class="p">(</span><span class="n">written</span><span class="o">.</span><span class="n">fileno</span><span class="p">())</span>
+    <span class="n">os</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="n">temporaryFileName</span><span class="p">,</span> <span class="n">fileName</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="ResumeCheckpoint">
+<a class="viewcode-back" href="../../../documentation/output.html#edelweissfe.utils.checkpoint.ResumeCheckpoint">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">ResumeCheckpoint</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""A restart checkpoint opened for resuming a run, restored piece by piece as the run is set up.</span>
+
+<span class="sd">    The pieces are restored at different moments, because the objects they belong to are created at</span>
+<span class="sd">    different moments: the model first (:meth:`restoreModel`), the output managers once they exist</span>
+<span class="sd">    (:meth:`restoreOutputManagers`), and the time stepper and solver when the resumed step begins</span>
+<span class="sd">    (:meth:`restoreStep`). Close the checkpoint right after that, see :meth:`close`.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    fileName</span>
+<span class="sd">        The checkpoint to resume from.</span>
+<span class="sd">    """</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">fileName</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">fileName</span> <span class="o">=</span> <span class="n">fileName</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_file</span> <span class="o">=</span> <span class="n">h5py</span><span class="o">.</span><span class="n">File</span><span class="p">(</span><span class="n">fileName</span><span class="p">,</span> <span class="s2">"r"</span><span class="p">)</span>
+        <span class="n">formatVersion</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_file</span><span class="o">.</span><span class="n">attrs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"formatVersion"</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
+        <span class="k">if</span> <span class="n">formatVersion</span> <span class="o">!=</span> <span class="n">CHECKPOINT_FORMAT_VERSION</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_file</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+            <span class="k">raise</span> <span class="n">RestartError</span><span class="p">(</span>
+                <span class="s2">"checkpoint </span><span class="si">{:}</span><span class="s2"> has format version </span><span class="si">{:}</span><span class="s2">, this version of EdelweissFE reads version </span><span class="si">{:}</span><span class="s2"> "</span>
+                <span class="s2">"only"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">fileName</span><span class="p">,</span> <span class="n">formatVersion</span><span class="p">,</span> <span class="n">CHECKPOINT_FORMAT_VERSION</span><span class="p">)</span>
+            <span class="p">)</span>
+        <span class="c1">#: The step the checkpointed run was in; the steps before it are not solved again.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">stepNumber</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_file</span><span class="o">.</span><span class="n">attrs</span><span class="p">[</span><span class="s2">"stepNumber"</span><span class="p">])</span>
+
+<div class="viewcode-block" id="ResumeCheckpoint.restoreModel">
+<a class="viewcode-back" href="../../../documentation/output.html#edelweissfe.utils.checkpoint.ResumeCheckpoint.restoreModel">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">restoreModel</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">journal</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Restore the model's state, see :meth:`~edelweissfe.models.femodel.FEModel.readRestart`.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        model</span>
+<span class="sd">            The model tree, rebuilt from the same input file.</span>
+<span class="sd">        journal</span>
+<span class="sd">            The journal, for the progress messages of the topology replay.</span>
+<span class="sd">        """</span>
+
+        <span class="n">model</span><span class="o">.</span><span class="n">readRestart</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_file</span><span class="p">,</span> <span class="n">journal</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="ResumeCheckpoint.restoreTimeStepper">
+<a class="viewcode-back" href="../../../documentation/output.html#edelweissfe.utils.checkpoint.ResumeCheckpoint.restoreTimeStepper">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">restoreTimeStepper</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">step</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Restore the progress of ``step``'s time stepper, before the step begins: it is what tells</span>
+<span class="sd">        the step that it is not at its start (see</span>
+<span class="sd">        :meth:`~edelweissfe.timesteppers.base.timestepperbase.TimeStepperBase.isAtStepStart`).</span>
+<span class="sd">        """</span>
+
+        <span class="n">readRestartDataInto</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_file</span><span class="p">,</span> <span class="p">{</span><span class="s2">"timestepper"</span><span class="p">:</span> <span class="n">step</span><span class="o">.</span><span class="n">timeStepper</span><span class="p">})</span></div>
+
+
+<div class="viewcode-block" id="ResumeCheckpoint.restoreStep">
+<a class="viewcode-back" href="../../../documentation/output.html#edelweissfe.utils.checkpoint.ResumeCheckpoint.restoreStep">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">restoreStep</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">step</span><span class="p">,</span> <span class="n">outputManagers</span><span class="p">:</span> <span class="nb">dict</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Restore everything else ``step`` continues from, after it began as if cold: the solver's</span>
+<span class="sd">        state between increments, the state of the step actions -- which the skipped steps before it</span>
+<span class="sd">        never brought to their step end -- and the output managers' state (Ensight's file numbering,</span>
+<span class="sd">        for instance). An output manager added for the resumed run starts afresh.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        step</span>
+<span class="sd">            The resumed step.</span>
+<span class="sd">        outputManagers</span>
+<span class="sd">            The output managers, by name.</span>
+<span class="sd">        """</span>
+
+        <span class="n">readRestartDataInto</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_file</span><span class="p">,</span> <span class="p">{</span><span class="s2">"solver"</span><span class="p">:</span> <span class="n">step</span><span class="o">.</span><span class="n">solver</span><span class="p">})</span>
+        <span class="n">readRestartDataInto</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_file</span><span class="p">[</span><span class="s2">"outputManagers"</span><span class="p">],</span> <span class="n">outputManagers</span><span class="p">,</span> <span class="n">newEntitiesStartAfresh</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">readRestartDataInto</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_file</span><span class="p">[</span><span class="s2">"fieldOutputs"</span><span class="p">],</span> <span class="n">step</span><span class="o">.</span><span class="n">fieldOutputController</span><span class="o">.</span><span class="n">fieldOutputs</span><span class="p">,</span> <span class="n">newEntitiesStartAfresh</span><span class="o">=</span><span class="kc">True</span>
+        <span class="p">)</span>
+        <span class="k">for</span> <span class="n">actionType</span><span class="p">,</span> <span class="n">actions</span> <span class="ow">in</span> <span class="n">step</span><span class="o">.</span><span class="n">actions</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">if</span> <span class="n">actions</span><span class="p">:</span>  <span class="c1"># the collection creates an empty entry for every type it is asked about</span>
+                <span class="n">readRestartDataInto</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_file</span><span class="p">[</span><span class="s2">"stepActions"</span><span class="p">][</span><span class="n">actionType</span><span class="p">],</span> <span class="n">actions</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="ResumeCheckpoint.close">
+<a class="viewcode-back" href="../../../documentation/output.html#edelweissfe.utils.checkpoint.ResumeCheckpoint.close">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">close</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Close the file. Nothing reads the checkpoint after :meth:`restoreStep`, and it must not</span>
+<span class="sd">        stay open: the restart output manager's ring buffer overwrites the oldest of its files,</span>
+<span class="sd">        which can be this very one, and HDF5 cannot truncate a file it still holds open. The</span>
+<span class="sd">        resumed run would then fail mid-step with "unable to truncate a file which is already</span>
+<span class="sd">        open", which reads like a solver failure and is not one."""</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_file</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_file</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_file</span> <span class="o">=</span> <span class="kc">None</span></div>
+</div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Matthias Neuner.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

@@ -1,0 +1,428 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>edelweissfe.linsolve.composition.systemmatrix &mdash; EdelweissFE v22.07 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=cfdaff8d" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css?v=37fbe429" />
+
+  
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=17e2f33f"></script>
+      <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            EdelweissFE
+              <img src="../../../../_static/edelweiss_fe_logo.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../features.html">Features</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../prerequisites.html">Prerequisites</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../documentation/index.html">Documentation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../contributors.html">Contributors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../publications.html">Publications</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">EdelweissFE</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">edelweissfe.linsolve.composition.systemmatrix</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for edelweissfe.linsolve.composition.systemmatrix</h1><div class="highlight"><pre>
+<span></span><span class="ch">#!/usr/bin/env python3</span>
+<span class="c1"># -*- coding: utf-8 -*-</span>
+<span class="c1">#  ---------------------------------------------------------------------</span>
+<span class="c1">#</span>
+<span class="c1">#  _____    _      _              _         _____ _____</span>
+<span class="c1"># | ____|__| | ___| |_      _____(_)___ ___|  ___| ____|</span>
+<span class="c1"># |  _| / _` |/ _ \ \ \ /\ / / _ \ / __/ __| |_  |  _|</span>
+<span class="c1"># | |__| (_| |  __/ |\ V  V /  __/ \__ \__ \  _| | |___</span>
+<span class="c1"># |_____\__,_|\___|_| \_/\_/ \___|_|___/___/_|   |_____|</span>
+<span class="c1">#</span>
+<span class="c1">#</span>
+<span class="c1">#  Unit of Strength of Materials and Structural Analysis</span>
+<span class="c1">#  University of Innsbruck,</span>
+<span class="c1">#  2017 - today</span>
+<span class="c1">#</span>
+<span class="c1">#  Matthias Neuner matthias.neuner@uibk.ac.at</span>
+<span class="c1">#</span>
+<span class="c1">#  This file is part of EdelweissFE.</span>
+<span class="c1">#</span>
+<span class="c1">#  This library is free software; you can redistribute it and/or</span>
+<span class="c1">#  modify it under the terms of the GNU Lesser General Public</span>
+<span class="c1">#  License as published by the Free Software Foundation; either</span>
+<span class="c1">#  version 2.1 of the License, or (at your option) any later version.</span>
+<span class="c1">#</span>
+<span class="c1">#  The full text of the license can be found in the file LICENSE.md at</span>
+<span class="c1">#  the top level directory of EdelweissFE.</span>
+<span class="c1">#  ---------------------------------------------------------------------</span>
+<span class="sd">"""The matrix handed down a composed solver: :class:`SystemMatrix`.</span>
+
+<span class="sd">A component gets its matrix as a :class:`SystemMatrix`, not as a bare SciPy matrix, for one reason: speed. A</span>
+<span class="sd">diagonal scaling :math:`\\hat A = D A D` followed by a split into field blocks :math:`\\hat A_{ij}` would cost a</span>
+<span class="sd">chain of serial SciPy passes over :math:`A` -- a scaled copy, then a row and column slice per block. Instead,</span>
+<span class="sd">:meth:`SystemMatrix.scaled` only records :math:`D`, and :meth:`SystemMatrix.fieldSplit` forms :math:`\\hat A` and</span>
+<span class="sd">all its blocks in one threaded native pass</span>
+<span class="sd">(:class:`~edelweissfe.linsolve.amgcl.amgcl.PyAMGCLEquilibratedSystem`). The same pass also keeps :math:`A` itself</span>
+<span class="sd">as the operator of an outer Krylov solve (:meth:`SystemMatrix.krylovOperator`), so a field split under a diagonal</span>
+<span class="sd">scaling under a Krylov solver reads :math:`A` exactly once per solve.</span>
+
+<span class="sd">A leaf that needs the matrix itself (a direct solver, the Schur complement) asks for :meth:`SystemMatrix.matrix`.</span>
+<span class="sd">"""</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">scipy.sparse</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">sp</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">edelweissfe.utils.performancetiming</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">performancetiming</span>
+
+
+<div class="viewcode-block" id="canonicalMatrix">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.systemmatrix.canonicalMatrix">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">canonicalMatrix</span><span class="p">(</span><span class="n">A</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">sp</span><span class="o">.</span><span class="n">csr_matrix</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""``A`` as CSR with sorted columns and no duplicate entries: AMGCL's block backends read the columns as sorted,</span>
+<span class="sd">    and no backend sums duplicate entries. A canonical copy if needed, leaving the caller's matrix as it is."""</span>
+    <span class="n">A</span> <span class="o">=</span> <span class="n">A</span><span class="o">.</span><span class="n">tocsr</span><span class="p">()</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">A</span><span class="o">.</span><span class="n">has_canonical_format</span><span class="p">:</span>
+        <span class="n">A</span> <span class="o">=</span> <span class="n">A</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="n">A</span><span class="o">.</span><span class="n">sum_duplicates</span><span class="p">()</span>
+    <span class="k">return</span> <span class="n">A</span></div>
+
+
+
+<div class="viewcode-block" id="FieldSplitBlocks">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.systemmatrix.FieldSplitBlocks">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">FieldSplitBlocks</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""The field blocks :math:`\\hat A_{ij}` of a (scaled) matrix, formed in one threaded pass: the diagonal blocks,</span>
+<span class="sd">    and products with the coupling blocks, as a block Gauss--Seidel sweep needs them.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    native</span>
+<span class="sd">        The :class:`~edelweissfe.linsolve.amgcl.amgcl.PyAMGCLEquilibratedSystem` that holds them.</span>
+<span class="sd">    bounds</span>
+<span class="sd">        The ``(start, stop)`` dof range of each field.</span>
+<span class="sd">    """</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">native</span><span class="p">,</span> <span class="n">bounds</span><span class="p">:</span> <span class="nb">list</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_native</span> <span class="o">=</span> <span class="n">native</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">bounds</span> <span class="o">=</span> <span class="n">bounds</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">slices</span> <span class="o">=</span> <span class="p">[</span><span class="nb">slice</span><span class="p">(</span><span class="n">start</span><span class="p">,</span> <span class="n">stop</span><span class="p">)</span> <span class="k">for</span> <span class="n">start</span><span class="p">,</span> <span class="n">stop</span> <span class="ow">in</span> <span class="n">bounds</span><span class="p">]</span>
+
+<div class="viewcode-block" id="FieldSplitBlocks.diagonalBlock">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.systemmatrix.FieldSplitBlocks.diagonalBlock">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">diagonalBlock</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">i</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">sp</span><span class="o">.</span><span class="n">csr_matrix</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">""":math:`\\hat A_{ii}` as a new SciPy CSR matrix."""</span>
+        <span class="k">with</span> <span class="n">performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"diagonal blocks"</span><span class="p">):</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_native</span><span class="o">.</span><span class="n">diagonalBlock</span><span class="p">(</span><span class="n">i</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="FieldSplitBlocks.diagonalBlockTimes">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.systemmatrix.FieldSplitBlocks.diagonalBlockTimes">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">diagonalBlockTimes</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">i</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">x</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">""":math:`\\hat A_{ii} x`."""</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_native</span><span class="o">.</span><span class="n">diagonalBlockMatvec</span><span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="n">x</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="FieldSplitBlocks.couplingTimes">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.systemmatrix.FieldSplitBlocks.couplingTimes">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">couplingTimes</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">i</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">j</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">x</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">""":math:`\\hat A_{ij} x`, for :math:`i \\neq j`."""</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_native</span><span class="o">.</span><span class="n">couplingMatvec</span><span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="n">j</span><span class="p">,</span> <span class="n">x</span><span class="p">)</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="SystemMatrix">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.systemmatrix.SystemMatrix">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">SystemMatrix</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""A matrix :math:`A`, as handed to a component: optionally with a diagonal scaling, :math:`\\hat A = D A D`.</span>
+
+<span class="sd">    See the module documentation: :math:`\\hat A` is formed on demand, together with its field blocks, in one</span>
+<span class="sd">    threaded pass.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    A</span>
+<span class="sd">        The matrix (SciPy sparse, square). Made canonical (CSR, sorted columns, no duplicates) if needed.</span>
+<span class="sd">    scaling</span>
+<span class="sd">        :math:`D` as a vector, or ``None`` for :math:`D = I`.</span>
+<span class="sd">    """</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">A</span><span class="p">,</span> <span class="n">scaling</span><span class="p">:</span> <span class="s2">"np.ndarray | None"</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">_unscaled</span><span class="p">:</span> <span class="s2">"SystemMatrix | None"</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">A</span> <span class="o">=</span> <span class="n">canonicalMatrix</span><span class="p">(</span><span class="n">A</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">scaling</span> <span class="o">=</span> <span class="n">scaling</span>
+        <span class="c1"># the unscaled matrix this one is a scaled view of: a field split of the view keeps A for its Krylov operator</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_unscaled</span> <span class="o">=</span> <span class="n">_unscaled</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_krylovOperator</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="c1"># whether a Krylov solve runs on this matrix (see useAsKrylovOperator)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_isKrylovOperator</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="c1"># the field split of this matrix, (bounds, blocks), formed at the first request (see fieldSplit)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_fieldSplit</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">shape</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">:</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">A</span><span class="o">.</span><span class="n">shape</span>
+
+<div class="viewcode-block" id="SystemMatrix.useAsKrylovOperator">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.systemmatrix.SystemMatrix.useAsKrylovOperator">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">useAsKrylovOperator</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Say that a Krylov solve runs on this matrix: a field split formed afterwards keeps :math:`\\hat A` itself as</span>
+<span class="sd">        the operator of that solve, in its one threaded pass (see :meth:`krylovOperator`)."""</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_isKrylovOperator</span> <span class="o">=</span> <span class="kc">True</span></div>
+
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">nnz</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The stored entries of :math:`A` (a proxy for its sparsity pattern)."""</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">A</span><span class="o">.</span><span class="n">nnz</span>
+
+<div class="viewcode-block" id="SystemMatrix.scaled">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.systemmatrix.SystemMatrix.scaled">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">scaled</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">D</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"SystemMatrix"</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">""":math:`D \\hat A D`, without forming it (see :meth:`fieldSplit`)."""</span>
+        <span class="n">scaling</span> <span class="o">=</span> <span class="n">D</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">scaling</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">scaling</span> <span class="o">*</span> <span class="n">D</span>
+        <span class="k">return</span> <span class="n">SystemMatrix</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">A</span><span class="p">,</span> <span class="n">scaling</span><span class="p">,</span> <span class="n">_unscaled</span><span class="o">=</span><span class="bp">self</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">scaling</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">_unscaled</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="SystemMatrix.diagonal">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.systemmatrix.SystemMatrix.diagonal">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">diagonal</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">""":math:`\\hat a_{ii}`: the diagonal of :math:`A`, scaled, without forming :math:`\\hat A = D A D`. Of a field</span>
+<span class="sd">        block (:class:`FieldBlockMatrix`) it is the diagonal of the block, which is cut out of the field split once and</span>
+<span class="sd">        kept."""</span>
+        <span class="n">diagonal</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">A</span><span class="o">.</span><span class="n">diagonal</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">diagonal</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">scaling</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">diagonal</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">scaling</span><span class="o">**</span><span class="mi">2</span></div>
+
+
+<div class="viewcode-block" id="SystemMatrix.absoluteDiagonal">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.systemmatrix.SystemMatrix.absoluteDiagonal">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">absoluteDiagonal</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">""":math:`\\lvert \\hat a_{ii} \\rvert`, threaded."""</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.linsolve.amgcl.amgcl</span><span class="w"> </span><span class="kn">import</span> <span class="n">PyAMGCLEquilibratedSystem</span>
+
+        <span class="n">diagonal</span> <span class="o">=</span> <span class="n">PyAMGCLEquilibratedSystem</span><span class="o">.</span><span class="n">absoluteDiagonal</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">A</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">diagonal</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">scaling</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">diagonal</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">scaling</span><span class="o">**</span><span class="mi">2</span></div>
+
+
+<div class="viewcode-block" id="SystemMatrix.matrix">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.systemmatrix.SystemMatrix.matrix">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">matrix</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">sp</span><span class="o">.</span><span class="n">csr_matrix</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">""":math:`\\hat A` itself, for a component built on the whole matrix (AMG, a direct solver): :math:`A`, or</span>
+<span class="sd">        :math:`D A D` formed in the threaded pass of a split into one block (:meth:`fieldSplit`), which also keeps</span>
+<span class="sd">        :math:`A` as the Krylov operator."""</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">scaling</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">A</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">fieldSplit</span><span class="p">([(</span><span class="mi">0</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">A</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">])])</span><span class="o">.</span><span class="n">diagonalBlock</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__matmul__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">""":math:`\\hat A x`."""</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">scaling</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">A</span> <span class="o">@</span> <span class="n">x</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">scaling</span> <span class="o">*</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">A</span> <span class="o">@</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">scaling</span> <span class="o">*</span> <span class="n">x</span><span class="p">))</span>
+
+<div class="viewcode-block" id="SystemMatrix.fieldSplit">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.systemmatrix.SystemMatrix.fieldSplit">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">fieldSplit</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">bounds</span><span class="p">:</span> <span class="nb">list</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">FieldSplitBlocks</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The field blocks :math:`\\hat A_{ij}` for the field ranges ``bounds``, formed with :math:`\\hat A` in one</span>
+<span class="sd">        threaded pass at the first request and kept with this matrix: every component handed this matrix (the</span>
+<span class="sd">        corrections of a combination, each on its field) gets the same blocks. That pass also keeps the operator of the</span>
+<span class="sd">        Krylov solve (:meth:`krylovOperator`): :math:`D A D` if the solve runs on this scaled matrix</span>
+<span class="sd">        (:meth:`useAsKrylovOperator`), else :math:`A`, for a solve on the unscaled matrix this one is a view of."""</span>
+        <span class="n">bounds</span> <span class="o">=</span> <span class="p">[</span><span class="nb">tuple</span><span class="p">(</span><span class="n">bound</span><span class="p">)</span> <span class="k">for</span> <span class="n">bound</span> <span class="ow">in</span> <span class="n">bounds</span><span class="p">]</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_fieldSplit</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_fieldSplit</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="n">bounds</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_fieldSplit</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.linsolve.amgcl.amgcl</span><span class="w"> </span><span class="kn">import</span> <span class="n">PyAMGCLEquilibratedSystem</span>
+
+        <span class="c1"># a split for other bounds goes before the new one is formed: never two copies at once</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_fieldSplit</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="c1"># The pass keeps one operator besides the blocks: D A D for a Krylov solve on this (scaled) matrix, else A, for</span>
+        <span class="c1"># a Krylov solve on the unscaled matrix this one is a view of.</span>
+        <span class="n">keepsScaled</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">scaling</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_isKrylovOperator</span>
+        <span class="k">with</span> <span class="n">performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"equilibrated system"</span><span class="p">):</span>
+            <span class="n">native</span> <span class="o">=</span> <span class="n">PyAMGCLEquilibratedSystem</span><span class="p">()</span>
+            <span class="n">scaling</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">A</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">scaling</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">scaling</span>
+            <span class="n">native</span><span class="o">.</span><span class="n">build</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">A</span><span class="p">,</span> <span class="n">scaling</span><span class="p">,</span> <span class="n">bounds</span><span class="p">,</span> <span class="n">unscaled</span><span class="o">=</span><span class="ow">not</span> <span class="n">keepsScaled</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">keepsScaled</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_krylovOperator</span> <span class="o">=</span> <span class="n">native</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">unscaled</span> <span class="o">=</span> <span class="bp">self</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">scaling</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">_unscaled</span>
+            <span class="k">if</span> <span class="n">unscaled</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">unscaled</span><span class="o">.</span><span class="n">_krylovOperator</span> <span class="o">=</span> <span class="n">native</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_fieldSplit</span> <span class="o">=</span> <span class="p">(</span><span class="n">bounds</span><span class="p">,</span> <span class="n">FieldSplitBlocks</span><span class="p">(</span><span class="n">native</span><span class="p">,</span> <span class="n">bounds</span><span class="p">))</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_fieldSplit</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span></div>
+
+
+<div class="viewcode-block" id="SystemMatrix.releaseFormedMatrices">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.systemmatrix.SystemMatrix.releaseFormedMatrices">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">releaseFormedMatrices</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Drop what was formed from this matrix in a solve, the native field split and the operator of a Krylov solve</span>
+<span class="sd">        (formed again when next asked for), and keep only :math:`A`: for a matrix a component keeps between solves</span>
+<span class="sd">        (the :math:`\\tilde S` of a Schur complement)."""</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_fieldSplit</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_krylovOperator</span> <span class="o">=</span> <span class="kc">None</span></div>
+
+
+<div class="viewcode-block" id="SystemMatrix.krylovOperator">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.systemmatrix.SystemMatrix.krylovOperator">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">krylovOperator</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">""":math:`\\hat A` as the operator of AMGCL's Krylov solvers: :math:`A` itself (applied with</span>
+<span class="sd">        ``onUnscaledOperator``), or :math:`D A D` for a Krylov solve on a scaled matrix,</span>
+<span class="sd">        ``DiagonalScaling(LGMRES(...))``. Kept from the field split of the matrix if there was one (see</span>
+<span class="sd">        :meth:`useAsKrylovOperator`), else built in a threaded pass."""</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_krylovOperator</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">scaling</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="c1"># D A D comes only from a split pass; one of a single block holds nothing else</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">useAsKrylovOperator</span><span class="p">()</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">fieldSplit</span><span class="p">([(</span><span class="mi">0</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">A</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">])])</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.linsolve.amgcl.amgcl</span><span class="w"> </span><span class="kn">import</span> <span class="n">PyAMGCLEquilibratedSystem</span>
+
+                <span class="k">with</span> <span class="n">performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"equilibrated system"</span><span class="p">):</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_krylovOperator</span> <span class="o">=</span> <span class="n">PyAMGCLEquilibratedSystem</span><span class="p">()</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_krylovOperator</span><span class="o">.</span><span class="n">buildOperator</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">A</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_krylovOperator</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="FieldBlockMatrix">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.systemmatrix.FieldBlockMatrix">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">FieldBlockMatrix</span><span class="p">(</span><span class="n">SystemMatrix</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""The diagonal block :math:`\\hat A_{ii}` of a field split as a :class:`SystemMatrix`, cut out only when it is</span>
+<span class="sd">    first used: a child that reuses its preconditioner never needs it, and the split itself is formed only when the</span>
+<span class="sd">    block or a product with it is first asked for.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    blocksOf</span>
+<span class="sd">        ``() -&gt; FieldSplitBlocks``, the field split of the whole matrix.</span>
+<span class="sd">    i</span>
+<span class="sd">        The index of the field.</span>
+<span class="sd">    """</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">blocksOf</span><span class="p">,</span> <span class="n">i</span><span class="p">:</span> <span class="nb">int</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_blocksOf</span> <span class="o">=</span> <span class="n">blocksOf</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_i</span> <span class="o">=</span> <span class="n">i</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_block</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">scaling</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_unscaled</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_krylovOperator</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_isKrylovOperator</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_fieldSplit</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">A</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_block</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_block</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_blocksOf</span><span class="p">()</span><span class="o">.</span><span class="n">diagonalBlock</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_i</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_block</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">shape</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">:</span>
+        <span class="n">start</span><span class="p">,</span> <span class="n">stop</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_blocksOf</span><span class="p">()</span><span class="o">.</span><span class="n">bounds</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_i</span><span class="p">]</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_block</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_block</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+        <span class="k">return</span> <span class="p">(</span><span class="n">stop</span> <span class="o">-</span> <span class="n">start</span><span class="p">,</span> <span class="n">stop</span> <span class="o">-</span> <span class="n">start</span><span class="p">)</span>
+
+<div class="viewcode-block" id="FieldBlockMatrix.fieldSplit">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.systemmatrix.FieldBlockMatrix.fieldSplit">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">fieldSplit</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">bounds</span><span class="p">:</span> <span class="nb">list</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">FieldSplitBlocks</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The block as a split of one field: its products come from the split of the whole matrix, not from a copy."""</span>
+        <span class="n">start</span><span class="p">,</span> <span class="n">stop</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_blocksOf</span><span class="p">()</span><span class="o">.</span><span class="n">bounds</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_i</span><span class="p">]</span>
+        <span class="k">if</span> <span class="p">[</span><span class="nb">tuple</span><span class="p">(</span><span class="n">bound</span><span class="p">)</span> <span class="k">for</span> <span class="n">bound</span> <span class="ow">in</span> <span class="n">bounds</span><span class="p">]</span> <span class="o">!=</span> <span class="p">[(</span><span class="mi">0</span><span class="p">,</span> <span class="n">stop</span> <span class="o">-</span> <span class="n">start</span><span class="p">)]:</span>
+            <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">fieldSplit</span><span class="p">(</span><span class="n">bounds</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">_OneFieldOf</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_blocksOf</span><span class="p">(),</span> <span class="bp">self</span><span class="o">.</span><span class="n">_i</span><span class="p">)</span></div>
+</div>
+
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">_OneFieldOf</span><span class="p">(</span><span class="n">FieldSplitBlocks</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Field ``i`` of a field split, as a split of one field (see :meth:`FieldBlockMatrix.fieldSplit`)."""</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">blocks</span><span class="p">:</span> <span class="n">FieldSplitBlocks</span><span class="p">,</span> <span class="n">i</span><span class="p">:</span> <span class="nb">int</span><span class="p">):</span>
+        <span class="n">start</span><span class="p">,</span> <span class="n">stop</span> <span class="o">=</span> <span class="n">blocks</span><span class="o">.</span><span class="n">bounds</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">blocks</span><span class="o">.</span><span class="n">_native</span><span class="p">,</span> <span class="p">[(</span><span class="mi">0</span><span class="p">,</span> <span class="n">stop</span> <span class="o">-</span> <span class="n">start</span><span class="p">)])</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_i</span> <span class="o">=</span> <span class="n">i</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">diagonalBlock</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">i</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">sp</span><span class="o">.</span><span class="n">csr_matrix</span><span class="p">:</span>
+        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">diagonalBlock</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_i</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">diagonalBlockTimes</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">i</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">x</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">diagonalBlockTimes</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_i</span><span class="p">,</span> <span class="n">x</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">couplingTimes</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">i</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">j</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">x</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"a split of one field has no coupling blocks"</span><span class="p">)</span>
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Matthias Neuner.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

@@ -15,8 +15,8 @@
       <script src="../_static/jquery.js?v=5d32c60e"></script>
       <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
       <script src="../_static/documentation_options.js?v=17e2f33f"></script>
-      <script src="../_static/doctools.js?v=9bcbadda"></script>
-      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
@@ -50,10 +50,15 @@
 <li class="toctree-l1"><a class="reference internal" href="../installation.html">Installation</a></li>
 <li class="toctree-l1 current"><a class="reference internal" href="index.html">Documentation</a><ul class="current">
 <li class="toctree-l2"><a class="reference internal" href="syntax.html">Input file syntax</a></li>
+<li class="toctree-l2"><a class="reference internal" href="inputsystem.html">The input system: how <code class="docutils literal notranslate"><span class="pre">.inp</span></code> grammar is defined</a></li>
 <li class="toctree-l2"><a class="reference internal" href="jobs.html">Inputfile driven simulations</a></li>
 <li class="toctree-l2 current"><a class="current reference internal" href="#">Models</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="#module-edelweissfe.models.femodel"><code class="docutils literal notranslate"><span class="pre">FEModel</span></code> - A classical finite element model</a><ul>
 <li class="toctree-l4"><a class="reference internal" href="#edelweissfe.models.femodel.FEModel"><code class="docutils literal notranslate"><span class="pre">FEModel</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#topologypipeline-how-the-mesh-may-change-during-a-run"><code class="docutils literal notranslate"><span class="pre">TopologyPipeline</span></code> - How the mesh may change during a run</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.models.topologypipeline.TopologyPipeline"><code class="docutils literal notranslate"><span class="pre">TopologyPipeline</span></code></a></li>
 </ul>
 </li>
 </ul>
@@ -63,7 +68,10 @@
 <li class="toctree-l2"><a class="reference internal" href="steps.html">Steps</a></li>
 <li class="toctree-l2"><a class="reference internal" href="analyticalfields.html">Analytical fields</a></li>
 <li class="toctree-l2"><a class="reference internal" href="constraints.html">Constraints</a></li>
-<li class="toctree-l2"><a class="reference internal" href="dofmanager.html">DOF manager</a></li>
+<li class="toctree-l2"><a class="reference internal" href="rigidbodies.html">Rigid bodies</a></li>
+<li class="toctree-l2"><a class="reference internal" href="contacttheory.html">Contact mechanics: theory</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dofmanager.html">Degree of Freedom (DOF) Manager and Numerics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="assembly.html">System matrix assembly</a></li>
 <li class="toctree-l2"><a class="reference internal" href="fieldoutputmanager.html">Field outputs</a></li>
 <li class="toctree-l2"><a class="reference internal" href="fields.html">Fields</a></li>
 <li class="toctree-l2"><a class="reference internal" href="elements.html">Elements</a></li>
@@ -72,6 +80,10 @@
 <li class="toctree-l2"><a class="reference internal" href="journal.html">Journal</a></li>
 <li class="toctree-l2"><a class="reference internal" href="materials.html">Materials</a></li>
 <li class="toctree-l2"><a class="reference internal" href="mesh.html">Creating finite element meshes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="modelmodifiers.html">Model modifiers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="topologypipeline.html">The topology pipeline: how a model changes itself</a></li>
+<li class="toctree-l2"><a class="reference internal" href="restart.html">Restart</a></li>
+<li class="toctree-l2"><a class="reference internal" href="adaptivitytheory.html">Adaptive refinement: error estimation and marking</a></li>
 <li class="toctree-l2"><a class="reference internal" href="output.html">Outputmanagers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="parallelization.html">Parallelization</a></li>
 <li class="toctree-l2"><a class="reference internal" href="phenomena.html">Physical phenomena</a></li>
@@ -119,7 +131,7 @@
 <span id="femodel-a-classical-finite-element-model"></span><h2><code class="docutils literal notranslate"><span class="pre">FEModel</span></code> - A classical finite element model<a class="headerlink" href="#module-edelweissfe.models.femodel" title="Link to this heading"></a></h2>
 <dl class="py class">
 <dt class="sig sig-object py" id="edelweissfe.models.femodel.FEModel">
-<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">edelweissfe.models.femodel.</span></span><span class="sig-name descname"><span class="pre">FEModel</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dimension</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/models/femodel.html#FEModel"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.models.femodel.FEModel" title="Link to this definition"></a></dt>
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">edelweissfe.models.femodel.</span></span><span class="sig-name descname"><span class="pre">FEModel</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dimension</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/models/femodel.html#FEModel"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.models.femodel.FEModel" title="Link to this definition"></a></dt>
 <dd><p>This is is a standard finite element model tree.
 It takes care of the correct number of variables,
 for nodes and scalar degrees of freedem, and it manages the fields.</p>
@@ -134,14 +146,23 @@ for nodes and scalar degrees of freedem, and it manages the fields.</p>
 <tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.models.femodel.FEModel.advanceToTime" title="edelweissfe.models.femodel.FEModel.advanceToTime"><code class="xref py py-obj docutils literal notranslate"><span class="pre">advanceToTime</span></code></a>(time)</p></td>
 <td><p>Accept the current state of the model and sub instances, and set the new time.</p></td>
 </tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.models.femodel.FEModel.createElement" title="edelweissfe.models.femodel.FEModel.createElement"><code class="xref py py-obj docutils literal notranslate"><span class="pre">createElement</span></code></a>(element)</p></td>
+<td><p>Add a freshly created element to the model.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.models.femodel.FEModel.createNode" title="edelweissfe.models.femodel.FEModel.createNode"><code class="xref py py-obj docutils literal notranslate"><span class="pre">createNode</span></code></a>(node)</p></td>
+<td><p>Add a freshly created node to the model.</p></td>
+</tr>
 <tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.models.femodel.FEModel.prepareYourself" title="edelweissfe.models.femodel.FEModel.prepareYourself"><code class="xref py py-obj docutils literal notranslate"><span class="pre">prepareYourself</span></code></a>(journal)</p></td>
 <td><p>Prepare the model for a simulation.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.models.femodel.FEModel.readRestart" title="edelweissfe.models.femodel.FEModel.readRestart"><code class="xref py py-obj docutils literal notranslate"><span class="pre">readRestart</span></code></a>(restartFile)</p></td>
-<td><p>Read the state of the model from a restart file.</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.models.femodel.FEModel.readRestart" title="edelweissfe.models.femodel.FEModel.readRestart"><code class="xref py py-obj docutils literal notranslate"><span class="pre">readRestart</span></code></a>(restartFile[, journal])</p></td>
+<td><p>Read the state of the model from a restart checkpoint written by <a class="reference internal" href="#edelweissfe.models.femodel.FEModel.writeRestart" title="edelweissfe.models.femodel.FEModel.writeRestart"><code class="xref py py-meth docutils literal notranslate"><span class="pre">writeRestart()</span></code></a>.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.models.femodel.FEModel.writeRestart" title="edelweissfe.models.femodel.FEModel.writeRestart"><code class="xref py py-obj docutils literal notranslate"><span class="pre">writeRestart</span></code></a>(restartFile)</p></td>
-<td><p>Write the current state of the model to a restart file.</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.models.femodel.FEModel.removeElement" title="edelweissfe.models.femodel.FEModel.removeElement"><code class="xref py py-obj docutils literal notranslate"><span class="pre">removeElement</span></code></a>(elNumber)</p></td>
+<td><p>Remove an element from the model.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.models.femodel.FEModel.writeRestart" title="edelweissfe.models.femodel.FEModel.writeRestart"><code class="xref py py-obj docutils literal notranslate"><span class="pre">writeRestart</span></code></a>(restartFile)</p></td>
+<td><p>Write the current (converged) state of the model to a restart checkpoint.</p></td>
 </tr>
 </tbody>
 </table>
@@ -153,6 +174,28 @@ set the new time.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>time</strong> (<em>float</em>) – The new time.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.models.femodel.FEModel.createElement">
+<span class="sig-name descname"><span class="pre">createElement</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">element</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/models/femodel.html#FEModel.createElement"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.models.femodel.FEModel.createElement" title="Link to this definition"></a></dt>
+<dd><p>Add a freshly created element to the model.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>element</strong> – The element, already carrying a number obtained from <a class="reference internal" href="#edelweissfe.models.topologypipeline.TopologyPipeline.reserveElementNumbers" title="edelweissfe.models.topologypipeline.TopologyPipeline.reserveElementNumbers"><code class="xref py py-meth docutils literal notranslate"><span class="pre">reserveElementNumbers()</span></code></a>.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.models.femodel.FEModel.createNode">
+<span class="sig-name descname"><span class="pre">createNode</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">node</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/models/femodel.html#FEModel.createNode"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.models.femodel.FEModel.createNode" title="Link to this definition"></a></dt>
+<dd><p>Add a freshly created node to the model.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>node</strong> – The node, already carrying a label obtained from <a class="reference internal" href="#edelweissfe.models.topologypipeline.TopologyPipeline.reserveNodeNumbers" title="edelweissfe.models.topologypipeline.TopologyPipeline.reserveNodeNumbers"><code class="xref py py-meth docutils literal notranslate"><span class="pre">reserveNodeNumbers()</span></code></a>.</p>
 </dd>
 </dl>
 </dd></dl>
@@ -172,14 +215,27 @@ and initializes elements.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="edelweissfe.models.femodel.FEModel.readRestart">
-<span class="sig-name descname"><span class="pre">readRestart</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">restartFile</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/models/femodel.html#FEModel.readRestart"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.models.femodel.FEModel.readRestart" title="Link to this definition"></a></dt>
-<dd><p>Read the state of the model from a restart file.</p>
+<span class="sig-name descname"><span class="pre">readRestart</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">restartFile</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">journal</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/models/femodel.html#FEModel.readRestart"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.models.femodel.FEModel.readRestart" title="Link to this definition"></a></dt>
+<dd><p>Read the state of the model from a restart checkpoint written by <a class="reference internal" href="#edelweissfe.models.femodel.FEModel.writeRestart" title="edelweissfe.models.femodel.FEModel.writeRestart"><code class="xref py py-meth docutils literal notranslate"><span class="pre">writeRestart()</span></code></a>.</p>
+<p>The model must already have been rebuilt from the original <code class="docutils literal notranslate"><span class="pre">.inp</span></code> file (same topology)
+and <a class="reference internal" href="#edelweissfe.models.femodel.FEModel.prepareYourself" title="edelweissfe.models.femodel.FEModel.prepareYourself"><code class="xref py py-meth docutils literal notranslate"><span class="pre">prepareYourself()</span></code></a> called, before this is called.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>fileName</strong> – The name of the restart file.</p></li>
-<li><p><strong>restartFile</strong> (<em>File</em>)</p></li>
+<li><p><strong>restartFile</strong> (<em>File</em>) – An open, readable <code class="xref py py-class docutils literal notranslate"><span class="pre">h5py.File</span></code> (or group) to read the checkpoint from.</p></li>
+<li><p><strong>journal</strong> (<a class="reference internal" href="journal.html#edelweissfe.journal.journal.Journal" title="edelweissfe.journal.journal.Journal"><em>Journal</em></a>) – Optional Journal for the progress messages of the topology replay.</p></li>
 </ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.models.femodel.FEModel.removeElement">
+<span class="sig-name descname"><span class="pre">removeElement</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">elNumber</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/models/femodel.html#FEModel.removeElement"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.models.femodel.FEModel.removeElement" title="Link to this definition"></a></dt>
+<dd><p>Remove an element from the model. Its number is retired, never reissued.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>elNumber</strong> (<em>int</em>) – The number of the element to remove.</p>
 </dd>
 </dl>
 </dd></dl>
@@ -187,13 +243,14 @@ and initializes elements.</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="edelweissfe.models.femodel.FEModel.writeRestart">
 <span class="sig-name descname"><span class="pre">writeRestart</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">restartFile</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/models/femodel.html#FEModel.writeRestart"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.models.femodel.FEModel.writeRestart" title="Link to this definition"></a></dt>
-<dd><p>Write the current state of the model to a restart file.</p>
+<dd><p>Write the current (converged) state of the model to a restart checkpoint.</p>
+<p>Does not serialize model topology (nodes/elements/sets/sections/materials) – only state
+that a rebuild from the original <code class="docutils literal notranslate"><span class="pre">.inp</span></code> file cannot reproduce: node field values, element
+quadrature-point history, scalar variables (e.g. Lagrange multipliers), and stateful
+constraints’ internal history (e.g. frictional contact).</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>fileName</strong> – The name of the restart file.</p></li>
-<li><p><strong>restartFile</strong> (<em>File</em>)</p></li>
-</ul>
+<dd class="field-odd"><p><strong>restartFile</strong> (<em>File</em>) – An open, writable <code class="xref py py-class docutils literal notranslate"><span class="pre">h5py.File</span></code> (or group) to write the checkpoint into.</p>
 </dd>
 </dl>
 </dd></dl>
@@ -223,9 +280,21 @@ and initializes elements.</p>
 </dd></dl>
 
 <dl class="py attribute">
+<dt class="sig sig-object py" id="edelweissfe.models.femodel.FEModel.contactFacetRecipes">
+<span class="sig-name descname"><span class="pre">contactFacetRecipes</span></span><a class="headerlink" href="#edelweissfe.models.femodel.FEModel.contactFacetRecipes" title="Link to this definition"></a></dt>
+<dd><p>facet elSet name -&gt; (surfaceName, prefix, triangulation, nodalWeights).</p>
+</dd></dl>
+
+<dl class="py attribute">
 <dt class="sig sig-object py" id="edelweissfe.models.femodel.FEModel.domainSize">
 <span class="sig-name descname"><span class="pre">domainSize</span></span><a class="headerlink" href="#edelweissfe.models.femodel.FEModel.domainSize" title="Link to this definition"></a></dt>
 <dd><p>Spatial dimension of the model</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="edelweissfe.models.femodel.FEModel.elementProperties">
+<span class="sig-name descname"><span class="pre">elementProperties</span></span><a class="headerlink" href="#edelweissfe.models.femodel.FEModel.elementProperties" title="Link to this definition"></a></dt>
+<dd><p>Element properties.</p>
 </dd></dl>
 
 <dl class="py attribute">
@@ -241,9 +310,27 @@ and initializes elements.</p>
 </dd></dl>
 
 <dl class="py attribute">
+<dt class="sig sig-object py" id="edelweissfe.models.femodel.FEModel.fieldOutputController">
+<span class="sig-name descname"><span class="pre">fieldOutputController</span></span><a class="headerlink" href="#edelweissfe.models.femodel.FEModel.fieldOutputController" title="Link to this definition"></a></dt>
+<dd><p>Set once by the driver; lets in-model entities (e.g. AMR markers) look up a named <a href="#id1"><span class="problematic" id="id2">*</span></a>fieldOutput by value, not just by declaration.</p>
+</dd></dl>
+
+<dl class="py attribute">
 <dt class="sig sig-object py" id="edelweissfe.models.femodel.FEModel.materials">
 <span class="sig-name descname"><span class="pre">materials</span></span><a class="headerlink" href="#edelweissfe.models.femodel.FEModel.materials" title="Link to this definition"></a></dt>
 <dd><p>Materials in the model.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="edelweissfe.models.femodel.FEModel.modelModifiers">
+<span class="sig-name descname"><span class="pre">modelModifiers</span></span><a class="headerlink" href="#edelweissfe.models.femodel.FEModel.modelModifiers" title="Link to this definition"></a></dt>
+<dd><p>Model modifiers (dynamic topology / mesh mutation entities) in the model.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="edelweissfe.models.femodel.FEModel.multiPointConstraints">
+<span class="sig-name descname"><span class="pre">multiPointConstraints</span></span><a class="headerlink" href="#edelweissfe.models.femodel.FEModel.multiPointConstraints" title="Link to this definition"></a></dt>
+<dd><p>Multi-point (DOF-elimination) constraints in the model.</p>
 </dd></dl>
 
 <dl class="py attribute">
@@ -262,6 +349,12 @@ and initializes elements.</p>
 <dt class="sig sig-object py" id="edelweissfe.models.femodel.FEModel.nodes">
 <span class="sig-name descname"><span class="pre">nodes</span></span><a class="headerlink" href="#edelweissfe.models.femodel.FEModel.nodes" title="Link to this definition"></a></dt>
 <dd><p>Nodes in the model.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="edelweissfe.models.femodel.FEModel.rigidBodies">
+<span class="sig-name descname"><span class="pre">rigidBodies</span></span><a class="headerlink" href="#edelweissfe.models.femodel.FEModel.rigidBodies" title="Link to this definition"></a></dt>
+<dd><p>RigidBodies in the model.</p>
 </dd></dl>
 
 <dl class="py attribute">
@@ -286,6 +379,528 @@ and initializes elements.</p>
 <dt class="sig sig-object py" id="edelweissfe.models.femodel.FEModel.time">
 <span class="sig-name descname"><span class="pre">time</span></span><a class="headerlink" href="#edelweissfe.models.femodel.FEModel.time" title="Link to this definition"></a></dt>
 <dd><p>Current time of the model.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="edelweissfe.models.femodel.FEModel.topology">
+<span class="sig-name descname"><span class="pre">topology</span></span><a class="headerlink" href="#edelweissfe.models.femodel.FEModel.topology" title="Link to this definition"></a></dt>
+<dd><p>How the mesh may change during a run; see <a class="reference internal" href="#edelweissfe.models.topologypipeline.TopologyPipeline" title="edelweissfe.models.topologypipeline.TopologyPipeline"><code class="xref py py-class docutils literal notranslate"><span class="pre">TopologyPipeline</span></code></a>.</p>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+<section id="topologypipeline-how-the-mesh-may-change-during-a-run">
+<h2><code class="docutils literal notranslate"><span class="pre">TopologyPipeline</span></code> - How the mesh may change during a run<a class="headerlink" href="#topologypipeline-how-the-mesh-may-change-during-a-run" title="Link to this heading"></a></h2>
+<p>Held by every model as <code class="docutils literal notranslate"><span class="pre">model.topology</span></code>. The model is the mesh and its data; the pipeline owns the
+topology window, the number allocators, the fixed-point rounds of the model modifiers, the change log
+and mesh-dependent consumers, and the recorded history that a restart replays. See
+<a class="reference internal" href="topologypipeline.html"><span class="doc">The topology pipeline: how a model changes itself</span></a> for the design.</p>
+<p id="module-edelweissfe.models.topologypipeline">The topology pipeline: how, and only how, the mesh of a model may change during a run.</p>
+<p>See <a class="reference internal" href="#edelweissfe.models.topologypipeline.TopologyPipeline" title="edelweissfe.models.topologypipeline.TopologyPipeline"><code class="xref py py-class docutils literal notranslate"><span class="pre">TopologyPipeline</span></code></a>.</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="edelweissfe.models.topologypipeline.TopologyPipeline">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">edelweissfe.models.topologypipeline.</span></span><span class="sig-name descname"><span class="pre">TopologyPipeline</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/models/topologypipeline.html#TopologyPipeline"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.models.topologypipeline.TopologyPipeline" title="Link to this definition"></a></dt>
+<dd><p>Everything about changing the mesh of a <a class="reference internal" href="#edelweissfe.models.femodel.FEModel" title="edelweissfe.models.femodel.FEModel"><code class="xref py py-class docutils literal notranslate"><span class="pre">FEModel</span></code></a>
+during a run, held by the model as <code class="docutils literal notranslate"><span class="pre">model.topology</span></code>.</p>
+<p>The model itself is the mesh and its data. This class is the machinery around changing it:</p>
+<ul class="simple">
+<li><p>the <strong>topology window</strong> (<a class="reference internal" href="#edelweissfe.models.topologypipeline.TopologyPipeline.changes" title="edelweissfe.models.topologypipeline.TopologyPipeline.changes"><code class="xref py py-meth docutils literal notranslate"><span class="pre">changes()</span></code></a>), the only scope in which elements and nodes
+may be created or removed;</p></li>
+<li><p>the <strong>number allocators</strong> (<a class="reference internal" href="#edelweissfe.models.topologypipeline.TopologyPipeline.reserveElementNumbers" title="edelweissfe.models.topologypipeline.TopologyPipeline.reserveElementNumbers"><code class="xref py py-meth docutils literal notranslate"><span class="pre">reserveElementNumbers()</span></code></a>, <a class="reference internal" href="#edelweissfe.models.topologypipeline.TopologyPipeline.reserveNodeNumbers" title="edelweissfe.models.topologypipeline.TopologyPipeline.reserveNodeNumbers"><code class="xref py py-meth docutils literal notranslate"><span class="pre">reserveNodeNumbers()</span></code></a>), which
+make numbering a pure function of the creation order;</p></li>
+<li><p>the <strong>fixed-point rounds</strong> (<a class="reference internal" href="#edelweissfe.models.topologypipeline.TopologyPipeline.update" title="edelweissfe.models.topologypipeline.TopologyPipeline.update"><code class="xref py py-meth docutils literal notranslate"><span class="pre">update()</span></code></a>), in which every model modifier (e.g. AMR)
+plans and applies until none has anything left to do;</p></li>
+<li><p>the <strong>change log</strong> (<a class="reference internal" href="#edelweissfe.models.topologypipeline.TopologyPipeline.version" title="edelweissfe.models.topologypipeline.TopologyPipeline.version"><code class="xref py py-attr docutils literal notranslate"><span class="pre">version</span></code></a>, <a class="reference internal" href="#edelweissfe.models.topologypipeline.TopologyPipeline.changesSince" title="edelweissfe.models.topologypipeline.TopologyPipeline.changesSince"><code class="xref py py-meth docutils literal notranslate"><span class="pre">changesSince()</span></code></a>) and the registry of
+<strong>mesh dependents</strong> (<a class="reference internal" href="#edelweissfe.models.topologypipeline.TopologyPipeline.refreshMeshDependents" title="edelweissfe.models.topologypipeline.TopologyPipeline.refreshMeshDependents"><code class="xref py py-meth docutils literal notranslate"><span class="pre">refreshMeshDependents()</span></code></a>), from which ties and contact catch up;</p></li>
+<li><p>the <strong>history</strong> of every applied decision, its <strong>fingerprint</strong>, and the <strong>replay</strong> of that
+history on restart (<a class="reference internal" href="#edelweissfe.models.topologypipeline.TopologyPipeline.replayHistory" title="edelweissfe.models.topologypipeline.TopologyPipeline.replayHistory"><code class="xref py py-meth docutils literal notranslate"><span class="pre">replayHistory()</span></code></a>).</p></li>
+</ul>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>model</strong> – The model whose mesh this pipeline changes.</p>
+</dd>
+</dl>
+<p class="rubric">Methods</p>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.models.topologypipeline.TopologyPipeline.adoptSetupElementNumbers" title="edelweissfe.models.topologypipeline.TopologyPipeline.adoptSetupElementNumbers"><code class="xref py py-obj docutils literal notranslate"><span class="pre">adoptSetupElementNumbers</span></code></a>()</p></td>
+<td><p>Raise the allocator above every element number setup has already handed out.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.models.topologypipeline.TopologyPipeline.adoptSetupNodeNumbers" title="edelweissfe.models.topologypipeline.TopologyPipeline.adoptSetupNodeNumbers"><code class="xref py py-obj docutils literal notranslate"><span class="pre">adoptSetupNodeNumbers</span></code></a>()</p></td>
+<td><p>Raise the node allocator above every label setup has already handed out; the node-side counterpart of <a class="reference internal" href="#edelweissfe.models.topologypipeline.TopologyPipeline.adoptSetupElementNumbers" title="edelweissfe.models.topologypipeline.TopologyPipeline.adoptSetupElementNumbers"><code class="xref py py-meth docutils literal notranslate"><span class="pre">adoptSetupElementNumbers()</span></code></a>, called alongside it.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.models.topologypipeline.TopologyPipeline.boundTo" title="edelweissfe.models.topologypipeline.TopologyPipeline.boundTo"><code class="xref py py-obj docutils literal notranslate"><span class="pre">boundTo</span></code></a>(model)</p></td>
+<td><p>A shallow copy of this pipeline that acts on <code class="docutils literal notranslate"><span class="pre">model</span></code>, for a shallow copy of the model.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.models.topologypipeline.TopologyPipeline.changes" title="edelweissfe.models.topologypipeline.TopologyPipeline.changes"><code class="xref py py-obj docutils literal notranslate"><span class="pre">changes</span></code></a>([deferFieldBookkeeping])</p></td>
+<td><p>The only scope in which elements may be created or deleted.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.models.topologypipeline.TopologyPipeline.changesSince" title="edelweissfe.models.topologypipeline.TopologyPipeline.changesSince"><code class="xref py py-obj docutils literal notranslate"><span class="pre">changesSince</span></code></a>(version)</p></td>
+<td><p>The <code class="xref py py-class docutils literal notranslate"><span class="pre">ModelChange</span></code> coalesced across every mutation recorded after <code class="docutils literal notranslate"><span class="pre">version</span></code>, or <code class="docutils literal notranslate"><span class="pre">None</span></code> if the model hasn't changed since.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.models.topologypipeline.TopologyPipeline.checkModelModifierDomains" title="edelweissfe.models.topologypipeline.TopologyPipeline.checkModelModifierDomains"><code class="xref py py-obj docutils literal notranslate"><span class="pre">checkModelModifierDomains</span></code></a>()</p></td>
+<td><p>Refuse a model in which two modifiers claim the same element.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.models.topologypipeline.TopologyPipeline.deferFieldVariableLink" title="edelweissfe.models.topologypipeline.TopologyPipeline.deferFieldVariableLink"><code class="xref py py-obj docutils literal notranslate"><span class="pre">deferFieldVariableLink</span></code></a>(nodes)</p></td>
+<td><p>Note a field-variable relink requested inside a deferring window; it runs when the window closes.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.models.topologypipeline.TopologyPipeline.deferNodeFieldResize" title="edelweissfe.models.topologypipeline.TopologyPipeline.deferNodeFieldResize"><code class="xref py py-obj docutils literal notranslate"><span class="pre">deferNodeFieldResize</span></code></a>(journal)</p></td>
+<td><p>Note a node-field resize requested inside a deferring window; it runs when the window closes.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.models.topologypipeline.TopologyPipeline.ensureSurfaceFacetModifier" title="edelweissfe.models.topologypipeline.TopologyPipeline.ensureSurfaceFacetModifier"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ensureSurfaceFacetModifier</span></code></a>(journal)</p></td>
+<td><p>Create the implicit facet-regeneration modifier, if any facet recipe was declared.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.models.topologypipeline.TopologyPipeline.fingerprint" title="edelweissfe.models.topologypipeline.TopologyPipeline.fingerprint"><code class="xref py py-obj docutils literal notranslate"><span class="pre">fingerprint</span></code></a>()</p></td>
+<td><p>A short digest of the model's topology <em>and its numbering</em>, for verifying that a restart replay reproduced the original run.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.models.topologypipeline.TopologyPipeline.recordChange" title="edelweissfe.models.topologypipeline.TopologyPipeline.recordChange"><code class="xref py py-obj docutils literal notranslate"><span class="pre">recordChange</span></code></a>(roundNumber, name, modifier, ...)</p></td>
+<td><p>Register everything an applied decision produced: the replay record and the changeset.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.models.topologypipeline.TopologyPipeline.recordSetupFingerprint" title="edelweissfe.models.topologypipeline.TopologyPipeline.recordSetupFingerprint"><code class="xref py py-obj docutils literal notranslate"><span class="pre">recordSetupFingerprint</span></code></a>()</p></td>
+<td><p>Record the <a class="reference internal" href="#edelweissfe.models.topologypipeline.TopologyPipeline.fingerprint" title="edelweissfe.models.topologypipeline.TopologyPipeline.fingerprint"><code class="xref py py-meth docutils literal notranslate"><span class="pre">fingerprint()</span></code></a> of the mesh as the input file built it, once the model is set up and before any model modifier acts; see <a class="reference internal" href="#edelweissfe.models.topologypipeline.TopologyPipeline.setupFingerprint" title="edelweissfe.models.topologypipeline.TopologyPipeline.setupFingerprint"><code class="xref py py-meth docutils literal notranslate"><span class="pre">setupFingerprint()</span></code></a>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.models.topologypipeline.TopologyPipeline.refreshMeshDependents" title="edelweissfe.models.topologypipeline.TopologyPipeline.refreshMeshDependents"><code class="xref py py-obj docutils literal notranslate"><span class="pre">refreshMeshDependents</span></code></a>()</p></td>
+<td><p>Let every registered mesh-dependent consumer catch up, once, after the topology update.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.models.topologypipeline.TopologyPipeline.registerMeshDependent" title="edelweissfe.models.topologypipeline.TopologyPipeline.registerMeshDependent"><code class="xref py py-obj docutils literal notranslate"><span class="pre">registerMeshDependent</span></code></a>(consumer)</p></td>
+<td><p>Register a <code class="xref py py-class docutils literal notranslate"><span class="pre">MeshDependent</span></code> to be refreshed after every topology update.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.models.topologypipeline.TopologyPipeline.replayHistory" title="edelweissfe.models.topologypipeline.TopologyPipeline.replayHistory"><code class="xref py py-obj docutils literal notranslate"><span class="pre">replayHistory</span></code></a>(records[, journal])</p></td>
+<td><p>Reconstruct the topology by re-applying recorded decisions, in order.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.models.topologypipeline.TopologyPipeline.reserveElementNumbers" title="edelweissfe.models.topologypipeline.TopologyPipeline.reserveElementNumbers"><code class="xref py py-obj docutils literal notranslate"><span class="pre">reserveElementNumbers</span></code></a>([count])</p></td>
+<td><p>Reserve <code class="docutils literal notranslate"><span class="pre">count</span></code> fresh element numbers.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.models.topologypipeline.TopologyPipeline.reserveNodeNumbers" title="edelweissfe.models.topologypipeline.TopologyPipeline.reserveNodeNumbers"><code class="xref py py-obj docutils literal notranslate"><span class="pre">reserveNodeNumbers</span></code></a>([count])</p></td>
+<td><p>Reserve <code class="docutils literal notranslate"><span class="pre">count</span></code> fresh node labels.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.models.topologypipeline.TopologyPipeline.setupFingerprint" title="edelweissfe.models.topologypipeline.TopologyPipeline.setupFingerprint"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setupFingerprint</span></code></a>()</p></td>
+<td><p>The <a class="reference internal" href="#edelweissfe.models.topologypipeline.TopologyPipeline.fingerprint" title="edelweissfe.models.topologypipeline.TopologyPipeline.fingerprint"><code class="xref py py-meth docutils literal notranslate"><span class="pre">fingerprint()</span></code></a> of the mesh as the input file built it.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.models.topologypipeline.TopologyPipeline.update" title="edelweissfe.models.topologypipeline.TopologyPipeline.update"><code class="xref py py-obj docutils literal notranslate"><span class="pre">update</span></code></a>([step])</p></td>
+<td><p>Run every model modifier to a fixed point, inside one topology window.</p></td>
+</tr>
+</tbody>
+</table>
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.models.topologypipeline.TopologyPipeline.adoptSetupElementNumbers">
+<span class="sig-name descname"><span class="pre">adoptSetupElementNumbers</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/models/topologypipeline.html#TopologyPipeline.adoptSetupElementNumbers"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.models.topologypipeline.TopologyPipeline.adoptSetupElementNumbers" title="Link to this definition"></a></dt>
+<dd><p>Raise the allocator above every element number setup has already handed out.</p>
+<p>Called once, at the end of model setup. The base mesh (input file and every mesh generator)
+numbers its elements as a pure function of the input file, is re-run identically by a
+resumed run before the checkpoint is read, and is never renumbered afterwards – so those
+numbers need no allocator. This just makes sure nothing minted later can collide with them.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.models.topologypipeline.TopologyPipeline.adoptSetupNodeNumbers">
+<span class="sig-name descname"><span class="pre">adoptSetupNodeNumbers</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/models/topologypipeline.html#TopologyPipeline.adoptSetupNodeNumbers"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.models.topologypipeline.TopologyPipeline.adoptSetupNodeNumbers" title="Link to this definition"></a></dt>
+<dd><p>Raise the node allocator above every label setup has already handed out; the node-side
+counterpart of <a class="reference internal" href="#edelweissfe.models.topologypipeline.TopologyPipeline.adoptSetupElementNumbers" title="edelweissfe.models.topologypipeline.TopologyPipeline.adoptSetupElementNumbers"><code class="xref py py-meth docutils literal notranslate"><span class="pre">adoptSetupElementNumbers()</span></code></a>, called alongside it.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.models.topologypipeline.TopologyPipeline.boundTo">
+<span class="sig-name descname"><span class="pre">boundTo</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/models/topologypipeline.html#TopologyPipeline.boundTo"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.models.topologypipeline.TopologyPipeline.boundTo" title="Link to this definition"></a></dt>
+<dd><p>A shallow copy of this pipeline that acts on <code class="docutils literal notranslate"><span class="pre">model</span></code>, for a shallow copy of the model.</p>
+<p>As for the model itself, the containers (history, change log, mesh dependents) are shared with
+this pipeline, and the counters, the version and the window state are the copy’s own.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>model</strong> – The model the copy acts on.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference internal" href="#edelweissfe.models.topologypipeline.TopologyPipeline" title="edelweissfe.models.topologypipeline.TopologyPipeline"><em>TopologyPipeline</em></a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.models.topologypipeline.TopologyPipeline.changes">
+<span class="sig-name descname"><span class="pre">changes</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">deferFieldBookkeeping</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/models/topologypipeline.html#TopologyPipeline.changes"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.models.topologypipeline.TopologyPipeline.changes" title="Link to this definition"></a></dt>
+<dd><p>The only scope in which elements may be created or deleted.</p>
+<p>Opened once around model setup, and once per increment around the model modifiers. Outside
+it, <a class="reference internal" href="#edelweissfe.models.femodel.FEModel.createElement" title="edelweissfe.models.femodel.FEModel.createElement"><code class="xref py py-meth docutils literal notranslate"><span class="pre">createElement()</span></code></a> and <a class="reference internal" href="#edelweissfe.models.femodel.FEModel.removeElement" title="edelweissfe.models.femodel.FEModel.removeElement"><code class="xref py py-meth docutils literal notranslate"><span class="pre">removeElement()</span></code></a> raise – which is what makes “only model
+modifiers mutate the topology” an enforced property rather than a convention, and what lets
+<a class="reference internal" href="#edelweissfe.models.topologypipeline.TopologyPipeline.reserveElementNumbers" title="edelweissfe.models.topologypipeline.TopologyPipeline.reserveElementNumbers"><code class="xref py py-meth docutils literal notranslate"><span class="pre">reserveElementNumbers()</span></code></a> guarantee that element numbering is a pure function of the
+ordered creation sequence.</p>
+<p>Nesting is permitted and is a no-op for the inner scope: setup-time helpers may open a
+window without knowing whether their caller already did.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>deferFieldBookkeeping</strong> (<em>bool</em>) – Postpone the node-field bookkeeping a mesh mutator requests through
+<code class="xref py py-meth docutils literal notranslate"><span class="pre">_resizeNodeFieldsForNodes()</span></code> and <code class="xref py py-meth docutils literal notranslate"><span class="pre">_linkFieldVariableObjects()</span></code> until this
+window closes, and run it exactly once then. Both are idempotent recomputations from the
+model’s <em>current</em> nodes and elements – neither one touches numbering, connectivity or
+anything the <a class="reference internal" href="#edelweissfe.models.topologypipeline.TopologyPipeline.fingerprint" title="edelweissfe.models.topologypipeline.TopologyPipeline.fingerprint"><code class="xref py py-meth docutils literal notranslate"><span class="pre">fingerprint()</span></code></a> covers – so the state after one flush at the
+end equals the state after a flush per mutation; only the intermediate, immediately
+overwritten field layouts are skipped. That is what <a class="reference internal" href="#edelweissfe.models.topologypipeline.TopologyPipeline.replayHistory" title="edelweissfe.models.topologypipeline.TopologyPipeline.replayHistory"><code class="xref py py-meth docutils literal notranslate"><span class="pre">replayHistory()</span></code></a> wants:
+no increment is solved between two replayed records, so nothing consumes those layouts,
+and a flush per record makes a long replay O(records x mesh) instead of O(mesh). The
+live per-increment window does <em>not</em> defer – the solver runs on the fields right after
+each update. Honoured by the outermost window only, like the window itself.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.models.topologypipeline.TopologyPipeline.changesSince">
+<span class="sig-name descname"><span class="pre">changesSince</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">version</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/models/topologypipeline.html#TopologyPipeline.changesSince"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.models.topologypipeline.TopologyPipeline.changesSince" title="Link to this definition"></a></dt>
+<dd><p>The <code class="xref py py-class docutils literal notranslate"><span class="pre">ModelChange</span></code> coalesced across every mutation recorded after <code class="docutils literal notranslate"><span class="pre">version</span></code>, or
+<code class="docutils literal notranslate"><span class="pre">None</span></code> if the model hasn’t changed since. A pull-based consumer compares its own
+last-seen version against <a class="reference internal" href="#edelweissfe.models.topologypipeline.TopologyPipeline.version" title="edelweissfe.models.topologypipeline.TopologyPipeline.version"><code class="xref py py-attr docutils literal notranslate"><span class="pre">version</span></code></a> and, on a mismatch, reconciles from this,
+then adopts the new <a class="reference internal" href="#edelweissfe.models.topologypipeline.TopologyPipeline.version" title="edelweissfe.models.topologypipeline.TopologyPipeline.version"><code class="xref py py-attr docutils literal notranslate"><span class="pre">version</span></code></a> as its own last-seen version.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>version</strong> (<em>int</em>)</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><em>ModelChange</em></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.models.topologypipeline.TopologyPipeline.checkModelModifierDomains">
+<span class="sig-name descname"><span class="pre">checkModelModifierDomains</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/models/topologypipeline.html#TopologyPipeline.checkModelModifierDomains"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.models.topologypipeline.TopologyPipeline.checkModelModifierDomains" title="Link to this definition"></a></dt>
+<dd><p>Refuse a model in which two modifiers claim the same element.</p>
+<p>Run once, at the end of setup. Each modifier declares what it owns via
+<a class="reference internal" href="modelmodifiers.html#edelweissfe.modelmodifiers.base.modelmodifierbase.ModelModifierBase.declaredDomain" title="edelweissfe.modelmodifiers.base.modelmodifierbase.ModelModifierBase.declaredDomain"><code class="xref py py-meth docutils literal notranslate"><span class="pre">declaredDomain()</span></code></a>;
+an overlap means both will mutate the same element and each will end up holding stale
+references to the other’s work. Failing here costs a clear message at startup; failing later
+costs a corrupted element set or a node that is both Dirichlet-prescribed and an MPC slave,
+discovered mid-solve.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.models.topologypipeline.TopologyPipeline.deferFieldVariableLink">
+<span class="sig-name descname"><span class="pre">deferFieldVariableLink</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">nodes</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/models/topologypipeline.html#TopologyPipeline.deferFieldVariableLink"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.models.topologypipeline.TopologyPipeline.deferFieldVariableLink" title="Link to this definition"></a></dt>
+<dd><p>Note a field-variable relink requested inside a deferring window; it runs when the window closes.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.models.topologypipeline.TopologyPipeline.deferNodeFieldResize">
+<span class="sig-name descname"><span class="pre">deferNodeFieldResize</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">journal</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/models/topologypipeline.html#TopologyPipeline.deferNodeFieldResize"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.models.topologypipeline.TopologyPipeline.deferNodeFieldResize" title="Link to this definition"></a></dt>
+<dd><p>Note a node-field resize requested inside a deferring window; it runs when the window closes.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>journal</strong> (<a class="reference internal" href="journal.html#edelweissfe.journal.journal.Journal" title="edelweissfe.journal.journal.Journal"><em>Journal</em></a>)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.models.topologypipeline.TopologyPipeline.ensureSurfaceFacetModifier">
+<span class="sig-name descname"><span class="pre">ensureSurfaceFacetModifier</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">journal</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/models/topologypipeline.html#TopologyPipeline.ensureSurfaceFacetModifier"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.models.topologypipeline.TopologyPipeline.ensureSurfaceFacetModifier" title="Link to this definition"></a></dt>
+<dd><p>Create the implicit facet-regeneration modifier, if any facet recipe was declared.</p>
+<p>Retiling a contact/tie surface creates and deletes elements, so it is a topology change and
+belongs in the topology-update phase – not in a consumer’s refresh, which is where it used
+to live and which is what made every tie a mutating consumer. Users never declare this
+modifier: they already declared the <code class="docutils literal notranslate"><span class="pre">*surface</span></code> recipe it acts on.</p>
+<p>Ordered <strong>last</strong>, so that within a round it reacts to whatever the primary modifiers (a
+refinement, a deposition) just did.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>journal</strong> (<a class="reference internal" href="journal.html#edelweissfe.journal.journal.Journal" title="edelweissfe.journal.journal.Journal"><em>Journal</em></a>)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.models.topologypipeline.TopologyPipeline.fingerprint">
+<span class="sig-name descname"><span class="pre">fingerprint</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/models/topologypipeline.html#TopologyPipeline.fingerprint"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.models.topologypipeline.TopologyPipeline.fingerprint" title="Link to this definition"></a></dt>
+<dd><p>A short digest of the model’s topology <em>and its numbering</em>, for verifying that a restart
+replay reproduced the original run.</p>
+<p>Covers exactly what a replay must get right and nothing else: every element’s number, type
+and connectivity (in order – a rotated connectivity is a real difference), and every node’s
+label and reference coordinates. The surface nodes of a discrete rigid body hold its current
+position instead; the body reports their reference coordinates
+(<a class="reference internal" href="rigidbodies.html#edelweissfe.rigidbodies.rigidbody.RigidBody.referenceCoordinatesOfMovedNodes" title="edelweissfe.rigidbodies.rigidbody.RigidBody.referenceCoordinatesOfMovedNodes"><code class="xref py py-meth docutils literal notranslate"><span class="pre">referenceCoordinatesOfMovedNodes()</span></code></a>), so that
+the motion of a rigid body is not mistaken for a change of the mesh. A resumed run replays the
+topology before it restores the displacement, i.e. with the body still at its reference position. Deliberately excludes solution state, so a mismatch means the <em>mesh</em>
+diverged, not that the solver took a different path.</p>
+<p>Recorded per round in the topology history, this turns “the resumed run diverged somewhere”
+into “increment 471, round 2, modifier amr” – a divergence you can bisect rather than hunt.</p>
+<p>Not cheap: it walks the whole mesh, measured at 0.188 s on 64k elements / 69k nodes. A live
+run pays it once per <em>applied</em> modifier decision, in <a class="reference internal" href="#edelweissfe.models.topologypipeline.TopologyPipeline.recordChange" title="edelweissfe.models.topologypipeline.TopologyPipeline.recordChange"><code class="xref py py-meth docutils literal notranslate"><span class="pre">recordChange()</span></code></a>. A replay
+pays it once for the whole history (<a class="reference internal" href="#edelweissfe.models.topologypipeline.TopologyPipeline.replayHistory" title="edelweissfe.models.topologypipeline.TopologyPipeline.replayHistory"><code class="xref py py-meth docutils literal notranslate"><span class="pre">replayHistory()</span></code></a> carries the recorded
+digests forward and checks the final one), unless <code class="docutils literal notranslate"><span class="pre">verifyFingerprintsPerRecord</span></code>
+asks for the per-record walk to locate a divergence.</p>
+<p>Uses blake2b rather than <code class="xref py py-func docutils literal notranslate"><span class="pre">hash()</span></code>, whose string hashing is randomised per process and
+would make the digest differ between two runs of the <em>same</em> code.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>A 32-character hex digest.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>str</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.models.topologypipeline.TopologyPipeline.recordChange">
+<span class="sig-name descname"><span class="pre">recordChange</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">roundNumber</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">modifier</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">plan</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">modelChange</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fingerprint</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/models/topologypipeline.html#TopologyPipeline.recordChange"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.models.topologypipeline.TopologyPipeline.recordChange" title="Link to this definition"></a></dt>
+<dd><p>Register everything an applied decision produced: the replay record and the changeset.</p>
+<p>Two things are recorded here, deliberately in one place:</p>
+<ul class="simple">
+<li><p>an entry in <a class="reference internal" href="#edelweissfe.models.topologypipeline.TopologyPipeline.history" title="edelweissfe.models.topologypipeline.TopologyPipeline.history"><code class="xref py py-attr docutils literal notranslate"><span class="pre">history</span></code></a>, holding the plan in the modifier’s own serializable
+form plus the resulting topology fingerprint – which is what lets a resumed run be
+checked round by round instead of only at the end;</p></li>
+<li><p>the <code class="docutils literal notranslate"><span class="pre">modelChange</span></code> itself, stamped with the next <a class="reference internal" href="#edelweissfe.models.topologypipeline.TopologyPipeline.version" title="edelweissfe.models.topologypipeline.TopologyPipeline.version"><code class="xref py py-attr docutils literal notranslate"><span class="pre">version</span></code></a>, so <a class="reference internal" href="#edelweissfe.models.topologypipeline.TopologyPipeline.changesSince" title="edelweissfe.models.topologypipeline.TopologyPipeline.changesSince"><code class="xref py py-meth docutils literal notranslate"><span class="pre">changesSince()</span></code></a>
+and <a class="reference internal" href="#edelweissfe.models.topologypipeline.TopologyPipeline.refreshMeshDependents" title="edelweissfe.models.topologypipeline.TopologyPipeline.refreshMeshDependents"><code class="xref py py-meth docutils literal notranslate"><span class="pre">refreshMeshDependents()</span></code></a> can see it.</p></li>
+</ul>
+<p>A model modifier therefore reports what it did in exactly one way: by returning a
+<code class="xref py py-class docutils literal notranslate"><span class="pre">ModelChange</span></code> from
+<a class="reference internal" href="modelmodifiers.html#edelweissfe.modelmodifiers.base.modelmodifierbase.ModelModifierBase.apply" title="edelweissfe.modelmodifiers.base.modelmodifierbase.ModelModifierBase.apply"><code class="xref py py-meth docutils literal notranslate"><span class="pre">apply()</span></code></a> – there
+is no second channel to keep in sync, and so no way to update one and forget the other.</p>
+<p>Both callers of <code class="docutils literal notranslate"><span class="pre">apply</span></code> (the live <a class="reference internal" href="#edelweissfe.models.topologypipeline.TopologyPipeline.update" title="edelweissfe.models.topologypipeline.TopologyPipeline.update"><code class="xref py py-meth docutils literal notranslate"><span class="pre">update()</span></code></a> loop and
+<a class="reference internal" href="#edelweissfe.models.topologypipeline.TopologyPipeline.replayHistory" title="edelweissfe.models.topologypipeline.TopologyPipeline.replayHistory"><code class="xref py py-meth docutils literal notranslate"><span class="pre">replayHistory()</span></code></a>) route through here, so a replayed run records the same
+changesets in the same order as the run it replays.</p>
+<p>Cost is one <a class="reference internal" href="#edelweissfe.models.topologypipeline.TopologyPipeline.fingerprint" title="edelweissfe.models.topologypipeline.TopologyPipeline.fingerprint"><code class="xref py py-meth docutils literal notranslate"><span class="pre">fingerprint()</span></code></a> per <em>applied</em> decision – not per iteration, but not
+free either: 0.188 s measured on 64k elements / 69k nodes – unless the caller supplies the
+fingerprint, which a replay does (see <a class="reference internal" href="#edelweissfe.models.topologypipeline.TopologyPipeline.replayHistory" title="edelweissfe.models.topologypipeline.TopologyPipeline.replayHistory"><code class="xref py py-meth docutils literal notranslate"><span class="pre">replayHistory()</span></code></a>).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>time</strong> (<em>float</em>) – Model time to stamp the record with. Defaults to the current <code class="xref py py-attr docutils literal notranslate"><span class="pre">time</span></code>; a replay
+passes the recorded time instead, so a resumed run’s history carries the times the
+decisions were originally made rather than the time it was resumed at.</p></li>
+<li><p><strong>fingerprint</strong> (<em>str</em>) – The digest to record. Defaults to <a class="reference internal" href="#edelweissfe.models.topologypipeline.TopologyPipeline.fingerprint" title="edelweissfe.models.topologypipeline.TopologyPipeline.fingerprint"><code class="xref py py-meth docutils literal notranslate"><span class="pre">fingerprint()</span></code></a> of the model as it is
+now, which is what a live run wants. A replay passes the digest the original run
+recorded, so the replayed history carries the digests that were verified rather than
+fresh ones that would launder a divergence into the next checkpoint.</p></li>
+<li><p><strong>roundNumber</strong> (<em>int</em>)</p></li>
+<li><p><strong>name</strong> (<em>str</em>)</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><em>TopologyRecord</em></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.models.topologypipeline.TopologyPipeline.recordSetupFingerprint">
+<span class="sig-name descname"><span class="pre">recordSetupFingerprint</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/models/topologypipeline.html#TopologyPipeline.recordSetupFingerprint"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.models.topologypipeline.TopologyPipeline.recordSetupFingerprint" title="Link to this definition"></a></dt>
+<dd><p>Record the <a class="reference internal" href="#edelweissfe.models.topologypipeline.TopologyPipeline.fingerprint" title="edelweissfe.models.topologypipeline.TopologyPipeline.fingerprint"><code class="xref py py-meth docutils literal notranslate"><span class="pre">fingerprint()</span></code></a> of the mesh as the input file built it, once the model is
+set up and before any model modifier acts; see <a class="reference internal" href="#edelweissfe.models.topologypipeline.TopologyPipeline.setupFingerprint" title="edelweissfe.models.topologypipeline.TopologyPipeline.setupFingerprint"><code class="xref py py-meth docutils literal notranslate"><span class="pre">setupFingerprint()</span></code></a>.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.models.topologypipeline.TopologyPipeline.refreshMeshDependents">
+<span class="sig-name descname"><span class="pre">refreshMeshDependents</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/models/topologypipeline.html#TopologyPipeline.refreshMeshDependents"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.models.topologypipeline.TopologyPipeline.refreshMeshDependents" title="Link to this definition"></a></dt>
+<dd><p>Let every registered mesh-dependent consumer catch up, once, after the topology update.</p>
+<p>Phase 2 of the increment (see <a class="reference internal" href="#edelweissfe.models.topologypipeline.TopologyPipeline.update" title="edelweissfe.models.topologypipeline.TopologyPipeline.update"><code class="xref py py-meth docutils literal notranslate"><span class="pre">update()</span></code></a> for phase 1). Consumers are pure
+readers here – the topology window is closed – so <strong>their order does not matter</strong> and no
+fixed-point iteration is needed: none of them can invalidate another’s work.</p>
+<p>Each consumer sees the <em>net</em> change across every round of the topology update, which is why
+this is pull and not push: a push fires per mutation, i.e. at moments that are by
+construction mid-pipeline, handing a consumer a state that no longer exists by the time the
+solve begins.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>True if any consumer reported that its DOF footprint changed.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>bool</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.models.topologypipeline.TopologyPipeline.registerMeshDependent">
+<span class="sig-name descname"><span class="pre">registerMeshDependent</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">consumer</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/models/topologypipeline.html#TopologyPipeline.registerMeshDependent"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.models.topologypipeline.TopologyPipeline.registerMeshDependent" title="Link to this definition"></a></dt>
+<dd><p>Register a <code class="xref py py-class docutils literal notranslate"><span class="pre">MeshDependent</span></code> to be refreshed after
+every topology update.</p>
+<p>Registration is the freshness guarantee: a consumer that is not in this list is never told
+the mesh changed. That matters most for the consumers the solver does not otherwise tick –
+multi-point constraints live in <code class="docutils literal notranslate"><span class="pre">model.multiPointConstraints</span></code>, which no per-increment sweep
+iterates, so a tie could only ever learn about refinement this way.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.models.topologypipeline.TopologyPipeline.replayHistory">
+<span class="sig-name descname"><span class="pre">replayHistory</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">records</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">journal</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/models/topologypipeline.html#TopologyPipeline.replayHistory"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.models.topologypipeline.TopologyPipeline.replayHistory" title="Link to this definition"></a></dt>
+<dd><p>Reconstruct the topology by re-applying recorded decisions, in order.</p>
+<p>This is the whole point of the plan/apply split: the modifier’s <code class="xref py py-meth docutils literal notranslate"><span class="pre">apply()</span></code> runs here
+exactly as it did live, fed a decoded plan instead of a freshly evaluated one. There is no
+replay-specific code path to drift from the live one – which is what the previous design
+had, and why a resumed run silently renumbered its elements.</p>
+<p>What a replay does <em>not</em> repeat per record is the whole-mesh work around <code class="docutils literal notranslate"><span class="pre">apply</span></code> whose
+result is a pure function of the final mesh: the <a class="reference internal" href="#edelweissfe.models.topologypipeline.TopologyPipeline.fingerprint" title="edelweissfe.models.topologypipeline.TopologyPipeline.fingerprint"><code class="xref py py-meth docutils literal notranslate"><span class="pre">fingerprint()</span></code></a> walk (the
+recorded digests are carried forward and the final one is checked) and the node-field
+bookkeeping (deferred to the end of the window, see <a class="reference internal" href="#edelweissfe.models.topologypipeline.TopologyPipeline.changes" title="edelweissfe.models.topologypipeline.TopologyPipeline.changes"><code class="xref py py-meth docutils literal notranslate"><span class="pre">changes()</span></code></a>). A history of
+a few hundred refinements on a mesh of tens of thousands of elements replayed in minutes
+otherwise, all of it spent re-deriving state that the next record, or <a class="reference internal" href="#edelweissfe.models.femodel.FEModel.readRestart" title="edelweissfe.models.femodel.FEModel.readRestart"><code class="xref py py-meth docutils literal notranslate"><span class="pre">readRestart()</span></code></a>,
+overwrote right away.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>records</strong> – The <code class="xref py py-class docutils literal notranslate"><span class="pre">TopologyRecord</span></code> sequence to replay.</p></li>
+<li><p><strong>journal</strong> (<a class="reference internal" href="journal.html#edelweissfe.journal.journal.Journal" title="edelweissfe.journal.journal.Journal"><em>Journal</em></a>) – Optional Journal for progress messages.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference internal" href="exceptions.html#edelweissfe.utils.exceptions.TopologyError" title="edelweissfe.utils.exceptions.TopologyError"><strong>TopologyError</strong></a> – If the replayed topology’s fingerprint differs from the one recorded with the last
+record (when <a class="reference internal" href="#edelweissfe.models.topologypipeline.TopologyPipeline.verifyFingerprints" title="edelweissfe.models.topologypipeline.TopologyPipeline.verifyFingerprints"><code class="xref py py-attr docutils literal notranslate"><span class="pre">verifyFingerprints</span></code></a>). With
+<a class="reference internal" href="#edelweissfe.models.topologypipeline.TopologyPipeline.verifyFingerprintsPerRecord" title="edelweissfe.models.topologypipeline.TopologyPipeline.verifyFingerprintsPerRecord"><code class="xref py py-attr docutils literal notranslate"><span class="pre">verifyFingerprintsPerRecord</span></code></a> every record is checked as it is replayed
+and the error names the first diverging one – so a divergence is located rather than
+merely detected.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.models.topologypipeline.TopologyPipeline.reserveElementNumbers">
+<span class="sig-name descname"><span class="pre">reserveElementNumbers</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">count</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/models/topologypipeline.html#TopologyPipeline.reserveElementNumbers"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.models.topologypipeline.TopologyPipeline.reserveElementNumbers" title="Link to this definition"></a></dt>
+<dd><p>Reserve <code class="docutils literal notranslate"><span class="pre">count</span></code> fresh element numbers.</p>
+<p>The allocator is <strong>monotonic</strong>: numbers are never recycled, and are never derived from
+<code class="docutils literal notranslate"><span class="pre">max(self._model.elements)</span></code>. Both properties matter beyond tidiness.</p>
+<p>Deriving the next number from <code class="docutils literal notranslate"><span class="pre">max(self._model.elements)</span></code> makes numbering a function of the
+deletion history as well as the creation history – a contact facet set that is deleted and
+rebuilt (the common case between two refinements) hands the freed numbers straight back out
+– so a restart replay would have to reproduce creations, deletions <em>and</em> their interleaving
+to renumber identically. With one monotonic counter it only has to reproduce the ordered
+creation sequence, which is exactly what the recorded topology history holds.</p>
+<p>Never recycling additionally means a number refers to one element for the model’s entire
+lifetime, so <code class="xref py py-meth docutils literal notranslate"><span class="pre">mergedWith()</span></code>’s documented
+no-reuse assumption holds, and a reference cached by number cannot silently alias a
+different element.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>count</strong> (<em>int</em>) – How many consecutive numbers to reserve.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The reserved numbers, in ascending order.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>range</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.models.topologypipeline.TopologyPipeline.reserveNodeNumbers">
+<span class="sig-name descname"><span class="pre">reserveNodeNumbers</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">count</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/models/topologypipeline.html#TopologyPipeline.reserveNodeNumbers"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.models.topologypipeline.TopologyPipeline.reserveNodeNumbers" title="Link to this definition"></a></dt>
+<dd><p>Reserve <code class="docutils literal notranslate"><span class="pre">count</span></code> fresh node labels. The node-side counterpart of
+<a class="reference internal" href="#edelweissfe.models.topologypipeline.TopologyPipeline.reserveElementNumbers" title="edelweissfe.models.topologypipeline.TopologyPipeline.reserveElementNumbers"><code class="xref py py-meth docutils literal notranslate"><span class="pre">reserveElementNumbers()</span></code></a>, monotonic for the same reasons.</p>
+<p>The pattern this replaces is <code class="docutils literal notranslate"><span class="pre">len(model.nodes)</span> <span class="pre">+</span> <span class="pre">1</span></code>, which is a positional guess, not an
+allocator: once anything is deleted the dict has gaps, and the “next” label lands on a live
+node and silently overwrites it.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>count</strong> (<em>int</em>) – How many consecutive labels to reserve.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The reserved labels, in ascending order.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>range</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.models.topologypipeline.TopologyPipeline.setupFingerprint">
+<span class="sig-name descname"><span class="pre">setupFingerprint</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/models/topologypipeline.html#TopologyPipeline.setupFingerprint"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.models.topologypipeline.TopologyPipeline.setupFingerprint" title="Link to this definition"></a></dt>
+<dd><p>The <a class="reference internal" href="#edelweissfe.models.topologypipeline.TopologyPipeline.fingerprint" title="edelweissfe.models.topologypipeline.TopologyPipeline.fingerprint"><code class="xref py py-meth docutils literal notranslate"><span class="pre">fingerprint()</span></code></a> of the mesh as the input file built it. A checkpoint carries it, so
+that a resumed run can verify that it was rebuilt from the same mesh – the recorded
+topology changes are verified by the replay, but they say nothing about a mesh no modifier
+ever touched.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>The digest.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>str</p>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>RuntimeError</strong> – If the model was never set up (<a class="reference internal" href="#edelweissfe.models.femodel.FEModel.prepareYourself" title="edelweissfe.models.femodel.FEModel.prepareYourself"><code class="xref py py-meth docutils literal notranslate"><span class="pre">prepareYourself()</span></code></a>).</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.models.topologypipeline.TopologyPipeline.update">
+<span class="sig-name descname"><span class="pre">update</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">step</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/models/topologypipeline.html#TopologyPipeline.update"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.models.topologypipeline.TopologyPipeline.update" title="Link to this definition"></a></dt>
+<dd><p>Run every model modifier to a fixed point, inside one topology window.</p>
+<p>Modifiers depend on each other – refinement invalidates a tied surface’s facets, a
+deposition modifier creates elements refinement may then want to split, and a 2:1 balance
+may need to refine what another modifier just activated. Rather than asking the user to
+declare a dependency order (which cannot express mutual dependence anyway), each <strong>round</strong>
+offers every modifier the net change since that modifier last planned. A round in which
+nobody plans anything is the fixed point.</p>
+<p>Determinism comes from the round structure, not from luck: within a round, modifiers run in
+<code class="docutils literal notranslate"><span class="pre">self._model.modelModifiers</span></code> order, which is input-file order.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>True if the topology changed, so the solver rebuilds its equation system.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>bool</p>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference internal" href="exceptions.html#edelweissfe.utils.exceptions.TopologyError" title="edelweissfe.utils.exceptions.TopologyError"><strong>TopologyError</strong></a> – If the rounds do not settle within <a class="reference internal" href="#edelweissfe.models.topologypipeline.TopologyPipeline.maxRounds" title="edelweissfe.models.topologypipeline.TopologyPipeline.maxRounds"><code class="xref py py-attr docutils literal notranslate"><span class="pre">maxRounds</span></code></a>, which means some modifier
+keeps planning in response to its own output. The message names the offenders.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="edelweissfe.models.topologypipeline.TopologyPipeline.history">
+<span class="sig-name descname"><span class="pre">history</span></span><a class="headerlink" href="#edelweissfe.models.topologypipeline.TopologyPipeline.history" title="Link to this definition"></a></dt>
+<dd><p>the restart history, replayed on resume.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Ordered record of every applied model-modifier decision</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="edelweissfe.models.topologypipeline.TopologyPipeline.isDeferringFieldBookkeeping">
+<span class="sig-name descname"><span class="pre">isDeferringFieldBookkeeping</span></span><a class="headerlink" href="#edelweissfe.models.topologypipeline.TopologyPipeline.isDeferringFieldBookkeeping" title="Link to this definition"></a></dt>
+<dd><p>True inside a <a class="reference internal" href="#edelweissfe.models.topologypipeline.TopologyPipeline.changes" title="edelweissfe.models.topologypipeline.TopologyPipeline.changes"><code class="xref py py-meth docutils literal notranslate"><span class="pre">changes()</span></code></a> window that defers the node-field bookkeeping.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="edelweissfe.models.topologypipeline.TopologyPipeline.isOpen">
+<span class="sig-name descname"><span class="pre">isOpen</span></span><a class="headerlink" href="#edelweissfe.models.topologypipeline.TopologyPipeline.isOpen" title="Link to this definition"></a></dt>
+<dd><p>True only inside <a class="reference internal" href="#edelweissfe.models.topologypipeline.TopologyPipeline.changes" title="edelweissfe.models.topologypipeline.TopologyPipeline.changes"><code class="xref py py-meth docutils literal notranslate"><span class="pre">changes()</span></code></a>; see there.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="edelweissfe.models.topologypipeline.TopologyPipeline.maxRounds">
+<span class="sig-name descname"><span class="pre">maxRounds</span></span><a class="headerlink" href="#edelweissfe.models.topologypipeline.TopologyPipeline.maxRounds" title="Link to this definition"></a></dt>
+<dd><p>Guard against a model modifier that keeps planning in response to its own output.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="edelweissfe.models.topologypipeline.TopologyPipeline.meshDependents">
+<span class="sig-name descname"><span class="pre">meshDependents</span></span><a class="headerlink" href="#edelweissfe.models.topologypipeline.TopologyPipeline.meshDependents" title="Link to this definition"></a></dt>
+<dd><p>Consumers that cache mesh-derived state; see <a class="reference internal" href="#edelweissfe.models.topologypipeline.TopologyPipeline.refreshMeshDependents" title="edelweissfe.models.topologypipeline.TopologyPipeline.refreshMeshDependents"><code class="xref py py-meth docutils literal notranslate"><span class="pre">refreshMeshDependents()</span></code></a>.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="edelweissfe.models.topologypipeline.TopologyPipeline.verifyFingerprints">
+<span class="sig-name descname"><span class="pre">verifyFingerprints</span></span><a class="headerlink" href="#edelweissfe.models.topologypipeline.TopologyPipeline.verifyFingerprints" title="Link to this definition"></a></dt>
+<dd><p>Compare the replayed topology’s fingerprint against the recorded one, once, after the whole
+history has been replayed. See <a class="reference internal" href="#edelweissfe.models.topologypipeline.TopologyPipeline.replayHistory" title="edelweissfe.models.topologypipeline.TopologyPipeline.replayHistory"><code class="xref py py-meth docutils literal notranslate"><span class="pre">replayHistory()</span></code></a>.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="edelweissfe.models.topologypipeline.TopologyPipeline.verifyFingerprintsPerRecord">
+<span class="sig-name descname"><span class="pre">verifyFingerprintsPerRecord</span></span><a class="headerlink" href="#edelweissfe.models.topologypipeline.TopologyPipeline.verifyFingerprintsPerRecord" title="Link to this definition"></a></dt>
+<dd><p>Additionally compare a fingerprint after <em>every</em> replayed record, to locate a divergence.
+Off by default: it costs one whole-mesh walk per record.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="edelweissfe.models.topologypipeline.TopologyPipeline.version">
+<span class="sig-name descname"><span class="pre">version</span></span><a class="headerlink" href="#edelweissfe.models.topologypipeline.TopologyPipeline.version" title="Link to this definition"></a></dt>
+<dd><p>Bumped on every structural mutation; drives pull-based reconcile.</p>
 </dd></dl>
 
 </dd></dl>

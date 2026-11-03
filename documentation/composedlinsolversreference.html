@@ -1,0 +1,522 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Composed linear solvers: reference &mdash; EdelweissFE v22.07 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=cfdaff8d" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/custom.css?v=37fbe429" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=17e2f33f"></script>
+      <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+      <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-mml-chtml.js"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Theory: the field-split AMG preconditioner" href="blockamgtheory.html" />
+    <link rel="prev" title="Composing a linear solver" href="composedlinsolvers.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            EdelweissFE
+              <img src="../_static/edelweiss_fe_logo.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../features.html">Features</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../prerequisites.html">Prerequisites</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation.html">Installation</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">Documentation</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="syntax.html">Input file syntax</a></li>
+<li class="toctree-l2"><a class="reference internal" href="inputsystem.html">The input system: how <code class="docutils literal notranslate"><span class="pre">.inp</span></code> grammar is defined</a></li>
+<li class="toctree-l2"><a class="reference internal" href="jobs.html">Inputfile driven simulations</a></li>
+<li class="toctree-l2"><a class="reference internal" href="models.html">Models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="solvers.html">Solvers</a></li>
+<li class="toctree-l2 current"><a class="reference internal" href="linsolvers.html">Linear solvers</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="linsolvers.html#direct-or-iterative">Direct or iterative</a></li>
+<li class="toctree-l3"><a class="reference internal" href="linsolvers.html#one-adapter-for-every-type">One adapter for every type</a></li>
+<li class="toctree-l3"><a class="reference internal" href="linsolvers.html#the-options-of-each-type">The options of each type</a></li>
+<li class="toctree-l3 current"><a class="reference internal" href="linsolvers.html#the-pages-on-linear-solvers">The pages on linear solvers</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="composedlinsolvers.html">Composing a linear solver</a></li>
+<li class="toctree-l4 current"><a class="current reference internal" href="#">Composed linear solvers: reference</a></li>
+<li class="toctree-l4"><a class="reference internal" href="blockamgtheory.html">Theory: the field-split AMG preconditioner</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fieldsplitmeasurements.html">Field-split AMG: measurements behind the defaults</a></li>
+<li class="toctree-l4"><a class="reference internal" href="linsolveapi.html">Linear solvers: Python API</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="steps.html">Steps</a></li>
+<li class="toctree-l2"><a class="reference internal" href="analyticalfields.html">Analytical fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="constraints.html">Constraints</a></li>
+<li class="toctree-l2"><a class="reference internal" href="rigidbodies.html">Rigid bodies</a></li>
+<li class="toctree-l2"><a class="reference internal" href="contacttheory.html">Contact mechanics: theory</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dofmanager.html">Degree of Freedom (DOF) Manager and Numerics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="assembly.html">System matrix assembly</a></li>
+<li class="toctree-l2"><a class="reference internal" href="fieldoutputmanager.html">Field outputs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="fields.html">Fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="elements.html">Elements</a></li>
+<li class="toctree-l2"><a class="reference internal" href="exceptions.html">Exceptions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="generators.html">Generators</a></li>
+<li class="toctree-l2"><a class="reference internal" href="journal.html">Journal</a></li>
+<li class="toctree-l2"><a class="reference internal" href="materials.html">Materials</a></li>
+<li class="toctree-l2"><a class="reference internal" href="mesh.html">Creating finite element meshes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="modelmodifiers.html">Model modifiers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="topologypipeline.html">The topology pipeline: how a model changes itself</a></li>
+<li class="toctree-l2"><a class="reference internal" href="restart.html">Restart</a></li>
+<li class="toctree-l2"><a class="reference internal" href="adaptivitytheory.html">Adaptive refinement: error estimation and marking</a></li>
+<li class="toctree-l2"><a class="reference internal" href="output.html">Outputmanagers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="parallelization.html">Parallelization</a></li>
+<li class="toctree-l2"><a class="reference internal" href="phenomena.html">Physical phenomena</a></li>
+<li class="toctree-l2"><a class="reference internal" href="plotter.html">Plotting</a></li>
+<li class="toctree-l2"><a class="reference internal" href="points.html">Points</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sections.html">Sections</a></li>
+<li class="toctree-l2"><a class="reference internal" href="sets.html">Sets</a></li>
+<li class="toctree-l2"><a class="reference internal" href="stepactions.html">Step actions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="utils.html">Utilities</a></li>
+<li class="toctree-l2"><a class="reference internal" href="variables.html">Variables</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../contributors.html">Contributors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../publications.html">Publications</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">EdelweissFE</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="index.html">Documentation</a></li>
+          <li class="breadcrumb-item"><a href="linsolvers.html">Linear solvers</a></li>
+      <li class="breadcrumb-item active">Composed linear solvers: reference</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/documentation/composedlinsolversreference.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="composed-linear-solvers-reference">
+<h1>Composed linear solvers: reference<a class="headerlink" href="#composed-linear-solvers-reference" title="Link to this heading"></a></h1>
+<p>The arguments, defaults and data lines of the components and of the adapter, for looking up; how to build a solver
+from them is on <a class="reference internal" href="composedlinsolvers.html"><span class="doc">Composing a linear solver</span></a>, the method they implement on <a class="reference internal" href="blockamgtheory.html"><span class="doc">Theory: the field-split AMG preconditioner</span></a>, and the classes and
+functions on <a class="reference internal" href="linsolveapi.html"><span class="doc">Linear solvers: Python API</span></a>.</p>
+<section id="the-adapter">
+<span id="composed-adapter"></span><h2>The adapter<a class="headerlink" href="#the-adapter" title="Link to this heading"></a></h2>
+<p><a class="reference internal" href="linsolveapi.html#edelweissfe.linsolve.composition.solver.ComposedLinearSolver" title="edelweissfe.linsolve.composition.solver.ComposedLinearSolver"><code class="xref py py-class docutils literal notranslate"><span class="pre">ComposedLinearSolver</span></code></a> is what the nonlinear solver calls,
+<code class="docutils literal notranslate"><span class="pre">x</span> <span class="pre">=</span> <span class="pre">solver(A,</span> <span class="pre">b)</span></code>, once per Newton iteration, for every type of linear solver. It finds what changed since the last
+call (the first solve, a new model, a resized system, a new sparsity pattern, a jump of the right-hand side that marks
+a new increment), hands the matrix down the tree, applies the root (to each column of <code class="docutils literal notranslate"><span class="pre">b</span></code>, if it has several), and
+reports on the solve. Its settings are the data lines every type has (the table in <a class="reference internal" href="linsolvers.html"><span class="doc">Linear solvers</span></a>):</p>
+<div class="highlight-edelweiss notranslate"><div class="highlight"><pre><span></span><span class="k">*linearSolver</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">mySolver</span>,<span class="nv"> type</span><span class="ow">=</span><span class="m">custom</span>
+<span class="nv">script</span><span class="ow">=</span><span class="m">solver.py</span>
+<span class="c c-Singleline">** silent, warning (default), info, debug</span>
+<span class="nv">verbosity</span><span class="ow">=</span><span class="m">info</span>
+<span class="c c-Singleline">** a solve with more outer iterations gets a warning (default 100)</span>
+<span class="nv">warningOuterIterations</span><span class="ow">=</span><span class="m">60</span>
+<span class="c c-Singleline">** a right-hand side this many times the last one is a new increment (default 4)</span>
+<span class="nv">residualGrowthFactor</span><span class="ow">=</span><span class="m">4.0</span>
+<span class="c c-Singleline">** none (default), slow, every, or the numbers of the solves: 12 13 14</span>
+<span class="nv">dumps</span><span class="ow">=</span><span class="m">slow</span>
+<span class="nv">dumpDirectory</span><span class="ow">=</span><span class="m">slowSolves</span>
+<span class="nv">maxDumps</span><span class="ow">=</span><span class="m">10</span>
+<span class="nv">dumpContextSolves</span><span class="ow">=</span><span class="m">2</span>
+<span class="c c-Singleline">** custom only: run the script again whenever it changes, during the run</span>
+<span class="nv">hotReload</span><span class="ow">=</span><span class="m">true</span>
+</pre></div>
+</div>
+<p>In Python, the same adapter is <code class="docutils literal notranslate"><span class="pre">ComposedLinearSolver(tree,</span> <span class="pre">verbosity=...,</span> <span class="pre">warningOuterIterations=...,</span>
+<span class="pre">residualGrowthFactor=...,</span> <span class="pre">dumps=SolveDumps(directory,</span> <span class="pre">trigger,</span> <span class="pre">maxDumps=...,</span> <span class="pre">contextSolves=...))</span></code>, or
+<code class="docutils literal notranslate"><span class="pre">ComposedLinearSolver.fromScript(&quot;solver.py&quot;,</span> <span class="pre">hotReload=True,</span> <span class="pre">...)</span></code>; <code class="docutils literal notranslate"><span class="pre">nodeCoordinates</span></code> and <code class="docutils literal notranslate"><span class="pre">midsideCorners</span></code> give node
+coordinates and midside corners per field instead of those of the model (an offline replay without a model).</p>
+<section id="verbosity-levels">
+<span id="composed-verbosity"></span><h3>Verbosity levels<a class="headerlink" href="#verbosity-levels" title="Link to this heading"></a></h3>
+<p>Messages go through the shared <a class="reference internal" href="journal.html#edelweissfe.journal.journal.Journal" title="edelweissfe.journal.journal.Journal"><code class="xref py py-class docutils literal notranslate"><span class="pre">Journal</span></code></a>, and the data line <code class="docutils literal notranslate"><span class="pre">verbosity</span></code> decides
+whether the solver attempts to log at all – the Journal’s own level then decides whether the attempt is shown.
+All messages are nested inside the Newton iteration they belong to; warnings are marked <code class="docutils literal notranslate"><span class="pre">⚠</span></code>.</p>
+<dl class="simple">
+<dt><code class="docutils literal notranslate"><span class="pre">silent</span></code></dt><dd><p>Nothing at all.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">warning</span></code> (default)</dt><dd><p>Only abnormal conditions, so a healthy run stays quiet: an outer iteration count past
+<code class="docutils literal notranslate"><span class="pre">warningOuterIterations</span></code> (a slow solve), a true residual still above the requested tolerance after every
+true-residual restart (saying whether an outer pass stopped at the iteration cap, or whether, on a scaled system, the scaled
+residual was met but not the true one), and any dump written. A pass that stopped at the cap but whose solve still met the tolerance, after a true-residual restart,
+is not reported; the hierarchies are rebuilt all the same.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">info</span></code></dt><dd><p>Turns on the “linear solve” column of the nonlinear solver’s per-iteration table: outer iteration
+count, achieved true residual (and whether it met the requested tolerance) and number of
+true-residual restarts of each solve; and shows the structure of the solver, in a frame, at its first solve. The frame
+stands above the header of the table, so that nothing the solver says interrupts the rows. This is the level to
+run at when first characterising a model on an iterative solver.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">debug</span></code></dt><dd><p>Adds, per solve, whether the hierarchies were rebuilt (and why, e.g. <code class="docutils literal notranslate"><span class="pre">rebuilt(stale)</span></code>) or <code class="docutils literal notranslate"><span class="pre">reused</span></code>, the
+requested tolerance and the wall-clock, in the “linear solve” column, and one line per true-residual restart of a Krylov
+solve on a scaled system. After a rebuild, the notes of the components on what they built follow in the column:
+for a <code class="docutils literal notranslate"><span class="pre">SchurComplement</span></code>, the condensed dofs and the nonzeros of <span class="math notranslate nohighlight">\(\tilde S\)</span>.</p>
+</dd>
+</dl>
+<p>The sizes of what a <code class="docutils literal notranslate"><span class="pre">SchurComplement</span></code> built are also recorded in its statistics (<code class="docutils literal notranslate"><span class="pre">condensed</span> <span class="pre">dofs</span></code>, <code class="docutils literal notranslate"><span class="pre">S̃</span> <span class="pre">nnz</span></code>), see
+the run-statistics view.</p>
+<p>Per-stage wall-clock – equilibration, the equilibrated system (the scaled operator and the coupling
+blocks between fields, built in one threaded pass), hierarchy build (per field, and per stage of a
+p-multigrid build), near-null-space construction, outer solve, and true-residual restarts – is recorded through
+<code class="xref py py-mod docutils literal notranslate"><span class="pre">performancetiming</span></code> regardless of verbosity, and appears nested under “linear
+solve” in the job’s performance table. That table, not the log, is the first place to look when
+deciding whether a run is dominated by hierarchy builds or by outer iterations.</p>
+</section>
+<section id="dumps-of-the-solves">
+<span id="composed-solve-dumps"></span><h3>Dumps of the solves<a class="headerlink" href="#dumps-of-the-solves" title="Link to this heading"></a></h3>
+<p>The data line <code class="docutils literal notranslate"><span class="pre">dumps</span></code> (in Python <code class="docutils literal notranslate"><span class="pre">SolveDumps(directory,</span> <span class="pre">trigger,</span> <span class="pre">maxDumps,</span> <span class="pre">contextSolves)</span></code>) writes the raw systems
+of chosen solves to <code class="docutils literal notranslate"><span class="pre">dumpDirectory</span></code>, for an offline replay (<code class="docutils literal notranslate"><span class="pre">scripts/benchmark_linsolve.py</span></code>, which replays a
+dumped sequence through direct solver variants, or a
+<code class="docutils literal notranslate"><span class="pre">ComposedLinearSolver</span></code> driven by hand with <code class="docutils literal notranslate"><span class="pre">setFieldStructure</span></code> and the dumped geometry as <code class="docutils literal notranslate"><span class="pre">nodeCoordinates</span></code> and
+<code class="docutils literal notranslate"><span class="pre">midsideCorners</span></code>). It works for every type, direct solvers included, and is the one way to capture a solve. A dump is
+the raw <code class="docutils literal notranslate"><span class="pre">(A,</span> <span class="pre">b)</span></code> of a solve – before any diagonal scaling – with the field-block layout active for that solve,
+which is what a replay needs in order to go back through the same tree without a live model: a sequence of
+authentic systems, so that every solver variant replayed offline sees the same input. The trigger:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">slow</span></code>: a solve with more outer iterations than <code class="docutils literal notranslate"><span class="pre">warningOuterIterations</span></code> (so that a dump and its warning fire
+together), or one stopped at the iteration cap short of its tolerance. A preconditioner that degrades typically shows
+only tens of hours into a run, at a solve nobody can name in advance (a late-increment, heavily damaged Jacobian,
+say); unlike <code class="docutils literal notranslate"><span class="pre">every</span></code> or solve numbers, fixed <em>before</em> the run, this trigger decides by the solve’s own outcome;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">every</span></code>: every solve, a sequence (whether a factorization or a preconditioner can be reused is a question about a
+sequence, not a single matrix);</p></li>
+<li><p>solve numbers, e.g. <code class="docutils literal notranslate"><span class="pre">dumps=12</span> <span class="pre">13</span> <span class="pre">14</span></code>: these solves of each linear solver (counted from 1).</p></li>
+</ul>
+<p>On disk:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">A_&lt;solver&gt;_&lt;solve&gt;.npz</span></code> (SciPy, uncompressed), <code class="docutils literal notranslate"><span class="pre">b_&lt;solver&gt;_&lt;solve&gt;.npy</span></code>, and with a Schur complement the
+condensed dofs, <code class="docutils literal notranslate"><span class="pre">schurDofs_&lt;solver&gt;_&lt;solve&gt;.npy</span></code>; <code class="docutils literal notranslate"><span class="pre">&lt;solver&gt;</span></code> is the ordinal of the linear solver in the process
+(one per nonlinear solver, made anew only when a step names another linear solver), so the dumps of several
+solvers never overwrite each other, and the solve numbering continues across steps and a hot reload;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">geometry_&lt;solver&gt;_&lt;solve&gt;.npz</span></code>: what a replay of the tree needs of the model, the node coordinates of every vector
+field (<code class="docutils literal notranslate"><span class="pre">&lt;field&gt;_coordinates</span></code>, for its rigid-body modes) and the midside corners the tree used (<code class="docutils literal notranslate"><span class="pre">&lt;field&gt;_isCorner</span></code>,
+<code class="docutils literal notranslate"><span class="pre">&lt;field&gt;_edgeEndpoints</span></code>);</p></li>
+<li><p>one line per dumped system in <code class="docutils literal notranslate"><span class="pre">manifest.jsonl</span></code>: <code class="docutils literal notranslate"><span class="pre">solveCount</span></code>, <code class="docutils literal notranslate"><span class="pre">role</span></code> (<code class="docutils literal notranslate"><span class="pre">&quot;trigger&quot;</span></code> or <code class="docutils literal notranslate"><span class="pre">&quot;context&quot;</span></code>),
+<code class="docutils literal notranslate"><span class="pre">triggerSolveCount</span></code>, <code class="docutils literal notranslate"><span class="pre">contextOffset</span></code>, <code class="docutils literal notranslate"><span class="pre">rows</span></code>, <code class="docutils literal notranslate"><span class="pre">nnz</span></code>, <code class="docutils literal notranslate"><span class="pre">matrixFile</span></code>, <code class="docutils literal notranslate"><span class="pre">rhsFile</span></code>, <code class="docutils literal notranslate"><span class="pre">geometryFile</span></code>, the field
+<code class="docutils literal notranslate"><span class="pre">blocks</span></code> (name, start, stop, dimension), <code class="docutils literal notranslate"><span class="pre">patternChanged</span></code>, <code class="docutils literal notranslate"><span class="pre">newIncrement</span></code>, and for a Krylov solve its
+<code class="docutils literal notranslate"><span class="pre">SolveRecord</span></code> – <code class="docutils literal notranslate"><span class="pre">iterations</span></code>, <code class="docutils literal notranslate"><span class="pre">residual</span></code> (the true relative residual), <code class="docutils literal notranslate"><span class="pre">eta</span></code>, <code class="docutils literal notranslate"><span class="pre">capHit</span></code>, <code class="docutils literal notranslate"><span class="pre">trueResidualRestarts</span></code>,
+<code class="docutils literal notranslate"><span class="pre">rebuildReason</span></code> (<code class="docutils literal notranslate"><span class="pre">null</span></code>: the preconditioner was reused), <code class="docutils literal notranslate"><span class="pre">scaledSystem</span></code> – and <code class="docutils literal notranslate"><span class="pre">previousIterations</span></code>.</p></li>
+</ul>
+<p><code class="docutils literal notranslate"><span class="pre">dumpContextSolves</span></code> also writes the solves <em>before</em> a dumped one, kept in memory as copies. A single snapshot cannot
+distinguish “this operator is intrinsically hard” from “this solve’s own carried-over state degraded independently
+of the operator” – such as a reused, now-stale hierarchy. Both look identical from the matrix alone, and a fresh
+solver replaying the matrix on its own can converge in a fraction of the live iteration count, which is a genuinely
+misleading result. Capturing the preceding sequence lets an offline replay feed one persistent solver instance the
+same solves in the same order. The staleness question can often be answered from the manifest alone, without a
+replay. <code class="docutils literal notranslate"><span class="pre">maxDumps</span></code> (default 10) bounds the systems written to one directory in the process, by all solvers that dump
+there, context solves included. A sequence of every solve is <code class="docutils literal notranslate"><span class="pre">dumps=every</span></code> (or solve numbers).</p>
+</section>
+<section id="hot-reload-of-the-solver-script">
+<span id="composed-hot-reload"></span><h3>Hot reload of the solver script<a class="headerlink" href="#hot-reload-of-the-solver-script" title="Link to this heading"></a></h3>
+<p>With <code class="docutils literal notranslate"><span class="pre">hotReload=true</span></code> (<code class="docutils literal notranslate"><span class="pre">type=custom</span></code>), the adapter reads the script before every solve and, if it changed, runs
+it again and continues with the tree it builds, set up on that solve (rebuild reason <code class="docutils literal notranslate"><span class="pre">reload</span></code>). The settings of the
+adapter stay those of the input file, and what the run has learnt stays too: the solve count, the residual history,
+the numbering of the dumps. The journal says so at <code class="docutils literal notranslate"><span class="pre">warning</span></code>, with the sha256 of the script and the new tree, so
+that a reader of the log knows which solver was in force from which solve onwards. This makes solver settings
+testable on a <em>live</em> run, at the state that was expensive to reach.</p>
+<p>A bad edit can never end the run: a script that cannot be read or does not compile (e.g. half written by an editor) is
+retried on the next solve; one that raises, or defines no composed solver, is reported (<code class="docutils literal notranslate"><span class="pre">REJECTED</span></code>) and the tree in
+force kept until the script changes again; a new tree whose set-up fails (e.g. an AMGCL tree naming an unknown
+smoother) is <code class="docutils literal notranslate"><span class="pre">ROLLED</span> <span class="pre">BACK</span></code> to the one in force. The contents themselves are the stamp, not the modification time,
+which coarse file timestamps can leave unchanged across two quick edits.</p>
+</section>
+</section>
+<section id="reuse-and-tolerance">
+<h2>Reuse and tolerance<a class="headerlink" href="#reuse-and-tolerance" title="Link to this heading"></a></h2>
+<p><a class="reference internal" href="linsolveapi.html#edelweissfe.linsolve.composition.solver.ComposedLinearSolver" title="edelweissfe.linsolve.composition.solver.ComposedLinearSolver"><code class="xref py py-class docutils literal notranslate"><span class="pre">ComposedLinearSolver</span></code></a> finds what changed since the last solve (the
+first solve, a new model, a resized system, a new sparsity pattern, a jump of the right-hand side that marks a new
+increment) and hands it down the tree as a <code class="docutils literal notranslate"><span class="pre">MatrixChange</span></code>. <code class="docutils literal notranslate"><span class="pre">LGMRES</span></code> adds its own reasons – a new increment, a
+stale preconditioner (too many more iterations than the solve it was built for, or a cap hit), or <code class="docutils literal notranslate"><span class="pre">reusePreconditioner=False</span></code> –
+and every component decides in <code class="docutils literal notranslate"><span class="pre">update</span></code> what to keep: an <code class="docutils literal notranslate"><span class="pre">AMG</span></code> hierarchy is kept unless a rebuild is asked for,
+a <code class="docutils literal notranslate"><span class="pre">DiagonalScaling</span></code> keeps its <span class="math notranslate nohighlight">\(D\)</span>, a <code class="docutils literal notranslate"><span class="pre">Multiplicative</span></code> always takes the new couplings.</p>
+<p>A <code class="docutils literal notranslate"><span class="pre">DiagonalScaling</span></code> rebuilds its <span class="math notranslate nohighlight">\(D\)</span> together with what is below it, also for the reasons a Krylov solver below
+it adds itself (<code class="docutils literal notranslate"><span class="pre">Preconditioner.withRebuildReasons</span></code>), so that <code class="docutils literal notranslate"><span class="pre">DiagonalScaling(LGMRES(...))</span></code> rebuilds as
+<code class="docutils literal notranslate"><span class="pre">LGMRES(DiagonalScaling(...))</span></code> does.</p>
+<p>What is rebuilt is first forgotten (<code class="docutils literal notranslate"><span class="pre">Preconditioner.forget</span></code>): a Krylov solver that rebuilds its preconditioner drops
+all of it before any part is built again, a <code class="docutils literal notranslate"><span class="pre">SchurComplement</span></code> drops <span class="math notranslate nohighlight">\(\tilde S\)</span> and its child before it forms
+the next <span class="math notranslate nohighlight">\(\tilde S\)</span>, the blocks of the last matrix before it cuts out those of this one, and a direct solve its
+factorization before it factorizes again; the adapter forgets the whole tree when the model changes (a new step, a
+change of the mesh). So the old and the new hierarchies, factorizations and matrices are never held at once. What is
+reused on purpose survives: the hierarchies while no rebuild is asked for, the selection of the condensed dofs, a
+symbolic factorization (PARDISO’s
+<code class="docutils literal notranslate"><span class="pre">reuseSymbolicFactorization</span></code>), and what the Krylov solver has learnt (its reference iterations, the gap of a
+<code class="docutils literal notranslate"><span class="pre">ResidualGapCompensation</span></code>, its scratch vectors).</p>
+<p>Performance: a diagonal scaling does not form <span class="math notranslate nohighlight">\(D A D\)</span>; the first component below it that needs a block forms
+<span class="math notranslate nohighlight">\(\hat A\)</span> and all field blocks in one threaded native pass, kept with the matrix for all others, which also keeps <span class="math notranslate nohighlight">\(A\)</span> as the operator of the outer Krylov solve
+(<a class="reference internal" href="linsolveapi.html#edelweissfe.linsolve.composition.systemmatrix.SystemMatrix" title="edelweissfe.linsolve.composition.systemmatrix.SystemMatrix"><code class="xref py py-class docutils literal notranslate"><span class="pre">SystemMatrix</span></code></a>).</p>
+</section>
+<section id="a-krylov-solve-on-the-scaled-system">
+<span id="composed-scaled-krylov"></span><h2>A Krylov solve on the scaled system<a class="headerlink" href="#a-krylov-solve-on-the-scaled-system" title="Link to this heading"></a></h2>
+<p>Where the diagonal scaling sits says what the Krylov solve converges. <code class="docutils literal notranslate"><span class="pre">LGMRES(DiagonalScaling(M))</span></code> (the default of
+<code class="docutils literal notranslate"><span class="pre">blockAMG()</span></code>) solves <span class="math notranslate nohighlight">\(A x = b\)</span>, preconditioned by <span class="math notranslate nohighlight">\(D \hat M^{-1} D\)</span>: its residual is the true one,
+<span class="math notranslate nohighlight">\(\lVert b - A x \rVert / \lVert b \rVert\)</span>. <code class="docutils literal notranslate"><span class="pre">DiagonalScaling(LGMRES(M))</span></code> (<code class="docutils literal notranslate"><span class="pre">blockAMG(krylovOnScaledSystem=True)</span></code>)
+solves <span class="math notranslate nohighlight">\(\hat A \hat x = D b\)</span> with <span class="math notranslate nohighlight">\(\hat A = D A D\)</span>, <span class="math notranslate nohighlight">\(x = D \hat x\)</span>, and converges the scaled
+residual <span class="math notranslate nohighlight">\(\lVert D (b - A x) \rVert\)</span>, which weighs every row by its own diagonal – a field with small residual
+entries is resolved as well as the others – but which can be smaller than the true one, on which the solve is accepted.</p>
+<p>So a Krylov solver on a scaled matrix checks the true residual after its pass (in the physical variables of its
+problem: <span class="math notranslate nohighlight">\(b - A x = D^{-1} (\hat b - \hat A \hat x)\)</span>) and, while it misses <span class="math notranslate nohighlight">\(\eta\)</span>, restarts from its
+iterate with a tighter tolerance, 0.01 times the last, at most <code class="docutils literal notranslate"><span class="pre">trueResidualRestarts</span></code> times (default 2). With
+<code class="docutils literal notranslate"><span class="pre">residualGapCompensation=ResidualGapCompensation(safetyFactor=0.3,</span> <span class="pre">maxFactor=1e3)</span></code> the first pass asks for
+<span class="math notranslate nohighlight">\(s \, \eta / g\)</span> instead, with <span class="math notranslate nohighlight">\(g\)</span> the ratio of the true to the scaled residual learnt from the previous
+solves, and a true-residual restart tightens by the measured ratio; it is opt-in (<a class="reference internal" href="fieldsplitmeasurements.html#measured-gap-compensation"><span class="std std-ref">Gap compensation</span></a>). On an unscaled matrix there are no
+true-residual restarts: a pass that misses <span class="math notranslate nohighlight">\(\eta\)</span> has hit the iteration cap, which a warm restart would only extend.
+The method is <a class="reference internal" href="blockamgtheory.html#blockamg-true-residual"><span class="std std-ref">True-residual enforcement: LGMRES on the scaled system</span></a>.</p>
+</section>
+<section id="a-preconditioner-on-the-filtered-matrix">
+<span id="composed-drop-tolerance"></span><h2>A preconditioner on the filtered matrix<a class="headerlink" href="#a-preconditioner-on-the-filtered-matrix" title="Link to this heading"></a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">AMG(dropTolerance=τ)</span></code> and <code class="docutils literal notranslate"><span class="pre">TwoLevel(...,</span> <span class="pre">dropTolerance=τ)</span></code> build on the filtered block <span class="math notranslate nohighlight">\(\tilde A\)</span>: the
+off-diagonal entries with <span class="math notranslate nohighlight">\(\lvert a_{ij} \rvert &lt; \tau \sqrt{\lvert a_{ii} a_{jj} \rvert}\)</span> dropped, the
+diagonal always kept. For operators with many entries per row that are numerically far sparser than structurally (e.g.
+RKPM), smoothed aggregation then weighs only the entries that matter, and the Galerkin products carry fewer of them to
+the coarse levels. Only the preconditioner sees <span class="math notranslate nohighlight">\(\tilde A\)</span>; the Krylov solve applies <span class="math notranslate nohighlight">\(A\)</span>, so the solution
+is that of <span class="math notranslate nohighlight">\(A\)</span>. <code class="docutils literal notranslate"><span class="pre">lumpDroppedEntries=True</span></code> adds the dropped entries of each row onto its diagonal, which keeps
+the row sums (the “filtered matrix” of the AMG literature); for elasticity, whose off-diagonals are mostly negative,
+this weakens the diagonal dominance. The run statistics record the stored entries before and after (<code class="docutils literal notranslate"><span class="pre">nnz</span></code>, <code class="docutils literal notranslate"><span class="pre">nnz</span>
+<span class="pre">kept</span></code>). <code class="docutils literal notranslate"><span class="pre">blockAMG(dropTolerance=τ,</span> <span class="pre">lumpDroppedEntries=...)</span></code> passes them to every field.</p>
+</section>
+<section id="the-amgcl-backend-of-a-field">
+<span id="composed-amg-backend"></span><h2>The AMGCL backend of a field<a class="headerlink" href="#the-amgcl-backend-of-a-field" title="Link to this heading"></a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">AMG</span></code> and <code class="docutils literal notranslate"><span class="pre">TwoLevel</span></code> take the AMGCL tree and the backend apart (the method: <a class="reference internal" href="blockamgtheory.html#blockamg-per-field-amg"><span class="std std-ref">Per-field AMG hierarchies: AMG</span></a>): the tree is what AMGCL reads, the backend how
+EdelweissFE stores the field’s matrix for it. The defaults are chosen in one place,
+<a class="reference internal" href="linsolveapi.html#edelweissfe.linsolve.composition.amg.backendOf" title="edelweissfe.linsolve.composition.amg.backendOf"><code class="xref py py-func docutils literal notranslate"><span class="pre">backendOf()</span></code></a>, from the field:</p>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 30.0%" />
+<col style="width: 70.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Keyword</p></th>
+<th class="head"><p>Default</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">backendBlockSize</span></code></p></td>
+<td><p>the field’s dimension for a 2D or 3D field (node-wise blocks: less index and value traffic per product), else
+1 (scalar entries)</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">backendPrecision</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">&quot;float&quot;</span></code> on 3x3 blocks (set up in double, only the matrices the cycle reads stored in float), else
+<code class="docutils literal notranslate"><span class="pre">&quot;double&quot;</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">nearNullspace</span></code> (<code class="docutils literal notranslate"><span class="pre">AMG</span></code> only)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">&quot;rigidBodyModes&quot;</span></code>: the field’s rigid-body modes as far as the backend holds them – on a block backend the
+translations <span class="math notranslate nohighlight">\(D^{-1} t\)</span> of the scaled block (instead of AMGCL’s constant blocks), on the scalar backend
+the translations and rotations of a displacement field, the translations of another vector field.
+<code class="docutils literal notranslate"><span class="pre">&quot;translations&quot;</span></code> takes the translations on either backend, <code class="docutils literal notranslate"><span class="pre">None</span></code> AMGCL’s own near null-space</p></td>
+</tr>
+</tbody>
+</table>
+<p>So <code class="docutils literal notranslate"><span class="pre">AMG(backendBlockSize=1)</span></code> puts a 3D displacement field on the scalar backend, in double, where its hierarchy
+takes all rigid-body modes as its near null-space. Rotations belong to the near null-space of a displacement field
+only (by its phenomenon, <code class="xref py py-func docutils literal notranslate"><span class="pre">carriesRigidBodyModes()</span></code>): the rotation field of a
+micropolar model gets its translations.</p>
+</section>
+<section id="default-field-trees">
+<span id="composed-default-field-trees"></span><h2>Default field trees<a class="headerlink" href="#default-field-trees" title="Link to this heading"></a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">AMG(amgclTree=...)</span></code> and <code class="docutils literal notranslate"><span class="pre">TwoLevel(...,</span> <span class="pre">amgclTree=...)</span></code> take a field’s AMGCL parameter tree, plus EdelweissFE’s own
+key <code class="docutils literal notranslate"><span class="pre">spectralRadiusSteps</span></code> (below). A tree given replaces the default outright, so start from the one that applies
+and change only what is intended. The defaults are, by the field’s nodal dimension
+(<a class="reference internal" href="linsolveapi.html#edelweissfe.linsolve.composition.amg.defaultFieldTree" title="edelweissfe.linsolve.composition.amg.defaultFieldTree"><code class="xref py py-func docutils literal notranslate"><span class="pre">defaultFieldTree()</span></code></a> in the code):</p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">    </span><span class="nt">"3D vector field (e.g. displacement)"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"coarsening"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="nt">"type"</span><span class="p">:</span><span class="w"> </span><span class="s2">"smoothed_aggregation"</span><span class="p">,</span>
+<span class="w">            </span><span class="nt">"aggr"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"eps_strong"</span><span class="p">:</span><span class="w"> </span><span class="mf">0.01</span><span class="p">},</span>
+<span class="w">            </span><span class="nt">"estimate_spectral_radius"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span>
+<span class="w">        </span><span class="p">},</span>
+<span class="w">        </span><span class="nt">"relax"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"type"</span><span class="p">:</span><span class="w"> </span><span class="s2">"chebyshev"</span><span class="p">,</span><span class="w"> </span><span class="nt">"degree"</span><span class="p">:</span><span class="w"> </span><span class="mi">16</span><span class="p">,</span><span class="w"> </span><span class="nt">"lower"</span><span class="p">:</span><span class="w"> </span><span class="mf">0.01</span><span class="p">,</span><span class="w"> </span><span class="nt">"higher"</span><span class="p">:</span><span class="w"> </span><span class="mf">1.1</span><span class="p">},</span>
+<span class="w">        </span><span class="nt">"npre"</span><span class="p">:</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"npost"</span><span class="p">:</span><span class="w"> </span><span class="mi">1</span>
+<span class="w">    </span><span class="p">},</span>
+<span class="w">    </span><span class="nt">"2D vector field"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"coarsening"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="nt">"type"</span><span class="p">:</span><span class="w"> </span><span class="s2">"smoothed_aggregation"</span><span class="p">,</span>
+<span class="w">            </span><span class="nt">"aggr"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"eps_strong"</span><span class="p">:</span><span class="w"> </span><span class="mf">0.01</span><span class="p">},</span>
+<span class="w">            </span><span class="nt">"estimate_spectral_radius"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span>
+<span class="w">        </span><span class="p">},</span>
+<span class="w">        </span><span class="nt">"relax"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"type"</span><span class="p">:</span><span class="w"> </span><span class="s2">"chebyshev"</span><span class="p">,</span><span class="w"> </span><span class="nt">"degree"</span><span class="p">:</span><span class="w"> </span><span class="mi">16</span><span class="p">,</span><span class="w"> </span><span class="nt">"lower"</span><span class="p">:</span><span class="w"> </span><span class="mf">0.01</span><span class="p">,</span><span class="w"> </span><span class="nt">"higher"</span><span class="p">:</span><span class="w"> </span><span class="mf">1.1</span><span class="p">},</span>
+<span class="w">        </span><span class="nt">"npre"</span><span class="p">:</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"npost"</span><span class="p">:</span><span class="w"> </span><span class="mi">1</span>
+<span class="w">    </span><span class="p">},</span>
+<span class="w">    </span><span class="nt">"vector field of a dimension other than 2 or 3"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"coarsening"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="nt">"type"</span><span class="p">:</span><span class="w"> </span><span class="s2">"smoothed_aggregation"</span><span class="p">,</span>
+<span class="w">            </span><span class="nt">"aggr"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"eps_strong"</span><span class="p">:</span><span class="w"> </span><span class="mf">0.01</span><span class="p">},</span>
+<span class="w">            </span><span class="nt">"estimate_spectral_radius"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span>
+<span class="w">        </span><span class="p">},</span>
+<span class="w">        </span><span class="nt">"relax"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"type"</span><span class="p">:</span><span class="w"> </span><span class="s2">"chebyshev"</span><span class="p">,</span><span class="w"> </span><span class="nt">"degree"</span><span class="p">:</span><span class="w"> </span><span class="mi">16</span><span class="p">,</span><span class="w"> </span><span class="nt">"lower"</span><span class="p">:</span><span class="w"> </span><span class="mf">0.01</span><span class="p">,</span><span class="w"> </span><span class="nt">"higher"</span><span class="p">:</span><span class="w"> </span><span class="mf">1.1</span><span class="p">},</span>
+<span class="w">        </span><span class="nt">"npre"</span><span class="p">:</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"npost"</span><span class="p">:</span><span class="w"> </span><span class="mi">1</span>
+<span class="w">    </span><span class="p">},</span>
+<span class="w">    </span><span class="nt">"scalar field (e.g. nonlocal damage)"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"coarsening"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"type"</span><span class="p">:</span><span class="w"> </span><span class="s2">"smoothed_aggregation"</span><span class="p">},</span>
+<span class="w">        </span><span class="nt">"relax"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"type"</span><span class="p">:</span><span class="w"> </span><span class="s2">"chebyshev"</span><span class="p">}</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>The backend the tree is built on is chosen apart from it, by the keywords <code class="docutils literal notranslate"><span class="pre">backendBlockSize</span></code>, <code class="docutils literal notranslate"><span class="pre">backendPrecision</span></code>
+and (<code class="docutils literal notranslate"><span class="pre">AMG</span></code> only) <code class="docutils literal notranslate"><span class="pre">nearNullspace</span></code>, with defaults from the field
+(<a class="reference internal" href="linsolveapi.html#edelweissfe.linsolve.composition.amg.backendOf" title="edelweissfe.linsolve.composition.amg.backendOf"><code class="xref py py-func docutils literal notranslate"><span class="pre">backendOf()</span></code></a>): node-wise 3x3 blocks stored in float for a 3D field, 2x2
+blocks in double for a 2D one (this wrapper has no float 2x2 backend), the scalar backend in double otherwise, and on
+a block backend the translations <span class="math notranslate nohighlight">\(D^{-1} t\)</span> as the near null-space. A vector field of a dimension the defaults
+were never tuned for (anything but 2 or 3, e.g. a 4-DOF-per-node formulation) gets the same coarsening and
+relaxation as the 2D and 3D fields, on the scalar backend. <code class="docutils literal notranslate"><span class="pre">AMG(backendBlockSize=1)</span></code> puts a 2D or 3D displacement
+field on the scalar backend, the only one that takes the rotations (<a class="reference internal" href="blockamgtheory.html#blockamg-block-nullspace"><span class="std std-ref">The near-null-space of a block backend</span></a>); a tree with another coarsening than
+smoothed aggregation on a block backend needs <code class="docutils literal notranslate"><span class="pre">nearNullspace=None</span></code>, which is checked.</p>
+<p>A linear 3D displacement field of the <code class="docutils literal notranslate"><span class="pre">blockAMG()</span></code> preset gets the rigid-body coarse level
+(<code class="docutils literal notranslate"><span class="pre">TwoLevel(coarseSpace=RigidBodyModesPerAggregate())</span></code>), configured by the same tree: its <code class="docutils literal notranslate"><span class="pre">relax</span></code> and <code class="docutils literal notranslate"><span class="pre">npre</span></code>/<code class="docutils literal notranslate"><span class="pre">npost</span></code> are the
+fine smoother of the rigid-body coarse level, its <code class="docutils literal notranslate"><span class="pre">coarsening</span></code> the aggregation of that level, and the whole tree the
+AMGCL hierarchy below it. Only a genuinely scalar field (nodal dimension 1) gets the plain scalar tree, which predates
+the vector recipe and was never re-tuned against it. AMGCL warns on stderr about a parameter key it does not recognise
+and otherwise ignores it, so check its stderr if an override appears to do nothing; a Chebyshev <code class="docutils literal notranslate"><span class="pre">relax</span></code>,
+EdelweissFE’s own, rejects such a key instead.</p>
+<p>The corner-node two-level cycle’s default tree is another: <code class="docutils literal notranslate"><span class="pre">TwoLevel(coarseSpace=CornerNodeInterpolation())</span></code> reads
+its fine smoother from the tree in the same spelling (<code class="docutils literal notranslate"><span class="pre">relax</span></code>, <code class="docutils literal notranslate"><span class="pre">npre</span></code>, <code class="docutils literal notranslate"><span class="pre">npost</span></code>; it has no coarsening of its
+own). For the corner-node two-level cycle, degree 16 is stronger than it pays: degree 8 costs half the products per
+sweep for fewer than twice the outer iterations (<a class="reference internal" href="fieldsplitmeasurements.html#measured-corner-node-two-level-smoother"><span class="std std-ref">The smoother of the corner-node two-level cycle</span></a>). So a <code class="docutils literal notranslate"><span class="pre">TwoLevel</span></code> on
+<code class="docutils literal notranslate"><span class="pre">CornerNodeInterpolation</span></code> that is given no tree takes <code class="docutils literal notranslate"><span class="pre">CornerNodeInterpolation.defaultTree(field)</span></code>: for a 3D
+displacement field, the vector field’s tree with a Chebyshev polynomial of degree 8 on the interval from 0.03 to 1.1
+times the spectral radius (<a class="reference internal" href="linsolveapi.html#edelweissfe.linsolve.composition.amg.defaultCornerNodeTwoLevelTree" title="edelweissfe.linsolve.composition.amg.defaultCornerNodeTwoLevelTree"><code class="xref py py-func docutils literal notranslate"><span class="pre">defaultCornerNodeTwoLevelTree()</span></code></a>), where it was
+measured; any other field keeps its default tree (<code class="docutils literal notranslate"><span class="pre">defaultFieldTree(field.dimension)</span></code>):</p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">    </span><span class="nt">"coarsening"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"type"</span><span class="p">:</span><span class="w"> </span><span class="s2">"smoothed_aggregation"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"aggr"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"eps_strong"</span><span class="p">:</span><span class="w"> </span><span class="mf">0.01</span><span class="p">},</span>
+<span class="w">        </span><span class="nt">"estimate_spectral_radius"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span>
+<span class="w">    </span><span class="p">},</span>
+<span class="w">    </span><span class="nt">"relax"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">"type"</span><span class="p">:</span><span class="w"> </span><span class="s2">"chebyshev"</span><span class="p">,</span><span class="w"> </span><span class="nt">"degree"</span><span class="p">:</span><span class="w"> </span><span class="mi">8</span><span class="p">,</span><span class="w"> </span><span class="nt">"lower"</span><span class="p">:</span><span class="w"> </span><span class="mf">0.03</span><span class="p">,</span><span class="w"> </span><span class="nt">"higher"</span><span class="p">:</span><span class="w"> </span><span class="mf">1.1</span><span class="p">},</span>
+<span class="w">    </span><span class="nt">"npre"</span><span class="p">:</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"npost"</span><span class="p">:</span><span class="w"> </span><span class="mi">1</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">AMG()</span></code> and <code class="docutils literal notranslate"><span class="pre">TwoLevel(coarseSpace=RigidBodyModesPerAggregate())</span></code> alone keep degree 16: there, degree 8 gained
+nothing. Each level has its own tree. One given to the corner-node two-level cycle
+(<code class="docutils literal notranslate"><span class="pre">TwoLevel(coarseSpace=CornerNodeInterpolation(),</span> <span class="pre">amgclTree=...)</span></code>) is its fine smoother only; the coarse level has the
+tree of its coarse solve, <code class="docutils literal notranslate"><span class="pre">CornerNodeInterpolation(coarseSolve=...)</span></code>. The default coarse solve,
+<code class="docutils literal notranslate"><span class="pre">DiagonalScaling(AMG())</span></code>, takes AMG’s default tree; the <code class="docutils literal notranslate"><span class="pre">blockAMG()</span></code> preset gives a 3D displacement field the same
+smoother on both levels, <code class="docutils literal notranslate"><span class="pre">CornerNodeInterpolation(coarseSolve=DiagonalScaling(TwoLevel(coarseSpace=</span>
+<span class="pre">RigidBodyModesPerAggregate(),</span> <span class="pre">amgclTree=defaultCornerNodeTwoLevelTree())))</span></code>.</p>
+<p>Every spectral radius in these trees – of the Chebyshev smoother (<code class="docutils literal notranslate"><span class="pre">relax</span></code>) and of the prolongation smoothing
+(<code class="docutils literal notranslate"><span class="pre">coarsening</span></code> with <code class="docutils literal notranslate"><span class="pre">estimate_spectral_radius</span></code>) – is estimated by <code class="docutils literal notranslate"><span class="pre">spectralRadiusSteps</span></code> Arnoldi steps (default
+10) from a start vector seeded per row, the same at any thread count (<a class="reference internal" href="blockamgtheory.html#blockamg-chebyshev"><span class="std std-ref">Near-null-space and the Chebyshev smoother</span></a>). The key is
+EdelweissFE’s own, read by its Chebyshev smoother and its smoothed aggregation; the trees leave the default. A tree
+that sets AMGCL’s <code class="docutils literal notranslate"><span class="pre">power_iters</span></code>, which the Arnoldi steps replace, is refused.</p>
+</section>
+<section id="the-rigid-body-coarse-level-rigidbodymodesperaggregate-and-twolevel">
+<span id="blockamg-rigid-body-coarse-level-configuration"></span><h2>The rigid-body coarse level: <code class="docutils literal notranslate"><span class="pre">RigidBodyModesPerAggregate</span></code> and <code class="docutils literal notranslate"><span class="pre">TwoLevel</span></code><a class="headerlink" href="#the-rigid-body-coarse-level-rigidbodymodesperaggregate-and-twolevel" title="Link to this heading"></a></h2>
+<p>The <code class="docutils literal notranslate"><span class="pre">blockAMG()</span></code> preset (<code class="docutils literal notranslate"><span class="pre">type=blockamg</span></code>) gives a linear 3D displacement field the rigid-body coarse level, and
+the corner-node field of a quadratic one too (as the coarse solve of its corner-node two-level cycle);
+<code class="docutils literal notranslate"><span class="pre">rigidBodyModesPerAggregate=false</span></code> switches it off, <code class="docutils literal notranslate"><span class="pre">cornerNodeInterpolation=false</span></code> the corner-node two-level cycle. A 2D displacement field, or a 3D one with other options, gets it in a <code class="docutils literal notranslate"><span class="pre">custom</span></code> solver script,
+<code class="docutils literal notranslate"><span class="pre">OnField(name,</span> <span class="pre">TwoLevel(coarseSpace=RigidBodyModesPerAggregate(...),</span> <span class="pre">...))</span></code>. The field must be on a block backend
+(<code class="docutils literal notranslate"><span class="pre">backendBlockSize</span></code> 2 or 3, the default of a 2D or 3D field), and its tree must smooth with a Chebyshev polynomial
+(<code class="docutils literal notranslate"><span class="pre">relax.type</span></code> <code class="docutils literal notranslate"><span class="pre">chebyshev</span></code>, without <code class="docutils literal notranslate"><span class="pre">relax.scale</span></code>, <code class="docutils literal notranslate"><span class="pre">relax.spectralRadiusSteps</span></code> at least 1) and coarsen by smoothed
+aggregation, as the default trees do; <code class="docutils literal notranslate"><span class="pre">TwoLevel</span></code> checks this when it meets its field, and the parameters of
+<code class="docutils literal notranslate"><span class="pre">RigidBodyModesPerAggregate</span></code> at construction. The options of <code class="docutils literal notranslate"><span class="pre">RigidBodyModesPerAggregate</span></code>:</p>
+<dl class="simple">
+<dt><code class="docutils literal notranslate"><span class="pre">prolongation</span></code> (<code class="docutils literal notranslate"><span class="pre">&quot;smoothed&quot;</span></code>)</dt><dd><p><code class="docutils literal notranslate"><span class="pre">&quot;smoothed&quot;</span></code>: <span class="math notranslate nohighlight">\(P = (I - \omega\, \mathrm{diag}_B(\hat A_F)^{-1} \hat A_F) P^{\mathrm{tent}}\)</span>.
+<code class="docutils literal notranslate"><span class="pre">&quot;tentative&quot;</span></code>:
+<span class="math notranslate nohighlight">\(P^{\mathrm{tent}}\)</span> itself – a cheaper setup and a sparser coarse operator, for more outer iterations (32
+instead of 22 on the elastic tunnel system).</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">coarseHierarchyPrecision</span></code> (<code class="docutils literal notranslate"><span class="pre">&quot;double&quot;</span></code>)</dt><dd><p>The value type of the AMGCL hierarchy below: <code class="docutils literal notranslate"><span class="pre">&quot;double&quot;</span></code>, or <code class="docutils literal notranslate"><span class="pre">&quot;float&quot;</span></code> (AMGCL’s single-precision backend, its
+setup included) for half its memory, at the price of more outer iterations.</p>
+</dd>
+</dl>
+</section>
+<section id="the-arguments-of-schurcomplement">
+<span id="composed-schur-complement-arguments"></span><h2>The arguments of <code class="docutils literal notranslate"><span class="pre">SchurComplement</span></code><a class="headerlink" href="#the-arguments-of-schurcomplement" title="Link to this heading"></a></h2>
+<p>The method is <a class="reference internal" href="blockamgtheory.html#blockamg-schur-complement"><span class="std std-ref">Schur complement condensation: SchurComplement (opt-in)</span></a>, a complete script <a class="reference internal" href="composedlinsolvers.html#composed-schur-complement-recipe"><span class="std std-ref">A Schur complement</span></a>. The
+arguments of <a class="reference internal" href="linsolveapi.html#edelweissfe.linsolve.composition.schurcomplement.SchurComplement" title="edelweissfe.linsolve.composition.schurcomplement.SchurComplement"><code class="xref py py-class docutils literal notranslate"><span class="pre">SchurComplement</span></code></a>:</p>
+<dl class="simple">
+<dt><code class="docutils literal notranslate"><span class="pre">condensedDofMarkers</span></code> (required)</dt><dd><p>A list of markers, created through the marker registry from the options of a <code class="docutils literal notranslate"><span class="pre">&gt;&gt;marker</span></code> line of
+<code class="docutils literal notranslate"><span class="pre">*modelModifier,</span> <span class="pre">type=hAdaptivity</span></code>, e.g. <code class="docutils literal notranslate"><span class="pre">getMarkerClass(&quot;fieldOutput&quot;).fromOptions({&quot;fieldOutput&quot;:</span>
+<span class="pre">&quot;damage&quot;,</span> <span class="pre">&quot;threshold&quot;:</span> <span class="pre">0.05,</span> <span class="pre">&quot;halo&quot;:</span> <span class="pre">1})</span></code>. Sets, surfaces and fieldOutputs they name must exist.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">schurComplementSolve</span></code> (required)</dt><dd><p>The preconditioner of <span class="math notranslate nohighlight">\(\tilde S\)</span>, e.g. <code class="docutils literal notranslate"><span class="pre">DiagonalScaling(Multiplicative(...))</span></code>.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">approximation</span></code> (<code class="docutils literal notranslate"><span class="pre">&quot;local&quot;</span></code>)</dt><dd><p><code class="docutils literal notranslate"><span class="pre">&quot;local&quot;</span></code>: <span class="math notranslate nohighlight">\(\tilde S\)</span> as in <a class="reference internal" href="blockamgtheory.html#blockamg-schur-complement"><span class="std std-ref">Schur complement condensation: SchurComplement (opt-in)</span></a>. <code class="docutils literal notranslate"><span class="pre">&quot;none&quot;</span></code>: <span class="math notranslate nohighlight">\(\tilde S = A_{kk}\)</span>, the coupling through <span class="math notranslate nohighlight">\(b\)</span>
+ignored (for comparison).</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">dropTolerance</span></code> (<code class="docutils literal notranslate"><span class="pre">1e-4</span></code>)</dt><dd><p><span class="math notranslate nohighlight">\(\tau\)</span>, the relative size below which entries of <span class="math notranslate nohighlight">\(\tilde S\)</span> are dropped.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">windowNodes</span></code>, <code class="docutils literal notranslate"><span class="pre">haloNodes</span></code> (<code class="docutils literal notranslate"><span class="pre">50</span></code>, <code class="docutils literal notranslate"><span class="pre">windowNodes</span></code>)</dt><dd><p>The nodes of a window’s core along a chain, and of the halo on either side. A chain no longer than one core with
+both halos is corrected exactly.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">blockFactors</span></code> (<code class="docutils literal notranslate"><span class="pre">&quot;upper&quot;</span></code>)</dt><dd><p><code class="docutils literal notranslate"><span class="pre">&quot;upper&quot;</span></code>: the block upper triangular factor, one solve with <span class="math notranslate nohighlight">\(A_{bb}\)</span> per application. <code class="docutils literal notranslate"><span class="pre">&quot;both&quot;</span></code>: both
+factors of the block LU factorization, two solves.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">condensedBlockSolve</span></code> (<code class="docutils literal notranslate"><span class="pre">DirectSolver(&quot;superlu&quot;)</span></code>)</dt><dd><p>The solver of <span class="math notranslate nohighlight">\(A_{bb}\)</span>.</p>
+</dd>
+</dl>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="composedlinsolvers.html" class="btn btn-neutral float-left" title="Composing a linear solver" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="blockamgtheory.html" class="btn btn-neutral float-right" title="Theory: the field-split AMG preconditioner" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Matthias Neuner.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

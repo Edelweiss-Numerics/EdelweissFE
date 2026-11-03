@@ -14,8 +14,8 @@
       <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
       <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
       <script src="../../../../_static/documentation_options.js?v=17e2f33f"></script>
-      <script src="../../../../_static/doctools.js?v=9bcbadda"></script>
-      <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../../../../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../../../../genindex.html" />
     <link rel="search" title="Search" href="../../../../search.html" /> 
@@ -102,27 +102,93 @@
 <span class="c1">#  The full text of the license can be found in the file LICENSE.md at</span>
 <span class="c1">#  the top level directory of EdelweissFE.</span>
 <span class="c1">#  ---------------------------------------------------------------------</span>
-<span class="sd">&quot;&quot;&quot;One or more Steps form the simulation. Steps are executed in consecutive order,</span>
+<span class="sd">"""One or more Steps form the simulation. Steps are executed in consecutive order,</span>
 <span class="sd">have a distinct (physical) runtime, and may contain multiple StepActions.</span>
-<span class="sd">Subsequent Steps inherit StepActions, and they may be updated.&quot;&quot;&quot;</span>
+<span class="sd">Subsequent Steps inherit StepActions, and they may be updated."""</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">ABC</span><span class="p">,</span> <span class="n">abstractmethod</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.journal.journal</span><span class="w"> </span><span class="kn">import</span> <span class="n">Journal</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.models.femodel</span><span class="w"> </span><span class="kn">import</span> <span class="n">FEModel</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.timesteppers.base.timestepperbase</span><span class="w"> </span><span class="kn">import</span> <span class="n">TimeStepperBase</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">performancetiming</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.utils.exceptions</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">ConditionalStop</span><span class="p">,</span>
+    <span class="n">IncrementFailed</span><span class="p">,</span>
+    <span class="n">ReachedMaxIncrements</span><span class="p">,</span>
+    <span class="n">ReachedMinIncrementSize</span><span class="p">,</span>
+    <span class="n">StepFailed</span><span class="p">,</span>
+<span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.utils.fieldoutput</span><span class="w"> </span><span class="kn">import</span> <span class="n">FieldOutputController</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.utils.schema</span><span class="w"> </span><span class="kn">import</span> <span class="n">buildSchemaFromOptions</span><span class="p">,</span> <span class="n">schemaField</span>
+
+
+<div class="viewcode-block" id="StepIncrementationSchema">
+<a class="viewcode-back" href="../../../../documentation/steps.html#edelweissfe.steps.base.stepbase.StepIncrementationSchema">[docs]</a>
+<span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">StepIncrementationSchema</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""The standard incrementation options common to every step type (``*step`` keyword</span>
+<span class="sd">    datalines), owned by this module and never mutated from outside it.</span>
+
+<span class="sd">    Every concrete :class:`StepBase` subclass shares exactly this option set -- there is no</span>
+<span class="sd">    per-step-type variation -- so it is declared once here rather than once per step type.</span>
+<span class="sd">    """</span>
+
+    <span class="n">stepLength</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">schemaField</span><span class="p">(</span><span class="n">description</span><span class="o">=</span><span class="s2">"The duration of the step."</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="mf">1.0</span><span class="p">)</span>
+    <span class="n">startInc</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">schemaField</span><span class="p">(</span>
+        <span class="n">description</span><span class="o">=</span><span class="s2">"The initial fraction of the step to be computed."</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="mf">1.0</span>
+    <span class="p">)</span>
+    <span class="n">maxInc</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">schemaField</span><span class="p">(</span>
+        <span class="n">description</span><span class="o">=</span><span class="s2">"The maximal fraction of the step to be computed."</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="mf">1.0</span>
+    <span class="p">)</span>
+    <span class="n">minInc</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">schemaField</span><span class="p">(</span>
+        <span class="n">description</span><span class="o">=</span><span class="s2">"The minimal fraction of the step to be computed."</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="mf">1e-4</span>
+    <span class="p">)</span>
+    <span class="n">maxNumInc</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">schemaField</span><span class="p">(</span><span class="n">description</span><span class="o">=</span><span class="s2">"The maximal number of increments allowed."</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">int</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="mi">1000</span><span class="p">)</span>
+    <span class="n">maxIter</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">schemaField</span><span class="p">(</span><span class="n">description</span><span class="o">=</span><span class="s2">"The maximal number of iterations allowed."</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">int</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="mi">10</span><span class="p">)</span>
+    <span class="n">criticalIter</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">schemaField</span><span class="p">(</span>
+        <span class="n">description</span><span class="o">=</span><span class="s2">"Increments needing at least this many iterations keep the next increment from growing."</span><span class="p">,</span>
+        <span class="n">dtype</span><span class="o">=</span><span class="nb">int</span><span class="p">,</span>
+        <span class="n">default</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">maxGrowIter</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">schemaField</span><span class="p">(</span>
+        <span class="n">description</span><span class="o">=</span><span class="s2">"The number of residual growths before the increment is discarded."</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">int</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="mi">10</span>
+    <span class="p">)</span>
+    <span class="n">cutbackFactor</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">schemaField</span><span class="p">(</span>
+        <span class="n">description</span><span class="o">=</span><span class="s2">"Factor by which the increment size is reduced if no convergence was achieved."</span><span class="p">,</span>
+        <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">,</span>
+        <span class="n">default</span><span class="o">=</span><span class="mf">0.25</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">increaseFactor</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">schemaField</span><span class="p">(</span>
+        <span class="n">description</span><span class="o">=</span><span class="s2">"Factor by which the increment size grows after good increments (adaptive steps only)."</span><span class="p">,</span>
+        <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">,</span>
+        <span class="n">default</span><span class="o">=</span><span class="mf">1.1</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">goodIncrementsBeforeIncrease</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">schemaField</span><span class="p">(</span>
+        <span class="n">description</span><span class="o">=</span><span class="p">(</span>
+            <span class="s2">"Number of good increments that must already have passed, since the step start or the last cutback "</span>
+            <span class="s2">"(which counts as one), before an accepted increment lets the next one grow (adaptive steps only)."</span>
+        <span class="p">),</span>
+        <span class="n">dtype</span><span class="o">=</span><span class="nb">int</span><span class="p">,</span>
+        <span class="n">default</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>
+    <span class="p">)</span></div>
+
 
 
 <div class="viewcode-block" id="StepBase">
 <a class="viewcode-back" href="../../../../documentation/steps.html#edelweissfe.steps.base.stepbase.StepBase">[docs]</a>
-<span class="k">class</span><span class="w"> </span><span class="nc">StepBase</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    This is a simulation step.</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">StepBase</span><span class="p">(</span><span class="n">ABC</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Base class for simulation steps.</span>
 
-<span class="sd">    It has a specific runtime, and it holds StepActions to executed.</span>
+<span class="sd">    A step has a specific runtime, holds the StepActions to be executed,</span>
+<span class="sd">    and delegates the incrementation to a time stepper, which is created by the</span>
+<span class="sd">    concrete step type.</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
 <span class="sd">    number</span>
-<span class="sd">        The number of this step. For information purposes only.</span>
+<span class="sd">        The (unique) number of this step.</span>
 <span class="sd">    model</span>
 <span class="sd">        The current state of the model.</span>
 <span class="sd">    fieldOutputController</span>
@@ -130,16 +196,16 @@
 <span class="sd">    journal</span>
 <span class="sd">        The Journal instance for logging purposes.</span>
 <span class="sd">    jobInfo</span>
-<span class="sd">        Additional information about the job</span>
-<span class="sd">    solvers</span>
-<span class="sd">        The instances of solvers available to this step.</span>
+<span class="sd">        Additional information about the job.</span>
+<span class="sd">    solver</span>
+<span class="sd">        The solver instance to be used for this step.</span>
 <span class="sd">    outputManagers</span>
 <span class="sd">        The OutputManagers used.</span>
 <span class="sd">    stepActions</span>
-<span class="sd">        The collection of actions for this step.</span>
+<span class="sd">        The collection of actions for this step, grouped by action type.</span>
 <span class="sd">    **kwargs</span>
-<span class="sd">        Additional options for the step.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
+<span class="sd">        The options for this step.</span>
+<span class="sd">    """</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
@@ -153,24 +219,143 @@
         <span class="n">stepActions</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span>
         <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
     <span class="p">):</span>
-        <span class="k">pass</span>
+        <span class="n">options</span> <span class="o">=</span> <span class="n">buildSchemaFromOptions</span><span class="p">(</span><span class="n">StepIncrementationSchema</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">)</span>
 
-<div class="viewcode-block" id="StepBase.solve">
-<a class="viewcode-back" href="../../../../documentation/steps.html#edelweissfe.steps.base.stepbase.StepBase.solve">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">solve</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">FEModel</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Let a step be solved.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">number</span> <span class="o">=</span> <span class="n">number</span>  <span class="c1">#: The (unique) number of the step.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">model</span> <span class="o">=</span> <span class="n">model</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">fieldOutputController</span> <span class="o">=</span> <span class="n">fieldOutputController</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">journal</span> <span class="o">=</span> <span class="n">journal</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">solver</span> <span class="o">=</span> <span class="n">solver</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">outputManagers</span> <span class="o">=</span> <span class="n">outputManagers</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">actions</span> <span class="o">=</span> <span class="n">stepActions</span>
 
-<span class="sd">        Parameters</span>
-<span class="sd">        ----------</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">length</span> <span class="o">=</span> <span class="n">options</span><span class="o">.</span><span class="n">stepLength</span>  <span class="c1">#: The duration of the step.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">startIncrementSize</span> <span class="o">=</span> <span class="n">options</span><span class="o">.</span><span class="n">startInc</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">maxIncrementSize</span> <span class="o">=</span> <span class="n">options</span><span class="o">.</span><span class="n">maxInc</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">minIncrementSize</span> <span class="o">=</span> <span class="n">options</span><span class="o">.</span><span class="n">minInc</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">maxNumberIncrements</span> <span class="o">=</span> <span class="n">options</span><span class="o">.</span><span class="n">maxNumInc</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">maxIter</span> <span class="o">=</span> <span class="n">options</span><span class="o">.</span><span class="n">maxIter</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">criticalIter</span> <span class="o">=</span> <span class="n">options</span><span class="o">.</span><span class="n">criticalIter</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">maxGrowIter</span> <span class="o">=</span> <span class="n">options</span><span class="o">.</span><span class="n">maxGrowIter</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">cutbackFactor</span> <span class="o">=</span> <span class="n">options</span><span class="o">.</span><span class="n">cutbackFactor</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">increaseFactor</span> <span class="o">=</span> <span class="n">options</span><span class="o">.</span><span class="n">increaseFactor</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">goodIncrementsBeforeIncrease</span> <span class="o">=</span> <span class="n">options</span><span class="o">.</span><span class="n">goodIncrementsBeforeIncrease</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">timeStepper</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_createTimeStepper</span><span class="p">()</span>
+
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_createTimeStepper</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TimeStepperBase</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Create the time stepper for this step type.</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
-<span class="sd">        FEModel</span>
-<span class="sd">            The updated model.</span>
-<span class="sd">        &quot;&quot;&quot;</span></div>
+<span class="sd">        TimeStepperBase</span>
+<span class="sd">            The time stepper controlling the incrementation of this step.</span>
+<span class="sd">        """</span>
+
+<div class="viewcode-block" id="StepBase.solve">
+<a class="viewcode-back" href="../../../../documentation/steps.html#edelweissfe.steps.base.stepbase.StepBase.solve">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">solve</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">resumeFrom</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Solve this step, increment by increment.</span>
+
+<span class="sd">        The increment loop, the same for every solver:</span>
+
+<span class="sd">        .. code-block:: text</span>
+
+<span class="sd">            begin the step</span>
+<span class="sd">            while the step is not finished:</span>
+<span class="sd">                prepare the increment     topology update when due</span>
+<span class="sd">                propose an increment      time stepper</span>
+<span class="sd">                attempt it                solver; if it fails: reject it, retry smaller</span>
+<span class="sd">                accept it                 solver, then time stepper</span>
+<span class="sd">                write output              field outputs, output managers, restart checkpoint last</span>
+<span class="sd">            end the step</span>
+
+<span class="sd">        A restart checkpoint is written after an accepted increment, as the last output, so it holds</span>
+<span class="sd">        exactly the state the next increment starts from -- and a resumed step simply continues</span>
+<span class="sd">        this loop. It begins like any step, and then takes over the checkpointed state, in this one</span>
+<span class="sd">        place.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        resumeFrom</span>
+<span class="sd">            The :class:`~edelweissfe.utils.checkpoint.ResumeCheckpoint` this step continues from, or</span>
+<span class="sd">            None.</span>
+<span class="sd">        """</span>
+
+        <span class="n">model</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span>
+        <span class="n">solver</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">solver</span>
+        <span class="n">timeStepper</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">timeStepper</span>
+        <span class="n">fieldOutputController</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">fieldOutputController</span>
+        <span class="n">journal</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">journal</span>
+        <span class="n">outputManagers</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">outputManagers</span>
+        <span class="c1"># Restart checkpoints last, so that they hold the bookkeeping of every other output.</span>
+        <span class="n">outputManagers</span> <span class="o">=</span> <span class="p">[</span><span class="n">m</span> <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="n">outputManagers</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">m</span><span class="o">.</span><span class="n">writesRestartCheckpoints</span><span class="p">]</span> <span class="o">+</span> <span class="p">[</span>
+            <span class="n">m</span> <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="n">outputManagers</span> <span class="k">if</span> <span class="n">m</span><span class="o">.</span><span class="n">writesRestartCheckpoints</span>
+        <span class="p">]</span>
+
+        <span class="k">if</span> <span class="n">resumeFrom</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">resumeFrom</span><span class="o">.</span><span class="n">restoreTimeStepper</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="c1"># Step-start model updates. A resumed step has none: resuming past one is refused.</span>
+            <span class="k">for</span> <span class="n">modelUpdate</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">actions</span><span class="p">[</span><span class="s2">"modelupdate"</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+                <span class="n">model</span> <span class="o">=</span> <span class="n">modelUpdate</span><span class="o">.</span><span class="n">updateModel</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">fieldOutputController</span><span class="p">,</span> <span class="n">journal</span><span class="p">)</span>
+
+            <span class="n">fieldOutputController</span><span class="o">.</span><span class="n">initializeStep</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">manager</span> <span class="ow">in</span> <span class="n">outputManagers</span><span class="p">:</span>
+                <span class="n">manager</span><span class="o">.</span><span class="n">initializeStep</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
+
+            <span class="n">solver</span><span class="o">.</span><span class="n">beginStep</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">fieldOutputController</span><span class="p">,</span> <span class="n">outputManagers</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">resumeFrom</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">resumeFrom</span><span class="o">.</span><span class="n">restoreStep</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="o">.</span><span class="n">outputManagers</span><span class="p">)</span>
+                <span class="c1"># Closed here, before the first increment: see ResumeCheckpoint.close.</span>
+                <span class="n">resumeFrom</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">isRetry</span> <span class="o">=</span> <span class="kc">False</span>
+                <span class="k">while</span> <span class="ow">not</span> <span class="n">timeStepper</span><span class="o">.</span><span class="n">isFinished</span><span class="p">():</span>
+                    <span class="n">solver</span><span class="o">.</span><span class="n">prepareIncrement</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">isRetry</span><span class="p">)</span>
+                    <span class="n">timeStep</span> <span class="o">=</span> <span class="n">timeStepper</span><span class="o">.</span><span class="n">proposeTimeStep</span><span class="p">()</span>
+
+                    <span class="k">try</span><span class="p">:</span>
+                        <span class="n">solver</span><span class="o">.</span><span class="n">attemptIncrement</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">)</span>
+                    <span class="k">except</span> <span class="n">IncrementFailed</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                        <span class="n">journal</span><span class="o">.</span><span class="n">message</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">),</span> <span class="n">solver</span><span class="o">.</span><span class="n">identification</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+                        <span class="n">timeStepper</span><span class="o">.</span><span class="n">rejectTimeStep</span><span class="p">(</span><span class="n">e</span><span class="o">.</span><span class="n">cutbackFactor</span><span class="p">)</span>
+                        <span class="k">for</span> <span class="n">manager</span> <span class="ow">in</span> <span class="n">outputManagers</span><span class="p">:</span>
+                            <span class="n">manager</span><span class="o">.</span><span class="n">finalizeFailedIncrement</span><span class="p">(</span><span class="n">statusInfoDict</span><span class="o">=</span><span class="n">solver</span><span class="o">.</span><span class="n">incrementStatus</span><span class="p">)</span>
+                        <span class="n">isRetry</span> <span class="o">=</span> <span class="kc">True</span>
+                        <span class="k">continue</span>
+
+                    <span class="n">solver</span><span class="o">.</span><span class="n">acceptIncrement</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">)</span>
+                    <span class="n">timeStepper</span><span class="o">.</span><span class="n">acceptTimeStep</span><span class="p">(</span><span class="n">timeStep</span><span class="p">)</span>
+                    <span class="n">isRetry</span> <span class="o">=</span> <span class="kc">False</span>
+
+                    <span class="k">if</span> <span class="n">solver</span><span class="o">.</span><span class="n">isOutputIncrement</span><span class="p">(</span><span class="n">timeStep</span><span class="p">):</span>
+                        <span class="k">with</span> <span class="n">performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"output"</span><span class="p">):</span>
+                            <span class="k">with</span> <span class="n">performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"field output"</span><span class="p">):</span>
+                                <span class="n">fieldOutputController</span><span class="o">.</span><span class="n">finalizeIncrement</span><span class="p">()</span>
+                            <span class="k">for</span> <span class="n">manager</span> <span class="ow">in</span> <span class="n">outputManagers</span><span class="p">:</span>
+                                <span class="c1"># One row per manager, under the name of its *output line.</span>
+                                <span class="k">with</span> <span class="n">performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="n">manager</span><span class="o">.</span><span class="n">name</span><span class="p">):</span>
+                                    <span class="n">manager</span><span class="o">.</span><span class="n">finalizeIncrement</span><span class="p">(</span><span class="n">statusInfoDict</span><span class="o">=</span><span class="n">solver</span><span class="o">.</span><span class="n">incrementStatus</span><span class="p">)</span>
+
+            <span class="k">except</span> <span class="n">ReachedMaxIncrements</span><span class="p">:</span>
+                <span class="k">pass</span>
+            <span class="k">except</span> <span class="n">ReachedMinIncrementSize</span><span class="p">:</span>
+                <span class="n">journal</span><span class="o">.</span><span class="n">errorMessage</span><span class="p">(</span><span class="s2">"Incrementation failed"</span><span class="p">,</span> <span class="n">solver</span><span class="o">.</span><span class="n">identification</span><span class="p">)</span>
+                <span class="k">raise</span> <span class="n">StepFailed</span><span class="p">()</span>
+            <span class="k">except</span> <span class="n">ConditionalStop</span><span class="p">:</span>
+                <span class="n">journal</span><span class="o">.</span><span class="n">message</span><span class="p">(</span><span class="s2">"Conditional Stop"</span><span class="p">,</span> <span class="n">solver</span><span class="o">.</span><span class="n">identification</span><span class="p">)</span>
+            <span class="k">finally</span><span class="p">:</span>
+                <span class="n">solver</span><span class="o">.</span><span class="n">endStep</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">)</span>
+
+            <span class="n">solver</span><span class="o">.</span><span class="n">applyStepActionsAtStepEnd</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">actions</span><span class="p">)</span>
+
+        <span class="k">finally</span><span class="p">:</span>
+            <span class="n">fieldOutputController</span><span class="o">.</span><span class="n">finalizeStep</span><span class="p">()</span>
+            <span class="k">for</span> <span class="n">manager</span> <span class="ow">in</span> <span class="n">outputManagers</span><span class="p">:</span>
+                <span class="n">manager</span><span class="o">.</span><span class="n">finalizeStep</span><span class="p">()</span></div>
 </div>
 
 </pre></div>

@@ -1,0 +1,488 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>edelweissfe.rigidbodies.discreterigidbody &mdash; EdelweissFE v22.07 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=cfdaff8d" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/custom.css?v=37fbe429" />
+
+  
+      <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../_static/documentation_options.js?v=17e2f33f"></script>
+      <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../index.html" class="icon icon-home">
+            EdelweissFE
+              <img src="../../../_static/edelweiss_fe_logo.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../features.html">Features</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../prerequisites.html">Prerequisites</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../documentation/index.html">Documentation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../contributors.html">Contributors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../publications.html">Publications</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">EdelweissFE</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">edelweissfe.rigidbodies.discreterigidbody</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for edelweissfe.rigidbodies.discreterigidbody</h1><div class="highlight"><pre>
+<span></span><span class="ch">#!/usr/bin/env python3</span>
+<span class="c1"># -*- coding: utf-8 -*-</span>
+<span class="c1">#  ---------------------------------------------------------------------</span>
+<span class="c1">#</span>
+<span class="c1">#  _____    _      _              _         _____ _____</span>
+<span class="c1"># | ____|__| | ___| |_      _____(_)___ ___|  ___| ____|</span>
+<span class="c1"># |  _| / _` |/ _ \ \ \ /\ / / _ \ / __/ __| |_  |  _|</span>
+<span class="c1"># | |__| (_| |  __/ |\ V  V /  __/ \__ \__ \  _| | |___</span>
+<span class="c1"># |_____\__,_|\___|_| \_/\_/ \___|_|___/___/_|   |_____|</span>
+<span class="c1">#</span>
+<span class="c1">#</span>
+<span class="c1">#  Unit of Strength of Materials and Structural Analysis</span>
+<span class="c1">#  University of Innsbruck,</span>
+<span class="c1">#  2017 - today</span>
+<span class="c1">#</span>
+<span class="c1">#  Matthias Neuner matthias.neuner@uibk.ac.at</span>
+<span class="c1">#</span>
+<span class="c1">#  This file is part of EdelweissFE.</span>
+<span class="c1">#</span>
+<span class="c1">#  This library is free software; you can redistribute it and/or</span>
+<span class="c1">#  modify it under the terms of the GNU Lesser General Public</span>
+<span class="c1">#  License as published by the Free Software Foundation; either</span>
+<span class="c1">#  version 2.1 of the License, or (at your option) any later version.</span>
+<span class="c1">#</span>
+<span class="c1">#  The full text of the license can be found in the file LICENSE.md at</span>
+<span class="c1">#  the top level directory of EdelweissFE.</span>
+<span class="c1">#  ---------------------------------------------------------------------</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">List</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.rigidbodies.rigidbody</span><span class="w"> </span><span class="kn">import</span> <span class="n">RigidBody</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.utils.caseinsensitivedict</span><span class="w"> </span><span class="kn">import</span> <span class="n">CaseInsensitiveDict</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.utils.rotations</span><span class="w"> </span><span class="kn">import</span> <span class="n">rightJacobianSO3</span><span class="p">,</span> <span class="n">rotationMatrixFromPseudoVector</span>
+
+
+<div class="viewcode-block" id="DiscreteRigidBody">
+<a class="viewcode-back" href="../../../documentation/rigidbodies.html#edelweissfe.rigidbodies.discreterigidbody.DiscreteRigidBody">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">DiscreteRigidBody</span><span class="p">(</span><span class="n">RigidBody</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""</span>
+<span class="sd">    Discrete Rigid Body entity.</span>
+
+<span class="sd">    It represents a rigid body defined by a discrete surface mesh. Instances</span>
+<span class="sd">    are normally created via</span>
+<span class="sd">    :func:`~edelweissfe.generators.discreterigidbodygenerator.generateDiscreteRigidBodyFromMeshFile`,</span>
+<span class="sd">    which handles loading the mesh and creating the surface/reference-point</span>
+<span class="sd">    nodes -- this class itself only deals with the rigid body's kinematics.</span>
+<span class="sd">    """</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">surfaceMesh</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">model</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">rigidBodies</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span>
+
+        <span class="n">kwargs</span> <span class="o">=</span> <span class="n">CaseInsensitiveDict</span><span class="p">(</span><span class="n">kwargs</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">surfaceNodes</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">nodeSets</span><span class="p">[</span><span class="n">kwargs</span><span class="p">[</span><span class="s2">"nSet"</span><span class="p">]])</span>
+        <span class="n">rpNodeSet</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">nodeSets</span><span class="p">[</span><span class="n">kwargs</span><span class="p">[</span><span class="s2">"referencePoint"</span><span class="p">]]</span>
+
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">rpNodeSet</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"Reference point set must contain exactly one node!"</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">rpNode</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">rpNodeSet</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">domainSize</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">domainSize</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">surfaceMesh</span> <span class="o">=</span> <span class="n">surfaceMesh</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_queryEngine</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_referenceTriangles</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_stackedSurfaceCoordinatesCache</span> <span class="o">=</span> <span class="kc">None</span>
+
+        <span class="c1"># Facets replace DiscreteRigidElement.</span>
+        <span class="c1"># Format: [{'type': 'tria3', 'nodes': [node1, node2, node3]}, ...]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">facets</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"facets"</span><span class="p">,</span> <span class="p">[])</span>
+
+        <span class="c1"># The surface nodes' coordinates follow the body (see updateKinematics), so keep their reference</span>
+        <span class="c1"># coordinates for the topology fingerprint.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">referenceSurfaceCoordinates</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">n</span><span class="o">.</span><span class="n">coordinates</span> <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">surfaceNodes</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span>
+
+        <span class="c1"># Precompute initial relative positions of surface nodes w.r.t. the RP</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">initialRelativePositions</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">n</span><span class="o">.</span><span class="n">coordinates</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">rpNode</span><span class="o">.</span><span class="n">coordinates</span> <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">surfaceNodes</span><span class="p">])</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">mass</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"mass"</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">inertia</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"inertia"</span><span class="p">)</span>
+
+        <span class="c1"># Abstract the PointMass element</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">pointMassElement</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">mass</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.elements.pointmass</span><span class="w"> </span><span class="kn">import</span> <span class="n">PointMass</span>
+
+            <span class="c1"># Element numbers come from the model allocator (topology pipeline).</span>
+            <span class="p">(</span><span class="n">el_num</span><span class="p">,)</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">topology</span><span class="o">.</span><span class="n">reserveElementNumbers</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">pointMassElement</span> <span class="o">=</span> <span class="n">PointMass</span><span class="p">(</span><span class="n">el_num</span><span class="p">,</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">rpNode</span><span class="p">],</span> <span class="n">model</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">mass</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">inertia</span><span class="p">)</span>
+            <span class="n">model</span><span class="o">.</span><span class="n">createElement</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">pointMassElement</span><span class="p">)</span>
+
+<div class="viewcode-block" id="DiscreteRigidBody.referenceCoordinatesOfMovedNodes">
+<a class="viewcode-back" href="../../../documentation/rigidbodies.html#edelweissfe.rigidbodies.discreterigidbody.DiscreteRigidBody.referenceCoordinatesOfMovedNodes">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">referenceCoordinatesOfMovedNodes</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The reference coordinates of the surface nodes, which :meth:`updateKinematics` moves.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        dict</span>
+<span class="sd">            The reference coordinates, keyed by surface node label.</span>
+<span class="sd">        """</span>
+        <span class="k">return</span> <span class="nb">dict</span><span class="p">(</span><span class="nb">zip</span><span class="p">((</span><span class="n">node</span><span class="o">.</span><span class="n">label</span> <span class="k">for</span> <span class="n">node</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">surfaceNodes</span><span class="p">),</span> <span class="bp">self</span><span class="o">.</span><span class="n">referenceSurfaceCoordinates</span><span class="p">))</span></div>
+
+
+<div class="viewcode-block" id="DiscreteRigidBody.getCurrentKinematics">
+<a class="viewcode-back" href="../../../documentation/rigidbodies.html#edelweissfe.rigidbodies.discreterigidbody.DiscreteRigidBody.getCurrentKinematics">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">getCurrentKinematics</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Return the current rigid body motion.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        tuple[numpy.ndarray, numpy.ndarray, numpy.ndarray]</span>
+<span class="sd">            The total RP displacement, the 3x3 rotation matrix, and the</span>
+<span class="sd">            *reference* (initial) RP coordinates. The current RP position is</span>
+<span class="sd">            the sum of the first and third entries.</span>
+<span class="sd">        """</span>
+        <span class="n">disp_field</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">nodeFields</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"displacement"</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">disp_field</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="s2">"U"</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">disp_field</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">rpNode</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">disp_field</span><span class="o">.</span><span class="n">nodes</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"Discrete rigid body '</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">': reference point node is not part of the model's "</span>
+                <span class="s2">"'displacement' NodeField -- the model may not be fully initialized yet."</span>
+            <span class="p">)</span>
+        <span class="n">u_rp</span> <span class="o">=</span> <span class="n">disp_field</span><span class="p">[</span><span class="s2">"U"</span><span class="p">][</span><span class="n">disp_field</span><span class="o">.</span><span class="n">indexOfNode</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">rpNode</span><span class="p">)]</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+
+        <span class="n">R</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span>
+        <span class="n">rot_field</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">nodeFields</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"rotation"</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">rot_field</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="s2">"U"</span> <span class="ow">in</span> <span class="n">rot_field</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">rpNode</span> <span class="ow">in</span> <span class="n">rot_field</span><span class="o">.</span><span class="n">nodes</span><span class="p">:</span>
+            <span class="n">theta</span> <span class="o">=</span> <span class="n">rot_field</span><span class="p">[</span><span class="s2">"U"</span><span class="p">][</span><span class="n">rot_field</span><span class="o">.</span><span class="n">indexOfNode</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">rpNode</span><span class="p">)]</span>
+            <span class="n">R</span> <span class="o">=</span> <span class="n">rotationMatrixFromPseudoVector</span><span class="p">(</span><span class="n">theta</span><span class="p">)</span>
+
+        <span class="c1"># In EdelweissFE, the RP node's coordinates are the *reference* (initial) coordinates.</span>
+        <span class="k">return</span> <span class="n">u_rp</span><span class="p">,</span> <span class="n">R</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">rpNode</span><span class="o">.</span><span class="n">coordinates</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_currentAndReferenceSurfaceCoordinates</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">kinematics</span><span class="p">:</span> <span class="nb">tuple</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Compute the current and reference world coordinates of every surface node.</span>
+
+<span class="sd">        The surface nodes are not independent degrees of freedom themselves -- they</span>
+<span class="sd">        carry no FieldVariables and this never registers or writes to any NodeField</span>
+<span class="sd">        -- but by default the reference point's kinematics *are* read from the</span>
+<span class="sd">        NodeFields of its ``displacement``/``rotation`` fields, via</span>
+<span class="sd">        :meth:`getCurrentKinematics`.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        kinematics : tuple[numpy.ndarray, numpy.ndarray, numpy.ndarray], optional</span>
+<span class="sd">            An explicit ``(u_rp, R, rp_initial)`` triple (matching the return value of</span>
+<span class="sd">            :meth:`getCurrentKinematics`) to use instead of the (possibly stale, since</span>
+<span class="sd">            NodeFields only reflect the last *converged* increment) current state. Pass</span>
+<span class="sd">            this when the caller already holds a fresher RP kinematic state -- e.g. a</span>
+<span class="sd">            contact constraint mid-Newton-iteration, which has direct access to the</span>
+<span class="sd">            current trial solution vector.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        tuple[numpy.ndarray, numpy.ndarray]</span>
+<span class="sd">            The current and reference coordinates, both of shape ``(nSurfaceNodes, domainSize)``.</span>
+<span class="sd">        """</span>
+        <span class="n">u_rp</span><span class="p">,</span> <span class="n">R</span><span class="p">,</span> <span class="n">rp_initial</span> <span class="o">=</span> <span class="n">kinematics</span> <span class="k">if</span> <span class="n">kinematics</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">getCurrentKinematics</span><span class="p">()</span>
+        <span class="n">currentCoords</span> <span class="o">=</span> <span class="p">(</span><span class="n">rp_initial</span> <span class="o">+</span> <span class="n">u_rp</span><span class="p">)</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">initialRelativePositions</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">R</span><span class="o">.</span><span class="n">T</span><span class="p">)</span>
+        <span class="n">referenceCoords</span> <span class="o">=</span> <span class="n">rp_initial</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">initialRelativePositions</span>
+        <span class="k">return</span> <span class="n">currentCoords</span><span class="p">,</span> <span class="n">referenceCoords</span>
+
+<div class="viewcode-block" id="DiscreteRigidBody.updateKinematics">
+<a class="viewcode-back" href="../../../documentation/rigidbodies.html#edelweissfe.rigidbodies.discreterigidbody.DiscreteRigidBody.updateKinematics">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">updateKinematics</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">timeStep</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="n">currentCoords</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_currentAndReferenceSurfaceCoordinates</span><span class="p">()</span>
+
+        <span class="c1"># Unlike the usual EdelweissFE convention, the surface nodes' coordinates hold the *current*</span>
+        <span class="c1"># configuration (used by output and contact AABB checks); they carry no field variables.</span>
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">node</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">surfaceNodes</span><span class="p">):</span>
+            <span class="n">node</span><span class="o">.</span><span class="n">coordinates</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">currentCoords</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_stackedSurfaceCoordinatesCache</span> <span class="o">=</span> <span class="n">currentCoords</span></div>
+
+
+<div class="viewcode-block" id="DiscreteRigidBody.getAABB">
+<a class="viewcode-back" href="../../../documentation/rigidbodies.html#edelweissfe.rigidbodies.discreterigidbody.DiscreteRigidBody.getAABB">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">getAABB</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">kinematics</span><span class="p">:</span> <span class="nb">tuple</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Axis-aligned bounding box of the surface nodes' current positions.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        kinematics : tuple, optional</span>
+<span class="sd">            See :meth:`_currentAndReferenceSurfaceCoordinates`. If not given, uses</span>
+<span class="sd">            the stacked array cached by the last :meth:`updateKinematics` call (or,</span>
+<span class="sd">            before the first such call, rebuilds it from the surface nodes' own</span>
+<span class="sd">            ``coordinates``), as a fast path for the common case.</span>
+<span class="sd">        """</span>
+        <span class="k">if</span> <span class="n">kinematics</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">coords</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stackedSurfaceCoordinatesCache</span>
+            <span class="k">if</span> <span class="n">coords</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">coords</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">n</span><span class="o">.</span><span class="n">coordinates</span> <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">surfaceNodes</span><span class="p">])</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">coords</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_currentAndReferenceSurfaceCoordinates</span><span class="p">(</span><span class="n">kinematics</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">min</span><span class="p">(</span><span class="n">coords</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">coords</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="DiscreteRigidBody.poseFromDofs">
+<a class="viewcode-back" href="../../../documentation/rigidbodies.html#edelweissfe.rigidbodies.discreterigidbody.DiscreteRigidBody.poseFromDofs">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">poseFromDofs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">rpDisplacement</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">rpRotation</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The rigid body pose for given reference point DOF values.</span>
+
+<span class="sd">        A contact constraint evaluates the pose from its own current trial solution, not from the</span>
+<span class="sd">        last converged NodeField state that :meth:`getCurrentKinematics` reads.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        rpDisplacement</span>
+<span class="sd">            The displacement of the reference point.</span>
+<span class="sd">        rpRotation</span>
+<span class="sd">            The rotation pseudo-vector of the reference point.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        tuple[numpy.ndarray, numpy.ndarray, numpy.ndarray]</span>
+<span class="sd">            The current reference point position, the rotation matrix :math:`R`, and</span>
+<span class="sd">            ``dPhysicalSpin_dTheta`` :math:`= R \\, J_r(\\boldsymbol{\\theta})`, which maps a perturbation</span>
+<span class="sd">            of the stored pseudo-vector DOF onto the spatial rotation it produces (the identity only</span>
+<span class="sd">            at zero rotation), see :func:`~edelweissfe.utils.rotations.rightJacobianSO3`.</span>
+<span class="sd">        """</span>
+        <span class="n">rotationMatrix</span> <span class="o">=</span> <span class="n">rotationMatrixFromPseudoVector</span><span class="p">(</span><span class="n">rpRotation</span><span class="p">)</span>
+        <span class="n">dPhysicalSpin_dTheta</span> <span class="o">=</span> <span class="n">rotationMatrix</span> <span class="o">@</span> <span class="n">rightJacobianSO3</span><span class="p">(</span><span class="n">rpRotation</span><span class="p">)</span>
+        <span class="n">currentRpPosition</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">rpNode</span><span class="o">.</span><span class="n">coordinates</span> <span class="o">+</span> <span class="n">rpDisplacement</span>
+        <span class="k">return</span> <span class="n">currentRpPosition</span><span class="p">,</span> <span class="n">rotationMatrix</span><span class="p">,</span> <span class="n">dPhysicalSpin_dTheta</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_surfaceQueryEngine</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""The VTK-based surface query engine, created on first use."""</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_queryEngine</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.utils.discretesurfacequery</span><span class="w"> </span><span class="kn">import</span> <span class="n">DiscreteSurfaceQuery</span>
+
+            <span class="bp">self</span><span class="o">.</span><span class="n">_queryEngine</span> <span class="o">=</span> <span class="n">DiscreteSurfaceQuery</span><span class="p">(</span><span class="n">mesh</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">surfaceMesh</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_queryEngine</span>
+
+<div class="viewcode-block" id="DiscreteRigidBody.referenceTriangles">
+<a class="viewcode-back" href="../../../documentation/rigidbodies.html#edelweissfe.rigidbodies.discreterigidbody.DiscreteRigidBody.referenceTriangles">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">referenceTriangles</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""The triangles of the rigid surface and their outward unit normals, in the reference</span>
+<span class="sd">        configuration (the body frame).</span>
+
+<span class="sd">        The rigid surface must be closed, so that outside and inside are well defined, and must not</span>
+<span class="sd">        contain triangles of zero area, whose normal is undefined. Both are checked here, since a</span>
+<span class="sd">        violation otherwise shows up only as unphysical contact forces much later in a run.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        tuple[numpy.ndarray, numpy.ndarray]</span>
+<span class="sd">            The triangle vertex coordinates, of shape (nTriangles, 3, 3), and the outward unit</span>
+<span class="sd">            normals, of shape (nTriangles, 3).</span>
+<span class="sd">        """</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_referenceTriangles</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">surface</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_surfaceQueryEngine</span><span class="p">()</span><span class="o">.</span><span class="n">mesh</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">surface</span><span class="o">.</span><span class="n">is_all_triangles</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Discrete rigid body '</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">': the surface must consist of triangles only."</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">surface</span><span class="o">.</span><span class="n">n_open_edges</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">"Discrete rigid body '</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">': the surface is not closed "</span>
+                    <span class="sa">f</span><span class="s2">"(</span><span class="si">{</span><span class="n">surface</span><span class="o">.</span><span class="n">n_open_edges</span><span class="si">}</span><span class="s2"> open edges), so its outward normals are undefined."</span>
+                <span class="p">)</span>
+            <span class="n">triangleCoordinates</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">surface</span><span class="o">.</span><span class="n">points</span><span class="p">)[</span><span class="n">surface</span><span class="o">.</span><span class="n">regular_faces</span><span class="p">]</span>
+            <span class="n">doubleAreas</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span>
+                <span class="n">np</span><span class="o">.</span><span class="n">cross</span><span class="p">(</span>
+                    <span class="n">triangleCoordinates</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="n">triangleCoordinates</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">],</span>
+                    <span class="n">triangleCoordinates</span><span class="p">[:,</span> <span class="mi">2</span><span class="p">]</span> <span class="o">-</span> <span class="n">triangleCoordinates</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">],</span>
+                <span class="p">),</span>
+                <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="n">degenerate</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">flatnonzero</span><span class="p">(</span><span class="n">doubleAreas</span> <span class="o">&lt;=</span> <span class="mf">1e-12</span> <span class="o">*</span> <span class="n">doubleAreas</span><span class="o">.</span><span class="n">max</span><span class="p">())</span>
+            <span class="k">if</span> <span class="n">degenerate</span><span class="o">.</span><span class="n">size</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">"Discrete rigid body '</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">': </span><span class="si">{</span><span class="n">degenerate</span><span class="o">.</span><span class="n">size</span><span class="si">}</span><span class="s2"> triangle(s) of zero area "</span>
+                    <span class="sa">f</span><span class="s2">"(first: </span><span class="si">{</span><span class="n">degenerate</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="si">}</span><span class="s2">), whose normals are undefined."</span>
+                <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_referenceTriangles</span> <span class="o">=</span> <span class="p">(</span><span class="n">triangleCoordinates</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_surfaceQueryEngine</span><span class="p">()</span><span class="o">.</span><span class="n">mesh_cell_normals</span><span class="p">))</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_referenceTriangles</span></div>
+
+
+<div class="viewcode-block" id="DiscreteRigidBody.querySurface">
+<a class="viewcode-back" href="../../../documentation/rigidbodies.html#edelweissfe.rigidbodies.discreterigidbody.DiscreteRigidBody.querySurface">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">querySurface</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">coords</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">proximityDistance</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">kinematics</span><span class="p">:</span> <span class="nb">tuple</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Compute signed distances and outward face normals of the rigid</span>
+<span class="sd">        surface, in its current configuration, for an array of query points.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        coords : numpy.ndarray, shape (nPoints, 3)</span>
+<span class="sd">            The query coordinates.</span>
+<span class="sd">        proximityDistance : float, optional</span>
+<span class="sd">            If given, a broadphase AABB check (the current AABB inflated by</span>
+<span class="sd">            this distance) is performed first; points outside are assigned a</span>
+<span class="sd">            distance of ``inf`` and a zero normal without querying the surface.</span>
+<span class="sd">        kinematics : tuple[numpy.ndarray, numpy.ndarray, numpy.ndarray], optional</span>
+<span class="sd">            An explicit ``(u_rp, R, rp_initial)`` triple to use for the rigid body's</span>
+<span class="sd">            pose instead of :meth:`getCurrentKinematics`'s (last-*converged*-increment)</span>
+<span class="sd">            NodeField state. A caller that already holds a fresher/current RP</span>
+<span class="sd">            kinematic state -- e.g. a contact constraint mid-Newton-iteration, which</span>
+<span class="sd">            has direct access to the trial solution vector -- should pass it here so</span>
+<span class="sd">            the query is evaluated for a pose consistent with the rest of that</span>
+<span class="sd">            caller's own current state (both this narrow-phase query and the</span>
+<span class="sd">            broadphase AABB check use it consistently).</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        dists : numpy.ndarray, shape (nPoints,)</span>
+<span class="sd">            The signed distances (negative = penetration).</span>
+<span class="sd">        normals : numpy.ndarray, shape (nPoints, 3)</span>
+<span class="sd">            The outward unit normals of the closest faces.</span>
+<span class="sd">        """</span>
+        <span class="n">queryEngine</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_surfaceQueryEngine</span><span class="p">()</span>
+
+        <span class="n">n_points</span> <span class="o">=</span> <span class="n">coords</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">proximityDistance</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">curr_min</span><span class="p">,</span> <span class="n">curr_max</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">getAABB</span><span class="p">(</span><span class="n">kinematics</span><span class="p">)</span>
+            <span class="n">aabb_min</span> <span class="o">=</span> <span class="n">curr_min</span> <span class="o">-</span> <span class="n">proximityDistance</span>
+            <span class="n">aabb_max</span> <span class="o">=</span> <span class="n">curr_max</span> <span class="o">+</span> <span class="n">proximityDistance</span>
+            <span class="n">in_aabb</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">all</span><span class="p">((</span><span class="n">coords</span> <span class="o">&gt;=</span> <span class="n">aabb_min</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">coords</span> <span class="o">&lt;=</span> <span class="n">aabb_max</span><span class="p">),</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+            <span class="n">active_indices</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">in_aabb</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">active_indices</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">(</span><span class="n">n_points</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">inf</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">n_points</span><span class="p">,</span> <span class="mi">3</span><span class="p">))</span>
+            <span class="n">coords_to_query</span> <span class="o">=</span> <span class="n">coords</span><span class="p">[</span><span class="n">active_indices</span><span class="p">]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">coords_to_query</span> <span class="o">=</span> <span class="n">coords</span>
+            <span class="n">active_indices</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">n_points</span><span class="p">)</span>
+
+        <span class="n">u_rp</span><span class="p">,</span> <span class="n">R</span><span class="p">,</span> <span class="n">rp_initial</span> <span class="o">=</span> <span class="n">kinematics</span> <span class="k">if</span> <span class="n">kinematics</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">getCurrentKinematics</span><span class="p">()</span>
+        <span class="n">active_dists</span><span class="p">,</span> <span class="n">active_normals</span> <span class="o">=</span> <span class="n">queryEngine</span><span class="o">.</span><span class="n">query</span><span class="p">(</span>
+            <span class="n">coords_to_query</span><span class="p">,</span> <span class="n">translation</span><span class="o">=</span><span class="n">u_rp</span><span class="p">,</span> <span class="n">rotation_matrix</span><span class="o">=</span><span class="n">R</span><span class="p">,</span> <span class="n">rotation_center</span><span class="o">=</span><span class="n">rp_initial</span>
+        <span class="p">)</span>
+
+        <span class="n">dists</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">(</span><span class="n">n_points</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">inf</span><span class="p">)</span>
+        <span class="n">dists</span><span class="p">[</span><span class="n">active_indices</span><span class="p">]</span> <span class="o">=</span> <span class="n">active_dists</span>
+        <span class="n">normals</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">n_points</span><span class="p">,</span> <span class="mi">3</span><span class="p">))</span>
+        <span class="n">normals</span><span class="p">[</span><span class="n">active_indices</span><span class="p">]</span> <span class="o">=</span> <span class="n">active_normals</span>
+        <span class="k">return</span> <span class="n">dists</span><span class="p">,</span> <span class="n">normals</span></div>
+
+
+<div class="viewcode-block" id="DiscreteRigidBody.getVisualizationNodes">
+<a class="viewcode-back" href="../../../documentation/rigidbodies.html#edelweissfe.rigidbodies.discreterigidbody.DiscreteRigidBody.getVisualizationNodes">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">getVisualizationNodes</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">:</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">surfaceNodes</span></div>
+
+
+<div class="viewcode-block" id="DiscreteRigidBody.getVisualizationElements">
+<a class="viewcode-back" href="../../../documentation/rigidbodies.html#edelweissfe.rigidbodies.discreterigidbody.DiscreteRigidBody.getVisualizationElements">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">getVisualizationElements</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]:</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">facets</span></div>
+
+
+<div class="viewcode-block" id="DiscreteRigidBody.getVisualizationField">
+<a class="viewcode-back" href="../../../documentation/rigidbodies.html#edelweissfe.rigidbodies.discreterigidbody.DiscreteRigidBody.getVisualizationField">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">getVisualizationField</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">fieldName</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Compute a field's values on the surface (visualization) nodes.</span>
+
+<span class="sd">        The surface nodes carry no FieldVariables of their own -- they are fully</span>
+<span class="sd">        determined by the reference point's already-solved kinematics -- so this</span>
+<span class="sd">        is computed directly rather than looked up from a NodeField.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        fieldName</span>
+<span class="sd">            The name of the field. Currently only ``"displacement"`` is supported.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If ``fieldName`` is not ``"displacement"``.</span>
+<span class="sd">        """</span>
+        <span class="k">if</span> <span class="n">fieldName</span> <span class="o">!=</span> <span class="s2">"displacement"</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"Discrete rigid body '</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">': unsupported field '</span><span class="si">{</span><span class="n">fieldName</span><span class="si">}</span><span class="s2">' for visualization "</span>
+                <span class="s2">"output; only 'displacement' is currently supported."</span>
+            <span class="p">)</span>
+
+        <span class="n">currentCoords</span><span class="p">,</span> <span class="n">referenceCoords</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_currentAndReferenceSurfaceCoordinates</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">currentCoords</span> <span class="o">-</span> <span class="n">referenceCoords</span></div>
+</div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Matthias Neuner.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

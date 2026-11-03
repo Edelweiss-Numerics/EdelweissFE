@@ -14,8 +14,8 @@
       <script src="../../../_static/jquery.js?v=5d32c60e"></script>
       <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
       <script src="../../../_static/documentation_options.js?v=17e2f33f"></script>
-      <script src="../../../_static/doctools.js?v=9bcbadda"></script>
-      <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../../../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../../../genindex.html" />
     <link rel="search" title="Search" href="../../../search.html" /> 
@@ -103,27 +103,352 @@
 <span class="c1">#  The full text of the license can be found in the file LICENSE.md at</span>
 <span class="c1">#  the top level directory of EdelweissFE.</span>
 <span class="c1">#  ---------------------------------------------------------------------</span>
-<span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">"""</span>
 <span class="sd">Inputfileparser for inputfiles employing an Abaqus-like syntax.</span>
-<span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">"""</span>
 
-<span class="kn">import</span><span class="w"> </span><span class="nn">textwrap</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">dataclasses</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">os.path</span><span class="w"> </span><span class="kn">import</span> <span class="n">dirname</span><span class="p">,</span> <span class="n">join</span>
 
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.config</span><span class="w"> </span><span class="kn">import</span> <span class="n">registry</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.config.registry</span><span class="w"> </span><span class="kn">import</span> <span class="n">RegistryConflictError</span><span class="p">,</span> <span class="n">RegistryLookupError</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.utils.caseinsensitivedict</span><span class="w"> </span><span class="kn">import</span> <span class="n">CaseInsensitiveDict</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.utils.inputlanguage</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
-    <span class="n">InputLanguage</span><span class="p">,</span>
-    <span class="n">keywordIdentifier</span><span class="p">,</span>
-    <span class="n">moduleLevelKeywordIdentifier</span><span class="p">,</span>
-<span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.utils.misc</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">caseInsensitiveKwargsChecker</span><span class="p">,</span>
-    <span class="n">castKwargsValuesAndAddDefaults</span><span class="p">,</span>
+    <span class="n">caseInsensitiveRequiredArgsChecker</span><span class="p">,</span>
     <span class="n">convertAssignmentsToCaseInsensitiveStringDictionary</span><span class="p">,</span>
     <span class="n">splitLineAtCommas</span><span class="p">,</span>
     <span class="n">strCaseCmp</span><span class="p">,</span>
-    <span class="n">typeString</span><span class="p">,</span>
 <span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.utils.schema</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">coerceValue</span><span class="p">,</span>
+    <span class="n">datalineFieldMeta</span><span class="p">,</span>
+    <span class="n">fieldSchemaMeta</span><span class="p">,</span>
+    <span class="n">subKeywordFieldNames</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="c1">#: The ``.inp`` syntax markers: a top-level keyword line starts with ``*``, a sub-keyword line with ``&gt;&gt;``.</span>
+<span class="n">keywordIdentifier</span> <span class="o">=</span> <span class="s2">"*"</span>
+<span class="n">moduleLevelKeywordIdentifier</span> <span class="o">=</span> <span class="s2">"&gt;&gt;"</span>
+
+<span class="c1">#: Top-level keywords whose grammar is completed by a dispatched target's own schema: maps the</span>
+<span class="c1">#: keyword's casefolded name to ``(registry category, the keyword-line option carrying the dispatch value)``.</span>
+<span class="c1">#: ``step`` is included only for :func:`_expectsPlainDatalines`; its ``&gt;&gt;`` grammar always resolves</span>
+<span class="c1">#: via the ``stepaction`` category.</span>
+<span class="n">_DISPATCH_CATEGORY_BY_KEYWORD</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">"output"</span><span class="p">:</span> <span class="p">(</span><span class="s2">"outputmanager"</span><span class="p">,</span> <span class="s2">"type"</span><span class="p">),</span>
+    <span class="s2">"section"</span><span class="p">:</span> <span class="p">(</span><span class="s2">"section"</span><span class="p">,</span> <span class="s2">"type"</span><span class="p">),</span>
+    <span class="s2">"analyticalfield"</span><span class="p">:</span> <span class="p">(</span><span class="s2">"analyticalfield"</span><span class="p">,</span> <span class="s2">"type"</span><span class="p">),</span>
+    <span class="s2">"constraint"</span><span class="p">:</span> <span class="p">(</span><span class="s2">"constraint"</span><span class="p">,</span> <span class="s2">"type"</span><span class="p">),</span>
+    <span class="s2">"modelmodifier"</span><span class="p">:</span> <span class="p">(</span><span class="s2">"modelmodifier"</span><span class="p">,</span> <span class="s2">"type"</span><span class="p">),</span>
+    <span class="s2">"modelgenerator"</span><span class="p">:</span> <span class="p">(</span><span class="s2">"generator"</span><span class="p">,</span> <span class="s2">"generator"</span><span class="p">),</span>
+    <span class="s2">"step"</span><span class="p">:</span> <span class="p">(</span><span class="s2">"step"</span><span class="p">,</span> <span class="s2">"type"</span><span class="p">),</span>
+    <span class="s2">"linearsolver"</span><span class="p">:</span> <span class="p">(</span><span class="s2">"linsolver"</span><span class="p">,</span> <span class="s2">"type"</span><span class="p">),</span>
+<span class="p">}</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_updateStepActionSchema</span><span class="p">(</span><span class="n">moduleKeyword</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Return the dedicated ``update&lt;keyword&gt;`` schema for a step action's partial re-declaration</span>
+<span class="sd">    in a later step, or ``None`` if this step action has no such companion.</span>
+
+<span class="sd">    Only three step actions declare one at all (``dirichlet``, ``distributedload``,</span>
+<span class="sd">    ``nodeforces``) -- every other step action either has no update path (a re-declaration must</span>
+<span class="sd">    restate every required argument again) or -- ``options`` -- validates dynamically and never</span>
+<span class="sd">    reaches this function at all (see the ``isDynamicOptionsKeyword`` branch of</span>
+<span class="sd">    :func:`parseModuleKeywordLine`). A small explicit table, not a registry category: these</span>
+<span class="sd">    ``Update&lt;Name&gt;Schema`` classes are documentation/parser-validation companions the step action's</span>
+<span class="sd">    own constructor never references (see e.g. ``stepactions/dirichlet.py``'s own docstring), so</span>
+<span class="sd">    they have no home in the ``stepaction`` registry, which maps to the step action classes</span>
+<span class="sd">    themselves.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    moduleKeyword</span>
+<span class="sd">        The step action's own name, as written in the ``.inp`` file (e.g. ``"dirichlet"``).</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    type | None</span>
+<span class="sd">        The update schema, or ``None``.</span>
+<span class="sd">    """</span>
+    <span class="n">name</span> <span class="o">=</span> <span class="n">moduleKeyword</span><span class="o">.</span><span class="n">casefold</span><span class="p">()</span>
+    <span class="k">if</span> <span class="n">name</span> <span class="o">==</span> <span class="s2">"dirichlet"</span><span class="p">:</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.stepactions.dirichlet</span><span class="w"> </span><span class="kn">import</span> <span class="n">UpdateDirichletSchema</span>
+
+        <span class="k">return</span> <span class="n">UpdateDirichletSchema</span>
+    <span class="k">if</span> <span class="n">name</span> <span class="o">==</span> <span class="s2">"distributedload"</span><span class="p">:</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.stepactions.distributedload</span><span class="w"> </span><span class="kn">import</span> <span class="n">UpdateDistributedloadSchema</span>
+
+        <span class="k">return</span> <span class="n">UpdateDistributedloadSchema</span>
+    <span class="k">if</span> <span class="n">name</span> <span class="o">==</span> <span class="s2">"nodeforces"</span><span class="p">:</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.stepactions.nodeforces</span><span class="w"> </span><span class="kn">import</span> <span class="n">UpdateNodeforcesSchema</span>
+
+        <span class="k">return</span> <span class="n">UpdateNodeforcesSchema</span>
+    <span class="k">return</span> <span class="kc">None</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_allScalarFields</span><span class="p">(</span><span class="n">schemaCls</span><span class="p">:</span> <span class="nb">type</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Map every input-file option name of ``schemaCls``'s own scalar (non-dataline,</span>
+<span class="sd">    non-sub-keyword) fields to its :class:`dataclasses.Field`.</span>
+
+<span class="sd">    Not :func:`~edelweissfe.utils.schema.scalarOptionNames`: that function excludes</span>
+<span class="sd">    ``structuralOnly`` fields (the adapter pops them before ``buildSchemaFromOptions`` ever sees</span>
+<span class="sd">    them), but the *parser* must still recognize and require every scalar option a schema declares,</span>
+<span class="sd">    with no such distinction at all (``structuralOnly``/``optionsOverrideOnly``/``updateOnly`` are</span>
+<span class="sd">    schema-only rendering/construction concerns, see ``utils/schema.py``'s ``SchemaFieldMeta``).</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    schemaCls</span>
+<span class="sd">        A frozen dataclass schema, or ``None`` (a keyword/module declaring no line options at all).</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    dict</span>
+<span class="sd">        Maps option name to field, in declaration order. Empty if ``schemaCls`` is ``None``.</span>
+<span class="sd">    """</span>
+    <span class="k">if</span> <span class="n">schemaCls</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">{}</span>
+    <span class="n">fields</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">field</span> <span class="ow">in</span> <span class="n">dataclasses</span><span class="o">.</span><span class="n">fields</span><span class="p">(</span><span class="n">schemaCls</span><span class="p">):</span>
+        <span class="n">meta</span> <span class="o">=</span> <span class="n">fieldSchemaMeta</span><span class="p">(</span><span class="n">field</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">meta</span><span class="o">.</span><span class="n">isDataline</span> <span class="ow">or</span> <span class="n">meta</span><span class="o">.</span><span class="n">subSchema</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">continue</span>
+        <span class="n">fields</span><span class="p">[</span><span class="n">meta</span><span class="o">.</span><span class="n">optionName</span> <span class="ow">or</span> <span class="n">field</span><span class="o">.</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span>
+    <span class="k">return</span> <span class="n">fields</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_realScalarFields</span><span class="p">(</span><span class="n">schemaCls</span><span class="p">:</span> <span class="nb">type</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Like :func:`_allScalarFields`, but excluding ``optionsOverrideOnly``/``updateOnly`` fields --</span>
+<span class="sd">    the ones that exist purely for the ``&gt;&gt;options`` override mechanism or the ``update&lt;keyword&gt;``</span>
+<span class="sd">    grammar and were never part of a keyword's own real line/dataline grammar (whose presence is</span>
+<span class="sd">    what implies a dispatch target actually expects plain datalines, see</span>
+<span class="sd">    :func:`_expectsPlainDatalines`).</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    schemaCls</span>
+<span class="sd">        A frozen dataclass schema, or ``None``.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    dict</span>
+<span class="sd">        Maps option name to field, in declaration order. Empty if ``schemaCls`` is ``None``.</span>
+<span class="sd">    """</span>
+    <span class="k">return</span> <span class="p">{</span>
+        <span class="n">name</span><span class="p">:</span> <span class="n">field</span>
+        <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">field</span> <span class="ow">in</span> <span class="n">_allScalarFields</span><span class="p">(</span><span class="n">schemaCls</span><span class="p">)</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">fieldSchemaMeta</span><span class="p">(</span><span class="n">field</span><span class="p">)</span><span class="o">.</span><span class="n">optionsOverrideOnly</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">fieldSchemaMeta</span><span class="p">(</span><span class="n">field</span><span class="p">)</span><span class="o">.</span><span class="n">updateOnly</span>
+    <span class="p">}</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_requiredAndOptionalNames</span><span class="p">(</span><span class="n">schemaCls</span><span class="p">:</span> <span class="nb">type</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">list</span><span class="p">,</span> <span class="nb">list</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Split :func:`_allScalarFields`'s option names into required/optional lists, the shape</span>
+<span class="sd">    :func:`~edelweissfe.utils.misc.caseInsensitiveKwargsChecker` expects.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    schemaCls</span>
+<span class="sd">        A frozen dataclass schema, or ``None``.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    tuple[list, list]</span>
+<span class="sd">        ``(requiredNames, optionalNames)``.</span>
+<span class="sd">    """</span>
+    <span class="n">fields</span> <span class="o">=</span> <span class="n">_allScalarFields</span><span class="p">(</span><span class="n">schemaCls</span><span class="p">)</span>
+    <span class="n">required</span> <span class="o">=</span> <span class="p">[</span><span class="n">name</span> <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">field</span> <span class="ow">in</span> <span class="n">fields</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">fieldSchemaMeta</span><span class="p">(</span><span class="n">field</span><span class="p">)</span><span class="o">.</span><span class="n">required</span><span class="p">]</span>
+    <span class="n">optional</span> <span class="o">=</span> <span class="p">[</span><span class="n">name</span> <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">field</span> <span class="ow">in</span> <span class="n">fields</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">fieldSchemaMeta</span><span class="p">(</span><span class="n">field</span><span class="p">)</span><span class="o">.</span><span class="n">required</span><span class="p">]</span>
+    <span class="k">return</span> <span class="n">required</span><span class="p">,</span> <span class="n">optional</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_coerceKnownFields</span><span class="p">(</span><span class="n">schemaCls</span><span class="p">:</span> <span class="nb">type</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">options</span><span class="p">:</span> <span class="nb">dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">CaseInsensitiveDict</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Coerce and default the keys of ``options`` that match one of ``schemaCls``'s own scalar</span>
+<span class="sd">    fields; every other key is left untouched, as a raw string.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    schemaCls</span>
+<span class="sd">        A frozen dataclass schema, or ``None`` (nothing is coerced or defaulted).</span>
+<span class="sd">    options</span>
+<span class="sd">        A mapping of (possibly mis-cased) option names to raw, typically string, values.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    CaseInsensitiveDict</span>
+<span class="sd">        ``options``, with its known keys coerced to their declared type and every missing optional</span>
+<span class="sd">        field defaulted.</span>
+<span class="sd">    """</span>
+    <span class="n">options</span> <span class="o">=</span> <span class="n">CaseInsensitiveDict</span><span class="p">(</span><span class="n">options</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">optionName</span><span class="p">,</span> <span class="n">field</span> <span class="ow">in</span> <span class="n">_allScalarFields</span><span class="p">(</span><span class="n">schemaCls</span><span class="p">)</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="n">meta</span> <span class="o">=</span> <span class="n">fieldSchemaMeta</span><span class="p">(</span><span class="n">field</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">optionName</span> <span class="ow">in</span> <span class="n">options</span><span class="p">:</span>
+            <span class="n">options</span><span class="p">[</span><span class="n">optionName</span><span class="p">]</span> <span class="o">=</span> <span class="n">coerceValue</span><span class="p">(</span><span class="n">options</span><span class="p">[</span><span class="n">optionName</span><span class="p">],</span> <span class="n">meta</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="ow">not</span> <span class="n">meta</span><span class="o">.</span><span class="n">required</span><span class="p">:</span>
+            <span class="n">options</span><span class="p">[</span><span class="n">optionName</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="o">.</span><span class="n">default</span> <span class="k">if</span> <span class="n">field</span><span class="o">.</span><span class="n">default</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">dataclasses</span><span class="o">.</span><span class="n">MISSING</span> <span class="k">else</span> <span class="kc">None</span>
+    <span class="k">return</span> <span class="n">options</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_resolveDispatchSchemaForKeywordLine</span><span class="p">(</span><span class="n">keyword</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">options</span><span class="p">:</span> <span class="nb">dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">type</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Resolve the schema of the ``type=``/``generator=``-dispatched target hosted by a</span>
+<span class="sd">    top-level keyword's line, so a value meant for *that* target's own options (e.g. a plane</span>
+<span class="sd">    section's ``thickness``) written directly on the ``*section`` line is not rejected as unknown.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    keyword</span>
+<span class="sd">        The top-level keyword being parsed.</span>
+<span class="sd">    options</span>
+<span class="sd">        Its already-coerced-so-far option mapping (used only to read the dispatch value).</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    type | None</span>
+<span class="sd">        The dispatch target's schema, or ``None`` if this keyword has no such dispatch, the</span>
+<span class="sd">        dispatch value is missing, or it does not resolve to anything registered.</span>
+<span class="sd">    """</span>
+    <span class="n">dispatch</span> <span class="o">=</span> <span class="n">_DISPATCH_CATEGORY_BY_KEYWORD</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">keyword</span><span class="o">.</span><span class="n">casefold</span><span class="p">())</span>
+    <span class="k">if</span> <span class="n">dispatch</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="n">category</span><span class="p">,</span> <span class="n">optionName</span> <span class="o">=</span> <span class="n">dispatch</span>
+    <span class="n">dispatchValue</span> <span class="o">=</span> <span class="n">options</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">optionName</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">dispatchValue</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">_</span><span class="p">,</span> <span class="n">schema</span> <span class="o">=</span> <span class="n">registry</span><span class="o">.</span><span class="n">lookup</span><span class="p">(</span><span class="n">category</span><span class="p">,</span> <span class="n">dispatchValue</span><span class="p">)</span>
+    <span class="k">except</span> <span class="n">RegistryConflictError</span><span class="p">:</span>
+        <span class="c1"># a name conflict is an error, not a miss</span>
+        <span class="k">raise</span>
+    <span class="k">except</span> <span class="n">RegistryLookupError</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="k">return</span> <span class="n">schema</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_resolveModuleKeywordSchema</span><span class="p">(</span><span class="n">topLevelKeyword</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">topLevelOptions</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span> <span class="n">moduleKeyword</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">type</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Resolve the schema describing one ``&gt;&gt;`` sub-keyword block's own grammar.</span>
+
+<span class="sd">    For ``*step``, every step action registers identically onto every step type, so its ``&gt;&gt;``</span>
+<span class="sd">    grammar is resolved directly against the ``stepaction`` registry category, independent of the</span>
+<span class="sd">    step's own ``type=``. Every other keyword's ``&gt;&gt;`` grammar is a</span>
+<span class="sd">    :func:`~edelweissfe.utils.schema.subKeywordField` of either the dispatch target's own schema</span>
+<span class="sd">    (resolved via ``type=``/``generator=``, e.g. ensight's ``&gt;&gt;perNode``) or, for a keyword with no</span>
+<span class="sd">    such dispatch (``*fieldOutput``), the keyword's own schema directly.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    topLevelKeyword</span>
+<span class="sd">        The enclosing top-level keyword (e.g. ``"output"``, ``"step"``).</span>
+<span class="sd">    topLevelOptions</span>
+<span class="sd">        The enclosing top-level keyword's own (already coerced) option mapping.</span>
+<span class="sd">    moduleKeyword</span>
+<span class="sd">        The ``&gt;&gt;`` sub-keyword's own name, as written in the ``.inp`` file.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    type | None</span>
+<span class="sd">        The sub-keyword's own schema.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If ``moduleKeyword`` does not name a known ``&gt;&gt;`` sub-keyword in this context.</span>
+<span class="sd">    """</span>
+    <span class="k">if</span> <span class="n">strCaseCmp</span><span class="p">(</span><span class="n">topLevelKeyword</span><span class="p">,</span> <span class="s2">"step"</span><span class="p">):</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">_</span><span class="p">,</span> <span class="n">schema</span> <span class="o">=</span> <span class="n">registry</span><span class="o">.</span><span class="n">lookup</span><span class="p">(</span><span class="s2">"stepaction"</span><span class="p">,</span> <span class="n">moduleKeyword</span><span class="p">)</span>
+        <span class="k">except</span> <span class="n">RegistryLookupError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">))</span> <span class="kn">from</span><span class="w"> </span><span class="nn">e</span>
+        <span class="k">return</span> <span class="n">schema</span>
+
+    <span class="n">_</span><span class="p">,</span> <span class="n">keywordSchema</span> <span class="o">=</span> <span class="n">registry</span><span class="o">.</span><span class="n">lookup</span><span class="p">(</span><span class="s2">"keyword"</span><span class="p">,</span> <span class="n">topLevelKeyword</span><span class="p">)</span>
+    <span class="n">dispatch</span> <span class="o">=</span> <span class="n">_DISPATCH_CATEGORY_BY_KEYWORD</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">topLevelKeyword</span><span class="o">.</span><span class="n">casefold</span><span class="p">())</span>
+    <span class="k">if</span> <span class="n">dispatch</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">hostSchema</span> <span class="o">=</span> <span class="n">keywordSchema</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">category</span><span class="p">,</span> <span class="n">optionName</span> <span class="o">=</span> <span class="n">dispatch</span>
+        <span class="n">dispatchValue</span> <span class="o">=</span> <span class="n">topLevelOptions</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">optionName</span><span class="p">)</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">_</span><span class="p">,</span> <span class="n">hostSchema</span> <span class="o">=</span> <span class="n">registry</span><span class="o">.</span><span class="n">lookup</span><span class="p">(</span><span class="n">category</span><span class="p">,</span> <span class="n">dispatchValue</span><span class="p">)</span>
+        <span class="k">except</span> <span class="n">RegistryLookupError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">))</span> <span class="kn">from</span><span class="w"> </span><span class="nn">e</span>
+
+    <span class="n">subFields</span> <span class="o">=</span> <span class="n">subKeywordFieldNames</span><span class="p">(</span><span class="n">hostSchema</span><span class="p">)</span> <span class="k">if</span> <span class="n">hostSchema</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="p">{}</span>
+    <span class="n">foldedFields</span> <span class="o">=</span> <span class="p">{</span><span class="n">name</span><span class="o">.</span><span class="n">casefold</span><span class="p">():</span> <span class="n">field</span> <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">field</span> <span class="ow">in</span> <span class="n">subFields</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span>
+    <span class="n">field</span> <span class="o">=</span> <span class="n">foldedFields</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">moduleKeyword</span><span class="o">.</span><span class="n">casefold</span><span class="p">())</span>
+    <span class="k">if</span> <span class="n">field</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">available</span> <span class="o">=</span> <span class="s2">", "</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">sorted</span><span class="p">(</span><span class="n">subFields</span><span class="p">))</span> <span class="ow">or</span> <span class="s2">"none"</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"'</span><span class="si">{</span><span class="n">moduleLevelKeywordIdentifier</span><span class="si">}{</span><span class="n">moduleKeyword</span><span class="si">}</span><span class="s2">' is not a valid module keyword for "</span>
+            <span class="sa">f</span><span class="s2">"'</span><span class="si">{</span><span class="n">keywordIdentifier</span><span class="si">}{</span><span class="n">topLevelKeyword</span><span class="si">}</span><span class="s2">'. Available: </span><span class="si">{</span><span class="n">available</span><span class="si">}</span><span class="s2">."</span>
+        <span class="p">)</span>
+    <span class="k">return</span> <span class="n">fieldSchemaMeta</span><span class="p">(</span><span class="n">field</span><span class="p">)</span><span class="o">.</span><span class="n">subSchema</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_dispatchTargetExpectsPlainDatalines</span><span class="p">(</span><span class="n">schemaCls</span><span class="p">:</span> <span class="nb">type</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Whether a resolved dispatch target (a section type, output-manager type, generator, ...)</span>
+<span class="sd">    accepts plain (non-``&gt;&gt;``) datalines: a dispatch target's *own* scalar options, unlike a</span>
+<span class="sd">    top-level keyword's, are conventionally supplied via datalines rather than on the keyword line</span>
+<span class="sd">    itself, so a schema with any real scalar field or a dedicated dataline payload of its own both</span>
+<span class="sd">    count.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    schemaCls</span>
+<span class="sd">        The dispatch target's own schema, or ``None``.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    bool</span>
+<span class="sd">        Whether a plain dataline is valid here. ``True`` when ``schemaCls`` is ``None``: a dispatch</span>
+<span class="sd">        target with no schema at all yet is a genuinely raw-datalines case in every instance that</span>
+<span class="sd">        exists today (``executePythonCode``'s Python source), so this conservatively allows rather</span>
+<span class="sd">        than rejecting every real ``.inp`` file exercising it.</span>
+<span class="sd">    """</span>
+    <span class="k">if</span> <span class="n">schemaCls</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">True</span>
+    <span class="k">return</span> <span class="nb">bool</span><span class="p">(</span><span class="n">_realScalarFields</span><span class="p">(</span><span class="n">schemaCls</span><span class="p">))</span> <span class="ow">or</span> <span class="n">datalineFieldMeta</span><span class="p">(</span><span class="n">schemaCls</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_expectsPlainDatalines</span><span class="p">(</span><span class="n">keyword</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">options</span><span class="p">:</span> <span class="nb">dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Whether a plain (non-``&gt;&gt;``) line following a ``*keyword`` block's own line is a valid</span>
+<span class="sd">    dataline for it, resolved from the keyword's (or its dispatch target's) own schema.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    keyword</span>
+<span class="sd">        The current top-level keyword.</span>
+<span class="sd">    options</span>
+<span class="sd">        Its current (already coerced) option mapping -- used to read the dispatch value</span>
+<span class="sd">        (``type=``/``generator=``) for a keyword whose plain-dataline grammar belongs to a resolved</span>
+<span class="sd">        dispatch target rather than to the keyword's own schema (e.g. ``*modelGenerator``'s</span>
+<span class="sd">        ``x0=...`` datalines belong to the resolved generator, not to ``*modelGenerator`` itself).</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    bool</span>
+<span class="sd">        Whether a plain dataline is valid here.</span>
+<span class="sd">    """</span>
+    <span class="n">dispatch</span> <span class="o">=</span> <span class="n">_DISPATCH_CATEGORY_BY_KEYWORD</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">keyword</span><span class="o">.</span><span class="n">casefold</span><span class="p">())</span>
+    <span class="k">if</span> <span class="n">dispatch</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">_</span><span class="p">,</span> <span class="n">keywordSchema</span> <span class="o">=</span> <span class="n">registry</span><span class="o">.</span><span class="n">lookup</span><span class="p">(</span><span class="s2">"keyword"</span><span class="p">,</span> <span class="n">keyword</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">keywordSchema</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">datalineFieldMeta</span><span class="p">(</span><span class="n">keywordSchema</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+
+    <span class="k">if</span> <span class="n">strCaseCmp</span><span class="p">(</span><span class="n">keyword</span><span class="p">,</span> <span class="s2">"step"</span><span class="p">):</span>
+        <span class="c1"># every step type shares one schema, which accepts datalines</span>
+        <span class="k">return</span> <span class="kc">True</span>
+
+    <span class="n">category</span><span class="p">,</span> <span class="n">optionName</span> <span class="o">=</span> <span class="n">dispatch</span>
+    <span class="n">dispatchValue</span> <span class="o">=</span> <span class="n">options</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">optionName</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">dispatchValue</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">False</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">_</span><span class="p">,</span> <span class="n">dispatchSchema</span> <span class="o">=</span> <span class="n">registry</span><span class="o">.</span><span class="n">lookup</span><span class="p">(</span><span class="n">category</span><span class="p">,</span> <span class="n">dispatchValue</span><span class="p">)</span>
+    <span class="k">except</span> <span class="n">RegistryConflictError</span><span class="p">:</span>
+        <span class="c1"># a name conflict is an error, not a miss</span>
+        <span class="k">raise</span>
+    <span class="k">except</span> <span class="n">RegistryLookupError</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">False</span>
+    <span class="k">return</span> <span class="n">_dispatchTargetExpectsPlainDatalines</span><span class="p">(</span><span class="n">dispatchSchema</span><span class="p">)</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">parseKeywordLine</span><span class="p">(</span><span class="n">line</span><span class="p">,</span> <span class="n">fileName</span><span class="p">):</span>
@@ -135,53 +460,46 @@
     <span class="k">try</span><span class="p">:</span>
         <span class="n">options</span> <span class="o">=</span> <span class="n">convertAssignmentsToCaseInsensitiveStringDictionary</span><span class="p">(</span><span class="n">optionAssignments</span><span class="p">)</span>
     <span class="k">except</span> <span class="ne">ValueError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-        <span class="n">e</span><span class="o">.</span><span class="n">args</span> <span class="o">=</span> <span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Error during parsing of keyword </span><span class="si">{</span><span class="n">keywordIdentifier</span><span class="si">}{</span><span class="n">keyword</span><span class="si">}</span><span class="s2">: &quot;</span> <span class="o">+</span> <span class="n">e</span><span class="o">.</span><span class="n">args</span><span class="p">[</span><span class="mi">0</span><span class="p">],)</span>
+        <span class="n">e</span><span class="o">.</span><span class="n">args</span> <span class="o">=</span> <span class="p">(</span><span class="sa">f</span><span class="s2">"Error during parsing of keyword </span><span class="si">{</span><span class="n">keywordIdentifier</span><span class="si">}{</span><span class="n">keyword</span><span class="si">}</span><span class="s2">: "</span> <span class="o">+</span> <span class="n">e</span><span class="o">.</span><span class="n">args</span><span class="p">[</span><span class="mi">0</span><span class="p">],)</span>
         <span class="k">raise</span> <span class="n">e</span>
 
-    <span class="n">kw</span> <span class="o">=</span> <span class="n">inputLanguage</span><span class="p">[</span><span class="n">keyword</span><span class="p">]</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">_</span><span class="p">,</span> <span class="n">keywordSchema</span> <span class="o">=</span> <span class="n">registry</span><span class="o">.</span><span class="n">lookup</span><span class="p">(</span><span class="s2">"keyword"</span><span class="p">,</span> <span class="n">keyword</span><span class="p">)</span>
+    <span class="k">except</span> <span class="n">RegistryLookupError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">))</span> <span class="kn">from</span><span class="w"> </span><span class="nn">e</span>
 
-    <span class="nd">@castKwargsValuesAndAddDefaults</span><span class="p">(</span><span class="n">kw</span><span class="p">)</span>
+    <span class="n">options</span> <span class="o">=</span> <span class="n">_coerceKnownFields</span><span class="p">(</span><span class="n">keywordSchema</span><span class="p">,</span> <span class="n">options</span><span class="p">)</span>
+
+    <span class="n">requiredNames</span><span class="p">,</span> <span class="n">optionalNames</span> <span class="o">=</span> <span class="n">_requiredAndOptionalNames</span><span class="p">(</span><span class="n">keywordSchema</span><span class="p">)</span>
+
+    <span class="nd">@caseInsensitiveKwargsChecker</span><span class="p">(</span><span class="n">requiredNames</span><span class="p">,</span> <span class="n">optionalNames</span><span class="p">)</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">checkKeywordInput</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;this is a dummy function needed to apply kwargsChecker&quot;&quot;&quot;</span>
-        <span class="k">return</span> <span class="n">CaseInsensitiveDict</span><span class="p">(</span><span class="n">kwargs</span><span class="p">)</span>
-
-    <span class="n">options</span> <span class="o">=</span> <span class="n">checkKeywordInput</span><span class="p">(</span><span class="o">**</span><span class="n">options</span><span class="p">)</span>
-
-    <span class="nd">@caseInsensitiveKwargsChecker</span><span class="p">([</span><span class="n">kw</span><span class="o">.</span><span class="n">name</span> <span class="k">for</span> <span class="n">kw</span> <span class="ow">in</span> <span class="n">kw</span><span class="o">.</span><span class="n">requiredArgs</span><span class="p">],</span> <span class="p">[</span><span class="n">kw</span><span class="o">.</span><span class="n">name</span> <span class="k">for</span> <span class="n">kw</span> <span class="ow">in</span> <span class="n">kw</span><span class="o">.</span><span class="n">optionalArgs</span><span class="p">])</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">checkKeywordInput</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;this is a dummy function needed to apply kwargsChecker&quot;&quot;&quot;</span>
+<span class="w">        </span><span class="sd">"""this is a dummy function needed to apply kwargsChecker"""</span>
         <span class="k">return</span>
 
     <span class="k">try</span><span class="p">:</span>
         <span class="n">checkKeywordInput</span><span class="p">(</span><span class="o">**</span><span class="n">options</span><span class="p">)</span>
     <span class="k">except</span> <span class="ne">ValueError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-        <span class="k">try</span><span class="p">:</span>
-            <span class="n">module</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># in some cases, module-specific kwArgs arguments can be given in the keyword line</span>
-            <span class="k">if</span> <span class="n">strCaseCmp</span><span class="p">(</span><span class="n">kw</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="s2">&quot;section&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="n">strCaseCmp</span><span class="p">(</span><span class="n">options</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;type&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">),</span> <span class="s2">&quot;plane&quot;</span><span class="p">):</span>
-                <span class="n">module</span> <span class="o">=</span> <span class="n">kw</span><span class="o">.</span><span class="n">getModule</span><span class="p">(</span><span class="s2">&quot;plane&quot;</span><span class="p">)</span>
+        <span class="c1"># dispatch-target options may be given directly on the keyword line (e.g. a plane section's 'thickness')</span>
+        <span class="n">dispatchSchema</span> <span class="o">=</span> <span class="n">_resolveDispatchSchemaForKeywordLine</span><span class="p">(</span><span class="n">keyword</span><span class="p">,</span> <span class="n">options</span><span class="p">)</span>
 
-            <span class="k">if</span> <span class="n">module</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="n">addRequired</span> <span class="o">=</span> <span class="p">[</span><span class="n">kw</span><span class="o">.</span><span class="n">name</span> <span class="k">for</span> <span class="n">kw</span> <span class="ow">in</span> <span class="n">module</span><span class="o">.</span><span class="n">requiredArgs</span><span class="p">]</span>
-                <span class="n">addOptional</span> <span class="o">=</span> <span class="p">[</span><span class="n">kw</span><span class="o">.</span><span class="n">name</span> <span class="k">for</span> <span class="n">kw</span> <span class="ow">in</span> <span class="n">module</span><span class="o">.</span><span class="n">optionalArgs</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">dispatchSchema</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">extraRequired</span><span class="p">,</span> <span class="n">extraOptional</span> <span class="o">=</span> <span class="n">_requiredAndOptionalNames</span><span class="p">(</span><span class="n">dispatchSchema</span><span class="p">)</span>
 
-                <span class="nd">@caseInsensitiveKwargsChecker</span><span class="p">(</span>
-                    <span class="p">[</span><span class="n">kw</span><span class="o">.</span><span class="n">name</span> <span class="k">for</span> <span class="n">kw</span> <span class="ow">in</span> <span class="n">kw</span><span class="o">.</span><span class="n">requiredArgs</span><span class="p">],</span> <span class="p">[</span><span class="n">kw</span><span class="o">.</span><span class="n">name</span> <span class="k">for</span> <span class="n">kw</span> <span class="ow">in</span> <span class="n">kw</span><span class="o">.</span><span class="n">optionalArgs</span><span class="p">]</span> <span class="o">+</span> <span class="n">addOptional</span> <span class="o">+</span> <span class="n">addRequired</span>
-                <span class="p">)</span>
-                <span class="k">def</span><span class="w"> </span><span class="nf">checkKeywordInput</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
-<span class="w">                    </span><span class="sd">&quot;&quot;&quot;this is a dummy function needed to apply kwargsChecker&quot;&quot;&quot;</span>
-                    <span class="k">return</span>
+            <span class="nd">@caseInsensitiveKwargsChecker</span><span class="p">(</span><span class="n">requiredNames</span><span class="p">,</span> <span class="n">optionalNames</span> <span class="o">+</span> <span class="n">extraOptional</span> <span class="o">+</span> <span class="n">extraRequired</span><span class="p">)</span>
+            <span class="k">def</span><span class="w"> </span><span class="nf">checkKeywordInput</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<span class="w">                </span><span class="sd">"""this is a dummy function needed to apply kwargsChecker"""</span>
+                <span class="k">return</span>
 
-                <span class="n">checkKeywordInput</span><span class="p">(</span><span class="o">**</span><span class="n">options</span><span class="p">)</span>
+            <span class="n">checkKeywordInput</span><span class="p">(</span><span class="o">**</span><span class="n">options</span><span class="p">)</span>
 
-            <span class="k">else</span><span class="p">:</span>
-                <span class="n">e</span><span class="o">.</span><span class="n">args</span> <span class="o">=</span> <span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Error during parsing of keyword </span><span class="si">{</span><span class="n">keywordIdentifier</span><span class="si">}{</span><span class="n">keyword</span><span class="si">}</span><span class="s2">: &quot;</span> <span class="o">+</span> <span class="n">e</span><span class="o">.</span><span class="n">args</span><span class="p">[</span><span class="mi">0</span><span class="p">],)</span>
-                <span class="k">raise</span> <span class="n">e</span>
-        <span class="k">except</span> <span class="ne">ValueError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">e</span><span class="o">.</span><span class="n">args</span> <span class="o">=</span> <span class="p">(</span><span class="sa">f</span><span class="s2">"Error during parsing of keyword </span><span class="si">{</span><span class="n">keywordIdentifier</span><span class="si">}{</span><span class="n">keyword</span><span class="si">}</span><span class="s2">: "</span> <span class="o">+</span> <span class="n">e</span><span class="o">.</span><span class="n">args</span><span class="p">[</span><span class="mi">0</span><span class="p">],)</span>
             <span class="k">raise</span> <span class="n">e</span>
 
-    <span class="n">options</span><span class="p">[</span><span class="s2">&quot;inputFile&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">fileName</span>  <span class="c1"># save also the filename of the original inputfile!</span>
+    <span class="n">options</span><span class="p">[</span><span class="s2">"inputFile"</span><span class="p">]</span> <span class="o">=</span> <span class="n">fileName</span>  <span class="c1"># save also the filename of the original inputfile!</span>
 
-    <span class="n">options</span><span class="p">[</span><span class="s2">&quot;datalines&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">options</span><span class="p">[</span><span class="s2">"datalines"</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
 
     <span class="k">return</span> <span class="n">keyword</span><span class="p">,</span> <span class="n">options</span>
 
@@ -193,325 +511,87 @@
     <span class="n">optionAssignments</span> <span class="o">=</span> <span class="n">lineElements</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span>
 
     <span class="k">try</span><span class="p">:</span>
-        <span class="n">options</span> <span class="o">=</span> <span class="n">convertAssignmentsToCaseInsensitiveStringDictionary</span><span class="p">(</span><span class="n">optionAssignments</span><span class="p">)</span>
+        <span class="n">rawOptions</span> <span class="o">=</span> <span class="n">convertAssignmentsToCaseInsensitiveStringDictionary</span><span class="p">(</span><span class="n">optionAssignments</span><span class="p">)</span>
     <span class="k">except</span> <span class="ne">ValueError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-        <span class="n">e</span><span class="o">.</span><span class="n">args</span> <span class="o">=</span> <span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Error during parsing of keyword </span><span class="si">{</span><span class="n">keywordIdentifier</span><span class="si">}{</span><span class="n">keyword</span><span class="si">}</span><span class="s2">: &quot;</span> <span class="o">+</span> <span class="n">e</span><span class="o">.</span><span class="n">args</span><span class="p">[</span><span class="mi">0</span><span class="p">],)</span>
+        <span class="n">e</span><span class="o">.</span><span class="n">args</span> <span class="o">=</span> <span class="p">(</span><span class="sa">f</span><span class="s2">"Error during parsing of keyword </span><span class="si">{</span><span class="n">keywordIdentifier</span><span class="si">}{</span><span class="n">keyword</span><span class="si">}</span><span class="s2">: "</span> <span class="o">+</span> <span class="n">e</span><span class="o">.</span><span class="n">args</span><span class="p">[</span><span class="mi">0</span><span class="p">],)</span>
         <span class="k">raise</span> <span class="n">e</span>
 
-    <span class="k">if</span> <span class="s2">&quot;type&quot;</span> <span class="ow">in</span> <span class="n">inputLanguage</span><span class="p">[</span><span class="n">topLevelKeyword</span><span class="p">]</span><span class="o">.</span><span class="n">argNames</span><span class="p">:</span>
-        <span class="n">module</span> <span class="o">=</span> <span class="n">inputLanguage</span><span class="p">[</span><span class="n">topLevelKeyword</span><span class="p">]</span><span class="o">.</span><span class="n">getModule</span><span class="p">(</span>
-            <span class="n">inputLanguage</span><span class="p">[</span><span class="n">topLevelKeyword</span><span class="p">]</span><span class="o">.</span><span class="n">getArg</span><span class="p">(</span><span class="s2">&quot;type&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">getValueFromKwargs</span><span class="p">(</span><span class="n">topLevelOptions</span><span class="p">)</span>
-        <span class="p">)</span>
+    <span class="n">isStepDynamicOptions</span> <span class="o">=</span> <span class="n">strCaseCmp</span><span class="p">(</span><span class="n">topLevelKeyword</span><span class="p">,</span> <span class="s2">"step"</span><span class="p">)</span> <span class="ow">and</span> <span class="n">strCaseCmp</span><span class="p">(</span><span class="n">keyword</span><span class="p">,</span> <span class="s2">"options"</span><span class="p">)</span>
+    <span class="n">isTypeDispatchedMarker</span> <span class="o">=</span> <span class="n">strCaseCmp</span><span class="p">(</span><span class="n">topLevelKeyword</span><span class="p">,</span> <span class="s2">"modelModifier"</span><span class="p">)</span> <span class="ow">and</span> <span class="n">strCaseCmp</span><span class="p">(</span><span class="n">keyword</span><span class="p">,</span> <span class="s2">"marker"</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">isStepDynamicOptions</span> <span class="ow">or</span> <span class="n">isTypeDispatchedMarker</span><span class="p">:</span>
+        <span class="c1"># '&gt;&gt;options' (depends on the targeted step action) and '&gt;&gt;marker' (depends on 'type') are</span>
+        <span class="c1"># validated later; only the discriminator is checked here, all other keys are passed raw.</span>
+        <span class="n">discriminator</span> <span class="o">=</span> <span class="s2">"name"</span> <span class="k">if</span> <span class="n">isStepDynamicOptions</span> <span class="k">else</span> <span class="s2">"type"</span>
+
+        <span class="nd">@caseInsensitiveRequiredArgsChecker</span><span class="p">([</span><span class="n">discriminator</span><span class="p">])</span>
+        <span class="k">def</span><span class="w"> </span><span class="nf">checkKeywordInput</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<span class="w">            </span><span class="sd">"""this is a dummy function needed to apply kwargsChecker"""</span>
+            <span class="k">return</span>
+
+        <span class="n">checkKeywordInput</span><span class="p">(</span><span class="o">**</span><span class="n">rawOptions</span><span class="p">)</span>
+        <span class="n">options</span> <span class="o">=</span> <span class="n">CaseInsensitiveDict</span><span class="p">(</span><span class="n">rawOptions</span><span class="p">)</span>
     <span class="k">else</span><span class="p">:</span>
-        <span class="n">module</span> <span class="o">=</span> <span class="n">inputLanguage</span><span class="p">[</span><span class="n">topLevelKeyword</span><span class="p">]</span><span class="o">.</span><span class="n">getModule</span><span class="p">(</span><span class="n">topLevelKeyword</span><span class="p">)</span>
+        <span class="n">moduleSchema</span> <span class="o">=</span> <span class="n">_resolveModuleKeywordSchema</span><span class="p">(</span><span class="n">topLevelKeyword</span><span class="p">,</span> <span class="n">topLevelOptions</span><span class="p">,</span> <span class="n">keyword</span><span class="p">)</span>
+        <span class="n">options</span> <span class="o">=</span> <span class="n">_coerceKnownFields</span><span class="p">(</span><span class="n">moduleSchema</span><span class="p">,</span> <span class="n">rawOptions</span><span class="p">)</span>
 
-    <span class="n">kw</span> <span class="o">=</span> <span class="n">module</span><span class="o">.</span><span class="n">getKeyword</span><span class="p">(</span><span class="n">keyword</span><span class="p">)</span>
+        <span class="n">requiredNames</span><span class="p">,</span> <span class="n">optionalNames</span> <span class="o">=</span> <span class="n">_requiredAndOptionalNames</span><span class="p">(</span><span class="n">moduleSchema</span><span class="p">)</span>
 
-    <span class="nd">@caseInsensitiveKwargsChecker</span><span class="p">([</span><span class="n">kw</span><span class="o">.</span><span class="n">name</span> <span class="k">for</span> <span class="n">kw</span> <span class="ow">in</span> <span class="n">kw</span><span class="o">.</span><span class="n">requiredArgs</span><span class="p">],</span> <span class="p">[</span><span class="n">kw</span><span class="o">.</span><span class="n">name</span> <span class="k">for</span> <span class="n">kw</span> <span class="ow">in</span> <span class="n">kw</span><span class="o">.</span><span class="n">optionalArgs</span><span class="p">])</span>
-    <span class="nd">@castKwargsValuesAndAddDefaults</span><span class="p">(</span><span class="n">kw</span><span class="p">)</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">checkKeywordInput</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;this is a dummy function needed to apply kwargsChecker&quot;&quot;&quot;</span>
-        <span class="k">return</span> <span class="n">CaseInsensitiveDict</span><span class="p">(</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="nd">@caseInsensitiveKwargsChecker</span><span class="p">(</span><span class="n">requiredNames</span><span class="p">,</span> <span class="n">optionalNames</span><span class="p">)</span>
+        <span class="k">def</span><span class="w"> </span><span class="nf">checkKeywordInput</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<span class="w">            </span><span class="sd">"""this is a dummy function needed to apply kwargsChecker"""</span>
+            <span class="k">return</span>
 
-    <span class="k">try</span><span class="p">:</span>
-        <span class="n">options</span> <span class="o">=</span> <span class="n">checkKeywordInput</span><span class="p">(</span><span class="o">**</span><span class="n">options</span><span class="p">)</span>
-    <span class="k">except</span> <span class="ne">ValueError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-        <span class="k">if</span> <span class="p">(</span>  <span class="c1"># stepaction update</span>
-            <span class="n">topLevelKeyword</span> <span class="o">==</span> <span class="s2">&quot;step&quot;</span>
-            <span class="ow">and</span> <span class="n">module</span><span class="o">.</span><span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;adaptive&quot;</span>
-            <span class="ow">and</span> <span class="n">kw</span><span class="o">.</span><span class="n">name</span>
-            <span class="ow">in</span> <span class="p">[</span>
-                <span class="c1"># &quot;bodyforce&quot;,</span>
-                <span class="s2">&quot;dirichlet&quot;</span><span class="p">,</span>
-                <span class="s2">&quot;distributedload&quot;</span><span class="p">,</span>
-                <span class="c1"># &quot;geostatic&quot;,</span>
-                <span class="s2">&quot;nodeforces&quot;</span><span class="p">,</span>
-            <span class="p">]</span>  <span class="c1"># these stepactions can be updated by repeating the module level keyword and using the same name as previously defined</span>
-            <span class="ow">and</span> <span class="s2">&quot;name&quot;</span> <span class="ow">in</span> <span class="n">options</span>
-            <span class="ow">and</span> <span class="n">options</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">casefold</span><span class="p">()</span>
-            <span class="ow">in</span> <span class="p">[</span>  <span class="c1"># check if a step action with the same name already exists</span>
-                <span class="n">item</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">casefold</span><span class="p">()</span>
-                <span class="k">for</span> <span class="n">step</span> <span class="ow">in</span> <span class="n">fileDict</span><span class="p">[</span><span class="s2">&quot;step&quot;</span><span class="p">]</span>
-                <span class="k">if</span> <span class="n">keyword</span> <span class="ow">in</span> <span class="n">step</span><span class="p">[</span><span class="s2">&quot;moduleoptions&quot;</span><span class="p">]</span>
-                <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">step</span><span class="p">[</span><span class="s2">&quot;moduleoptions&quot;</span><span class="p">][</span><span class="n">keyword</span><span class="p">]</span>
-            <span class="p">]</span>
-        <span class="p">):</span>
-            <span class="n">kw</span> <span class="o">=</span> <span class="n">module</span><span class="o">.</span><span class="n">getKeyword</span><span class="p">(</span><span class="s2">&quot;update&quot;</span> <span class="o">+</span> <span class="n">keyword</span><span class="p">)</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">checkKeywordInput</span><span class="p">(</span><span class="o">**</span><span class="n">options</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">ValueError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="c1"># A step action can be updated in a subsequent step by repeating the module</span>
+            <span class="c1"># level keyword with the same name as previously defined. Updates are validated</span>
+            <span class="c1"># against the dedicated 'update&lt;keyword&gt;' schema, if this step action provides one.</span>
+            <span class="n">updateSchema</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="k">if</span> <span class="p">(</span>
+                <span class="n">strCaseCmp</span><span class="p">(</span><span class="n">topLevelKeyword</span><span class="p">,</span> <span class="s2">"step"</span><span class="p">)</span>
+                <span class="ow">and</span> <span class="s2">"name"</span> <span class="ow">in</span> <span class="n">rawOptions</span>
+                <span class="ow">and</span> <span class="n">rawOptions</span><span class="p">[</span><span class="s2">"name"</span><span class="p">]</span><span class="o">.</span><span class="n">casefold</span><span class="p">()</span>
+                <span class="ow">in</span> <span class="p">[</span>  <span class="c1"># check if a step action with the same name already exists</span>
+                    <span class="n">item</span><span class="p">[</span><span class="s2">"name"</span><span class="p">]</span><span class="o">.</span><span class="n">casefold</span><span class="p">()</span>
+                    <span class="k">for</span> <span class="n">step</span> <span class="ow">in</span> <span class="n">fileDict</span><span class="p">[</span><span class="s2">"step"</span><span class="p">]</span>
+                    <span class="k">if</span> <span class="n">keyword</span> <span class="ow">in</span> <span class="n">step</span><span class="p">[</span><span class="s2">"moduleOptions"</span><span class="p">]</span>
+                    <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">step</span><span class="p">[</span><span class="s2">"moduleOptions"</span><span class="p">][</span><span class="n">keyword</span><span class="p">]</span>
+                    <span class="k">if</span> <span class="s2">"name"</span> <span class="ow">in</span> <span class="n">item</span>
+                <span class="p">]</span>
+            <span class="p">):</span>
+                <span class="n">updateSchema</span> <span class="o">=</span> <span class="n">_updateStepActionSchema</span><span class="p">(</span><span class="n">keyword</span><span class="p">)</span>
 
-            <span class="nd">@caseInsensitiveKwargsChecker</span><span class="p">([</span><span class="n">kw</span><span class="o">.</span><span class="n">name</span> <span class="k">for</span> <span class="n">kw</span> <span class="ow">in</span> <span class="n">kw</span><span class="o">.</span><span class="n">requiredArgs</span><span class="p">],</span> <span class="p">[</span><span class="n">kw</span><span class="o">.</span><span class="n">name</span> <span class="k">for</span> <span class="n">kw</span> <span class="ow">in</span> <span class="n">kw</span><span class="o">.</span><span class="n">optionalArgs</span><span class="p">])</span>
-            <span class="nd">@castKwargsValuesAndAddDefaults</span><span class="p">(</span><span class="n">kw</span><span class="p">)</span>
-            <span class="k">def</span><span class="w"> </span><span class="nf">checkUpdateKeywordInput</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
-<span class="w">                </span><span class="sd">&quot;&quot;&quot;this is a dummy function needed to apply kwargsChecker&quot;&quot;&quot;</span>
-                <span class="k">return</span> <span class="n">CaseInsensitiveDict</span><span class="p">(</span><span class="n">kwargs</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">updateSchema</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">options</span> <span class="o">=</span> <span class="n">_coerceKnownFields</span><span class="p">(</span><span class="n">updateSchema</span><span class="p">,</span> <span class="n">rawOptions</span><span class="p">)</span>
+                <span class="n">updateRequired</span><span class="p">,</span> <span class="n">updateOptional</span> <span class="o">=</span> <span class="n">_requiredAndOptionalNames</span><span class="p">(</span><span class="n">updateSchema</span><span class="p">)</span>
 
-            <span class="k">try</span><span class="p">:</span>
-                <span class="n">options</span> <span class="o">=</span> <span class="n">checkUpdateKeywordInput</span><span class="p">(</span><span class="o">**</span><span class="n">options</span><span class="p">)</span>
-            <span class="k">except</span> <span class="ne">ValueError</span> <span class="k">as</span> <span class="n">e2</span><span class="p">:</span>
-                <span class="n">e2</span><span class="o">.</span><span class="n">args</span> <span class="o">=</span> <span class="p">(</span>
-                    <span class="sa">f</span><span class="s2">&quot;Error during updating stepaction </span><span class="si">{</span><span class="n">moduleLevelKeywordIdentifier</span><span class="si">}{</span><span class="n">keyword</span><span class="si">}</span><span class="s2">, name=</span><span class="si">{</span><span class="n">options</span><span class="p">[</span><span class="s1">&#39;name&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">: &quot;</span>
-                    <span class="o">+</span> <span class="n">e2</span><span class="o">.</span><span class="n">args</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+                <span class="nd">@caseInsensitiveKwargsChecker</span><span class="p">(</span><span class="n">updateRequired</span><span class="p">,</span> <span class="n">updateOptional</span><span class="p">)</span>
+                <span class="k">def</span><span class="w"> </span><span class="nf">checkUpdateKeywordInput</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<span class="w">                    </span><span class="sd">"""this is a dummy function needed to apply kwargsChecker"""</span>
+                    <span class="k">return</span>
+
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="n">checkUpdateKeywordInput</span><span class="p">(</span><span class="o">**</span><span class="n">options</span><span class="p">)</span>
+                <span class="k">except</span> <span class="ne">ValueError</span> <span class="k">as</span> <span class="n">e2</span><span class="p">:</span>
+                    <span class="n">e2</span><span class="o">.</span><span class="n">args</span> <span class="o">=</span> <span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">"Error during updating stepaction </span><span class="si">{</span><span class="n">moduleLevelKeywordIdentifier</span><span class="si">}{</span><span class="n">keyword</span><span class="si">}</span><span class="s2">, "</span>
+                        <span class="sa">f</span><span class="s2">"name=</span><span class="si">{</span><span class="n">options</span><span class="p">[</span><span class="s1">'name'</span><span class="p">]</span><span class="si">}</span><span class="s2">: "</span> <span class="o">+</span> <span class="n">e2</span><span class="o">.</span><span class="n">args</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+                    <span class="p">)</span>
+                    <span class="k">raise</span> <span class="n">e2</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">e</span><span class="o">.</span><span class="n">args</span> <span class="o">=</span> <span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">"Error during parsing of module level keyword </span><span class="si">{</span><span class="n">moduleLevelKeywordIdentifier</span><span class="si">}{</span><span class="n">keyword</span><span class="si">}</span><span class="s2">: "</span>
+                    <span class="o">+</span> <span class="n">e</span><span class="o">.</span><span class="n">args</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
                 <span class="p">)</span>
-                <span class="k">raise</span> <span class="n">e2</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="n">e</span><span class="o">.</span><span class="n">args</span> <span class="o">=</span> <span class="p">(</span>
-                <span class="sa">f</span><span class="s2">&quot;Error during parsing of module level keyword </span><span class="si">{</span><span class="n">moduleLevelKeywordIdentifier</span><span class="si">}{</span><span class="n">keyword</span><span class="si">}</span><span class="s2">: &quot;</span> <span class="o">+</span> <span class="n">e</span><span class="o">.</span><span class="n">args</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
-            <span class="p">)</span>
-            <span class="k">raise</span> <span class="n">e</span>
+                <span class="k">raise</span> <span class="n">e</span>
 
-    <span class="k">for</span> <span class="n">opt</span> <span class="ow">in</span> <span class="n">kw</span><span class="o">.</span><span class="n">optionalArgs</span><span class="p">:</span>
-        <span class="k">if</span> <span class="n">opt</span><span class="o">.</span><span class="n">name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">options</span><span class="p">:</span>
-            <span class="n">options</span><span class="p">[</span><span class="n">opt</span><span class="o">.</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">opt</span><span class="o">.</span><span class="n">default</span>
+    <span class="n">options</span><span class="p">[</span><span class="s2">"inputFile"</span><span class="p">]</span> <span class="o">=</span> <span class="n">fileName</span>  <span class="c1"># save also the filename of the original inputfile!</span>
 
-    <span class="n">options</span><span class="p">[</span><span class="s2">&quot;inputFile&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">fileName</span>  <span class="c1"># save also the filename of the original inputfile!</span>
-
-    <span class="k">if</span> <span class="n">kw</span><span class="o">.</span><span class="n">expectsRequiredDatalines</span> <span class="ow">or</span> <span class="n">kw</span><span class="o">.</span><span class="n">expectsOptionalDatalines</span><span class="p">:</span>
-        <span class="n">options</span><span class="p">[</span><span class="s2">&quot;datalines&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="c1"># No `datalines` key for `&gt;&gt;` blocks: e.g. `&gt;&gt;bodyforce` passes the whole dict to `buildSchemaFromOptions`.</span>
 
     <span class="k">return</span> <span class="n">keyword</span><span class="p">,</span> <span class="n">options</span>
-
-
-<span class="n">inputLanguage</span> <span class="o">=</span> <span class="n">InputLanguage</span><span class="p">()</span>
-
-<span class="n">kw</span> <span class="o">=</span> <span class="n">inputLanguage</span><span class="o">.</span><span class="n">addKeyword</span><span class="p">(</span><span class="s2">&quot;element&quot;</span><span class="p">,</span> <span class="s2">&quot;definition of element(s)&quot;</span><span class="p">)</span>
-<span class="n">kw</span><span class="o">.</span><span class="n">addRequiredArg</span><span class="p">(</span><span class="s2">&quot;type&quot;</span><span class="p">,</span> <span class="s2">&quot;assign one of the types defined in the elementlibrary&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span>
-<span class="n">kw</span><span class="o">.</span><span class="n">addOptionalArg</span><span class="p">(</span><span class="s2">&quot;elSet&quot;</span><span class="p">,</span> <span class="s2">&quot;name of elSet to be created&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
-<span class="n">kw</span><span class="o">.</span><span class="n">addOptionalArg</span><span class="p">(</span>
-    <span class="s2">&quot;provider&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;provider (library) for the element type. Default: Marmot&quot;</span><span class="p">,</span>
-    <span class="nb">str</span><span class="p">,</span>
-    <span class="s2">&quot;Marmot&quot;</span><span class="p">,</span>
-<span class="p">)</span>
-<span class="n">kw</span><span class="o">.</span><span class="n">addRequiredDatalines</span><span class="p">(</span><span class="s2">&quot;Abaqus like element definition lines&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
-
-<span class="n">kw</span> <span class="o">=</span> <span class="n">inputLanguage</span><span class="o">.</span><span class="n">addKeyword</span><span class="p">(</span><span class="s2">&quot;elSet&quot;</span><span class="p">,</span> <span class="s2">&quot;definition of an element set&quot;</span><span class="p">)</span>
-<span class="n">kw</span><span class="o">.</span><span class="n">addRequiredArg</span><span class="p">(</span><span class="s2">&quot;elSet&quot;</span><span class="p">,</span> <span class="s2">&quot;name&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span>
-<span class="n">kw</span><span class="o">.</span><span class="n">addOptionalArg</span><span class="p">(</span>
-    <span class="s2">&quot;generate&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;set True to generate from data line 1: start-element, end-element, step&quot;</span><span class="p">,</span>
-    <span class="nb">bool</span><span class="p">,</span>
-    <span class="kc">False</span><span class="p">,</span>
-<span class="p">)</span>
-<span class="n">kw</span><span class="o">.</span><span class="n">addRequiredDatalines</span><span class="p">(</span><span class="s2">&quot;Abaqus like element set definition lines&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
-
-<span class="n">kw</span> <span class="o">=</span> <span class="n">inputLanguage</span><span class="o">.</span><span class="n">addKeyword</span><span class="p">(</span><span class="s2">&quot;node&quot;</span><span class="p">,</span> <span class="s2">&quot;definition of nodes&quot;</span><span class="p">)</span>
-<span class="n">kw</span><span class="o">.</span><span class="n">addOptionalArg</span><span class="p">(</span><span class="s2">&quot;nSet&quot;</span><span class="p">,</span> <span class="s2">&quot;name of nSet to be created&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
-<span class="n">kw</span><span class="o">.</span><span class="n">addRequiredDatalines</span><span class="p">(</span><span class="s2">&quot;Abaqus like node definition lines: label, x, [y], [z]&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
-
-<span class="n">kw</span> <span class="o">=</span> <span class="n">inputLanguage</span><span class="o">.</span><span class="n">addKeyword</span><span class="p">(</span><span class="s2">&quot;nSet&quot;</span><span class="p">,</span> <span class="s2">&quot;definition of an element set&quot;</span><span class="p">)</span>
-<span class="n">kw</span><span class="o">.</span><span class="n">addRequiredArg</span><span class="p">(</span><span class="s2">&quot;nSet&quot;</span><span class="p">,</span> <span class="s2">&quot;name&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span>
-<span class="n">kw</span><span class="o">.</span><span class="n">addOptionalArg</span><span class="p">(</span>
-    <span class="s2">&quot;generate&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;set True to generate from data line 1: start-node, end-node, step&quot;</span><span class="p">,</span>
-    <span class="nb">bool</span><span class="p">,</span>
-    <span class="kc">False</span><span class="p">,</span>
-<span class="p">)</span>
-<span class="n">kw</span><span class="o">.</span><span class="n">addRequiredDatalines</span><span class="p">(</span><span class="s2">&quot;Abaqus like node set definition lines&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
-
-<span class="n">kw</span> <span class="o">=</span> <span class="n">inputLanguage</span><span class="o">.</span><span class="n">addKeyword</span><span class="p">(</span><span class="s2">&quot;surface&quot;</span><span class="p">,</span> <span class="s2">&quot;definition of surface set&quot;</span><span class="p">)</span>
-<span class="n">kw</span><span class="o">.</span><span class="n">addRequiredArg</span><span class="p">(</span><span class="s2">&quot;name&quot;</span><span class="p">,</span> <span class="s2">&quot;name&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span>
-<span class="n">kw</span><span class="o">.</span><span class="n">addRequiredArg</span><span class="p">(</span><span class="s2">&quot;type&quot;</span><span class="p">,</span> <span class="s2">&quot;type of surface (currently &#39;element&#39; only)&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span>
-<span class="n">kw</span><span class="o">.</span><span class="n">addRequiredDatalines</span><span class="p">(</span><span class="s2">&quot;Abaqus like definition. Type &#39;element&#39;: elSet, faceID&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
-
-<span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">*section</span>
-<span class="sd">&quot;&quot;&quot;</span>
-<span class="n">kw</span> <span class="o">=</span> <span class="n">inputLanguage</span><span class="o">.</span><span class="n">addKeyword</span><span class="p">(</span><span class="s2">&quot;section&quot;</span><span class="p">,</span> <span class="s2">&quot;definition of a section&quot;</span><span class="p">)</span>
-<span class="n">kw</span><span class="o">.</span><span class="n">addRequiredArg</span><span class="p">(</span><span class="s2">&quot;name&quot;</span><span class="p">,</span> <span class="s2">&quot;name&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span>
-<span class="n">kw</span><span class="o">.</span><span class="n">addRequiredArg</span><span class="p">(</span><span class="s2">&quot;material&quot;</span><span class="p">,</span> <span class="s2">&quot;associated id of defined material&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span>
-<span class="n">kw</span><span class="o">.</span><span class="n">addRequiredArg</span><span class="p">(</span><span class="s2">&quot;type&quot;</span><span class="p">,</span> <span class="s2">&quot;type of the section&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span>
-<span class="n">kw</span><span class="o">.</span><span class="n">addRequiredDatalines</span><span class="p">(</span><span class="s2">&quot;list of associated element sets&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
-
-<span class="c1"># kw.addOptionalArg(&quot;thickness&quot;, &quot;associated element thickness&quot;, float, 1.0)</span>
-<span class="c1"># kw.addOptionalArg(&quot;density&quot;, &quot;associated element density&quot;, float, 1.0)</span>
-
-<span class="c1"># isort: off</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.sections.solid</span><span class="w"> </span><span class="kn">import</span> <span class="n">inputLanguage</span>  <span class="c1"># noqa: F811,E402</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.sections.plane</span><span class="w"> </span><span class="kn">import</span> <span class="n">inputLanguage</span>  <span class="c1"># noqa: F811,E402</span>
-
-<span class="c1"># isort: on</span>
-
-<span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">*material</span>
-<span class="sd">&quot;&quot;&quot;</span>
-<span class="n">kw</span> <span class="o">=</span> <span class="n">inputLanguage</span><span class="o">.</span><span class="n">addKeyword</span><span class="p">(</span><span class="s2">&quot;material&quot;</span><span class="p">,</span> <span class="s2">&quot;definition of a material&quot;</span><span class="p">)</span>
-<span class="n">kw</span><span class="o">.</span><span class="n">addRequiredArg</span><span class="p">(</span><span class="s2">&quot;name&quot;</span><span class="p">,</span> <span class="s2">&quot;name of material&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span>
-<span class="n">kw</span><span class="o">.</span><span class="n">addRequiredArg</span><span class="p">(</span><span class="s2">&quot;id&quot;</span><span class="p">,</span> <span class="s2">&quot;id of material&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span>
-<span class="n">kw</span><span class="o">.</span><span class="n">addOptionalArg</span><span class="p">(</span><span class="s2">&quot;provider&quot;</span><span class="p">,</span> <span class="s2">&quot;material provider&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="s2">&quot;marmotmaterial&quot;</span><span class="p">)</span>
-<span class="n">kw</span><span class="o">.</span><span class="n">addRequiredDatalines</span><span class="p">(</span><span class="s2">&quot;material properties&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
-<span class="c1"># kw.addOptionalArg(&quot;statevars&quot;, , , None)</span>
-
-<span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">*advancedmaterial</span>
-<span class="sd">&quot;&quot;&quot;</span>
-<span class="n">kw</span> <span class="o">=</span> <span class="n">inputLanguage</span><span class="o">.</span><span class="n">addKeyword</span><span class="p">(</span><span class="s2">&quot;advancedmaterial&quot;</span><span class="p">,</span> <span class="s2">&quot;definition of an advanced material&quot;</span><span class="p">)</span>
-<span class="n">kw</span><span class="o">.</span><span class="n">addRequiredArg</span><span class="p">(</span><span class="s2">&quot;name&quot;</span><span class="p">,</span> <span class="s2">&quot;name of material&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span>
-<span class="n">kw</span><span class="o">.</span><span class="n">addRequiredArg</span><span class="p">(</span><span class="s2">&quot;id&quot;</span><span class="p">,</span> <span class="s2">&quot;id of material&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span>
-<span class="n">kw</span><span class="o">.</span><span class="n">addOptionalArg</span><span class="p">(</span><span class="s2">&quot;provider&quot;</span><span class="p">,</span> <span class="s2">&quot;material provider&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="s2">&quot;marmotmaterial&quot;</span><span class="p">)</span>
-<span class="n">kw</span><span class="o">.</span><span class="n">addRequiredDatalines</span><span class="p">(</span><span class="s2">&quot;material properties&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
-
-<span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">*fieldOutput</span>
-<span class="sd">&quot;&quot;&quot;</span>
-<span class="n">kw</span> <span class="o">=</span> <span class="n">inputLanguage</span><span class="o">.</span><span class="n">addKeyword</span><span class="p">(</span><span class="s2">&quot;fieldOutput&quot;</span><span class="p">,</span> <span class="s2">&quot;define fieldoutput, which is used by outputmanagers&quot;</span><span class="p">)</span>
-
-<span class="c1"># isort: off</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.utils.fieldoutput</span><span class="w"> </span><span class="kn">import</span> <span class="n">inputLanguage</span>  <span class="c1"># noqa: F811,E402</span>
-
-<span class="c1"># isort: on</span>
-
-<span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">*analyticalField</span>
-<span class="sd">&quot;&quot;&quot;</span>
-<span class="n">kw</span> <span class="o">=</span> <span class="n">inputLanguage</span><span class="o">.</span><span class="n">addKeyword</span><span class="p">(</span><span class="s2">&quot;analyticalField&quot;</span><span class="p">,</span> <span class="s2">&quot;define an analytical field&quot;</span><span class="p">)</span>
-<span class="n">kw</span><span class="o">.</span><span class="n">addRequiredArg</span><span class="p">(</span><span class="s2">&quot;name&quot;</span><span class="p">,</span> <span class="s2">&quot;name of analytical field&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span>
-<span class="n">kw</span><span class="o">.</span><span class="n">addRequiredArg</span><span class="p">(</span><span class="s2">&quot;type&quot;</span><span class="p">,</span> <span class="s2">&quot;type of analytical field&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span>
-<span class="c1"># kw.addRequiredDatalines(&quot;definition lines&quot;, &quot;&quot;)</span>
-
-<span class="c1"># isort: off</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.analyticalfields.randomscalar</span><span class="w"> </span><span class="kn">import</span> <span class="n">inputLanguage</span>  <span class="c1"># noqa: F811,E402</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.analyticalfields.fromvtk</span><span class="w"> </span><span class="kn">import</span> <span class="n">inputLanguage</span>  <span class="c1"># noqa: F811,E402</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.analyticalfields.scalarexpression</span><span class="w"> </span><span class="kn">import</span> <span class="n">inputLanguage</span>  <span class="c1"># noqa: F811,E402</span>
-
-<span class="c1"># isort: on</span>
-
-<span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">*job</span>
-<span class="sd">&quot;&quot;&quot;</span>
-<span class="n">kw</span> <span class="o">=</span> <span class="n">inputLanguage</span><span class="o">.</span><span class="n">addKeyword</span><span class="p">(</span><span class="s2">&quot;job&quot;</span><span class="p">,</span> <span class="s2">&quot;definition of an analysis job&quot;</span><span class="p">)</span>
-<span class="n">kw</span><span class="o">.</span><span class="n">addRequiredArg</span><span class="p">(</span><span class="s2">&quot;domain&quot;</span><span class="p">,</span> <span class="s2">&quot;define spatial domain: 1d, 2d, 3d&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span>
-<span class="n">kw</span><span class="o">.</span><span class="n">addOptionalArg</span><span class="p">(</span><span class="s2">&quot;startTime&quot;</span><span class="p">,</span> <span class="s2">&quot;(optional) start time of job&quot;</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span>
-<span class="n">kw</span><span class="o">.</span><span class="n">addOptionalArg</span><span class="p">(</span><span class="s2">&quot;name&quot;</span><span class="p">,</span> <span class="s2">&quot;Name of job.&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="s2">&quot;defaultJob&quot;</span><span class="p">)</span>
-<span class="n">kw</span><span class="o">.</span><span class="n">addOptionalArg</span><span class="p">(</span><span class="s2">&quot;solver&quot;</span><span class="p">,</span> <span class="s2">&quot;(deprecated) define the solver to be used&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="s2">&quot;NIST&quot;</span><span class="p">)</span>
-
-<span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">*solver</span>
-<span class="sd">&quot;&quot;&quot;</span>
-<span class="n">kw</span> <span class="o">=</span> <span class="n">inputLanguage</span><span class="o">.</span><span class="n">addKeyword</span><span class="p">(</span><span class="s2">&quot;solver&quot;</span><span class="p">,</span> <span class="s2">&quot;define a solver&quot;</span><span class="p">)</span>
-<span class="n">kw</span><span class="o">.</span><span class="n">addRequiredArg</span><span class="p">(</span><span class="s2">&quot;name&quot;</span><span class="p">,</span> <span class="s2">&quot;solver name&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span>
-<span class="n">kw</span><span class="o">.</span><span class="n">addRequiredArg</span><span class="p">(</span><span class="s2">&quot;solver&quot;</span><span class="p">,</span> <span class="s2">&quot;solver type&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span>
-<span class="n">kw</span><span class="o">.</span><span class="n">addOptionalDatalines</span><span class="p">(</span><span class="s2">&quot;define options which are passed to the respective solver instance.&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
-
-<span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">*step</span>
-<span class="sd">&quot;&quot;&quot;</span>
-<span class="n">kw</span> <span class="o">=</span> <span class="n">inputLanguage</span><span class="o">.</span><span class="n">addKeyword</span><span class="p">(</span><span class="s2">&quot;step&quot;</span><span class="p">,</span> <span class="s2">&quot;define steps&quot;</span><span class="p">)</span>
-<span class="n">kw</span><span class="o">.</span><span class="n">addRequiredArg</span><span class="p">(</span><span class="s2">&quot;solver&quot;</span><span class="p">,</span> <span class="s2">&quot;solver to be used&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span>
-<span class="n">kw</span><span class="o">.</span><span class="n">addOptionalArg</span><span class="p">(</span><span class="s2">&quot;type&quot;</span><span class="p">,</span> <span class="s2">&quot;step type&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="s2">&quot;adaptive&quot;</span><span class="p">)</span>
-
-<span class="c1"># isort: off</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.steps.adaptivestep</span><span class="w"> </span><span class="kn">import</span> <span class="n">inputLanguage</span>  <span class="c1"># noqa: F811,E402</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.steps.adaptivestepforexplicitsimulations</span><span class="w"> </span><span class="kn">import</span> <span class="n">inputLanguage</span>  <span class="c1"># noqa: F811,E402</span>
-
-<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.stepactions.bodyforce</span><span class="w"> </span><span class="kn">import</span> <span class="n">inputLanguage</span>  <span class="c1"># noqa: F811,E402</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.stepactions.changematerialproperty</span><span class="w"> </span><span class="kn">import</span> <span class="n">inputLanguage</span>  <span class="c1"># noqa: F811,E402</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.stepactions.dirichlet</span><span class="w"> </span><span class="kn">import</span> <span class="n">inputLanguage</span>  <span class="c1"># noqa: F811,E402</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.stepactions.distributedload</span><span class="w"> </span><span class="kn">import</span> <span class="n">inputLanguage</span>  <span class="c1"># noqa: F811,E402</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.stepactions.geostatic</span><span class="w"> </span><span class="kn">import</span> <span class="n">inputLanguage</span>  <span class="c1"># noqa: F811,E402</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.stepactions.indirectcontractioncontrol</span><span class="w"> </span><span class="kn">import</span> <span class="n">inputLanguage</span>  <span class="c1"># noqa: F811,E402</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.stepactions.indirectcontrol</span><span class="w"> </span><span class="kn">import</span> <span class="n">inputLanguage</span>  <span class="c1"># noqa: F811,E402</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.stepactions.initializematerial</span><span class="w"> </span><span class="kn">import</span> <span class="n">inputLanguage</span>  <span class="c1"># noqa: F811,E402</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.stepactions.modelupdate</span><span class="w"> </span><span class="kn">import</span> <span class="n">inputLanguage</span>  <span class="c1"># noqa: F811,E402</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.stepactions.nodeforces</span><span class="w"> </span><span class="kn">import</span> <span class="n">inputLanguage</span>  <span class="c1"># noqa: F811,E402</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.stepactions.setfield</span><span class="w"> </span><span class="kn">import</span> <span class="n">inputLanguage</span>  <span class="c1"># noqa: F811,E402</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.stepactions.setinitialconditions</span><span class="w"> </span><span class="kn">import</span> <span class="n">inputLanguage</span>  <span class="c1"># noqa: F811,E402</span>
-
-<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.stepactions.options</span><span class="w"> </span><span class="kn">import</span> <span class="n">inputLanguage</span>  <span class="c1"># noqa: F811,E402</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.solvers.nonlinearimplicitstatic</span><span class="w"> </span><span class="kn">import</span> <span class="n">inputLanguage</span>  <span class="c1"># noqa: F811,E402</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.solvers.nonlinearimplicitstaticparallelarclength</span><span class="w"> </span><span class="kn">import</span> <span class="n">inputLanguage</span>  <span class="c1"># noqa: F811,E402</span>
-
-<span class="c1"># isort: on</span>
-
-<span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">*output</span>
-<span class="sd">&quot;&quot;&quot;</span>
-<span class="n">kw</span> <span class="o">=</span> <span class="n">inputLanguage</span><span class="o">.</span><span class="n">addKeyword</span><span class="p">(</span><span class="s2">&quot;output&quot;</span><span class="p">,</span> <span class="s2">&quot;define an output module&quot;</span><span class="p">)</span>
-<span class="n">kw</span><span class="o">.</span><span class="n">addRequiredArg</span><span class="p">(</span><span class="s2">&quot;type&quot;</span><span class="p">,</span> <span class="s2">&quot;output module&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span>
-<span class="n">kw</span><span class="o">.</span><span class="n">addOptionalArg</span><span class="p">(</span><span class="s2">&quot;name&quot;</span><span class="p">,</span> <span class="s2">&quot;name of output manager&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
-<span class="c1"># kw.addOptionalDatalines(&quot;definition lines&quot;, &quot;&quot;)</span>
-
-<span class="c1"># isort: off</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.outputmanagers.computetimemonitor</span><span class="w"> </span><span class="kn">import</span> <span class="n">inputLanguage</span>  <span class="c1"># noqa: F811,E402</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.outputmanagers.conditionalstop</span><span class="w"> </span><span class="kn">import</span> <span class="n">inputLanguage</span>  <span class="c1"># noqa: F811,E402</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.outputmanagers.ensight</span><span class="w"> </span><span class="kn">import</span> <span class="n">inputLanguage</span>  <span class="c1"># noqa: F811,E402</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.outputmanagers.fractureenergyintegrator</span><span class="w"> </span><span class="kn">import</span> <span class="n">inputLanguage</span>  <span class="c1"># noqa: F811,E402</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.outputmanagers.meshdatatofile</span><span class="w"> </span><span class="kn">import</span> <span class="n">inputLanguage</span>  <span class="c1"># noqa: F811,E402</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.outputmanagers.meshplot</span><span class="w"> </span><span class="kn">import</span> <span class="n">inputLanguage</span>  <span class="c1"># noqa: F811,E402</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.outputmanagers.monitor</span><span class="w"> </span><span class="kn">import</span> <span class="n">inputLanguage</span>  <span class="c1"># noqa: F811,E402</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.outputmanagers.plotalongpath</span><span class="w"> </span><span class="kn">import</span> <span class="n">inputLanguage</span>  <span class="c1"># noqa: F811,E402</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.outputmanagers.statusfile</span><span class="w"> </span><span class="kn">import</span> <span class="n">inputLanguage</span>  <span class="c1"># noqa: F811,E402</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.outputmanagers.timemonitor</span><span class="w"> </span><span class="kn">import</span> <span class="n">inputLanguage</span>  <span class="c1"># noqa: F811,E402</span>
-
-<span class="c1"># isort: on</span>
-
-<span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">*updateConfiguration</span>
-<span class="sd">&quot;&quot;&quot;</span>
-<span class="n">kw</span> <span class="o">=</span> <span class="n">inputLanguage</span><span class="o">.</span><span class="n">addKeyword</span><span class="p">(</span><span class="s2">&quot;updateConfiguration&quot;</span><span class="p">,</span> <span class="s2">&quot;update a configuration&quot;</span><span class="p">)</span>
-<span class="n">kw</span><span class="o">.</span><span class="n">addRequiredArg</span><span class="p">(</span><span class="s2">&quot;configuration&quot;</span><span class="p">,</span> <span class="s2">&quot;name of configuration to be changed&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span>
-<span class="n">kw</span><span class="o">.</span><span class="n">addRequiredDatalines</span><span class="p">(</span><span class="s2">&quot;keyword arguments&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
-
-<span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">*modelGenerator</span>
-<span class="sd">&quot;&quot;&quot;</span>
-<span class="n">kw</span> <span class="o">=</span> <span class="n">inputLanguage</span><span class="o">.</span><span class="n">addKeyword</span><span class="p">(</span><span class="s2">&quot;modelGenerator&quot;</span><span class="p">,</span> <span class="s2">&quot;define a model generator, loaded from a module&quot;</span><span class="p">)</span>
-<span class="n">kw</span><span class="o">.</span><span class="n">addRequiredArg</span><span class="p">(</span><span class="s2">&quot;name&quot;</span><span class="p">,</span> <span class="s2">&quot;name of the generator&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span>
-<span class="n">kw</span><span class="o">.</span><span class="n">addRequiredArg</span><span class="p">(</span><span class="s2">&quot;generator&quot;</span><span class="p">,</span> <span class="s2">&quot;name of generator module&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span>
-<span class="n">kw</span><span class="o">.</span><span class="n">addOptionalArg</span><span class="p">(</span>
-    <span class="s2">&quot;executeAfterManualGeneration&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;Delay the execution of the generator after model generation&quot;</span><span class="p">,</span>
-    <span class="nb">bool</span><span class="p">,</span>
-    <span class="kc">False</span><span class="p">,</span>
-<span class="p">)</span>
-<span class="c1"># kw.addRequiredDatalines(&quot;keyword arguments&quot;, &quot;&quot;)</span>
-
-<span class="c1"># isort: off</span>
-<span class="c1"># from edelweissfe.generators.abqmodelconstructor import inputLanguage  # noqa: F811,E402</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.generators.boxgen</span><span class="w"> </span><span class="kn">import</span> <span class="n">inputLanguage</span>  <span class="c1"># noqa: F811,E402</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.generators.cubit</span><span class="w"> </span><span class="kn">import</span> <span class="n">inputLanguage</span>  <span class="c1"># noqa: F811,E402</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.generators.executepythoncode</span><span class="w"> </span><span class="kn">import</span> <span class="n">inputLanguage</span>  <span class="c1"># noqa: F811,E402</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.generators.findclosestnode</span><span class="w"> </span><span class="kn">import</span> <span class="n">inputLanguage</span>  <span class="c1"># noqa: F811,E402</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.generators.pipegen</span><span class="w"> </span><span class="kn">import</span> <span class="n">inputLanguage</span>  <span class="c1"># noqa: F811,E402</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.generators.planerectquad</span><span class="w"> </span><span class="kn">import</span> <span class="n">inputLanguage</span>  <span class="c1"># noqa: F811,E402</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.generators.cuboidlatticegenerator</span><span class="w"> </span><span class="kn">import</span> <span class="n">inputLanguage</span>  <span class="c1"># noqa: F811,E402</span>
-
-<span class="c1"># isort: on</span>
-
-<span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">*constraint</span>
-<span class="sd">&quot;&quot;&quot;</span>
-<span class="n">kw</span> <span class="o">=</span> <span class="n">inputLanguage</span><span class="o">.</span><span class="n">addKeyword</span><span class="p">(</span><span class="s2">&quot;constraint&quot;</span><span class="p">,</span> <span class="s2">&quot;define a constraint&quot;</span><span class="p">)</span>
-<span class="n">kw</span><span class="o">.</span><span class="n">addRequiredArg</span><span class="p">(</span><span class="s2">&quot;type&quot;</span><span class="p">,</span> <span class="s2">&quot;constraint type&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span>
-<span class="n">kw</span><span class="o">.</span><span class="n">addRequiredDatalines</span><span class="p">(</span><span class="s2">&quot;definition of the constraint&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
-<span class="n">kw</span><span class="o">.</span><span class="n">addOptionalArg</span><span class="p">(</span><span class="s2">&quot;name&quot;</span><span class="p">,</span> <span class="s2">&quot;name of the constraint&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
-
-<span class="c1"># isort: off</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.constraints.equalvaluelagrangian</span><span class="w"> </span><span class="kn">import</span> <span class="n">inputLanguage</span>  <span class="c1"># noqa: F811,E402</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.constraints.equalvaluepenalty</span><span class="w"> </span><span class="kn">import</span> <span class="n">inputLanguage</span>  <span class="c1"># noqa: F811,E402</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.constraints.linearizedrigidbody</span><span class="w"> </span><span class="kn">import</span> <span class="n">inputLanguage</span>  <span class="c1"># noqa: F811,E402</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.constraints.penaltyindirectcontrol</span><span class="w"> </span><span class="kn">import</span> <span class="n">inputLanguage</span>  <span class="c1"># noqa: F811,E402</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.constraints.rigidbody</span><span class="w"> </span><span class="kn">import</span> <span class="n">inputLanguage</span>  <span class="c1"># noqa: F811,E402</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.constraints.directionalspringpenalty</span><span class="w"> </span><span class="kn">import</span> <span class="n">inputLanguage</span>  <span class="c1"># noqa: F811,E402</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.constraints.nodetorigidsurfacepenalty</span><span class="w"> </span><span class="kn">import</span> <span class="n">inputLanguage</span>  <span class="c1"># noqa: F811,E402</span>
-
-<span class="c1"># isort: on</span>
-
-<span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">*configurePlots</span>
-<span class="sd">&quot;&quot;&quot;</span>
-<span class="n">kw</span> <span class="o">=</span> <span class="n">inputLanguage</span><span class="o">.</span><span class="n">addKeyword</span><span class="p">(</span><span class="s2">&quot;configurePlots&quot;</span><span class="p">,</span> <span class="s2">&quot;customize the figures and axes&quot;</span><span class="p">)</span>
-<span class="n">kw</span><span class="o">.</span><span class="n">addRequiredDatalines</span><span class="p">(</span><span class="s2">&quot;key=value pairs for configuration of figures and axes&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
-
-<span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">*exportPlots</span>
-<span class="sd">&quot;&quot;&quot;</span>
-<span class="n">kw</span> <span class="o">=</span> <span class="n">inputLanguage</span><span class="o">.</span><span class="n">addKeyword</span><span class="p">(</span><span class="s2">&quot;exportPlots&quot;</span><span class="p">,</span> <span class="s2">&quot;export your figures&quot;</span><span class="p">)</span>
-<span class="n">kw</span><span class="o">.</span><span class="n">addRequiredDatalines</span><span class="p">(</span><span class="s2">&quot;key=value pairs for exporting of figures and axes&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
-
-<span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">*include</span>
-<span class="sd">&quot;&quot;&quot;</span>
-<span class="n">kw</span> <span class="o">=</span> <span class="n">inputLanguage</span><span class="o">.</span><span class="n">addKeyword</span><span class="p">(</span><span class="s2">&quot;include&quot;</span><span class="p">,</span> <span class="s2">&quot;load contents of extra file&quot;</span><span class="p">)</span>
-<span class="n">kw</span><span class="o">.</span><span class="n">addRequiredArg</span><span class="p">(</span><span class="s2">&quot;input&quot;</span><span class="p">,</span> <span class="s2">&quot;path to file (use relative path to current .inp)&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span>
 
 
 <div class="viewcode-block" id="parseInputFile">
@@ -521,7 +601,7 @@
     <span class="n">currentKeyword</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">existingFileDict</span><span class="p">:</span> <span class="n">CaseInsensitiveDict</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">CaseInsensitiveDict</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Parse an Abaqus-like input file to generate a dictionary with its content.</span>
+<span class="w">    </span><span class="sd">"""Parse an Abaqus-like input file to generate a dictionary with its content.</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
@@ -537,10 +617,10 @@
 <span class="sd">    -------</span>
 <span class="sd">    CaseInsensitiveDict</span>
 <span class="sd">        The parsed input file.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
+<span class="sd">    """</span>
 
     <span class="k">if</span> <span class="ow">not</span> <span class="n">existingFileDict</span><span class="p">:</span>
-        <span class="n">fileDict</span> <span class="o">=</span> <span class="n">CaseInsensitiveDict</span><span class="p">({</span><span class="n">kw</span><span class="o">.</span><span class="n">name</span><span class="p">:</span> <span class="p">[]</span> <span class="k">for</span> <span class="n">kw</span> <span class="ow">in</span> <span class="n">inputLanguage</span><span class="p">})</span>
+        <span class="n">fileDict</span> <span class="o">=</span> <span class="n">CaseInsensitiveDict</span><span class="p">({</span><span class="n">name</span><span class="p">:</span> <span class="p">[]</span> <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">registry</span><span class="o">.</span><span class="n">availableNames</span><span class="p">(</span><span class="s2">"keyword"</span><span class="p">)})</span>
     <span class="k">else</span><span class="p">:</span>
         <span class="n">fileDict</span> <span class="o">=</span> <span class="n">existingFileDict</span>
 
@@ -548,17 +628,17 @@
     <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">fileName</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
         <span class="c1"># filter out empty lines and comments</span>
         <span class="n">lines</span> <span class="o">=</span> <span class="p">(</span><span class="n">line</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span> <span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="n">f</span><span class="p">)</span>
-        <span class="n">lines</span> <span class="o">=</span> <span class="p">(</span><span class="n">line</span> <span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="n">lines</span> <span class="k">if</span> <span class="n">line</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">line</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;**&quot;</span><span class="p">))</span>
+        <span class="n">lines</span> <span class="o">=</span> <span class="p">(</span><span class="n">line</span> <span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="n">lines</span> <span class="k">if</span> <span class="n">line</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">line</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">"**"</span><span class="p">))</span>
 
         <span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="n">lines</span><span class="p">:</span>
-            <span class="k">if</span> <span class="n">line</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;*&quot;</span><span class="p">):</span>  <span class="c1"># line is keywordline</span>
+            <span class="k">if</span> <span class="n">line</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">"*"</span><span class="p">):</span>  <span class="c1"># line is keywordline</span>
                 <span class="n">lastKeyword</span> <span class="o">=</span> <span class="n">keyword</span>
                 <span class="n">keyword</span><span class="p">,</span> <span class="n">options</span> <span class="o">=</span> <span class="n">parseKeywordLine</span><span class="p">(</span><span class="n">line</span><span class="p">,</span> <span class="n">fileName</span><span class="p">)</span>
-                <span class="n">options</span><span class="p">[</span><span class="s2">&quot;moduleOptions&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>
+                <span class="n">options</span><span class="p">[</span><span class="s2">"moduleOptions"</span><span class="p">]</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>
 
                 <span class="c1"># special treatment for *include:</span>
-                <span class="k">if</span> <span class="n">strCaseCmp</span><span class="p">(</span><span class="n">keyword</span><span class="p">,</span> <span class="s2">&quot;include&quot;</span><span class="p">):</span>
-                    <span class="n">includeFile</span> <span class="o">=</span> <span class="n">options</span><span class="p">[</span><span class="s2">&quot;input&quot;</span><span class="p">]</span>
+                <span class="k">if</span> <span class="n">strCaseCmp</span><span class="p">(</span><span class="n">keyword</span><span class="p">,</span> <span class="s2">"include"</span><span class="p">):</span>
+                    <span class="n">includeFile</span> <span class="o">=</span> <span class="n">options</span><span class="p">[</span><span class="s2">"input"</span><span class="p">]</span>
                     <span class="n">parseInputFile</span><span class="p">(</span>
                         <span class="n">join</span><span class="p">(</span><span class="n">dirname</span><span class="p">(</span><span class="n">fileName</span><span class="p">),</span> <span class="n">includeFile</span><span class="p">),</span>
                         <span class="n">currentKeyword</span><span class="o">=</span><span class="n">lastKeyword</span><span class="p">,</span>
@@ -571,87 +651,21 @@
             <span class="k">elif</span> <span class="n">line</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="n">moduleLevelKeywordIdentifier</span><span class="p">):</span>  <span class="c1"># line is a module level keyword line</span>
                 <span class="n">moduleKeyword</span><span class="p">,</span> <span class="n">moduleOptions</span> <span class="o">=</span> <span class="n">parseModuleKeywordLine</span><span class="p">(</span><span class="n">line</span><span class="p">,</span> <span class="n">fileName</span><span class="p">,</span> <span class="n">keyword</span><span class="p">,</span> <span class="n">options</span><span class="p">,</span> <span class="n">fileDict</span><span class="p">)</span>
 
-                <span class="k">if</span> <span class="n">moduleKeyword</span> <span class="ow">in</span> <span class="n">fileDict</span><span class="p">[</span><span class="n">keyword</span><span class="p">][</span><span class="o">-</span><span class="mi">1</span><span class="p">][</span><span class="s2">&quot;moduleOptions&quot;</span><span class="p">]:</span>
-                    <span class="n">fileDict</span><span class="p">[</span><span class="n">keyword</span><span class="p">][</span><span class="o">-</span><span class="mi">1</span><span class="p">][</span><span class="s2">&quot;moduleOptions&quot;</span><span class="p">][</span><span class="n">moduleKeyword</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">moduleOptions</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">moduleKeyword</span> <span class="ow">in</span> <span class="n">fileDict</span><span class="p">[</span><span class="n">keyword</span><span class="p">][</span><span class="o">-</span><span class="mi">1</span><span class="p">][</span><span class="s2">"moduleOptions"</span><span class="p">]:</span>
+                    <span class="n">fileDict</span><span class="p">[</span><span class="n">keyword</span><span class="p">][</span><span class="o">-</span><span class="mi">1</span><span class="p">][</span><span class="s2">"moduleOptions"</span><span class="p">][</span><span class="n">moduleKeyword</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">moduleOptions</span><span class="p">)</span>
                 <span class="k">else</span><span class="p">:</span>
-                    <span class="n">fileDict</span><span class="p">[</span><span class="n">keyword</span><span class="p">][</span><span class="o">-</span><span class="mi">1</span><span class="p">][</span><span class="s2">&quot;moduleOptions&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">update</span><span class="p">({</span><span class="n">moduleKeyword</span><span class="p">:</span> <span class="p">[</span><span class="n">moduleOptions</span><span class="p">]})</span>
+                    <span class="n">fileDict</span><span class="p">[</span><span class="n">keyword</span><span class="p">][</span><span class="o">-</span><span class="mi">1</span><span class="p">][</span><span class="s2">"moduleOptions"</span><span class="p">]</span><span class="o">.</span><span class="n">update</span><span class="p">({</span><span class="n">moduleKeyword</span><span class="p">:</span> <span class="p">[</span><span class="n">moduleOptions</span><span class="p">]})</span>
 
             <span class="c1"># else splitLineAtCommas(line)[]  # line is a module level keyword line</span>
 
             <span class="k">else</span><span class="p">:</span>  <span class="c1"># line is a data line</span>
-                <span class="c1"># # module kw parsing backward compatibility</span>
-                <span class="c1"># try:</span>
-                <span class="c1">#     module = inputLanguage[keyword].getModule(options[&quot;type&quot;])</span>
-                <span class="c1"># except:</span>
-                <span class="c1">#     module = None</span>
-                <span class="c1"># moduleKeyword = &quot;&gt;&gt;&quot;+splitLineAtCommas(line)[0]</span>
-                <span class="c1">#</span>
-                <span class="c1"># if module and moduleKeyword in [kw.name for kw in module.keywords]:</span>
-                <span class="c1">#     moduleKeyword, moduleOptions = parseModuleKeywordLine(&quot;&gt;&gt;&quot;+line, fileName, keyword, options)</span>
-                <span class="c1">#</span>
-                <span class="c1">#     if moduleKeyword in fileDict[keyword][-1][&quot;moduleOptions&quot;]:</span>
-                <span class="c1">#         fileDict[keyword][-1][&quot;moduleOptions&quot;][moduleKeyword].append(moduleOptions)</span>
-                <span class="c1">#     else:</span>
-                <span class="c1">#         fileDict[keyword][-1][&quot;moduleOptions&quot;] = {moduleKeyword: [moduleOptions]}</span>
-                <span class="c1">#     continue</span>
-                <span class="c1"># # module kw parsing backward compatibility</span>
-
-                <span class="n">inputFileKeyword</span> <span class="o">=</span> <span class="n">inputLanguage</span><span class="p">[</span><span class="n">keyword</span><span class="p">]</span>
-                <span class="k">if</span> <span class="ow">not</span> <span class="n">inputFileKeyword</span><span class="o">.</span><span class="n">modules</span><span class="p">:</span>  <span class="c1"># for keywords with no modules:</span>
-                    <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span>
-                        <span class="n">inputLanguage</span><span class="p">[</span><span class="n">keyword</span><span class="p">]</span><span class="o">.</span><span class="n">expectsOptionalDatalines</span>
-                        <span class="ow">or</span> <span class="n">inputLanguage</span><span class="p">[</span><span class="n">keyword</span><span class="p">]</span><span class="o">.</span><span class="n">expectsRequiredDatalines</span>
-                    <span class="p">):</span>
-                        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                            <span class="sa">f</span><span class="s2">&quot;Error during parsing of keyword </span><span class="si">{</span><span class="n">keywordIdentifier</span><span class="si">}{</span><span class="n">keyword</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">keywordIdentifier</span><span class="si">}{</span><span class="n">keyword</span><span class="si">}</span><span class="s2"> expects no data lines&quot;</span>
-                        <span class="p">)</span>
-                    <span class="n">fileDict</span><span class="p">[</span><span class="n">keyword</span><span class="p">][</span><span class="o">-</span><span class="mi">1</span><span class="p">][</span><span class="s2">&quot;datalines&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">line</span><span class="p">)</span>
-                <span class="k">else</span><span class="p">:</span>  <span class="c1"># for keywords with modules</span>
-                    <span class="c1"># module = inputLanguage[keyword].getModule(options[&quot;type&quot;] if &quot;type&quot; in options else keyword)</span>
-                    <span class="k">if</span> <span class="s2">&quot;type&quot;</span> <span class="ow">in</span> <span class="n">inputLanguage</span><span class="p">[</span><span class="n">keyword</span><span class="p">]</span><span class="o">.</span><span class="n">argNames</span><span class="p">:</span>
-                        <span class="n">module</span> <span class="o">=</span> <span class="n">inputLanguage</span><span class="p">[</span><span class="n">keyword</span><span class="p">]</span><span class="o">.</span><span class="n">getModule</span><span class="p">(</span>
-                            <span class="n">inputLanguage</span><span class="p">[</span><span class="n">keyword</span><span class="p">]</span><span class="o">.</span><span class="n">getArg</span><span class="p">(</span><span class="s2">&quot;type&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">getValueFromKwargs</span><span class="p">(</span><span class="n">options</span><span class="p">)</span>
-                        <span class="p">)</span>
-                    <span class="k">elif</span> <span class="s2">&quot;generator&quot;</span> <span class="ow">in</span> <span class="n">inputLanguage</span><span class="p">[</span><span class="n">keyword</span><span class="p">]</span><span class="o">.</span><span class="n">argNames</span><span class="p">:</span>
-                        <span class="n">module</span> <span class="o">=</span> <span class="n">inputLanguage</span><span class="p">[</span><span class="n">keyword</span><span class="p">]</span><span class="o">.</span><span class="n">getModule</span><span class="p">(</span>
-                            <span class="n">inputLanguage</span><span class="p">[</span><span class="n">keyword</span><span class="p">]</span><span class="o">.</span><span class="n">getArg</span><span class="p">(</span><span class="s2">&quot;generator&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">getValueFromKwargs</span><span class="p">(</span><span class="n">options</span><span class="p">)</span>
-                        <span class="p">)</span>
-                    <span class="k">else</span><span class="p">:</span>
-                        <span class="n">module</span> <span class="o">=</span> <span class="n">inputLanguage</span><span class="p">[</span><span class="n">keyword</span><span class="p">]</span><span class="o">.</span><span class="n">getModule</span><span class="p">(</span><span class="n">keyword</span><span class="p">)</span>
-                    <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="n">module</span><span class="o">.</span><span class="n">expectsOptionalDatalines</span> <span class="ow">or</span> <span class="n">module</span><span class="o">.</span><span class="n">expectsRequiredDatalines</span><span class="p">):</span>
-                        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                            <span class="sa">f</span><span class="s2">&quot;Error during parsing of keyword </span><span class="si">{</span><span class="n">keywordIdentifier</span><span class="si">}{</span><span class="n">keyword</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">module</span><span class="si">}</span><span class="s2"> expects no data lines&quot;</span>
-                        <span class="p">)</span>
-                    <span class="n">fileDict</span><span class="p">[</span><span class="n">keyword</span><span class="p">][</span><span class="o">-</span><span class="mi">1</span><span class="p">][</span><span class="s2">&quot;datalines&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">line</span><span class="p">)</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="n">_expectsPlainDatalines</span><span class="p">(</span><span class="n">keyword</span><span class="p">,</span> <span class="n">options</span><span class="p">):</span>
+                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">"Error during parsing of keyword </span><span class="si">{</span><span class="n">keywordIdentifier</span><span class="si">}{</span><span class="n">keyword</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">keywordIdentifier</span><span class="si">}{</span><span class="n">keyword</span><span class="si">}</span><span class="s2"> expects no data lines"</span>
+                    <span class="p">)</span>
+                <span class="n">fileDict</span><span class="p">[</span><span class="n">keyword</span><span class="p">][</span><span class="o">-</span><span class="mi">1</span><span class="p">][</span><span class="s2">"datalines"</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">line</span><span class="p">)</span>
 
     <span class="k">return</span> <span class="n">fileDict</span></div>
-
-
-
-<div class="viewcode-block" id="printKeywords">
-<a class="viewcode-back" href="../../../documentation/syntax.html#edelweissfe.utils.inputfileparser.printKeywords">[docs]</a>
-<span class="k">def</span><span class="w"> </span><span class="nf">printKeywords</span><span class="p">():</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Print the input file language set.&quot;&quot;&quot;</span>
-
-    <span class="n">kwString</span> <span class="o">=</span> <span class="s2">&quot;    </span><span class="si">{:}</span><span class="s2">    &quot;</span>
-    <span class="n">kwDataString</span> <span class="o">=</span> <span class="s2">&quot;        </span><span class="si">{:22}{:20}</span><span class="s2">&quot;</span>
-
-    <span class="n">wrapper</span> <span class="o">=</span> <span class="n">textwrap</span><span class="o">.</span><span class="n">TextWrapper</span><span class="p">(</span><span class="n">width</span><span class="o">=</span><span class="mi">80</span><span class="p">,</span> <span class="n">replace_whitespace</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-    <span class="c1"># for kw, (kwDoc, optiondict) in sorted(inputLanguage.items()):</span>
-    <span class="k">for</span> <span class="n">kw</span> <span class="ow">in</span> <span class="n">inputLanguage</span><span class="p">:</span>
-        <span class="n">wrapper</span><span class="o">.</span><span class="n">initial_indent</span> <span class="o">=</span> <span class="n">kwString</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">kw</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
-        <span class="n">wrapper</span><span class="o">.</span><span class="n">subsequent_indent</span> <span class="o">=</span> <span class="s2">&quot; &quot;</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">wrapper</span><span class="o">.</span><span class="n">initial_indent</span><span class="p">)</span>
-        <span class="nb">print</span><span class="p">(</span><span class="n">wrapper</span><span class="o">.</span><span class="n">fill</span><span class="p">(</span><span class="n">kw</span><span class="o">.</span><span class="n">description</span><span class="p">))</span>
-        <span class="c1"># print(&quot;&quot;)</span>
-        <span class="k">for</span> <span class="n">arg</span> <span class="ow">in</span> <span class="n">kw</span><span class="o">.</span><span class="n">requiredArgs</span><span class="p">:</span>
-            <span class="n">wrapper</span><span class="o">.</span><span class="n">initial_indent</span> <span class="o">=</span> <span class="n">kwDataString</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">arg</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">typeString</span><span class="p">(</span><span class="n">arg</span><span class="o">.</span><span class="n">dtype</span><span class="p">))</span>
-            <span class="n">wrapper</span><span class="o">.</span><span class="n">subsequent_indent</span> <span class="o">=</span> <span class="s2">&quot; &quot;</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">wrapper</span><span class="o">.</span><span class="n">initial_indent</span><span class="p">)</span>
-            <span class="nb">print</span><span class="p">(</span><span class="n">wrapper</span><span class="o">.</span><span class="n">fill</span><span class="p">(</span><span class="n">arg</span><span class="o">.</span><span class="n">description</span><span class="p">))</span>
-        <span class="k">for</span> <span class="n">arg</span> <span class="ow">in</span> <span class="n">kw</span><span class="o">.</span><span class="n">optionalArgs</span><span class="p">:</span>
-            <span class="n">wrapper</span><span class="o">.</span><span class="n">initial_indent</span> <span class="o">=</span> <span class="n">kwDataString</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">arg</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">typeString</span><span class="p">(</span><span class="n">arg</span><span class="o">.</span><span class="n">dtype</span><span class="p">))</span>
-            <span class="n">wrapper</span><span class="o">.</span><span class="n">subsequent_indent</span> <span class="o">=</span> <span class="s2">&quot; &quot;</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">wrapper</span><span class="o">.</span><span class="n">initial_indent</span><span class="p">)</span>
-            <span class="nb">print</span><span class="p">(</span><span class="n">wrapper</span><span class="o">.</span><span class="n">fill</span><span class="p">(</span><span class="n">arg</span><span class="o">.</span><span class="n">description</span><span class="p">))</span>
-        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="p">)</span></div>
 
 </pre></div>
 

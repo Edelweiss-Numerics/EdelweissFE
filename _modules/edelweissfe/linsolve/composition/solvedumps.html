@@ -1,0 +1,395 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>edelweissfe.linsolve.composition.solvedumps &mdash; EdelweissFE v22.07 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=cfdaff8d" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css?v=37fbe429" />
+
+  
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=17e2f33f"></script>
+      <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            EdelweissFE
+              <img src="../../../../_static/edelweiss_fe_logo.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../features.html">Features</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../prerequisites.html">Prerequisites</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../documentation/index.html">Documentation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../contributors.html">Contributors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../publications.html">Publications</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">EdelweissFE</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">edelweissfe.linsolve.composition.solvedumps</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for edelweissfe.linsolve.composition.solvedumps</h1><div class="highlight"><pre>
+<span></span><span class="ch">#!/usr/bin/env python3</span>
+<span class="c1"># -*- coding: utf-8 -*-</span>
+<span class="c1">#  ---------------------------------------------------------------------</span>
+<span class="c1">#</span>
+<span class="c1">#  _____    _      _              _         _____ _____</span>
+<span class="c1"># | ____|__| | ___| |_      _____(_)___ ___|  ___| ____|</span>
+<span class="c1"># |  _| / _` |/ _ \ \ \ /\ / / _ \ / __/ __| |_  |  _|</span>
+<span class="c1"># | |__| (_| |  __/ |\ V  V /  __/ \__ \__ \  _| | |___</span>
+<span class="c1"># |_____\__,_|\___|_| \_/\_/ \___|_|___/___/_|   |_____|</span>
+<span class="c1">#</span>
+<span class="c1">#</span>
+<span class="c1">#  Unit of Strength of Materials and Structural Analysis</span>
+<span class="c1">#  University of Innsbruck,</span>
+<span class="c1">#  2017 - today</span>
+<span class="c1">#</span>
+<span class="c1">#  Matthias Neuner matthias.neuner@uibk.ac.at</span>
+<span class="c1">#</span>
+<span class="c1">#  This file is part of EdelweissFE.</span>
+<span class="c1">#</span>
+<span class="c1">#  This library is free software; you can redistribute it and/or</span>
+<span class="c1">#  modify it under the terms of the GNU Lesser General Public</span>
+<span class="c1">#  License as published by the Free Software Foundation; either</span>
+<span class="c1">#  version 2.1 of the License, or (at your option) any later version.</span>
+<span class="c1">#</span>
+<span class="c1">#  The full text of the license can be found in the file LICENSE.md at</span>
+<span class="c1">#  the top level directory of EdelweissFE.</span>
+<span class="c1">#  ---------------------------------------------------------------------</span>
+<span class="sd">"""Writing the systems of chosen solves to disk, for an offline replay: :class:`SolveDumps`.</span>
+
+<span class="sd">Comparing solver variants by rerunning the simulation is slow and confounded: every run repeats the assembly, and a</span>
+<span class="sd">variant that changes the Newton iterates changes the sequence of matrices being compared. Dumping authentic systems</span>
+<span class="sd">:math:`(A, b)` once and replaying them offline -- through a</span>
+<span class="sd">:class:`~edelweissfe.linsolve.composition.solver.ComposedLinearSolver` with ``setFieldStructure`` and the dumped</span>
+<span class="sd">``nodeCoordinates`` and ``midsideCorners`` -- makes the comparison fast and controlled.</span>
+
+<span class="sd">Which solves are dumped is the trigger:</span>
+
+<span class="sd">- ``"every"``: every solve (a sequence: whether a symbolic factorization or a preconditioner can be reused across</span>
+<span class="sd">  Newton iterations is a question about a sequence, not about one matrix);</span>
+<span class="sd">- solve numbers, e.g. ``{12, 13, 14}``: these solves of each solver (counted from 1);</span>
+<span class="sd">- ``"slow"``: a solve that needs more outer iterations than a threshold, or stops at the iteration cap short of its</span>
+<span class="sd">  tolerance. A preconditioner that degrades -- a reused hierarchy that no longer fits the Jacobian, a damaged operator</span>
+<span class="sd">  AMG cannot handle -- typically shows only tens of hours into an analysis, at a solve nobody can name in advance; this</span>
+<span class="sd">  trigger decides by the solve's own outcome.</span>
+
+<span class="sd">One snapshot cannot tell an intrinsically hard operator from a solve made slow by its own state (a stale</span>
+<span class="sd">preconditioner): a fresh solver replaying the matrix alone may converge in a fraction of the live iterations. So a</span>
+<span class="sd">dump can also hold the solves that *preceded* a dumped one (``contextSolves``), for a replay through one persistent</span>
+<span class="sd">solver in the same order; and every dumped solve records why it was (not) rebuilt.</span>
+
+<span class="sd">``maxDumps`` caps the systems written to one directory in a process: a coupled 3D system of a million dofs takes</span>
+<span class="sd">gigabytes on disk. The solvers of all analysis steps that dump to the same directory share that cap.</span>
+
+<span class="sd">On disk, in ``directory``: ``A_&lt;instance&gt;_&lt;solve&gt;.npz`` (SciPy, uncompressed), ``b_&lt;instance&gt;_&lt;solve&gt;.npy``,</span>
+<span class="sd">``schurDofs_&lt;instance&gt;_&lt;solve&gt;.npy`` (the condensed dofs of a Schur complement, if any),</span>
+<span class="sd">``geometry_&lt;instance&gt;_&lt;solve&gt;.npz`` (the node coordinates of the vector fields, ``&lt;field&gt;_coordinates``, and the midside</span>
+<span class="sd">corners the tree used, ``&lt;field&gt;_isCorner`` and ``&lt;field&gt;_edgeEndpoints``, if any) and one line per dumped solve in</span>
+<span class="sd">``manifest.jsonl``: the field blocks and file names, and the bookkeeping of a Krylov solve in the names of its</span>
+<span class="sd">:class:`~edelweissfe.linsolve.composition.krylov.SolveRecord` (``iterations``, ``residual``, ``eta``, ``capHit``,</span>
+<span class="sd">``trueResidualRestarts``, ``rebuildReason``, ``scaledSystem``), with ``patternChanged``, ``newIncrement`` and</span>
+<span class="sd">``previousIterations``. ``&lt;instance&gt;`` is the ordinal of the solver in the process (one per analysis step).</span>
+<span class="sd">"""</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">collections</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">json</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">scipy.sparse</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">sp</span>
+
+
+<div class="viewcode-block" id="SolveDumps">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.solvedumps.SolveDumps">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">SolveDumps</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""The dumps of a composed solver, see the module documentation; the data lines ``dumps``, ``dumpDirectory``,</span>
+<span class="sd">    ``maxDumps`` and ``dumpContextSolves`` of every type of linear solver.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    directory</span>
+<span class="sd">        Where the dumps go; created if missing.</span>
+<span class="sd">    trigger</span>
+<span class="sd">        Which solves are dumped: ``"slow"`` (default), ``"every"``, or a collection of solve numbers.</span>
+<span class="sd">    threshold</span>
+<span class="sd">        For ``"slow"``: a solve with more outer iterations than this is dumped; ``None``: the warning threshold of the</span>
+<span class="sd">        solver (``warningOuterIterations``), so that a dump and its warning fire on the same solves. A solve that stops</span>
+<span class="sd">        at the iteration cap short of its tolerance is dumped whatever the threshold.</span>
+<span class="sd">    maxDumps</span>
+<span class="sd">        The most systems written to ``directory`` in this process, across all solvers that dump there (e.g. one per</span>
+<span class="sd">        analysis step), context solves included: a disk-space guard for a run that degrades on every remaining solve.</span>
+<span class="sd">    contextSolves</span>
+<span class="sd">        How many of the solves preceding a dumped one are dumped with it (``0``: only the slow solve itself). They are</span>
+<span class="sd">        kept in memory, as copies, only while this is positive.</span>
+<span class="sd">    """</span>
+
+    <span class="c1">#: The systems written to each directory (by absolute path) in this process, by every solver: what ``maxDumps``</span>
+    <span class="c1">#: bounds.</span>
+    <span class="n">dumpsWrittenTo</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">=</span> <span class="p">{}</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">directory</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">trigger</span><span class="o">=</span><span class="s2">"slow"</span><span class="p">,</span> <span class="n">threshold</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">maxDumps</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">10</span><span class="p">,</span> <span class="n">contextSolves</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="p">):</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">trigger</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">trigger</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"slow"</span><span class="p">,</span> <span class="s2">"every"</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="s2">"SolveDumps: trigger must be 'slow', 'every' or solve numbers, got </span><span class="si">{!r}</span><span class="s2">"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">trigger</span><span class="p">)</span>
+                <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">trigger</span> <span class="o">=</span> <span class="n">trigger</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">trigger</span> <span class="o">=</span> <span class="nb">frozenset</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">solveCount</span><span class="p">)</span> <span class="k">for</span> <span class="n">solveCount</span> <span class="ow">in</span> <span class="n">trigger</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">threshold</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">threshold</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"SolveDumps: threshold must not be negative, got </span><span class="si">{!r}</span><span class="s2">"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">threshold</span><span class="p">))</span>
+        <span class="k">if</span> <span class="n">maxDumps</span> <span class="o">&lt;</span> <span class="mi">0</span> <span class="ow">or</span> <span class="n">contextSolves</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"SolveDumps: maxDumps and contextSolves must not be negative"</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">threshold</span> <span class="o">=</span> <span class="n">threshold</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">maxDumps</span> <span class="o">=</span> <span class="n">maxDumps</span>
+        <span class="c1">#: The last ``contextSolves`` solves, oldest first: ``{"solveCount", "A", "b", "blocks", "state",</span>
+        <span class="c1">#: "condensedDofs", "geometry"}``.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">history</span> <span class="o">=</span> <span class="n">collections</span><span class="o">.</span><span class="n">deque</span><span class="p">(</span><span class="n">maxlen</span><span class="o">=</span><span class="n">contextSolves</span><span class="p">)</span>
+        <span class="c1">#: The solves already written, so that overlapping context windows never write (or count) one twice.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dumpedSolves</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">directory</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">moveTo</span><span class="p">(</span><span class="n">directory</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">dumpsWritten</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The systems written to :attr:`directory` in this process, by every solver that dumps there."""</span>
+        <span class="k">return</span> <span class="n">SolveDumps</span><span class="o">.</span><span class="n">dumpsWrittenTo</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">abspath</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">directory</span><span class="p">),</span> <span class="mi">0</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">contextSolves</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">history</span><span class="o">.</span><span class="n">maxlen</span>
+
+<div class="viewcode-block" id="SolveDumps.keepContextSolves">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.solvedumps.SolveDumps.keepContextSolves">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">keepContextSolves</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">contextSolves</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Keep this many preceding solves from now on (the newest of those kept so far stay)."""</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">history</span> <span class="o">=</span> <span class="n">collections</span><span class="o">.</span><span class="n">deque</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">history</span><span class="p">,</span> <span class="n">maxlen</span><span class="o">=</span><span class="nb">max</span><span class="p">(</span><span class="n">contextSolves</span><span class="p">,</span> <span class="mi">0</span><span class="p">))</span></div>
+
+
+<div class="viewcode-block" id="SolveDumps.moveTo">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.solvedumps.SolveDumps.moveTo">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">moveTo</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">directory</span><span class="p">:</span> <span class="s2">"str | None"</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Write the dumps to ``directory`` from now on (created if missing; ``None``: write none)."""</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">directory</span> <span class="o">=</span> <span class="n">directory</span>
+        <span class="k">if</span> <span class="n">directory</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">os</span><span class="o">.</span><span class="n">makedirs</span><span class="p">(</span><span class="n">directory</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="SolveDumps.thresholdOr">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.solvedumps.SolveDumps.thresholdOr">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">thresholdOr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">warningThreshold</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The outer iterations above which a solve is slow: :attr:`threshold`, or ``warningThreshold``."""</span>
+        <span class="k">return</span> <span class="n">warningThreshold</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">threshold</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">threshold</span></div>
+
+
+<div class="viewcode-block" id="SolveDumps.selects">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.solvedumps.SolveDumps.selects">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">selects</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">solveCount</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">slow</span><span class="p">:</span> <span class="nb">bool</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Whether the trigger selects this solve, given whether it was slow."""</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">trigger</span> <span class="o">==</span> <span class="s2">"slow"</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">slow</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">trigger</span> <span class="o">==</span> <span class="s2">"every"</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">True</span>
+        <span class="k">return</span> <span class="n">solveCount</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">trigger</span></div>
+
+
+<div class="viewcode-block" id="SolveDumps.afterSolve">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.solvedumps.SolveDumps.afterSolve">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">afterSolve</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">instance</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">solveCount</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">A</span><span class="p">:</span> <span class="n">sp</span><span class="o">.</span><span class="n">csr_matrix</span><span class="p">,</span>
+        <span class="n">b</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+        <span class="n">blocks</span><span class="p">:</span> <span class="nb">list</span><span class="p">,</span>
+        <span class="n">state</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span>
+        <span class="n">condensedDofs</span><span class="p">:</span> <span class="s2">"np.ndarray | None"</span><span class="p">,</span>
+        <span class="n">geometry</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span>
+        <span class="n">slow</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
+        <span class="n">log</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Take a finished solve: dump it, with its context window, if the trigger selects it and the budget allows,</span>
+<span class="sd">        then keep it (copied) as context for the next ones.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        instance, solveCount</span>
+<span class="sd">            The ordinal of the solver in this process and of the solve: the file names.</span>
+<span class="sd">        A, b</span>
+<span class="sd">            The raw system as handed to the solver.</span>
+<span class="sd">        blocks</span>
+<span class="sd">            Its :class:`~edelweissfe.linsolve.base.FieldBlock` layout.</span>
+<span class="sd">        state</span>
+<span class="sd">            The solve's bookkeeping, recorded in the manifest (see the module documentation).</span>
+<span class="sd">        condensedDofs</span>
+<span class="sd">            The dofs a Schur complement condensed in this solve, or ``None``.</span>
+<span class="sd">        geometry</span>
+<span class="sd">            ``{name: array}``: the node coordinates and midside corners of the fields, written to ``geometry_*.npz``</span>
+<span class="sd">            (nothing if empty).</span>
+<span class="sd">        slow</span>
+<span class="sd">            Whether the solve was slow (see :meth:`thresholdOr`), for the trigger ``"slow"``.</span>
+<span class="sd">        log</span>
+<span class="sd">            ``(level, message) -&gt; None``.</span>
+<span class="sd">        """</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">directory</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">selects</span><span class="p">(</span><span class="n">solveCount</span><span class="p">,</span> <span class="n">slow</span><span class="p">)</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">dumpsWritten</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">maxDumps</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">solveCount</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">dumpedSolves</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_write</span><span class="p">(</span>
+                    <span class="n">instance</span><span class="p">,</span> <span class="n">solveCount</span><span class="p">,</span> <span class="n">A</span><span class="p">,</span> <span class="n">b</span><span class="p">,</span> <span class="n">blocks</span><span class="p">,</span> <span class="s2">"trigger"</span><span class="p">,</span> <span class="n">solveCount</span><span class="p">,</span> <span class="n">state</span><span class="p">,</span> <span class="n">condensedDofs</span><span class="p">,</span> <span class="n">geometry</span><span class="p">,</span> <span class="n">log</span>
+                <span class="p">)</span>
+            <span class="k">for</span> <span class="n">entry</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">history</span><span class="p">:</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">dumpsWritten</span> <span class="o">&gt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">maxDumps</span><span class="p">:</span>
+                    <span class="k">break</span>
+                <span class="k">if</span> <span class="n">entry</span><span class="p">[</span><span class="s2">"solveCount"</span><span class="p">]</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">dumpedSolves</span><span class="p">:</span>
+                    <span class="k">continue</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_write</span><span class="p">(</span>
+                    <span class="n">instance</span><span class="p">,</span>
+                    <span class="n">entry</span><span class="p">[</span><span class="s2">"solveCount"</span><span class="p">],</span>
+                    <span class="n">entry</span><span class="p">[</span><span class="s2">"A"</span><span class="p">],</span>
+                    <span class="n">entry</span><span class="p">[</span><span class="s2">"b"</span><span class="p">],</span>
+                    <span class="n">entry</span><span class="p">[</span><span class="s2">"blocks"</span><span class="p">],</span>
+                    <span class="s2">"context"</span><span class="p">,</span>
+                    <span class="n">solveCount</span><span class="p">,</span>
+                    <span class="n">entry</span><span class="p">[</span><span class="s2">"state"</span><span class="p">],</span>
+                    <span class="n">entry</span><span class="p">[</span><span class="s2">"condensedDofs"</span><span class="p">],</span>
+                    <span class="n">entry</span><span class="p">[</span><span class="s2">"geometry"</span><span class="p">],</span>
+                    <span class="n">log</span><span class="p">,</span>
+                <span class="p">)</span>
+        <span class="c1"># kept after the dump above, so that a trigger's context window holds only the solves strictly before it</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">contextSolves</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">history</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                <span class="p">{</span>
+                    <span class="s2">"solveCount"</span><span class="p">:</span> <span class="n">solveCount</span><span class="p">,</span>
+                    <span class="c1"># copied, not referenced: the nonlinear solver hands the same matrix and residual buffer back every</span>
+                    <span class="c1"># Newton iteration, so references would all alias the trigger-time values</span>
+                    <span class="s2">"A"</span><span class="p">:</span> <span class="n">A</span><span class="o">.</span><span class="n">copy</span><span class="p">(),</span>
+                    <span class="s2">"b"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">b</span><span class="p">,</span> <span class="n">copy</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span>
+                    <span class="s2">"blocks"</span><span class="p">:</span> <span class="n">blocks</span><span class="p">,</span>
+                    <span class="s2">"state"</span><span class="p">:</span> <span class="n">state</span><span class="p">,</span>
+                    <span class="s2">"condensedDofs"</span><span class="p">:</span> <span class="n">condensedDofs</span><span class="p">,</span>
+                    <span class="s2">"geometry"</span><span class="p">:</span> <span class="n">geometry</span><span class="p">,</span>
+                <span class="p">}</span>
+            <span class="p">)</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_write</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">instance</span><span class="p">,</span> <span class="n">solveCount</span><span class="p">,</span> <span class="n">A</span><span class="p">,</span> <span class="n">b</span><span class="p">,</span> <span class="n">blocks</span><span class="p">,</span> <span class="n">role</span><span class="p">,</span> <span class="n">triggerSolveCount</span><span class="p">,</span> <span class="n">state</span><span class="p">,</span> <span class="n">condensedDofs</span><span class="p">,</span> <span class="n">geometry</span><span class="p">,</span> <span class="n">log</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Write one system and its manifest line."""</span>
+        <span class="n">stem</span> <span class="o">=</span> <span class="s2">"</span><span class="si">{:02d}</span><span class="s2">_</span><span class="si">{:05d}</span><span class="s2">"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">instance</span><span class="p">,</span> <span class="n">solveCount</span><span class="p">)</span>
+        <span class="n">matrixFile</span><span class="p">,</span> <span class="n">rhsFile</span> <span class="o">=</span> <span class="s2">"A_</span><span class="si">{:}</span><span class="s2">.npz"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">stem</span><span class="p">),</span> <span class="s2">"b_</span><span class="si">{:}</span><span class="s2">.npy"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">stem</span><span class="p">)</span>
+        <span class="c1"># uncompressed: these systems are large, and compressing would take longer than the slow solve itself</span>
+        <span class="n">sp</span><span class="o">.</span><span class="n">save_npz</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">directory</span><span class="p">,</span> <span class="n">matrixFile</span><span class="p">),</span> <span class="n">A</span><span class="p">,</span> <span class="n">compressed</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+        <span class="n">np</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">directory</span><span class="p">,</span> <span class="n">rhsFile</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">b</span><span class="p">))</span>
+        <span class="n">record</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">"solveCount"</span><span class="p">:</span> <span class="n">solveCount</span><span class="p">,</span>
+            <span class="s2">"role"</span><span class="p">:</span> <span class="n">role</span><span class="p">,</span>
+            <span class="s2">"triggerSolveCount"</span><span class="p">:</span> <span class="n">triggerSolveCount</span><span class="p">,</span>
+            <span class="s2">"contextOffset"</span><span class="p">:</span> <span class="n">triggerSolveCount</span> <span class="o">-</span> <span class="n">solveCount</span><span class="p">,</span>
+            <span class="s2">"rows"</span><span class="p">:</span> <span class="nb">int</span><span class="p">(</span><span class="n">A</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span>
+            <span class="s2">"nnz"</span><span class="p">:</span> <span class="nb">int</span><span class="p">(</span><span class="n">A</span><span class="o">.</span><span class="n">nnz</span><span class="p">),</span>
+            <span class="s2">"matrixFile"</span><span class="p">:</span> <span class="n">matrixFile</span><span class="p">,</span>
+            <span class="s2">"rhsFile"</span><span class="p">:</span> <span class="n">rhsFile</span><span class="p">,</span>
+            <span class="s2">"blocks"</span><span class="p">:</span> <span class="p">[</span>
+                <span class="p">{</span><span class="s2">"name"</span><span class="p">:</span> <span class="n">block</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="s2">"start"</span><span class="p">:</span> <span class="n">block</span><span class="o">.</span><span class="n">start</span><span class="p">,</span> <span class="s2">"stop"</span><span class="p">:</span> <span class="n">block</span><span class="o">.</span><span class="n">stop</span><span class="p">,</span> <span class="s2">"dimension"</span><span class="p">:</span> <span class="n">block</span><span class="o">.</span><span class="n">dimension</span><span class="p">}</span>
+                <span class="k">for</span> <span class="n">block</span> <span class="ow">in</span> <span class="n">blocks</span>
+            <span class="p">],</span>
+            <span class="o">**</span><span class="n">state</span><span class="p">,</span>
+        <span class="p">}</span>
+        <span class="k">if</span> <span class="n">condensedDofs</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">record</span><span class="p">[</span><span class="s2">"condensedDofsFile"</span><span class="p">]</span> <span class="o">=</span> <span class="s2">"schurDofs_</span><span class="si">{:}</span><span class="s2">.npy"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">stem</span><span class="p">)</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">directory</span><span class="p">,</span> <span class="n">record</span><span class="p">[</span><span class="s2">"condensedDofsFile"</span><span class="p">]),</span> <span class="n">condensedDofs</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">geometry</span><span class="p">:</span>
+            <span class="n">record</span><span class="p">[</span><span class="s2">"geometryFile"</span><span class="p">]</span> <span class="o">=</span> <span class="s2">"geometry_</span><span class="si">{:}</span><span class="s2">.npz"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">stem</span><span class="p">)</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">savez</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">directory</span><span class="p">,</span> <span class="n">record</span><span class="p">[</span><span class="s2">"geometryFile"</span><span class="p">]),</span> <span class="o">**</span><span class="n">geometry</span><span class="p">)</span>
+        <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">directory</span><span class="p">,</span> <span class="s2">"manifest.jsonl"</span><span class="p">),</span> <span class="s2">"a"</span><span class="p">)</span> <span class="k">as</span> <span class="n">manifestFile</span><span class="p">:</span>
+            <span class="n">manifestFile</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">record</span><span class="p">)</span> <span class="o">+</span> <span class="s2">"</span><span class="se">\n</span><span class="s2">"</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dumpedSolves</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">solveCount</span><span class="p">)</span>
+        <span class="n">SolveDumps</span><span class="o">.</span><span class="n">dumpsWrittenTo</span><span class="p">[</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">abspath</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">directory</span><span class="p">)]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">dumpsWritten</span> <span class="o">+</span> <span class="mi">1</span>
+        <span class="n">log</span><span class="p">(</span>
+            <span class="s2">"warning"</span><span class="p">,</span>
+            <span class="s2">"dumped </span><span class="si">{:}</span><span class="s2"> solve #</span><span class="si">{:}</span><span class="s2"> (of trigger #</span><span class="si">{:}</span><span class="s2">) to </span><span class="si">{:}</span><span class="s2">; </span><span class="si">{:}</span><span class="s2"> of </span><span class="si">{:}</span><span class="s2"> dumps used"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+                <span class="n">role</span><span class="p">,</span> <span class="n">solveCount</span><span class="p">,</span> <span class="n">triggerSolveCount</span><span class="p">,</span> <span class="n">matrixFile</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">dumpsWritten</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">maxDumps</span>
+            <span class="p">),</span>
+        <span class="p">)</span></div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Matthias Neuner.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

@@ -1,0 +1,345 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>edelweissfe.config.phenomena &mdash; EdelweissFE v22.07 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=cfdaff8d" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/custom.css?v=37fbe429" />
+
+  
+      <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../_static/documentation_options.js?v=17e2f33f"></script>
+      <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../index.html" class="icon icon-home">
+            EdelweissFE
+              <img src="../../../_static/edelweiss_fe_logo.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../features.html">Features</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../prerequisites.html">Prerequisites</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../documentation/index.html">Documentation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../contributors.html">Contributors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../publications.html">Publications</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">EdelweissFE</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">edelweissfe.config.phenomena</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for edelweissfe.config.phenomena</h1><div class="highlight"><pre>
+<span></span><span class="ch">#!/usr/bin/env python3</span>
+<span class="c1"># -*- coding: utf-8 -*-</span>
+<span class="c1">#  ---------------------------------------------------------------------</span>
+<span class="c1">#</span>
+<span class="c1">#  _____    _      _              _         _____ _____</span>
+<span class="c1"># | ____|__| | ___| |_      _____(_)___ ___|  ___| ____|</span>
+<span class="c1"># |  _| / _` |/ _ \ \ \ /\ / / _ \ / __/ __| |_  |  _|</span>
+<span class="c1"># | |__| (_| |  __/ |\ V  V /  __/ \__ \__ \  _| | |___</span>
+<span class="c1"># |_____\__,_|\___|_| \_/\_/ \___|_|___/___/_|   |_____|</span>
+<span class="c1">#</span>
+<span class="c1">#</span>
+<span class="c1">#  Unit of Strength of Materials and Structural Analysis</span>
+<span class="c1">#  University of Innsbruck,</span>
+<span class="c1">#  2017 - today</span>
+<span class="c1">#</span>
+<span class="c1">#  Matthias Neuner matthias.neuner@uibk.ac.at</span>
+<span class="c1">#</span>
+<span class="c1">#  This file is part of EdelweissFE.</span>
+<span class="c1">#</span>
+<span class="c1">#  This library is free software; you can redistribute it and/or</span>
+<span class="c1">#  modify it under the terms of the GNU Lesser General Public</span>
+<span class="c1">#  License as published by the Free Software Foundation; either</span>
+<span class="c1">#  version 2.1 of the License, or (at your option) any later version.</span>
+<span class="c1">#</span>
+<span class="c1">#  The full text of the license can be found in the file LICENSE.md at</span>
+<span class="c1">#  the top level directory of EdelweissFE.</span>
+<span class="c1">#  ---------------------------------------------------------------------</span>
+<span class="c1"># Created on Tue Jan  10 19:10:42 2017</span>
+
+<span class="c1"># @author: Matthias Neuner</span>
+<span class="sd">"""</span>
+<span class="sd">This module contains the central definition of</span>
+<span class="sd">the known physics,</span>
+<span class="sd">i.e.,</span>
+
+<span class="sd"> * the available physical fields</span>
+<span class="sd"> * their tensorial order</span>
+<span class="sd"> * their default residual tolerances</span>
+
+<span class="sd">If a new physical field should be added to EdelweissFE,</span>
+<span class="sd">then this should happen (only) here.</span>
+<span class="sd">"""</span>
+
+<span class="c1"># field                  field type</span>
+<span class="n">phenomena</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">"displacement"</span><span class="p">:</span> <span class="s2">"vector"</span><span class="p">,</span>
+    <span class="s2">"rotation"</span><span class="p">:</span> <span class="s2">"rotation vector"</span><span class="p">,</span>
+    <span class="s2">"micro rotation"</span><span class="p">:</span> <span class="s2">"rotation vector"</span><span class="p">,</span>
+    <span class="s2">"thermal"</span><span class="p">:</span> <span class="s2">"scalar"</span><span class="p">,</span>
+    <span class="s2">"nonlocal damage"</span><span class="p">:</span> <span class="s2">"scalar"</span><span class="p">,</span>
+    <span class="s2">"nonlocal damage 2"</span><span class="p">:</span> <span class="s2">"scalar"</span><span class="p">,</span>
+    <span class="s2">"concentration"</span><span class="p">:</span> <span class="s2">"scalar"</span><span class="p">,</span>
+    <span class="s2">"chemical potential"</span><span class="p">:</span> <span class="s2">"scalar"</span><span class="p">,</span>
+    <span class="s2">"strain symmetric"</span><span class="p">:</span> <span class="s2">"symmetric tensor second order"</span><span class="p">,</span>
+    <span class="s2">"plastic multiplier"</span><span class="p">:</span> <span class="s2">"scalar"</span><span class="p">,</span>
+    <span class="s2">"pressure"</span><span class="p">:</span> <span class="s2">"scalar"</span><span class="p">,</span>
+    <span class="s2">"jacobi"</span><span class="p">:</span> <span class="s2">"scalar"</span><span class="p">,</span>
+<span class="p">}</span>
+
+
+<span class="c1"># field                  kind of inertia</span>
+<span class="c1">#</span>
+<span class="c1"># The coefficient of a field's SECOND time derivative is not always a mass. Reporting a momentum or an</span>
+<span class="c1"># energy needs to know which inertia entries may be added to which:</span>
+<span class="c1">#</span>
+<span class="c1">#  * ``"mass"``               -- m*v is a linear momentum, 0.5*m*v^2 an energy.</span>
+<span class="c1">#  * ``"rotational inertia"`` -- 0.5*I*w^2 is an energy, but I*w is an ANGULAR momentum and must</span>
+<span class="c1">#                                not be added to a linear one (in 3d both have three components).</span>
+<span class="c1">#  * ``"non-mechanical"``     -- neither, e.g. the non-local micro-inertia (a time squared).</span>
+<span class="c1">#                                Also used for fields without any inertia.</span>
+<span class="n">inertiaKind</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">"displacement"</span><span class="p">:</span> <span class="s2">"mass"</span><span class="p">,</span>
+    <span class="s2">"rotation"</span><span class="p">:</span> <span class="s2">"rotational inertia"</span><span class="p">,</span>
+    <span class="s2">"micro rotation"</span><span class="p">:</span> <span class="s2">"rotational inertia"</span><span class="p">,</span>
+    <span class="s2">"thermal"</span><span class="p">:</span> <span class="s2">"non-mechanical"</span><span class="p">,</span>
+    <span class="s2">"nonlocal damage"</span><span class="p">:</span> <span class="s2">"non-mechanical"</span><span class="p">,</span>
+    <span class="s2">"nonlocal damage 2"</span><span class="p">:</span> <span class="s2">"non-mechanical"</span><span class="p">,</span>
+    <span class="s2">"concentration"</span><span class="p">:</span> <span class="s2">"non-mechanical"</span><span class="p">,</span>
+    <span class="s2">"chemical potential"</span><span class="p">:</span> <span class="s2">"non-mechanical"</span><span class="p">,</span>
+    <span class="s2">"strain symmetric"</span><span class="p">:</span> <span class="s2">"non-mechanical"</span><span class="p">,</span>
+    <span class="s2">"plastic multiplier"</span><span class="p">:</span> <span class="s2">"non-mechanical"</span><span class="p">,</span>
+    <span class="s2">"pressure"</span><span class="p">:</span> <span class="s2">"non-mechanical"</span><span class="p">,</span>
+    <span class="s2">"jacobi"</span><span class="p">:</span> <span class="s2">"non-mechanical"</span><span class="p">,</span>
+<span class="p">}</span>
+
+
+<span class="c1"># field                  tolerance</span>
+<span class="n">fieldCorrectionTolerance</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">"displacement"</span><span class="p">:</span> <span class="mf">1e-7</span><span class="p">,</span>
+    <span class="s2">"rotation"</span><span class="p">:</span> <span class="mf">1e-3</span><span class="p">,</span>
+    <span class="s2">"micro rotation"</span><span class="p">:</span> <span class="mf">1e-8</span><span class="p">,</span>
+    <span class="s2">"nonlocal damage"</span><span class="p">:</span> <span class="mf">1e-8</span><span class="p">,</span>
+    <span class="s2">"nonlocal damage 2"</span><span class="p">:</span> <span class="mf">1e-8</span><span class="p">,</span>
+    <span class="s2">"concentration"</span><span class="p">:</span> <span class="mf">1e-1</span><span class="p">,</span>
+    <span class="s2">"chemical potential"</span><span class="p">:</span> <span class="mf">1e-1</span><span class="p">,</span>
+    <span class="s2">"strain symmetric"</span><span class="p">:</span> <span class="mf">1e-7</span><span class="p">,</span>
+    <span class="s2">"scalar variables"</span><span class="p">:</span> <span class="mf">1e-3</span><span class="p">,</span>
+    <span class="s2">"plastic multiplier"</span><span class="p">:</span> <span class="mf">1e-8</span><span class="p">,</span>
+    <span class="s2">"pressure"</span><span class="p">:</span> <span class="mf">1e-8</span><span class="p">,</span>
+    <span class="s2">"jacobi"</span><span class="p">:</span> <span class="mf">1e-8</span><span class="p">,</span>
+<span class="p">}</span>
+
+<span class="n">fluxResidualTolerance</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">"displacement"</span><span class="p">:</span> <span class="mf">1e-8</span><span class="p">,</span>
+    <span class="s2">"rotation"</span><span class="p">:</span> <span class="mf">1e-4</span><span class="p">,</span>
+    <span class="s2">"micro rotation"</span><span class="p">:</span> <span class="mf">1e-8</span><span class="p">,</span>
+    <span class="s2">"nonlocal damage"</span><span class="p">:</span> <span class="mf">1e-8</span><span class="p">,</span>
+    <span class="s2">"nonlocal damage 2"</span><span class="p">:</span> <span class="mf">1e-8</span><span class="p">,</span>
+    <span class="s2">"concentration"</span><span class="p">:</span> <span class="mf">1e-1</span><span class="p">,</span>
+    <span class="s2">"chemical potential"</span><span class="p">:</span> <span class="mf">1e-2</span><span class="p">,</span>
+    <span class="s2">"strain symmetric"</span><span class="p">:</span> <span class="mf">1e-8</span><span class="p">,</span>
+    <span class="s2">"scalar variables"</span><span class="p">:</span> <span class="mf">1e-8</span><span class="p">,</span>
+    <span class="s2">"plastic multiplier"</span><span class="p">:</span> <span class="mf">1e-8</span><span class="p">,</span>
+    <span class="s2">"pressure"</span><span class="p">:</span> <span class="mf">1e-8</span><span class="p">,</span>
+    <span class="s2">"jacobi"</span><span class="p">:</span> <span class="mf">1e-8</span><span class="p">,</span>
+<span class="p">}</span>
+
+<span class="n">fluxResidualToleranceAlternative</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">"displacement"</span><span class="p">:</span> <span class="mf">5e-3</span><span class="p">,</span>
+    <span class="s2">"rotation"</span><span class="p">:</span> <span class="mf">5e-3</span><span class="p">,</span>
+    <span class="s2">"micro rotation"</span><span class="p">:</span> <span class="mf">5e-3</span><span class="p">,</span>
+    <span class="s2">"nonlocal damage"</span><span class="p">:</span> <span class="mf">5e-3</span><span class="p">,</span>
+    <span class="s2">"nonlocal damage 2"</span><span class="p">:</span> <span class="mf">5e-3</span><span class="p">,</span>
+    <span class="s2">"concentration"</span><span class="p">:</span> <span class="mf">5e-2</span><span class="p">,</span>
+    <span class="s2">"chemical potential"</span><span class="p">:</span> <span class="mf">5e-2</span><span class="p">,</span>
+    <span class="s2">"strain symmetric"</span><span class="p">:</span> <span class="mf">5e-3</span><span class="p">,</span>
+    <span class="s2">"scalar variables"</span><span class="p">:</span> <span class="mf">1e-8</span><span class="p">,</span>
+    <span class="s2">"plastic multiplier"</span><span class="p">:</span> <span class="mf">5e-3</span><span class="p">,</span>
+    <span class="s2">"pressure"</span><span class="p">:</span> <span class="mf">5e-3</span><span class="p">,</span>
+    <span class="s2">"jacobi"</span><span class="p">:</span> <span class="mf">5e-3</span><span class="p">,</span>
+<span class="p">}</span>
+
+<span class="c1"># domain                 dimensions</span>
+<span class="n">domainMapping</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">"1d"</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
+    <span class="s2">"2d"</span><span class="p">:</span> <span class="mi">2</span><span class="p">,</span>
+    <span class="s2">"3d"</span><span class="p">:</span> <span class="mi">3</span><span class="p">,</span>
+    <span class="s2">"axisymmetric"</span><span class="p">:</span> <span class="mi">2</span><span class="p">,</span>
+<span class="p">}</span>
+
+
+<div class="viewcode-block" id="getInertiaKind">
+<a class="viewcode-back" href="../../../documentation/phenomena.html#edelweissfe.config.phenomena.getInertiaKind">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">getInertiaKind</span><span class="p">(</span><span class="n">field</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""The kind of inertia a field carries; see :data:`inertiaKind`.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    field</span>
+<span class="sd">        The name of the physical field.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    str</span>
+<span class="sd">        One of ``"mass"``, ``"rotational inertia"``, ``"non-mechanical"``.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    NotImplementedError</span>
+<span class="sd">        If the field is not registered here.</span>
+<span class="sd">    """</span>
+
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">inertiaKind</span><span class="p">[</span><span class="n">field</span><span class="p">]</span>
+    <span class="k">except</span> <span class="ne">KeyError</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
+            <span class="s2">"Physical field </span><span class="si">{:}</span><span class="s2"> has no registered inertia kind. Add it to inertiaKind in "</span>
+            <span class="s2">"edelweissfe/config/phenomena.py, alongside its entry in phenomena."</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">field</span><span class="p">)</span>
+        <span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="carriesLinearMomentum">
+<a class="viewcode-back" href="../../../documentation/phenomena.html#edelweissfe.config.phenomena.carriesLinearMomentum">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">carriesLinearMomentum</span><span class="p">(</span><span class="n">field</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Whether a field's inertia times its rate is a linear momentum, i.e. whether the field may</span>
+<span class="sd">    enter a linear-momentum balance and be summed with the other fields in it.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    field</span>
+<span class="sd">        The name of the physical field.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    bool</span>
+<span class="sd">        True only for a field whose inertia is a mass.</span>
+<span class="sd">    """</span>
+
+    <span class="k">return</span> <span class="n">getInertiaKind</span><span class="p">(</span><span class="n">field</span><span class="p">)</span> <span class="o">==</span> <span class="s2">"mass"</span></div>
+
+
+
+<div class="viewcode-block" id="carriesKineticEnergy">
+<a class="viewcode-back" href="../../../documentation/phenomena.html#edelweissfe.config.phenomena.carriesKineticEnergy">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">carriesKineticEnergy</span><span class="p">(</span><span class="n">field</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Whether a field's ``0.5 * inertia * rate**2`` is a mechanical energy, i.e. whether the field</span>
+<span class="sd">    may enter the energy balance and be summed with the other fields in it.</span>
+
+<span class="sd">    Work done at a prescribed degree of freedom of such a field -- a force through a displacement,</span>
+<span class="sd">    a moment through a rotation -- is an energy by the same token, which is why the external work</span>
+<span class="sd">    is accumulated over exactly these fields as well.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    field</span>
+<span class="sd">        The name of the physical field.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    bool</span>
+<span class="sd">        True for a field whose inertia is a mass or a rotational inertia.</span>
+<span class="sd">    """</span>
+
+    <span class="k">return</span> <span class="n">getInertiaKind</span><span class="p">(</span><span class="n">field</span><span class="p">)</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"mass"</span><span class="p">,</span> <span class="s2">"rotational inertia"</span><span class="p">)</span></div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">getFieldSize</span><span class="p">(</span><span class="n">field</span><span class="p">,</span> <span class="n">domainSize</span><span class="p">):</span>
+    <span class="n">fType</span> <span class="o">=</span> <span class="n">phenomena</span><span class="p">[</span><span class="n">field</span><span class="p">]</span>
+    <span class="k">if</span> <span class="n">fType</span> <span class="o">==</span> <span class="s2">"scalar"</span><span class="p">:</span>
+        <span class="k">return</span> <span class="mi">1</span>
+    <span class="k">if</span> <span class="n">fType</span> <span class="o">==</span> <span class="s2">"vector"</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">domainSize</span>
+    <span class="k">if</span> <span class="n">fType</span> <span class="o">==</span> <span class="s2">"rotation vector"</span><span class="p">:</span>
+        <span class="c1"># Called for every declared phenomenon, used or not. 2D has a single out-of-plane rotation axis;</span>
+        <span class="c1"># for 1D, 1 is a placeholder that keeps every 1D model buildable, not a physical claim.</span>
+        <span class="k">if</span> <span class="n">domainSize</span> <span class="ow">in</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">):</span>
+            <span class="k">return</span> <span class="mi">1</span>
+        <span class="k">elif</span> <span class="n">domainSize</span> <span class="o">==</span> <span class="mi">3</span><span class="p">:</span>
+            <span class="k">return</span> <span class="mi">3</span>
+    <span class="k">if</span> <span class="n">fType</span> <span class="o">==</span> <span class="s2">"symmetric tensor second order"</span><span class="p">:</span>
+        <span class="c1"># if domainSize == 2:</span>
+        <span class="c1">#     return 3</span>
+        <span class="c1"># elif domainSize == 3:</span>
+        <span class="k">return</span> <span class="mi">6</span>
+
+    <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="s2">"Invalid physical field </span><span class="si">{:}</span><span class="s2"> requested"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">field</span><span class="p">))</span>
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Matthias Neuner.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

@@ -15,12 +15,12 @@
       <script src="../_static/jquery.js?v=5d32c60e"></script>
       <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
       <script src="../_static/documentation_options.js?v=17e2f33f"></script>
-      <script src="../_static/doctools.js?v=9bcbadda"></script>
-      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Steps" href="steps.html" />
+    <link rel="next" title="Composing a linear solver" href="composedlinsolvers.html" />
     <link rel="prev" title="Solvers" href="solvers.html" /> 
 </head>
 
@@ -50,14 +50,31 @@
 <li class="toctree-l1"><a class="reference internal" href="../installation.html">Installation</a></li>
 <li class="toctree-l1 current"><a class="reference internal" href="index.html">Documentation</a><ul class="current">
 <li class="toctree-l2"><a class="reference internal" href="syntax.html">Input file syntax</a></li>
+<li class="toctree-l2"><a class="reference internal" href="inputsystem.html">The input system: how <code class="docutils literal notranslate"><span class="pre">.inp</span></code> grammar is defined</a></li>
 <li class="toctree-l2"><a class="reference internal" href="jobs.html">Inputfile driven simulations</a></li>
 <li class="toctree-l2"><a class="reference internal" href="models.html">Models</a></li>
 <li class="toctree-l2"><a class="reference internal" href="solvers.html">Solvers</a></li>
-<li class="toctree-l2 current"><a class="current reference internal" href="#">Linear solvers</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">Linear solvers</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#direct-or-iterative">Direct or iterative</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#one-adapter-for-every-type">One adapter for every type</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#the-options-of-each-type">The options of each type</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#the-pages-on-linear-solvers">The pages on linear solvers</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="composedlinsolvers.html">Composing a linear solver</a></li>
+<li class="toctree-l4"><a class="reference internal" href="composedlinsolversreference.html">Composed linear solvers: reference</a></li>
+<li class="toctree-l4"><a class="reference internal" href="blockamgtheory.html">Theory: the field-split AMG preconditioner</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fieldsplitmeasurements.html">Field-split AMG: measurements behind the defaults</a></li>
+<li class="toctree-l4"><a class="reference internal" href="linsolveapi.html">Linear solvers: Python API</a></li>
+</ul>
+</li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="steps.html">Steps</a></li>
 <li class="toctree-l2"><a class="reference internal" href="analyticalfields.html">Analytical fields</a></li>
 <li class="toctree-l2"><a class="reference internal" href="constraints.html">Constraints</a></li>
-<li class="toctree-l2"><a class="reference internal" href="dofmanager.html">DOF manager</a></li>
+<li class="toctree-l2"><a class="reference internal" href="rigidbodies.html">Rigid bodies</a></li>
+<li class="toctree-l2"><a class="reference internal" href="contacttheory.html">Contact mechanics: theory</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dofmanager.html">Degree of Freedom (DOF) Manager and Numerics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="assembly.html">System matrix assembly</a></li>
 <li class="toctree-l2"><a class="reference internal" href="fieldoutputmanager.html">Field outputs</a></li>
 <li class="toctree-l2"><a class="reference internal" href="fields.html">Fields</a></li>
 <li class="toctree-l2"><a class="reference internal" href="elements.html">Elements</a></li>
@@ -66,6 +83,10 @@
 <li class="toctree-l2"><a class="reference internal" href="journal.html">Journal</a></li>
 <li class="toctree-l2"><a class="reference internal" href="materials.html">Materials</a></li>
 <li class="toctree-l2"><a class="reference internal" href="mesh.html">Creating finite element meshes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="modelmodifiers.html">Model modifiers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="topologypipeline.html">The topology pipeline: how a model changes itself</a></li>
+<li class="toctree-l2"><a class="reference internal" href="restart.html">Restart</a></li>
+<li class="toctree-l2"><a class="reference internal" href="adaptivitytheory.html">Adaptive refinement: error estimation and marking</a></li>
 <li class="toctree-l2"><a class="reference internal" href="output.html">Outputmanagers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="parallelization.html">Parallelization</a></li>
 <li class="toctree-l2"><a class="reference internal" href="phenomena.html">Physical phenomena</a></li>
@@ -109,74 +130,340 @@
              
   <section id="linear-solvers">
 <h1>Linear solvers<a class="headerlink" href="#linear-solvers" title="Link to this heading"></a></h1>
-<p>Linear solvers are defined in EdelweissFE after the <code class="docutils literal notranslate"><span class="pre">*solver</span></code> keyword using <code class="docutils literal notranslate"><span class="pre">linsolver</span></code> and an optional configuration file <code class="docutils literal notranslate"><span class="pre">linsolverConfigFile</span></code> as a data line.
-The <code class="docutils literal notranslate"><span class="pre">linsolverConfigFile</span></code> needs to be in <code class="docutils literal notranslate"><span class="pre">.json</span></code> format.</p>
-<p>Choose a linsolver after the <code class="docutils literal notranslate"><span class="pre">*solver</span></code> keyword:</p>
+<p>A nonlinear solver solves one linear system per Newton iteration. Which linear solver it uses is its <code class="docutils literal notranslate"><span class="pre">linsolver</span></code>
+option: the name of a <code class="docutils literal notranslate"><span class="pre">*linearSolver</span></code> block, or a type of linear solver with its defaults.</p>
 <div class="highlight-edelweiss notranslate"><div class="highlight"><pre><span></span><span class="k">*solver</span>,<span class="nv"> solver</span><span class="ow">=</span><span class="m">NIST</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">theSolver</span>
-<span class="nv">linsolver</span><span class="ow">=</span><span class="m">gmres</span>
-<span class="nv">linsolverConfigFile</span><span class="ow">=</span><span class="m">opt.json</span>
+<span class="nv">linsolver</span><span class="ow">=</span><span class="m">pardiso</span>
 </pre></div>
 </div>
+<p>A <code class="docutils literal notranslate"><span class="pre">*linearSolver</span></code> block defines a linear solver with options, as <code class="docutils literal notranslate"><span class="pre">*material</span></code> defines a material: the keyword line
+holds only its identity, <code class="docutils literal notranslate"><span class="pre">name</span></code> and <code class="docutils literal notranslate"><span class="pre">type</span></code>; the data lines are the options of that type, one <code class="docutils literal notranslate"><span class="pre">key=value</span></code> per line
+(an option the type does not have is an error):</p>
+<div class="highlight-edelweiss notranslate"><div class="highlight"><pre><span></span><span class="k">*linearSolver</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">fast</span>,<span class="nv"> type</span><span class="ow">=</span><span class="m">blockamg</span>
+<span class="nv">cornerNodeInterpolation</span><span class="ow">=</span><span class="m">false</span>
+<span class="nv">verbosity</span><span class="ow">=</span><span class="m">info</span>
+
+<span class="k">*solver</span>,<span class="nv"> solver</span><span class="ow">=</span><span class="m">NIST</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">theSolver</span>
+<span class="nv">linsolver</span><span class="ow">=</span><span class="m">fast</span>
+</pre></div>
+</div>
+<p>A type name in <code class="docutils literal notranslate"><span class="pre">linsolver=</span></code> means that type with its defaults, so a block must not be named like a type.
+<code class="docutils literal notranslate"><span class="pre">linsolver</span></code> unset means <code class="docutils literal notranslate"><span class="pre">pardiso</span></code> if it was built, else <code class="docutils literal notranslate"><span class="pre">superlu</span></code>. From Python, the same linear solver is
+<code class="docutils literal notranslate"><span class="pre">getLinSolverByName(&quot;blockamg&quot;,</span> <span class="pre">{&quot;rigidBodyModesPerAggregate&quot;:</span> <span class="pre">False})</span></code> (<a class="reference internal" href="linsolveapi.html#module-edelweissfe.config.linsolve" title="edelweissfe.config.linsolve"><code class="xref py py-mod docutils literal notranslate"><span class="pre">edelweissfe.config.linsolve</span></code></a>).</p>
 <table class="docutils align-default" id="id1" style="width: 100%">
-<caption><span class="caption-text">Currently available linear solvers</span><a class="headerlink" href="#id1" title="Link to this table"></a></caption>
+<caption><span class="caption-text">The types of linear solver</span><a class="headerlink" href="#id1" title="Link to this table"></a></caption>
 <colgroup>
-<col style="width: 36.6%" />
-<col style="width: 2.4%" />
-<col style="width: 61.0%" />
+<col style="width: 21.4%" />
+<col style="width: 14.3%" />
+<col style="width: 64.3%" />
 </colgroup>
 <thead>
-<tr class="row-odd"><th class="head"><p>Name</p></th>
-<th class="head"><p>Direct solver</p></th>
-<th class="head"><p>Relevant module</p></th>
+<tr class="row-odd"><th class="head"><p>Type</p></th>
+<th class="head"><p>Direct</p></th>
+<th class="head"><p>What it is</p></th>
 </tr>
 </thead>
 <tbody>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">superlu</span></code></p></td>
 <td><p>✓</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">scipy.sparse.linalg.spsolve</span></code></p></td>
+<td><p>SciPy’s sparse LU (SuperLU), always available</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">umfpack</span></code></p></td>
 <td><p>✓</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">scipy.sparse.linalg.spsolve</span></code></p></td>
+<td><p>UMFPACK through SciPy (SuperLU if <code class="docutils literal notranslate"><span class="pre">scikit-umfpack</span></code> is missing)</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">pardiso</span></code></p></td>
 <td><p>✓</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">edelweissfe.linsolve.pardiso.pardiso</span></code></p></td>
+<td><p>Intel MKL PARDISO (<code class="docutils literal notranslate"><span class="pre">edelweissfe.linsolve.pardiso.pardiso</span></code>), the default</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">panuapardiso</span></code></p></td>
 <td><p>✓</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">edelweissfe.linsolve.panuapardiso.panuapardiso</span></code></p></td>
+<td><p>Panua PARDISO (<code class="docutils literal notranslate"><span class="pre">edelweissfe.linsolve.panuapardiso.panuapardiso</span></code>)</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">klu</span></code></p></td>
 <td><p>✓</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">edelweissfe.linsolve.klu.klu</span></code></p></td>
+<td><p>SuiteSparse’s KLU (<code class="docutils literal notranslate"><span class="pre">edelweissfe.linsolve.klu.klu</span></code>)</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">petsclu</span></code></p></td>
 <td><p>✓</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">edelweissfe.linsolve.petsclu.petsclu</span></code></p></td>
+<td><p>PETSc’s LU, through <code class="docutils literal notranslate"><span class="pre">petsc4py</span></code></p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">mumps</span></code></p></td>
 <td><p>✓</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">edelweissfe.linsolve.mumps.mumps</span></code></p></td>
+<td><p>MUMPS, through its Python bindings</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">gmres</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">blockamg</span></code></p></td>
 <td><p>✗</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">edelweissfe.linsolve.gmres.gmres</span></code></p></td>
+<td><p>the preset <code class="docutils literal notranslate"><span class="pre">blockAMG()</span></code>: LGMRES around a block Gauss–Seidel sweep over the fields, with one AMG hierarchy
+(or two-level cycle) per field</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">custom</span></code></p></td>
+<td><p>—</p></td>
+<td><p>a composed solver defined by you, in a Python script (see <a class="reference internal" href="composedlinsolvers.html"><span class="doc">Composing a linear solver</span></a>)</p></td>
 </tr>
 </tbody>
 </table>
-<p>Currently, only the linsolver <code class="docutils literal notranslate"><span class="pre">gmres</span></code> allows the use of an optional configuration file <code class="docutils literal notranslate"><span class="pre">linsolverConfigFile</span></code>.</p>
-<p>Choose the options for the linsolver (in this case <code class="docutils literal notranslate"><span class="pre">gmres</span></code>) in an extra file:</p>
-<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
-<span class="nt">&quot;precondopts&quot;</span><span class="p">:</span>
-<span class="p">{</span>
-<span class="nt">&quot;presmoother&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;block_gauss_seidel&quot;</span><span class="p">,</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;iterations&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">15</span><span class="p">}],</span>
-<span class="nt">&quot;postsmoother&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;block_gauss_seidel&quot;</span><span class="p">,</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;iterations&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">15</span><span class="p">}],</span>
-<span class="p">},</span>
-<span class="nt">&quot;linsolveopts&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;maxiter&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;restart&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">1500</span><span class="p">}</span>
-<span class="p">}</span>
+<section id="direct-or-iterative">
+<h2>Direct or iterative<a class="headerlink" href="#direct-or-iterative" title="Link to this heading"></a></h2>
+<p><strong>Direct solvers</strong> factorize the matrix and back-substitute: <code class="docutils literal notranslate"><span class="pre">superlu</span></code> and <code class="docutils literal notranslate"><span class="pre">umfpack</span></code> (SciPy, always available),
+<code class="docutils literal notranslate"><span class="pre">pardiso</span></code> (Intel MKL, the production default), <code class="docutils literal notranslate"><span class="pre">panuapardiso</span></code>, <code class="docutils literal notranslate"><span class="pre">klu</span></code>, <code class="docutils literal notranslate"><span class="pre">petsclu</span></code> and <code class="docutils literal notranslate"><span class="pre">mumps</span></code>. Pick one of
+these unless the factorization has become the run’s bottleneck or exceeds available memory. A direct solver keeps its
+backend for the whole step: PARDISO with <code class="docutils literal notranslate"><span class="pre">reuseSymbolicFactorization=true</span></code> keeps its reordering and symbolic
+factorization while only the values of the matrix change. A singular matrix gives NaN, which the nonlinear solver
+turns into a cutback.</p>
+<p><strong>Iterative solvers</strong> never factorize the full matrix, trading exactness for O(n) memory: past roughly a million DOFs
+the fill-in of a direct factorization exceeds memory, whereas algebraic multigrid stays linear. <code class="docutils literal notranslate"><span class="pre">blockamg</span></code> is the
+field-split solver for <strong>large coupled multi-field systems</strong> (e.g. displacement + gradient-enhanced damage): one AMG
+hierarchy per physical field, combined by a block Gauss–Seidel sweep to precondition an outer LGMRES. The block
+structure – which DOFs belong to which field, and each field’s dimension – is discovered automatically from the
+model. It requires the optional <code class="docutils literal notranslate"><span class="pre">amgcl</span></code> extension.</p>
+<div class="highlight-edelweiss notranslate"><div class="highlight"><pre><span></span><span class="k">*linearSolver</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">fieldSplit</span>,<span class="nv"> type</span><span class="ow">=</span><span class="m">blockamg</span>
+<span class="nv">sweeps</span><span class="ow">=</span><span class="m">1</span>
+<span class="nv">symmetric</span><span class="ow">=</span><span class="m">false</span>
+
+<span class="k">*solver</span>,<span class="nv"> solver</span><span class="ow">=</span><span class="m">NIST</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">theSolver</span>
+<span class="nv">linsolver</span><span class="ow">=</span><span class="m">fieldSplit</span>
 </pre></div>
 </div>
+<p>A <code class="docutils literal notranslate"><span class="pre">custom</span></code> solver script composes any other tree: a Schur complement that condenses the dofs on which AMG alone
+stalls (bars tied to their host elements by bond springs, a softening zone), other smoothers, other coarse spaces.
+How to write one, and the tree of <code class="docutils literal notranslate"><span class="pre">blockamg</span></code>, are on <a class="reference internal" href="composedlinsolvers.html"><span class="doc">Composing a linear solver</span></a>; why the field-split method works,
+and each of its steps, on <a class="reference internal" href="blockamgtheory.html"><span class="doc">Theory: the field-split AMG preconditioner</span></a>.</p>
+</section>
+<section id="one-adapter-for-every-type">
+<h2>One adapter for every type<a class="headerlink" href="#one-adapter-for-every-type" title="Link to this heading"></a></h2>
+<p>Every type is a composed solver (<a class="reference internal" href="composedlinsolvers.html"><span class="doc">Composing a linear solver</span></a>) behind one adapter,
+<a class="reference internal" href="linsolveapi.html#edelweissfe.linsolve.composition.solver.ComposedLinearSolver" title="edelweissfe.linsolve.composition.solver.ComposedLinearSolver"><code class="xref py py-class docutils literal notranslate"><span class="pre">ComposedLinearSolver</span></code></a>: <code class="docutils literal notranslate"><span class="pre">blockamg</span></code> is the tree of the <code class="docutils literal notranslate"><span class="pre">blockAMG()</span></code>
+preset, and a direct solver is a tree of one leaf, <code class="docutils literal notranslate"><span class="pre">type=pardiso</span></code> being <code class="docutils literal notranslate"><span class="pre">DirectSolver(&quot;pardiso&quot;)</span></code>. What the adapter
+does therefore works the same for every type, with the same data lines
+(<a class="reference internal" href="linsolveapi.html#edelweissfe.linsolve.types.LinearSolverSchema" title="edelweissfe.linsolve.types.LinearSolverSchema"><code class="xref py py-class docutils literal notranslate"><span class="pre">LinearSolverSchema</span></code></a>, described in <a class="reference internal" href="composedlinsolversreference.html#composed-adapter"><span class="std std-ref">The adapter</span></a>):</p>
+<table class="docutils align-default" id="id2" style="width: 100%">
+<caption><span class="caption-text">The data lines of every type</span><a class="headerlink" href="#id2" title="Link to this table"></a></caption>
+<colgroup>
+<col style="width: 25.0%" />
+<col style="width: 20.0%" />
+<col style="width: 55.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Data line</p></th>
+<th class="head"><p>Default</p></th>
+<th class="head"><p>What it sets</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">verbosity</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">warning</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">silent</span></code>, <code class="docutils literal notranslate"><span class="pre">warning</span></code>, <code class="docutils literal notranslate"><span class="pre">info</span></code> or <code class="docutils literal notranslate"><span class="pre">debug</span></code> (<a class="reference internal" href="composedlinsolversreference.html#composed-verbosity"><span class="std std-ref">Verbosity levels</span></a>)</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">warningOuterIterations</span></code></p></td>
+<td><p>100</p></td>
+<td><p>a Krylov solve with more outer iterations is warned about, and is a slow solve</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">residualGrowthFactor</span></code></p></td>
+<td><p>4</p></td>
+<td><p>a right-hand side this many times larger than the previous one marks a new increment</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">dumps</span></code>, <code class="docutils literal notranslate"><span class="pre">dumpDirectory</span></code>, <code class="docutils literal notranslate"><span class="pre">maxDumps</span></code>, <code class="docutils literal notranslate"><span class="pre">dumpContextSolves</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">none</span></code>, <code class="docutils literal notranslate"><span class="pre">linsolveDumps</span></code>, 10, 0</p></td>
+<td><p>which solves are written to disk, as a sequence of authentic systems for an offline replay
+(<a class="reference internal" href="composedlinsolversreference.html#composed-solve-dumps"><span class="std std-ref">Dumps of the solves</span></a>)</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="the-options-of-each-type">
+<h2>The options of each type<a class="headerlink" href="#the-options-of-each-type" title="Link to this heading"></a></h2>
+<table class="docutils align-default" id="id3">
+<caption><span class="caption-text">``pardiso``:</span><a class="headerlink" href="#id3" title="Link to this table"></a></caption>
+<thead>
+<tr class="row-odd"><th class="head"><p>Option</p></th>
+<th class="head"><p>Type / Default</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">verbosity</span></code></td>
+<td><p>str, default=’warning’</p></td>
+<td><p>silent, warning (a warning for a slow or unconverged solve), info (one line per solve, the structure of the solver, and the ‘linear solve’ column of the nonlinear solver) or debug (also why a preconditioner was rebuilt or reused).</p></td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">warningOuterIterations</span></code></td>
+<td><p>int, default=100</p></td>
+<td><p>A solve with more outer Krylov iterations than this is warned about, and is a slow solve.</p></td>
+</tr>
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">residualGrowthFactor</span></code></td>
+<td><p>float, default=4.0</p></td>
+<td><p>A right-hand side this many times larger than the previous one marks a new increment.</p></td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">dumps</span></code></td>
+<td><p>str, default=’none’</p></td>
+<td><p>Which solves are written to disk for an offline replay: none, slow (above warningOuterIterations, or stopped at the iteration cap), every, or the numbers of the solves separated by spaces, e.g. ‘12 13 14’.</p></td>
+</tr>
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">dumpDirectory</span></code></td>
+<td><p>str, default=’linsolveDumps’</p></td>
+<td><p>Where the dumps go.</p></td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">maxDumps</span></code></td>
+<td><p>int, default=10</p></td>
+<td><p>The most systems dumped to dumpDirectory in the run (a disk guard).</p></td>
+</tr>
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">dumpContextSolves</span></code></td>
+<td><p>int, default=0</p></td>
+<td><p>How many of the solves preceding a dumped one are dumped with it.</p></td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">reuseSymbolicFactorization</span></code></td>
+<td><p>bool, default=False</p></td>
+<td><p>Keep PARDISO’s reordering and symbolic factorization while the sparsity pattern stays the same. Off by default: it has been observed to give silently wrong results for some coupled problems.</p></td>
+</tr>
+</tbody>
+</table>
+<p>The other direct solvers take only the common data lines above.</p>
+<table class="docutils align-default" id="id4">
+<caption><span class="caption-text">``blockamg``:</span><a class="headerlink" href="#id4" title="Link to this table"></a></caption>
+<thead>
+<tr class="row-odd"><th class="head"><p>Option</p></th>
+<th class="head"><p>Type / Default</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">verbosity</span></code></td>
+<td><p>str, default=’warning’</p></td>
+<td><p>silent, warning (a warning for a slow or unconverged solve), info (one line per solve, the structure of the solver, and the ‘linear solve’ column of the nonlinear solver) or debug (also why a preconditioner was rebuilt or reused).</p></td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">warningOuterIterations</span></code></td>
+<td><p>int, default=100</p></td>
+<td><p>A solve with more outer Krylov iterations than this is warned about, and is a slow solve.</p></td>
+</tr>
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">residualGrowthFactor</span></code></td>
+<td><p>float, default=4.0</p></td>
+<td><p>A right-hand side this many times larger than the previous one marks a new increment.</p></td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">dumps</span></code></td>
+<td><p>str, default=’none’</p></td>
+<td><p>Which solves are written to disk for an offline replay: none, slow (above warningOuterIterations, or stopped at the iteration cap), every, or the numbers of the solves separated by spaces, e.g. ‘12 13 14’.</p></td>
+</tr>
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">dumpDirectory</span></code></td>
+<td><p>str, default=’linsolveDumps’</p></td>
+<td><p>Where the dumps go.</p></td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">maxDumps</span></code></td>
+<td><p>int, default=10</p></td>
+<td><p>The most systems dumped to dumpDirectory in the run (a disk guard).</p></td>
+</tr>
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">dumpContextSolves</span></code></td>
+<td><p>int, default=0</p></td>
+<td><p>How many of the solves preceding a dumped one are dumped with it.</p></td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">rigidBodyModesPerAggregate</span></code></td>
+<td><p>bool, default=True</p></td>
+<td><p>A (linear) 3D displacement field gets the two-level cycle on its rigid-body modes (else one AMG hierarchy, on the translations).</p></td>
+</tr>
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">cornerNodeInterpolation</span></code></td>
+<td><p>bool, default=True</p></td>
+<td><p>A quadratic 3D displacement field gets the two-level cycle on its corner nodes (else the case of a linear one).</p></td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">tolerance</span></code></td>
+<td><p>float, default=None</p></td>
+<td><p>A fixed relative tolerance per solve; unset: the Eisenstat-Walker forcing tolerance.</p></td>
+</tr>
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">maxIterations</span></code></td>
+<td><p>int, default=100</p></td>
+<td><p>The outer iteration cap.</p></td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">reusePreconditioner</span></code></td>
+<td><p>bool, default=False</p></td>
+<td><p>Keep the preconditioner across solves until a new increment or a stale preconditioner asks for a rebuild (false: a new preconditioner for every solve).</p></td>
+</tr>
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">sweeps</span></code></td>
+<td><p>int, default=1</p></td>
+<td><p>The block Gauss-Seidel sweeps over the fields.</p></td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">symmetric</span></code></td>
+<td><p>bool, default=False</p></td>
+<td><p>A symmetric block Gauss-Seidel sweep (forward, then backward).</p></td>
+</tr>
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">krylovOnScaledSystem</span></code></td>
+<td><p>bool, default=False</p></td>
+<td><p>Run LGMRES on the diagonally scaled matrix, with true-residual restarts.</p></td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">trueResidualRestarts</span></code></td>
+<td><p>int, default=2</p></td>
+<td><p>The true-residual restarts (only with krylovOnScaledSystem).</p></td>
+</tr>
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">residualGapCompensation</span></code></td>
+<td><p>bool, default=False</p></td>
+<td><p>Tighten the first pass by the learnt gap between the scaled and the true residual (only with krylovOnScaledSystem).</p></td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">dropTolerance</span></code></td>
+<td><p>float, default=0.0</p></td>
+<td><p>Build every field’s preconditioner on its block without the entries below this (relative).</p></td>
+</tr>
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">lumpDroppedEntries</span></code></td>
+<td><p>bool, default=False</p></td>
+<td><p>Add the dropped entries to the diagonal (keeps the row sums).</p></td>
+</tr>
+</tbody>
+</table>
+<table class="docutils align-default" id="id5">
+<caption><span class="caption-text">``custom``:</span><a class="headerlink" href="#id5" title="Link to this table"></a></caption>
+<thead>
+<tr class="row-odd"><th class="head"><p>Option</p></th>
+<th class="head"><p>Type / Default</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">verbosity</span></code></td>
+<td><p>str, default=’warning’</p></td>
+<td><p>silent, warning (a warning for a slow or unconverged solve), info (one line per solve, the structure of the solver, and the ‘linear solve’ column of the nonlinear solver) or debug (also why a preconditioner was rebuilt or reused).</p></td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">warningOuterIterations</span></code></td>
+<td><p>int, default=100</p></td>
+<td><p>A solve with more outer Krylov iterations than this is warned about, and is a slow solve.</p></td>
+</tr>
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">residualGrowthFactor</span></code></td>
+<td><p>float, default=4.0</p></td>
+<td><p>A right-hand side this many times larger than the previous one marks a new increment.</p></td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">dumps</span></code></td>
+<td><p>str, default=’none’</p></td>
+<td><p>Which solves are written to disk for an offline replay: none, slow (above warningOuterIterations, or stopped at the iteration cap), every, or the numbers of the solves separated by spaces, e.g. ‘12 13 14’.</p></td>
+</tr>
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">dumpDirectory</span></code></td>
+<td><p>str, default=’linsolveDumps’</p></td>
+<td><p>Where the dumps go.</p></td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">maxDumps</span></code></td>
+<td><p>int, default=10</p></td>
+<td><p>The most systems dumped to dumpDirectory in the run (a disk guard).</p></td>
+</tr>
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">dumpContextSolves</span></code></td>
+<td><p>int, default=0</p></td>
+<td><p>How many of the solves preceding a dumped one are dumped with it.</p></td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal notranslate"><span class="pre">script</span></code></td>
+<td><p>str (required)</p></td>
+<td><p>The solver script: a Python file that binds the composed solver, a tree of components, to its global linearSolver (a path relative to the working directory).</p></td>
+</tr>
+<tr class="row-even"><td><code class="docutils literal notranslate"><span class="pre">hotReload</span></code></td>
+<td><p>bool, default=False</p></td>
+<td><p>Build the solver again whenever the script changes on disk, before a solve.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="the-pages-on-linear-solvers">
+<h2>The pages on linear solvers<a class="headerlink" href="#the-pages-on-linear-solvers" title="Link to this heading"></a></h2>
+<div class="toctree-wrapper compound">
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="composedlinsolvers.html">Composing a linear solver</a></li>
+<li class="toctree-l1"><a class="reference internal" href="composedlinsolversreference.html">Composed linear solvers: reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="blockamgtheory.html">Theory: the field-split AMG preconditioner</a></li>
+<li class="toctree-l1"><a class="reference internal" href="fieldsplitmeasurements.html">Field-split AMG: measurements behind the defaults</a></li>
+<li class="toctree-l1"><a class="reference internal" href="linsolveapi.html">Linear solvers: Python API</a></li>
+</ul>
+</div>
+</section>
 </section>
 
 
@@ -184,7 +471,7 @@ The <code class="docutils literal notranslate"><span class="pre">linsolverConfig
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
         <a href="solvers.html" class="btn btn-neutral float-left" title="Solvers" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="steps.html" class="btn btn-neutral float-right" title="Steps" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="composedlinsolvers.html" class="btn btn-neutral float-right" title="Composing a linear solver" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>

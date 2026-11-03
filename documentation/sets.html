@@ -15,8 +15,8 @@
       <script src="../_static/jquery.js?v=5d32c60e"></script>
       <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
       <script src="../_static/documentation_options.js?v=17e2f33f"></script>
-      <script src="../_static/doctools.js?v=9bcbadda"></script>
-      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
@@ -50,6 +50,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../installation.html">Installation</a></li>
 <li class="toctree-l1 current"><a class="reference internal" href="index.html">Documentation</a><ul class="current">
 <li class="toctree-l2"><a class="reference internal" href="syntax.html">Input file syntax</a></li>
+<li class="toctree-l2"><a class="reference internal" href="inputsystem.html">The input system: how <code class="docutils literal notranslate"><span class="pre">.inp</span></code> grammar is defined</a></li>
 <li class="toctree-l2"><a class="reference internal" href="jobs.html">Inputfile driven simulations</a></li>
 <li class="toctree-l2"><a class="reference internal" href="models.html">Models</a></li>
 <li class="toctree-l2"><a class="reference internal" href="solvers.html">Solvers</a></li>
@@ -57,7 +58,10 @@
 <li class="toctree-l2"><a class="reference internal" href="steps.html">Steps</a></li>
 <li class="toctree-l2"><a class="reference internal" href="analyticalfields.html">Analytical fields</a></li>
 <li class="toctree-l2"><a class="reference internal" href="constraints.html">Constraints</a></li>
-<li class="toctree-l2"><a class="reference internal" href="dofmanager.html">DOF manager</a></li>
+<li class="toctree-l2"><a class="reference internal" href="rigidbodies.html">Rigid bodies</a></li>
+<li class="toctree-l2"><a class="reference internal" href="contacttheory.html">Contact mechanics: theory</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dofmanager.html">Degree of Freedom (DOF) Manager and Numerics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="assembly.html">System matrix assembly</a></li>
 <li class="toctree-l2"><a class="reference internal" href="fieldoutputmanager.html">Field outputs</a></li>
 <li class="toctree-l2"><a class="reference internal" href="fields.html">Fields</a></li>
 <li class="toctree-l2"><a class="reference internal" href="elements.html">Elements</a></li>
@@ -66,6 +70,10 @@
 <li class="toctree-l2"><a class="reference internal" href="journal.html">Journal</a></li>
 <li class="toctree-l2"><a class="reference internal" href="materials.html">Materials</a></li>
 <li class="toctree-l2"><a class="reference internal" href="mesh.html">Creating finite element meshes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="modelmodifiers.html">Model modifiers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="topologypipeline.html">The topology pipeline: how a model changes itself</a></li>
+<li class="toctree-l2"><a class="reference internal" href="restart.html">Restart</a></li>
+<li class="toctree-l2"><a class="reference internal" href="adaptivitytheory.html">Adaptive refinement: error estimation and marking</a></li>
 <li class="toctree-l2"><a class="reference internal" href="output.html">Outputmanagers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="parallelization.html">Parallelization</a></li>
 <li class="toctree-l2"><a class="reference internal" href="phenomena.html">Physical phenomena</a></li>
@@ -81,10 +89,14 @@
 <li class="toctree-l4"><a class="reference internal" href="#edelweissfe.sets.orderedset.OrderedSet.add"><code class="docutils literal notranslate"><span class="pre">OrderedSet.add()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#edelweissfe.sets.orderedset.OrderedSet.checkObjectType"><code class="docutils literal notranslate"><span class="pre">OrderedSet.checkObjectType()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#edelweissfe.sets.orderedset.OrderedSet.forceIter"><code class="docutils literal notranslate"><span class="pre">OrderedSet.forceIter()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.sets.orderedset.OrderedSet.replaceMembers"><code class="docutils literal notranslate"><span class="pre">OrderedSet.replaceMembers()</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l3"><a class="reference internal" href="#edelweissfe.sets.nodeset.NodeSet"><code class="docutils literal notranslate"><span class="pre">NodeSet</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#edelweissfe.sets.elementset.ElementSet"><code class="docutils literal notranslate"><span class="pre">ElementSet</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#edelweissfe.sets.elementset.ElementSet"><code class="docutils literal notranslate"><span class="pre">ElementSet</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.sets.elementset.ElementSet.replaceMembers"><code class="docutils literal notranslate"><span class="pre">ElementSet.replaceMembers()</span></code></a></li>
+</ul>
+</li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="stepactions.html">Step actions</a></li>
@@ -138,7 +150,7 @@ they are based on a custom ordered set object.</p>
 </div></blockquote>
 <span class="target" id="module-edelweissfe.sets.orderedset"></span><dl class="py class">
 <dt class="sig sig-object py" id="edelweissfe.sets.orderedset.ImmutableOrderedSet">
-<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">edelweissfe.sets.orderedset.</span></span><span class="sig-name descname"><span class="pre">ImmutableOrderedSet</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">item_s</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/sets/orderedset.html#ImmutableOrderedSet"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.sets.orderedset.ImmutableOrderedSet" title="Link to this definition"></a></dt>
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">edelweissfe.sets.orderedset.</span></span><span class="sig-name descname"><span class="pre">ImmutableOrderedSet</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">item_s</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/sets/orderedset.html#ImmutableOrderedSet"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.sets.orderedset.ImmutableOrderedSet" title="Link to this definition"></a></dt>
 <dd><p>An immutable ordered set.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -178,13 +190,16 @@ they are based on a custom ordered set object.</p>
 <tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">popitem</span></code>()</p></td>
 <td><p>as a 2-tuple; but raise KeyError if D is empty.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setdefault</span></code>(k[,d])</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">replaceMembers</span></code>(item_s)</p></td>
+<td><p>Replace all members in-place, preserving this object's identity.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setdefault</span></code>(k[,d])</p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">update</span></code>([E, ]**F)</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">update</span></code>([E, ]**F)</p></td>
 <td><p>If E present and has a .keys() method, does:</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">values</span></code>()</p></td>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">values</span></code>()</p></td>
 <td><p></p></td>
 </tr>
 </tbody>
@@ -209,7 +224,7 @@ they are based on a custom ordered set object.</p>
 
 <dl class="py class">
 <dt class="sig sig-object py" id="edelweissfe.sets.orderedset.OrderedSet">
-<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">edelweissfe.sets.orderedset.</span></span><span class="sig-name descname"><span class="pre">OrderedSet</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">item_s</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/sets/orderedset.html#OrderedSet"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.sets.orderedset.OrderedSet" title="Link to this definition"></a></dt>
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">edelweissfe.sets.orderedset.</span></span><span class="sig-name descname"><span class="pre">OrderedSet</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">item_s</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/sets/orderedset.html#OrderedSet"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.sets.orderedset.OrderedSet" title="Link to this definition"></a></dt>
 <dd><p>An ordered set.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -249,13 +264,16 @@ they are based on a custom ordered set object.</p>
 <tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">popitem</span></code>()</p></td>
 <td><p>as a 2-tuple; but raise KeyError if D is empty.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setdefault</span></code>(k[,d])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.sets.orderedset.OrderedSet.replaceMembers" title="edelweissfe.sets.orderedset.OrderedSet.replaceMembers"><code class="xref py py-obj docutils literal notranslate"><span class="pre">replaceMembers</span></code></a>(item_s)</p></td>
+<td><p>Replace all members in-place, preserving this object's identity.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setdefault</span></code>(k[,d])</p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">update</span></code>([E, ]**F)</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">update</span></code>([E, ]**F)</p></td>
 <td><p>If E present and has a .keys() method, does:</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">values</span></code>()</p></td>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">values</span></code>()</p></td>
 <td><p></p></td>
 </tr>
 </tbody>
@@ -288,11 +306,26 @@ they are based on a custom ordered set object.</p>
 <dd><p>Return an iterator object for item_s even if item_s itself is not iterable</p>
 </dd></dl>
 
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.sets.orderedset.OrderedSet.replaceMembers">
+<span class="sig-name descname"><span class="pre">replaceMembers</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">item_s</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/sets/orderedset.html#OrderedSet.replaceMembers"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.sets.orderedset.OrderedSet.replaceMembers" title="Link to this definition"></a></dt>
+<dd><p>Replace all members in-place, preserving this object’s identity.</p>
+<p>Any reference held by a consumer (e.g. <code class="docutils literal notranslate"><span class="pre">self.nSet</span> <span class="pre">=</span> <span class="pre">model.nodeSets[&quot;mySet&quot;]</span></code>) stays
+valid after this call – it sees the new members without re-fetching from the model.
+Bumps <code class="xref py py-attr docutils literal notranslate"><span class="pre">_version</span></code> so a cached derived array (e.g. a pre-sized load vector) can detect
+the change lazily.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>item_s</strong> – The new item or iterable of items replacing the current members.</p>
+</dd>
+</dl>
+</dd></dl>
+
 </dd></dl>
 
 <span class="target" id="module-edelweissfe.sets.nodeset"></span><dl class="py class">
 <dt class="sig sig-object py" id="edelweissfe.sets.nodeset.NodeSet">
-<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">edelweissfe.sets.nodeset.</span></span><span class="sig-name descname"><span class="pre">NodeSet</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">label</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nodes</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/sets/nodeset.html#NodeSet"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.sets.nodeset.NodeSet" title="Link to this definition"></a></dt>
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">edelweissfe.sets.nodeset.</span></span><span class="sig-name descname"><span class="pre">NodeSet</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">label</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nodes</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/sets/nodeset.html#NodeSet"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.sets.nodeset.NodeSet" title="Link to this definition"></a></dt>
 <dd><p>A basic node set.
 It has a label, and a list containing the unique nodes.</p>
 <dl class="field-list simple">
@@ -333,13 +366,16 @@ It has a label, and a list containing the unique nodes.</p>
 <tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">popitem</span></code>()</p></td>
 <td><p>as a 2-tuple; but raise KeyError if D is empty.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setdefault</span></code>(k[,d])</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">replaceMembers</span></code>(item_s)</p></td>
+<td><p>Replace all members in-place, preserving this object's identity.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setdefault</span></code>(k[,d])</p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">update</span></code>([E, ]**F)</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">update</span></code>([E, ]**F)</p></td>
 <td><p>If E present and has a .keys() method, does:</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">values</span></code>()</p></td>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">values</span></code>()</p></td>
 <td><p></p></td>
 </tr>
 </tbody>
@@ -358,7 +394,7 @@ It has a label, and a list containing the unique nodes.</p>
 
 <span class="target" id="module-edelweissfe.sets.elementset"></span><dl class="py class">
 <dt class="sig sig-object py" id="edelweissfe.sets.elementset.ElementSet">
-<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">edelweissfe.sets.elementset.</span></span><span class="sig-name descname"><span class="pre">ElementSet</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">label</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">elements</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/sets/elementset.html#ElementSet"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.sets.elementset.ElementSet" title="Link to this definition"></a></dt>
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">edelweissfe.sets.elementset.</span></span><span class="sig-name descname"><span class="pre">ElementSet</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">label</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">elements</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/sets/elementset.html#ElementSet"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.sets.elementset.ElementSet" title="Link to this definition"></a></dt>
 <dd><p>A basic element set.
 It has a label, and a list containing unique elements.</p>
 <dl class="field-list simple">
@@ -400,13 +436,16 @@ It has a label, and a list containing unique elements.</p>
 <tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">popitem</span></code>()</p></td>
 <td><p>as a 2-tuple; but raise KeyError if D is empty.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setdefault</span></code>(k[,d])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.sets.elementset.ElementSet.replaceMembers" title="edelweissfe.sets.elementset.ElementSet.replaceMembers"><code class="xref py py-obj docutils literal notranslate"><span class="pre">replaceMembers</span></code></a>(item_s)</p></td>
+<td><p>Replace all members in-place (see <code class="xref py py-meth docutils literal notranslate"><span class="pre">OrderedSet.replaceMembers()</span></code>), additionally invalidating the cached <code class="xref py py-meth docutils literal notranslate"><span class="pre">extractNodeSet()</span></code> result, which is stale once the element membership changes.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setdefault</span></code>(k[,d])</p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">update</span></code>([E, ]**F)</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">update</span></code>([E, ]**F)</p></td>
 <td><p>If E present and has a .keys() method, does:</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">values</span></code>()</p></td>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">values</span></code>()</p></td>
 <td><p></p></td>
 </tr>
 </tbody>
@@ -424,6 +463,14 @@ It has a label, and a list containing unique elements.</p>
 </tr>
 </tbody>
 </table>
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.sets.elementset.ElementSet.replaceMembers">
+<span class="sig-name descname"><span class="pre">replaceMembers</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">item_s</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/sets/elementset.html#ElementSet.replaceMembers"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.sets.elementset.ElementSet.replaceMembers" title="Link to this definition"></a></dt>
+<dd><p>Replace all members in-place (see <code class="xref py py-meth docutils literal notranslate"><span class="pre">OrderedSet.replaceMembers()</span></code>), additionally
+invalidating the cached <code class="xref py py-meth docutils literal notranslate"><span class="pre">extractNodeSet()</span></code> result, which is stale once the element
+membership changes.</p>
+</dd></dl>
+
 </dd></dl>
 
 </section>

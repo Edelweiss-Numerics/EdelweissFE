@@ -1,0 +1,261 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>edelweissfe.utils.discretesurfacequery &mdash; EdelweissFE v22.07 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=cfdaff8d" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/custom.css?v=37fbe429" />
+
+  
+      <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../_static/documentation_options.js?v=17e2f33f"></script>
+      <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../index.html" class="icon icon-home">
+            EdelweissFE
+              <img src="../../../_static/edelweiss_fe_logo.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../features.html">Features</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../prerequisites.html">Prerequisites</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../documentation/index.html">Documentation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../contributors.html">Contributors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../publications.html">Publications</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">EdelweissFE</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">edelweissfe.utils.discretesurfacequery</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for edelweissfe.utils.discretesurfacequery</h1><div class="highlight"><pre>
+<span></span><span class="ch">#!/usr/bin/env python3</span>
+<span class="c1"># -*- coding: utf-8 -*-</span>
+<span class="c1">#  ---------------------------------------------------------------------</span>
+<span class="c1">#</span>
+<span class="c1">#  _____    _      _              _         _____ _____</span>
+<span class="c1"># | ____|__| | ___| |_      _____(_)___ ___|  ___| ____|</span>
+<span class="c1"># |  _| / _` |/ _ \ \ \ /\ / / _ \ / __/ __| |_  |  _|</span>
+<span class="c1"># | |__| (_| |  __/ |\ V  V /  __/ \__ \__ \  _| | |___</span>
+<span class="c1"># |_____\__,_|\___|_| \_/\_/ \___|_|___/___/_|   |_____|</span>
+<span class="c1">#</span>
+<span class="c1">#</span>
+<span class="c1">#  Unit of Strength of Materials and Structural Analysis</span>
+<span class="c1">#  University of Innsbruck,</span>
+<span class="c1">#  2017 - today</span>
+<span class="c1">#</span>
+<span class="c1">#  Matthias Neuner matthias.neuner@uibk.ac.at</span>
+<span class="c1">#</span>
+<span class="c1">#  This file is part of EdelweissFE.</span>
+<span class="c1">#</span>
+<span class="c1">#  This library is free software; you can redistribute it and/or</span>
+<span class="c1">#  modify it under the terms of the GNU Lesser General Public</span>
+<span class="c1">#  License as published by the Free Software Foundation; either</span>
+<span class="c1">#  version 2.1 of the License, or (at your option) any later version.</span>
+<span class="c1">#</span>
+<span class="c1">#  The full text of the license can be found in the file LICENSE.md at</span>
+<span class="c1">#  the top level directory of EdelweissFE.</span>
+<span class="c1">#  ---------------------------------------------------------------------</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+
+
+<div class="viewcode-block" id="DiscreteSurfaceQuery">
+<a class="viewcode-back" href="../../../documentation/rigidbodies.html#edelweissfe.utils.discretesurfacequery.DiscreteSurfaceQuery">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">DiscreteSurfaceQuery</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">mesh</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""</span>
+<span class="sd">        Initializes the query engine for a given PyVista mesh.</span>
+
+<span class="sd">        Uses static VTK locators and evaluators to avoid memory leaks during</span>
+<span class="sd">        repeated distance evaluations.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        mesh : pyvista.PolyData</span>
+<span class="sd">            The PyVista mesh to query.</span>
+<span class="sd">        """</span>
+        <span class="kn">import</span><span class="w"> </span><span class="nn">vtk</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_vtk</span> <span class="o">=</span> <span class="n">vtk</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">mesh</span> <span class="o">=</span> <span class="n">mesh</span>
+
+        <span class="c1"># Extract the outer surface to ensure we have a PolyData object</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">mesh</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">mesh</span><span class="o">.</span><span class="n">extract_surface</span><span class="p">(</span><span class="n">algorithm</span><span class="o">=</span><span class="s2">"dataset_surface"</span><span class="p">)</span>
+
+        <span class="c1"># Outward cell normals, oriented from the (closed, manifold) mesh topology rather than the file's winding.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">mesh</span><span class="o">.</span><span class="n">compute_normals</span><span class="p">(</span><span class="n">cell_normals</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">point_normals</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">auto_orient_normals</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">inplace</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">mesh_cell_normals</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">mesh</span><span class="o">.</span><span class="n">cell_normals</span><span class="p">)</span>
+
+        <span class="c1"># Initialize implicit distance evaluator once to avoid memory leaks</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">implicit_dist</span> <span class="o">=</span> <span class="n">vtk</span><span class="o">.</span><span class="n">vtkImplicitPolyDataDistance</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">implicit_dist</span><span class="o">.</span><span class="n">SetInput</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">mesh</span><span class="p">)</span>
+
+        <span class="c1"># Initialize cell locator once to avoid memory leaks</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">locator</span> <span class="o">=</span> <span class="n">vtk</span><span class="o">.</span><span class="n">vtkStaticCellLocator</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">locator</span><span class="o">.</span><span class="n">SetDataSet</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">mesh</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">locator</span><span class="o">.</span><span class="n">BuildLocator</span><span class="p">()</span>
+
+<div class="viewcode-block" id="DiscreteSurfaceQuery.query">
+<a class="viewcode-back" href="../../../documentation/rigidbodies.html#edelweissfe.utils.discretesurfacequery.DiscreteSurfaceQuery.query">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">query</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">coords</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+        <span class="n">translation</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">rotation_matrix</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">rotation_center</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""</span>
+<span class="sd">        Batched query to compute signed distance and closest face normals for an array of points.</span>
+
+<span class="sd">        The coordinate transform and result assembly are vectorized, but the actual</span>
+<span class="sd">        VTK distance/closest-cell evaluation loops over points one at a time -- this</span>
+<span class="sd">        is a potential performance bottleneck for very large point counts.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        coords : numpy.ndarray</span>
+<span class="sd">            Array of shape (N, 3) containing the query coordinates.</span>
+<span class="sd">        translation : numpy.ndarray, optional</span>
+<span class="sd">            A translation vector of the rigid body RP.</span>
+<span class="sd">        rotation_matrix : numpy.ndarray, optional</span>
+<span class="sd">            A 3x3 rotation matrix of the rigid body.</span>
+<span class="sd">        rotation_center : numpy.ndarray, optional</span>
+<span class="sd">            The center of rotation (initial position of the RP).</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        dists : numpy.ndarray</span>
+<span class="sd">            Array of shape (N,) containing the signed distance (negative = inside/penetration).</span>
+<span class="sd">        normals : numpy.ndarray</span>
+<span class="sd">            Array of shape (N, 3) containing the outward normal vectors on the closest faces.</span>
+
+<span class="sd">        .. note::</span>
+<span class="sd">            Note on the rotation convention: both ``localCoords``/``normals`` here and e.g.</span>
+<span class="sd">            :meth:`~edelweissfe.rigidbodies.discreterigidbody.DiscreteRigidBody.getCurrentKinematics`</span>
+<span class="sd">            use the *same* forward convention: a body-frame vector ``v`` is mapped to the world frame</span>
+<span class="sd">            via ``v.dot(R.T)``. Because these are *row* vectors (shape ``(N, 3)``), ``v.dot(M)`` computes</span>
+<span class="sd">            ``M.T @ v`` per row, not ``M @ v`` -- so ``v.dot(R.T)`` is ``R @ v`` (forward: body -&gt; world),</span>
+<span class="sd">            and ``v.dot(R)`` is ``R.T @ v`` (inverse: world -&gt; body). This is the opposite of what a</span>
+<span class="sd">            naive read of ``.dot(rotation_matrix)`` vs. ``.dot(rotation_matrix.T)`` suggests -- verified</span>
+<span class="sd">            numerically against a known rotated mesh before relying on it, since it is easy to get backwards</span>
+<span class="sd">            (do not "fix" the transpose here without re-deriving/re-checking this convention first).</span>
+<span class="sd">        """</span>
+        <span class="c1"># Inverse transform query coordinates to the local (static mesh) frame</span>
+        <span class="n">localCoords</span> <span class="o">=</span> <span class="n">coords</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+
+        <span class="k">if</span> <span class="n">translation</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">rotation_center</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">rp_current</span> <span class="o">=</span> <span class="n">rotation_center</span> <span class="o">+</span> <span class="n">translation</span>
+            <span class="n">localCoords</span> <span class="o">-=</span> <span class="n">rp_current</span>
+
+        <span class="k">if</span> <span class="n">rotation_matrix</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># Inverse rotation R^T (P - RP_current): for row vectors this is .dot(R), see the docstring note.</span>
+            <span class="n">localCoords</span> <span class="o">=</span> <span class="n">localCoords</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">rotation_matrix</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">rotation_center</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># P_local = RP_initial + R^T * (P_global - RP_current)</span>
+            <span class="n">localCoords</span> <span class="o">+=</span> <span class="n">rotation_center</span>
+
+        <span class="n">n_points</span> <span class="o">=</span> <span class="n">localCoords</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">dists</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="n">n_points</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+        <span class="n">closest_cells</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="n">n_points</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
+
+        <span class="c1"># Pre-allocate reusable VTK out arguments for speed</span>
+        <span class="n">closest_point</span> <span class="o">=</span> <span class="p">[</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">]</span>
+        <span class="n">sub_id</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_vtk</span><span class="o">.</span><span class="n">reference</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+        <span class="n">dist2</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_vtk</span><span class="o">.</span><span class="n">reference</span><span class="p">(</span><span class="mf">0.0</span><span class="p">)</span>
+
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_points</span><span class="p">):</span>
+            <span class="n">pt</span> <span class="o">=</span> <span class="n">localCoords</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+            <span class="n">dists</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">implicit_dist</span><span class="o">.</span><span class="n">EvaluateFunction</span><span class="p">(</span><span class="n">pt</span><span class="p">)</span>
+
+            <span class="n">cell_id</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_vtk</span><span class="o">.</span><span class="n">reference</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">locator</span><span class="o">.</span><span class="n">FindClosestPoint</span><span class="p">(</span><span class="n">pt</span><span class="p">,</span> <span class="n">closest_point</span><span class="p">,</span> <span class="n">cell_id</span><span class="p">,</span> <span class="n">sub_id</span><span class="p">,</span> <span class="n">dist2</span><span class="p">)</span>
+            <span class="n">closest_cells</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">cell_id</span><span class="p">)</span>
+
+        <span class="n">normals</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">mesh_cell_normals</span><span class="p">[</span><span class="n">closest_cells</span><span class="p">]</span>
+
+        <span class="c1"># Forward rotation R n (body -&gt; world): for row vectors this is .dot(R.T), see the docstring note.</span>
+        <span class="k">if</span> <span class="n">rotation_matrix</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">normals</span> <span class="o">=</span> <span class="n">normals</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">rotation_matrix</span><span class="o">.</span><span class="n">T</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">dists</span><span class="p">,</span> <span class="n">normals</span></div>
+</div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Matthias Neuner.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

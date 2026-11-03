@@ -1,0 +1,286 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>edelweissfe.config.linsolve &mdash; EdelweissFE v22.07 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=cfdaff8d" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/custom.css?v=37fbe429" />
+
+  
+      <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../_static/documentation_options.js?v=17e2f33f"></script>
+      <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../index.html" class="icon icon-home">
+            EdelweissFE
+              <img src="../../../_static/edelweiss_fe_logo.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../features.html">Features</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../prerequisites.html">Prerequisites</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../documentation/index.html">Documentation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../contributors.html">Contributors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../publications.html">Publications</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">EdelweissFE</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">edelweissfe.config.linsolve</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for edelweissfe.config.linsolve</h1><div class="highlight"><pre>
+<span></span><span class="ch">#!/usr/bin/env python3</span>
+<span class="c1"># -*- coding: utf-8 -*-</span>
+<span class="c1">#  ---------------------------------------------------------------------</span>
+<span class="c1">#</span>
+<span class="c1">#  _____    _      _              _         _____ _____</span>
+<span class="c1"># | ____|__| | ___| |_      _____(_)___ ___|  ___| ____|</span>
+<span class="c1"># |  _| / _` |/ _ \ \ \ /\ / / _ \ / __/ __| |_  |  _|</span>
+<span class="c1"># | |__| (_| |  __/ |\ V  V /  __/ \__ \__ \  _| | |___</span>
+<span class="c1"># |_____\__,_|\___|_| \_/\_/ \___|_|___/___/_|   |_____|</span>
+<span class="c1">#</span>
+<span class="c1">#</span>
+<span class="c1">#  Unit of Strength of Materials and Structural Analysis</span>
+<span class="c1">#  University of Innsbruck,</span>
+<span class="c1">#  2017 - today</span>
+<span class="c1">#</span>
+<span class="c1">#  Matthias Neuner matthias.neuner@uibk.ac.at</span>
+<span class="c1">#</span>
+<span class="c1">#  This file is part of EdelweissFE.</span>
+<span class="c1">#</span>
+<span class="c1">#  This library is free software; you can redistribute it and/or</span>
+<span class="c1">#  modify it under the terms of the GNU Lesser General Public</span>
+<span class="c1">#  License as published by the Free Software Foundation; either</span>
+<span class="c1">#  version 2.1 of the License, or (at your option) any later version.</span>
+<span class="c1">#</span>
+<span class="c1">#  The full text of the license can be found in the file LICENSE.md at</span>
+<span class="c1">#  the top level directory of EdelweissFE.</span>
+<span class="c1">#  ---------------------------------------------------------------------</span>
+<span class="sd">"""</span>
+<span class="sd">Created on Sat Feb 10 10:27:25 2018</span>
+
+<span class="sd">@author: Matthias Neuner</span>
+<span class="sd">"""</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.config</span><span class="w"> </span><span class="kn">import</span> <span class="n">registry</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.linsolve.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">LinearSolver</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.utils.caseinsensitivedict</span><span class="w"> </span><span class="kn">import</span> <span class="n">CaseInsensitiveDict</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.utils.misc</span><span class="w"> </span><span class="kn">import</span> <span class="n">parseDatalinesToArgsAndKwargs</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.utils.schema</span><span class="w"> </span><span class="kn">import</span> <span class="n">buildSchemaFromOptions</span>
+
+
+<span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">LinearSolverDefinition</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""A ``*linearSolver`` block: its type and the configuration its data lines give (checked when the input file is</span>
+<span class="sd">    read). A nonlinear solver creates a linear solver from it (:meth:`create`) and keeps it for all the steps that</span>
+<span class="sd">    name it.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    solverType</span>
+<span class="sd">        The type (a :class:`~edelweissfe.linsolve.types.LinearSolverType`).</span>
+<span class="sd">    configuration</span>
+<span class="sd">        The type's schema, built from the data lines.</span>
+<span class="sd">    """</span>
+
+    <span class="n">solverType</span><span class="p">:</span> <span class="nb">type</span>
+    <span class="n">configuration</span><span class="p">:</span> <span class="nb">object</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">create</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">LinearSolver</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""A new linear solver of this definition."""</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">solverType</span><span class="o">.</span><span class="n">create</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">configuration</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="linearSolverDefinitionsFromInputFile">
+<a class="viewcode-back" href="../../../documentation/linsolveapi.html#edelweissfe.config.linsolve.linearSolverDefinitionsFromInputFile">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">linearSolverDefinitionsFromInputFile</span><span class="p">(</span><span class="n">inputfile</span><span class="p">:</span> <span class="nb">dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">CaseInsensitiveDict</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""The ``*linearSolver`` blocks of an input file, by name.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        For a block named like a type (``linsolver=&lt;type&gt;`` means that type with its defaults), a name used twice, a</span>
+<span class="sd">        data line that is not ``key=value``, or an option the type does not have.</span>
+<span class="sd">    """</span>
+    <span class="n">definitions</span> <span class="o">=</span> <span class="n">CaseInsensitiveDict</span><span class="p">()</span>
+    <span class="k">for</span> <span class="n">block</span> <span class="ow">in</span> <span class="n">inputfile</span><span class="p">[</span><span class="s2">"linearSolver"</span><span class="p">]:</span>
+        <span class="n">name</span><span class="p">,</span> <span class="n">typeName</span> <span class="o">=</span> <span class="n">block</span><span class="p">[</span><span class="s2">"name"</span><span class="p">],</span> <span class="n">block</span><span class="p">[</span><span class="s2">"type"</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">name</span><span class="o">.</span><span class="n">casefold</span><span class="p">()</span> <span class="ow">in</span> <span class="p">(</span><span class="n">known</span><span class="o">.</span><span class="n">casefold</span><span class="p">()</span> <span class="k">for</span> <span class="n">known</span> <span class="ow">in</span> <span class="n">registry</span><span class="o">.</span><span class="n">availableNames</span><span class="p">(</span><span class="s2">"linsolver"</span><span class="p">)):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">"*linearSolver, name=</span><span class="si">{:}</span><span class="s2">: a linear solver must not be named like a type, since linsolver=</span><span class="si">{:}</span><span class="s2"> means "</span>
+                <span class="s2">"that type with its defaults"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">definitions</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"*linearSolver, name=</span><span class="si">{:}</span><span class="s2"> is defined twice"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">name</span><span class="p">))</span>
+        <span class="n">args</span><span class="p">,</span> <span class="n">options</span> <span class="o">=</span> <span class="n">parseDatalinesToArgsAndKwargs</span><span class="p">(</span><span class="n">block</span><span class="p">[</span><span class="s2">"datalines"</span><span class="p">])</span>
+        <span class="k">if</span> <span class="n">args</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"*linearSolver, name=</span><span class="si">{:}</span><span class="s2">: data lines are key=value options, got </span><span class="si">{:}</span><span class="s2">"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">args</span><span class="p">))</span>
+        <span class="n">solverType</span><span class="p">,</span> <span class="n">schema</span> <span class="o">=</span> <span class="n">registry</span><span class="o">.</span><span class="n">lookup</span><span class="p">(</span><span class="s2">"linsolver"</span><span class="p">,</span> <span class="n">typeName</span><span class="p">)</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">configuration</span> <span class="o">=</span> <span class="n">buildSchemaFromOptions</span><span class="p">(</span><span class="n">schema</span><span class="p">,</span> <span class="n">options</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">ValueError</span> <span class="k">as</span> <span class="n">error</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"*linearSolver, name=</span><span class="si">{:}</span><span class="s2">, type=</span><span class="si">{:}</span><span class="s2">: </span><span class="si">{:}</span><span class="s2">"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">typeName</span><span class="p">,</span> <span class="n">error</span><span class="p">))</span> <span class="kn">from</span><span class="w"> </span><span class="nn">error</span>
+        <span class="n">definitions</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">LinearSolverDefinition</span><span class="p">(</span><span class="n">solverType</span><span class="p">,</span> <span class="n">configuration</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">definitions</span></div>
+
+
+
+<div class="viewcode-block" id="createLinearSolver">
+<a class="viewcode-back" href="../../../documentation/linsolveapi.html#edelweissfe.config.linsolve.createLinearSolver">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">createLinearSolver</span><span class="p">(</span><span class="n">linsolver</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">definitions</span><span class="p">:</span> <span class="nb">dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">LinearSolver</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""The linear solver a nonlinear solver's ``linsolver=`` names: a ``*linearSolver`` block, else a type with its</span>
+<span class="sd">    defaults, else (empty) the default linear solver.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    linsolver</span>
+<span class="sd">        The name of a block of ``definitions``, or of a type; ``""`` for the default.</span>
+<span class="sd">    definitions</span>
+<span class="sd">        The ``*linearSolver`` blocks by name (:func:`linearSolverDefinitionsFromInputFile`).</span>
+<span class="sd">    """</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">linsolver</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">getDefaultLinSolver</span><span class="p">()</span>
+    <span class="k">if</span> <span class="n">linsolver</span> <span class="ow">in</span> <span class="n">definitions</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">definitions</span><span class="p">[</span><span class="n">linsolver</span><span class="p">]</span><span class="o">.</span><span class="n">create</span><span class="p">()</span>
+    <span class="k">if</span> <span class="n">linsolver</span><span class="o">.</span><span class="n">casefold</span><span class="p">()</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="n">known</span><span class="o">.</span><span class="n">casefold</span><span class="p">()</span> <span class="k">for</span> <span class="n">known</span> <span class="ow">in</span> <span class="n">registry</span><span class="o">.</span><span class="n">availableNames</span><span class="p">(</span><span class="s2">"linsolver"</span><span class="p">)):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="s2">"linsolver=</span><span class="si">{:}</span><span class="s2"> names neither a *linearSolver block (</span><span class="si">{:}</span><span class="s2">) nor a type of linear solver (</span><span class="si">{:}</span><span class="s2">)"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+                <span class="n">linsolver</span><span class="p">,</span>
+                <span class="s2">", "</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">definitions</span><span class="p">)</span> <span class="ow">or</span> <span class="s2">"none defined"</span><span class="p">,</span>
+                <span class="s2">", "</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">sorted</span><span class="p">(</span><span class="n">registry</span><span class="o">.</span><span class="n">availableNames</span><span class="p">(</span><span class="s2">"linsolver"</span><span class="p">))),</span>
+            <span class="p">)</span>
+        <span class="p">)</span>
+    <span class="k">return</span> <span class="n">getLinSolverByName</span><span class="p">(</span><span class="n">linsolver</span><span class="p">,</span> <span class="p">{})</span></div>
+
+
+
+<div class="viewcode-block" id="getDefaultLinSolver">
+<a class="viewcode-back" href="../../../documentation/linsolveapi.html#edelweissfe.config.linsolve.getDefaultLinSolver">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">getDefaultLinSolver</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">LinearSolver</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Get the linear solver to use when a step declares no ``linsolver`` option.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    LinearSolver</span>
+<span class="sd">        ``pardiso`` if its optional extension was built, else SciPy's own sparse LU (``superlu``), with their defaults.</span>
+<span class="sd">    """</span>
+
+    <span class="k">try</span><span class="p">:</span>
+        <span class="c1"># creating a PARDISO solver raises ImportError if the extension is not installed</span>
+        <span class="k">return</span> <span class="n">getLinSolverByName</span><span class="p">(</span><span class="s2">"pardiso"</span><span class="p">,</span> <span class="p">{})</span>
+    <span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">getLinSolverByName</span><span class="p">(</span><span class="s2">"superlu"</span><span class="p">,</span> <span class="p">{})</span></div>
+
+
+
+<div class="viewcode-block" id="getLinSolverByName">
+<a class="viewcode-back" href="../../../documentation/linsolveapi.html#edelweissfe.config.linsolve.getLinSolverByName">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">getLinSolverByName</span><span class="p">(</span><span class="n">linsolverName</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">options</span><span class="p">:</span> <span class="nb">dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">LinearSolver</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return a linear solver of the type ``linsolverName``, configured with ``options``.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    linsolverName</span>
+<span class="sd">        The type of the linear solver, case-insensitively (e.g. ``"pardiso"``, ``"blockamg"``, ``"custom"``; registry</span>
+<span class="sd">        category ``linsolver``, see :mod:`edelweissfe.linsolve.types`).</span>
+<span class="sd">    options</span>
+<span class="sd">        The data lines of that type by name, e.g. ``{"reuseSymbolicFactorization": True}`` or</span>
+<span class="sd">        ``{"script": "solver.py"}``; ``{}`` for its defaults.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    LinearSolver</span>
+<span class="sd">        A callable ``(A, b) -&gt; x`` solving ``A x = b``.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    edelweissfe.config.registry.RegistryLookupError</span>
+<span class="sd">        If no linear solver is registered under ``linsolverName``.</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If ``options`` names an option the type does not have, or a value it cannot take.</span>
+<span class="sd">    ImportError</span>
+<span class="sd">        If the requested solver's optional backend is not available in this installation (see</span>
+<span class="sd">        :func:`getDefaultLinSolver`, which relies on it).</span>
+<span class="sd">    """</span>
+
+    <span class="n">solverType</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">registry</span><span class="o">.</span><span class="n">lookup</span><span class="p">(</span><span class="s2">"linsolver"</span><span class="p">,</span> <span class="n">linsolverName</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">solverType</span><span class="o">.</span><span class="n">fromOptions</span><span class="p">(</span><span class="nb">dict</span><span class="p">(</span><span class="n">options</span><span class="p">))</span></div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Matthias Neuner.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

@@ -1,0 +1,337 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>edelweissfe.linsolve.composition.rigidbodymodestwolevelcycle &mdash; EdelweissFE v22.07 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=cfdaff8d" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css?v=37fbe429" />
+
+  
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=17e2f33f"></script>
+      <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            EdelweissFE
+              <img src="../../../../_static/edelweiss_fe_logo.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../features.html">Features</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../prerequisites.html">Prerequisites</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../documentation/index.html">Documentation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../contributors.html">Contributors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../publications.html">Publications</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">EdelweissFE</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">edelweissfe.linsolve.composition.rigidbodymodestwolevelcycle</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for edelweissfe.linsolve.composition.rigidbodymodestwolevelcycle</h1><div class="highlight"><pre>
+<span></span><span class="ch">#!/usr/bin/env python3</span>
+<span class="c1"># -*- coding: utf-8 -*-</span>
+<span class="c1">#  ---------------------------------------------------------------------</span>
+<span class="c1">#</span>
+<span class="c1">#  _____    _      _              _         _____ _____</span>
+<span class="c1"># | ____|__| | ___| |_      _____(_)___ ___|  ___| ____|</span>
+<span class="c1"># |  _| / _` |/ _ \ \ \ /\ / / _ \ / __/ __| |_  |  _|</span>
+<span class="c1"># | |__| (_| |  __/ |\ V  V /  __/ \__ \__ \  _| | |___</span>
+<span class="c1"># |_____\__,_|\___|_| \_/\_/ \___|_|___/___/_|   |_____|</span>
+<span class="c1">#</span>
+<span class="c1">#</span>
+<span class="c1">#  Unit of Strength of Materials and Structural Analysis</span>
+<span class="c1">#  University of Innsbruck,</span>
+<span class="c1">#  2017 - today</span>
+<span class="c1">#</span>
+<span class="c1">#  Matthias Neuner matthias.neuner@uibk.ac.at</span>
+<span class="c1">#</span>
+<span class="c1">#  This file is part of EdelweissFE.</span>
+<span class="c1">#</span>
+<span class="c1">#  This library is free software; you can redistribute it and/or</span>
+<span class="c1">#  modify it under the terms of the GNU Lesser General Public</span>
+<span class="c1">#  License as published by the Free Software Foundation; either</span>
+<span class="c1">#  version 2.1 of the License, or (at your option) any later version.</span>
+<span class="c1">#</span>
+<span class="c1">#  The full text of the license can be found in the file LICENSE.md at</span>
+<span class="c1">#  the top level directory of EdelweissFE.</span>
+<span class="c1">#  ---------------------------------------------------------------------</span>
+<span class="sd">"""The rigid-body coarse level of a vector field: the cycle of</span>
+<span class="sd">``TwoLevel(coarseSpace=RigidBodyModesPerAggregate())`` (:class:`~edelweissfe.linsolve.composition.twolevel.TwoLevel`).</span>
+
+<span class="sd">Why</span>
+<span class="sd">---</span>
+
+<span class="sd">The near null-space of linear elasticity -- the displacements that cost (almost) no strain energy -- are the rigid-body</span>
+<span class="sd">modes: three translations and three rotations in 3D, two translations and one rotation in 2D. Smoothed aggregation</span>
+<span class="sd">needs them in its coarse space. An error the Chebyshev smoother leaves alone -- its eigenvalues lie below the</span>
+<span class="sd">smoother's window, which starts at a fraction of the spectral radius by construction -- is removed by the coarse-grid</span>
+<span class="sd">correction only as far as the coarse space can represent it on every aggregate.</span>
+
+<span class="sd">The block backends of :class:`~edelweissfe.linsolve.composition.amg.AMG`, the default for 2D and 3D vector fields, take the translations alone (AMGCL's</span>
+<span class="sd">hierarchy on node-wise blocks cannot take more): their coarse space holds displacements that are constant on every</span>
+<span class="sd">aggregate. In a bending-dominated structure -- a slender beam, a tunnel lining, a plate -- the smooth error is bending,</span>
+<span class="sd">which rotates every aggregate almost as a rigid body. The translations represent it poorly, the smoother does not touch</span>
+<span class="sd">it, and the outer Krylov solve pays with iterations.</span>
+
+<span class="sd">What</span>
+<span class="sd">----</span>
+
+<span class="sd">The rigid-body coarse level keeps the fine level of the block backend -- the field's equilibrated block</span>
+<span class="sd">:math:`\\hat A = D A D` in node-wise blocks, smoothed by the Chebyshev polynomial of the field's tree -- and builds the</span>
+<span class="sd">first coarse level itself, from all rigid-body modes:</span>
+
+<span class="sd">#. **aggregates**: AMGCL's plain aggregation of the nodes, as AMGCL's own first level on the block backend;</span>
+<span class="sd">#. **tentative prolongation**: the field's rigid-body modes about its centroid, divided by the equilibration (the near</span>
+<span class="sd">   null-space of :math:`\\hat A` is :math:`D^{-1}` times that of :math:`A`) -- built in Python by</span>
+<span class="sd">   :func:`~edelweissfe.linsolve.nullspace.rigidBodyNullspace`, the one definition of the modes, and handed to C++ --</span>
+<span class="sd">   restricted to every aggregate, zero on the Dirichlet rows (which the cycle solves exactly), and made orthonormal by</span>
+<span class="sd">   a QR factorization, as AMGCL's tentative prolongation does with a near null-space. A mode that depends linearly on</span>
+<span class="sd">   the ones before it -- a rotation of a single-node aggregate, the rotation about the line through a collinear</span>
+<span class="sd">   aggregate, a mode whose components are all constrained -- is dropped;</span>
+<span class="sd">#. **smoothed prolongation**: :math:`P = (I - \\omega\\, \\mathrm{diag}_B(\\hat A_F)^{-1} \\hat A_F) P_{tent}`,</span>
+<span class="sd">   AMGCL's, with :math:`\\mathrm{diag}_B` the node-wise :math:`B \\times B` diagonal blocks of the filtered operator;</span>
+<span class="sd">#. **Galerkin coarse operator**: :math:`A_c = P^T \\hat A P`, 6 coarse dofs per aggregate in 3D (3 in 2D), on which an</span>
+<span class="sd">   AMGCL hierarchy continues the field's tree, with the R factors of the QR factorizations -- the coefficients of the</span>
+<span class="sd">   rigid-body modes in the coarse basis -- as its near null-space.</span>
+
+<span class="sd">One application is the two-level cycle the corner-node interpolation</span>
+<span class="sd">(:mod:`~edelweissfe.linsolve.composition.cornernodetwolevelcycle`) uses too: restriction of the residual, one V-cycle of</span>
+<span class="sd">the AMGCL hierarchy, prolongation, and the fine Chebyshev sweeps. Everything runs in C++: the steps in</span>
+<span class="sd">``amgcl-rigid-body-coarse-level.hpp``, the cycle in ``amgcl-wrapper.hpp`` (``RigidBodyModesTwoLevelCycleT``).</span>
+
+<span class="sd">When</span>
+<span class="sd">----</span>
+
+<span class="sd">It is the default of the ``blockAMG()`` preset for the 3D displacement field (of any element type), and pays most where the solves would need many outer iterations although the operator is (nearly) elastic: typically a</span>
+<span class="sd">bending-dominated structure. The rigid-body modes are the near null-space of elasticity on the displacement field; a</span>
+<span class="sd">rotation field, or any other vector field, has another, so a solver script gives it the coarse level only by name</span>
+<span class="sd">(``OnField("displacement", TwoLevel(coarseSpace=RigidBodyModesPerAggregate()))``, e.g. for a 2D displacement field). It</span>
+<span class="sd">needs the field's node coordinates (read from the model), and the field's tree configures its smoother, its aggregation</span>
+<span class="sd">and the AMGCL hierarchy below it. Its setup costs more than AMGCL's hierarchy on the translations (the</span>
+<span class="sd">Galerkin product with 6 coarse dofs per aggregate, the larger hierarchy below), so on a model where that converges in a</span>
+<span class="sd">few iterations it gains little. The measurements are in :ref:`measured-rigid-body-coarse-level`.</span>
+<span class="sd">"""</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.linsolve.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">FieldBlock</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.linsolve.composition.twolevelcycle</span><span class="w"> </span><span class="kn">import</span> <span class="n">TwoLevelCycle</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.linsolve.nullspace</span><span class="w"> </span><span class="kn">import</span> <span class="n">rigidBodyNullspace</span>
+
+
+<div class="viewcode-block" id="RigidBodyModesTwoLevelCycle">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.rigidbodymodestwolevelcycle.RigidBodyModesTwoLevelCycle">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">RigidBodyModesTwoLevelCycle</span><span class="p">(</span><span class="n">TwoLevelCycle</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""The preconditioner of one vector field with a rigid-body coarse level (see the module docstring): a two-level</span>
+<span class="sd">    preconditioner (:class:`~edelweissfe.linsolve.composition.twolevelcycle.TwoLevelCycle`) whose coarse level is</span>
+<span class="sd">    spanned by the rigid-body modes of the aggregates. The C++ class takes any near null-space; this class hands it the</span>
+<span class="sd">    rigid-body modes (:meth:`nearNullspace`).</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    amgclTree, backendBlockSize, backendPrecision</span>
+<span class="sd">        The parameters of the cycle, see</span>
+<span class="sd">        :meth:`~edelweissfe.linsolve.composition.twolevelcycle.TwoLevelCycle.cycleParameters`;</span>
+<span class="sd">        ``backendBlockSize`` is the field's components per node, 3 (6 rigid-body modes per aggregate) or 2 (3). The</span>
+<span class="sd">        AMGCL tree means what it means to AMGCL's own hierarchy, with AMGCL's defaults for what it leaves out:</span>
+<span class="sd">        ``relax``, ``npre`` and ``npost`` the fine smoother; ``coarsening`` (smoothed aggregation) the aggregation and</span>
+<span class="sd">        the prolongation smoothing of the rigid-body coarse level; and the whole tree the AMGCL hierarchy below it, with</span>
+<span class="sd">        the strong-connection threshold halved, as AMGCL halves it from one level to the next.</span>
+<span class="sd">    coarseHierarchyPrecision</span>
+<span class="sd">        The value type of the AMGCL hierarchy below the rigid-body coarse level (its whole setup): ``"double"`` or</span>
+<span class="sd">        ``"float"``.</span>
+<span class="sd">    prolongation</span>
+<span class="sd">        ``"smoothed"`` (default) or ``"tentative"``: the tentative prolongation alone, a cheaper setup and a sparser</span>
+<span class="sd">        coarse operator at the price of more outer iterations.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        For settings that cannot be used, before anything is built.</span>
+<span class="sd">    """</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">amgclTree</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span>
+        <span class="n">backendBlockSize</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">backendPrecision</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"double"</span><span class="p">,</span>
+        <span class="n">coarseHierarchyPrecision</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"double"</span><span class="p">,</span>
+        <span class="n">prolongation</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"smoothed"</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.linsolve.amgcl.amgcl</span><span class="w"> </span><span class="kn">import</span> <span class="n">PyAMGCLRigidBodyModesTwoLevelCycle</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_blockSize</span> <span class="o">=</span> <span class="n">backendBlockSize</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span>
+            <span class="n">PyAMGCLRigidBodyModesTwoLevelCycle</span><span class="p">,</span>
+            <span class="p">{</span>
+                <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">cycleParameters</span><span class="p">(</span><span class="n">amgclTree</span><span class="p">,</span> <span class="n">backendBlockSize</span><span class="p">,</span> <span class="n">backendPrecision</span><span class="p">),</span>
+                <span class="s2">"coarseHierarchyPrecision"</span><span class="p">:</span> <span class="n">coarseHierarchyPrecision</span><span class="p">,</span>
+                <span class="s2">"prolongation"</span><span class="p">:</span> <span class="n">prolongation</span><span class="p">,</span>
+            <span class="p">},</span>
+        <span class="p">)</span>
+
+<div class="viewcode-block" id="RigidBodyModesTwoLevelCycle.nearNullspace">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.rigidbodymodestwolevelcycle.RigidBodyModesTwoLevelCycle.nearNullspace">[docs]</a>
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">nearNullspace</span><span class="p">(</span><span class="n">block</span><span class="p">:</span> <span class="n">FieldBlock</span><span class="p">,</span> <span class="n">coordinates</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">scaling</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The near null-space whose vectors span the coarse space of every aggregate: the field's rigid-body modes,</span>
+<span class="sd">        divided by the equilibration -- :func:`~edelweissfe.linsolve.nullspace.rigidBodyNullspace`, the one definition</span>
+<span class="sd">        of the modes (6 in 3D, 3 in 2D). The C++ class takes any near null-space of ``B`` or ``B (B + 1) / 2`` columns;</span>
+<span class="sd">        a subclass may hand it another (the tests' control takes the translations, AMGCL's own coarse space)."""</span>
+        <span class="k">return</span> <span class="n">rigidBodyNullspace</span><span class="p">(</span><span class="n">block</span><span class="p">,</span> <span class="n">coordinates</span><span class="p">,</span> <span class="n">scaling</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="RigidBodyModesTwoLevelCycle.build">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.rigidbodymodestwolevelcycle.RigidBodyModesTwoLevelCycle.build">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">build</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">A</span><span class="p">,</span> <span class="n">scaling</span><span class="p">,</span> <span class="n">coordinates</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Build the rigid-body coarse level, the AMGCL hierarchy below it and the fine smoother, all in C++, on the</span>
+<span class="sd">        near null-space of :meth:`nearNullspace`.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        A</span>
+<span class="sd">            The field's equilibrated diagonal block :math:`\\hat A = D A D` (scipy CSR), node-major, with its Dirichlet</span>
+<span class="sd">            identity rows.</span>
+<span class="sd">        scaling</span>
+<span class="sd">            The field's slice of the equilibration :math:`D`: the modes are divided by it.</span>
+<span class="sd">        coordinates</span>
+<span class="sd">            The field's node coordinates in its dof order, ``(nNodes, &gt;= blockSize)`` (columns beyond the field's</span>
+<span class="sd">            dimension, e.g. ``z`` of a 2D field, are ignored): the modes are built from them.</span>
+<span class="sd">        """</span>
+        <span class="k">if</span> <span class="n">coordinates</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">"rigidBodyModesTwoLevelCycle: needs the field's node coordinates to build its rigid-body modes"</span>
+            <span class="p">)</span>
+        <span class="n">block</span> <span class="o">=</span> <span class="n">FieldBlock</span><span class="p">(</span><span class="s2">"rigidBodyModesTwoLevelCycle"</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">A</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">_blockSize</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_preconditioner</span><span class="o">.</span><span class="n">build</span><span class="p">(</span>
+            <span class="n">A</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">nearNullspace</span><span class="p">(</span><span class="n">block</span><span class="p">,</span> <span class="n">coordinates</span><span class="p">,</span> <span class="n">scaling</span><span class="p">),</span>
+        <span class="p">)</span></div>
+
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">nAggregates</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The number of aggregates."""</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_preconditioner</span><span class="o">.</span><span class="n">nAggregates</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">nCoarse</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The coarse dofs: one per mode of the near null-space on every aggregate."""</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_preconditioner</span><span class="o">.</span><span class="n">nCoarse</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">droppedModes</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The number of modes dropped as linearly dependent."""</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_preconditioner</span><span class="o">.</span><span class="n">droppedModes</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">prolongationSmoothingWeight</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The damping weight omega of the prolongation smoothing (0 for the tentative prolongation)."""</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_preconditioner</span><span class="o">.</span><span class="n">prolongationSmoothingWeight</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">aggregates</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The aggregate of every node, ``&lt; 0`` for a node in none (e.g. a fully constrained one)."""</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_preconditioner</span><span class="o">.</span><span class="n">aggregates</span>
+
+<div class="viewcode-block" id="RigidBodyModesTwoLevelCycle.prolongationMatrix">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.rigidbodymodestwolevelcycle.RigidBodyModesTwoLevelCycle.prolongationMatrix">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">prolongationMatrix</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""The prolongation ``P`` as the cycle uses it, a scipy CSR matrix (for inspection)."""</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_preconditioner</span><span class="o">.</span><span class="n">prolongationMatrix</span><span class="p">()</span></div>
+
+
+<div class="viewcode-block" id="RigidBodyModesTwoLevelCycle.coarseOperator">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.rigidbodymodestwolevelcycle.RigidBodyModesTwoLevelCycle.coarseOperator">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">coarseOperator</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""The Galerkin coarse operator ``P^T \\hat A P`` as the hierarchy below holds it, a scipy CSR matrix (for</span>
+<span class="sd">        inspection); a dropped mode has a zero row and column but for its diagonal entry."""</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_preconditioner</span><span class="o">.</span><span class="n">coarseOperator</span><span class="p">()</span></div>
+
+
+<div class="viewcode-block" id="RigidBodyModesTwoLevelCycle.coarseNullspace">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.rigidbodymodestwolevelcycle.RigidBodyModesTwoLevelCycle.coarseNullspace">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">coarseNullspace</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The near null-space of the hierarchy below: the coefficients of the near null-space -- the field's</span>
+<span class="sd">        rigid-body modes, about its centroid -- in the coarse basis, per aggregate the R factor of its QR factorization</span>
+<span class="sd">        (for inspection)."""</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_preconditioner</span><span class="o">.</span><span class="n">coarseNullspace</span><span class="p">()</span></div>
+</div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Matthias Neuner.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

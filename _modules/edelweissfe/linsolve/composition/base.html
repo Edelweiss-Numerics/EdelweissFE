@@ -1,0 +1,774 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>edelweissfe.linsolve.composition.base &mdash; EdelweissFE v22.07 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=cfdaff8d" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css?v=37fbe429" />
+
+  
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=17e2f33f"></script>
+      <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            EdelweissFE
+              <img src="../../../../_static/edelweiss_fe_logo.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../features.html">Features</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../prerequisites.html">Prerequisites</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../documentation/index.html">Documentation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../contributors.html">Contributors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../publications.html">Publications</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">EdelweissFE</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">edelweissfe.linsolve.composition.base</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for edelweissfe.linsolve.composition.base</h1><div class="highlight"><pre>
+<span></span><span class="ch">#!/usr/bin/env python3</span>
+<span class="c1"># -*- coding: utf-8 -*-</span>
+<span class="c1">#  ---------------------------------------------------------------------</span>
+<span class="c1">#</span>
+<span class="c1">#  _____    _      _              _         _____ _____</span>
+<span class="c1"># | ____|__| | ___| |_      _____(_)___ ___|  ___| ____|</span>
+<span class="c1"># |  _| / _` |/ _ \ \ \ /\ / / _ \ / __/ __| |_  |  _|</span>
+<span class="c1"># | |__| (_| |  __/ |\ V  V /  __/ \__ \__ \  _| | |___</span>
+<span class="c1"># |_____\__,_|\___|_| \_/\_/ \___|_|___/___/_|   |_____|</span>
+<span class="c1">#</span>
+<span class="c1">#</span>
+<span class="c1">#  Unit of Strength of Materials and Structural Analysis</span>
+<span class="c1">#  University of Innsbruck,</span>
+<span class="c1">#  2017 - today</span>
+<span class="c1">#</span>
+<span class="c1">#  Matthias Neuner matthias.neuner@uibk.ac.at</span>
+<span class="c1">#</span>
+<span class="c1">#  This file is part of EdelweissFE.</span>
+<span class="c1">#</span>
+<span class="c1">#  This library is free software; you can redistribute it and/or</span>
+<span class="c1">#  modify it under the terms of the GNU Lesser General Public</span>
+<span class="c1">#  License as published by the Free Software Foundation; either</span>
+<span class="c1">#  version 2.1 of the License, or (at your option) any later version.</span>
+<span class="c1">#</span>
+<span class="c1">#  The full text of the license can be found in the file LICENSE.md at</span>
+<span class="c1">#  the top level directory of EdelweissFE.</span>
+<span class="c1">#  ---------------------------------------------------------------------</span>
+<span class="sd">"""The building block of a composed linear solver: :class:`Preconditioner`, an approximate inverse :math:`M^{-1}`</span>
+<span class="sd">of a matrix :math:`A`, and what is handed to it -- the :class:`SetUpContext` of its (sub-)problem and the</span>
+<span class="sd">:class:`MatrixChange` since its last set-up.</span>
+
+<span class="sd">A composed solver is a tree of preconditioners. Each one solves its part of the problem and hands a smaller</span>
+<span class="sd">problem to its children: a Krylov solver calls its preconditioner once per iteration, a Schur complement solves</span>
+<span class="sd">the condensed dofs exactly and hands the remaining ones to its child, a diagonal scaling multiplies by</span>
+<span class="sd">:math:`D` before and after its child. A Krylov solver is itself a preconditioner -- an approximate inverse of</span>
+<span class="sd">:math:`A` -- so solvers nest like any other component.</span>
+
+<span class="sd">A component implements what makes it what it is, in protected hooks:</span>
+
+<span class="sd">- :meth:`Preconditioner._setUp` builds it for a matrix (and its children for their sub-problems);</span>
+<span class="sd">- :meth:`Preconditioner._forget` drops what it built, and so declares what that is (the constructor calls it);</span>
+<span class="sd">- :meth:`Preconditioner._update` takes a changed matrix and decides what to keep (by default: set up again);</span>
+<span class="sd">- :meth:`Preconditioner._apply` applies it, :math:`z = M^{-1} r` -- the formula of the textbook;</span>
+<span class="sd">- :meth:`Preconditioner.children` names its children, if it has any (the tree is walked through it);</span>
+<span class="sd">- :meth:`Preconditioner.describe` says what it is, for the views (:mod:`~edelweissfe.linsolve.composition.views`).</span>
+
+<span class="sd">It is used through the public methods of the base class, :meth:`~Preconditioner.setUp`,</span>
+<span class="sd">:meth:`~Preconditioner.update` and :meth:`~Preconditioner.__call__` (a template method each): they record the call</span>
+<span class="sd">and its time in the component's :class:`Statistics` and call the hook. So a component's ``_apply`` holds nothing but</span>
+<span class="sd">its formula, and a hook that calls another hook of its own component (a Krylov solver's ``_setUp`` is its ``_update``</span>
+<span class="sd">for a first matrix) counts as one call.</span>
+
+<span class="sd">A component builds only through :meth:`~Preconditioner.setUp`, also when an update decides to rebuild (it calls</span>
+<span class="sd">``self.setUp``). :meth:`~Preconditioner.setUp` first forgets what was built before (:meth:`~Preconditioner.forget`:</span>
+<span class="sd">the :meth:`~Preconditioner._forget` of the component and of its children), so that the old and the new hierarchies,</span>
+<span class="sd">factorizations and matrices, gigabytes for a large model, are never held at once. An update that does not rebuild</span>
+<span class="sd">keeps what was built, and what is reused on purpose is never forgotten: the selection of a Schur complement's</span>
+<span class="sd">condensed dofs, a symbolic factorization, the statistics. A component</span>
+<span class="sd">with nothing built builds at its next update, whatever the update says.</span>
+<span class="sd">"""</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">time</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span><span class="p">,</span> <span class="n">field</span><span class="p">,</span> <span class="n">replace</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.linsolve.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">FieldBlock</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.p1topology</span><span class="w"> </span><span class="kn">import</span> <span class="n">restrictMidsideCorners</span>
+
+
+<div class="viewcode-block" id="Statistics">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.base.Statistics">[docs]</a>
+<span class="nd">@dataclass</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">Statistics</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""What a component recorded while it ran: filled at run time, shown by the run-statistics view.</span>
+
+<span class="sd">    The times are inclusive: a component's apply time contains its children's.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    setUps</span>
+<span class="sd">        How often it was built from scratch (:meth:`Preconditioner.setUp`).</span>
+<span class="sd">    updates</span>
+<span class="sd">        How often it took a changed matrix (:meth:`Preconditioner.update`), whether it rebuilt or not.</span>
+<span class="sd">    applications</span>
+<span class="sd">        How often it was applied (:meth:`Preconditioner.__call__`).</span>
+<span class="sd">    setUpSeconds, updateSeconds, applySeconds</span>
+<span class="sd">        The wall time spent in each.</span>
+<span class="sd">    sizes</span>
+<span class="sd">        What the component wants to report about what it built, e.g. ``{"rows": 841260, "levels": 4}``.</span>
+<span class="sd">    """</span>
+
+    <span class="n">setUps</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">updates</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">applications</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">setUpSeconds</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span>
+    <span class="n">updateSeconds</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span>
+    <span class="n">applySeconds</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span>
+    <span class="n">sizes</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">dict</span><span class="p">)</span>
+
+<div class="viewcode-block" id="Statistics.record">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.base.Statistics.record">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">record</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">kind</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">seconds</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Count one call of ``kind`` (``"setUp"``, ``"update"`` or ``"apply"``) that took ``seconds``."""</span>
+        <span class="k">if</span> <span class="n">kind</span> <span class="o">==</span> <span class="s2">"setUp"</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">setUps</span> <span class="o">+=</span> <span class="mi">1</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">setUpSeconds</span> <span class="o">+=</span> <span class="n">seconds</span>
+        <span class="k">elif</span> <span class="n">kind</span> <span class="o">==</span> <span class="s2">"update"</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">updates</span> <span class="o">+=</span> <span class="mi">1</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">updateSeconds</span> <span class="o">+=</span> <span class="n">seconds</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">applications</span> <span class="o">+=</span> <span class="mi">1</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">applySeconds</span> <span class="o">+=</span> <span class="n">seconds</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="Step">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.base.Step">[docs]</a>
+<span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">Step</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""One step of a component's application (:meth:`Preconditioner._apply`), for the data-flow view.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    operation</span>
+<span class="sd">        What the step computes, in the symbols of the component's formula, e.g. ``"y_b = A_bb⁻¹ r_b"``.</span>
+<span class="sd">    child</span>
+<span class="sd">        The role of the child the step delegates to (a role of :meth:`Preconditioner.children`), or ``None`` for a</span>
+<span class="sd">        step the component does itself.</span>
+<span class="sd">    """</span>
+
+    <span class="n">operation</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">child</span><span class="p">:</span> <span class="s2">"str | None"</span> <span class="o">=</span> <span class="kc">None</span></div>
+
+
+
+<div class="viewcode-block" id="Description">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.base.Description">[docs]</a>
+<span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">Description</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""What a component is, independent of how it is shown: the views</span>
+<span class="sd">    (:mod:`~edelweissfe.linsolve.composition.views`) draw it.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    name</span>
+<span class="sd">        The component's name, e.g. ``"SchurComplement"``.</span>
+<span class="sd">    formula</span>
+<span class="sd">        Its approximate inverse in unicode, with ``{role}`` for the formula of each of its</span>
+<span class="sd">        :meth:`~Preconditioner.children`, e.g. ``"D · {inner} · D"``.</span>
+<span class="sd">    latex</span>
+<span class="sd">        The same in LaTeX, with ``{role}`` placeholders.</span>
+<span class="sd">    parameters</span>
+<span class="sd">        The settings that make it what it is, e.g. ``{"restart": 50}``.</span>
+<span class="sd">    steps</span>
+<span class="sd">        The steps of one application, in order.</span>
+<span class="sd">    """</span>
+
+    <span class="n">name</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">formula</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">latex</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">""</span>
+    <span class="n">parameters</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">dict</span><span class="p">)</span>
+    <span class="n">steps</span><span class="p">:</span> <span class="nb">tuple</span> <span class="o">=</span> <span class="p">()</span></div>
+
+
+
+<div class="viewcode-block" id="SetUpContext">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.base.SetUpContext">[docs]</a>
+<span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">SetUpContext</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""What a component may need besides its matrix: the fields of its (sub-)problem and where their nodes are.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    fields</span>
+<span class="sd">        The field blocks of the dofs of this (sub-)problem, contiguous and in dof order.</span>
+<span class="sd">    scaling</span>
+<span class="sd">        The diagonal scaling between the physical dofs and the variables of this (sub-)problem: the matrix a</span>
+<span class="sd">        component gets is :math:`D A D` of the physical one, ``None`` for :math:`D = I`. A near null-space,</span>
+<span class="sd">        physical by nature (the rigid-body modes of a displacement field), is :math:`D^{-1}` times its physical</span>
+<span class="sd">        modes in these variables.</span>
+<span class="sd">    coordinatesOf</span>
+<span class="sd">        ``fieldName -&gt; (nNodes, dimension)`` node coordinates of the field, in its dof order, or ``None`` if</span>
+<span class="sd">        unknown (an offline replay without a model).</span>
+<span class="sd">    midsideCornersOf</span>
+<span class="sd">        ``fieldName -&gt; (isCorner, edgeEndpoints)``, the corner/midside topology of a quadratic field, or ``None``.</span>
+<span class="sd">    model</span>
+<span class="sd">        The model, if there is one (markers read it), else ``None``.</span>
+<span class="sd">    journal</span>
+<span class="sd">        The journal, if there is one, else ``None``.</span>
+<span class="sd">    log</span>
+<span class="sd">        ``(level, message) -&gt; None``: the composed solver's log, which shows a message if its verbosity reaches</span>
+<span class="sd">        ``level`` (``"warning"``, ``"info"``, ``"debug"``), or ``None`` (then :meth:`message` prints warnings only).</span>
+<span class="sd">    """</span>
+
+    <span class="n">fields</span><span class="p">:</span> <span class="nb">tuple</span>
+    <span class="n">scaling</span><span class="p">:</span> <span class="s2">"np.ndarray | None"</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">coordinatesOf</span><span class="p">:</span> <span class="nb">object</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">midsideCornersOf</span><span class="p">:</span> <span class="nb">object</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">model</span><span class="p">:</span> <span class="nb">object</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">journal</span><span class="p">:</span> <span class="nb">object</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">log</span><span class="p">:</span> <span class="nb">object</span> <span class="o">=</span> <span class="kc">None</span>
+
+<div class="viewcode-block" id="SetUpContext.message">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.base.SetUpContext.message">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">message</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">level</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">text</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Log ``text`` at ``level`` through the composed solver (see :attr:`log`)."""</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">log</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">level</span><span class="p">,</span> <span class="n">text</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">level</span> <span class="o">==</span> <span class="s2">"warning"</span><span class="p">:</span>
+            <span class="nb">print</span><span class="p">(</span><span class="n">text</span><span class="p">,</span> <span class="n">flush</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span></div>
+
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">size</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The number of dofs of this (sub-)problem."""</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">fields</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">stop</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">fields</span> <span class="k">else</span> <span class="mi">0</span>
+
+<div class="viewcode-block" id="SetUpContext.onlyField">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.base.SetUpContext.onlyField">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">onlyField</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">owner</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">FieldBlock</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The one field of this (sub-)problem, for a component that is built on one field's matrix; raises, naming</span>
+<span class="sd">        ``owner``, if there are several."""</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">fields</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">"</span><span class="si">{:}</span><span class="s2"> is built on the matrix of one field, but got the fields </span><span class="si">{:}</span><span class="s2">: put it under OnField(name, ...) "</span>
+                <span class="s2">"for each field, combined by Multiplicative([...]) (block Gauss-Seidel) or Additive([...]) (block "</span>
+                <span class="s2">"Jacobi)"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">owner</span><span class="p">,</span> <span class="s2">", "</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">field</span><span class="o">.</span><span class="n">name</span> <span class="k">for</span> <span class="n">field</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">fields</span><span class="p">))</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">fields</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span></div>
+
+
+<div class="viewcode-block" id="SetUpContext.coordinates">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.base.SetUpContext.coordinates">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">coordinates</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">fieldName</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"np.ndarray | None"</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The node coordinates of a field, or ``None``."""</span>
+        <span class="k">return</span> <span class="kc">None</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">coordinatesOf</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">coordinatesOf</span><span class="p">(</span><span class="n">fieldName</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="SetUpContext.midsideCorners">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.base.SetUpContext.midsideCorners">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">midsideCorners</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">fieldName</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""The midside corners of a field (which nodes are corners, and the corners of each midside node), or</span>
+<span class="sd">        ``None``."""</span>
+        <span class="k">return</span> <span class="kc">None</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">midsideCornersOf</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">midsideCornersOf</span><span class="p">(</span><span class="n">fieldName</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="SetUpContext.scalingOf">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.base.SetUpContext.scalingOf">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">scalingOf</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dofs</span><span class="p">:</span> <span class="s2">"slice | np.ndarray"</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The scaling of some dofs (ones without a scaling)."""</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">scaling</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">size</span><span class="p">)[</span><span class="n">dofs</span><span class="p">]</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">scaling</span><span class="p">[</span><span class="n">dofs</span><span class="p">]</span></div>
+
+
+<div class="viewcode-block" id="SetUpContext.scaledBy">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.base.SetUpContext.scaledBy">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">scaledBy</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">D</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"SetUpContext"</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The context of :math:`D \\hat A D`, for a child that gets this problem scaled once more by ``D``."""</span>
+        <span class="k">return</span> <span class="n">replace</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">scaling</span><span class="o">=</span><span class="n">D</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">scaling</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">scaling</span> <span class="o">*</span> <span class="n">D</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="SetUpContext.restrictedToField">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.base.SetUpContext.restrictedToField">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">restrictedToField</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">block</span><span class="p">:</span> <span class="n">FieldBlock</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"SetUpContext"</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The context of one field block of this problem: its dofs renumbered from zero."""</span>
+        <span class="k">return</span> <span class="n">replace</span><span class="p">(</span>
+            <span class="bp">self</span><span class="p">,</span>
+            <span class="n">fields</span><span class="o">=</span><span class="p">(</span><span class="n">FieldBlock</span><span class="p">(</span><span class="n">block</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">block</span><span class="o">.</span><span class="n">stop</span> <span class="o">-</span> <span class="n">block</span><span class="o">.</span><span class="n">start</span><span class="p">,</span> <span class="n">block</span><span class="o">.</span><span class="n">dimension</span><span class="p">),),</span>
+            <span class="n">scaling</span><span class="o">=</span><span class="kc">None</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">scaling</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">scaling</span><span class="p">[</span><span class="n">block</span><span class="o">.</span><span class="n">start</span> <span class="p">:</span> <span class="n">block</span><span class="o">.</span><span class="n">stop</span><span class="p">],</span>
+        <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="SetUpContext.restrictedTo">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.base.SetUpContext.restrictedTo">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">restrictedTo</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">fields</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">,</span> <span class="n">dofs</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">nodesOf</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"SetUpContext"</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The context of a subset ``dofs`` of this problem's dofs, whose fields are ``fields`` (as the Schur</span>
+<span class="sd">        complement leaves them). ``nodesOf``: ``fieldName -&gt; boolean mask`` of the nodes of the field that remain,</span>
+<span class="sd">        to restrict the coordinates and midside corners."""</span>
+
+        <span class="k">def</span><span class="w"> </span><span class="nf">coordinatesOf</span><span class="p">(</span><span class="n">fieldName</span><span class="p">):</span>
+            <span class="n">coordinates</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">coordinates</span><span class="p">(</span><span class="n">fieldName</span><span class="p">)</span>
+            <span class="n">mask</span> <span class="o">=</span> <span class="kc">None</span> <span class="k">if</span> <span class="n">nodesOf</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">nodesOf</span><span class="p">(</span><span class="n">fieldName</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">coordinates</span> <span class="k">if</span> <span class="n">coordinates</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">mask</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">coordinates</span><span class="p">[</span><span class="n">mask</span><span class="p">]</span>
+
+        <span class="k">def</span><span class="w"> </span><span class="nf">midsideCornersOf</span><span class="p">(</span><span class="n">fieldName</span><span class="p">):</span>
+            <span class="n">midsideCorners</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">midsideCorners</span><span class="p">(</span><span class="n">fieldName</span><span class="p">)</span>
+            <span class="n">mask</span> <span class="o">=</span> <span class="kc">None</span> <span class="k">if</span> <span class="n">nodesOf</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">nodesOf</span><span class="p">(</span><span class="n">fieldName</span><span class="p">)</span>
+            <span class="k">return</span> <span class="p">(</span>
+                <span class="n">midsideCorners</span>
+                <span class="k">if</span> <span class="n">midsideCorners</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">mask</span> <span class="ow">is</span> <span class="kc">None</span>
+                <span class="k">else</span> <span class="n">restrictMidsideCorners</span><span class="p">(</span><span class="o">*</span><span class="n">midsideCorners</span><span class="p">,</span> <span class="n">mask</span><span class="p">)</span>
+            <span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">replace</span><span class="p">(</span>
+            <span class="bp">self</span><span class="p">,</span>
+            <span class="n">fields</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(</span><span class="n">fields</span><span class="p">),</span>
+            <span class="n">scaling</span><span class="o">=</span><span class="kc">None</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">scaling</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">scaling</span><span class="p">[</span><span class="n">dofs</span><span class="p">],</span>
+            <span class="n">coordinatesOf</span><span class="o">=</span><span class="n">coordinatesOf</span><span class="p">,</span>
+            <span class="n">midsideCornersOf</span><span class="o">=</span><span class="n">midsideCornersOf</span><span class="p">,</span>
+        <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="SetUpContext.ofCoarseDofs">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.base.SetUpContext.ofCoarseDofs">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">ofCoarseDofs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">nCoarse</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"SetUpContext"</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The context of a coarse problem whose dofs are no nodes (the coefficients of the modes of aggregates, say):</span>
+<span class="sd">        one field ``"coarse"`` of ``nCoarse`` scalar dofs, without coordinates, midside corners or scaling. The journal</span>
+<span class="sd">        and the log stay."""</span>
+        <span class="k">return</span> <span class="n">SetUpContext</span><span class="p">(</span><span class="n">fields</span><span class="o">=</span><span class="p">(</span><span class="n">FieldBlock</span><span class="p">(</span><span class="s2">"coarse"</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">nCoarse</span><span class="p">,</span> <span class="mi">1</span><span class="p">),),</span> <span class="n">journal</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">journal</span><span class="p">,</span> <span class="n">log</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">log</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="SetUpContext.ofCoarseNodes">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.base.SetUpContext.ofCoarseNodes">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">ofCoarseNodes</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">field</span><span class="p">:</span> <span class="n">FieldBlock</span><span class="p">,</span> <span class="n">isCoarseNode</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"SetUpContext"</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The context of the coarse problem of a corner-node interpolation of this problem's one field ``field``: the</span>
+<span class="sd">        same field on its coarse nodes alone (``isCoarseNode``, per node of the field: the corner nodes, and the midside</span>
+<span class="sd">        nodes the interpolation keeps as nodes of their own), its dofs numbered node by node. The coarse nodes keep</span>
+<span class="sd">        their coordinates and their scaling :math:`D_c`; the coarse field is linear, so it has no midside corners, and</span>
+<span class="sd">        it is no field of the model."""</span>
+        <span class="n">isCoarseNode</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">isCoarseNode</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">)</span>
+        <span class="n">coarseNodes</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">nonzero</span><span class="p">(</span><span class="n">isCoarseNode</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">coarseDofs</span> <span class="o">=</span> <span class="p">(</span><span class="n">coarseNodes</span><span class="p">[:,</span> <span class="kc">None</span><span class="p">]</span> <span class="o">*</span> <span class="n">field</span><span class="o">.</span><span class="n">dimension</span> <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">field</span><span class="o">.</span><span class="n">dimension</span><span class="p">))</span><span class="o">.</span><span class="n">ravel</span><span class="p">()</span>
+        <span class="c1"># restricted once, here: the coarse context keeps no reference to this (fine) one</span>
+        <span class="n">coordinates</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">coordinates</span><span class="p">(</span><span class="n">field</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
+        <span class="n">coarseCoordinates</span> <span class="o">=</span> <span class="kc">None</span> <span class="k">if</span> <span class="n">coordinates</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">coordinates</span><span class="p">[</span><span class="n">isCoarseNode</span><span class="p">]</span>
+        <span class="k">return</span> <span class="n">replace</span><span class="p">(</span>
+            <span class="bp">self</span><span class="p">,</span>
+            <span class="n">fields</span><span class="o">=</span><span class="p">(</span><span class="n">FieldBlock</span><span class="p">(</span><span class="n">field</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">coarseDofs</span><span class="p">),</span> <span class="n">field</span><span class="o">.</span><span class="n">dimension</span><span class="p">),),</span>
+            <span class="n">scaling</span><span class="o">=</span><span class="kc">None</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">scaling</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">scaling</span><span class="p">[</span><span class="n">field</span><span class="o">.</span><span class="n">start</span> <span class="o">+</span> <span class="n">coarseDofs</span><span class="p">],</span>
+            <span class="n">coordinatesOf</span><span class="o">=</span><span class="k">lambda</span> <span class="n">fieldName</span><span class="p">:</span> <span class="n">coarseCoordinates</span> <span class="k">if</span> <span class="n">fieldName</span> <span class="o">==</span> <span class="n">field</span><span class="o">.</span><span class="n">name</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
+            <span class="n">midsideCornersOf</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+            <span class="n">model</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="p">)</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="MatrixChange">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.base.MatrixChange">[docs]</a>
+<span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">MatrixChange</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""What changed since a component's last set-up, and whether what it built must be built again.</span>
+
+<span class="sd">    The facts about the matrix (a new pattern, a resized system) are found by the composed solver</span>
+<span class="sd">    (:class:`~edelweissfe.linsolve.composition.solver.ComposedLinearSolver`); a Krylov solver adds its own</span>
+<span class="sd">    reasons (an increment, a stale preconditioner, see</span>
+<span class="sd">    :class:`~edelweissfe.linsolve.composition.krylov.RebuildPolicy`); a Schur complement adds its own when its</span>
+<span class="sd">    condensed dofs change. Each component then decides in :meth:`Preconditioner.update` what to keep.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    context</span>
+<span class="sd">        The context of the changed matrix.</span>
+<span class="sd">    rebuildReason</span>
+<span class="sd">        Why what was built must be built again (``"first"``, ``"model"``, ``"amr"``, ``"pattern"``,</span>
+<span class="sd">        ``"increment"``, ``"stale"``, ``"always"``, ``"condensed dofs"``), or ``None``: only the values changed,</span>
+<span class="sd">        and what was built for the previous matrix is reused.</span>
+<span class="sd">    newIncrement</span>
+<span class="sd">        Whether the right-hand side jumped, which marks a new increment of the nonlinear solver.</span>
+<span class="sd">    residualNorm</span>
+<span class="sd">        :math:`\\lVert b \\rVert` of this solve.</span>
+<span class="sd">    previousResidualNorm</span>
+<span class="sd">        :math:`\\lVert b \\rVert` of the previous solve, ``None`` before the first one (or after a change of the</span>
+<span class="sd">        model).</span>
+<span class="sd">    """</span>
+
+    <span class="n">context</span><span class="p">:</span> <span class="n">SetUpContext</span>
+    <span class="n">rebuildReason</span><span class="p">:</span> <span class="s2">"str | None"</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">newIncrement</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="n">residualNorm</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span>
+    <span class="n">previousResidualNorm</span><span class="p">:</span> <span class="s2">"float | None"</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">requiresRebuild</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Whether what was built must be built again."""</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">rebuildReason</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+
+<div class="viewcode-block" id="MatrixChange.withRebuild">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.base.MatrixChange.withRebuild">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">withRebuild</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">reason</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"MatrixChange"</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""This change, asking for a rebuild for ``reason`` -- unless it asks for one already, whose reason stays."""</span>
+        <span class="k">return</span> <span class="bp">self</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">requiresRebuild</span> <span class="k">else</span> <span class="n">replace</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">rebuildReason</span><span class="o">=</span><span class="n">reason</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="MatrixChange.withContext">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.base.MatrixChange.withContext">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">withContext</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">context</span><span class="p">:</span> <span class="n">SetUpContext</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"MatrixChange"</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""This change, for a child with its own context."""</span>
+        <span class="k">return</span> <span class="n">replace</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">context</span><span class="o">=</span><span class="n">context</span><span class="p">)</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="Preconditioner">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.base.Preconditioner">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">Preconditioner</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""An approximate inverse :math:`M^{-1}` of a matrix :math:`A`: built by :meth:`setUp`, applied as</span>
+<span class="sd">    :math:`z = M^{-1} r`.</span>
+
+<span class="sd">    See the module documentation. A subclass implements the hooks :meth:`_setUp`, :meth:`_apply`, :meth:`_forget` if</span>
+<span class="sd">    it builds anything, and, to reuse what it built, :meth:`_update`, and calls ``super().__init__()`` in its</span>
+<span class="sd">    constructor (which creates its :attr:`statistics` and declares what it builds, by :meth:`_forget`).</span>
+<span class="sd">    """</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="c1">#: What this component recorded while it ran, see :class:`Statistics`.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">statistics</span> <span class="o">=</span> <span class="n">Statistics</span><span class="p">()</span>
+        <span class="c1"># nothing is built yet</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_forget</span><span class="p">()</span>
+
+    <span class="c1"># ----- the public methods: record the call, then call the hook -----</span>
+
+<div class="viewcode-block" id="Preconditioner.setUp">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.base.Preconditioner.setUp">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">setUp</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">A</span><span class="p">,</span> <span class="n">context</span><span class="p">:</span> <span class="n">SetUpContext</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Build this component for the matrix ``A`` (a</span>
+<span class="sd">        :class:`~edelweissfe.linsolve.composition.systemmatrix.SystemMatrix`), and its children for their</span>
+<span class="sd">        sub-problems: :meth:`forget` what was built before, then :meth:`_setUp`, recorded."""</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">forget</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_recorded</span><span class="p">(</span><span class="s2">"setUp"</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_setUp</span><span class="p">,</span> <span class="n">A</span><span class="p">,</span> <span class="n">context</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="Preconditioner.forget">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.base.Preconditioner.forget">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">forget</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Drop what this component and its children built (:meth:`_forget`), so that nothing is held twice while it</span>
+<span class="sd">        is built again. What they reuse on purpose stays (see the module documentation)."""</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_forget</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">child</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">children</span><span class="p">():</span>
+            <span class="n">child</span><span class="o">.</span><span class="n">forget</span><span class="p">()</span></div>
+
+
+<div class="viewcode-block" id="Preconditioner.update">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.base.Preconditioner.update">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">A</span><span class="p">,</span> <span class="n">change</span><span class="p">:</span> <span class="n">MatrixChange</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Take the changed matrix ``A``: :meth:`_update`, recorded."""</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_recorded</span><span class="p">(</span><span class="s2">"update"</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_update</span><span class="p">,</span> <span class="n">A</span><span class="p">,</span> <span class="n">change</span><span class="p">)</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">r</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Apply this component, :math:`z = M^{-1} r`: :meth:`_apply`, recorded."""</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_recorded</span><span class="p">(</span><span class="s2">"apply"</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_apply</span><span class="p">,</span> <span class="n">r</span><span class="p">)</span>
+
+<div class="viewcode-block" id="Preconditioner.applyRestricted">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.base.Preconditioner.applyRestricted">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">applyRestricted</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">r_f</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">""":math:`M^{-1} r_f` on the dofs of :attr:`fieldIndex` alone: :meth:`_applyRestricted`, recorded as an</span>
+<span class="sd">        application."""</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_recorded</span><span class="p">(</span><span class="s2">"apply"</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_applyRestricted</span><span class="p">,</span> <span class="n">r_f</span><span class="p">)</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_recorded</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">kind</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">hook</span><span class="p">,</span> <span class="o">*</span><span class="n">arguments</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Call ``hook(*arguments)`` and count the call and its time in :attr:`statistics` as ``kind``."""</span>
+        <span class="n">start</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">perf_counter</span><span class="p">()</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">hook</span><span class="p">(</span><span class="o">*</span><span class="n">arguments</span><span class="p">)</span>
+        <span class="k">finally</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">statistics</span><span class="o">.</span><span class="n">record</span><span class="p">(</span><span class="n">kind</span><span class="p">,</span> <span class="n">time</span><span class="o">.</span><span class="n">perf_counter</span><span class="p">()</span> <span class="o">-</span> <span class="n">start</span><span class="p">)</span>
+
+    <span class="c1"># ----- the hooks a component implements -----</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_setUp</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">A</span><span class="p">,</span> <span class="n">context</span><span class="p">:</span> <span class="n">SetUpContext</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Build this component for the matrix ``A``, and its children (through their public :meth:`setUp`)."""</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_forget</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Drop what this component built: set each attribute that :meth:`_setUp` builds to its value before the first</span>
+<span class="sd">        set-up (``self.hierarchy = None``). The constructor calls it, so this is where those attributes are declared;</span>
+<span class="sd">        a component that builds nothing of its own (its children are forgotten by :meth:`forget`) keeps this</span>
+<span class="sd">        default."""</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">A</span><span class="p">,</span> <span class="n">change</span><span class="p">:</span> <span class="n">MatrixChange</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Take the changed matrix ``A``. By default, build anew; a component that can reuse what it built</span>
+<span class="sd">        overrides this and rebuilds (through :meth:`setUp`) only if ``change.requiresRebuild`` or nothing is</span>
+<span class="sd">        built."""</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">setUp</span><span class="p">(</span><span class="n">A</span><span class="p">,</span> <span class="n">change</span><span class="o">.</span><span class="n">context</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_apply</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">r</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">""":math:`z = M^{-1} r`."""</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_applyRestricted</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">r_f</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">""":math:`M^{-1} r_f` on the dofs of :attr:`fieldIndex` alone (all dofs: the same as :meth:`_apply`)."""</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_apply</span><span class="p">(</span><span class="n">r_f</span><span class="p">)</span>
+
+<div class="viewcode-block" id="Preconditioner.children">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.base.Preconditioner.children">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">children</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The ``(role, child)`` pairs of this component, in the order the children are used (empty for a leaf). A</span>
+<span class="sd">        component with children overrides this: the tree is walked through it (:meth:`setModel`,</span>
+<span class="sd">        :meth:`finishSolve`, :attr:`isFixedLinearOperator`, ..., and the views), and the role is the placeholder of</span>
+<span class="sd">        the child in the component's formula (:attr:`Description.formula`)."""</span>
+        <span class="k">return</span> <span class="p">()</span></div>
+
+
+    <span class="c1"># ----- what the tree is asked as a whole -----</span>
+
+<div class="viewcode-block" id="Preconditioner.withRebuildReasons">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.base.Preconditioner.withRebuildReasons">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">withRebuildReasons</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">change</span><span class="p">:</span> <span class="n">MatrixChange</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">MatrixChange</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""``change``, with the reasons for a rebuild that this component and its children add on their own (a Krylov</span>
+<span class="sd">        solver's :class:`~edelweissfe.linsolve.composition.krylov.RebuildPolicy`: a new increment, a stale</span>
+<span class="sd">        preconditioner). A component that keeps something built for the matrix above such a child (the :math:`D` of a</span>
+<span class="sd">        :class:`~edelweissfe.linsolve.composition.diagonalscaling.DiagonalScaling` around a Krylov solve) asks for</span>
+<span class="sd">        them first, so that it rebuilds together with the child."""</span>
+        <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">child</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">children</span><span class="p">():</span>
+            <span class="n">change</span> <span class="o">=</span> <span class="n">child</span><span class="o">.</span><span class="n">withRebuildReasons</span><span class="p">(</span><span class="n">change</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">change</span></div>
+
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">fieldIndex</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"int | None"</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The field this component acts on, :math:`R` in :math:`z = R^T M^{-1} R r`, as the index of the field in its</span>
+<span class="sd">        context (known after :meth:`setUp`), or ``None`` for all dofs. A combination</span>
+<span class="sd">        (:mod:`~edelweissfe.linsolve.composition.combinators`) then forms the residual of that field alone and calls</span>
+<span class="sd">        :meth:`applyRestricted`."""</span>
+        <span class="k">return</span> <span class="kc">None</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">isFixedLinearOperator</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Whether :math:`z = M^{-1} r` is one fixed linear operator between two set-ups: true for a component whose</span>
+<span class="sd">        children all are; a Krylov solve is not (its result depends on :math:`r` nonlinearly, through the tolerance</span>
+<span class="sd">        and the subspace it builds). A Krylov method that relies on a fixed preconditioner (LGMRES, CG) refuses one</span>
+<span class="sd">        that is not."""</span>
+        <span class="k">return</span> <span class="nb">all</span><span class="p">(</span><span class="n">child</span><span class="o">.</span><span class="n">isFixedLinearOperator</span> <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">child</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">children</span><span class="p">())</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">containsKrylovSolver</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Whether this component is, or has among its children, a Krylov solver. A Krylov solver records each solve</span>
+<span class="sd">        (the "linear solve" column of the nonlinear solver); a direct solve does not."""</span>
+        <span class="k">return</span> <span class="nb">any</span><span class="p">(</span><span class="n">child</span><span class="o">.</span><span class="n">containsKrylovSolver</span> <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">child</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">children</span><span class="p">())</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">containsDirectSolver</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Whether this component is, or has among its children, a direct solver (a sparse LU factorization). Such a</span>
+<span class="sd">        factorization wants the explicitly stored zeros pruned out of the system matrix</span>
+<span class="sd">        (:attr:`~edelweissfe.linsolve.base.LinearSolver.needsPrunedSystemMatrix`)."""</span>
+        <span class="k">return</span> <span class="nb">any</span><span class="p">(</span><span class="n">child</span><span class="o">.</span><span class="n">containsDirectSolver</span> <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">child</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">children</span><span class="p">())</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">reusesPreconditioner</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Whether this component is, or has among its children, a Krylov solver that keeps its preconditioner across</span>
+<span class="sd">        solves (:class:`~edelweissfe.linsolve.composition.krylov.RebuildPolicy` with ``reuse``). A new sparsity</span>
+<span class="sd">        pattern forces a rebuild that such a solver would have saved, so the nonlinear solver then does not prune the</span>
+<span class="sd">        system matrix (:attr:`~edelweissfe.linsolve.base.LinearSolver.needsPrunedSystemMatrix`), which changes its</span>
+<span class="sd">        pattern on almost every iteration."""</span>
+        <span class="k">return</span> <span class="nb">any</span><span class="p">(</span><span class="n">child</span><span class="o">.</span><span class="n">reusesPreconditioner</span> <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">child</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">children</span><span class="p">())</span>
+
+<div class="viewcode-block" id="Preconditioner.setModel">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.base.Preconditioner.setModel">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">setModel</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">dofManager</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Take a new model (the first, or one after a change of the mesh), and hand it to the children. A component</span>
+<span class="sd">        that derives something from the model (e.g. which dofs a marker selects) overrides this."""</span>
+        <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">child</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">children</span><span class="p">():</span>
+            <span class="n">child</span><span class="o">.</span><span class="n">setModel</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">dofManager</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="Preconditioner.finishSolve">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.base.Preconditioner.finishSolve">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">finishSolve</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The solve is done: release what only this solve needed (e.g. the field blocks of its matrix, which the next</span>
+<span class="sd">        solve forms anew from its own matrix), and tell the children. What the next solve may reuse (a</span>
+<span class="sd">        preconditioner) is kept. Without this, a solver would hold a copy of the last matrix between solves -- while</span>
+<span class="sd">        the nonlinear solver assembles the next one."""</span>
+        <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">child</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">children</span><span class="p">():</span>
+            <span class="n">child</span><span class="o">.</span><span class="n">finishSolve</span><span class="p">()</span></div>
+
+
+<div class="viewcode-block" id="Preconditioner.builtMatrices">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.base.Preconditioner.builtMatrices">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">builtMatrices</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""``(name, scipy matrix)`` pairs of the matrices this component formed and keeps (for the matrix view);</span>
+<span class="sd">        empty for most."""</span>
+        <span class="k">return</span> <span class="p">()</span></div>
+
+
+<div class="viewcode-block" id="Preconditioner.solveRecord">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.base.Preconditioner.solveRecord">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">solveRecord</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""What the last Krylov solve in this component did, a</span>
+<span class="sd">        :class:`~edelweissfe.linsolve.composition.krylov.SolveRecord`: a Krylov solver's own, else that of the first</span>
+<span class="sd">        child that has one (e.g. the Krylov solve under a diagonal scaling), else ``None``."""</span>
+        <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">child</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">children</span><span class="p">():</span>
+            <span class="n">record</span> <span class="o">=</span> <span class="n">child</span><span class="o">.</span><span class="n">solveRecord</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">record</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">return</span> <span class="n">record</span>
+        <span class="k">return</span> <span class="kc">None</span></div>
+
+
+<div class="viewcode-block" id="Preconditioner.setUpNotes">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.base.Preconditioner.setUpNotes">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">setUpNotes</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Short facts about what this component and its children built in the last set-up or update, one string</span>
+<span class="sd">        each, for the "linear solve" column of the nonlinear solver's table at verbosity ``"debug"``: at most 24</span>
+<span class="sd">        characters, the width of that column. Most components have none."""</span>
+        <span class="k">return</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">note</span> <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">child</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">children</span><span class="p">()</span> <span class="k">for</span> <span class="n">note</span> <span class="ow">in</span> <span class="n">child</span><span class="o">.</span><span class="n">setUpNotes</span><span class="p">())</span></div>
+
+
+<div class="viewcode-block" id="Preconditioner.condensedDofs">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.base.Preconditioner.condensedDofs">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">condensedDofs</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"np.ndarray | None"</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The dofs a Schur complement in this component condensed in the last solve, or ``None`` (for a degradation</span>
+<span class="sd">        dump, which records them for an offline replay without the model)."""</span>
+        <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">child</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">children</span><span class="p">():</span>
+            <span class="n">dofs</span> <span class="o">=</span> <span class="n">child</span><span class="o">.</span><span class="n">condensedDofs</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">dofs</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">return</span> <span class="n">dofs</span>
+        <span class="k">return</span> <span class="kc">None</span></div>
+
+
+<div class="viewcode-block" id="Preconditioner.describe">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.base.Preconditioner.describe">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">describe</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Description</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""What this component is, for the views."""</span>
+        <span class="k">return</span> <span class="n">Description</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="p">,</span> <span class="n">formula</span><span class="o">=</span><span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span> <span class="o">+</span> <span class="s2">"⁻¹"</span><span class="p">)</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__str__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.linsolve.composition.views</span><span class="w"> </span><span class="kn">import</span> <span class="n">structure</span>
+
+        <span class="k">return</span> <span class="n">structure</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_repr_html_</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.linsolve.composition.views</span><span class="w"> </span><span class="kn">import</span> <span class="n">html</span>
+
+        <span class="k">return</span> <span class="n">html</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">standalone</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="requireEachComponentOnce">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.base.requireEachComponentOnce">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">requireEachComponentOnce</span><span class="p">(</span><span class="n">root</span><span class="p">:</span> <span class="n">Preconditioner</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Raise if one component (one instance) sits in two places of the tree: it is set up for one matrix, so the</span>
+<span class="sd">    second place would overwrite what the first one built, e.g. ``AMG()`` bound to a name and put under two</span>
+<span class="sd">    :class:`~edelweissfe.linsolve.composition.combinators.OnField`. A combination that applies one correction several</span>
+<span class="sd">    times (a symmetric sweep) lists it once among its children, so that is no second place."""</span>
+    <span class="n">seen</span> <span class="o">=</span> <span class="p">{}</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">visit</span><span class="p">(</span><span class="n">component</span><span class="p">,</span> <span class="n">path</span><span class="p">):</span>
+        <span class="k">if</span> <span class="nb">id</span><span class="p">(</span><span class="n">component</span><span class="p">)</span> <span class="ow">in</span> <span class="n">seen</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">"the component </span><span class="si">{:}</span><span class="s2"> sits in two places of the solver tree, </span><span class="si">{:}</span><span class="s2"> and </span><span class="si">{:}</span><span class="s2">; it is set up for one matrix, so "</span>
+                <span class="s2">"make a new one for each place"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="nb">type</span><span class="p">(</span><span class="n">component</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="p">,</span> <span class="n">seen</span><span class="p">[</span><span class="nb">id</span><span class="p">(</span><span class="n">component</span><span class="p">)],</span> <span class="n">path</span><span class="p">)</span>
+            <span class="p">)</span>
+        <span class="n">seen</span><span class="p">[</span><span class="nb">id</span><span class="p">(</span><span class="n">component</span><span class="p">)]</span> <span class="o">=</span> <span class="n">path</span>
+        <span class="k">for</span> <span class="n">role</span><span class="p">,</span> <span class="n">child</span> <span class="ow">in</span> <span class="n">component</span><span class="o">.</span><span class="n">children</span><span class="p">():</span>
+            <span class="n">visit</span><span class="p">(</span><span class="n">child</span><span class="p">,</span> <span class="n">path</span> <span class="o">+</span> <span class="s2">"/"</span> <span class="o">+</span> <span class="n">role</span><span class="p">)</span>
+
+    <span class="n">visit</span><span class="p">(</span><span class="n">root</span><span class="p">,</span> <span class="nb">type</span><span class="p">(</span><span class="n">root</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="requirePreconditioner">
+<a class="viewcode-back" href="../../../../documentation/linsolveapi.html#edelweissfe.linsolve.composition.base.requirePreconditioner">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">requirePreconditioner</span><span class="p">(</span><span class="n">owner</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">role</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">child</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Raise at construction if ``child``, the ``role`` of ``owner``, is not a component (e.g. a class instead of an</span>
+<span class="sd">    instance, or a bare SciPy solver)."""</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">child</span><span class="p">,</span> <span class="n">Preconditioner</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+            <span class="s2">"</span><span class="si">{:}</span><span class="s2">: its </span><span class="si">{:}</span><span class="s2"> must be a component (a Preconditioner such as AMG() or DirectSolver()), got </span><span class="si">{!r}</span><span class="s2">"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+                <span class="n">owner</span><span class="p">,</span> <span class="n">role</span><span class="p">,</span> <span class="n">child</span>
+            <span class="p">)</span>
+        <span class="p">)</span></div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Matthias Neuner.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

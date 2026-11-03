@@ -1,0 +1,438 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>edelweissfe.numerics.parallelizationutilities &mdash; EdelweissFE v22.07 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=cfdaff8d" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/custom.css?v=37fbe429" />
+
+  
+      <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../_static/documentation_options.js?v=17e2f33f"></script>
+      <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../index.html" class="icon icon-home">
+            EdelweissFE
+              <img src="../../../_static/edelweiss_fe_logo.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../features.html">Features</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../prerequisites.html">Prerequisites</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../documentation/index.html">Documentation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../contributors.html">Contributors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../publications.html">Publications</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">EdelweissFE</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">edelweissfe.numerics.parallelizationutilities</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for edelweissfe.numerics.parallelizationutilities</h1><div class="highlight"><pre>
+<span></span><span class="c1">#  ---------------------------------------------------------------------</span>
+<span class="c1">#</span>
+<span class="c1">#  _____    _      _              _         _____ _____</span>
+<span class="c1"># | ____|__| | ___| |_      _____(_)___ ___|  ___| ____|</span>
+<span class="c1"># |  _| / _` |/ _ \ \ \ /\ / / _ \ / __/ __| |_  |  _|</span>
+<span class="c1"># | |__| (_| |  __/ |\ V  V /  __/ \__ \__ \  _| | |___</span>
+<span class="c1"># |_____\__,_|\___|_| \_/\_/ \___|_|___/___/_|   |_____|</span>
+<span class="c1">#</span>
+<span class="c1">#</span>
+<span class="c1">#  Unit of Strength of Materials and Structural Analysis</span>
+<span class="c1">#  University of Innsbruck,</span>
+<span class="c1">#  2017 - today</span>
+<span class="c1">#</span>
+<span class="c1">#  Matthias Neuner matthias.neuner@uibk.ac.at</span>
+<span class="c1">#</span>
+<span class="c1">#  This file is part of EdelweissFE.</span>
+<span class="c1">#</span>
+<span class="c1">#  This library is free software; you can redistribute it and/or</span>
+<span class="c1">#  modify it under the terms of the GNU Lesser General Public</span>
+<span class="c1">#  License as published by the Free Software Foundation; either</span>
+<span class="c1">#  version 2.1 of the License, or (at your option) any later version.</span>
+<span class="c1">#</span>
+<span class="c1">#  The full text of the license can be found in the file LICENSE.md at</span>
+<span class="c1">#  the top level directory of EdelweissFE.</span>
+<span class="c1">#  ---------------------------------------------------------------------</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">concurrent.futures</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">itertools</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">sys</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">threading</span>
+
+<span class="n">_threadPools</span> <span class="o">=</span> <span class="p">{}</span>
+<span class="n">_threadPoolsLock</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Lock</span><span class="p">()</span>
+
+
+<div class="viewcode-block" id="isFreeThreadingSupported">
+<a class="viewcode-back" href="../../../documentation/dofmanager.html#edelweissfe.numerics.parallelizationutilities.isFreeThreadingSupported">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">isFreeThreadingSupported</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Check if free threading is supported in the current build of EdelweissFE.</span>
+
+<span class="sd">    Free threading allows for parallel computations using multiple threads.</span>
+<span class="sd">    This function checks if the current build of EdelweissFE supports this feature.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        bool: True if free threading is supported and the GIL is disabled, False otherwise.</span>
+<span class="sd">    """</span>
+    <span class="n">res</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">res</span> <span class="o">=</span> <span class="ow">not</span> <span class="n">sys</span><span class="o">.</span><span class="n">_is_gil_enabled</span><span class="p">()</span>
+    <span class="k">except</span> <span class="ne">AttributeError</span><span class="p">:</span>
+        <span class="k">pass</span>
+
+    <span class="k">return</span> <span class="n">res</span></div>
+
+
+
+<div class="viewcode-block" id="getNumberOfThreads">
+<a class="viewcode-back" href="../../../documentation/dofmanager.html#edelweissfe.numerics.parallelizationutilities.getNumberOfThreads">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">getNumberOfThreads</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Get the number of threads available for parallel computations.</span>
+
+<span class="sd">    EdelweissFE has a built-in mechanism to determine the number of threads to be used for parallel computations.</span>
+<span class="sd">    It checks if the environment variable `OMP_NUM_THREADS` is set. If it is</span>
+<span class="sd">    and can be converted to an integer, that value is used. If not, the function falls back to using a default value of 1.</span>
+<span class="sd">    The result is clamped to at least 1, since a `ThreadPoolExecutor` requires at least one worker.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        int: Number of threads to be used.</span>
+<span class="sd">    """</span>
+
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">env_threads</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"OMP_NUM_THREADS"</span><span class="p">)</span>
+        <span class="n">num_workers</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">env_threads</span><span class="p">)</span> <span class="k">if</span> <span class="n">env_threads</span> <span class="k">else</span> <span class="mi">1</span>
+    <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>
+        <span class="n">num_workers</span> <span class="o">=</span> <span class="mi">1</span>
+
+    <span class="k">return</span> <span class="nb">max</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">num_workers</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="getNumberOfWorkerThreads">
+<a class="viewcode-back" href="../../../documentation/dofmanager.html#edelweissfe.numerics.parallelizationutilities.getNumberOfWorkerThreads">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">getNumberOfWorkerThreads</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""The number of threads a parallel computation on the thread pool runs with:</span>
+<span class="sd">    :func:`getNumberOfThreads` if free threading is available, else 1 -- without free threading the</span>
+<span class="sd">    workers would only take turns on the GIL, so the work runs serially in the calling thread.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    int</span>
+<span class="sd">        The number of worker threads, at least 1.</span>
+<span class="sd">    """</span>
+
+    <span class="k">return</span> <span class="n">getNumberOfThreads</span><span class="p">()</span> <span class="k">if</span> <span class="n">isFreeThreadingSupported</span><span class="p">()</span> <span class="k">else</span> <span class="mi">1</span></div>
+
+
+
+<div class="viewcode-block" id="getNumberOfAvailableCpus">
+<a class="viewcode-back" href="../../../documentation/dofmanager.html#edelweissfe.numerics.parallelizationutilities.getNumberOfAvailableCpus">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">getNumberOfAvailableCpus</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Get the number of CPUs this process is actually permitted to run on.</span>
+
+<span class="sd">    This is not the machine's core count. A batch scheduler's cgroup, ``taskset``, and an OpenMP</span>
+<span class="sd">    runtime honouring ``OMP_PROC_BIND`` all narrow it -- the last of them at the moment it is</span>
+<span class="sd">    loaded, which in this framework is whenever the first compiled extension is imported.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    int</span>
+<span class="sd">        The number of CPUs available to this process, or 0 where the platform cannot report it.</span>
+<span class="sd">    """</span>
+
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">sched_getaffinity</span><span class="p">(</span><span class="mi">0</span><span class="p">))</span>
+    <span class="k">except</span> <span class="p">(</span><span class="ne">AttributeError</span><span class="p">,</span> <span class="ne">OSError</span><span class="p">):</span>  <span class="c1"># pragma: no cover - non-Linux</span>
+        <span class="k">return</span> <span class="mi">0</span></div>
+
+
+
+<div class="viewcode-block" id="reportThreadAvailability">
+<a class="viewcode-back" href="../../../documentation/dofmanager.html#edelweissfe.numerics.parallelizationutilities.reportThreadAvailability">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">reportThreadAvailability</span><span class="p">(</span><span class="n">numThreads</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">journal</span><span class="p">,</span> <span class="n">senderIdentification</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Report how many threads will be used, and warn if the process cannot actually use them.</span>
+
+<span class="sd">    A pool of ``numThreads`` workers only runs on ``numThreads`` cores if the process is permitted</span>
+<span class="sd">    to use that many, and ``OMP_PROC_BIND``/``OMP_PLACES`` are the common reason for it not to be:</span>
+<span class="sd">    they make the OpenMP runtime pin the thread that loads it to a single place, and every thread</span>
+<span class="sd">    started afterwards -- the pool's workers included -- inherits that one-core mask. The element</span>
+<span class="sd">    loop is then serial in fact while still reporting the threads it asked for, and nothing fails,</span>
+<span class="sd">    so this is worth saying out loud rather than leaving to be discovered by measurement.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    numThreads</span>
+<span class="sd">        The number of threads the solver is about to use.</span>
+<span class="sd">    journal</span>
+<span class="sd">        The journal to report to.</span>
+<span class="sd">    senderIdentification</span>
+<span class="sd">        The name of the reporting solver.</span>
+<span class="sd">    """</span>
+
+    <span class="n">journal</span><span class="o">.</span><span class="n">message</span><span class="p">(</span><span class="s2">"Using </span><span class="si">{:}</span><span class="s2"> threads"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">numThreads</span><span class="p">),</span> <span class="n">senderIdentification</span><span class="p">)</span>
+
+    <span class="n">availableCpus</span> <span class="o">=</span> <span class="n">getNumberOfAvailableCpus</span><span class="p">()</span>
+    <span class="k">if</span> <span class="n">availableCpus</span> <span class="ow">and</span> <span class="n">availableCpus</span> <span class="o">&lt;</span> <span class="n">numThreads</span><span class="p">:</span>
+        <span class="n">journal</span><span class="o">.</span><span class="n">message</span><span class="p">(</span>
+            <span class="s2">"WARNING: this process is allowed to run on </span><span class="si">{:}</span><span class="s2"> CPUs, fewer than the </span><span class="si">{:}</span><span class="s2"> threads it "</span>
+            <span class="s2">"just asked for, so those threads will take turns on the same cores instead of running "</span>
+            <span class="s2">"side by side. If OMP_PROC_BIND or OMP_PLACES is set in the environment, unset them "</span>
+            <span class="s2">"for EdelweissFE: they pin this process to a single place as soon as an OpenMP runtime "</span>
+            <span class="s2">"is loaded, and every thread started after that inherits the pinning."</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">availableCpus</span><span class="p">,</span> <span class="n">numThreads</span><span class="p">),</span>
+            <span class="n">senderIdentification</span><span class="p">,</span>
+        <span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="getThreadPool">
+<a class="viewcode-back" href="../../../documentation/dofmanager.html#edelweissfe.numerics.parallelizationutilities.getThreadPool">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">getThreadPool</span><span class="p">(</span><span class="n">numThreads</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">concurrent</span><span class="o">.</span><span class="n">futures</span><span class="o">.</span><span class="n">ThreadPoolExecutor</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Get a persistent thread pool with the requested number of worker threads.</span>
+
+<span class="sd">    Pools are created lazily and reused for the lifetime of the process. This avoids</span>
+<span class="sd">    the cost of spawning and joining worker threads for every parallel computation,</span>
+<span class="sd">    which the solvers request once per Newton iteration.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    numThreads</span>
+<span class="sd">        The number of worker threads. Clamped to at least 1.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    concurrent.futures.ThreadPoolExecutor</span>
+<span class="sd">        The persistent thread pool.</span>
+<span class="sd">    """</span>
+
+    <span class="n">numThreads</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">numThreads</span><span class="p">)</span>
+
+    <span class="n">pool</span> <span class="o">=</span> <span class="n">_threadPools</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">numThreads</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">pool</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">with</span> <span class="n">_threadPoolsLock</span><span class="p">:</span>
+            <span class="n">pool</span> <span class="o">=</span> <span class="n">_threadPools</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">numThreads</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">pool</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">pool</span> <span class="o">=</span> <span class="n">_threadPools</span><span class="p">[</span><span class="n">numThreads</span><span class="p">]</span> <span class="o">=</span> <span class="n">concurrent</span><span class="o">.</span><span class="n">futures</span><span class="o">.</span><span class="n">ThreadPoolExecutor</span><span class="p">(</span><span class="n">max_workers</span><span class="o">=</span><span class="n">numThreads</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">pool</span></div>
+
+
+
+<div class="viewcode-block" id="chunked_iterable">
+<a class="viewcode-back" href="../../../documentation/dofmanager.html#edelweissfe.numerics.parallelizationutilities.chunked_iterable">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">chunked_iterable</span><span class="p">(</span><span class="n">iterable</span><span class="p">,</span> <span class="n">size</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Yield successive n-sized chunks from an iterable."""</span>
+    <span class="n">it</span> <span class="o">=</span> <span class="nb">iter</span><span class="p">(</span><span class="n">iterable</span><span class="p">)</span>
+    <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+        <span class="n">chunk</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">itertools</span><span class="o">.</span><span class="n">islice</span><span class="p">(</span><span class="n">it</span><span class="p">,</span> <span class="n">size</span><span class="p">))</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">chunk</span><span class="p">:</span>
+            <span class="k">break</span>
+        <span class="k">yield</span> <span class="n">chunk</span></div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_mapOnPoolAndWaitForRunningCalls</span><span class="p">(</span><span class="n">work</span><span class="p">,</span> <span class="n">tasks</span><span class="p">,</span> <span class="n">numThreads</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Call ``work(task)`` for every task on the persistent thread pool, and return what the calls returned, in the</span>
+<span class="sd">    order of the tasks.</span>
+
+<span class="sd">    If a call raises, the exception is that of the first failing call in the order of the tasks -- the one a serial</span>
+<span class="sd">    loop meets first -- raised once the calls before it are done. The calls that have not started are not made, as with</span>
+<span class="sd">    ``Executor.map``. The calls that are running cannot be stopped: ``Executor.map`` leaves them running, this function</span>
+<span class="sd">    waits for them. So when it returns or raises, no call is running. Whoever retries after the exception -- the solver</span>
+<span class="sd">    repeats an increment with a smaller time step when an element raises a ``CutbackRequest`` -- must not have workers</span>
+<span class="sd">    of the failed attempt still evaluating the same elements and writing into the same arrays as the retry.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    work</span>
+<span class="sd">        Called once per task, with the task.</span>
+<span class="sd">    tasks</span>
+<span class="sd">        The tasks, an iterable; it is consumed in the calling thread.</span>
+<span class="sd">    numThreads</span>
+<span class="sd">        The number of worker threads of the pool.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    list</span>
+<span class="sd">        What ``work`` returned for each task, in the order of the tasks.</span>
+<span class="sd">    """</span>
+
+    <span class="n">pool</span> <span class="o">=</span> <span class="n">getThreadPool</span><span class="p">(</span><span class="n">numThreads</span><span class="p">)</span>
+    <span class="n">futures</span> <span class="o">=</span> <span class="p">[</span><span class="n">pool</span><span class="o">.</span><span class="n">submit</span><span class="p">(</span><span class="n">work</span><span class="p">,</span> <span class="n">task</span><span class="p">)</span> <span class="k">for</span> <span class="n">task</span> <span class="ow">in</span> <span class="n">tasks</span><span class="p">]</span>
+
+    <span class="k">try</span><span class="p">:</span>
+        <span class="c1"># In task order, like a serial loop: the first failing call raises, once the calls before it are done.</span>
+        <span class="k">return</span> <span class="p">[</span><span class="n">future</span><span class="o">.</span><span class="n">result</span><span class="p">()</span> <span class="k">for</span> <span class="n">future</span> <span class="ow">in</span> <span class="n">futures</span><span class="p">]</span>
+    <span class="k">except</span> <span class="ne">BaseException</span><span class="p">:</span>  <span class="c1"># also a KeyboardInterrupt must not leave workers running behind it</span>
+        <span class="c1"># The calls that have not started are not made, as with Executor.map. The running ones cannot be stopped, so</span>
+        <span class="c1"># wait for them: cancel() leaves them alone, and a cancelled call counts as done for wait().</span>
+        <span class="k">for</span> <span class="n">future</span> <span class="ow">in</span> <span class="n">futures</span><span class="p">:</span>
+            <span class="n">future</span><span class="o">.</span><span class="n">cancel</span><span class="p">()</span>
+        <span class="n">concurrent</span><span class="o">.</span><span class="n">futures</span><span class="o">.</span><span class="n">wait</span><span class="p">(</span><span class="n">futures</span><span class="p">)</span>
+        <span class="k">raise</span>
+
+
+<div class="viewcode-block" id="mapChunksInParallel">
+<a class="viewcode-back" href="../../../documentation/dofmanager.html#edelweissfe.numerics.parallelizationutilities.mapChunksInParallel">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">mapChunksInParallel</span><span class="p">(</span><span class="n">items</span><span class="p">,</span> <span class="n">work</span><span class="p">,</span> <span class="n">chunksPerThread</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">4</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Call ``work(chunk)`` for consecutive chunks of ``items`` on the persistent thread pool, and return what the calls</span>
+<span class="sd">    returned, in the order of the chunks.</span>
+
+<span class="sd">    Meant for a loop over entities (the elements) whose iterations are independent: each call handles a whole chunk, so</span>
+<span class="sd">    that the cost of handing out tasks stays negligible against the work, and there are several chunks per thread, so</span>
+<span class="sd">    that the pool balances chunks of unequal cost. The results come in the order of ``items``: what is assembled from</span>
+<span class="sd">    them is what the serial loop assembles.</span>
+
+<span class="sd">    Runs serially in the calling thread, as one chunk holding all ``items``, if free threading is not available or one</span>
+<span class="sd">    thread is asked for.</span>
+
+<span class="sd">    When it returns or raises, no call is running. If a call raises, the exception is that of the first failing chunk</span>
+<span class="sd">    in the order of the chunks, the one a serial loop meets first; the chunks that have not started are not made, and</span>
+<span class="sd">    the running ones are waited for.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    items</span>
+<span class="sd">        The entities, a sized iterable (a list, a dictionary view).</span>
+<span class="sd">    work</span>
+<span class="sd">        Called once per chunk, with a tuple of consecutive items; a worker must write only to what belongs to its items.</span>
+<span class="sd">    chunksPerThread</span>
+<span class="sd">        How many chunks each thread is handed.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    list</span>
+<span class="sd">        What ``work`` returned for each chunk, in order.</span>
+<span class="sd">    """</span>
+
+    <span class="n">numThreads</span> <span class="o">=</span> <span class="n">getNumberOfWorkerThreads</span><span class="p">()</span>
+
+    <span class="k">if</span> <span class="n">numThreads</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">[</span><span class="n">work</span><span class="p">(</span><span class="n">items</span><span class="p">)]</span>
+
+    <span class="n">chunkSize</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">items</span><span class="p">)</span> <span class="o">//</span> <span class="p">(</span><span class="n">numThreads</span> <span class="o">*</span> <span class="n">chunksPerThread</span><span class="p">))</span>
+
+    <span class="k">return</span> <span class="n">_mapOnPoolAndWaitForRunningCalls</span><span class="p">(</span><span class="n">work</span><span class="p">,</span> <span class="n">chunked_iterable</span><span class="p">(</span><span class="n">items</span><span class="p">,</span> <span class="n">chunkSize</span><span class="p">),</span> <span class="n">numThreads</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="forEachSliceInParallel">
+<a class="viewcode-back" href="../../../documentation/dofmanager.html#edelweissfe.numerics.parallelizationutilities.forEachSliceInParallel">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">forEachSliceInParallel</span><span class="p">(</span><span class="n">work</span><span class="p">,</span> <span class="n">length</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">sliceLength</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">&lt;&lt;</span> <span class="mi">20</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Call ``work(s)`` for consecutive slices ``s`` that together cover ``range(length)``, on the</span>
+<span class="sd">    persistent thread pool, and return what the calls returned, in the order of the slices.</span>
+
+<span class="sd">    Meant for the simple array operations on arrays as long as the system matrix -- zeroing it,</span>
+<span class="sd">    adding a scaled mass matrix to it -- which numpy runs on a single thread, and which on a large</span>
+<span class="sd">    model take seconds per Newton iteration that way. Every call works on its own part of the</span>
+<span class="sd">    arrays, so the result is bitwise the one of the same operation on the whole array. Short slices</span>
+<span class="sd">    keep the temporaries of an expression like ``K[s] += a * M[s]`` small.</span>
+
+<span class="sd">    Runs serially in the calling thread if free threading is not available or the array fits into</span>
+<span class="sd">    one slice.</span>
+
+<span class="sd">    When it returns or raises, no call is running. If a call raises, the exception is that of the first failing slice</span>
+<span class="sd">    in the order of the slices, the one a serial loop meets first; the slices that have not started are not made, and</span>
+<span class="sd">    the running ones are waited for.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    work</span>
+<span class="sd">        Called once per slice, with a :class:`slice` of ``range(length)``; what it returns (e.g. the indices found in</span>
+<span class="sd">        the slice) is collected.</span>
+<span class="sd">    length</span>
+<span class="sd">        The length of the arrays ``work`` operates on.</span>
+<span class="sd">    sliceLength</span>
+<span class="sd">        The length of the slices; the last one may be shorter.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    list</span>
+<span class="sd">        What ``work`` returned for each slice, in order.</span>
+<span class="sd">    """</span>
+
+    <span class="n">slices</span> <span class="o">=</span> <span class="p">[</span><span class="nb">slice</span><span class="p">(</span><span class="n">start</span><span class="p">,</span> <span class="nb">min</span><span class="p">(</span><span class="n">start</span> <span class="o">+</span> <span class="n">sliceLength</span><span class="p">,</span> <span class="n">length</span><span class="p">))</span> <span class="k">for</span> <span class="n">start</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">length</span><span class="p">,</span> <span class="n">sliceLength</span><span class="p">)]</span>
+    <span class="n">numThreads</span> <span class="o">=</span> <span class="n">getNumberOfWorkerThreads</span><span class="p">()</span>
+
+    <span class="k">if</span> <span class="n">numThreads</span> <span class="o">==</span> <span class="mi">1</span> <span class="ow">or</span> <span class="nb">len</span><span class="p">(</span><span class="n">slices</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">[</span><span class="n">work</span><span class="p">(</span><span class="n">s</span><span class="p">)</span> <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">slices</span><span class="p">]</span>
+
+    <span class="k">return</span> <span class="n">_mapOnPoolAndWaitForRunningCalls</span><span class="p">(</span><span class="n">work</span><span class="p">,</span> <span class="n">slices</span><span class="p">,</span> <span class="n">numThreads</span><span class="p">)</span></div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Matthias Neuner.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

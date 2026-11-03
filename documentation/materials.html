@@ -15,9 +15,9 @@
       <script src="../_static/jquery.js?v=5d32c60e"></script>
       <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
       <script src="../_static/documentation_options.js?v=17e2f33f"></script>
-      <script src="../_static/doctools.js?v=9bcbadda"></script>
-      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
-      <script async="async" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+      <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+      <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-mml-chtml.js"></script>
     <script src="../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
@@ -51,6 +51,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../installation.html">Installation</a></li>
 <li class="toctree-l1 current"><a class="reference internal" href="index.html">Documentation</a><ul class="current">
 <li class="toctree-l2"><a class="reference internal" href="syntax.html">Input file syntax</a></li>
+<li class="toctree-l2"><a class="reference internal" href="inputsystem.html">The input system: how <code class="docutils literal notranslate"><span class="pre">.inp</span></code> grammar is defined</a></li>
 <li class="toctree-l2"><a class="reference internal" href="jobs.html">Inputfile driven simulations</a></li>
 <li class="toctree-l2"><a class="reference internal" href="models.html">Models</a></li>
 <li class="toctree-l2"><a class="reference internal" href="solvers.html">Solvers</a></li>
@@ -58,7 +59,10 @@
 <li class="toctree-l2"><a class="reference internal" href="steps.html">Steps</a></li>
 <li class="toctree-l2"><a class="reference internal" href="analyticalfields.html">Analytical fields</a></li>
 <li class="toctree-l2"><a class="reference internal" href="constraints.html">Constraints</a></li>
-<li class="toctree-l2"><a class="reference internal" href="dofmanager.html">DOF manager</a></li>
+<li class="toctree-l2"><a class="reference internal" href="rigidbodies.html">Rigid bodies</a></li>
+<li class="toctree-l2"><a class="reference internal" href="contacttheory.html">Contact mechanics: theory</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dofmanager.html">Degree of Freedom (DOF) Manager and Numerics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="assembly.html">System matrix assembly</a></li>
 <li class="toctree-l2"><a class="reference internal" href="fieldoutputmanager.html">Field outputs</a></li>
 <li class="toctree-l2"><a class="reference internal" href="fields.html">Fields</a></li>
 <li class="toctree-l2"><a class="reference internal" href="elements.html">Elements</a></li>
@@ -80,6 +84,10 @@
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="mesh.html">Creating finite element meshes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="modelmodifiers.html">Model modifiers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="topologypipeline.html">The topology pipeline: how a model changes itself</a></li>
+<li class="toctree-l2"><a class="reference internal" href="restart.html">Restart</a></li>
+<li class="toctree-l2"><a class="reference internal" href="adaptivitytheory.html">Adaptive refinement: error estimation and marking</a></li>
 <li class="toctree-l2"><a class="reference internal" href="output.html">Outputmanagers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="parallelization.html">Parallelization</a></li>
 <li class="toctree-l2"><a class="reference internal" href="phenomena.html">Physical phenomena</a></li>
@@ -161,8 +169,8 @@ Arguments for the <code class="docutils literal notranslate"><span class="pre">*
 <p>The material properties for materials using the <code class="docutils literal notranslate"><span class="pre">*material</span></code> keyword are assigned as seen here:</p>
 <div class="literal-block-wrapper docutils container" id="id5">
 <div class="code-block-caption"><span class="caption-text">Use different non-advanced materials. Example:</span><a class="headerlink" href="#id5" title="Link to this code"></a></div>
-<div class="highlight-edelweiss notranslate"><div class="highlight"><pre><span></span><span class="k">*material</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">neohookewaplastic</span>,<span class="nv"> id</span><span class="ow">=</span><span class="m">Mat1</span>,<span class="nv"> provider</span><span class="ow">=</span><span class="m">edelweissmaterial</span>
-91304.34783, 100000., 260, 70, 320, 9
+<div class="highlight-edelweiss notranslate"><div class="highlight"><pre><span></span><span class="k">*material</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">neohookeplastic</span>,<span class="nv"> id</span><span class="ow">=</span><span class="m">Mat1</span>,<span class="nv"> provider</span><span class="ow">=</span><span class="m">edelweissmaterial</span>
+1, 91304.34783, 100000., 260, 70, 320, 9
 </pre></div>
 </div>
 </div>
@@ -203,9 +211,9 @@ Arguments for the <code class="docutils literal notranslate"><span class="pre">*
 <div class="literal-block-wrapper docutils container" id="id7">
 <div class="code-block-caption"><span class="caption-text">Use different advanced materials. Example:</span><a class="headerlink" href="#id7" title="Link to this code"></a></div>
 <div class="highlight-edelweiss notranslate"><div class="highlight"><pre><span></span><span class="k">*advancedmaterial</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">hyperplasticadvanced</span>,<span class="nv"> id</span><span class="ow">=</span><span class="m">hyperplasticadvanced</span>,<span class="nv"> provider</span><span class="ow">=</span><span class="m">edelweissmaterial</span>
-<span class="nv">psi_e</span><span class="ow">=</span><span class="s">&#39;mu/2 * (I1/J**(2/3) - 3) + K/8 * (J**2 + 1/J**2 - 2)&#39;</span>
+<span class="nv">psi_e</span><span class="ow">=</span><span class="s">'mu/2 * (I1/J**(2/3) - 3) + K/8 * (J**2 + 1/J**2 - 2)'</span>
 <span class="nv">mu</span><span class="ow">=</span><span class="m">91304.34783</span>,<span class="nv"> K</span><span class="ow">=</span><span class="m">100000.</span>,<span class="nv"> fy0</span><span class="ow">=</span><span class="m">260</span>,<span class="nv"> HLin</span><span class="ow">=</span><span class="m">70</span>,<span class="nv"> dfy</span><span class="ow">=</span><span class="m">320</span>,<span class="nv"> delta</span><span class="ow">=</span><span class="m">9</span>
-<span class="nv">a</span><span class="ow">=</span><span class="s">&#39;2,3,4&#39;</span>
+<span class="nv">a</span><span class="ow">=</span><span class="s">'2,3,4'</span>
 </pre></div>
 </div>
 </div>
@@ -239,16 +247,9 @@ Arguments for the <code class="docutils literal notranslate"><span class="pre">*
 <td><p>Von Mises material.</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">*material</span></code></p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">neohookewa</span></code></p></td>
-<td><p>Neo-Hookean Pence-Gou formulation ‘a’ material.</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">*material</span></code></p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">neohookewb</span></code></p></td>
-<td><p>Neo-Hookean Pence-Gou formulation ‘b’ material.</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">*material</span></code></p></td>
-</tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">neohookewc</span></code></p></td>
-<td><p>Neo-Hookean Pence-Gou formulation ‘c’ material.</p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">neohooke</span></code></p></td>
+<td><p>Neo-Hookean Pence-Gou material; the first material property selects the formulation
+(1=’a’, 2=’b’, 3=’c’).</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">*material</span></code></p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">hyperelasticadvanced</span></code></p></td>
@@ -259,16 +260,9 @@ Arguments for the <code class="docutils literal notranslate"><span class="pre">*
 <td><p>Hyperelastic material with advanced defined energy density function using I1, I2, J and C itself.</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">*advancedmaterial</span></code></p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">neohookewaplastic</span></code></p></td>
-<td><p>Neo-Hookean Pence-Gou formulation ‘a’ material with J2 plasticity.</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">*material</span></code></p></td>
-</tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">neohookewbplastic</span></code></p></td>
-<td><p>Neo-Hookean Pence-Gou formulation ‘b’ material with J2 plasticity.</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">*material</span></code></p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">neohookewcplastic</span></code></p></td>
-<td><p>Neo-Hookean Pence-Gou formulation ‘c’ material with J2 plasticity.</p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">neohookeplastic</span></code></p></td>
+<td><p>Neo-Hookean Pence-Gou material with J2 plasticity; the first material property selects
+the formulation (1=’a’, 2=’b’, 3=’c’).</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">*material</span></code></p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">hyperplasticadvanced</span></code></p></td>
@@ -310,12 +304,12 @@ This material needs the following material properties in the correct order</p>
 \[\varepsilon_{33} = -\frac{\nu}{1-\nu} (\varepsilon_{11}+\varepsilon_{22}).\]</div>
 <dl class="py class">
 <dt class="sig sig-object py" id="edelweissfe.materials.linearelastic.linearelastic.LinearElasticMaterial">
-<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">edelweissfe.materials.linearelastic.linearelastic.</span></span><span class="sig-name descname"><span class="pre">LinearElasticMaterial</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">materialProperties</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/linearelastic/linearelastic.html#LinearElasticMaterial"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.linearelastic.linearelastic.LinearElasticMaterial" title="Link to this definition"></a></dt>
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">edelweissfe.materials.linearelastic.linearelastic.</span></span><span class="sig-name descname"><span class="pre">LinearElasticMaterial</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">materialProperties</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/linearelastic/linearelastic.html#LinearElasticMaterial"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.linearelastic.linearelastic.LinearElasticMaterial" title="Link to this definition"></a></dt>
 <dd><p>Initialize.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Attributes<span class="colon">:</span></dt>
 <dd class="field-odd"><dl class="simple">
-<dt><code class="xref py py-obj docutils literal notranslate"><span class="pre">materialProperties</span></code></dt><dd><p>The properties the material has.</p>
+<dt><a class="reference internal" href="#edelweissfe.materials.hyperelasticadvanced.hyperelasticadvancedi2extended.HyperelasticAdvancedI2ExtendedMaterial.materialProperties" title="edelweissfe.materials.hyperelasticadvanced.hyperelasticadvancedi2extended.HyperelasticAdvancedI2ExtendedMaterial.materialProperties"><code class="xref py py-obj docutils literal notranslate"><span class="pre">materialProperties</span></code></a></dt><dd><p>The properties the material has, as handed to <code class="docutils literal notranslate"><span class="pre">__init__</span></code>.</p>
 </dd>
 </dl>
 </dd>
@@ -335,23 +329,17 @@ This material needs the following material properties in the correct order</p>
 <tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.materials.linearelastic.linearelastic.LinearElasticMaterial.computeStress" title="edelweissfe.materials.linearelastic.linearelastic.LinearElasticMaterial.computeStress"><code class="xref py py-obj docutils literal notranslate"><span class="pre">computeStress</span></code></a>(stress, dStress_dStrain, ...)</p></td>
 <td><p>Computes the stresses for a 3D material.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.materials.linearelastic.linearelastic.LinearElasticMaterial.computeStress2D" title="edelweissfe.materials.linearelastic.linearelastic.LinearElasticMaterial.computeStress2D"><code class="xref py py-obj docutils literal notranslate"><span class="pre">computeStress2D</span></code></a>(stress, dStress_dStrain, ...)</p></td>
-<td><p>Computes the stresses for a 2D material with plane strain.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.materials.linearelastic.linearelastic.LinearElasticMaterial.computeUniaxialStress" title="edelweissfe.materials.linearelastic.linearelastic.LinearElasticMaterial.computeUniaxialStress"><code class="xref py py-obj docutils literal notranslate"><span class="pre">computeUniaxialStress</span></code></a>(stress, ...)</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">computeUniaxialStress</span></code>(stress, ...)</p></td>
 <td><p>Computes the stresses for a uniaxial stress state.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.materials.linearelastic.linearelastic.LinearElasticMaterial.elasticityMatrix" title="edelweissfe.materials.linearelastic.linearelastic.LinearElasticMaterial.elasticityMatrix"><code class="xref py py-obj docutils literal notranslate"><span class="pre">elasticityMatrix</span></code></a>()</p></td>
-<td><p>Initalize a 3D material elasticity matrix.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.materials.linearelastic.linearelastic.LinearElasticMaterial.elasticityMatrix2D" title="edelweissfe.materials.linearelastic.linearelastic.LinearElasticMaterial.elasticityMatrix2D"><code class="xref py py-obj docutils literal notranslate"><span class="pre">elasticityMatrix2D</span></code></a>()</p></td>
-<td><p>Initalize a 2D plane strain material elasticity matrix.</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.materials.linearelastic.linearelastic.LinearElasticMaterial.elasticityMatrix" title="edelweissfe.materials.linearelastic.linearelastic.LinearElasticMaterial.elasticityMatrix"><code class="xref py py-obj docutils literal notranslate"><span class="pre">elasticityMatrix</span></code></a>()</p></td>
+<td><p>The 3D material elasticity matrix.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.materials.linearelastic.linearelastic.LinearElasticMaterial.elasticityMatrixPlaneStress" title="edelweissfe.materials.linearelastic.linearelastic.LinearElasticMaterial.elasticityMatrixPlaneStress"><code class="xref py py-obj docutils literal notranslate"><span class="pre">elasticityMatrixPlaneStress</span></code></a>()</p></td>
-<td><p>Initalize a 2D plane stress material elasticity matrix.</p></td>
+<td><p>The 2D plane stress material elasticity matrix.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.materials.linearelastic.linearelastic.LinearElasticMaterial.getDensity" title="edelweissfe.materials.linearelastic.linearelastic.LinearElasticMaterial.getDensity"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getDensity</span></code></a>()</p></td>
-<td><p>Get the density of the material.</p></td>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">getDensity</span></code>()</p></td>
+<td><p>Determines the density of the material.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.materials.linearelastic.linearelastic.LinearElasticMaterial.getNumberOfRequiredStateVars" title="edelweissfe.materials.linearelastic.linearelastic.LinearElasticMaterial.getNumberOfRequiredStateVars"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getNumberOfRequiredStateVars</span></code></a>()</p></td>
 <td><p>Returns number of needed material state Variables per integration point in the material.</p></td>
@@ -407,57 +395,9 @@ This material needs the following material properties in the correct order</p>
 </dd></dl>
 
 <dl class="py method">
-<dt class="sig sig-object py" id="edelweissfe.materials.linearelastic.linearelastic.LinearElasticMaterial.computeStress2D">
-<span class="sig-name descname"><span class="pre">computeStress2D</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">stress</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dStress_dStrain</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dStrain</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dTime</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/linearelastic/linearelastic.html#LinearElasticMaterial.computeStress2D"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.linearelastic.linearelastic.LinearElasticMaterial.computeStress2D" title="Link to this definition"></a></dt>
-<dd><p>Computes the stresses for a 2D material with plane strain.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>stress</strong> (<em>ndarray</em>) – Vector containing the stresses.</p></li>
-<li><p><strong>dStress_dStrain</strong> (<em>ndarray</em>) – Matrix containing dStress/dStrain.</p></li>
-<li><p><strong>dStrain</strong> (<em>ndarray</em>) – Strain vector increment at time step t to t+dTime.</p></li>
-<li><p><strong>time</strong> (<em>float</em>) – Array of step time and total time.</p></li>
-<li><p><strong>dTime</strong> (<em>float</em>) – Current time step size.</p></li>
-</ul>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="edelweissfe.materials.linearelastic.linearelastic.LinearElasticMaterial.computeUniaxialStress">
-<span class="sig-name descname"><span class="pre">computeUniaxialStress</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">stress</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dStress_dStrain</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dStrain</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dTime</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/linearelastic/linearelastic.html#LinearElasticMaterial.computeUniaxialStress"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.linearelastic.linearelastic.LinearElasticMaterial.computeUniaxialStress" title="Link to this definition"></a></dt>
-<dd><p>Computes the stresses for a uniaxial stress state.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>stress</strong> (<em>ndarray</em>) – Vector containing the stresses.</p></li>
-<li><p><strong>dStress_dStrain</strong> (<em>ndarray</em>) – Matrix containing dStress/dStrain.</p></li>
-<li><p><strong>dStrain</strong> (<em>ndarray</em>) – Strain vector increment at time step t to t+dTime.</p></li>
-<li><p><strong>time</strong> (<em>float</em>) – Array of step time and total time.</p></li>
-<li><p><strong>dTime</strong> (<em>float</em>) – Current time step size.</p></li>
-</ul>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
 <dt class="sig sig-object py" id="edelweissfe.materials.linearelastic.linearelastic.LinearElasticMaterial.elasticityMatrix">
 <span class="sig-name descname"><span class="pre">elasticityMatrix</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/linearelastic/linearelastic.html#LinearElasticMaterial.elasticityMatrix"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.linearelastic.linearelastic.LinearElasticMaterial.elasticityMatrix" title="Link to this definition"></a></dt>
-<dd><p>Initalize a 3D material elasticity matrix.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Returns<span class="colon">:</span></dt>
-<dd class="field-odd"><p>The elasticity matrix.</p>
-</dd>
-<dt class="field-even">Return type<span class="colon">:</span></dt>
-<dd class="field-even"><p>np.ndarray</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="edelweissfe.materials.linearelastic.linearelastic.LinearElasticMaterial.elasticityMatrix2D">
-<span class="sig-name descname"><span class="pre">elasticityMatrix2D</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/linearelastic/linearelastic.html#LinearElasticMaterial.elasticityMatrix2D"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.linearelastic.linearelastic.LinearElasticMaterial.elasticityMatrix2D" title="Link to this definition"></a></dt>
-<dd><p>Initalize a 2D plane strain material elasticity matrix.</p>
+<dd><p>The 3D material elasticity matrix.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Returns<span class="colon">:</span></dt>
 <dd class="field-odd"><p>The elasticity matrix.</p>
@@ -471,27 +411,13 @@ This material needs the following material properties in the correct order</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="edelweissfe.materials.linearelastic.linearelastic.LinearElasticMaterial.elasticityMatrixPlaneStress">
 <span class="sig-name descname"><span class="pre">elasticityMatrixPlaneStress</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/linearelastic/linearelastic.html#LinearElasticMaterial.elasticityMatrixPlaneStress"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.linearelastic.linearelastic.LinearElasticMaterial.elasticityMatrixPlaneStress" title="Link to this definition"></a></dt>
-<dd><p>Initalize a 2D plane stress material elasticity matrix.</p>
+<dd><p>The 2D plane stress material elasticity matrix.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Returns<span class="colon">:</span></dt>
 <dd class="field-odd"><p>The elasticity matrix.</p>
 </dd>
 <dt class="field-even">Return type<span class="colon">:</span></dt>
 <dd class="field-even"><p>np.ndarray</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="edelweissfe.materials.linearelastic.linearelastic.LinearElasticMaterial.getDensity">
-<span class="sig-name descname"><span class="pre">getDensity</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/linearelastic/linearelastic.html#LinearElasticMaterial.getDensity"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.linearelastic.linearelastic.LinearElasticMaterial.getDensity" title="Link to this definition"></a></dt>
-<dd><p>Get the density of the material.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Returns<span class="colon">:</span></dt>
-<dd class="field-odd"><p>The density of the material.</p>
-</dd>
-<dt class="field-even">Return type<span class="colon">:</span></dt>
-<dd class="field-even"><p>float</p>
 </dd>
 </dl>
 </dd></dl>
@@ -559,12 +485,12 @@ projected stress</p>
 <p>and <span class="math notranslate nohighlight">\(\mathbf{s}\)</span> as the deviatoric stress.</p>
 <dl class="py class">
 <dt class="sig sig-object py" id="edelweissfe.materials.vonmises.vonmises.VonMisesMaterial">
-<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">edelweissfe.materials.vonmises.vonmises.</span></span><span class="sig-name descname"><span class="pre">VonMisesMaterial</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">materialProperties</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/vonmises/vonmises.html#VonMisesMaterial"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.vonmises.vonmises.VonMisesMaterial" title="Link to this definition"></a></dt>
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">edelweissfe.materials.vonmises.vonmises.</span></span><span class="sig-name descname"><span class="pre">VonMisesMaterial</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">materialProperties</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/vonmises/vonmises.html#VonMisesMaterial"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.vonmises.vonmises.VonMisesMaterial" title="Link to this definition"></a></dt>
 <dd><p>Initialize.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Attributes<span class="colon">:</span></dt>
 <dd class="field-odd"><dl class="simple">
-<dt><code class="xref py py-obj docutils literal notranslate"><span class="pre">materialProperties</span></code></dt><dd><p>The properties the material has.</p>
+<dt><a class="reference internal" href="#edelweissfe.materials.hyperelasticadvanced.hyperelasticadvancedi2extended.HyperelasticAdvancedI2ExtendedMaterial.materialProperties" title="edelweissfe.materials.hyperelasticadvanced.hyperelasticadvancedi2extended.HyperelasticAdvancedI2ExtendedMaterial.materialProperties"><code class="xref py py-obj docutils literal notranslate"><span class="pre">materialProperties</span></code></a></dt><dd><p>The properties the material has, as handed to <code class="docutils literal notranslate"><span class="pre">__init__</span></code>.</p>
 </dd>
 </dl>
 </dd>
@@ -578,20 +504,20 @@ projected stress</p>
 <tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.materials.vonmises.vonmises.VonMisesMaterial.assignCurrentStateVars" title="edelweissfe.materials.vonmises.vonmises.VonMisesMaterial.assignCurrentStateVars"><code class="xref py py-obj docutils literal notranslate"><span class="pre">assignCurrentStateVars</span></code></a>(currentStateVars)</p></td>
 <td><p>Assign new current state vars.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.materials.vonmises.vonmises.VonMisesMaterial.computePlaneStress" title="edelweissfe.materials.vonmises.vonmises.VonMisesMaterial.computePlaneStress"><code class="xref py py-obj docutils literal notranslate"><span class="pre">computePlaneStress</span></code></a>(stress, dStress_dStrain, ...)</p></td>
-<td><p>Computes the stresses for a plane stress material.</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">computePlaneStress</span></code>(stress, dStress_dStrain, ...)</p></td>
+<td><p>Computes the stresses for a 2D material with plane stress.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.materials.vonmises.vonmises.VonMisesMaterial.computeStress" title="edelweissfe.materials.vonmises.vonmises.VonMisesMaterial.computeStress"><code class="xref py py-obj docutils literal notranslate"><span class="pre">computeStress</span></code></a>(stress, dStress_dStrain, ...)</p></td>
 <td><p>Computes the stresses for a 3D material.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.materials.vonmises.vonmises.VonMisesMaterial.computeUniaxialStress" title="edelweissfe.materials.vonmises.vonmises.VonMisesMaterial.computeUniaxialStress"><code class="xref py py-obj docutils literal notranslate"><span class="pre">computeUniaxialStress</span></code></a>(stress, ...)</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">computeUniaxialStress</span></code>(stress, ...)</p></td>
 <td><p>Computes the stresses for a uniaxial stress state.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.materials.vonmises.vonmises.VonMisesMaterial.elasticityMatrix" title="edelweissfe.materials.vonmises.vonmises.VonMisesMaterial.elasticityMatrix"><code class="xref py py-obj docutils literal notranslate"><span class="pre">elasticityMatrix</span></code></a>()</p></td>
-<td><p>Initalize a 3D material elasticity matrix.</p></td>
+<td><p>The 3D material elasticity matrix.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.materials.vonmises.vonmises.VonMisesMaterial.getDensity" title="edelweissfe.materials.vonmises.vonmises.VonMisesMaterial.getDensity"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getDensity</span></code></a>()</p></td>
-<td><p>Get the density of the material.</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">getDensity</span></code>()</p></td>
+<td><p>Determines the density of the material.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.materials.vonmises.vonmises.VonMisesMaterial.getNumberOfRequiredStateVars" title="edelweissfe.materials.vonmises.vonmises.VonMisesMaterial.getNumberOfRequiredStateVars"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getNumberOfRequiredStateVars</span></code></a>()</p></td>
 <td><p>Returns number of needed material state Variables per integration point in the material.</p></td>
@@ -608,23 +534,6 @@ projected stress</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>currentStateVars</strong> (<em>ndarray</em>) – Array containing the material state vars.</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="edelweissfe.materials.vonmises.vonmises.VonMisesMaterial.computePlaneStress">
-<span class="sig-name descname"><span class="pre">computePlaneStress</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">stress</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dStress_dStrain</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dStrain</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dTime</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/vonmises/vonmises.html#VonMisesMaterial.computePlaneStress"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.vonmises.vonmises.VonMisesMaterial.computePlaneStress" title="Link to this definition"></a></dt>
-<dd><p>Computes the stresses for a plane stress material.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>stress</strong> (<em>ndarray</em>) – Vector containing the stresses.</p></li>
-<li><p><strong>dStress_dStrain</strong> (<em>ndarray</em>) – Matrix containing dStress/dStrain.</p></li>
-<li><p><strong>dStrain</strong> (<em>ndarray</em>) – Strain vector increment at time step t to t+dTime.</p></li>
-<li><p><strong>time</strong> (<em>float</em>) – Array of step time and total time.</p></li>
-<li><p><strong>dTime</strong> (<em>float</em>) – Current time step size.</p></li>
-</ul>
 </dd>
 </dl>
 </dd></dl>
@@ -647,46 +556,15 @@ projected stress</p>
 </dd></dl>
 
 <dl class="py method">
-<dt class="sig sig-object py" id="edelweissfe.materials.vonmises.vonmises.VonMisesMaterial.computeUniaxialStress">
-<span class="sig-name descname"><span class="pre">computeUniaxialStress</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">stress</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dStress_dStrain</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dStrain</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dTime</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/vonmises/vonmises.html#VonMisesMaterial.computeUniaxialStress"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.vonmises.vonmises.VonMisesMaterial.computeUniaxialStress" title="Link to this definition"></a></dt>
-<dd><p>Computes the stresses for a uniaxial stress state.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>stress</strong> (<em>ndarray</em>) – Vector containing the stresses.</p></li>
-<li><p><strong>dStress_dStrain</strong> (<em>ndarray</em>) – Matrix containing dStress/dStrain.</p></li>
-<li><p><strong>dStrain</strong> (<em>ndarray</em>) – Strain vector increment at time step t to t+dTime.</p></li>
-<li><p><strong>time</strong> (<em>float</em>) – Array of step time and total time.</p></li>
-<li><p><strong>dTime</strong> (<em>float</em>) – Current time step size.</p></li>
-</ul>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
 <dt class="sig sig-object py" id="edelweissfe.materials.vonmises.vonmises.VonMisesMaterial.elasticityMatrix">
 <span class="sig-name descname"><span class="pre">elasticityMatrix</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/vonmises/vonmises.html#VonMisesMaterial.elasticityMatrix"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.vonmises.vonmises.VonMisesMaterial.elasticityMatrix" title="Link to this definition"></a></dt>
-<dd><p>Initalize a 3D material elasticity matrix.</p>
+<dd><p>The 3D material elasticity matrix.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Returns<span class="colon">:</span></dt>
 <dd class="field-odd"><p>The elasticity matrix.</p>
 </dd>
 <dt class="field-even">Return type<span class="colon">:</span></dt>
 <dd class="field-even"><p>np.ndarray</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="edelweissfe.materials.vonmises.vonmises.VonMisesMaterial.getDensity">
-<span class="sig-name descname"><span class="pre">getDensity</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/vonmises/vonmises.html#VonMisesMaterial.getDensity"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.vonmises.vonmises.VonMisesMaterial.getDensity" title="Link to this definition"></a></dt>
-<dd><p>Get the density of the material.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Returns<span class="colon">:</span></dt>
-<dd class="field-odd"><p>The density of the material.</p>
-</dd>
-<dt class="field-even">Return type<span class="colon">:</span></dt>
-<dd class="field-even"><p>float</p>
 </dd>
 </dl>
 </dd></dl>
@@ -728,12 +606,13 @@ updated by the material.</p>
 </section>
 <section id="elastic-neo-hookean-w-i1-j-pence-gou-a-materials">
 <h3>Elastic Neo-Hookean W(I1, J) Pence-Gou [a] materials<a class="headerlink" href="#elastic-neo-hookean-w-i1-j-pence-gou-a-materials" title="Link to this heading"></a></h3>
-<p>These materials need the following parameters as input data in the correct order:</p>
+<p>This material needs the following parameters as input data in the correct order:</p>
 <ol class="arabic simple">
+<li><p><strong>formulation</strong> - Selects the energy density function: 1 for <span class="math notranslate nohighlight">\(W_a\)</span>, 2 for <span class="math notranslate nohighlight">\(W_b\)</span>, 3 for <span class="math notranslate nohighlight">\(W_c\)</span> (see below).</p></li>
 <li><p><span class="math notranslate nohighlight">\(\mu\)</span>       - Shear modulus.</p></li>
 <li><p><span class="math notranslate nohighlight">\(\kappa\)</span>    - Bulk modulus.</p></li>
 </ol>
-<p>These materials base on a energy density function <span class="math notranslate nohighlight">\(W(I_1, J)\)</span>, where <span class="math notranslate nohighlight">\(I_1=\text{trace}(\mathbf{b})\)</span> is the first
+<p>This material bases on a energy density function <span class="math notranslate nohighlight">\(W(I_1, J)\)</span>, where <span class="math notranslate nohighlight">\(I_1=\text{trace}(\mathbf{b})\)</span> is the first
 and <span class="math notranslate nohighlight">\(J=\det(\mathbf{F})\)</span> is the second invariant of the left Cauchy-Green tensor <span class="math notranslate nohighlight">\(\mathbf{b}=\mathbf{FF}^\text{T}\)</span>
 with the deformation gradient <span class="math notranslate nohighlight">\(\mathbf{F}\)</span>, the Kirchhoff stress is then:</p>
 <div class="math notranslate nohighlight">
@@ -751,163 +630,6 @@ with the deformation gradient <span class="math notranslate nohighlight">\(\math
 <p>and the tangent modulus is</p>
 <div class="math notranslate nohighlight">
 \[C^{\tau \text{F}}_{ijkL} = \mu\frac{\partial b_{ij}}{\partial F_{kL}} + \left(\kappa - \frac{2\mu}{3}\right) (2J^2-J) \delta_{ij} (F^{-1})_{Lk}.\]</div>
-<dl class="py class">
-<dt class="sig sig-object py" id="edelweissfe.materials.neohooke.neohookepencegouformulationa.NeoHookeanWaMaterial">
-<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">edelweissfe.materials.neohooke.neohookepencegouformulationa.</span></span><span class="sig-name descname"><span class="pre">NeoHookeanWaMaterial</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">materialProperties</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/neohooke/neohookepencegouformulationa.html#NeoHookeanWaMaterial"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.neohooke.neohookepencegouformulationa.NeoHookeanWaMaterial" title="Link to this definition"></a></dt>
-<dd><p>Initialize.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Attributes<span class="colon">:</span></dt>
-<dd class="field-odd"><dl class="simple">
-<dt><a class="reference internal" href="#edelweissfe.materials.neohooke.neohookepencegouformulationa.NeoHookeanWaMaterial.materialProperties" title="edelweissfe.materials.neohooke.neohookepencegouformulationa.NeoHookeanWaMaterial.materialProperties"><code class="xref py py-obj docutils literal notranslate"><span class="pre">materialProperties</span></code></a></dt><dd><p>The properties the material has.</p>
-</dd>
-</dl>
-</dd>
-<dt class="field-even">Parameters<span class="colon">:</span></dt>
-<dd class="field-even"><p><strong>materialProperties</strong> (<em>ndarray</em>)</p>
-</dd>
-</dl>
-<p class="rubric">Methods</p>
-<table class="autosummary longtable docutils align-default">
-<tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.materials.neohooke.neohookepencegouformulationa.NeoHookeanWaMaterial.assignCurrentStateVars" title="edelweissfe.materials.neohooke.neohookepencegouformulationa.NeoHookeanWaMaterial.assignCurrentStateVars"><code class="xref py py-obj docutils literal notranslate"><span class="pre">assignCurrentStateVars</span></code></a>(currentStateVars)</p></td>
-<td><p>Assign new current state vars.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.materials.neohooke.neohookepencegouformulationa.NeoHookeanWaMaterial.computeKirchhoff" title="edelweissfe.materials.neohooke.neohookepencegouformulationa.NeoHookeanWaMaterial.computeKirchhoff"><code class="xref py py-obj docutils literal notranslate"><span class="pre">computeKirchhoff</span></code></a>(stress, ...)</p></td>
-<td><p>Computes the stresses for a 3D material/2D material with plane strain.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.materials.neohooke.neohookepencegouformulationa.NeoHookeanWaMaterial.computePlaneKirchhoff" title="edelweissfe.materials.neohooke.neohookepencegouformulationa.NeoHookeanWaMaterial.computePlaneKirchhoff"><code class="xref py py-obj docutils literal notranslate"><span class="pre">computePlaneKirchhoff</span></code></a>(stress, ...)</p></td>
-<td><p>Computes the stresses for a 2D material with plane stress.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.materials.neohooke.neohookepencegouformulationa.NeoHookeanWaMaterial.computeUniaxialKirchhoff" title="edelweissfe.materials.neohooke.neohookepencegouformulationa.NeoHookeanWaMaterial.computeUniaxialKirchhoff"><code class="xref py py-obj docutils literal notranslate"><span class="pre">computeUniaxialKirchhoff</span></code></a>(stress, ...)</p></td>
-<td><p>Computes the stresses for a uniaxial stress state.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.materials.neohooke.neohookepencegouformulationa.NeoHookeanWaMaterial.getDensity" title="edelweissfe.materials.neohooke.neohookepencegouformulationa.NeoHookeanWaMaterial.getDensity"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getDensity</span></code></a>()</p></td>
-<td><p>Returns the density of the material.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.materials.neohooke.neohookepencegouformulationa.NeoHookeanWaMaterial.getNumberOfRequiredStateVars" title="edelweissfe.materials.neohooke.neohookepencegouformulationa.NeoHookeanWaMaterial.getNumberOfRequiredStateVars"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getNumberOfRequiredStateVars</span></code></a>()</p></td>
-<td><p>Returns number of needed material state Variables per integration point in the material.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.materials.neohooke.neohookepencegouformulationa.NeoHookeanWaMaterial.getResult" title="edelweissfe.materials.neohooke.neohookepencegouformulationa.NeoHookeanWaMaterial.getResult"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getResult</span></code></a>(result)</p></td>
-<td><p>Get the result, as a persistent view which is continiously updated by the material.</p></td>
-</tr>
-</tbody>
-</table>
-<dl class="py method">
-<dt class="sig sig-object py" id="edelweissfe.materials.neohooke.neohookepencegouformulationa.NeoHookeanWaMaterial.assignCurrentStateVars">
-<span class="sig-name descname"><span class="pre">assignCurrentStateVars</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">currentStateVars</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/neohooke/neohookepencegouformulationa.html#NeoHookeanWaMaterial.assignCurrentStateVars"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.neohooke.neohookepencegouformulationa.NeoHookeanWaMaterial.assignCurrentStateVars" title="Link to this definition"></a></dt>
-<dd><p>Assign new current state vars.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>currentStateVars</strong> (<em>ndarray</em>) – Array containing the material state vars.</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="edelweissfe.materials.neohooke.neohookepencegouformulationa.NeoHookeanWaMaterial.computeKirchhoff">
-<span class="sig-name descname"><span class="pre">computeKirchhoff</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">stress</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dStress_dDeformationGradient</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">deformationGradient</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dTime</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/neohooke/neohookepencegouformulationa.html#NeoHookeanWaMaterial.computeKirchhoff"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.neohooke.neohookepencegouformulationa.NeoHookeanWaMaterial.computeKirchhoff" title="Link to this definition"></a></dt>
-<dd><p>Computes the stresses for a 3D material/2D material with plane strain.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>stress</strong> (<em>ndarray</em>) – Vector containing the stresses.</p></li>
-<li><p><strong>dStress_dDeformationGradient</strong> (<em>ndarray</em>) – Matrix containing dStress/dStrain.</p></li>
-<li><p><strong>deformationGradient</strong> (<em>ndarray</em>) – The deformation gradient at time step t.</p></li>
-<li><p><strong>time</strong> (<em>float</em>) – Array of step time and total time.</p></li>
-<li><p><strong>dTime</strong> (<em>float</em>) – Current time step size.</p></li>
-</ul>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="edelweissfe.materials.neohooke.neohookepencegouformulationa.NeoHookeanWaMaterial.computePlaneKirchhoff">
-<span class="sig-name descname"><span class="pre">computePlaneKirchhoff</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">stress</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dStress_dDeformationGradient</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">deformationGradient</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dTime</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/neohooke/neohookepencegouformulationa.html#NeoHookeanWaMaterial.computePlaneKirchhoff"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.neohooke.neohookepencegouformulationa.NeoHookeanWaMaterial.computePlaneKirchhoff" title="Link to this definition"></a></dt>
-<dd><p>Computes the stresses for a 2D material with plane stress.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>stress</strong> (<em>ndarray</em>) – Vector containing the stresses.</p></li>
-<li><p><strong>dStress_dDeformationGradient</strong> (<em>ndarray</em>) – Matrix containing dStress/dStrain.</p></li>
-<li><p><strong>deformationGradient</strong> (<em>ndarray</em>) – The deformation gradient at time step t.</p></li>
-<li><p><strong>time</strong> (<em>float</em>) – Array of step time and total time.</p></li>
-<li><p><strong>dTime</strong> (<em>float</em>) – Current time step size.</p></li>
-</ul>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="edelweissfe.materials.neohooke.neohookepencegouformulationa.NeoHookeanWaMaterial.computeUniaxialKirchhoff">
-<span class="sig-name descname"><span class="pre">computeUniaxialKirchhoff</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">stress</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dStress_dDeformationGradient</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">deformationGradient</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dTime</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/neohooke/neohookepencegouformulationa.html#NeoHookeanWaMaterial.computeUniaxialKirchhoff"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.neohooke.neohookepencegouformulationa.NeoHookeanWaMaterial.computeUniaxialKirchhoff" title="Link to this definition"></a></dt>
-<dd><p>Computes the stresses for a uniaxial stress state.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>stress</strong> (<em>ndarray</em>) – Vector containing the stresses.</p></li>
-<li><p><strong>dStress_dDeformationGradient</strong> (<em>ndarray</em>) – Matrix containing dStress/dStrain.</p></li>
-<li><p><strong>deformationGradient</strong> (<em>ndarray</em>) – The deformation gradient at time step t.</p></li>
-<li><p><strong>time</strong> (<em>float</em>) – Array of step time and total time.</p></li>
-<li><p><strong>dTime</strong> (<em>float</em>) – Current time step size.</p></li>
-</ul>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="edelweissfe.materials.neohooke.neohookepencegouformulationa.NeoHookeanWaMaterial.getDensity">
-<span class="sig-name descname"><span class="pre">getDensity</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/neohooke/neohookepencegouformulationa.html#NeoHookeanWaMaterial.getDensity"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.neohooke.neohookepencegouformulationa.NeoHookeanWaMaterial.getDensity" title="Link to this definition"></a></dt>
-<dd><p>Returns the density of the material.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Returns<span class="colon">:</span></dt>
-<dd class="field-odd"><p>The density of the material.</p>
-</dd>
-<dt class="field-even">Return type<span class="colon">:</span></dt>
-<dd class="field-even"><p>float</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="edelweissfe.materials.neohooke.neohookepencegouformulationa.NeoHookeanWaMaterial.getNumberOfRequiredStateVars">
-<span class="sig-name descname"><span class="pre">getNumberOfRequiredStateVars</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/neohooke/neohookepencegouformulationa.html#NeoHookeanWaMaterial.getNumberOfRequiredStateVars"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.neohooke.neohookepencegouformulationa.NeoHookeanWaMaterial.getNumberOfRequiredStateVars" title="Link to this definition"></a></dt>
-<dd><p>Returns number of needed material state Variables per integration point in the material.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Returns<span class="colon">:</span></dt>
-<dd class="field-odd"><p>Number of needed material state Vars.</p>
-</dd>
-<dt class="field-even">Return type<span class="colon">:</span></dt>
-<dd class="field-even"><p>int</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="edelweissfe.materials.neohooke.neohookepencegouformulationa.NeoHookeanWaMaterial.getResult">
-<span class="sig-name descname"><span class="pre">getResult</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">result</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/neohooke/neohookepencegouformulationa.html#NeoHookeanWaMaterial.getResult"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.neohooke.neohookepencegouformulationa.NeoHookeanWaMaterial.getResult" title="Link to this definition"></a></dt>
-<dd><p>Get the result, as a persistent view which is continiously
-updated by the material.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>result</strong> (<em>str</em>) – The name of the result.</p>
-</dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>The result.</p>
-</dd>
-<dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p>float</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py property">
-<dt class="sig sig-object py" id="edelweissfe.materials.neohooke.neohookepencegouformulationa.NeoHookeanWaMaterial.materialProperties">
-<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">materialProperties</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">ndarray</span></em><a class="headerlink" href="#edelweissfe.materials.neohooke.neohookepencegouformulationa.NeoHookeanWaMaterial.materialProperties" title="Link to this definition"></a></dt>
-<dd><p>The properties the material has.</p>
-</dd></dl>
-
-</dd></dl>
-
 <p>The <span class="math notranslate nohighlight">\(\mathbf{W_b}\)</span> <strong>material</strong> is defined by</p>
 <div class="math notranslate nohighlight">
 \[W_b (I_1, J) = \frac{\mu}{2} \left(\frac{I_1}{J^{2/3}} - 3\right) + \frac{\kappa}{8} \left (J^2 + \frac{1}{J^2} - 2 \right).\]</div>
@@ -918,163 +640,6 @@ updated by the material.</p>
 <div class="math notranslate nohighlight">
 \[C^{\tau \text{F}}_{ijkL} = \frac{\mu}{J^{2/3}}\frac{\partial b_{ij}}{\partial F_{kL}} - \frac{2\mu}{3J^{2/3}} b_{ij} (F^{-1})_{Lk} -
 \frac{2\mu}{3J^{2/3}}\delta_{ij} F_{kL} + \left[ \frac{2\mu I_1}{9 J^{2/3}} + \frac{\kappa}{2} \left( J^2 + \frac{1}{J^2} \right) \right] \delta_{ij}\left(F^{-1}\right)_{Lk}.\]</div>
-<dl class="py class">
-<dt class="sig sig-object py" id="edelweissfe.materials.neohooke.neohookepencegouformulationb.NeoHookeanWbMaterial">
-<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">edelweissfe.materials.neohooke.neohookepencegouformulationb.</span></span><span class="sig-name descname"><span class="pre">NeoHookeanWbMaterial</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">materialProperties</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/neohooke/neohookepencegouformulationb.html#NeoHookeanWbMaterial"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.neohooke.neohookepencegouformulationb.NeoHookeanWbMaterial" title="Link to this definition"></a></dt>
-<dd><p>Initialize.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Attributes<span class="colon">:</span></dt>
-<dd class="field-odd"><dl class="simple">
-<dt><a class="reference internal" href="#edelweissfe.materials.neohooke.neohookepencegouformulationb.NeoHookeanWbMaterial.materialProperties" title="edelweissfe.materials.neohooke.neohookepencegouformulationb.NeoHookeanWbMaterial.materialProperties"><code class="xref py py-obj docutils literal notranslate"><span class="pre">materialProperties</span></code></a></dt><dd><p>The properties the material has.</p>
-</dd>
-</dl>
-</dd>
-<dt class="field-even">Parameters<span class="colon">:</span></dt>
-<dd class="field-even"><p><strong>materialProperties</strong> (<em>ndarray</em>)</p>
-</dd>
-</dl>
-<p class="rubric">Methods</p>
-<table class="autosummary longtable docutils align-default">
-<tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.materials.neohooke.neohookepencegouformulationb.NeoHookeanWbMaterial.assignCurrentStateVars" title="edelweissfe.materials.neohooke.neohookepencegouformulationb.NeoHookeanWbMaterial.assignCurrentStateVars"><code class="xref py py-obj docutils literal notranslate"><span class="pre">assignCurrentStateVars</span></code></a>(currentStateVars)</p></td>
-<td><p>Assign new current state vars.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.materials.neohooke.neohookepencegouformulationb.NeoHookeanWbMaterial.computeKirchhoff" title="edelweissfe.materials.neohooke.neohookepencegouformulationb.NeoHookeanWbMaterial.computeKirchhoff"><code class="xref py py-obj docutils literal notranslate"><span class="pre">computeKirchhoff</span></code></a>(stress, ...)</p></td>
-<td><p>Computes the stresses for a 3D material/2D material with plane strain.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.materials.neohooke.neohookepencegouformulationb.NeoHookeanWbMaterial.computePlaneKirchhoff" title="edelweissfe.materials.neohooke.neohookepencegouformulationb.NeoHookeanWbMaterial.computePlaneKirchhoff"><code class="xref py py-obj docutils literal notranslate"><span class="pre">computePlaneKirchhoff</span></code></a>(stress, ...)</p></td>
-<td><p>Computes the stresses for a 2D material with plane stress.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.materials.neohooke.neohookepencegouformulationb.NeoHookeanWbMaterial.computeUniaxialKirchhoff" title="edelweissfe.materials.neohooke.neohookepencegouformulationb.NeoHookeanWbMaterial.computeUniaxialKirchhoff"><code class="xref py py-obj docutils literal notranslate"><span class="pre">computeUniaxialKirchhoff</span></code></a>(stress, ...)</p></td>
-<td><p>Computes the stresses for a uniaxial stress state.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.materials.neohooke.neohookepencegouformulationb.NeoHookeanWbMaterial.getDensity" title="edelweissfe.materials.neohooke.neohookepencegouformulationb.NeoHookeanWbMaterial.getDensity"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getDensity</span></code></a>()</p></td>
-<td><p>Returns the density of the material.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.materials.neohooke.neohookepencegouformulationb.NeoHookeanWbMaterial.getNumberOfRequiredStateVars" title="edelweissfe.materials.neohooke.neohookepencegouformulationb.NeoHookeanWbMaterial.getNumberOfRequiredStateVars"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getNumberOfRequiredStateVars</span></code></a>()</p></td>
-<td><p>Returns number of needed material state Variables per integration point in the material.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.materials.neohooke.neohookepencegouformulationb.NeoHookeanWbMaterial.getResult" title="edelweissfe.materials.neohooke.neohookepencegouformulationb.NeoHookeanWbMaterial.getResult"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getResult</span></code></a>(result)</p></td>
-<td><p>Get the result, as a persistent view which is continiously updated by the material.</p></td>
-</tr>
-</tbody>
-</table>
-<dl class="py method">
-<dt class="sig sig-object py" id="edelweissfe.materials.neohooke.neohookepencegouformulationb.NeoHookeanWbMaterial.assignCurrentStateVars">
-<span class="sig-name descname"><span class="pre">assignCurrentStateVars</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">currentStateVars</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/neohooke/neohookepencegouformulationb.html#NeoHookeanWbMaterial.assignCurrentStateVars"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.neohooke.neohookepencegouformulationb.NeoHookeanWbMaterial.assignCurrentStateVars" title="Link to this definition"></a></dt>
-<dd><p>Assign new current state vars.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>currentStateVars</strong> (<em>ndarray</em>) – Array containing the material state vars.</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="edelweissfe.materials.neohooke.neohookepencegouformulationb.NeoHookeanWbMaterial.computeKirchhoff">
-<span class="sig-name descname"><span class="pre">computeKirchhoff</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">stress</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dStress_dDeformationGradient</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">deformationGradient</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dTime</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/neohooke/neohookepencegouformulationb.html#NeoHookeanWbMaterial.computeKirchhoff"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.neohooke.neohookepencegouformulationb.NeoHookeanWbMaterial.computeKirchhoff" title="Link to this definition"></a></dt>
-<dd><p>Computes the stresses for a 3D material/2D material with plane strain.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>stress</strong> (<em>ndarray</em>) – Vector containing the stresses.</p></li>
-<li><p><strong>dStress_dDeformationGradient</strong> (<em>ndarray</em>) – Matrix containing dStress/dStrain.</p></li>
-<li><p><strong>deformationGradient</strong> (<em>ndarray</em>) – The deformation gradient at time step t.</p></li>
-<li><p><strong>time</strong> (<em>float</em>) – Array of step time and total time.</p></li>
-<li><p><strong>dTime</strong> (<em>float</em>) – Current time step size.</p></li>
-</ul>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="edelweissfe.materials.neohooke.neohookepencegouformulationb.NeoHookeanWbMaterial.computePlaneKirchhoff">
-<span class="sig-name descname"><span class="pre">computePlaneKirchhoff</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">stress</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dStress_dDeformationGradient</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">deformationGradient</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dTime</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/neohooke/neohookepencegouformulationb.html#NeoHookeanWbMaterial.computePlaneKirchhoff"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.neohooke.neohookepencegouformulationb.NeoHookeanWbMaterial.computePlaneKirchhoff" title="Link to this definition"></a></dt>
-<dd><p>Computes the stresses for a 2D material with plane stress.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>stress</strong> (<em>ndarray</em>) – Vector containing the stresses.</p></li>
-<li><p><strong>dStress_dDeformationGradient</strong> (<em>ndarray</em>) – Matrix containing dStress/dStrain.</p></li>
-<li><p><strong>deformationGradient</strong> (<em>ndarray</em>) – The deformation gradient at time step t.</p></li>
-<li><p><strong>time</strong> (<em>float</em>) – Array of step time and total time.</p></li>
-<li><p><strong>dTime</strong> (<em>float</em>) – Current time step size.</p></li>
-</ul>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="edelweissfe.materials.neohooke.neohookepencegouformulationb.NeoHookeanWbMaterial.computeUniaxialKirchhoff">
-<span class="sig-name descname"><span class="pre">computeUniaxialKirchhoff</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">stress</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dStress_dDeformationGradient</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">deformationGradient</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dTime</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/neohooke/neohookepencegouformulationb.html#NeoHookeanWbMaterial.computeUniaxialKirchhoff"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.neohooke.neohookepencegouformulationb.NeoHookeanWbMaterial.computeUniaxialKirchhoff" title="Link to this definition"></a></dt>
-<dd><p>Computes the stresses for a uniaxial stress state.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>stress</strong> (<em>ndarray</em>) – Vector containing the stresses.</p></li>
-<li><p><strong>dStress_dDeformationGradient</strong> (<em>ndarray</em>) – Matrix containing dStress/dStrain.</p></li>
-<li><p><strong>deformationGradient</strong> (<em>ndarray</em>) – The deformation gradient at time step t.</p></li>
-<li><p><strong>time</strong> (<em>float</em>) – Array of step time and total time.</p></li>
-<li><p><strong>dTime</strong> (<em>float</em>) – Current time step size.</p></li>
-</ul>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="edelweissfe.materials.neohooke.neohookepencegouformulationb.NeoHookeanWbMaterial.getDensity">
-<span class="sig-name descname"><span class="pre">getDensity</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/neohooke/neohookepencegouformulationb.html#NeoHookeanWbMaterial.getDensity"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.neohooke.neohookepencegouformulationb.NeoHookeanWbMaterial.getDensity" title="Link to this definition"></a></dt>
-<dd><p>Returns the density of the material.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Returns<span class="colon">:</span></dt>
-<dd class="field-odd"><p>The density of the material.</p>
-</dd>
-<dt class="field-even">Return type<span class="colon">:</span></dt>
-<dd class="field-even"><p>float</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="edelweissfe.materials.neohooke.neohookepencegouformulationb.NeoHookeanWbMaterial.getNumberOfRequiredStateVars">
-<span class="sig-name descname"><span class="pre">getNumberOfRequiredStateVars</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/neohooke/neohookepencegouformulationb.html#NeoHookeanWbMaterial.getNumberOfRequiredStateVars"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.neohooke.neohookepencegouformulationb.NeoHookeanWbMaterial.getNumberOfRequiredStateVars" title="Link to this definition"></a></dt>
-<dd><p>Returns number of needed material state Variables per integration point in the material.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Returns<span class="colon">:</span></dt>
-<dd class="field-odd"><p>Number of needed material state Vars.</p>
-</dd>
-<dt class="field-even">Return type<span class="colon">:</span></dt>
-<dd class="field-even"><p>int</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="edelweissfe.materials.neohooke.neohookepencegouformulationb.NeoHookeanWbMaterial.getResult">
-<span class="sig-name descname"><span class="pre">getResult</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">result</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/neohooke/neohookepencegouformulationb.html#NeoHookeanWbMaterial.getResult"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.neohooke.neohookepencegouformulationb.NeoHookeanWbMaterial.getResult" title="Link to this definition"></a></dt>
-<dd><p>Get the result, as a persistent view which is continiously
-updated by the material.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>result</strong> (<em>str</em>) – The name of the result.</p>
-</dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>The result.</p>
-</dd>
-<dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p>float</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py property">
-<dt class="sig sig-object py" id="edelweissfe.materials.neohooke.neohookepencegouformulationb.NeoHookeanWbMaterial.materialProperties">
-<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">materialProperties</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">ndarray</span></em><a class="headerlink" href="#edelweissfe.materials.neohooke.neohookepencegouformulationb.NeoHookeanWbMaterial.materialProperties" title="Link to this definition"></a></dt>
-<dd><p>The properties the material has.</p>
-</dd></dl>
-
-</dd></dl>
-
 <p>The <span class="math notranslate nohighlight">\(\mathbf{W_c}\)</span> <strong>material</strong> is defined by</p>
 <div class="math notranslate nohighlight">
 \[W_c (I_1, J) = \frac{\mu}{2} \left(I_1 - 3\right) + \frac{3\mu^2}{3\kappa - 2\mu} \left(J^{\frac{2}{3} - \frac{\kappa}{\mu}} - 1\right).\]</div>
@@ -1085,13 +650,13 @@ updated by the material.</p>
 <div class="math notranslate nohighlight">
 \[C^{\tau \text{F}}_{ijkL} = \mu\frac{\partial b_{ij}}{\partial F_{kL}} + J^{\frac{2}{3}-\frac{\kappa}{\mu}}\left(\kappa - \frac{2\mu}{3}\right) \delta_{ij} (F^{-1})_{Lk}.\]</div>
 <dl class="py class">
-<dt class="sig sig-object py" id="edelweissfe.materials.neohooke.neohookepencegouformulationc.NeoHookeanWcMaterial">
-<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">edelweissfe.materials.neohooke.neohookepencegouformulationc.</span></span><span class="sig-name descname"><span class="pre">NeoHookeanWcMaterial</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">materialProperties</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/neohooke/neohookepencegouformulationc.html#NeoHookeanWcMaterial"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.neohooke.neohookepencegouformulationc.NeoHookeanWcMaterial" title="Link to this definition"></a></dt>
+<dt class="sig sig-object py" id="edelweissfe.materials.neohooke.neohooke.NeoHookeanMaterial">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">edelweissfe.materials.neohooke.neohooke.</span></span><span class="sig-name descname"><span class="pre">NeoHookeanMaterial</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">materialProperties</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/neohooke/neohooke.html#NeoHookeanMaterial"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.neohooke.neohooke.NeoHookeanMaterial" title="Link to this definition"></a></dt>
 <dd><p>Initialize.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Attributes<span class="colon">:</span></dt>
 <dd class="field-odd"><dl class="simple">
-<dt><a class="reference internal" href="#edelweissfe.materials.neohooke.neohookepencegouformulationc.NeoHookeanWcMaterial.materialProperties" title="edelweissfe.materials.neohooke.neohookepencegouformulationc.NeoHookeanWcMaterial.materialProperties"><code class="xref py py-obj docutils literal notranslate"><span class="pre">materialProperties</span></code></a></dt><dd><p>The properties the material has.</p>
+<dt><a class="reference internal" href="#edelweissfe.materials.hyperelasticadvanced.hyperelasticadvancedi2extended.HyperelasticAdvancedI2ExtendedMaterial.materialProperties" title="edelweissfe.materials.hyperelasticadvanced.hyperelasticadvancedi2extended.HyperelasticAdvancedI2ExtendedMaterial.materialProperties"><code class="xref py py-obj docutils literal notranslate"><span class="pre">materialProperties</span></code></a></dt><dd><p>The properties the material has.</p>
 </dd>
 </dl>
 </dd>
@@ -1102,32 +667,32 @@ updated by the material.</p>
 <p class="rubric">Methods</p>
 <table class="autosummary longtable docutils align-default">
 <tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.materials.neohooke.neohookepencegouformulationc.NeoHookeanWcMaterial.assignCurrentStateVars" title="edelweissfe.materials.neohooke.neohookepencegouformulationc.NeoHookeanWcMaterial.assignCurrentStateVars"><code class="xref py py-obj docutils literal notranslate"><span class="pre">assignCurrentStateVars</span></code></a>(currentStateVars)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.materials.neohooke.neohooke.NeoHookeanMaterial.assignCurrentStateVars" title="edelweissfe.materials.neohooke.neohooke.NeoHookeanMaterial.assignCurrentStateVars"><code class="xref py py-obj docutils literal notranslate"><span class="pre">assignCurrentStateVars</span></code></a>(currentStateVars)</p></td>
 <td><p>Assign new current state vars.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.materials.neohooke.neohookepencegouformulationc.NeoHookeanWcMaterial.computeKirchhoff" title="edelweissfe.materials.neohooke.neohookepencegouformulationc.NeoHookeanWcMaterial.computeKirchhoff"><code class="xref py py-obj docutils literal notranslate"><span class="pre">computeKirchhoff</span></code></a>(stress, ...)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.materials.neohooke.neohooke.NeoHookeanMaterial.computeKirchhoff" title="edelweissfe.materials.neohooke.neohooke.NeoHookeanMaterial.computeKirchhoff"><code class="xref py py-obj docutils literal notranslate"><span class="pre">computeKirchhoff</span></code></a>(stress, ...)</p></td>
 <td><p>Computes the stresses for a 3D material/2D material with plane strain.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.materials.neohooke.neohookepencegouformulationc.NeoHookeanWcMaterial.computePlaneKirchhoff" title="edelweissfe.materials.neohooke.neohookepencegouformulationc.NeoHookeanWcMaterial.computePlaneKirchhoff"><code class="xref py py-obj docutils literal notranslate"><span class="pre">computePlaneKirchhoff</span></code></a>(stress, ...)</p></td>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">computePlaneKirchhoff</span></code>(stress, ...)</p></td>
 <td><p>Computes the stresses for a 2D material with plane stress.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.materials.neohooke.neohookepencegouformulationc.NeoHookeanWcMaterial.computeUniaxialKirchhoff" title="edelweissfe.materials.neohooke.neohookepencegouformulationc.NeoHookeanWcMaterial.computeUniaxialKirchhoff"><code class="xref py py-obj docutils literal notranslate"><span class="pre">computeUniaxialKirchhoff</span></code></a>(stress, ...)</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">computeUniaxialKirchhoff</span></code>(stress, ...)</p></td>
 <td><p>Computes the stresses for a uniaxial stress state.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.materials.neohooke.neohookepencegouformulationc.NeoHookeanWcMaterial.getDensity" title="edelweissfe.materials.neohooke.neohookepencegouformulationc.NeoHookeanWcMaterial.getDensity"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getDensity</span></code></a>()</p></td>
-<td><p>Returns the density of the material.</p></td>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">getDensity</span></code>()</p></td>
+<td><p>Determines the density of the material.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.materials.neohooke.neohookepencegouformulationc.NeoHookeanWcMaterial.getNumberOfRequiredStateVars" title="edelweissfe.materials.neohooke.neohookepencegouformulationc.NeoHookeanWcMaterial.getNumberOfRequiredStateVars"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getNumberOfRequiredStateVars</span></code></a>()</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.materials.neohooke.neohooke.NeoHookeanMaterial.getNumberOfRequiredStateVars" title="edelweissfe.materials.neohooke.neohooke.NeoHookeanMaterial.getNumberOfRequiredStateVars"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getNumberOfRequiredStateVars</span></code></a>()</p></td>
 <td><p>Returns number of needed material state Variables per integration point in the material.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.materials.neohooke.neohookepencegouformulationc.NeoHookeanWcMaterial.getResult" title="edelweissfe.materials.neohooke.neohookepencegouformulationc.NeoHookeanWcMaterial.getResult"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getResult</span></code></a>(result)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.materials.neohooke.neohooke.NeoHookeanMaterial.getResult" title="edelweissfe.materials.neohooke.neohooke.NeoHookeanMaterial.getResult"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getResult</span></code></a>(result)</p></td>
 <td><p>Get the result, as a persistent view which is continiously updated by the material.</p></td>
 </tr>
 </tbody>
 </table>
 <dl class="py method">
-<dt class="sig sig-object py" id="edelweissfe.materials.neohooke.neohookepencegouformulationc.NeoHookeanWcMaterial.assignCurrentStateVars">
-<span class="sig-name descname"><span class="pre">assignCurrentStateVars</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">currentStateVars</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/neohooke/neohookepencegouformulationc.html#NeoHookeanWcMaterial.assignCurrentStateVars"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.neohooke.neohookepencegouformulationc.NeoHookeanWcMaterial.assignCurrentStateVars" title="Link to this definition"></a></dt>
+<dt class="sig sig-object py" id="edelweissfe.materials.neohooke.neohooke.NeoHookeanMaterial.assignCurrentStateVars">
+<span class="sig-name descname"><span class="pre">assignCurrentStateVars</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">currentStateVars</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/neohooke/neohooke.html#NeoHookeanMaterial.assignCurrentStateVars"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.neohooke.neohooke.NeoHookeanMaterial.assignCurrentStateVars" title="Link to this definition"></a></dt>
 <dd><p>Assign new current state vars.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -1137,8 +702,8 @@ updated by the material.</p>
 </dd></dl>
 
 <dl class="py method">
-<dt class="sig sig-object py" id="edelweissfe.materials.neohooke.neohookepencegouformulationc.NeoHookeanWcMaterial.computeKirchhoff">
-<span class="sig-name descname"><span class="pre">computeKirchhoff</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">stress</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dStress_dDeformationGradient</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">deformationGradient</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dTime</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/neohooke/neohookepencegouformulationc.html#NeoHookeanWcMaterial.computeKirchhoff"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.neohooke.neohookepencegouformulationc.NeoHookeanWcMaterial.computeKirchhoff" title="Link to this definition"></a></dt>
+<dt class="sig sig-object py" id="edelweissfe.materials.neohooke.neohooke.NeoHookeanMaterial.computeKirchhoff">
+<span class="sig-name descname"><span class="pre">computeKirchhoff</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">stress</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dStress_dDeformationGradient</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">deformationGradient</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dTime</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/neohooke/neohooke.html#NeoHookeanMaterial.computeKirchhoff"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.neohooke.neohooke.NeoHookeanMaterial.computeKirchhoff" title="Link to this definition"></a></dt>
 <dd><p>Computes the stresses for a 3D material/2D material with plane strain.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -1154,56 +719,8 @@ updated by the material.</p>
 </dd></dl>
 
 <dl class="py method">
-<dt class="sig sig-object py" id="edelweissfe.materials.neohooke.neohookepencegouformulationc.NeoHookeanWcMaterial.computePlaneKirchhoff">
-<span class="sig-name descname"><span class="pre">computePlaneKirchhoff</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">stress</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dStress_dDeformationGradient</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">deformationGradient</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dTime</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/neohooke/neohookepencegouformulationc.html#NeoHookeanWcMaterial.computePlaneKirchhoff"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.neohooke.neohookepencegouformulationc.NeoHookeanWcMaterial.computePlaneKirchhoff" title="Link to this definition"></a></dt>
-<dd><p>Computes the stresses for a 2D material with plane stress.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>stress</strong> (<em>ndarray</em>) – Vector containing the stresses.</p></li>
-<li><p><strong>dStress_dDeformationGradient</strong> (<em>ndarray</em>) – Matrix containing dStress/dStrain.</p></li>
-<li><p><strong>deformationGradient</strong> (<em>ndarray</em>) – The deformation gradient at time step t.</p></li>
-<li><p><strong>time</strong> (<em>float</em>) – Array of step time and total time.</p></li>
-<li><p><strong>dTime</strong> (<em>float</em>) – Current time step size.</p></li>
-</ul>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="edelweissfe.materials.neohooke.neohookepencegouformulationc.NeoHookeanWcMaterial.computeUniaxialKirchhoff">
-<span class="sig-name descname"><span class="pre">computeUniaxialKirchhoff</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">stress</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dStress_dDeformationGradient</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">deformationGradient</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dTime</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/neohooke/neohookepencegouformulationc.html#NeoHookeanWcMaterial.computeUniaxialKirchhoff"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.neohooke.neohookepencegouformulationc.NeoHookeanWcMaterial.computeUniaxialKirchhoff" title="Link to this definition"></a></dt>
-<dd><p>Computes the stresses for a uniaxial stress state.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>stress</strong> (<em>ndarray</em>) – Vector containing the stresses.</p></li>
-<li><p><strong>dStress_dDeformationGradient</strong> (<em>ndarray</em>) – Matrix containing dStress/dStrain.</p></li>
-<li><p><strong>deformationGradient</strong> (<em>ndarray</em>) – The deformation gradient at time step t.</p></li>
-<li><p><strong>time</strong> (<em>float</em>) – Array of step time and total time.</p></li>
-<li><p><strong>dTime</strong> (<em>float</em>) – Current time step size.</p></li>
-</ul>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="edelweissfe.materials.neohooke.neohookepencegouformulationc.NeoHookeanWcMaterial.getDensity">
-<span class="sig-name descname"><span class="pre">getDensity</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/neohooke/neohookepencegouformulationc.html#NeoHookeanWcMaterial.getDensity"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.neohooke.neohookepencegouformulationc.NeoHookeanWcMaterial.getDensity" title="Link to this definition"></a></dt>
-<dd><p>Returns the density of the material.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Returns<span class="colon">:</span></dt>
-<dd class="field-odd"><p>The density of the material.</p>
-</dd>
-<dt class="field-even">Return type<span class="colon">:</span></dt>
-<dd class="field-even"><p>float</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="edelweissfe.materials.neohooke.neohookepencegouformulationc.NeoHookeanWcMaterial.getNumberOfRequiredStateVars">
-<span class="sig-name descname"><span class="pre">getNumberOfRequiredStateVars</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/neohooke/neohookepencegouformulationc.html#NeoHookeanWcMaterial.getNumberOfRequiredStateVars"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.neohooke.neohookepencegouformulationc.NeoHookeanWcMaterial.getNumberOfRequiredStateVars" title="Link to this definition"></a></dt>
+<dt class="sig sig-object py" id="edelweissfe.materials.neohooke.neohooke.NeoHookeanMaterial.getNumberOfRequiredStateVars">
+<span class="sig-name descname"><span class="pre">getNumberOfRequiredStateVars</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/neohooke/neohooke.html#NeoHookeanMaterial.getNumberOfRequiredStateVars"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.neohooke.neohooke.NeoHookeanMaterial.getNumberOfRequiredStateVars" title="Link to this definition"></a></dt>
 <dd><p>Returns number of needed material state Variables per integration point in the material.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Returns<span class="colon">:</span></dt>
@@ -1216,8 +733,8 @@ updated by the material.</p>
 </dd></dl>
 
 <dl class="py method">
-<dt class="sig sig-object py" id="edelweissfe.materials.neohooke.neohookepencegouformulationc.NeoHookeanWcMaterial.getResult">
-<span class="sig-name descname"><span class="pre">getResult</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">result</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/neohooke/neohookepencegouformulationc.html#NeoHookeanWcMaterial.getResult"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.neohooke.neohookepencegouformulationc.NeoHookeanWcMaterial.getResult" title="Link to this definition"></a></dt>
+<dt class="sig sig-object py" id="edelweissfe.materials.neohooke.neohooke.NeoHookeanMaterial.getResult">
+<span class="sig-name descname"><span class="pre">getResult</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">result</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/neohooke/neohooke.html#NeoHookeanMaterial.getResult"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.neohooke.neohooke.NeoHookeanMaterial.getResult" title="Link to this definition"></a></dt>
 <dd><p>Get the result, as a persistent view which is continiously
 updated by the material.</p>
 <dl class="field-list simple">
@@ -1231,12 +748,6 @@ updated by the material.</p>
 <dd class="field-odd"><p>float</p>
 </dd>
 </dl>
-</dd></dl>
-
-<dl class="py property">
-<dt class="sig sig-object py" id="edelweissfe.materials.neohooke.neohookepencegouformulationc.NeoHookeanWcMaterial.materialProperties">
-<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">materialProperties</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">ndarray</span></em><a class="headerlink" href="#edelweissfe.materials.neohooke.neohookepencegouformulationc.NeoHookeanWcMaterial.materialProperties" title="Link to this definition"></a></dt>
-<dd><p>The properties the material has.</p>
 </dd></dl>
 
 </dd></dl>
@@ -1283,7 +794,7 @@ depending on how complicated the energy density function is. These two packages 
 </div>
 <dl class="py class">
 <dt class="sig sig-object py" id="edelweissfe.materials.hyperelasticadvanced.hyperelasticadvancedi2extended.HyperelasticAdvancedI2ExtendedMaterial">
-<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">edelweissfe.materials.hyperelasticadvanced.hyperelasticadvancedi2extended.</span></span><span class="sig-name descname"><span class="pre">HyperelasticAdvancedI2ExtendedMaterial</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">materialProperties</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/hyperelasticadvanced/hyperelasticadvancedi2extended.html#HyperelasticAdvancedI2ExtendedMaterial"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.hyperelasticadvanced.hyperelasticadvancedi2extended.HyperelasticAdvancedI2ExtendedMaterial" title="Link to this definition"></a></dt>
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">edelweissfe.materials.hyperelasticadvanced.hyperelasticadvancedi2extended.</span></span><span class="sig-name descname"><span class="pre">HyperelasticAdvancedI2ExtendedMaterial</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">materialProperties</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/hyperelasticadvanced/hyperelasticadvancedi2extended.html#HyperelasticAdvancedI2ExtendedMaterial"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.hyperelasticadvanced.hyperelasticadvancedi2extended.HyperelasticAdvancedI2ExtendedMaterial" title="Link to this definition"></a></dt>
 <dd><p>Initialize.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Attributes<span class="colon">:</span></dt>
@@ -1311,8 +822,8 @@ depending on how complicated the energy density function is. These two packages 
 <tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.materials.hyperelasticadvanced.hyperelasticadvancedi2extended.HyperelasticAdvancedI2ExtendedMaterial.computeUniaxialKirchhoff" title="edelweissfe.materials.hyperelasticadvanced.hyperelasticadvancedi2extended.HyperelasticAdvancedI2ExtendedMaterial.computeUniaxialKirchhoff"><code class="xref py py-obj docutils literal notranslate"><span class="pre">computeUniaxialKirchhoff</span></code></a>(stress, ...)</p></td>
 <td><p>Computes the stresses for a uniaxial stress state.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.materials.hyperelasticadvanced.hyperelasticadvancedi2extended.HyperelasticAdvancedI2ExtendedMaterial.getDensity" title="edelweissfe.materials.hyperelasticadvanced.hyperelasticadvancedi2extended.HyperelasticAdvancedI2ExtendedMaterial.getDensity"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getDensity</span></code></a>()</p></td>
-<td><p>Returns the density of the material.</p></td>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">getDensity</span></code>()</p></td>
+<td><p>Determines the density of the material.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.materials.hyperelasticadvanced.hyperelasticadvancedi2extended.HyperelasticAdvancedI2ExtendedMaterial.getNumberOfRequiredStateVars" title="edelweissfe.materials.hyperelasticadvanced.hyperelasticadvancedi2extended.HyperelasticAdvancedI2ExtendedMaterial.getNumberOfRequiredStateVars"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getNumberOfRequiredStateVars</span></code></a>()</p></td>
 <td><p>Returns number of needed material state Variables per integration point in the material.</p></td>
@@ -1388,20 +899,6 @@ depending on how complicated the energy density function is. These two packages 
 </dd></dl>
 
 <dl class="py method">
-<dt class="sig sig-object py" id="edelweissfe.materials.hyperelasticadvanced.hyperelasticadvancedi2extended.HyperelasticAdvancedI2ExtendedMaterial.getDensity">
-<span class="sig-name descname"><span class="pre">getDensity</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/hyperelasticadvanced/hyperelasticadvancedi2extended.html#HyperelasticAdvancedI2ExtendedMaterial.getDensity"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.hyperelasticadvanced.hyperelasticadvancedi2extended.HyperelasticAdvancedI2ExtendedMaterial.getDensity" title="Link to this definition"></a></dt>
-<dd><p>Returns the density of the material.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Returns<span class="colon">:</span></dt>
-<dd class="field-odd"><p>The density of the material.</p>
-</dd>
-<dt class="field-even">Return type<span class="colon">:</span></dt>
-<dd class="field-even"><p>float</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
 <dt class="sig sig-object py" id="edelweissfe.materials.hyperelasticadvanced.hyperelasticadvancedi2extended.HyperelasticAdvancedI2ExtendedMaterial.getNumberOfRequiredStateVars">
 <span class="sig-name descname"><span class="pre">getNumberOfRequiredStateVars</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/hyperelasticadvanced/hyperelasticadvancedi2extended.html#HyperelasticAdvancedI2ExtendedMaterial.getNumberOfRequiredStateVars"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.hyperelasticadvanced.hyperelasticadvancedi2extended.HyperelasticAdvancedI2ExtendedMaterial.getNumberOfRequiredStateVars" title="Link to this definition"></a></dt>
 <dd><p>Returns number of needed material state Variables per integration point in the material.</p>
@@ -1446,7 +943,7 @@ updated by the material.</p>
 
 <dl class="py property">
 <dt class="sig sig-object py" id="edelweissfe.materials.hyperelasticadvanced.hyperelasticadvancedi2extended.HyperelasticAdvancedI2ExtendedMaterial.materialProperties">
-<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">materialProperties</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">dict</span></em><a class="headerlink" href="#edelweissfe.materials.hyperelasticadvanced.hyperelasticadvancedi2extended.HyperelasticAdvancedI2ExtendedMaterial.materialProperties" title="Link to this definition"></a></dt>
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">materialProperties</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">dict</span></span><a class="headerlink" href="#edelweissfe.materials.hyperelasticadvanced.hyperelasticadvancedi2extended.HyperelasticAdvancedI2ExtendedMaterial.materialProperties" title="Link to this definition"></a></dt>
 <dd><p>The properties the material has.</p>
 </dd></dl>
 
@@ -1459,6 +956,7 @@ updated by the material.</p>
 the spatial Hencky-strain <span class="math notranslate nohighlight">\(\mathbf{e}\)</span> and the same yield and hardening functions as for the <a class="reference internal" href="#von-mises-material"><span class="std std-ref">Von Mises material</span></a> added onto them.
 This material needs the following material properties in the correct order:</p>
 <ol class="arabic simple">
+<li><p><strong>formulation</strong>               - Selects the energy density function: 1 for <span class="math notranslate nohighlight">\(W_a\)</span>, 2 for <span class="math notranslate nohighlight">\(W_b\)</span>, 3 for <span class="math notranslate nohighlight">\(W_c\)</span>.</p></li>
 <li><p><span class="math notranslate nohighlight">\(\mathbf{\mu}\)</span>          - Shear modulus.</p></li>
 <li><p><span class="math notranslate nohighlight">\(\mathbf{\kappa}\)</span>       - Bulk modulus.</p></li>
 <li><p><span class="math notranslate nohighlight">\(\mathbf{f_{y0}}\)</span>       - Yield stress.</p></li>
@@ -1473,13 +971,13 @@ This material needs the following material properties in the correct order:</p>
 ||\tau^\text{dev}(\tau(\mathbf{e}^\text{e}_{n+1}))|| - \sqrt{\frac{2}{3}} f_\text{y}(\bar{\kappa}^\text{old}+\Delta\bar{\kappa}) \end{bmatrix}\end{split}\]</div>
 <p>and give back the Kirchhoff stress and its corresponding tangent modulus. The full algorithm for these materials can be found in [b], chapter 14.</p>
 <dl class="py class">
-<dt class="sig sig-object py" id="edelweissfe.materials.neohookeplastic.neohookepencegouformulationaplastic.NeoHookeanWaPlasticMaterial">
-<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">edelweissfe.materials.neohookeplastic.neohookepencegouformulationaplastic.</span></span><span class="sig-name descname"><span class="pre">NeoHookeanWaPlasticMaterial</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">materialProperties</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/neohookeplastic/neohookepencegouformulationaplastic.html#NeoHookeanWaPlasticMaterial"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.neohookeplastic.neohookepencegouformulationaplastic.NeoHookeanWaPlasticMaterial" title="Link to this definition"></a></dt>
+<dt class="sig sig-object py" id="edelweissfe.materials.neohookeplastic.neohookeplastic.NeoHookeanPlasticMaterial">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">edelweissfe.materials.neohookeplastic.neohookeplastic.</span></span><span class="sig-name descname"><span class="pre">NeoHookeanPlasticMaterial</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">materialProperties</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/neohookeplastic/neohookeplastic.html#NeoHookeanPlasticMaterial"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.neohookeplastic.neohookeplastic.NeoHookeanPlasticMaterial" title="Link to this definition"></a></dt>
 <dd><p>Initialize.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Attributes<span class="colon">:</span></dt>
 <dd class="field-odd"><dl class="simple">
-<dt><a class="reference internal" href="#edelweissfe.materials.neohookeplastic.neohookepencegouformulationaplastic.NeoHookeanWaPlasticMaterial.materialProperties" title="edelweissfe.materials.neohookeplastic.neohookepencegouformulationaplastic.NeoHookeanWaPlasticMaterial.materialProperties"><code class="xref py py-obj docutils literal notranslate"><span class="pre">materialProperties</span></code></a></dt><dd><p>The properties the material has.</p>
+<dt><a class="reference internal" href="#edelweissfe.materials.hyperelasticadvanced.hyperelasticadvancedi2extended.HyperelasticAdvancedI2ExtendedMaterial.materialProperties" title="edelweissfe.materials.hyperelasticadvanced.hyperelasticadvancedi2extended.HyperelasticAdvancedI2ExtendedMaterial.materialProperties"><code class="xref py py-obj docutils literal notranslate"><span class="pre">materialProperties</span></code></a></dt><dd><p>The properties the material has.</p>
 </dd>
 </dl>
 </dd>
@@ -1490,32 +988,32 @@ This material needs the following material properties in the correct order:</p>
 <p class="rubric">Methods</p>
 <table class="autosummary longtable docutils align-default">
 <tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.materials.neohookeplastic.neohookepencegouformulationaplastic.NeoHookeanWaPlasticMaterial.assignCurrentStateVars" title="edelweissfe.materials.neohookeplastic.neohookepencegouformulationaplastic.NeoHookeanWaPlasticMaterial.assignCurrentStateVars"><code class="xref py py-obj docutils literal notranslate"><span class="pre">assignCurrentStateVars</span></code></a>(currentStateVars)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.materials.neohookeplastic.neohookeplastic.NeoHookeanPlasticMaterial.assignCurrentStateVars" title="edelweissfe.materials.neohookeplastic.neohookeplastic.NeoHookeanPlasticMaterial.assignCurrentStateVars"><code class="xref py py-obj docutils literal notranslate"><span class="pre">assignCurrentStateVars</span></code></a>(currentStateVars)</p></td>
 <td><p>Assign new current state vars.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.materials.neohookeplastic.neohookepencegouformulationaplastic.NeoHookeanWaPlasticMaterial.computeKirchhoff" title="edelweissfe.materials.neohookeplastic.neohookepencegouformulationaplastic.NeoHookeanWaPlasticMaterial.computeKirchhoff"><code class="xref py py-obj docutils literal notranslate"><span class="pre">computeKirchhoff</span></code></a>(stress, ...)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.materials.neohookeplastic.neohookeplastic.NeoHookeanPlasticMaterial.computeKirchhoff" title="edelweissfe.materials.neohookeplastic.neohookeplastic.NeoHookeanPlasticMaterial.computeKirchhoff"><code class="xref py py-obj docutils literal notranslate"><span class="pre">computeKirchhoff</span></code></a>(stress, ...)</p></td>
 <td><p>Computes the stresses for a 3D material/2D material with plane strain.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.materials.neohookeplastic.neohookepencegouformulationaplastic.NeoHookeanWaPlasticMaterial.computePlaneKirchhoff" title="edelweissfe.materials.neohookeplastic.neohookepencegouformulationaplastic.NeoHookeanWaPlasticMaterial.computePlaneKirchhoff"><code class="xref py py-obj docutils literal notranslate"><span class="pre">computePlaneKirchhoff</span></code></a>(stress, ...)</p></td>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">computePlaneKirchhoff</span></code>(stress, ...)</p></td>
 <td><p>Computes the stresses for a 2D material with plane stress.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.materials.neohookeplastic.neohookepencegouformulationaplastic.NeoHookeanWaPlasticMaterial.computeUniaxialKirchhoff" title="edelweissfe.materials.neohookeplastic.neohookepencegouformulationaplastic.NeoHookeanWaPlasticMaterial.computeUniaxialKirchhoff"><code class="xref py py-obj docutils literal notranslate"><span class="pre">computeUniaxialKirchhoff</span></code></a>(stress, ...)</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">computeUniaxialKirchhoff</span></code>(stress, ...)</p></td>
 <td><p>Computes the stresses for a uniaxial stress state.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.materials.neohookeplastic.neohookepencegouformulationaplastic.NeoHookeanWaPlasticMaterial.getDensity" title="edelweissfe.materials.neohookeplastic.neohookepencegouformulationaplastic.NeoHookeanWaPlasticMaterial.getDensity"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getDensity</span></code></a>()</p></td>
-<td><p>Returns the density of the material.</p></td>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">getDensity</span></code>()</p></td>
+<td><p>Determines the density of the material.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.materials.neohookeplastic.neohookepencegouformulationaplastic.NeoHookeanWaPlasticMaterial.getNumberOfRequiredStateVars" title="edelweissfe.materials.neohookeplastic.neohookepencegouformulationaplastic.NeoHookeanWaPlasticMaterial.getNumberOfRequiredStateVars"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getNumberOfRequiredStateVars</span></code></a>()</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.materials.neohookeplastic.neohookeplastic.NeoHookeanPlasticMaterial.getNumberOfRequiredStateVars" title="edelweissfe.materials.neohookeplastic.neohookeplastic.NeoHookeanPlasticMaterial.getNumberOfRequiredStateVars"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getNumberOfRequiredStateVars</span></code></a>()</p></td>
 <td><p>Returns number of needed material state Variables per integration point in the material.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.materials.neohookeplastic.neohookepencegouformulationaplastic.NeoHookeanWaPlasticMaterial.getResult" title="edelweissfe.materials.neohookeplastic.neohookepencegouformulationaplastic.NeoHookeanWaPlasticMaterial.getResult"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getResult</span></code></a>(result)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.materials.neohookeplastic.neohookeplastic.NeoHookeanPlasticMaterial.getResult" title="edelweissfe.materials.neohookeplastic.neohookeplastic.NeoHookeanPlasticMaterial.getResult"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getResult</span></code></a>(result)</p></td>
 <td><p>Get the result, as a persistent view which is continiously updated by the material.</p></td>
 </tr>
 </tbody>
 </table>
 <dl class="py method">
-<dt class="sig sig-object py" id="edelweissfe.materials.neohookeplastic.neohookepencegouformulationaplastic.NeoHookeanWaPlasticMaterial.assignCurrentStateVars">
-<span class="sig-name descname"><span class="pre">assignCurrentStateVars</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">currentStateVars</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/neohookeplastic/neohookepencegouformulationaplastic.html#NeoHookeanWaPlasticMaterial.assignCurrentStateVars"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.neohookeplastic.neohookepencegouformulationaplastic.NeoHookeanWaPlasticMaterial.assignCurrentStateVars" title="Link to this definition"></a></dt>
+<dt class="sig sig-object py" id="edelweissfe.materials.neohookeplastic.neohookeplastic.NeoHookeanPlasticMaterial.assignCurrentStateVars">
+<span class="sig-name descname"><span class="pre">assignCurrentStateVars</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">currentStateVars</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/neohookeplastic/neohookeplastic.html#NeoHookeanPlasticMaterial.assignCurrentStateVars"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.neohookeplastic.neohookeplastic.NeoHookeanPlasticMaterial.assignCurrentStateVars" title="Link to this definition"></a></dt>
 <dd><p>Assign new current state vars.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -1525,8 +1023,8 @@ This material needs the following material properties in the correct order:</p>
 </dd></dl>
 
 <dl class="py method">
-<dt class="sig sig-object py" id="edelweissfe.materials.neohookeplastic.neohookepencegouformulationaplastic.NeoHookeanWaPlasticMaterial.computeKirchhoff">
-<span class="sig-name descname"><span class="pre">computeKirchhoff</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">stress</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dStress_dDeformationGradient</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">deformationGradient</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dTime</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/neohookeplastic/neohookepencegouformulationaplastic.html#NeoHookeanWaPlasticMaterial.computeKirchhoff"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.neohookeplastic.neohookepencegouformulationaplastic.NeoHookeanWaPlasticMaterial.computeKirchhoff" title="Link to this definition"></a></dt>
+<dt class="sig sig-object py" id="edelweissfe.materials.neohookeplastic.neohookeplastic.NeoHookeanPlasticMaterial.computeKirchhoff">
+<span class="sig-name descname"><span class="pre">computeKirchhoff</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">stress</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dStress_dDeformationGradient</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">deformationGradient</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dTime</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/neohookeplastic/neohookeplastic.html#NeoHookeanPlasticMaterial.computeKirchhoff"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.neohookeplastic.neohookeplastic.NeoHookeanPlasticMaterial.computeKirchhoff" title="Link to this definition"></a></dt>
 <dd><p>Computes the stresses for a 3D material/2D material with plane strain.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -1542,56 +1040,8 @@ This material needs the following material properties in the correct order:</p>
 </dd></dl>
 
 <dl class="py method">
-<dt class="sig sig-object py" id="edelweissfe.materials.neohookeplastic.neohookepencegouformulationaplastic.NeoHookeanWaPlasticMaterial.computePlaneKirchhoff">
-<span class="sig-name descname"><span class="pre">computePlaneKirchhoff</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">stress</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dStress_dDeformationGradient</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">deformationGradient</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dTime</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/neohookeplastic/neohookepencegouformulationaplastic.html#NeoHookeanWaPlasticMaterial.computePlaneKirchhoff"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.neohookeplastic.neohookepencegouformulationaplastic.NeoHookeanWaPlasticMaterial.computePlaneKirchhoff" title="Link to this definition"></a></dt>
-<dd><p>Computes the stresses for a 2D material with plane stress.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>stress</strong> (<em>ndarray</em>) – Vector containing the stresses.</p></li>
-<li><p><strong>dStress_dDeformationGradient</strong> (<em>ndarray</em>) – Matrix containing dStress/dStrain.</p></li>
-<li><p><strong>deformationGradient</strong> (<em>ndarray</em>) – The deformation gradient at time step t.</p></li>
-<li><p><strong>time</strong> (<em>float</em>) – Array of step time and total time.</p></li>
-<li><p><strong>dTime</strong> (<em>float</em>) – Current time step size.</p></li>
-</ul>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="edelweissfe.materials.neohookeplastic.neohookepencegouformulationaplastic.NeoHookeanWaPlasticMaterial.computeUniaxialKirchhoff">
-<span class="sig-name descname"><span class="pre">computeUniaxialKirchhoff</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">stress</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dStress_dDeformationGradient</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">deformationGradient</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dTime</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/neohookeplastic/neohookepencegouformulationaplastic.html#NeoHookeanWaPlasticMaterial.computeUniaxialKirchhoff"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.neohookeplastic.neohookepencegouformulationaplastic.NeoHookeanWaPlasticMaterial.computeUniaxialKirchhoff" title="Link to this definition"></a></dt>
-<dd><p>Computes the stresses for a uniaxial stress state.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>stress</strong> (<em>ndarray</em>) – Vector containing the stresses.</p></li>
-<li><p><strong>dStress_dDeformationGradient</strong> (<em>ndarray</em>) – Matrix containing dStress/dStrain.</p></li>
-<li><p><strong>deformationGradient</strong> (<em>ndarray</em>) – The deformation gradient at time step t.</p></li>
-<li><p><strong>time</strong> (<em>float</em>) – Array of step time and total time.</p></li>
-<li><p><strong>dTime</strong> (<em>float</em>) – Current time step size.</p></li>
-</ul>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="edelweissfe.materials.neohookeplastic.neohookepencegouformulationaplastic.NeoHookeanWaPlasticMaterial.getDensity">
-<span class="sig-name descname"><span class="pre">getDensity</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/neohookeplastic/neohookepencegouformulationaplastic.html#NeoHookeanWaPlasticMaterial.getDensity"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.neohookeplastic.neohookepencegouformulationaplastic.NeoHookeanWaPlasticMaterial.getDensity" title="Link to this definition"></a></dt>
-<dd><p>Returns the density of the material.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Returns<span class="colon">:</span></dt>
-<dd class="field-odd"><p>The density of the material.</p>
-</dd>
-<dt class="field-even">Return type<span class="colon">:</span></dt>
-<dd class="field-even"><p>float</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="edelweissfe.materials.neohookeplastic.neohookepencegouformulationaplastic.NeoHookeanWaPlasticMaterial.getNumberOfRequiredStateVars">
-<span class="sig-name descname"><span class="pre">getNumberOfRequiredStateVars</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/neohookeplastic/neohookepencegouformulationaplastic.html#NeoHookeanWaPlasticMaterial.getNumberOfRequiredStateVars"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.neohookeplastic.neohookepencegouformulationaplastic.NeoHookeanWaPlasticMaterial.getNumberOfRequiredStateVars" title="Link to this definition"></a></dt>
+<dt class="sig sig-object py" id="edelweissfe.materials.neohookeplastic.neohookeplastic.NeoHookeanPlasticMaterial.getNumberOfRequiredStateVars">
+<span class="sig-name descname"><span class="pre">getNumberOfRequiredStateVars</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/neohookeplastic/neohookeplastic.html#NeoHookeanPlasticMaterial.getNumberOfRequiredStateVars"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.neohookeplastic.neohookeplastic.NeoHookeanPlasticMaterial.getNumberOfRequiredStateVars" title="Link to this definition"></a></dt>
 <dd><p>Returns number of needed material state Variables per integration point in the material.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Returns<span class="colon">:</span></dt>
@@ -1604,8 +1054,8 @@ This material needs the following material properties in the correct order:</p>
 </dd></dl>
 
 <dl class="py method">
-<dt class="sig sig-object py" id="edelweissfe.materials.neohookeplastic.neohookepencegouformulationaplastic.NeoHookeanWaPlasticMaterial.getResult">
-<span class="sig-name descname"><span class="pre">getResult</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">result</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/neohookeplastic/neohookepencegouformulationaplastic.html#NeoHookeanWaPlasticMaterial.getResult"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.neohookeplastic.neohookepencegouformulationaplastic.NeoHookeanWaPlasticMaterial.getResult" title="Link to this definition"></a></dt>
+<dt class="sig sig-object py" id="edelweissfe.materials.neohookeplastic.neohookeplastic.NeoHookeanPlasticMaterial.getResult">
+<span class="sig-name descname"><span class="pre">getResult</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">result</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/neohookeplastic/neohookeplastic.html#NeoHookeanPlasticMaterial.getResult"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.neohookeplastic.neohookeplastic.NeoHookeanPlasticMaterial.getResult" title="Link to this definition"></a></dt>
 <dd><p>Get the result, as a persistent view which is continiously
 updated by the material.</p>
 <dl class="field-list simple">
@@ -1619,326 +1069,6 @@ updated by the material.</p>
 <dd class="field-odd"><p>float</p>
 </dd>
 </dl>
-</dd></dl>
-
-<dl class="py property">
-<dt class="sig sig-object py" id="edelweissfe.materials.neohookeplastic.neohookepencegouformulationaplastic.NeoHookeanWaPlasticMaterial.materialProperties">
-<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">materialProperties</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">ndarray</span></em><a class="headerlink" href="#edelweissfe.materials.neohookeplastic.neohookepencegouformulationaplastic.NeoHookeanWaPlasticMaterial.materialProperties" title="Link to this definition"></a></dt>
-<dd><p>The properties the material has.</p>
-</dd></dl>
-
-</dd></dl>
-
-<dl class="py class">
-<dt class="sig sig-object py" id="edelweissfe.materials.neohookeplastic.neohookepencegouformulationbplastic.NeoHookeanWbPlasticMaterial">
-<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">edelweissfe.materials.neohookeplastic.neohookepencegouformulationbplastic.</span></span><span class="sig-name descname"><span class="pre">NeoHookeanWbPlasticMaterial</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">materialProperties</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/neohookeplastic/neohookepencegouformulationbplastic.html#NeoHookeanWbPlasticMaterial"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.neohookeplastic.neohookepencegouformulationbplastic.NeoHookeanWbPlasticMaterial" title="Link to this definition"></a></dt>
-<dd><p>Initialize.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Attributes<span class="colon">:</span></dt>
-<dd class="field-odd"><dl class="simple">
-<dt><a class="reference internal" href="#edelweissfe.materials.neohookeplastic.neohookepencegouformulationbplastic.NeoHookeanWbPlasticMaterial.materialProperties" title="edelweissfe.materials.neohookeplastic.neohookepencegouformulationbplastic.NeoHookeanWbPlasticMaterial.materialProperties"><code class="xref py py-obj docutils literal notranslate"><span class="pre">materialProperties</span></code></a></dt><dd><p>The properties the material has.</p>
-</dd>
-</dl>
-</dd>
-<dt class="field-even">Parameters<span class="colon">:</span></dt>
-<dd class="field-even"><p><strong>materialProperties</strong> (<em>ndarray</em>)</p>
-</dd>
-</dl>
-<p class="rubric">Methods</p>
-<table class="autosummary longtable docutils align-default">
-<tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.materials.neohookeplastic.neohookepencegouformulationbplastic.NeoHookeanWbPlasticMaterial.assignCurrentStateVars" title="edelweissfe.materials.neohookeplastic.neohookepencegouformulationbplastic.NeoHookeanWbPlasticMaterial.assignCurrentStateVars"><code class="xref py py-obj docutils literal notranslate"><span class="pre">assignCurrentStateVars</span></code></a>(currentStateVars)</p></td>
-<td><p>Assign new current state vars.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.materials.neohookeplastic.neohookepencegouformulationbplastic.NeoHookeanWbPlasticMaterial.computeKirchhoff" title="edelweissfe.materials.neohookeplastic.neohookepencegouformulationbplastic.NeoHookeanWbPlasticMaterial.computeKirchhoff"><code class="xref py py-obj docutils literal notranslate"><span class="pre">computeKirchhoff</span></code></a>(stress, ...)</p></td>
-<td><p>Computes the stresses for a 3D material/2D material with plane strain.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.materials.neohookeplastic.neohookepencegouformulationbplastic.NeoHookeanWbPlasticMaterial.computePlaneKirchhoff" title="edelweissfe.materials.neohookeplastic.neohookepencegouformulationbplastic.NeoHookeanWbPlasticMaterial.computePlaneKirchhoff"><code class="xref py py-obj docutils literal notranslate"><span class="pre">computePlaneKirchhoff</span></code></a>(stress, ...)</p></td>
-<td><p>Computes the stresses for a 2D material with plane stress.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.materials.neohookeplastic.neohookepencegouformulationbplastic.NeoHookeanWbPlasticMaterial.computeUniaxialKirchhoff" title="edelweissfe.materials.neohookeplastic.neohookepencegouformulationbplastic.NeoHookeanWbPlasticMaterial.computeUniaxialKirchhoff"><code class="xref py py-obj docutils literal notranslate"><span class="pre">computeUniaxialKirchhoff</span></code></a>(stress, ...)</p></td>
-<td><p>Computes the stresses for a uniaxial stress state.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.materials.neohookeplastic.neohookepencegouformulationbplastic.NeoHookeanWbPlasticMaterial.getDensity" title="edelweissfe.materials.neohookeplastic.neohookepencegouformulationbplastic.NeoHookeanWbPlasticMaterial.getDensity"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getDensity</span></code></a>()</p></td>
-<td><p>Returns the density of the material.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.materials.neohookeplastic.neohookepencegouformulationbplastic.NeoHookeanWbPlasticMaterial.getNumberOfRequiredStateVars" title="edelweissfe.materials.neohookeplastic.neohookepencegouformulationbplastic.NeoHookeanWbPlasticMaterial.getNumberOfRequiredStateVars"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getNumberOfRequiredStateVars</span></code></a>()</p></td>
-<td><p>Returns number of needed material state Variables per integration point in the material.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.materials.neohookeplastic.neohookepencegouformulationbplastic.NeoHookeanWbPlasticMaterial.getResult" title="edelweissfe.materials.neohookeplastic.neohookepencegouformulationbplastic.NeoHookeanWbPlasticMaterial.getResult"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getResult</span></code></a>(result)</p></td>
-<td><p>Get the result, as a persistent view which is continiously updated by the material.</p></td>
-</tr>
-</tbody>
-</table>
-<dl class="py method">
-<dt class="sig sig-object py" id="edelweissfe.materials.neohookeplastic.neohookepencegouformulationbplastic.NeoHookeanWbPlasticMaterial.assignCurrentStateVars">
-<span class="sig-name descname"><span class="pre">assignCurrentStateVars</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">currentStateVars</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/neohookeplastic/neohookepencegouformulationbplastic.html#NeoHookeanWbPlasticMaterial.assignCurrentStateVars"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.neohookeplastic.neohookepencegouformulationbplastic.NeoHookeanWbPlasticMaterial.assignCurrentStateVars" title="Link to this definition"></a></dt>
-<dd><p>Assign new current state vars.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>currentStateVars</strong> (<em>ndarray</em>) – Array containing the material state vars.</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="edelweissfe.materials.neohookeplastic.neohookepencegouformulationbplastic.NeoHookeanWbPlasticMaterial.computeKirchhoff">
-<span class="sig-name descname"><span class="pre">computeKirchhoff</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">stress</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dStress_dDeformationGradient</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">deformationGradient</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dTime</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/neohookeplastic/neohookepencegouformulationbplastic.html#NeoHookeanWbPlasticMaterial.computeKirchhoff"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.neohookeplastic.neohookepencegouformulationbplastic.NeoHookeanWbPlasticMaterial.computeKirchhoff" title="Link to this definition"></a></dt>
-<dd><p>Computes the stresses for a 3D material/2D material with plane strain.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>stress</strong> (<em>ndarray</em>) – Vector containing the stresses.</p></li>
-<li><p><strong>dStress_dDeformationGradient</strong> (<em>ndarray</em>) – Matrix containing dStress/dStrain.</p></li>
-<li><p><strong>deformationGradient</strong> (<em>ndarray</em>) – The deformation gradient at time step t.</p></li>
-<li><p><strong>time</strong> (<em>float</em>) – Array of step time and total time.</p></li>
-<li><p><strong>dTime</strong> (<em>float</em>) – Current time step size.</p></li>
-</ul>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="edelweissfe.materials.neohookeplastic.neohookepencegouformulationbplastic.NeoHookeanWbPlasticMaterial.computePlaneKirchhoff">
-<span class="sig-name descname"><span class="pre">computePlaneKirchhoff</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">stress</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dStress_dDeformationGradient</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">deformationGradient</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dTime</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/neohookeplastic/neohookepencegouformulationbplastic.html#NeoHookeanWbPlasticMaterial.computePlaneKirchhoff"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.neohookeplastic.neohookepencegouformulationbplastic.NeoHookeanWbPlasticMaterial.computePlaneKirchhoff" title="Link to this definition"></a></dt>
-<dd><p>Computes the stresses for a 2D material with plane stress.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>stress</strong> (<em>ndarray</em>) – Vector containing the stresses.</p></li>
-<li><p><strong>dStress_dDeformationGradient</strong> (<em>ndarray</em>) – Matrix containing dStress/dStrain.</p></li>
-<li><p><strong>deformationGradient</strong> (<em>ndarray</em>) – The deformation gradient at time step t.</p></li>
-<li><p><strong>time</strong> (<em>float</em>) – Array of step time and total time.</p></li>
-<li><p><strong>dTime</strong> (<em>float</em>) – Current time step size.</p></li>
-</ul>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="edelweissfe.materials.neohookeplastic.neohookepencegouformulationbplastic.NeoHookeanWbPlasticMaterial.computeUniaxialKirchhoff">
-<span class="sig-name descname"><span class="pre">computeUniaxialKirchhoff</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">stress</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dStress_dDeformationGradient</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">deformationGradient</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dTime</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/neohookeplastic/neohookepencegouformulationbplastic.html#NeoHookeanWbPlasticMaterial.computeUniaxialKirchhoff"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.neohookeplastic.neohookepencegouformulationbplastic.NeoHookeanWbPlasticMaterial.computeUniaxialKirchhoff" title="Link to this definition"></a></dt>
-<dd><p>Computes the stresses for a uniaxial stress state.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>stress</strong> (<em>ndarray</em>) – Vector containing the stresses.</p></li>
-<li><p><strong>dStress_dDeformationGradient</strong> (<em>ndarray</em>) – Matrix containing dStress/dStrain.</p></li>
-<li><p><strong>deformationGradient</strong> (<em>ndarray</em>) – The deformation gradient at time step t.</p></li>
-<li><p><strong>time</strong> (<em>float</em>) – Array of step time and total time.</p></li>
-<li><p><strong>dTime</strong> (<em>float</em>) – Current time step size.</p></li>
-</ul>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="edelweissfe.materials.neohookeplastic.neohookepencegouformulationbplastic.NeoHookeanWbPlasticMaterial.getDensity">
-<span class="sig-name descname"><span class="pre">getDensity</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/neohookeplastic/neohookepencegouformulationbplastic.html#NeoHookeanWbPlasticMaterial.getDensity"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.neohookeplastic.neohookepencegouformulationbplastic.NeoHookeanWbPlasticMaterial.getDensity" title="Link to this definition"></a></dt>
-<dd><p>Returns the density of the material.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Returns<span class="colon">:</span></dt>
-<dd class="field-odd"><p>The density of the material.</p>
-</dd>
-<dt class="field-even">Return type<span class="colon">:</span></dt>
-<dd class="field-even"><p>float</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="edelweissfe.materials.neohookeplastic.neohookepencegouformulationbplastic.NeoHookeanWbPlasticMaterial.getNumberOfRequiredStateVars">
-<span class="sig-name descname"><span class="pre">getNumberOfRequiredStateVars</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/neohookeplastic/neohookepencegouformulationbplastic.html#NeoHookeanWbPlasticMaterial.getNumberOfRequiredStateVars"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.neohookeplastic.neohookepencegouformulationbplastic.NeoHookeanWbPlasticMaterial.getNumberOfRequiredStateVars" title="Link to this definition"></a></dt>
-<dd><p>Returns number of needed material state Variables per integration point in the material.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Returns<span class="colon">:</span></dt>
-<dd class="field-odd"><p>Number of needed material state Vars.</p>
-</dd>
-<dt class="field-even">Return type<span class="colon">:</span></dt>
-<dd class="field-even"><p>int</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="edelweissfe.materials.neohookeplastic.neohookepencegouformulationbplastic.NeoHookeanWbPlasticMaterial.getResult">
-<span class="sig-name descname"><span class="pre">getResult</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">result</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/neohookeplastic/neohookepencegouformulationbplastic.html#NeoHookeanWbPlasticMaterial.getResult"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.neohookeplastic.neohookepencegouformulationbplastic.NeoHookeanWbPlasticMaterial.getResult" title="Link to this definition"></a></dt>
-<dd><p>Get the result, as a persistent view which is continiously
-updated by the material.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>result</strong> (<em>str</em>) – The name of the result.</p>
-</dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>The result.</p>
-</dd>
-<dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p>float</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py property">
-<dt class="sig sig-object py" id="edelweissfe.materials.neohookeplastic.neohookepencegouformulationbplastic.NeoHookeanWbPlasticMaterial.materialProperties">
-<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">materialProperties</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">ndarray</span></em><a class="headerlink" href="#edelweissfe.materials.neohookeplastic.neohookepencegouformulationbplastic.NeoHookeanWbPlasticMaterial.materialProperties" title="Link to this definition"></a></dt>
-<dd><p>The properties the material has.</p>
-</dd></dl>
-
-</dd></dl>
-
-<dl class="py class">
-<dt class="sig sig-object py" id="edelweissfe.materials.neohookeplastic.neohookepencegouformulationcplastic.NeoHookeanWcPlasticMaterial">
-<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">edelweissfe.materials.neohookeplastic.neohookepencegouformulationcplastic.</span></span><span class="sig-name descname"><span class="pre">NeoHookeanWcPlasticMaterial</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">materialProperties</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/neohookeplastic/neohookepencegouformulationcplastic.html#NeoHookeanWcPlasticMaterial"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.neohookeplastic.neohookepencegouformulationcplastic.NeoHookeanWcPlasticMaterial" title="Link to this definition"></a></dt>
-<dd><p>Initialize.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Attributes<span class="colon">:</span></dt>
-<dd class="field-odd"><dl class="simple">
-<dt><a class="reference internal" href="#edelweissfe.materials.neohookeplastic.neohookepencegouformulationcplastic.NeoHookeanWcPlasticMaterial.materialProperties" title="edelweissfe.materials.neohookeplastic.neohookepencegouformulationcplastic.NeoHookeanWcPlasticMaterial.materialProperties"><code class="xref py py-obj docutils literal notranslate"><span class="pre">materialProperties</span></code></a></dt><dd><p>The properties the material has.</p>
-</dd>
-</dl>
-</dd>
-<dt class="field-even">Parameters<span class="colon">:</span></dt>
-<dd class="field-even"><p><strong>materialProperties</strong> (<em>ndarray</em>)</p>
-</dd>
-</dl>
-<p class="rubric">Methods</p>
-<table class="autosummary longtable docutils align-default">
-<tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.materials.neohookeplastic.neohookepencegouformulationcplastic.NeoHookeanWcPlasticMaterial.assignCurrentStateVars" title="edelweissfe.materials.neohookeplastic.neohookepencegouformulationcplastic.NeoHookeanWcPlasticMaterial.assignCurrentStateVars"><code class="xref py py-obj docutils literal notranslate"><span class="pre">assignCurrentStateVars</span></code></a>(currentStateVars)</p></td>
-<td><p>Assign new current state vars.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.materials.neohookeplastic.neohookepencegouformulationcplastic.NeoHookeanWcPlasticMaterial.computeKirchhoff" title="edelweissfe.materials.neohookeplastic.neohookepencegouformulationcplastic.NeoHookeanWcPlasticMaterial.computeKirchhoff"><code class="xref py py-obj docutils literal notranslate"><span class="pre">computeKirchhoff</span></code></a>(stress, ...)</p></td>
-<td><p>Computes the stresses for a 3D material/2D material with plane strain.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.materials.neohookeplastic.neohookepencegouformulationcplastic.NeoHookeanWcPlasticMaterial.computePlaneKirchhoff" title="edelweissfe.materials.neohookeplastic.neohookepencegouformulationcplastic.NeoHookeanWcPlasticMaterial.computePlaneKirchhoff"><code class="xref py py-obj docutils literal notranslate"><span class="pre">computePlaneKirchhoff</span></code></a>(stress, ...)</p></td>
-<td><p>Computes the stresses for a 2D material with plane stress.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.materials.neohookeplastic.neohookepencegouformulationcplastic.NeoHookeanWcPlasticMaterial.computeUniaxialKirchhoff" title="edelweissfe.materials.neohookeplastic.neohookepencegouformulationcplastic.NeoHookeanWcPlasticMaterial.computeUniaxialKirchhoff"><code class="xref py py-obj docutils literal notranslate"><span class="pre">computeUniaxialKirchhoff</span></code></a>(stress, ...)</p></td>
-<td><p>Computes the stresses for a uniaxial stress state.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.materials.neohookeplastic.neohookepencegouformulationcplastic.NeoHookeanWcPlasticMaterial.getDensity" title="edelweissfe.materials.neohookeplastic.neohookepencegouformulationcplastic.NeoHookeanWcPlasticMaterial.getDensity"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getDensity</span></code></a>()</p></td>
-<td><p>Returns the density of the material.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.materials.neohookeplastic.neohookepencegouformulationcplastic.NeoHookeanWcPlasticMaterial.getNumberOfRequiredStateVars" title="edelweissfe.materials.neohookeplastic.neohookepencegouformulationcplastic.NeoHookeanWcPlasticMaterial.getNumberOfRequiredStateVars"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getNumberOfRequiredStateVars</span></code></a>()</p></td>
-<td><p>Returns number of needed material state Variables per integration point in the material.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.materials.neohookeplastic.neohookepencegouformulationcplastic.NeoHookeanWcPlasticMaterial.getResult" title="edelweissfe.materials.neohookeplastic.neohookepencegouformulationcplastic.NeoHookeanWcPlasticMaterial.getResult"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getResult</span></code></a>(result)</p></td>
-<td><p>Get the result, as a persistent view which is continiously updated by the material.</p></td>
-</tr>
-</tbody>
-</table>
-<dl class="py method">
-<dt class="sig sig-object py" id="edelweissfe.materials.neohookeplastic.neohookepencegouformulationcplastic.NeoHookeanWcPlasticMaterial.assignCurrentStateVars">
-<span class="sig-name descname"><span class="pre">assignCurrentStateVars</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">currentStateVars</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/neohookeplastic/neohookepencegouformulationcplastic.html#NeoHookeanWcPlasticMaterial.assignCurrentStateVars"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.neohookeplastic.neohookepencegouformulationcplastic.NeoHookeanWcPlasticMaterial.assignCurrentStateVars" title="Link to this definition"></a></dt>
-<dd><p>Assign new current state vars.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>currentStateVars</strong> (<em>ndarray</em>) – Array containing the material state vars.</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="edelweissfe.materials.neohookeplastic.neohookepencegouformulationcplastic.NeoHookeanWcPlasticMaterial.computeKirchhoff">
-<span class="sig-name descname"><span class="pre">computeKirchhoff</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">stress</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dStress_dDeformationGradient</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">deformationGradient</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dTime</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/neohookeplastic/neohookepencegouformulationcplastic.html#NeoHookeanWcPlasticMaterial.computeKirchhoff"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.neohookeplastic.neohookepencegouformulationcplastic.NeoHookeanWcPlasticMaterial.computeKirchhoff" title="Link to this definition"></a></dt>
-<dd><p>Computes the stresses for a 3D material/2D material with plane strain.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>stress</strong> (<em>ndarray</em>) – Vector containing the stresses.</p></li>
-<li><p><strong>dStress_dDeformationGradient</strong> (<em>ndarray</em>) – Matrix containing dStress/dStrain.</p></li>
-<li><p><strong>deformationGradient</strong> (<em>ndarray</em>) – The deformation gradient at time step t.</p></li>
-<li><p><strong>time</strong> (<em>float</em>) – Array of step time and total time.</p></li>
-<li><p><strong>dTime</strong> (<em>float</em>) – Current time step size.</p></li>
-</ul>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="edelweissfe.materials.neohookeplastic.neohookepencegouformulationcplastic.NeoHookeanWcPlasticMaterial.computePlaneKirchhoff">
-<span class="sig-name descname"><span class="pre">computePlaneKirchhoff</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">stress</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dStress_dDeformationGradient</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">deformationGradient</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dTime</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/neohookeplastic/neohookepencegouformulationcplastic.html#NeoHookeanWcPlasticMaterial.computePlaneKirchhoff"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.neohookeplastic.neohookepencegouformulationcplastic.NeoHookeanWcPlasticMaterial.computePlaneKirchhoff" title="Link to this definition"></a></dt>
-<dd><p>Computes the stresses for a 2D material with plane stress.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>stress</strong> (<em>ndarray</em>) – Vector containing the stresses.</p></li>
-<li><p><strong>dStress_dDeformationGradient</strong> (<em>ndarray</em>) – Matrix containing dStress/dStrain.</p></li>
-<li><p><strong>deformationGradient</strong> (<em>ndarray</em>) – The deformation gradient at time step t.</p></li>
-<li><p><strong>time</strong> (<em>float</em>) – Array of step time and total time.</p></li>
-<li><p><strong>dTime</strong> (<em>float</em>) – Current time step size.</p></li>
-</ul>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="edelweissfe.materials.neohookeplastic.neohookepencegouformulationcplastic.NeoHookeanWcPlasticMaterial.computeUniaxialKirchhoff">
-<span class="sig-name descname"><span class="pre">computeUniaxialKirchhoff</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">stress</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dStress_dDeformationGradient</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">deformationGradient</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dTime</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/neohookeplastic/neohookepencegouformulationcplastic.html#NeoHookeanWcPlasticMaterial.computeUniaxialKirchhoff"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.neohookeplastic.neohookepencegouformulationcplastic.NeoHookeanWcPlasticMaterial.computeUniaxialKirchhoff" title="Link to this definition"></a></dt>
-<dd><p>Computes the stresses for a uniaxial stress state.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>stress</strong> (<em>ndarray</em>) – Vector containing the stresses.</p></li>
-<li><p><strong>dStress_dDeformationGradient</strong> (<em>ndarray</em>) – Matrix containing dStress/dStrain.</p></li>
-<li><p><strong>deformationGradient</strong> (<em>ndarray</em>) – The deformation gradient at time step t.</p></li>
-<li><p><strong>time</strong> (<em>float</em>) – Array of step time and total time.</p></li>
-<li><p><strong>dTime</strong> (<em>float</em>) – Current time step size.</p></li>
-</ul>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="edelweissfe.materials.neohookeplastic.neohookepencegouformulationcplastic.NeoHookeanWcPlasticMaterial.getDensity">
-<span class="sig-name descname"><span class="pre">getDensity</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/neohookeplastic/neohookepencegouformulationcplastic.html#NeoHookeanWcPlasticMaterial.getDensity"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.neohookeplastic.neohookepencegouformulationcplastic.NeoHookeanWcPlasticMaterial.getDensity" title="Link to this definition"></a></dt>
-<dd><p>Returns the density of the material.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Returns<span class="colon">:</span></dt>
-<dd class="field-odd"><p>The density of the material.</p>
-</dd>
-<dt class="field-even">Return type<span class="colon">:</span></dt>
-<dd class="field-even"><p>float</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="edelweissfe.materials.neohookeplastic.neohookepencegouformulationcplastic.NeoHookeanWcPlasticMaterial.getNumberOfRequiredStateVars">
-<span class="sig-name descname"><span class="pre">getNumberOfRequiredStateVars</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/neohookeplastic/neohookepencegouformulationcplastic.html#NeoHookeanWcPlasticMaterial.getNumberOfRequiredStateVars"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.neohookeplastic.neohookepencegouformulationcplastic.NeoHookeanWcPlasticMaterial.getNumberOfRequiredStateVars" title="Link to this definition"></a></dt>
-<dd><p>Returns number of needed material state Variables per integration point in the material.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Returns<span class="colon">:</span></dt>
-<dd class="field-odd"><p>Number of needed material state Vars.</p>
-</dd>
-<dt class="field-even">Return type<span class="colon">:</span></dt>
-<dd class="field-even"><p>int</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="edelweissfe.materials.neohookeplastic.neohookepencegouformulationcplastic.NeoHookeanWcPlasticMaterial.getResult">
-<span class="sig-name descname"><span class="pre">getResult</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">result</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/neohookeplastic/neohookepencegouformulationcplastic.html#NeoHookeanWcPlasticMaterial.getResult"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.neohookeplastic.neohookepencegouformulationcplastic.NeoHookeanWcPlasticMaterial.getResult" title="Link to this definition"></a></dt>
-<dd><p>Get the result, as a persistent view which is continiously
-updated by the material.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>result</strong> (<em>str</em>) – The name of the result.</p>
-</dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>The result.</p>
-</dd>
-<dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p>float</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py property">
-<dt class="sig sig-object py" id="edelweissfe.materials.neohookeplastic.neohookepencegouformulationcplastic.NeoHookeanWcPlasticMaterial.materialProperties">
-<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">materialProperties</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">ndarray</span></em><a class="headerlink" href="#edelweissfe.materials.neohookeplastic.neohookepencegouformulationcplastic.NeoHookeanWcPlasticMaterial.materialProperties" title="Link to this definition"></a></dt>
-<dd><p>The properties the material has.</p>
 </dd></dl>
 
 </dd></dl>
@@ -1976,12 +1106,12 @@ This material needs the following parameters as input data using keywords:</p>
 <p>Relevant module for hypoelastic materials: <code class="docutils literal notranslate"><span class="pre">edelweissfe.materials.base.basehypoelasticmaterial</span></code></p>
 <dl class="py class">
 <dt class="sig sig-object py" id="edelweissfe.materials.base.basehypoelasticmaterial.BaseHypoElasticMaterial">
-<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">edelweissfe.materials.base.basehypoelasticmaterial.</span></span><span class="sig-name descname"><span class="pre">BaseHypoElasticMaterial</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">materialProperties</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/base/basehypoelasticmaterial.html#BaseHypoElasticMaterial"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.base.basehypoelasticmaterial.BaseHypoElasticMaterial" title="Link to this definition"></a></dt>
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">edelweissfe.materials.base.basehypoelasticmaterial.</span></span><span class="sig-name descname"><span class="pre">BaseHypoElasticMaterial</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">materialProperties</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/base/basehypoelasticmaterial.html#BaseHypoElasticMaterial"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.base.basehypoelasticmaterial.BaseHypoElasticMaterial" title="Link to this definition"></a></dt>
 <dd><p>Initialize.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Attributes<span class="colon">:</span></dt>
 <dd class="field-odd"><dl class="simple">
-<dt><a class="reference internal" href="#edelweissfe.materials.base.basehypoelasticmaterial.BaseHypoElasticMaterial.materialProperties" title="edelweissfe.materials.base.basehypoelasticmaterial.BaseHypoElasticMaterial.materialProperties"><code class="xref py py-obj docutils literal notranslate"><span class="pre">materialProperties</span></code></a></dt><dd><p>The properties the material has.</p>
+<dt><a class="reference internal" href="#edelweissfe.materials.base.basehypoelasticmaterial.BaseHypoElasticMaterial.materialProperties" title="edelweissfe.materials.base.basehypoelasticmaterial.BaseHypoElasticMaterial.materialProperties"><code class="xref py py-obj docutils literal notranslate"><span class="pre">materialProperties</span></code></a></dt><dd><p>The properties the material has, as handed to <code class="docutils literal notranslate"><span class="pre">__init__</span></code>.</p>
 </dd>
 </dl>
 </dd>
@@ -2017,7 +1147,7 @@ This material needs the following parameters as input data using keywords:</p>
 </table>
 <dl class="py method">
 <dt class="sig sig-object py" id="edelweissfe.materials.base.basehypoelasticmaterial.BaseHypoElasticMaterial.assignCurrentStateVars">
-<em class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">assignCurrentStateVars</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">currentStateVars</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/base/basehypoelasticmaterial.html#BaseHypoElasticMaterial.assignCurrentStateVars"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.base.basehypoelasticmaterial.BaseHypoElasticMaterial.assignCurrentStateVars" title="Link to this definition"></a></dt>
+<span class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">assignCurrentStateVars</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">currentStateVars</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/base/basehypoelasticmaterial.html#BaseHypoElasticMaterial.assignCurrentStateVars"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.base.basehypoelasticmaterial.BaseHypoElasticMaterial.assignCurrentStateVars" title="Link to this definition"></a></dt>
 <dd><p>Assign new current state vars.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -2028,7 +1158,7 @@ This material needs the following parameters as input data using keywords:</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="edelweissfe.materials.base.basehypoelasticmaterial.BaseHypoElasticMaterial.computePlaneStress">
-<em class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">computePlaneStress</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">stress</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dStress_dStrain</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dStrain</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dTime</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/base/basehypoelasticmaterial.html#BaseHypoElasticMaterial.computePlaneStress"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.base.basehypoelasticmaterial.BaseHypoElasticMaterial.computePlaneStress" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">computePlaneStress</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">stress</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dStress_dStrain</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dStrain</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dTime</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/base/basehypoelasticmaterial.html#BaseHypoElasticMaterial.computePlaneStress"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.base.basehypoelasticmaterial.BaseHypoElasticMaterial.computePlaneStress" title="Link to this definition"></a></dt>
 <dd><p>Computes the stresses for a 2D material with plane stress.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -2045,7 +1175,7 @@ This material needs the following parameters as input data using keywords:</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="edelweissfe.materials.base.basehypoelasticmaterial.BaseHypoElasticMaterial.computeStress">
-<em class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">computeStress</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">stress</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dStress_dStrain</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dStrain</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dTime</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/base/basehypoelasticmaterial.html#BaseHypoElasticMaterial.computeStress"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.base.basehypoelasticmaterial.BaseHypoElasticMaterial.computeStress" title="Link to this definition"></a></dt>
+<span class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">computeStress</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">stress</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dStress_dStrain</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dStrain</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dTime</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/base/basehypoelasticmaterial.html#BaseHypoElasticMaterial.computeStress"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.base.basehypoelasticmaterial.BaseHypoElasticMaterial.computeStress" title="Link to this definition"></a></dt>
 <dd><p>Computes the stresses for a 3D material/2D material with plane strain.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -2062,7 +1192,7 @@ This material needs the following parameters as input data using keywords:</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="edelweissfe.materials.base.basehypoelasticmaterial.BaseHypoElasticMaterial.computeUniaxialStress">
-<em class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">computeUniaxialStress</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">stress</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dStress_dStrain</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dStrain</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dTime</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/base/basehypoelasticmaterial.html#BaseHypoElasticMaterial.computeUniaxialStress"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.base.basehypoelasticmaterial.BaseHypoElasticMaterial.computeUniaxialStress" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">computeUniaxialStress</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">stress</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dStress_dStrain</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dStrain</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dTime</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/base/basehypoelasticmaterial.html#BaseHypoElasticMaterial.computeUniaxialStress"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.base.basehypoelasticmaterial.BaseHypoElasticMaterial.computeUniaxialStress" title="Link to this definition"></a></dt>
 <dd><p>Computes the stresses for a uniaxial stress state.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -2079,7 +1209,7 @@ This material needs the following parameters as input data using keywords:</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="edelweissfe.materials.base.basehypoelasticmaterial.BaseHypoElasticMaterial.getDensity">
-<em class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">getDensity</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/base/basehypoelasticmaterial.html#BaseHypoElasticMaterial.getDensity"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.base.basehypoelasticmaterial.BaseHypoElasticMaterial.getDensity" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">getDensity</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/base/basehypoelasticmaterial.html#BaseHypoElasticMaterial.getDensity"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.base.basehypoelasticmaterial.BaseHypoElasticMaterial.getDensity" title="Link to this definition"></a></dt>
 <dd><p>Determines the density of the material.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Returns<span class="colon">:</span></dt>
@@ -2093,7 +1223,7 @@ This material needs the following parameters as input data using keywords:</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="edelweissfe.materials.base.basehypoelasticmaterial.BaseHypoElasticMaterial.getNumberOfRequiredStateVars">
-<em class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">getNumberOfRequiredStateVars</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/base/basehypoelasticmaterial.html#BaseHypoElasticMaterial.getNumberOfRequiredStateVars"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.base.basehypoelasticmaterial.BaseHypoElasticMaterial.getNumberOfRequiredStateVars" title="Link to this definition"></a></dt>
+<span class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">getNumberOfRequiredStateVars</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/base/basehypoelasticmaterial.html#BaseHypoElasticMaterial.getNumberOfRequiredStateVars"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.base.basehypoelasticmaterial.BaseHypoElasticMaterial.getNumberOfRequiredStateVars" title="Link to this definition"></a></dt>
 <dd><p>Returns number of needed material state Variables per integration point in the material.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Returns<span class="colon">:</span></dt>
@@ -2107,7 +1237,7 @@ This material needs the following parameters as input data using keywords:</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="edelweissfe.materials.base.basehypoelasticmaterial.BaseHypoElasticMaterial.getResult">
-<em class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">getResult</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">result</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/base/basehypoelasticmaterial.html#BaseHypoElasticMaterial.getResult"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.base.basehypoelasticmaterial.BaseHypoElasticMaterial.getResult" title="Link to this definition"></a></dt>
+<span class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">getResult</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">result</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/base/basehypoelasticmaterial.html#BaseHypoElasticMaterial.getResult"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.base.basehypoelasticmaterial.BaseHypoElasticMaterial.getResult" title="Link to this definition"></a></dt>
 <dd><p>Get the result, as a persistent view which is continiously
 updated by the material.</p>
 <dl class="field-list simple">
@@ -2125,8 +1255,8 @@ updated by the material.</p>
 
 <dl class="py property">
 <dt class="sig sig-object py" id="edelweissfe.materials.base.basehypoelasticmaterial.BaseHypoElasticMaterial.materialProperties">
-<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">materialProperties</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">ndarray</span></em><a class="headerlink" href="#edelweissfe.materials.base.basehypoelasticmaterial.BaseHypoElasticMaterial.materialProperties" title="Link to this definition"></a></dt>
-<dd><p>The properties the material has.</p>
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">materialProperties</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">ndarray</span></span><a class="headerlink" href="#edelweissfe.materials.base.basehypoelasticmaterial.BaseHypoElasticMaterial.materialProperties" title="Link to this definition"></a></dt>
+<dd><p>The properties the material has, as handed to <code class="docutils literal notranslate"><span class="pre">__init__</span></code>.</p>
 </dd></dl>
 
 </dd></dl>
@@ -2134,7 +1264,7 @@ updated by the material.</p>
 <p>Relevant module for hyperelastic materials: <code class="docutils literal notranslate"><span class="pre">edelweissfe.materials.base.basehyperelasticmaterial</span></code></p>
 <dl class="py class">
 <dt class="sig sig-object py" id="edelweissfe.materials.base.basehyperelasticmaterial.BaseHyperElasticMaterial">
-<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">edelweissfe.materials.base.basehyperelasticmaterial.</span></span><span class="sig-name descname"><span class="pre">BaseHyperElasticMaterial</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">materialProperties</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/base/basehyperelasticmaterial.html#BaseHyperElasticMaterial"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.base.basehyperelasticmaterial.BaseHyperElasticMaterial" title="Link to this definition"></a></dt>
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">edelweissfe.materials.base.basehyperelasticmaterial.</span></span><span class="sig-name descname"><span class="pre">BaseHyperElasticMaterial</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">materialProperties</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/base/basehyperelasticmaterial.html#BaseHyperElasticMaterial"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.base.basehyperelasticmaterial.BaseHyperElasticMaterial" title="Link to this definition"></a></dt>
 <dd><p>Initialize.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Attributes<span class="colon">:</span></dt>
@@ -2175,7 +1305,7 @@ updated by the material.</p>
 </table>
 <dl class="py method">
 <dt class="sig sig-object py" id="edelweissfe.materials.base.basehyperelasticmaterial.BaseHyperElasticMaterial.assignCurrentStateVars">
-<em class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">assignCurrentStateVars</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">currentStateVars</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/base/basehyperelasticmaterial.html#BaseHyperElasticMaterial.assignCurrentStateVars"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.base.basehyperelasticmaterial.BaseHyperElasticMaterial.assignCurrentStateVars" title="Link to this definition"></a></dt>
+<span class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">assignCurrentStateVars</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">currentStateVars</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/base/basehyperelasticmaterial.html#BaseHyperElasticMaterial.assignCurrentStateVars"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.base.basehyperelasticmaterial.BaseHyperElasticMaterial.assignCurrentStateVars" title="Link to this definition"></a></dt>
 <dd><p>Assign new current state vars.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -2186,7 +1316,7 @@ updated by the material.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="edelweissfe.materials.base.basehyperelasticmaterial.BaseHyperElasticMaterial.computeKirchhoff">
-<em class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">computeKirchhoff</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">stress</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dStress_dDeformationGradient</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">deformationGradient</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dTime</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/base/basehyperelasticmaterial.html#BaseHyperElasticMaterial.computeKirchhoff"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.base.basehyperelasticmaterial.BaseHyperElasticMaterial.computeKirchhoff" title="Link to this definition"></a></dt>
+<span class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">computeKirchhoff</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">stress</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dStress_dDeformationGradient</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">deformationGradient</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dTime</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/base/basehyperelasticmaterial.html#BaseHyperElasticMaterial.computeKirchhoff"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.base.basehyperelasticmaterial.BaseHyperElasticMaterial.computeKirchhoff" title="Link to this definition"></a></dt>
 <dd><p>Computes the stresses for a 3D material/2D material with plane strain.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -2203,7 +1333,7 @@ updated by the material.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="edelweissfe.materials.base.basehyperelasticmaterial.BaseHyperElasticMaterial.computePlaneKirchhoff">
-<em class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">computePlaneKirchhoff</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">stress</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dStress_dDeformationGradient</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">deformationGradient</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dTime</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/base/basehyperelasticmaterial.html#BaseHyperElasticMaterial.computePlaneKirchhoff"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.base.basehyperelasticmaterial.BaseHyperElasticMaterial.computePlaneKirchhoff" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">computePlaneKirchhoff</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">stress</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dStress_dDeformationGradient</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">deformationGradient</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dTime</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/base/basehyperelasticmaterial.html#BaseHyperElasticMaterial.computePlaneKirchhoff"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.base.basehyperelasticmaterial.BaseHyperElasticMaterial.computePlaneKirchhoff" title="Link to this definition"></a></dt>
 <dd><p>Computes the stresses for a 2D material with plane stress.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -2220,7 +1350,7 @@ updated by the material.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="edelweissfe.materials.base.basehyperelasticmaterial.BaseHyperElasticMaterial.computeUniaxialKirchhoff">
-<em class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">computeUniaxialKirchhoff</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">stress</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dStress_dDeformationGradient</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">deformationGradient</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dTime</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/base/basehyperelasticmaterial.html#BaseHyperElasticMaterial.computeUniaxialKirchhoff"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.base.basehyperelasticmaterial.BaseHyperElasticMaterial.computeUniaxialKirchhoff" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">computeUniaxialKirchhoff</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">stress</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dStress_dDeformationGradient</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">deformationGradient</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dTime</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/base/basehyperelasticmaterial.html#BaseHyperElasticMaterial.computeUniaxialKirchhoff"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.base.basehyperelasticmaterial.BaseHyperElasticMaterial.computeUniaxialKirchhoff" title="Link to this definition"></a></dt>
 <dd><p>Computes the stresses for a uniaxial stress state.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -2237,7 +1367,7 @@ updated by the material.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="edelweissfe.materials.base.basehyperelasticmaterial.BaseHyperElasticMaterial.getDensity">
-<em class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">getDensity</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/base/basehyperelasticmaterial.html#BaseHyperElasticMaterial.getDensity"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.base.basehyperelasticmaterial.BaseHyperElasticMaterial.getDensity" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">getDensity</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/base/basehyperelasticmaterial.html#BaseHyperElasticMaterial.getDensity"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.base.basehyperelasticmaterial.BaseHyperElasticMaterial.getDensity" title="Link to this definition"></a></dt>
 <dd><p>Determines the density of the material.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Returns<span class="colon">:</span></dt>
@@ -2251,7 +1381,7 @@ updated by the material.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="edelweissfe.materials.base.basehyperelasticmaterial.BaseHyperElasticMaterial.getNumberOfRequiredStateVars">
-<em class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">getNumberOfRequiredStateVars</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/base/basehyperelasticmaterial.html#BaseHyperElasticMaterial.getNumberOfRequiredStateVars"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.base.basehyperelasticmaterial.BaseHyperElasticMaterial.getNumberOfRequiredStateVars" title="Link to this definition"></a></dt>
+<span class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">getNumberOfRequiredStateVars</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/base/basehyperelasticmaterial.html#BaseHyperElasticMaterial.getNumberOfRequiredStateVars"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.base.basehyperelasticmaterial.BaseHyperElasticMaterial.getNumberOfRequiredStateVars" title="Link to this definition"></a></dt>
 <dd><p>Returns number of needed material state Variables per integration point in the material.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Returns<span class="colon">:</span></dt>
@@ -2265,7 +1395,7 @@ updated by the material.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="edelweissfe.materials.base.basehyperelasticmaterial.BaseHyperElasticMaterial.getResult">
-<em class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">getResult</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">result</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/base/basehyperelasticmaterial.html#BaseHyperElasticMaterial.getResult"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.base.basehyperelasticmaterial.BaseHyperElasticMaterial.getResult" title="Link to this definition"></a></dt>
+<span class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">getResult</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">result</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/materials/base/basehyperelasticmaterial.html#BaseHyperElasticMaterial.getResult"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.materials.base.basehyperelasticmaterial.BaseHyperElasticMaterial.getResult" title="Link to this definition"></a></dt>
 <dd><p>Get the result, as a persistent view which is continiously
 updated by the material.</p>
 <dl class="field-list simple">
@@ -2283,7 +1413,7 @@ updated by the material.</p>
 
 <dl class="py property">
 <dt class="sig sig-object py" id="edelweissfe.materials.base.basehyperelasticmaterial.BaseHyperElasticMaterial.materialProperties">
-<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">materialProperties</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">ndarray</span></em><a class="headerlink" href="#edelweissfe.materials.base.basehyperelasticmaterial.BaseHyperElasticMaterial.materialProperties" title="Link to this definition"></a></dt>
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">materialProperties</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">ndarray</span></span><a class="headerlink" href="#edelweissfe.materials.base.basehyperelasticmaterial.BaseHyperElasticMaterial.materialProperties" title="Link to this definition"></a></dt>
 <dd><p>The properties the material has.</p>
 </dd></dl>
 
