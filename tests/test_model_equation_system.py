@@ -199,6 +199,21 @@ def test_the_layout_of_a_finite_element_model_writes_the_results_to_every_node()
     np.testing.assert_array_equal(model.nodeFields["rotation"]["V"], -1.0)
 
 
+def test_the_layout_writes_the_results_in_two_parts():
+    model, dofManager = _twoFieldModel()
+    layout = EquationSystemLayout(model, dofManager, [])
+    U = dofManager.constructDofVector()
+    U[:] = np.arange(dofManager.nDof)
+
+    # the increment on the system it was taken on, then the force on the system it is evaluated on
+    layout.writeResultsToModel(U, 2 * U, None)
+    layout.writeResultsToModel(U, None, 3 * U)
+    for nodeField in model.nodeFields.values():
+        rows = np.asarray(U)[dofManager.idcsOfFieldsInDofVector[nodeField.name]].reshape(-1, nodeField.dimension)
+        np.testing.assert_array_equal(nodeField["dU"], 2 * rows)
+        np.testing.assert_array_equal(nodeField["P"], 3 * rows)
+
+
 # --- a model whose equation system covers a part of it -------------------------------------------------------------
 
 
@@ -216,11 +231,9 @@ class _FirstElementsLayout(EquationSystemLayout):
         for nodeField in self.model.nodeFields.values():
             self.dofManager.writeNodeFieldToDofVector(U, nodeField, "U", self.nodesInSystem)
 
-    def writeResultsToModel(self, U, dU, P, V=None, A=None, dynamicFields=None):
+    def writeEntryOfNodeField(self, dofVector, nodeField, entry):
         # straight into the model's node fields, at the nodes in the system: the other nodes keep their values
-        for nodeField in self.model.nodeFields.values():
-            for vector, entry in ((U, "U"), (dU, "dU"), (P, "P")):
-                self.dofManager.writeDofVectorToNodeField(vector, nodeField, entry, self.nodesInSystem)
+        self.dofManager.writeDofVectorToNodeField(dofVector, nodeField, entry, self.nodesInSystem)
 
     def updateMaterialPoints(self, dU, timeStep, forEachChunk):
         self.model.materialPointUpdates += 1
