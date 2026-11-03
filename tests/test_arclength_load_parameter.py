@@ -49,6 +49,7 @@ import pytest
 from edelweissfe.drivers.inputfiledrivensimulation import finiteElementSimulation
 from edelweissfe.solvers.nonlinearimplicitstaticparallelarclength import NISTPArcLength
 from edelweissfe.timesteppers.timestep import TimeStep
+from edelweissfe.utils.exceptions import ReachedMaxIterations
 from edelweissfe.utils.inputfileparser import parseInputFile
 
 _DECKS = Path(__file__).resolve().parent.parent / "testfiles" / "edelweiss-only"
@@ -285,3 +286,69 @@ def test_two_arc_length_steps_reach_the_state_of_one(tmp_path, monkeypatch, step
     reference = solveWithNIST(tmp_path, settlement=0.0, tip=TIP_DISPLACEMENT)
     assertReachesTheReferenceState(model, reference, tipLoadFactor=first + second)
     assert model.additionalParameters["arc length parameter"] == second
+
+
+def test_a_cut_back_increment_retries_from_the_accepted_load_parameter(tmp_path, monkeypatch):
+    """The load parameter advances with the solution, only when an increment has converged: an attempt that fails after
+    its iterations have moved the load parameter leaves it where the last accepted increment left it, the cut back
+    increment starts from there, and the step ends in the state an uninterrupted run reaches.
+
+    ``ArcLengthPenaltyConstraint``, with its third increment failing once, at its first convergence check: by
+    then the prediction (or the first correction) has moved the load parameter."""
+
+    monkeypatch.chdir(tmp_path)
+    deck = tmp_path / "test.inp"
+    deck.write_text(arcLengthPenaltyConstraintDeck())
+    uninterrupted = solve(deck)
+
+    #: the load parameter at the start of the step and after every accepted increment
+    acceptedLoadParameters = []
+    #: per attempt of an increment: the solver's load parameter at its start, and the last accepted one
+    loadParametersAtTheStartOfAttempts = []
+    failedIterate = {}
+
+    originalSolveIncrement = NISTPArcLength.solveIncrement
+    originalCheckConvergence = NISTPArcLength.checkConvergence
+    originalAcceptIncrement = NISTPArcLength.acceptIncrement
+
+    def solveIncrement(self, *args):
+        loadParametersAtTheStartOfAttempts.append((self.Lambda, acceptedLoadParameters[-1]))
+        return originalSolveIncrement(self, *args)
+
+    def checkConvergence(self, R, ddU, dU, F, FConstraints, iterationCounter, incrementResidualHistory):
+        if len(acceptedLoadParameters) == 3 and not failedIterate:
+            failedIterate["loadParameter"] = self.arcLengthIncrement.loadParameter
+            raise ReachedMaxIterations("failing once, for the test")
+        return originalCheckConvergence(self, R, ddU, dU, F, FConstraints, iterationCounter, incrementResidualHistory)
+
+    def acceptIncrement(self, step, model, timeStep):
+        originalAcceptIncrement(self, step, model, timeStep)
+        acceptedLoadParameters.append(self.Lambda)
+
+    originalBeginStep = NISTPArcLength.beginStep
+
+    def beginStep(self, *args):
+        result = originalBeginStep(self, *args)
+        acceptedLoadParameters.append(self.Lambda)
+        return result
+
+    monkeypatch.setattr(NISTPArcLength, "beginStep", beginStep)
+    monkeypatch.setattr(NISTPArcLength, "solveIncrement", solveIncrement)
+    monkeypatch.setattr(NISTPArcLength, "checkConvergence", checkConvergence)
+    monkeypatch.setattr(NISTPArcLength, "acceptIncrement", acceptIncrement)
+
+    model = solve(deck)
+
+    assert failedIterate, "no attempt failed, so this proves nothing"
+    assert failedIterate["loadParameter"] != acceptedLoadParameters[2], "the failed attempt never moved the parameter"
+    # one attempt per accepted increment, and the failed one; the step start counts as accepted
+    assert len(loadParametersAtTheStartOfAttempts) == len(acceptedLoadParameters)
+    for atTheStart, lastAccepted in loadParametersAtTheStartOfAttempts:
+        assert atTheStart == lastAccepted
+
+    loadParameter = model.solvers["theSolver"].Lambda
+    assert model.additionalParameters["arc length parameter"] == loadParameter
+    np.testing.assert_allclose(loadParameter, uninterrupted.solvers["theSolver"].Lambda, rtol=1e-8)
+    np.testing.assert_allclose(
+        model.nodeFields["displacement"]["U"], uninterrupted.nodeFields["displacement"]["U"], rtol=0.0, atol=1e-8
+    )

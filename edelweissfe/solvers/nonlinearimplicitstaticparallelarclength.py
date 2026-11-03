@@ -133,6 +133,12 @@ class NISTPArcLength(NISTParallel):
     solved is written to the model at the acceptance of every increment, as
     ``model.additionalParameters["arc length parameter"]``, e.g. for a load-displacement curve.
 
+    The load parameter is the solver's state, as the solution is the model's: it advances only once an increment has
+    converged, together with the solution it belongs to (at the end of :meth:`solveIncrement`, which a failing attempt
+    leaves by an exception before). A cut back increment therefore starts again from the load parameter of the last
+    accepted one; a re-equilibration after a model change, which commits its state without an increment, advances it
+    with that state.
+
     Parameters
     ----------
     jobInfo
