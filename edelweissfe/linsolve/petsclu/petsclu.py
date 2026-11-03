@@ -27,59 +27,72 @@
 #  ---------------------------------------------------------------------
 
 """
-This module provides an interface to the PetSc LU solver provided by petsc4py.
+PETSc's sparse LU, through petsc4py: :class:`PetscLUFactorization` factorizes a matrix once and solves for as many
+right-hand sides as needed.
 """
 import numpy as np
 from petsc4py import PETSc
 
 
-def petscluSolve(A, b):
-    """
-    Solve the linear system Ax = b using the PETSc LU solver.
+class PetscLUFactorization:
+    """The PETSc LU factorization of the last :meth:`factorize` (a ``preonly`` KSP with an ``lu`` PC, set up once), for
+    :meth:`solve`."""
 
-    Parameters
-    ----------
-    A : scipy.sparse.csr_matrix
-        The matrix A in the linear system Ax = b.
-    b : numpy.ndarray
-        The right-hand side vector b in the linear system Ax = b.
+    def __init__(self):
+        self._ksp = None
+        self._matrix = None
 
-    Returns
-    -------
-    numpy.ndarray
-        The solution vector x.
-    """
+    def release(self) -> None:
+        """Destroy the KSP and the matrix, and with them the factorization (nothing to destroy before the first)."""
+        if self._ksp is not None:
+            self._ksp.destroy()
+            self._matrix.destroy()
+            self._ksp = self._matrix = None
 
-    # Create a PETSc matrix from the SciPy matrix
-    # think about not constructing the csr-matrix first and convert it back to aij
-    matrix = PETSc.Mat().createAIJ(size=A.shape, csr=(A.indptr, A.indices, A.data))
+    def __del__(self):
+        self.release()
 
-    ksp = PETSc.KSP().create()
-    ksp.setOperators(matrix)
-    ksp.setType("preonly")
-    ksp.setConvergenceHistory()
-    ksp.getPC().setType("lu")
+    def factorize(self, A) -> None:
+        """Factorize the square sparse matrix ``A``.
 
-    # prepare rhs
-    rhs = b.reshape(A.shape[0], -1)
-    nRhs = rhs.shape[1]
+        Raises
+        ------
+        numpy.linalg.LinAlgError
+            If the LU factorization fails (e.g. a zero pivot of a singular matrix): PETSc records that as the failure
+            of the PC, which is checked here instead of surfacing as a diverged solve later.
+        """
+        self.release()
+        A = A.tocsr()
+        matrix = PETSc.Mat().createAIJ(size=A.shape, csr=(A.indptr, A.indices, A.data))
+        ksp = PETSc.KSP().create()
+        ksp.setOperators(matrix)
+        ksp.setType("preonly")
+        pc = ksp.getPC()
+        pc.setType("lu")
+        try:
+            ksp.setUp()
+        except PETSc.Error as error:
+            ksp.destroy()
+            matrix.destroy()
+            raise np.linalg.LinAlgError("PETSc LU: {:}".format(error)) from error
+        if pc.getFailedReason() != PETSc.PC.FailedReason.NOERROR:
+            reason = pc.getFailedReason()
+            ksp.destroy()
+            matrix.destroy()
+            raise np.linalg.LinAlgError("PETSc LU: the factorization failed (PC failed reason {:})".format(reason))
+        self._ksp, self._matrix = ksp, matrix
 
-    # prepare vectors
-    x = matrix.createVecLeft()
-    currrhs = matrix.createVecRight()
-
-    # prepare solution array for all rhs
-    solution = np.zeros_like(rhs)
-
-    # loop over number of rhs
-    for i in range(nRhs):
-        # set current rhs
-        currrhs.setArray(rhs[:, i])
-        # solve for cuurent rhs
-        ksp.solve(currrhs, x)
-        # store solution
-        solution[:, i] = x.getArray()
-
-    ksp.destroy()
-
-    return np.reshape(solution, b.shape)
+    def solve(self, b):
+        """``A^-1 b`` with the factorization of the last :meth:`factorize`, for one right-hand side (a vector) or
+        several (the columns of a matrix)."""
+        rhs = np.reshape(np.asarray(b, dtype=float), (self._matrix.getSize()[0], -1))
+        x = self._matrix.createVecLeft()
+        current = self._matrix.createVecRight()
+        solution = np.zeros_like(rhs)
+        for i in range(rhs.shape[1]):
+            current.setArray(rhs[:, i])
+            self._ksp.solve(current, x)
+            solution[:, i] = x.getArray()
+        x.destroy()
+        current.destroy()
+        return np.reshape(solution, np.shape(b))

@@ -5,9 +5,11 @@
 all
 
 *job, name=c3d8job, domain=2d
+*linearSolver, name=amg, type=custom
+script=solver.py
+
 *solver, solver=NIST, name=theSolver
-linsolver=amgcl
-linsolverConfigFile=opt.json
+linsolver=amg
 
 *modelGenerator, generator=planeRectQuad, name=gen
 l=10

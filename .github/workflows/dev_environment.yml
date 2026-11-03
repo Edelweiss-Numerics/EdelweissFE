@@ -1,0 +1,128 @@
+name: Development environment package
+
+# Builds the edelweissfe-dev meta-package (conda/edelweissfe-dev) from conda-lock.yml for every platform, checks that
+# `conda create ... edelweissfe-dev=<VERSION>` reproduces the locked environment, and publishes it to the
+# matthiasneuner/edelweiss channel when conda-lock.yml or VERSION changes on next_v26.11.
+on:
+  push:
+    paths: ["conda-lock.yml", "conda/edelweissfe-dev/**", ".github/workflows/dev_environment.yml"]
+  pull_request:
+    paths: ["conda-lock.yml", "conda/edelweissfe-dev/**", ".github/workflows/dev_environment.yml"]
+  workflow_dispatch:
+
+env:
+  CHANNEL: matthiasneuner/edelweiss
+  CHANNEL_URL: https://repo.prefix.dev/matthiasneuner/edelweiss
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: mamba-org/setup-micromamba@v2
+        with:
+          environment-name: tools
+          create-args: rattler-build rattler-index python pyyaml
+          init-shell: bash
+
+      # A meta-package contains no files, so all platforms are built here, on Linux.
+      - name: Build edelweissfe-dev for every platform
+        shell: bash -leo pipefail {0}
+        run: |
+          for platform in linux-64 osx-arm64 osx-64 win-64; do
+            python conda/edelweissfe-dev/generate_recipe.py "$platform" "recipe-$platform"
+            rattler-build build --recipe "recipe-$platform" --target-platform "$platform" --output-dir output
+          done
+          rattler-index fs output
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: edelweissfe-dev
+          path: output
+
+  test:
+    name: test ${{ matrix.platform }}
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { platform: linux-64, os: ubuntu-latest }
+          - { platform: osx-arm64, os: macos-15 }
+          - { platform: win-64, os: windows-latest }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: edelweissfe-dev
+          path: output
+
+      - uses: conda-incubator/setup-miniconda@v3
+        with:
+          miniforge-version: latest
+
+      # Exactly what the installation documentation tells users to run.
+      - name: conda create ... edelweissfe-dev=<VERSION>
+        shell: bash -leo pipefail {0}
+        run: |
+          # A file:// URL conda accepts on Windows too (Git Bash's $PWD is /d/a/..., conda needs D:/a/...).
+          dir="$PWD/output"; if command -v cygpath > /dev/null; then dir=$(cygpath -m "$dir"); fi
+          conda create -y -n edelweissfe -c "file:///${dir#/}" -c "$CHANNEL_URL" -c conda-forge \
+            "edelweissfe-dev=$(cat conda/edelweissfe-dev/VERSION)"
+
+      - name: The environment is the locked one
+        shell: bash -leo pipefail {0}
+        run: |
+          conda install -y -n base pyyaml
+          conda list -n edelweissfe --json > installed.json
+          cat > compare.py <<'PY'
+          import json, yaml
+          platform = "${{ matrix.platform }}"
+          # The CPU-level marker is deliberately left unpinned (see generate_recipe.py), so it may differ.
+          def relevant(name):
+              return name != "edelweissfe-dev" and not name.endswith("-microarch-level")
+          locked = {(p["name"], p["version"]) for p in yaml.safe_load(open("conda-lock.yml"))["package"]
+                    if p["platform"] == platform and relevant(p["name"])}
+          installed = {(p["name"], p["version"]) for p in json.load(open("installed.json")) if relevant(p["name"])}
+          print(f"{platform}: {len(locked)} locked, {len(installed)} installed")
+          if locked != installed:
+              print("missing:", sorted(locked - installed))
+              print("extra:", sorted(installed - locked))
+              raise SystemExit("the environment differs from conda-lock.yml")
+          PY
+          # conda's own Python (not whichever python is first on PATH, Homebrew's on macOS runners); a file,
+          # because conda run does not pass stdin through.
+          conda run -n base python compare.py
+          conda run -n edelweissfe python -c "import sys, vtk; print(sys.version); assert not sys._is_gil_enabled()"
+          # Its activation script makes a plain `pip install -e .` build without isolation (see activate.sh).
+          conda run -n edelweissfe bash -c 'test "$PIP_NO_BUILD_ISOLATION" = 0'
+
+  publish:
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/next_v26.11'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: edelweissfe-dev
+          path: output
+
+      - uses: mamba-org/setup-micromamba@v2
+        with:
+          environment-name: tools
+          create-args: rattler-build
+          init-shell: bash
+
+      - name: Upload to prefix.dev
+        shell: bash -leo pipefail {0}
+        env:
+          PREFIX_API_KEY: ${{ secrets.PREFIX_API_KEY }}
+        run: |
+          find output -name 'edelweissfe-dev-*.conda' -print0 | xargs -0 rattler-build upload prefix --skip-existing --channel "$CHANNEL"

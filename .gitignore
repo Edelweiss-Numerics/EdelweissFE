@@ -19,3 +19,4 @@ build
 EdelweissFE.egg-info
 docs
 edelweissfe/built_extensions.log
+edelweissfe/marmot_install_dir.txt

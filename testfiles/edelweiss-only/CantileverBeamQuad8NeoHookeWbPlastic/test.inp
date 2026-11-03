@@ -1,5 +1,5 @@
-*material, name=neohookewbplastic, id=neohookewbplastic, provider=edelweiss
-91304.34783, 100000., 260, 70, 320, 9
+*material, name=neohookeplastic, id=neohookewbplastic, provider=edelweiss
+2, 91304.34783, 100000., 260, 70, 320, 9
 
 *section, name=section1, thickness=40.0, material=neohookewbplastic, type=plane
 all

@@ -52,7 +52,7 @@ def updateConfiguration(newConfiguration, jobInfo, journal):
     if configurationType not in jobInfo:
         raise KeyError("configuration type {:} invalid".format(configurationType))
 
-    settings = convertLinesToStringDictionary(newConfiguration["data"])
+    settings = convertLinesToStringDictionary(newConfiguration["datalines"])
     for key, val in settings.items():
         if key not in jobInfo[configurationType]:
             raise KeyError("configuration type {:}/{:} invalid".format(configurationType, key))

@@ -1,0 +1,3 @@
+# Free-threaded CPython only: EdelweissFE's thread-parallel element loops need the GIL off.
+python:
+  - "3.14.* *_cp314t"

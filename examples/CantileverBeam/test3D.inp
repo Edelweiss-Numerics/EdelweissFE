@@ -38,7 +38,7 @@ all
 ** set step size between 1 and 1e-9, 1000 iterations, 25 max iterations and step length 1
 *step, solver=theSolver
 maxInc=1e0, minInc=1e-9, maxNumInc=1000, maxIter=25, stepLength=1
->>options, category=NISTSolver, extrapolation=off
+>>options, name=theSolver, extrapolation=off
 ** fix one side (fixed support)
 >>dirichlet, name=Left,  nSet=gen_left, field=displacement, 1=0.0, 2=0.0, 3=.0
 ** set load in z to 0.012N for all the points on right back

@@ -36,7 +36,7 @@ fieldOutput=RF
 
 *output, type=meshplot, name=RFPlot
 figure=1, axSpec=121, c=k, ls=solid, create=xyData, x=time, y=RF
-figure=1, axSpec=122, >>perNode, fieldOutput=umag
+figure=1, axSpec=122, create=perNode, fieldOutput=umag
 
 *exportPlots
 figure=1, fileName=plot

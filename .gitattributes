@@ -1,0 +1,2 @@
+# Generated lockfile: collapse it in GitHub diffs and never try to merge it.
+conda-lock.yml merge=binary linguist-generated=true

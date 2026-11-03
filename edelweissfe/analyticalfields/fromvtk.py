@@ -27,52 +27,59 @@
 #  ---------------------------------------------------------------------
 """Use PyVista to interpolate from vtk data."""
 
+from dataclasses import dataclass
+
 import numpy as np
 import pyvista
 
 from edelweissfe.analyticalfields.base.analyticalfieldbase import (
     AnalyticalField as AnalyticalFieldBase,
 )
-from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
-from edelweissfe.utils.inputlanguage import InputLanguage, Module
-from edelweissfe.utils.misc import (
-    caseInsensitiveKwargsChecker,
-    castKwargsValuesAndAddDefaults,
-)
-
-module = Module("fromVtk", "Use PyVista to interpolate from vtk data.")
-
-inputLanguage = InputLanguage()
-
-keyword = "analyticalField"
-if keyword in inputLanguage:
-    inputLanguage[keyword].addModule(module)
-
-module.addRequiredArg("file", "path to database file", str)
-module.addRequiredArg("result", "result name in database", str)
-
-documentation = [module]
+from edelweissfe.utils.schema import schemaField
 
 
-@caseInsensitiveKwargsChecker([kw.name for kw in module.requiredArgs], [kw.name for kw in module.optionalArgs])
-@castKwargsValuesAndAddDefaults(module)
-def analyticalFieldFactory(name, FEModel, **kwargs):
-    kwargs = CaseInsensitiveDict(kwargs)
+@dataclass(frozen=True)
+class FromVtkSchema:
+    """The options this analytical field accepts, owned by this module and never mutated from
+    outside it.
 
-    file = kwargs["file"]
-    result = kwargs["result"]
+    Both fields are ``required=True``, but are still given a ``default=None``/``default=""`` so
+    that ``FromVtkSchema()`` remains constructible as the constructor's default argument;
+    ``buildSchemaFromOptions`` still enforces that an ``.inp`` file supplies ``file``. ``result``
+    may legitimately be supplied empty (see ``AnalyticalField.__init__``'s auto-pick fallback), so
+    an empty string -- not ``None`` -- is its default, matching what an ``.inp`` file writing
+    ``result=`` produces.
+    """
 
-    return AnalyticalField(name, FEModel, file, result)
+    file: str | None = schemaField(description="path to database file", dtype=str, default=None, required=True)
+    result: str = schemaField(description="result name in database", dtype=str, default="", required=True)
 
 
 class AnalyticalField(AnalyticalFieldBase):
-    def __init__(self, name: str, FEModel, file: str, result: str):
+    """Use PyVista to interpolate from vtk data."""
+
+    #: Option schema for this analytical field, per OptionSchemaProvider.
+    schema = FromVtkSchema
+
+    def __init__(self, name: str, FEModel, *, configuration: FromVtkSchema = FromVtkSchema()):
+        """Constructible standalone, with no parser involvement.
+
+        Parameters
+        ----------
+        name
+            The name of this analytical field.
+        FEModel
+            The model tree.
+        configuration
+            The options this analytical field accepts; ``file`` is still required, see
+            :class:`FromVtkSchema`.
+        """
         self.name = name
         self.type = "fromVtk"
 
         self.domainSize = FEModel.domainSize
 
-        reader = pyvista.get_reader(file)
+        reader = pyvista.get_reader(configuration.file)
         self.data = reader.read()
 
         availableResults = self.data.array_names
@@ -80,6 +87,7 @@ class AnalyticalField(AnalyticalFieldBase):
         if not len(availableResults) > 0:
             raise ValueError("Database does not contain at least one result.")
 
+        result = configuration.result
         if not result:
             if len(availableResults) == 1:
                 result = self.data.array_names[0]

@@ -41,11 +41,16 @@ Example syntax:
         nSet=right
         referencePoint=rBottom
 """
-import importlib
+
+from edelweissfe.config import registry
 
 
 def getConstraintClass(name: str) -> type:
-    """Get the class type of the requested constraint.
+    """Return the class implementing constraint type ``name``.
+
+    Resolved through the registry (``constraint`` category), which lets built-in constraints,
+    entry points, and in-process :func:`~edelweissfe.config.registry.register` calls all be
+    reached the same way.
 
     Parameters
     ----------
@@ -56,7 +61,13 @@ def getConstraintClass(name: str) -> type:
     -------
     type
         The constraint class type.
+
+    Raises
+    ------
+    edelweissfe.config.registry.RegistryLookupError
+        If no constraint is registered under ``name``.
     """
 
-    module = importlib.import_module("edelweissfe.constraints." + name.lower())
-    return module.Constraint
+    constraintClass, _ = registry.lookup("constraint", name)
+
+    return constraintClass

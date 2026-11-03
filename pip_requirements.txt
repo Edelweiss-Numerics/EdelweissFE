@@ -1,5 +1,0 @@
-docutils
-matplotlib
-pyamg
-pyvista
-vtk

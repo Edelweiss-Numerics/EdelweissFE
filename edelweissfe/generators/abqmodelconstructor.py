@@ -43,17 +43,21 @@ employing an Abaqus-like syntax.
 
 import numpy as np
 
-from edelweissfe.config.analyticalfields import getAnalyticalFieldFactoryByName
+from edelweissfe.config import registry
 from edelweissfe.config.constraints import getConstraintClass
 from edelweissfe.config.elementlibrary import getElementClass
 from edelweissfe.config.materiallibrary import getMaterialClass
-from edelweissfe.config.sections import getSectionFactoryByName
+from edelweissfe.config.modelmodifiers import getModelModifierClass
+from edelweissfe.constraints.base.multipointconstraintbase import (
+    MultiPointConstraintBase,
+)
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.points.node import Node
 from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.sets.nodeset import NodeSet
+from edelweissfe.surfaces.entitybasedsurface import EntityBasedSurface
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
-from edelweissfe.utils.inputlanguage import (
+from edelweissfe.utils.inputfileparser import (
     keywordIdentifier,
     moduleLevelKeywordIdentifier,
 )
@@ -62,20 +66,12 @@ from edelweissfe.utils.misc import (
     convertLinesToMixedDictionary,
     convertLinesToStringDictionary,
     isInteger,
+    parseDatalinesToArgsAndKwargs,
     splitLineAtCommas,
+    splitLinesAtCommas,
+    withoutParserBookkeeping,
 )
-
-# isort: off
-from edelweissfe.utils.inputfileparser import inputLanguage  # noqa: F811
-
-from edelweissfe.analyticalfields.randomscalar import inputLanguage  # noqa: F811
-from edelweissfe.analyticalfields.fromvtk import inputLanguage  # noqa: F811
-from edelweissfe.analyticalfields.scalarexpression import inputLanguage  # noqa: F811
-
-from edelweissfe.sections.solid import inputLanguage  # noqa: F811
-from edelweissfe.sections.plane import inputLanguage  # noqa: F811
-
-# isort: on
+from edelweissfe.utils.schema import buildSchemaFromOptions
 
 
 class AbqModelConstructor:
@@ -180,7 +176,8 @@ class AbqModelConstructor:
 
                     elif booleanDef == "intersection":
                         elNumbersBase = [n.elNumber for n in elementSets[name]]
-                        els = [elements[n] for n in list(set(elNumbers).intersection(elNumbersBase))]
+                        elNumbersSet = set(elNumbers)
+                        els = [elements[n] for n in elNumbersBase if n in elNumbersSet]
                     else:
                         raise Exception("Undefined boolean operation!")
 
@@ -190,12 +187,17 @@ class AbqModelConstructor:
                         del elementSets[name]
                 else:
                     els = [elements[elNum] for elNum in elNumbers]
-                elementSets[name] = ElementSet(name, set(els))
+                # dict.fromkeys deduplicates in first-occurrence order (a set() would make the order hash-dependent)
+                elementSets[name] = ElementSet(name, list(dict.fromkeys(els)))
             else:
-                elementSets[name] = []
+                els = []
                 for line in data:
                     for elSet in line:
-                        elementSets[name] += elementSets[elSet]
+                        els += list(elementSets[elSet])
+                # Must be a proper (hashable) ElementSet, as consumers cache by set identity. Deduplicated in
+                # first-occurrence order: a set() of elements iterates in memory-address order, which differs from run
+                # to run, and so would the numbering of everything a generator creates while looping over this set.
+                elementSets[name] = ElementSet(name, list(dict.fromkeys(els)))
 
         # generate dictionary of nodeObjects belonging to a specified nodeset
         # or generate nodeset by generate definition in inputfile
@@ -240,7 +242,7 @@ class AbqModelConstructor:
                     faceNumber = int(faceNumber.replace("S", ""))
                     surface[faceNumber] = model.elementSets[elSet]
 
-            model.surfaces[name] = surface
+            model.surfaces[name] = EntityBasedSurface(name, surface)
 
         return model
 
@@ -331,19 +333,67 @@ class AbqModelConstructor:
             The updated model tree.
         """
 
-        for definition in inputFile["constraint"]:
+        # Multi-point constraints first: their reference coordinate adjustments (e.g. Tie with adjust=True)
+        # must take effect before other constraints cache reference coordinates by value.
+        def isMPCDefinition(definition):
+            constraintType = CaseInsensitiveDict(definition)["type"]
+            return issubclass(getConstraintClass(constraintType), MultiPointConstraintBase)
+
+        mpcDefinitions = [d for d in inputFile["constraint"] if isMPCDefinition(d)]
+        ordinaryDefinitions = [d for d in inputFile["constraint"] if not isMPCDefinition(d)]
+
+        for definition in mpcDefinitions + ordinaryDefinitions:
             constraintKwArgs = CaseInsensitiveDict(definition.copy())
 
             name = constraintKwArgs.pop("name")
             constraintType = constraintKwArgs.pop("type")
             data = constraintKwArgs.pop("datalines")
 
-            module = inputLanguage["constraint"].getModule(constraintType)
+            args, kwargs = parseDatalinesToArgsAndKwargs(data)
 
-            args, kwargs = module.parseDatalines(data)
+            constraintClass = getConstraintClass(constraintType)
+            constraint = constraintClass.fromConstraintDefinition(name, kwargs, model, journal=self.journal)
 
-            constraint = getConstraintClass(constraintType)(name, model, **kwargs)
-            model.constraints[name] = constraint
+            # Multi-point (DOF-elimination) constraints contribute nothing to the load vector or
+            # system matrix and must stay outside the DofManager/assembly machinery.
+            if issubclass(constraintClass, MultiPointConstraintBase):
+                model.multiPointConstraints[name] = constraint
+            else:
+                model.constraints[name] = constraint
+
+        return model
+
+    def createModelModifiersFromInputFile(self, model: FEModel, inputFile: dict) -> dict:
+        """Collects model modifier definitions from the input file.
+
+        Parameters
+        ----------
+        model
+            A dictionary containing the model tree.
+        inputFile
+            A dictionary containing the input file tree.
+
+        Returns
+        -------
+        dict
+            The updated model tree.
+        """
+
+        for definition in inputFile["modelModifier"]:
+            modifierKwArgs = CaseInsensitiveDict(definition.copy())
+
+            name = modifierKwArgs.pop("name")
+            modifierType = modifierKwArgs.pop("type")
+            data = modifierKwArgs.pop("datalines")
+
+            args, kwargs = parseDatalinesToArgsAndKwargs(data)
+            if "moduleOptions" in modifierKwArgs:
+                kwargs["moduleOptions"] = modifierKwArgs["moduleOptions"]
+
+            modifierClass = getModelModifierClass(modifierType)
+            modifier = modifierClass(name, model, self.journal, **kwargs)
+
+            model.modelModifiers[name] = modifier
 
         return model
 
@@ -379,9 +429,7 @@ class AbqModelConstructor:
             if name in model.sections:
                 raise Exception(f"Section with name {name} already exists")
 
-            module = inputLanguage["section"].getModule(sectionType)
-
-            args, kwargs = module.parseDatalines(data)
+            args, kwargs = parseDatalinesToArgsAndKwargs(data)
             # sectionKwArgs.update(kwargs)
 
             for elSet in args:
@@ -395,15 +443,35 @@ class AbqModelConstructor:
                     f"During parsing of keyword {keywordIdentifier}section: Unexpected keyword arguments. Use module level keyword identifier {moduleLevelKeywordIdentifier} instead."
                 )
 
-            sectionFactory = getSectionFactoryByName(sectionType)
+            sectionClass, sectionSchema = registry.lookup("section", sectionType)
 
+            if sectionSchema is None:
+                raise ValueError(
+                    f"Section '{sectionType}' declares no option schema. Declare one as a `schema` "
+                    "class attribute (see `edelweissfe.utils.schema.OptionSchemaProvider`)."
+                )
+
+            # Validate/coerce the parsed options (incl. the `>>` sub-keyword blocks) into the section's schema.
             try:
-                section = sectionFactory(name, model, materialName, args, moduleOptions, **sectionKwArgs)
+                configuration = buildSchemaFromOptions(
+                    sectionSchema,
+                    sectionKwArgs,
+                    {name: withoutParserBookkeeping(blocks) for name, blocks in moduleOptions.items()},
+                )
             except ValueError as e:
                 e.args = (
                     f"Error during parsing of keyword {keywordIdentifier}section (type={sectionType}): " + e.args[0],
                 )
                 raise e
+
+            elementSetNames = splitLinesAtCommas(args)
+            section = sectionClass(
+                name,
+                model,
+                model.materials[materialName],
+                [model.elementSets[elSetName] for elSetName in elementSetNames],
+                configuration=configuration,
+            )
 
             model.sections[name] = section
 
@@ -436,9 +504,56 @@ class AbqModelConstructor:
             # analytical fields accept no module level keywords
             analyticalFieldKwargs = convertLinesToStringDictionary(data)
 
-            analyticalFieldFactory = getAnalyticalFieldFactoryByName(analyticalFieldType)
-            analyticalField = analyticalFieldFactory(analyticalFieldName, model, **analyticalFieldKwargs)
+            analyticalFieldClass, analyticalFieldSchema = registry.lookup("analyticalfield", analyticalFieldType)
+
+            if analyticalFieldSchema is None:
+                raise ValueError(
+                    f"Analytical field '{analyticalFieldType}' declares no option schema. Declare "
+                    "one as a `schema` class attribute (see "
+                    "`edelweissfe.utils.schema.OptionSchemaProvider`)."
+                )
+
+            try:
+                configuration = buildSchemaFromOptions(analyticalFieldSchema, analyticalFieldKwargs)
+            except ValueError as e:
+                e.args = (
+                    f"Error during parsing of keyword {keywordIdentifier}analyticalField "
+                    f"(type={analyticalFieldType}): " + e.args[0],
+                )
+                raise e
+
+            analyticalField = analyticalFieldClass(analyticalFieldName, model, configuration=configuration)
 
             model.analyticalFields[analyticalFieldName] = analyticalField
+
+        return model
+
+    def createElementPropertiesFromInputFile(self, model, inputFile):
+        """Collects element property definitions from the input file and stores them in the model.
+
+        Parameters
+        ----------
+        model
+            The model object.
+        inputFile
+            The input file dictionary.
+
+        Returns
+        -------
+        model
+            The updated model object.
+        """
+        from edelweissfe.elements.elementproperty import ElementProperty
+
+        for definition in inputFile.get("elementproperty", []):
+            elSetName = definition["elSet"]
+            propertyName = definition["propertyName"]
+            data = definition["datalines"]
+
+            values_str = " ".join(data).replace(",", " ")
+            values = np.array([float(x) for x in values_str.split()], dtype=float)
+
+            elementProperty = ElementProperty(elSetName, propertyName, values)
+            model.elementProperties.append(elementProperty)
 
         return model

@@ -1,0 +1,35 @@
+coverage:
+  status:
+    # Informational only for now: no known coverage baseline exists yet (pytest was never run in
+    # CI before this pipeline was added). Switch these to `informational: false` with real
+    # `target`s once a baseline has been observed on a few PRs.
+    project:
+      default:
+        informational: true
+    patch:
+      default:
+        informational: true
+
+comment:
+  layout: "diff, flags, files"
+
+flags:
+  marmot:
+    paths:
+      - edelweissfe/
+    carryforward: false
+  no-marmot:
+    paths:
+      - edelweissfe/
+    carryforward: false
+
+ignore:
+  - "testfiles/"
+  - "examples/"
+  - "doc/"
+  - "docs/"
+  - "build/"
+  - "tests/"
+  - "*.egg-info/"
+  - "scripts/"
+  - "setup.py"

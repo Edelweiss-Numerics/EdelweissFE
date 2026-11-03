@@ -47,7 +47,13 @@ class EntityBasedSurface(dict):
     def __init__(self, name: str, faceToEntities: dict[int, Iterable]):
 
         self.name = name
+        self._version = 0  #: bumped on every in-place mutation (replaceData); stable identity for AMR
 
+        self._checkFaceToEntities(faceToEntities)
+
+        super().__init__(faceToEntities)
+
+    def _checkFaceToEntities(self, faceToEntities: dict[int, Iterable]):
         if not isinstance(faceToEntities, dict):
             raise TypeError("face_to_entities must be of type dict[int, list]")
         if not all(isinstance(k, int) for k in faceToEntities.keys()):
@@ -55,4 +61,17 @@ class EntityBasedSurface(dict):
         if not all(isinstance(v, Iterable) for v in faceToEntities.values()):
             raise TypeError("All values of faceToEntities must be iterable")
 
-        super().__init__(faceToEntities)
+    def replaceData(self, faceToEntities: dict[int, Iterable]):
+        """Replace the face-to-entity mapping in-place, preserving this object's identity so
+        consumers that cached a reference (e.g. a distributed load's ``self._surface``) see the
+        new mapping without re-fetching from the model.
+
+        Parameters
+        ----------
+        faceToEntities
+            The new dictionary mapping face ids (int) to entities sharing that face.
+        """
+        self._checkFaceToEntities(faceToEntities)
+        self.clear()
+        self.update(faceToEntities)
+        self._version += 1
