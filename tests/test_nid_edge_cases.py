@@ -32,6 +32,8 @@ guard against a dynamic degree of freedom that received no mass.
 Reuses the SDOF deck from ``test_nid_newmark`` (one Marmot ``C3D8``/``LinearElastic`` bar).
 """
 
+import re
+
 import numpy as np
 import pytest
 
@@ -51,6 +53,11 @@ from test_nid_newmark import (
     _run,
     _tipHistories,
 )
+
+from edelweissfe.config.configurator import loadConfiguration
+from edelweissfe.journal.journal import Journal
+from edelweissfe.solvers.nonlinearimplicitdynamic import NonlinearImplicitDynamic
+from edelweissfe.solvers.nonlinearimplicitstatic import NIST
 
 
 def test_backward_euler_damps_energy_monotonically(tmp_path):
@@ -207,3 +214,22 @@ def test_reports_the_assembled_total_mass(tmp_path, monkeypatch):
     assert reported and set(reported[0]) == {"displacement"}
     # the whole unit bar: rho * volume
     np.testing.assert_allclose(reported[0]["displacement"], RHO, rtol=1e-12)
+
+
+def test_the_quasi_static_and_the_dynamic_solver_give_the_entities_their_newmark_parameters():
+    """The solver is the one source of the Newmark parameters of the entities that integrate their own inertia (the
+    particles of a meshfree model): NIST passes zero, NID its own with meshfreeInertia=particles and zero with
+    meshfreeInertia=nodes, where it integrates the particles' inertia at the nodes instead."""
+
+    journal = Journal(verbose=False)
+    jobInfo = loadConfiguration(dict())
+    assert NIST(jobInfo, journal).newmarkParametersOfEntities() == (0.0, 0.0)
+
+    inParticles = NonlinearImplicitDynamic(jobInfo, journal, newmarkBeta=0.3, newmarkGamma=0.6)
+    assert inParticles.newmarkParametersOfEntities() == (0.3, 0.6)
+
+    atNodes = NonlinearImplicitDynamic(jobInfo, journal, newmarkBeta=0.3, newmarkGamma=0.6, meshfreeInertia="nodes")
+    assert atNodes.newmarkParametersOfEntities() == (0.0, 0.0)
+
+    with pytest.raises(ValueError, match=re.escape("meshfreeInertia=particles|nodes")):
+        NonlinearImplicitDynamic(jobInfo, journal, meshfreeInertia="grid")

@@ -165,6 +165,12 @@ increment evaluates the forces of the configuration the step starts from, and wr
 are at rest; a step that continues the motion the model holds at its nodes evaluates no force there, and leaves ``P``
 as it is.
 
+The implicit dynamic solver (``NID``) integrates the inertia of the particles either in the particles or at the
+nodes (option ``meshfreeInertia``, see :mod:`~edelweissfe.solvers.nonlinearimplicitdynamic`). In the particles, the
+particles carry their velocity and acceleration in their state, and ``V`` and ``A`` of the kernel functions' nodes
+are zero; at the nodes, ``NID`` carries them in ``V`` and ``A`` by node, as the explicit meshfree solver carries
+``V``. Either way, ``P`` holds the inertial force: in the particles' residual contributions, or added at the nodes.
+
 Using the entries in code
 -------------------------
 

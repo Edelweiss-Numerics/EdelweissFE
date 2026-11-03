@@ -454,6 +454,23 @@ class FEModel:
             [constraint.updateConnectivity(self) for constraint in self.constraints.values() if constraint.switchedOn]
         )
 
+    def setNewmarkParametersOfEntities(self, beta: float, gamma: float):
+        """Give the entities that integrate their own inertia in time the Newmark parameters of the solver: called by
+        the implicit solvers at the start of every step, so that the solver is the one source of the parameters. With
+        :math:`\\beta = \\gamma = 0`, which every quasi-static solver passes, such an entity carries no inertia.
+
+        In a finite element model, no entity integrates its own inertia: the elements report their mass, and a
+        dynamic solver integrates the nodes. The particles of a meshfree model of EdelweissMeshfree carry their state,
+        velocity and acceleration included, and each integrates the Newmark scheme at its own evaluation points.
+
+        Parameters
+        ----------
+        beta
+            The Newmark parameter :math:`\\beta`; 0 for no inertia.
+        gamma
+            The Newmark parameter :math:`\\gamma`; 0 for no inertia.
+        """
+
     def buildEquationSystem(self, withSystemMatrix: bool = True) -> EquationSystemLayout:
         """Lay out the global equation system of the model as it is now: number its degrees of freedom, and say which
         elements contribute to it, see :class:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout`. Called
