@@ -834,7 +834,8 @@ class NonlinearImplicitDynamic(NIST):
         """Read the state the next increment starts from out of the model, into the vectors of the equation system just
         (re)built: the solution, as in the parent, and the velocity and the acceleration of the fields carrying a mass,
         where the last accepted increment (or the checkpoint, or nothing -- a start from rest) left them, and where a
-        refinement has meanwhile interpolated them onto the nodes it created.
+        refinement has meanwhile interpolated them onto the nodes it created. After a quasi-static step, they are zero:
+        the step starts from rest.
 
         Parameters
         ----------
@@ -848,9 +849,8 @@ class NonlinearImplicitDynamic(NIST):
         self.equationSystemLayout.readStateFromModel(U, self._V, self._A, self._dynamicFields)
 
     def writeResultsToModel(self, U: DofVector, dU: DofVector, P: DofVector):
-        """Write the results of a converged increment to the model, as the parent does, and the velocity and the
-        acceleration of the fields carrying a mass with them: what field outputs read, what a checkpoint stores, and
-        what the next equation system reads back.
+        """Write the results of a converged increment to the model, as the parent does, with the velocity and the
+        acceleration of the fields carrying a mass (see :meth:`writeVelocityAndAccelerationToModel`).
 
         The force written is the internal force with the inertial and damping forces of the converged state,
         :math:`\\boldsymbol{f}_\\mathrm{int} + \\boldsymbol{M} \\ddot{\\boldsymbol{u}}_{n+1} + \\boldsymbol{C}
@@ -877,7 +877,15 @@ class NonlinearImplicitDynamic(NIST):
             internalInertialAndDampingForce = self.theDofManager.constructDofVector()
             internalInertialAndDampingForce[:] = P + system.massTimes(self._A) + system.C @ np.asarray(self._V)
 
-        super().writeResultsToModel(U, dU, internalInertialAndDampingForce, self._V, self._A, self._dynamicFields)
+        super().writeResultsToModel(U, dU, internalInertialAndDampingForce)
+
+    def writeVelocityAndAccelerationToModel(self):
+        """Write the velocity and the acceleration of the converged increment to the fields carrying a mass, as part
+        of :meth:`writeResultsToModel`, instead of the parent's state at rest: what field outputs read, what a
+        checkpoint stores, and what the next equation system reads back.
+        """
+
+        self.equationSystemLayout.writeVelocityAndAccelerationToModel(self._V, self._A, self._dynamicFields)
 
     def _updateNewmarkSystem(self, model: FEModel, stepActions: dict) -> _NewmarkSystem:
         """The Newmark operators and state for the parent's current equation system, assembled if

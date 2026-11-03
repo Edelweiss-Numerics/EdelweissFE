@@ -187,7 +187,7 @@ def test_the_layout_of_a_finite_element_model_writes_the_results_to_every_node()
         rows = np.asarray(U)[dofManager.idcsOfFieldsInDofVector[nodeField.name]].reshape(-1, nodeField.dimension)
         for entry, factor in (("U", 1), ("dU", 2), ("P", 3)):
             np.testing.assert_array_equal(nodeField[entry], factor * rows)
-        # a static solver passes no velocity and no acceleration: they are left as they are
+        # passed no velocity and no acceleration, the layout leaves them as they are
         np.testing.assert_array_equal(nodeField["V"], -1.0)
         np.testing.assert_array_equal(nodeField["A"], -1.0)
 
@@ -197,6 +197,22 @@ def test_the_layout_of_a_finite_element_model_writes_the_results_to_every_node()
     np.testing.assert_array_equal(displacement["V"], 4 * rows)
     np.testing.assert_array_equal(displacement["A"], 5 * rows)
     np.testing.assert_array_equal(model.nodeFields["rotation"]["V"], -1.0)
+
+
+def test_the_layout_writes_the_state_of_a_quasi_static_solver_at_rest():
+    model, dofManager = _twoFieldModel()
+    for nodeField in model.nodeFields.values():
+        for entry in NodeField.ENTRIES:
+            nodeField[entry][:] = -1.0
+    layout = EquationSystemLayout(model, dofManager, [])
+
+    layout.writeZeroVelocityAndAccelerationToModel()
+    for nodeField in model.nodeFields.values():
+        np.testing.assert_array_equal(nodeField["V"], 0.0)
+        np.testing.assert_array_equal(nodeField["A"], 0.0)
+        # the state U and the results are not touched
+        for entry in ("U", "dU", "P"):
+            np.testing.assert_array_equal(nodeField[entry], -1.0)
 
 
 def test_the_layout_writes_the_results_in_two_parts():
