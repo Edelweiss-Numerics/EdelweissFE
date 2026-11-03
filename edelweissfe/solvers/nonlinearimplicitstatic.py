@@ -896,7 +896,8 @@ class NIST(NonlinearSolverBase):
         :meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.zeroIncrementalCoefficients`), then the
         solution, its increment and the internal force are written (see
         :meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeResultsToModel`). A solver that
-        integrates in time passes its velocity and acceleration as well.
+        integrates in time passes its velocity and acceleration as well, and the internal force with its inertial and
+        damping forces.
 
         Parameters
         ----------
@@ -905,7 +906,8 @@ class NIST(NonlinearSolverBase):
         dU
             The solution increment.
         P
-            The internal force.
+            The internal force (with the inertial and damping forces of a solver that integrates in time); None to
+            leave the model's as it is.
         V
             The velocity of a solver that integrates in time; None for a static solver.
         A

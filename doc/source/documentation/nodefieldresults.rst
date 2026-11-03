@@ -24,7 +24,9 @@ what lives within one equation system.* An entry is therefore of one of two kind
 - **result** -- what a solver writes for output and for the user; no solver reads it back.
 
 Iterations work on the solver's vectors only. A cut back increment writes nothing. An accepted increment writes
-every entry, once (the explicit meshfree solver in two parts, see below). A rebuilt equation system (a changed mesh,
+every entry, once (the explicit meshfree solver in two parts, see below). The zero-length increment before the first
+increment of a step is the one exception in the dynamic solvers: it integrates nothing and evaluates no force, so it
+leaves ``P`` as the last accepted increment wrote it, of this step or of the step before. A rebuilt equation system (a changed mesh,
 a changed active domain, a changed coupling) reads the state entries from the model. A refinement of the mesh
 interpolates the state entries onto the nodes it creates; the results there are zero until the next accepted
 increment.
@@ -71,6 +73,14 @@ The entries
        summed over the nodes of a support, it is the reaction force. Zero at a node without element.
      - at acceptance
 
+In the explicit solver (``NED``), the inertial and damping forces of a node with an equation of motion are the
+net force the next velocity update divides by, so its ``P`` is the internal force plus that net force: the force of
+the loads and the constraints acting there. At a node with a prescribed motion, the acceleration at the end of an
+increment is set by the prescribed velocity of the next one, which is not known when the increment is accepted, so
+its ``P`` is the internal force alone: the support reaction, without the inertia of the support node's own lumped
+mass. The net force itself is the solver's state, not an entry (see
+:mod:`~edelweissfe.solvers.nonlinearexplicitdynamic`).
+
 The Lagrange multipliers of constraints are scalar variables, not node field entries
 (:class:`~edelweissfe.variables.scalarvariable.ScalarVariable`). They are state as well: each holds its total
 value, written at acceptance and read back at every rebuild. A constraint that is not active keeps the value it
@@ -112,9 +122,4 @@ Where the solvers do not follow this page yet
 The meanings above are being made to hold in every solver. Until then, these deviations remain; each is removed
 from this list together with the deviation:
 
-- The explicit solver (``NED``) writes as ``P`` the net force that accelerates the nodes,
-  :math:`\boldsymbol{f}_\mathrm{ext} - \boldsymbol{f}_\mathrm{int}` including loads and constraints -- the opposite
-  sign of the internal force -- and reads it back when it builds its equation system.
-- The implicit dynamic solver (``NonlinearImplicitDynamic``) writes as ``P`` the internal force without the inertial
-  and damping forces, and its zero increment at a step start writes ``P`` as zero.
 - A quasi-static step after a dynamic one leaves ``V`` and ``A`` of the last dynamic increment in the model.

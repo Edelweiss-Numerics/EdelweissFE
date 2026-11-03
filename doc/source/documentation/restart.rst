@@ -107,7 +107,7 @@ The model is first rebuilt from the same input file, then restored in this order
        parameter of the step) and the time average fluxes of the Abaqus convergence criterion, the
        implicit dynamic solver's conservation check and whether the initial acceleration of the step
        is still to be computed (in a checkpoint written after the zero increment, it is: the first
-       real increment computes it), the explicit solver's last increment and accumulated
+       real increment computes it), the explicit solver's last increment, net force and accumulated
        external work. The resumed step extrapolates the last accepted increments only if its first equation system numbers the
        degrees of freedom as they are numbered (see :doc:`solvers`)
 
