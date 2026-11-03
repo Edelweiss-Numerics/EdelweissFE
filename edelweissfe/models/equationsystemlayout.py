@@ -37,6 +37,7 @@ from edelweissfe.numerics.dofmanager import DofManager, DofVector
 from edelweissfe.timesteppers.timestep import TimeStep
 
 if TYPE_CHECKING:
+    from edelweissfe.fields.nodefield import NodeField
     from edelweissfe.models.femodel import FEModel
 
 
@@ -128,8 +129,8 @@ class EquationSystemLayout:
     def writeResultsToModel(
         self,
         U: DofVector,
-        dU: DofVector,
-        P: DofVector,
+        dU: DofVector | None,
+        P: DofVector | None,
         V: DofVector = None,
         A: DofVector = None,
         dynamicFields: list = None,
@@ -139,14 +140,20 @@ class EquationSystemLayout:
         names of the node fields, the solution to the scalar variables, and, for a solver that integrates in time, the
         velocity ``V`` and the acceleration ``A`` (see :meth:`writeVelocityAndAccelerationToModel`).
 
+        A solver whose increment ends on another equation system than it started on writes in two parts, each through
+        the layout of the system that holds the values: EdelweissMeshfree's explicit solver takes the increment on the
+        kernel functions the particles reached at its start, and evaluates the force on those they reach at its end.
+        It passes None for the entries the other part writes.
+
         Parameters
         ----------
         U
             The solution.
         dU
-            The increment of the solution.
+            The increment of the solution; None to leave the entry ``dU`` of the node fields as it is.
         P
-            The internal force, the sum of the elements' residual contributions.
+            The internal force, the sum of the elements' residual contributions; None to leave the entry ``P`` of the
+            node fields as it is.
         V
             The velocity; None to leave the entry ``V`` of the node fields as it is.
         A
@@ -156,9 +163,11 @@ class EquationSystemLayout:
         """
 
         for nodeField in self.model.nodeFields.values():
-            self.dofManager.writeDofVectorToNodeField(U, nodeField, "U")
-            self.dofManager.writeDofVectorToNodeField(P, nodeField, "P")
-            self.dofManager.writeDofVectorToNodeField(dU, nodeField, "dU")
+            self.writeEntryOfNodeField(U, nodeField, "U")
+            if P is not None:
+                self.writeEntryOfNodeField(P, nodeField, "P")
+            if dU is not None:
+                self.writeEntryOfNodeField(dU, nodeField, "dU")
         self.dofManager.writeDofVectorToScalarVariables(U)
 
         self.writeVelocityAndAccelerationToModel(V, A, dynamicFields)
@@ -180,9 +189,29 @@ class EquationSystemLayout:
 
         for nodeField in self._nodeFieldsWithVelocity(dynamicFields):
             if V is not None:
-                self.dofManager.writeDofVectorToNodeField(V, nodeField, "V")
+                self.writeEntryOfNodeField(V, nodeField, "V")
             if A is not None:
-                self.dofManager.writeDofVectorToNodeField(A, nodeField, "A")
+                self.writeEntryOfNodeField(A, nodeField, "A")
+
+    def writeEntryOfNodeField(self, dofVector: DofVector, nodeField: "NodeField", entry: str):
+        """Write a vector of the equation system to one entry of one node field of the model; every write of
+        :meth:`writeResultsToModel` and :meth:`writeVelocityAndAccelerationToModel` goes through here.
+
+        In a finite element model, the equation system numbers every node of the field, so the whole entry is written.
+        A model whose equation system covers a part of its nodes writes the entry on these nodes, and sets it to zero
+        on the others.
+
+        Parameters
+        ----------
+        dofVector
+            The vector of the equation system.
+        nodeField
+            The node field of the model.
+        entry
+            The entry, one of :attr:`NodeField.ENTRIES <edelweissfe.fields.nodefield.NodeField.ENTRIES>`.
+        """
+
+        self.dofManager.writeDofVectorToNodeField(dofVector, nodeField, entry)
 
     def _nodeFieldsWithVelocity(self, dynamicFields: list | None) -> list:
         """The node fields of the model whose velocity and acceleration a solver reads or writes.

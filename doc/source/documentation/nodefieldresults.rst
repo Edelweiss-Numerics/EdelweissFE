@@ -24,9 +24,10 @@ what lives within one equation system.* An entry is therefore of one of two kind
 - **result** -- what a solver writes for output and for the user; no solver reads it back.
 
 Iterations work on the solver's vectors only. A cut back increment writes nothing. An accepted increment writes
-every entry, once. A rebuilt equation system (a changed mesh, a changed active domain, a changed coupling) reads
-the state entries from the model. A refinement of the mesh interpolates the state entries onto the nodes it
-creates; the results there are zero until the next accepted increment.
+every entry, once (the explicit meshfree solver in two parts, see below). A rebuilt equation system (a changed mesh,
+a changed active domain, a changed coupling) reads the state entries from the model. A refinement of the mesh
+interpolates the state entries onto the nodes it creates; the results there are zero until the next accepted
+increment.
 
 Every solver passes these entries through the model's layout of its equation system
 (:class:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout`), and in no other way:
@@ -83,6 +84,14 @@ material points carry the state. On these nodes, ``U`` is zero and ``dU`` holds 
 accepted increment, which is their meaningful nodal value. Nodes outside the active domain of an increment hold
 zero in every entry.
 
+The explicit meshfree solver carries the velocity of the kernel functions in ``V``: it writes ``V`` by node at
+acceptance and reads it back by node whenever its equation system is rebuilt, so that a node keeps its velocity
+when the active domain changes around it; a node that becomes active starts at rest. Its increment ends on other
+kernel functions than it started on -- the particles move, and reach other nodes -- so it writes the results in two
+parts, each through the layout of the equation system that holds them: ``dU`` on the nodes the increment was taken
+on, ``P`` and ``V`` on the nodes of the configuration it ends in. A node that left the active domain in that
+increment therefore keeps its ``dU``, and holds zero in ``P`` and ``V``.
+
 Using the entries in code
 -------------------------
 
@@ -107,5 +116,3 @@ from this list together with the deviation:
 - The implicit dynamic solver (``NonlinearImplicitDynamic``) writes as ``P`` the internal force without the inertial
   and damping forces, and its zero increment at a step start writes ``P`` as zero.
 - A quasi-static step after a dynamic one leaves ``V`` and ``A`` of the last dynamic increment in the model.
-- In a meshfree model, ``U`` at the incremental nodes is the sum of their increments since the equation system was
-  last built, and the explicit meshfree solver writes no node field entry.
