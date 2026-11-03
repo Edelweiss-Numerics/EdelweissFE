@@ -136,7 +136,7 @@ class EquationSystemLayout:
         dynamicFields: list = None,
     ):
         """Write the results of an accepted increment to the model, once (see the documentation page *Node field
-        results*): the solution ``U``, its increment ``dU`` and the internal force ``P`` to the entries of the same
+        results*): the solution ``U``, its increment ``dU`` and the force ``P`` to the entries of the same
         names of the node fields, the solution to the scalar variables, and, for a solver that integrates in time, the
         velocity ``V`` and the acceleration ``A`` (see :meth:`writeVelocityAndAccelerationToModel`).
 
@@ -152,8 +152,8 @@ class EquationSystemLayout:
         dU
             The increment of the solution; None to leave the entry ``dU`` of the node fields as it is.
         P
-            The internal force, the sum of the elements' residual contributions; None to leave the entry ``P`` of the
-            node fields as it is.
+            The internal force, the sum of the elements' residual contributions, with the inertial and damping forces
+            of a solver that integrates in time; None to leave the entry ``P`` of the node fields as it is.
         V
             The velocity; None to leave the entry ``V`` of the node fields as it is.
         A

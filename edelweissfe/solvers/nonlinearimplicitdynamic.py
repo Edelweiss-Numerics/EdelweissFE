@@ -129,7 +129,8 @@ Solving it statically would put a suddenly loaded model at its static deflection
 real increment -- the whole dynamic response skipped. An increment shorter than :math:`10^{-10}` of
 the time elapsed in the step is skipped for the same reason: it is the round-off remainder the
 stepper's progress accumulation leaves at the end of a step (400 increments of 0.0025 leave 2e-14),
-and the Newmark update would divide by its square.
+and the Newmark update would divide by its square. A skipped increment evaluates no force, so it
+leaves the node field result ``P`` as the last accepted increment wrote it.
 
 **Initial acceleration.** At the start of a step the acceleration is computed from equilibrium,
 :math:`\\boldsymbol{M} \\ddot{\\boldsymbol{u}}_0 = \\boldsymbol{P}_\\mathrm{ext}(t_0) - \\boldsymbol{P}_\\mathrm{int}(\\boldsymbol{u}_0)
@@ -147,7 +148,11 @@ increment alongside the parent's ``U``/``P``/``dU``, both through the model's la
 system -- the same mechanism the explicit solver uses for its velocity. That makes them part of every checkpoint the
 ``*output, type=restart`` manager writes and of every ``*fieldOutput`` (``result=V``,
 ``result=A``), with no solver-specific restart code beyond a marker that tells a resumed run not to
-recompute the initial acceleration.
+recompute the initial acceleration. The force written as ``P`` is the internal force with the
+inertial and damping forces of the converged state, :math:`\\boldsymbol{f}_\\mathrm{int} +
+\\boldsymbol{M} \\ddot{\\boldsymbol{u}}_{n+1} + \\boldsymbol{C} \\dot{\\boldsymbol{u}}_{n+1}`, as the
+documentation page :doc:`/documentation/nodefieldresults` defines it: at a support without load, the
+reaction.
 
 **Live h-adaptivity.** A ``*modelModifier, type=hAdaptivity`` refining the mesh mid-step is
 supported. Three things make that work, and only the third is this solver's own:
@@ -635,6 +640,9 @@ class NonlinearImplicitDynamic(NIST):
                 2,
             )
             dU[:] = 0.0
+            # No Newmark increment, so no force of this state is evaluated: the model keeps the force it holds (see
+            # writeResultsToModel).
+            self._currentIncrement = None
             return U_n, dU, P, 0, {field: [] for field in self.theDofManager.idcsOfFieldsInDofVector}
 
         return super().solveIncrement(
@@ -844,6 +852,13 @@ class NonlinearImplicitDynamic(NIST):
         acceleration of the fields carrying a mass with them: what field outputs read, what a checkpoint stores, and
         what the next equation system reads back.
 
+        The force written is the internal force with the inertial and damping forces of the converged state,
+        :math:`\\boldsymbol{f}_\\mathrm{int} + \\boldsymbol{M} \\ddot{\\boldsymbol{u}}_{n+1} + \\boldsymbol{C}
+        \\dot{\\boldsymbol{u}}_{n+1}` (see the documentation page *Node field results*): at a support that no load
+        acts on, the reaction, the inertia of the support's own mass included. A skipped (zero-length or negligible)
+        increment evaluates no force; the model keeps the force the last accepted increment wrote, of this step or of
+        the step before.
+
         Parameters
         ----------
         U
@@ -851,10 +866,18 @@ class NonlinearImplicitDynamic(NIST):
         dU
             The solution increment.
         P
-            The internal force.
+            The internal force, the elements' residual contributions.
         """
 
-        super().writeResultsToModel(U, dU, P, self._V, self._A, self._dynamicFields)
+        increment = self._currentIncrement
+        if increment is None:
+            internalInertialAndDampingForce = None
+        else:
+            system = increment.system
+            internalInertialAndDampingForce = self.theDofManager.constructDofVector()
+            internalInertialAndDampingForce[:] = P + system.massTimes(self._A) + system.C @ np.asarray(self._V)
+
+        super().writeResultsToModel(U, dU, internalInertialAndDampingForce, self._V, self._A, self._dynamicFields)
 
     def _updateNewmarkSystem(self, model: FEModel, stepActions: dict) -> _NewmarkSystem:
         """The Newmark operators and state for the parent's current equation system, assembled if

@@ -105,7 +105,7 @@ The model is first rebuilt from the same input file, then restored in this order
        and their ``dU``, with the digest of the numbering of the degrees of freedom these are vectors
        of, under arc length control also their increments of the load parameter, and the load
        parameter of the step) and the time average fluxes of the Abaqus convergence criterion, the
-       explicit solver's last increment and accumulated external work. The resumed step
+       explicit solver's last increment, net force and accumulated external work. The resumed step
        extrapolates the last accepted increments only if its first equation system numbers the
        degrees of freedom as they are numbered (see :doc:`solvers`)
 
