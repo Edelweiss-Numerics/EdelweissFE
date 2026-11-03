@@ -179,8 +179,8 @@ namespace EdelweissFE {
       // Named maps rather than temporaries: `Eigen::Map< T >( ptr ) = value;` would be
       // parsed as a declaration of a variable named `ptr`, not as an assignment.
       Eigen::Map< Marmot::Math::Vector6d > stressMap( stress );
-      Eigen::Map< NonlocalVector >   KLocalMap( KLocal );
-      Eigen::Map< NonlocalVector >   cMap( c );
+      Eigen::Map< NonlocalVector >         KLocalMap( KLocal );
+      Eigen::Map< NonlocalVector >         cMap( c );
 
       Eigen::Map< Stiffness >      dStress_dStrainMap( dStress_dStrain );
       Eigen::Map< StressNonlocal > dStress_dKMap( dStress_dK );
