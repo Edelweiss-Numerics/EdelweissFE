@@ -148,7 +148,7 @@ All pull requests (fixes, features, refactoring) target `master`, the developmen
 If your changes depend on features or fixes in [Marmot](https://github.com/MAteRialMOdelingToolbox/Marmot/), ensure the Marmot-side branch is named identically to your EdelweissFE branch. CI automatically resolves and checks out matching Marmot branches during test runs.
 
 ### PR Checklist
-- [ ] PR targets the correct branch (`master` for bugfixes, `next_v<YY>.<MM>` for features/enhancements).
+- [ ] PR targets `master`.
 - [ ] PR title follows Conventional Commits format.
 - [ ] `pre-commit run --all-files` passes cleanly.
 - [ ] Project builds cleanly via `pip install -e .` (`-v` to see the Marmot extensions being built).
