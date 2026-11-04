@@ -148,11 +148,12 @@ def test_scaled_blocks_enter_scaled(assemblyType):
     np.testing.assert_allclose(_assemble(assemblyType, 2, factor=0.3), _reference(factor=0.3), rtol=1e-14, atol=1e-14)
 
 
-def test_direct_assembly_with_workers_sums_in_the_same_order_every_time():
-    """Each worker meets the same entities in the same order, so the matrix is the same to the last bit."""
+def test_direct_assembly_with_workers_agrees_with_itself_to_round_off():
+    """The workers add to the one CSR matrix atomically, in an order set by their timing: repeated, the matrix agrees
+    to round-off, not necessarily bit for bit."""
     first = _assemble(DirectCSRSystemMatrixAssembly, 3)
     for _ in range(5):
-        np.testing.assert_array_equal(_assemble(DirectCSRSystemMatrixAssembly, 3), first)
+        np.testing.assert_allclose(_assemble(DirectCSRSystemMatrixAssembly, 3), first, rtol=1e-14, atol=1e-14)
 
 
 def test_workers_get_their_chunks_in_turn():
