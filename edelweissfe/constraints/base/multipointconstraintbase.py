@@ -150,16 +150,17 @@ class MultiPointConstraintBase(OptionSchemaProvider, ABC):
         (i.e. every constraint that does not override this method)."""
 
     @property
-    def activatedNodeFields(self) -> list:
-        """The fields this constraint needs on nodes that no element activates (e.g. the
-        displacement and rotation of a reference point), as ``[(node, [field, ...]), ...]``.
+    def nodes(self) -> list:
+        """The nodes this constraint needs fields on, as for
+        :attr:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.nodes`.
 
         The default is none: the slaves and masters of most multi-point constraints are element
         nodes, which already carry their fields.
-
-        Returns
-        -------
-        list
-            The nodes and the fields to activate on them.
         """
+        return []
+
+    @property
+    def fieldsOnNodes(self) -> list:
+        """The fields this constraint needs on each of :attr:`nodes`, as for
+        :attr:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.fieldsOnNodes`."""
         return []

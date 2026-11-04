@@ -45,7 +45,20 @@ in 3D (rotation field with 3 components), and in 2D (one rotation :math:`\\phi` 
     u_{s,x} = u_{RP,x} - \\phi \\, d_{s,y}, \\quad u_{s,y} = u_{RP,y} + \\phi \\, d_{s,x}.
 
 The slave displacements are eliminated; the displacement and the rotation of the RP are the masters.
-Prescribe Dirichlet conditions on the RP only, not on the slave nodes.
+Prescribe Dirichlet conditions on the RP only, not on the slave nodes: a slave degree of freedom that
+is also prescribed loses its record to the Dirichlet condition (reported by the solver), so the body
+is no longer rigid at that node.
+
+This constraint is a :class:`~edelweissfe.models.meshdependent.MeshDependent`: if adaptive refinement
+changes the slave node set (e.g. by :mod:`~edelweissfe.modelmodifiers.adaptivity.hadaptivity`), the
+records are rebuilt from the current members, so new nodes are tied as well.
+
+Limitation: static solvers only. The RP carries no mass of its own, and both dynamic solvers check
+the assembled inertia before the multi-point constraint enters, so they reject the RP's degrees of
+freedom (NID: no mass on a time-integrated DOF, as for
+:mod:`~edelweissfe.constraints.linearizedrigidbody`; NED: an inertia on only some DOFs of a field).
+For NED, folding the slave masses onto the RP would not suffice: the row-sum lumping used for ties
+gives the RP rotation the signed static moment of the slave masses instead of a rotational inertia.
 """
 
 from dataclasses import dataclass
@@ -53,8 +66,10 @@ from dataclasses import dataclass
 from edelweissfe.constraints.base.multipointconstraintbase import (
     MultiPointConstraintBase,
 )
+from edelweissfe.constraints.linearizedrigidbody import rigidBodyKinematicsCoefficients
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
+from edelweissfe.models.meshdependent import MeshDependent
 from edelweissfe.sets.nodeset import NodeSet
 from edelweissfe.utils.exceptions import WrongDomain
 from edelweissfe.utils.schema import buildSchemaFromOptions, schemaField
@@ -71,7 +86,7 @@ class LinearizedRigidBodyMPCSchema:
     )
 
 
-class Constraint(MultiPointConstraintBase):
+class Constraint(MultiPointConstraintBase, MeshDependent):
     """Linearized rigid body constraint as a multi-point constraint.
 
     Parameters
@@ -110,8 +125,11 @@ class Constraint(MultiPointConstraintBase):
         self._model = model
         self.nDim = model.domainSize
         self.rp = referencePoint[0]
-        # (slaveNode, d_s); slave node first, as claimedSlaveNodes() of the base class expects
-        self._records = [(s, s.coordinates - self.rp.coordinates) for s in nSet if s is not self.rp]
+        self._nSetName = nSet.name
+        self._buildRecords(nSet)
+
+        # gets the records rebuilt after topology changes, via TopologyPipeline.refreshMeshDependents
+        model.topology.registerMeshDependent(self)
 
     @classmethod
     def fromConstraintDefinition(
@@ -127,10 +145,27 @@ class Constraint(MultiPointConstraintBase):
             configuration=configuration,
         )
 
+    def _buildRecords(self, nSet: NodeSet):
+        # (slaveNode, d_s); slave node first, as claimedSlaveNodes() of the base class expects
+        self._records = [(s, s.coordinates - self.rp.coordinates) for s in nSet if s is not self.rp]
+
+    def refresh(self, model: FEModel, change) -> bool:
+        """Rebuild the records from the current members of the slave node set, if ``change``
+        touched it."""
+        if not change.touchesNodeSet(self._nSetName):
+            return False
+        self._buildRecords(model.nodeSets[self._nSetName])
+        return True
+
+    # the RP carries no element: its displacement and rotation are activated here; the slaves are
+    # element nodes, which carry their displacement already
     @property
-    def activatedNodeFields(self) -> list:
-        # the RP carries no element: its displacement and rotation are activated here
-        return [(self.rp, ["displacement", "rotation"])] + [(s, ["displacement"]) for s, _ in self._records]
+    def nodes(self) -> list:
+        return [self.rp]
+
+    @property
+    def fieldsOnNodes(self) -> list:
+        return [["displacement", "rotation"]]
 
     def getMultiPointConstraints(self, dofManager) -> list:
         idcs = dofManager.idcsOfFieldVariablesInDofVector
@@ -139,18 +174,9 @@ class Constraint(MultiPointConstraintBase):
         records = []
         for slave, d in self._records:
             uS = idcs[slave.fields["displacement"]]
-            if self.nDim == 3:
-                dx, dy, dz = d
-                # u_s = u_RP + phi x d
-                rotationTerms = (
-                    [(phi[1], dz), (phi[2], -dy)],
-                    [(phi[2], dx), (phi[0], -dz)],
-                    [(phi[0], dy), (phi[1], -dx)],
-                )
-            else:
-                dx, dy = d[:2]
-                rotationTerms = ([(phi[0], -dy)], [(phi[0], dx)])
+            # u_s = u_RP + phi x d
+            rotationTerms = rigidBodyKinematicsCoefficients(d, self.nDim)
             for i in range(self.nDim):
-                masters = [(uRP[i], 1.0)] + [(dof, c) for dof, c in rotationTerms[i] if c != 0.0]
+                masters = [(uRP[i], 1.0)] + [(phi[j], c) for j, c in rotationTerms[i] if c != 0.0]
                 records.append((uS[i], masters))
         return records
