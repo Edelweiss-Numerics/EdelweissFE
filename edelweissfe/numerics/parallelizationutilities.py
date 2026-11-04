@@ -266,13 +266,13 @@ def mapChunksOnWorkers(items, work, numberOfWorkers: int, chunksPerWorker: int =
     """Call ``work(worker, chunk)`` for consecutive chunks of ``items``, each chunk on a fixed worker thread, and return
     what the calls returned, in the order of the chunks.
 
-    For an entity loop whose workers write into memory of their own -- each worker its own copy of the system matrix
-    values (see :class:`~edelweissfe.numerics.systemmatrixassembly.DirectCSRSystemMatrixAssembly`). Unlike
+    For an entity loop whose workers write through memory of their own, which no other call may use at the same
+    time -- each worker its own scratch array for the blocks of the system matrix (see
+    :meth:`~edelweissfe.numerics.systemmatrixassembly.SystemMatrixAssembly.blocksOfWorker`). Unlike
     :func:`mapChunksInParallel`, which hands each chunk to whichever thread is free, the chunks are dealt out to the
-    workers in turn: worker ``w`` handles chunks ``w``, ``w + numberOfWorkers``, ..., in this order. So every worker
-    meets the same entities in the same order in every run, and what it sums up is summed in the same order -- the
-    result does not depend on the timing of the threads. Several chunks per worker, interleaved, spread a region of
-    expensive entities (e.g., at a damage front, adjacent in the element order) over all workers.
+    workers in turn: worker ``w`` handles chunks ``w``, ``w + numberOfWorkers``, ..., in this order, so every worker
+    meets the same entities in every run. Several chunks per worker, interleaved, spread a region of expensive
+    entities (e.g., at a damage front, adjacent in the element order) over all workers.
 
     Runs serially in the calling thread, as worker 0 with one chunk holding all ``items``, for one worker.
 

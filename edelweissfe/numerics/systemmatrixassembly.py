@@ -259,7 +259,7 @@ class VIJSystemMatrixAssembly(SystemMatrixAssembly):
 
 class _DirectCSRBlocksOfWorker(SystemMatrixBlocks):
     """The blocks one worker of a :class:`DirectCSRSystemMatrixAssembly` writes: one zeroed scratch array, reused for
-    every entity, scattered into the worker's own copy of the CSR values when the block is committed.
+    every entity, added to the CSR values when the block is committed.
 
     Parameters
     ----------
@@ -268,7 +268,7 @@ class _DirectCSRBlocksOfWorker(SystemMatrixBlocks):
     entityIds
         The number of every entity in the assembler.
     worker
-        The number of the worker, which selects its CSR copy.
+        The number of the worker, which selects its scratch in the scatter.
     """
 
     def __init__(self, assembler: DirectCSRAssembler, entityIds: dict, worker: int):
@@ -311,10 +311,9 @@ class DirectCSRSystemMatrixAssembly(SystemMatrixAssembly):
     (:class:`~edelweissfe.numerics.csrgeneratorv2.DirectCSRAssembler`). No value array of the VIJ pattern's length
     exists.
 
-    Every worker writes its blocks into a scratch array of its own, and scatters them into a CSR copy of its own, so
-    the workers never write to the same memory; :meth:`assembledMatrix` sums the copies. An entity loop that hands
-    every worker a fixed share of the entities, in a fixed order, sums in the same order in every run (see
-    :func:`~edelweissfe.numerics.parallelizationutilities.mapChunksOnWorkers`).
+    Every worker writes its blocks into a scratch array of its own, and all workers add them to the one CSR matrix,
+    each addition atomic. The order in which the workers add to an entry depends on their timing, so with more than
+    one worker the matrix agrees from run to run to round-off, not bit for bit.
 
     Every block is a zeroed scratch array: an entity that is handed its block more than once in an assembly (an
     element, then a body load on it) has each one scattered on its own. Entities with a sparse VIJ pattern of their
@@ -328,7 +327,7 @@ class DirectCSRSystemMatrixAssembly(SystemMatrixAssembly):
     dofManager
         The DOF manager of the equation system, with its VIJ pattern.
     numberOfWorkers
-        How many threads may write blocks at the same time; one CSR copy each.
+        How many threads may write blocks at the same time; one scratch array each.
     """
 
     needsGatherMap = False
@@ -356,8 +355,7 @@ class DirectCSRSystemMatrixAssembly(SystemMatrixAssembly):
     def blocksOfWorker(self, worker: int) -> SystemMatrixBlocks:
         return self._workers[worker]
 
-    @performancetiming.timeit("sum CSR copies")
     def assembledMatrix(self) -> csr_matrix:
         for worker in self._workers:
             worker.flush()
-        return self.assembler.reduce()
+        return self.assembler.csrMatrix
