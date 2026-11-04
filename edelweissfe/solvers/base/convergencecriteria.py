@@ -114,9 +114,10 @@ Two criteria are available, selected by the solver option ``convergenceCriterion
     flux, :math:`\\tilde{q}` is the time average flux of the previous step or, in the first step, the initial value
     :math:`\\tilde{q}^0` (Abaqus' "initial value of time average force", ``1e-2``).
 
-    A field whose current spatial average flux is below :math:`\\varepsilon \\, \\tilde{q}` carries no flux; it is
-    converged if :math:`c_{\\max} \\leq C_\\varepsilon \\, \\Delta u_{\\max}`. A field with
-    :math:`r_{\\max} \\leq R_l \\, \\tilde{q}` is converged irrespective of the correction (linear case).
+    A field with :math:`r_{\\max} \\leq R_l \\, \\tilde{q}` is converged irrespective of the correction (linear case),
+    whether it carries flux or not. Otherwise, a field whose current spatial average flux is below
+    :math:`\\varepsilon \\, \\tilde{q}` carries no flux; it is converged if
+    :math:`c_{\\max} \\leq C_\\varepsilon \\, \\Delta u_{\\max}`.
 
     The criterion is formulated for fields; the scalar variables are checked by the ``legacy`` criterion.
 
@@ -546,16 +547,15 @@ class AbaqusConvergenceCriterion(ConvergenceCriterionBase):
         largestIncrement = np.linalg.norm(dU, np.inf)
         timeAveragedFlux = self.timeAveragedFlux(field, spatialAveragedFlux)
 
-        if not self._carriesFlux(field, spatialAveragedFlux):
-            # A field without flux and without residual (e.g., a nonlocal field before the onset of damage) has
-            # nothing left to iterate on, even if its correction is pure round-off of the size of its increment.
-            correctionConverged = fluxResidual == 0.0 or (
-                ddU is not None and correction <= self.zeroFluxCorrectionTolerance * largestIncrement
-            )
-            return FieldConvergence(fluxResidual, True, correction, correctionConverged, indexOfMax)
-
+        # The linear case comes first, with or without flux: a field whose residual is negligible (e.g., a nonlocal
+        # field before the onset of damage, whose residual is round-off or exactly zero) has nothing left to iterate
+        # on, even if its correction is pure round-off of the size of its increment.
         if fluxResidual <= self.linearResidualTolerance * timeAveragedFlux:
             return FieldConvergence(fluxResidual, True, correction, True, indexOfMax)
+
+        if not self._carriesFlux(field, spatialAveragedFlux):
+            correctionConverged = ddU is not None and correction <= self.zeroFluxCorrectionTolerance * largestIncrement
+            return FieldConvergence(fluxResidual, True, correction, correctionConverged, indexOfMax)
 
         residualTolerance = (
             self.residualTolerance
