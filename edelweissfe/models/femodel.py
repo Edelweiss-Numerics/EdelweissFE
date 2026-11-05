@@ -29,6 +29,7 @@
 
 # @author: Matthias Neuner
 
+import itertools
 import textwrap
 from operator import attrgetter
 
@@ -183,7 +184,7 @@ class FEModel:
         constraints.
         """
 
-        for constraint in self.constraints.values():
+        for constraint in itertools.chain(self.constraints.values(), self.multiPointConstraints.values()):
             for node, nodeFields in zip(constraint.nodes, constraint.fieldsOnNodes):
                 for field in nodeFields:
                     if field not in node.fields:

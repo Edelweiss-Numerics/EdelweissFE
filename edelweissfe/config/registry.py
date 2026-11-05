@@ -188,6 +188,7 @@ _addBuiltins(
         "equalvaluepenalty",
         "hangingnode",
         "linearizedrigidbody",
+        "linearizedrigidbodympc",
         "nodetodeformablesurfacepenalty",
         "nodetodiscreterigidbodypenalty",
         "nodetorigidsurfacepenalty",

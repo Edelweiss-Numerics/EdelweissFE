@@ -38,6 +38,31 @@ from edelweissfe.utils.exceptions import WrongDomain
 from edelweissfe.utils.schema import buildSchemaFromOptions, schemaField
 
 
+def rigidBodyKinematicsCoefficients(d: np.ndarray, nDim: int) -> list[list[tuple[int, float]]]:
+    """The linearized rigid body kinematics of a point at distance ``d`` from the reference point,
+    :math:`\\mathbf{u} = \\mathbf{u}_{RP} + \\boldsymbol{\\phi} \\times \\mathbf{d}`, as the
+    rotation terms of each displacement component.
+
+    Parameters
+    ----------
+    d
+        The distance vector :math:`\\mathbf{x} - \\mathbf{x}_{RP}`.
+    nDim
+        The domain size; in 2D, the rotation has the one component :math:`\\phi_z`.
+
+    Returns
+    -------
+    list[list[tuple[int, float]]]
+        Per displacement component :math:`i`, the pairs ``(j, c)`` with
+        :math:`u_i = u_{RP,i} + \\sum c \\, \\phi_j`.
+    """
+    if nDim == 3:
+        dx, dy, dz = d
+        return [[(1, dz), (2, -dy)], [(2, dx), (0, -dz)], [(0, dy), (1, -dx)]]
+    dx, dy = d[:2]
+    return [[(0, -dy)], [(0, dx)]]
+
+
 @dataclass(frozen=True)
 class LinearizedRigidBodySchema:
     """The options this constraint accepts, owned by this module and never mutated from outside
@@ -181,53 +206,19 @@ class Constraint(ConstraintBase):
 
         self._nDof = nAffectedDofs + nConstraints
 
-        distances = [s.coordinates - self.rp.coordinates for s in self.slaveNodes]
-
         dG_dU = np.zeros((nConstraints, nAffectedDofs))
+        rpDisplacementCol = nDim * nSlaves
+        rotationCol = nDim * (nSlaves + nRp)
 
-        for i in range(nConstraints):
-            # 1) Set the values for d_dux, d_duy and d_duz columns
-            # filling diagonal elements with 1
-            dG_dU[i, i] = 1
-
-            # 2) Set the values for d_duxRP, d_duyRP and d_duzRP columns,
-            # starting at nConstraints and cycling every nDim rows
-            col_index = nConstraints + (i % nDim)
-
-            # make sure we don't go out of bounds
-            if col_index < nAffectedDofs - nRot:
-                dG_dU[i, col_index] = -1
-
-            # 3) Set the values for the last columns d_dRx, d_dRy, d_dRz
-            # index for distances
-            index = i // nDim
-            # make sure we don't go out of bounds of the distances array
-            if index < np.array(distances).shape[0]:
-                # 3D
-                if nDim == 3:
-                    dx, dy, dz = np.array(distances)[index]
-                    # Row 0, 3, 6, ...
-                    if i % nDim == 0:
-                        dG_dU[i, -1] = dy
-                        dG_dU[i, -2] = -dz
-                    # Row 1, 4, 7, ...
-                    elif i % nDim == 1:
-                        dG_dU[i, -1] = -dx
-                        dG_dU[i, -3] = dz
-                    # Row 2, 5, 8, ...
-                    elif i % nDim == 2:
-                        dG_dU[i, -2] = dx
-                        dG_dU[i, -3] = -dy
-
-                # 2D
-                elif nDim == 2:
-                    dx, dy = np.array(distances)[index]
-                    # Row 0, 2, 4, ...
-                    if i % nDim == 0:
-                        dG_dU[i, -1] = dy
-                    # Row 1, 3, 5, ...
-                    elif i % nDim == 1:
-                        dG_dU[i, -1] = -dx
+        # g = u_s - u_RP - phi x d_s, row s * nDim + i
+        for s, slave in enumerate(self.slaveNodes):
+            rotationTerms = rigidBodyKinematicsCoefficients(slave.coordinates - self.rp.coordinates, nDim)
+            for i in range(nDim):
+                row = s * nDim + i
+                dG_dU[row, row] = 1.0
+                dG_dU[row, rpDisplacementCol + i] = -1.0
+                for j, c in rotationTerms[i]:
+                    dG_dU[row, rotationCol + j] = -c
 
         self.dG_dU = dG_dU
 

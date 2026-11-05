@@ -148,3 +148,19 @@ class MultiPointConstraintBase(OptionSchemaProvider, ABC):
 
         The default implementation does nothing, which is correct for every stateless constraint
         (i.e. every constraint that does not override this method)."""
+
+    @property
+    def nodes(self) -> list:
+        """The nodes this constraint needs fields on, as for
+        :attr:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.nodes`.
+
+        The default is none: the slaves and masters of most multi-point constraints are element
+        nodes, which already carry their fields.
+        """
+        return []
+
+    @property
+    def fieldsOnNodes(self) -> list:
+        """The fields this constraint needs on each of :attr:`nodes`, as for
+        :attr:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.fieldsOnNodes`."""
+        return []

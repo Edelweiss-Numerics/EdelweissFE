@@ -1,0 +1,46 @@
+** AMR + linearizedRigidBodyMPC: a C3D20 block, its front face a rigid body driven by a reference
+** point (displacement and rotation). The elements at the front face are refined, which adds nodes to
+** the rigid node set; the constraint rebuilds its records from the grown set, so the new nodes are
+** tied as well.
+*material, name=linearelastic, id=mat
+18000, 0.0
+
+*section, name=sec, material=mat, type=solid
+block_all
+
+*modelGenerator, generator=boxGen, name=block
+nX      =2
+nY      =2
+nZ      =2
+x0      =0
+y0      =0
+z0      =0
+lX      =1
+lY      =1
+lZ      =1
+elType  =C3D20
+
+*node, nSet=RP
+999999, 0.5, 0.5, 1.2
+
+*constraint, type=linearizedRigidBodyMPC, name=rigidFront
+nSet=block_front
+referencePoint=RP
+
+*modelModifier, type=hAdaptivity, name=amr
+>>marker, type=nodeSet, nSet=block_front, initialOnly=True
+maxLevel=1
+
+*job, name=amrrigidbody, domain=3d
+*solver, solver=NIST, name=theSolver
+
+*fieldOutput
+>>perNode, elSet=block_all, field=displacement, result=U, name=disp
+>>perNode, nSet=RP, field=rotation, result=U, name=rpRotation
+
+*step, solver=theSolver
+maxInc=1.0, minInc=1.0, maxNumInc=1, maxIter=25, stepLength=1
+>>options, name=theSolver, extrapolation=off
+>>dirichlet, name=fixBack, nSet=block_back, field=displacement, 1=0.0, 2=0.0, 3=0.0
+>>dirichlet, name=moveRP, nSet=RP, field=displacement, 1=0.01, 2=0.0, 3=-0.01
+>>dirichlet, name=rotateRP, nSet=RP, field=rotation, 1=0.0, 2=0.0, 3=0.02
