@@ -41,6 +41,7 @@ know which is in use (see :ref:`system-matrix-assembly`):
 """
 
 from abc import ABC, abstractmethod
+from typing import Callable
 
 import numpy as np
 from scipy.sparse import csr_matrix
@@ -49,6 +50,7 @@ import edelweissfe.utils.performancetiming as performancetiming
 from edelweissfe.numerics.csrgeneratorv2 import CSRGenerator, DirectCSRAssembler
 from edelweissfe.numerics.dofmanager import DofManager
 from edelweissfe.numerics.parallelizationutilities import forEachSliceInParallel
+from edelweissfe.numerics.systemmatrixcontributor import SystemMatrixEntities
 
 
 class SystemMatrixBlocks(ABC):
@@ -133,7 +135,7 @@ class SystemMatrixAssembly(SystemMatrixBlocks):
 
     One assembly per Newton iteration: :meth:`beginAssembly`, then every entity writes its block (``K[entity]``, or
     from a worker thread, ``K.blocksOfWorker(worker)[entity]``), then :meth:`assembledMatrix` returns the global
-    matrix. It is built per equation system, after its CSR pattern is complete, see
+    matrix. It is built per equation system, together with its CSR pattern, see
     :meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.createSystemMatrixAssembly`.
 
     ``K[entity]`` hands out the blocks of worker 0, for the entity loops in the calling thread.
@@ -144,10 +146,6 @@ class SystemMatrixAssembly(SystemMatrixBlocks):
         How many threads may write blocks at the same time, each through its own
         :meth:`blocksOfWorker`.
     """
-
-    #: Whether the CSR generator of the pattern must keep its gather map for this assembly (see
-    #: :class:`~edelweissfe.numerics.csrgeneratorv2.CSRGenerator`).
-    needsGatherMap = True
 
     #: The VIJ value array, for code that works on it directly (e.g., the mass term of a dynamic solver, or a compiled
     #: entity loop); None on a path without one.
@@ -191,6 +189,12 @@ class SystemMatrixAssembly(SystemMatrixBlocks):
         int
             The number of values.
         """
+
+    @property
+    @abstractmethod
+    def csrMatrix(self) -> csr_matrix:
+        """The CSR matrix the assembly assembles into, the one :meth:`assembledMatrix` returns: its own buffer, which
+        the next assembly overwrites, and whose pattern must not change."""
 
     @abstractmethod
     def assembledMatrix(self) -> csr_matrix:
@@ -238,20 +242,23 @@ class VIJSystemMatrixAssembly(SystemMatrixAssembly):
 
     Parameters
     ----------
-    csrGenerator
-        The CSR pattern and the gather map.
     dofManager
         The DOF manager of the equation system, with its VIJ pattern.
     numberOfWorkers
         How many threads may write blocks at the same time.
+    patternFillIn
+        Called with the CSR pattern (as a matrix of zeros) once it is derived; returns the entries no entity
+        contributes that the pattern must have as well (e.g.
+        :meth:`~edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation.condensedPatternFillIn`).
     """
 
-    needsGatherMap = True
-
-    def __init__(self, csrGenerator: CSRGenerator, dofManager: DofManager, numberOfWorkers: int):
+    def __init__(self, dofManager: DofManager, numberOfWorkers: int, patternFillIn: Callable | None = None):
         super().__init__(numberOfWorkers)
+        #: The CSR pattern, derived from the VIJ pairs by sort-and-sum, and the gather map.
+        self.csrGenerator = CSRGenerator(dofManager)
+        if patternFillIn is not None:
+            self.csrGenerator.addToPattern(patternFillIn(self.csrGenerator.csrMatrix))
         self.vijArray = dofManager.constructVIJSystemMatrix()
-        self._csrGenerator = csrGenerator
 
     def beginAssembly(self):
         # the value array holds the entries of all blocks, far too many to zero on a single thread
@@ -271,9 +278,13 @@ class VIJSystemMatrixAssembly(SystemMatrixAssembly):
         # the value array is the matrix being assembled: a written block is in it already
         pass
 
+    @property
+    def csrMatrix(self) -> csr_matrix:
+        return self.csrGenerator.csrMatrix
+
     @performancetiming.timeit("gather VIJ to CSR")
     def assembledMatrix(self) -> csr_matrix:
-        return self._csrGenerator.updateInPlace(self.vijArray)
+        return self.csrGenerator.updateInPlace(self.vijArray)
 
 
 class _DirectCSRBlocksOfWorker(SystemMatrixBlocks):
@@ -348,52 +359,44 @@ class _DirectCSRBlocksOfWorker(SystemMatrixBlocks):
 
 class DirectCSRSystemMatrixAssembly(SystemMatrixAssembly):
     """Scatter directly: every block is scattered into CSR as soon as it is committed, through a map that knows the
-    CSR position of every entry of the VIJ pattern
-    (:class:`~edelweissfe.numerics.csrgeneratorv2.DirectCSRAssembler`). No value array of the VIJ pattern's length
-    exists.
+    CSR position of every value of every block (:class:`~edelweissfe.numerics.csrgeneratorv2.DirectCSRAssembler`).
+    The CSR pattern is derived from the entities' DOF lists; neither a value array nor index arrays of the VIJ layout
+    exist.
 
     Every worker writes its blocks into a scratch array of its own, and all workers add them to the one CSR matrix,
     each addition atomic. The order in which the workers add to an entry depends on their timing, so with more than
     one worker the matrix agrees from run to run to round-off, not bit for bit.
 
     Every block is a zeroed scratch array: an entity that is handed its block more than once in an assembly (an
-    element, then a body load on it) has each one scattered on its own. Entities with a sparse VIJ pattern of their
-    own (constraints that couple only some of their degrees of freedom, which say so through
+    element, then a body load on it) has each one scattered on its own. Entities that list the entries of their block
+    themselves (constraints that couple only some of their degrees of freedom, which say so through
     :attr:`~edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.couplesAllItsDofs`) are scattered
     entry by entry.
 
     Parameters
     ----------
-    csrGenerator
-        The CSR pattern, complete (with the entries the multi-point-constraint condensation adds); its gather map is
-        not needed.
     dofManager
-        The DOF manager of the equation system, with its VIJ pattern.
+        The DOF manager of the equation system: the global DOF list of every entity.
     numberOfWorkers
         How many threads may write blocks at the same time; one scratch array each.
+    patternFillIn
+        As for :class:`VIJSystemMatrixAssembly`.
     """
 
-    needsGatherMap = False
-
-    def __init__(self, csrGenerator: CSRGenerator, dofManager: DofManager, numberOfWorkers: int):
+    def __init__(self, dofManager: DofManager, numberOfWorkers: int, patternFillIn: Callable | None = None):
         super().__init__(numberOfWorkers)
 
-        entities = list(dofManager.vijSliceOfEntity)
-        vijStarts = np.fromiter((s.start for s in dofManager.vijSliceOfEntity.values()), np.int64, len(entities))
+        dofsOfEntity = dofManager.idcsOfHigherOrderEntitiesInDofVector
+        #: The scatter, for a compiled entity loop that scatters from its own threads.
+        self.assembler = DirectCSRAssembler(
+            SystemMatrixEntities.ofEntities(dofsOfEntity), dofManager.nDof, numberOfWorkers, patternFillIn
+        )
         #: Where the values of the block of every entity begin, counted over all entities in their order, and in the
         #: last place the number of all values: the block of entity ``i`` has ``entryStart[i + 1] - entryStart[i]``
         #: values.
-        self.entryStart = np.append(vijStarts, len(dofManager.I))
-        #: The scatter, for a compiled entity loop that scatters from its own threads.
-        self.assembler = DirectCSRAssembler(csrGenerator, dofManager, numberOfWorkers)
-        self.assembler.registerEntities(
-            vijStarts,
-            np.fromiter((entity.nDof for entity in entities), dtype=np.intc, count=len(entities)),
-            np.diff(self.entryStart),
-            np.fromiter((entity.couplesAllItsDofs for entity in entities), dtype=np.intc, count=len(entities)),
-        )
+        self.entryStart = self.assembler.entryStart
         #: The number of every entity in :attr:`assembler`.
-        self.entityIds = {entity: i for i, entity in enumerate(entities)}
+        self.entityIds = {entity: i for i, entity in enumerate(dofsOfEntity)}
         self._workers = [
             _DirectCSRBlocksOfWorker(self.assembler, self.entityIds, self.entryStart, w) for w in range(numberOfWorkers)
         ]
@@ -408,6 +411,10 @@ class DirectCSRSystemMatrixAssembly(SystemMatrixAssembly):
 
     def numberOfEntriesInBlock(self, entity) -> int:
         return self._workers[0].numberOfEntriesInBlock(entity)
+
+    @property
+    def csrMatrix(self) -> csr_matrix:
+        return self.assembler.csrMatrix
 
     def assembledMatrix(self) -> csr_matrix:
         for worker in self._workers:

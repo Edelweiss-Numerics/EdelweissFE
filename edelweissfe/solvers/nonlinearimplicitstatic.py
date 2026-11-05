@@ -40,7 +40,6 @@ import edelweissfe.utils.performancetiming as performancetiming
 from edelweissfe.config.linsolve import createLinearSolver
 from edelweissfe.constraints.base.constraintbase import ConstraintBase
 from edelweissfe.models.femodel import FEModel
-from edelweissfe.numerics.csrgeneratorv2 import CSRGenerator
 from edelweissfe.numerics.dofmanager import DofVector
 from edelweissfe.numerics.systemmatrixassembly import (
     DirectCSRSystemMatrixAssembly,
@@ -542,7 +541,6 @@ class NIST(NonlinearSolverBase):
         before the next one is built, never both at once."""
         self.equationSystemLayout = None
         self.theDofManager = None
-        self.csrGenerator = None
         self.mpcTransformation = None
         self._U = self._dU = self._P = self._K = None
 
@@ -747,10 +745,6 @@ class NIST(NonlinearSolverBase):
 
                 self.convergenceTable = ConvergenceTable(presentVariableNames, self.linSolver.reportsSolveSummary)
 
-                assemblyType = self.systemMatrixAssemblies[self.options["systemMatrixAssembly"]]
-                with performancetiming.timeit("system matrix pattern"):
-                    self.csrGenerator = CSRGenerator(self.theDofManager, patternOnly=not assemblyType.needsGatherMap)
-
                 U = self.theDofManager.constructDofVector()
                 P = self.theDofManager.constructDofVector()
                 dU = self.theDofManager.constructDofVector()
@@ -761,17 +755,13 @@ class NIST(NonlinearSolverBase):
                     self.mpcTransformation = self.buildMPCTransformation(model, step.actions)
                 with performancetiming.timeit("mpc dirichlet conflict check"):
                     self.checkMPCDirichletConflicts(self.mpcTransformation, step.actions)
-                if self.mpcTransformation is not None:
-                    # Room in the CSR pattern for the entries the condensation adds, so that it can be done in place
-                    with performancetiming.timeit("mpc condensed pattern"):
-                        self.csrGenerator.addToPattern(
-                            self.mpcTransformation.condensedPatternFillIn(self.csrGenerator.csrMatrix)
-                        )
-
-                # Built on the complete pattern, the entries the condensation adds included: the assembly writes the
-                # matrix of the pattern it is built on.
-                with performancetiming.timeit("system matrix assembly setup"):
-                    K = self.createSystemMatrixAssembly(assemblyType)
+                # The CSR pattern with room for the entries the condensation adds, so that it can be done in place:
+                # the assembly writes the matrix of the pattern it is built on.
+                with performancetiming.timeit("system matrix pattern"):
+                    K = self.createSystemMatrixAssembly(
+                        self.systemMatrixAssemblies[self.options["systemMatrixAssembly"]],
+                        self.mpcTransformation.condensedPatternFillIn if self.mpcTransformation is not None else None,
+                    )
 
                 # The last accepted increments are vectors of the equation system they were solved in: this increment
                 # extrapolates them only if the rebuilt system numbers the degrees of freedom alike.
@@ -931,14 +921,19 @@ class NIST(NonlinearSolverBase):
 
         self.equationSystemLayout.writeZeroVelocityAndAccelerationToModel()
 
-    def createSystemMatrixAssembly(self, assemblyType: type) -> SystemMatrixAssembly:
-        """The assembly of the system matrix of the equation system just built (option ``systemMatrixAssembly``), on
-        the complete CSR pattern of :attr:`csrGenerator`, with :meth:`numberOfAssemblyWorkers` workers.
+    def createSystemMatrixAssembly(
+        self, assemblyType: type, patternFillIn: Callable | None = None
+    ) -> SystemMatrixAssembly:
+        """The assembly of the system matrix of the equation system just built (option ``systemMatrixAssembly``), with
+        its CSR pattern and :meth:`numberOfAssemblyWorkers` workers.
 
         Parameters
         ----------
         assemblyType
             The type of the assembly, one of :attr:`systemMatrixAssemblies`.
+        patternFillIn
+            The entries the pattern must have although no entity contributes them, see
+            :class:`~edelweissfe.numerics.systemmatrixassembly.VIJSystemMatrixAssembly`.
 
         Returns
         -------
@@ -946,7 +941,7 @@ class NIST(NonlinearSolverBase):
             The assembly.
         """
 
-        return assemblyType(self.csrGenerator, self.theDofManager, self.numberOfAssemblyWorkers())
+        return assemblyType(self.theDofManager, self.numberOfAssemblyWorkers(), patternFillIn)
 
     def forEachChunk(self, entities: list, work: Callable[[list], None]):
         """Call ``work(chunk)`` for chunks that together hold all ``entities``: the solver's loop over independent
@@ -1983,10 +1978,10 @@ class NIST(NonlinearSolverBase):
         # the extra structural entries to drift from the reference path; but the pattern then changes from one
         # Newton iteration to the next, so a solver like blockamg, which reuses its hierarchy, keeps them.
         #
-        # The CSR generator's own matrix (the threaded condensation works in place on it) must never be compacted:
-        # the generator scatters every update into its full-length buffer via a fixed map. A copy is pruned instead.
+        # The assembly's own matrix (the threaded condensation works in place on it) must never be compacted: the
+        # assembly writes every update into its full-length buffer via a fixed map. A copy is pruned instead.
         if self.mpcTransformation is not None and self._shouldPruneCondensedMatrixZeros():
-            if K is self.csrGenerator.csrMatrix:
+            if K is self._K.csrMatrix:
                 K = K.copy()
             K.eliminate_zeros()
 

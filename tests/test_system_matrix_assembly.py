@@ -32,6 +32,7 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
+from scipy.sparse import csr_matrix
 
 from edelweissfe.constraints.base.rigidbodycontactstiffness import (
     rigidBodyContactLocalEntries,
@@ -49,7 +50,6 @@ from edelweissfe.constraints.surfacetodeformablesurfacepenalty import (
 from edelweissfe.constraints.surfacetodiscreterigidbodypenalty import (
     Constraint as SurfaceToDiscreteRigidBodyPenalty,
 )
-from edelweissfe.numerics.csrgeneratorv2 import CSRGenerator
 from edelweissfe.numerics.parallelizationutilities import mapChunksOnWorkers
 from edelweissfe.numerics.systemmatrixassembly import (
     DirectCSRSystemMatrixAssembly,
@@ -112,6 +112,7 @@ class _DofManager:
 
     def __init__(self, entities, nDof):
         self.nDof = nDof
+        self.idcsOfHigherOrderEntitiesInDofVector = {entity: entity.dofs for entity in entities}
         self.vijSliceOfEntity = {}
         rows, columns = [], []
         nEntries = 0
@@ -136,10 +137,19 @@ def _model():
     return entities, _DofManager(entities, 12), blocks
 
 
-def _assemble(assemblyType, numberOfWorkers, factor=None, model=_model):
+def _fillInOfTheWholeMatrix(pattern):
+    """Every entry that is not yet in the pattern: room for a condensation that couples everything."""
+    existing = pattern.copy()
+    existing.data[:] = 1.0
+    entries = csr_matrix(np.ones(pattern.shape)) - existing
+    entries.eliminate_zeros()
+    entries.sort_indices()
+    return entries
+
+
+def _assemble(assemblyType, numberOfWorkers, factor=None, model=_model, patternFillIn=None):
     entities, dofManager, blocks = model()
-    generator = CSRGenerator(dofManager, patternOnly=not assemblyType.needsGatherMap)
-    K = assemblyType(generator, dofManager, numberOfWorkers)
+    K = assemblyType(dofManager, numberOfWorkers, patternFillIn)
 
     # an abandoned assembly: a block handed out, never committed
     K.beginAssembly()
@@ -163,7 +173,9 @@ def _assemble(assemblyType, numberOfWorkers, factor=None, model=_model):
             block += blocks[entity].reshape(block.shape, order="F")
         scaled.flush()
 
-    return K.assembledMatrix().toarray()
+    assembled = K.assembledMatrix()
+    assert assembled is K.csrMatrix
+    return assembled.toarray()
 
 
 def _reference(factor=None, model=_model):
@@ -179,10 +191,24 @@ def _reference(factor=None, model=_model):
     return reference
 
 
+@pytest.mark.parametrize("patternFillIn", [None, _fillInOfTheWholeMatrix])
 @pytest.mark.parametrize("assemblyType", [VIJSystemMatrixAssembly, DirectCSRSystemMatrixAssembly])
 @pytest.mark.parametrize("numberOfWorkers", [1, 3])
-def test_both_assemblies_assemble_the_same_matrix(assemblyType, numberOfWorkers):
-    np.testing.assert_allclose(_assemble(assemblyType, numberOfWorkers), _reference(), rtol=1e-14, atol=1e-14)
+def test_both_assemblies_assemble_the_same_matrix(assemblyType, numberOfWorkers, patternFillIn):
+    np.testing.assert_allclose(
+        _assemble(assemblyType, numberOfWorkers, patternFillIn=patternFillIn), _reference(), rtol=1e-14, atol=1e-14
+    )
+
+
+@pytest.mark.parametrize("patternFillIn", [None, _fillInOfTheWholeMatrix])
+def test_both_assemblies_derive_the_same_pattern(patternFillIn):
+    """The VIJ assembly sorts and sums the pairs, the direct assembly unions the entities' columns row by row: two
+    independent derivations of one pattern, with the same entries added."""
+    entities, dofManager, _ = _model()
+    vij = VIJSystemMatrixAssembly(dofManager, 1, patternFillIn).csrMatrix
+    direct = DirectCSRSystemMatrixAssembly(dofManager, 3, patternFillIn).csrMatrix
+    np.testing.assert_array_equal(direct.indptr, vij.indptr)
+    np.testing.assert_array_equal(direct.indices, vij.indices)
 
 
 @pytest.mark.parametrize("assemblyType", [VIJSystemMatrixAssembly, DirectCSRSystemMatrixAssembly])
