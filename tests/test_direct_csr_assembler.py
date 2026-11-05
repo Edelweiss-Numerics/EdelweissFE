@@ -48,16 +48,6 @@ from edelweissfe.numerics.systemmatrixcontributor import (
     countEntriesOfBlock,
 )
 
-
-class _SystemMatrix:
-    """Minimal stand-in for the DofManager-provided VIJ system matrix: just I/J/nDof."""
-
-    def __init__(self, I, J, nDof):  # noqa: E741
-        self.I = np.asarray(I, dtype=np.intc)  # noqa: E741
-        self.J = np.asarray(J, dtype=np.intc)
-        self.nDof = nDof
-
-
 # --- the pattern the direct path derives row by row, against the one the VIJ path derives by sort-and-sum
 
 
@@ -115,7 +105,7 @@ def test_the_row_wise_pattern_is_the_sort_and_sum_pattern(numThreads, seed):
     nDof = 25
     dofsOfEntity = _randomEntities(nDof, seed)
     I, J = _vijPairs(dofsOfEntity)  # noqa: E741
-    generator = CSRGenerator(_SystemMatrix(I, J, nDof))
+    generator = CSRGenerator(I, J, nDof)
 
     indptr, indices = csrPatternOfEntities(SystemMatrixEntities.ofEntities(dofsOfEntity), nDof, numThreads)
 
@@ -144,7 +134,7 @@ def test_entries_are_added_to_the_sort_and_sum_pattern_by_the_same_merge():
     nDof = 25
     dofsOfEntity = _randomEntities(nDof, 7)
     I, J = _vijPairs(dofsOfEntity)  # noqa: E741
-    generator = CSRGenerator(_SystemMatrix(I, J, nDof))
+    generator = CSRGenerator(I, J, nDof)
     pattern = generator.csrMatrix.copy()
     pattern.data[:] = 1.0
     fillIn = csr_matrix(np.ones((nDof, nDof))) - pattern
@@ -193,7 +183,7 @@ def test_the_scatter_sums_the_blocks_as_the_gather_does(numThreads, seed):
     nDof = 25
     dofsOfEntity = _randomEntities(nDof, seed)
     I, J = _vijPairs(dofsOfEntity)  # noqa: E741
-    generator = CSRGenerator(_SystemMatrix(I, J, nDof))
+    generator = CSRGenerator(I, J, nDof)
     direct = DirectCSRAssembler(SystemMatrixEntities.ofEntities(dofsOfEntity), nDof, numThreads)
     starts = dict(zip(dofsOfEntity, direct.entryStart))
 
@@ -235,7 +225,7 @@ def test_entries_added_to_the_pattern_are_stored_zeros_on_both_paths():
         entries.sort_indices()
         return entries
 
-    generator = CSRGenerator(_SystemMatrix(I, J, nDof))
+    generator = CSRGenerator(I, J, nDof)
     generator.addToPattern(fillIn(generator.csrMatrix))
     direct = DirectCSRAssembler(SystemMatrixEntities.ofEntities(dofsOfEntity), nDof, 2, fillIn)
 

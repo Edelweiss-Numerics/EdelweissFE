@@ -311,9 +311,14 @@ cdef class CSRGenerator:
 
     Parameters
     ----------
-    systemMatrix : object
-        An object containing COO format data with attributes I, J, and nDof. The gather map indexes the COO pairs
-        with 32-bit integers, so there may be at most ``INT32_MAX`` of them.
+    I
+        The row of every COO pair.
+    J
+        The column of every COO pair.
+    nDof
+        The number of rows and columns.
+
+    The gather map indexes the COO pairs with 32-bit integers, so there may be at most ``INT32_MAX`` of them.
     """
 
     # the owner of the core, the owner of its current pattern (the base of csrMatrix's pattern arrays), and the core
@@ -331,19 +336,17 @@ cdef class CSRGenerator:
         if self.coreOwner is not None:
             self.core.releaseGatherMap()
 
-    def __init__(self, systemMatrix):
+    def __init__(self, I, J, int nDof):  # noqa: E741
         # Ensure int32 dtype regardless of the source array's dtype.
-        cdef int[::1] I = np.asarray(systemMatrix.I, dtype=np.intc)  # noqa
-        cdef int[::1] J = np.asarray(systemMatrix.J, dtype=np.intc)
+        cdef int[::1] rows = np.asarray(I, dtype=np.intc)
+        cdef int[::1] columns = np.asarray(J, dtype=np.intc)
 
-        self.nCooPairs = len(I)  # Length is still 64-bit capable
-
-        cdef int nDof = int(systemMatrix.nDof)
+        self.nCooPairs = len(rows)  # Length is still 64-bit capable
 
         # 1. Run C++ Core
         cdef CSRCore* core
         with nogil:
-            core = new CSRCore(&I[0], &J[0], self.nCooPairs, nDof)
+            core = new CSRCore(&rows[0], &columns[0], self.nCooPairs, nDof)
         self.coreOwner = _CSRCoreOwner()
         self.coreOwner.core = core
         self.core = core

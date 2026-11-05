@@ -253,7 +253,7 @@ from scipy.sparse import coo_matrix, csr_matrix, diags
 import edelweissfe.utils.performancetiming as performancetiming
 from edelweissfe.config.phenomena import carriesLinearMomentum
 from edelweissfe.models.femodel import FEModel
-from edelweissfe.numerics.dofmanager import DofManager, DofVector, VIJSystemMatrix
+from edelweissfe.numerics.dofmanager import DofManager, DofVector
 from edelweissfe.numerics.parallelizationutilities import (
     forEachSliceInParallel,
     mapChunksInParallel,
@@ -262,6 +262,7 @@ from edelweissfe.numerics.systemmatrixassembly import (
     SystemMatrixAssembly,
     VIJSystemMatrixAssembly,
 )
+from edelweissfe.numerics.vijsystemmatrix import VIJSystemMatrix
 from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
 from edelweissfe.solvers.base.conservationchecks import (
     CONSERVATION_TOLERANCE,
@@ -355,6 +356,10 @@ class _NewmarkSystem:
     ----------
     dofManager
         The manager these operators and vectors are indexed by.
+    I, J, vijSliceOfEntity
+        The VIJ layout ``Mvij`` and the damping indices are in: the row and column of every value and the slice of
+        every entity, the arrays of the stiffness' assembly they were assembled for (references to them alone, not to
+        the assembly, whose value array and gather map would otherwise outlive a rebuild).
     dynamicDofs
         The degrees of freedom integrated in time -- those of the fields carrying a mass.
     dynamicFields
@@ -384,6 +389,9 @@ class _NewmarkSystem:
     """
 
     dofManager: DofManager
+    I: np.ndarray
+    J: np.ndarray
+    vijSliceOfEntity: dict
     dynamicDofs: np.ndarray
     dynamicFields: list
     Mvij: VIJSystemMatrix | None
@@ -1093,6 +1101,9 @@ class NonlinearImplicitDynamic(NIST):
 
         self._newmarkSystem = _NewmarkSystem(
             dofManager=self.theDofManager,
+            I=self._K.I,
+            J=self._K.J,
+            vijSliceOfEntity=self._K.vijSliceOfEntity,
             dynamicDofs=dynamicDofs,
             dynamicFields=dynamicFields,
             Mvij=Mvij,
@@ -1224,16 +1235,17 @@ class NonlinearImplicitDynamic(NIST):
         if new.idcsOfElementsInDofVector.keys() != old.idcsOfElementsInDofVector.keys():
             return None
 
+        K = self._K
         nElementVIJ = 0
         for el in model.elements.values():
-            vijSlice = new.vijSliceOfEntity[el]
-            if vijSlice != old.vijSliceOfEntity[el]:
+            vijSlice = K.vijSliceOfEntity[el]
+            if vijSlice != system.vijSliceOfEntity[el]:
                 return None
             nElementVIJ = max(nElementVIJ, vijSlice.stop)
 
         if not (
-            np.array_equal(new.I[:nElementVIJ], old.I[:nElementVIJ])
-            and np.array_equal(new.J[:nElementVIJ], old.J[:nElementVIJ])
+            np.array_equal(K.I[:nElementVIJ], system.I[:nElementVIJ])
+            and np.array_equal(K.J[:nElementVIJ], system.J[:nElementVIJ])
         ):
             return None
 
@@ -1241,7 +1253,7 @@ class NonlinearImplicitDynamic(NIST):
         if np.any(np.asarray(system.Mvij)[nElementVIJ:]) or np.any(system.dampingVIJIndices >= nElementVIJ):
             return None
 
-        Mvij = new.constructVIJSystemMatrix()
+        Mvij = K.constructVIJSystemMatrix()
         Mvij[:] = 0.0
         Mvij[:nElementVIJ] = system.Mvij[:nElementVIJ]
 
@@ -1503,7 +1515,7 @@ class NonlinearImplicitDynamic(NIST):
             leaves a dynamic degree of freedom without any mass.
         """
 
-        Mvij = self.theDofManager.constructVIJSystemMatrix()
+        Mvij = self._K.constructVIJSystemMatrix()
 
         # The elements are independent: each writes its mass into its own slice of Mvij and reports its damping, so
         # they are done in chunks on the thread pool. The chunks come back in the order of the elements, which makes
@@ -1538,8 +1550,8 @@ class NonlinearImplicitDynamic(NIST):
             self._addLumpedMassOfParticles(Mvij, lumpedMassOfParticles)
 
         nDof = self.theDofManager.nDof
-        I = self.theDofManager.I  # noqa: E741
-        J = self.theDofManager.J
+        I = self._K.I  # noqa: E741
+        J = self._K.J
 
         isDynamic = np.zeros(nDof, dtype=bool)
         isDynamic[dynamicDofs] = True
@@ -1618,8 +1630,8 @@ class NonlinearImplicitDynamic(NIST):
             If a degree of freedom with a positive lumped mass has no diagonal slot in the layout.
         """
 
-        I = self.theDofManager.I  # noqa: E741
-        J = self.theDofManager.J
+        I = self._K.I  # noqa: E741
+        J = self._K.J
         lumpedMass = np.asarray(lumpedMassOfParticles)
 
         diagonalSlots = np.flatnonzero(I == J)
@@ -1657,7 +1669,7 @@ class NonlinearImplicitDynamic(NIST):
         el.computeLumpedDamping(Ce)
         nonzero = np.flatnonzero(Ce)
 
-        start = self.theDofManager.vijSliceOfEntity[el].start
+        start = self._K.vijSliceOfEntity[el].start
         return (start + nonzero * (el.nDof + 1)).astype(np.int64), Ce[nonzero]
 
     def _warnAboutDiscardedInertia(
@@ -1689,8 +1701,8 @@ class NonlinearImplicitDynamic(NIST):
         if not discarded.size:
             return
 
-        I = self.theDofManager.I  # noqa: E741
-        J = self.theDofManager.J
+        I = self._K.I  # noqa: E741
+        J = self._K.J
         isAffected = np.zeros(self.theDofManager.nDof, dtype=bool)
         isAffected[I[discarded]] = True
         isAffected[J[discarded]] = True

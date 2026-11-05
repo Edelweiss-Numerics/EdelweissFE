@@ -462,7 +462,7 @@ class FEModel:
             The Newmark parameter :math:`\\gamma`; 0 for no inertia.
         """
 
-    def buildEquationSystem(self, withSystemMatrix: bool = True) -> EquationSystemLayout:
+    def buildEquationSystem(self) -> EquationSystemLayout:
         """Lay out the global equation system of the model as it is now: number its degrees of freedom, and say which
         elements contribute to it, see :class:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout`. Called
         by a solver whenever it (re)builds its equation system: at the start of a step, and after the topology update
@@ -472,13 +472,6 @@ class FEModel:
         with their scalar variables (e.g. Lagrange multipliers). A constraint that is switched off (see
         :attr:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.active`) is left out together with its
         scalar variables, which would otherwise be unknowns without an equation.
-
-        Parameters
-        ----------
-        withSystemMatrix
-            False for an explicit solver, which assembles no system matrix: then neither the pattern of the system
-            matrix is built, nor the map from the degrees of freedom back to their nodes, by which the Newton iterations
-            report the nodes with the largest residuals.
 
         Returns
         -------
@@ -494,8 +487,6 @@ class FEModel:
             self.elements.values(),
             constraints,
             self.nodeSets.values(),
-            initializeVIJPattern=withSystemMatrix,
-            determiningIndexToHostObjectMapping=withSystemMatrix,
         )
 
         return EquationSystemLayout(self, dofManager, list(self.elements.values()))

@@ -50,7 +50,7 @@ from edelweissfe.sets.nodeset import NodeSet
 
 class _FakeConstraint:
     """The face of a constraint the DofManager reads: its nodes, the fields it couples per node,
-    its scalar variables, its DOF count and the entries of its block."""
+    its scalar variables and its DOF count; and, for a system matrix assembly, the entries of its block."""
 
     #: a dense block, like an element's
     couplesAllItsDofs = True
@@ -105,7 +105,7 @@ def _dofManager(model, constraints, **kwargs):
     )
 
 
-def _assertSameConstraintBookkeeping(refreshed, fresh, withVIJ):
+def _assertSameConstraintBookkeeping(refreshed, fresh):
     assert refreshed.nDof == fresh.nDof
     assert refreshed.accumulatedConstraintNDof == fresh.accumulatedConstraintNDof
     assert refreshed.largestNumberOfConstraintNDof == fresh.largestNumberOfConstraintNDof
@@ -119,26 +119,20 @@ def _assertSameConstraintBookkeeping(refreshed, fresh, withVIJ):
     for entity, indices in fresh.idcsOfHigherOrderEntitiesInDofVector.items():
         np.testing.assert_array_equal(refreshed.idcsOfHigherOrderEntitiesInDofVector[entity], indices)
 
-    if withVIJ:
-        np.testing.assert_array_equal(refreshed.I, fresh.I)
-        np.testing.assert_array_equal(refreshed.J, fresh.J)
-        assert refreshed.vijSliceOfEntity == fresh.vijSliceOfEntity
 
-
-def test_refresh_matches_a_fresh_dofmanager_without_the_vij_pattern():
-    """The explicit solver's configuration: no sparse-matrix pattern, no index-to-node map."""
+def test_refresh_matches_a_fresh_dofmanager():
     model, n = _buildTwoElementModel()
     before = _FakeConstraint([n[0], n[5]], ["displacement"])
     after = _FakeConstraint([n[2], n[3], n[4]], ["displacement"])
 
-    refreshed = _dofManager(model, [before], initializeVIJPattern=False, determiningIndexToHostObjectMapping=False)
+    refreshed = _dofManager(model, [before])
     staleMapping = refreshed.idcsOfHigherOrderEntitiesInDofVector
     staleElementIndices = {e: i.copy() for e, i in refreshed.idcsOfElementsInDofVector.items()}
 
     refreshed.refreshConstraintIndices([after])
 
-    fresh = _dofManager(model, [after], initializeVIJPattern=False, determiningIndexToHostObjectMapping=False)
-    _assertSameConstraintBookkeeping(refreshed, fresh, withVIJ=False)
+    fresh = _dofManager(model, [after])
+    _assertSameConstraintBookkeeping(refreshed, fresh)
 
     # a NEW mapping object, and the elements untouched
     assert refreshed.idcsOfHigherOrderEntitiesInDofVector is not staleMapping
@@ -151,28 +145,15 @@ def test_refresh_matches_a_fresh_dofmanager_without_the_vij_pattern():
     assert after in vector.entitiesInDofVector and before not in vector.entitiesInDofVector
 
 
-def test_refresh_keeps_the_vij_pattern_consistent_when_it_was_initialized():
-    """With a VIJ pattern the constraint's block of I/J moves too; it must match a fresh build."""
-    model, n = _buildTwoElementModel()
-    before = _FakeConstraint([n[0], n[1]], ["displacement"])
-    after = _FakeConstraint([n[3]], ["displacement"])
-
-    refreshed = _dofManager(model, [before])
-    refreshed.refreshConstraintIndices([after])
-    fresh = _dofManager(model, [after])
-
-    _assertSameConstraintBookkeeping(refreshed, fresh, withVIJ=True)
-
-
 def test_refresh_to_no_constraints_at_all():
     """A search may leave a constraint with nothing to couple; the bookkeeping must simply be
     empty."""
     model, n = _buildTwoElementModel()
     before = _FakeConstraint([n[0]], ["displacement"])
 
-    refreshed = _dofManager(model, [before], initializeVIJPattern=False)
+    refreshed = _dofManager(model, [before])
     refreshed.refreshConstraintIndices([])
-    fresh = _dofManager(model, [], initializeVIJPattern=False)
+    fresh = _dofManager(model, [])
 
-    _assertSameConstraintBookkeeping(refreshed, fresh, withVIJ=False)
+    _assertSameConstraintBookkeeping(refreshed, fresh)
     assert refreshed.accumulatedConstraintNDof == 0

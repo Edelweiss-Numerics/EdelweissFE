@@ -44,8 +44,6 @@ from edelweissfe.nodecouplingentity.base.nodecouplingentity import (
 )
 from edelweissfe.numerics.dofvector import DofVector
 from edelweissfe.numerics.parallelizationutilities import mapChunksInParallel
-from edelweissfe.numerics.systemmatrixcontributor import countEntriesOfBlock
-from edelweissfe.numerics.vijsystemmatrix import VIJSystemMatrix
 from edelweissfe.points.node import Node
 from edelweissfe.sets.nodeset import NodeSet
 from edelweissfe.variables.scalarvariable import ScalarVariable
@@ -58,10 +56,10 @@ class DofManager:
     Specifically, `DofManager`:
      * Analyzes the simulation domain (nodes, scalar variables, elements, constraints, and node sets).
      * Collects and assigns global Degree-of-Freedom (DOF) indices for node fields and scalar variables.
-     * Manages entity-to-index mappings for fast scatter/gather operations.
-     * Generates sparse system matrix sparsity patterns (`I` and `J` vectors in COO/VIJ format).
+     * Manages entity-to-index mappings for fast scatter/gather operations: the global DOF list of every element and
+       constraint, from which a system matrix assembly derives where each block goes.
      * Calculates accumulated elemental/constraint fluxes fieldwise for convergence tests.
-     * Constructs domain-aware `DofVector`, `ScatterDofVector`, and `VIJSystemMatrix` instances.
+     * Constructs domain-aware `DofVector` and `ScatterDofVector` instances.
 
     Parameters
     ----------
@@ -75,12 +73,8 @@ class DofManager:
         The list of Constraints for which DOF index mappings will be created.
     nodeSets : list of NodeSet, optional
         The list of NodeSets for which DOF index mappings will be created.
-    initializeVIJPattern : bool, optional
-        Whether to initialize the sparse VIJ pattern (`I` and `J` vectors) during construction. Default is True.
     initializeAccumulatedNodalFluxesFieldwise : bool, optional
         Whether to compute accumulated nodal fluxes fieldwise during construction. Default is True.
-    determiningIndexToHostObjectMapping : bool, optional
-        Whether to determine the mapping from global DOF indices to their host objects (e.g. Node) during construction. Default is True.
     """
 
     def __init__(
@@ -90,14 +84,8 @@ class DofManager:
         elements: list[BaseNodeCouplingEntity] = None,
         constraints: list[BaseNodeCouplingEntity] = None,
         nodeSets: list[NodeSet] = None,
-        initializeVIJPattern: bool = True,
         initializeAccumulatedNodalFluxesFieldwise: bool = True,
-        determiningIndexToHostObjectMapping: bool = True,
-        **kwargs,
     ):
-        if "determiningIndexToHostObjectMappping" in kwargs:
-            determiningIndexToHostObjectMapping = kwargs.pop("determiningIndexToHostObjectMappping")
-
         if scalarVariables is None:
             scalarVariables = []
         if elements is None:
@@ -153,16 +141,11 @@ class DofManager:
 
         #: Which of the optional structures this manager carries, for :meth:`refreshConstraintIndices`.
         self._hasAccumulatedNodalFluxes = initializeAccumulatedNodalFluxesFieldwise
-        self._hasVIJPattern = initializeVIJPattern
 
         if initializeAccumulatedNodalFluxesFieldwise:
             self.nAccumulatedNodalFluxesFieldwise = self._computeAccumulatedNodalFluxesFieldWise(self.fields)
 
-        if initializeVIJPattern:
-            self.I, self.J, self.vijSliceOfEntity = self._initializeVIJPattern()
-
-        if determiningIndexToHostObjectMapping:
-            self.indexToHostObjectMapping |= self._determineIndexToNodeMap()
+        self.indexToHostObjectMapping |= self._determineIndexToNodeMap()
 
     def _determineDofsAndTheirIndices(self, nodeFields: list, scalarVariables: list):
 
@@ -242,9 +225,6 @@ class DofManager:
 
         if self._hasAccumulatedNodalFluxes:
             self.nAccumulatedNodalFluxesFieldwise = self._computeAccumulatedNodalFluxesFieldWise(self.fields)
-
-        if self._hasVIJPattern:
-            self.I, self.J, self.vijSliceOfEntity = self._initializeVIJPattern()
 
     @cached_property
     def dofNumberingDigest(self) -> str:
@@ -368,7 +348,7 @@ class DofManager:
         return indexToNodeMapping
 
     def _computeAccumulatedNodalFluxesFieldWise(self, fields: list) -> dict:
-        """For the VIJ (COO) system matrix and the Abaqus like convergence test,
+        """For the Abaqus like convergence test,
         the number of dofs 'entity-wise' is needed:
         = Σ_(elements+constraints) Σ_nodes ( nDof (field) ).
 
@@ -663,65 +643,6 @@ class DofManager:
         )
 
         return dofIndices, nodePositions
-
-    def _initializeVIJPattern(
-        self,
-    ) -> tuple[np.ndarray, np.ndarray, dict]:
-        """Generate the IJ pattern for VIJ (COO) system matrices.
-
-        Every entity has its own slice of ``I`` and ``J``, one entry per value of its block, in the order of
-        :meth:`~edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.localEntriesOfBlock`. The
-        entity knows its entries in its own DOF numbering; their global row and column are the entries of its global
-        DOF list: ``I = idcs[localRows]``, ``J = idcs[localColumns]``.
-
-        Returns
-        -------
-        tuple
-             - I vector
-             - J vector
-             - the slice of the VIJ vectors of every entity.
-        """
-
-        # The entities follow one another in the VIJ vectors, so where each one starts is known before any of them
-        # writes; each then fills only its own part of I and J, and they do so in chunks on the thread pool.
-        vijSliceOfEntity = {}
-        nEntries = 0
-        for entity in self.idcsOfHigherOrderEntitiesInDofVector:
-            nEntriesOfEntity = countEntriesOfBlock(entity)
-            vijSliceOfEntity[entity] = slice(nEntries, nEntries + nEntriesOfEntity)
-            nEntries += nEntriesOfEntity
-
-        I = np.empty(nEntries, dtype=np.intc)  # noqa: E741
-        J = np.empty(nEntries, dtype=np.intc)  # noqa: E741
-
-        def localToGlobalChunk(entitiesWithIndices):
-            for entity, entityIdcsInDofVector in entitiesWithIndices:
-                localRows, localColumns = entity.localEntriesOfBlock()
-                vijSlice = vijSliceOfEntity[entity]
-                I[vijSlice] = entityIdcsInDofVector[localRows]
-                J[vijSlice] = entityIdcsInDofVector[localColumns]
-
-        mapChunksInParallel(list(self.idcsOfHigherOrderEntitiesInDofVector.items()), localToGlobalChunk)
-
-        return I, J, vijSliceOfEntity
-
-    def constructVIJSystemMatrix(
-        self,
-    ) -> VIJSystemMatrix:
-        """Construct a VIJ (COO) Sparse System matrix object, which also has knowledge about
-        the location of each entity.
-
-        Returns
-        -------
-        VIJSystemMatrix
-            The system Matrix.
-        """
-
-        nDof = self.nDof
-        I = self.I  # noqa: E741
-        J = self.J
-
-        return VIJSystemMatrix(nDof, I, J, self.vijSliceOfEntity)
 
     def constructDofVector(
         self,
