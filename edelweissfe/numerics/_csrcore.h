@@ -7,7 +7,6 @@
 #include <numeric>
 #include <omp.h>
 #include <stdexcept>
-#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -18,18 +17,6 @@ struct PackedEdge {
   // Default comparison for std::sort is now extremely fast
   bool operator<( const PackedEdge& other ) const { return key < other.key; }
 };
-
-// The pattern needs only the (row, col) key; the gather map additionally needs to know which COO pair
-// each key came from. These overloads let one build() serve both element types, so there is exactly one
-// definition of how the pattern is derived and a pattern-only build cannot drift from the full one.
-inline uint64_t keyOf( const PackedEdge& e )
-{
-  return e.key;
-}
-inline uint64_t keyOf( uint64_t k )
-{
-  return k;
-}
 
 /**
  * @brief The entities that contribute a block to the system matrix, as the direct assembly sees them: borrowed
@@ -311,56 +298,30 @@ public:
   // Assembly Mapping. Only the gather needs these; see releaseGatherMap().
   std::vector< int32_t > gather_sources;
   std::vector< int32_t > assembly_ptr;
-  bool                   gatherMapReleased = false;
 
-  // patternOnly builds indptr/indices and nothing else. Two reasons, and the second is the one that
-  // matters:
-  //
-  //  * The sort payload disappears. With the gather map, each pair is a PackedEdge -- 8 bytes of key
-  //    plus a 4-byte origin index, padded to 16. Without it, a bare uint64_t key: 8 bytes. That array
-  //    is the largest single allocation in the build (25.7 GiB at 43,350 DOF), so this halves it.
-  //  * It removes every 32-bit pair index. `PackedEdge::orig`, `gather_sources` and `assembly_ptr` all
-  //    hold indices into the COO list, which is why the full build has to refuse more than INT32_MAX
-  //    pairs. Measured, that limit -- not memory -- is what caps the model: it bites at ~50,000 DOF
-  //    with only a third of the machine in use, where memory alone would allow ~121,000. The
-  //    pattern-only build has no such index, so the only 32-bit quantity left is nnz, which is three
-  //    orders of magnitude from its limit at these sizes.
-  //
-  // A direct-to-CSR assembler borrows only the pattern, so it should always ask for this.
-  CSRCore( const int* I, const int* J, int64_t n_pairs, int n_dof, bool patternOnly = false )
+  // gather_sources and assembly_ptr are int32 indices into the COO list, so the build refuses more than INT32_MAX
+  // pairs; the direct path, which derives its pattern from the entities, has no such limit.
+  CSRCore( const int* I, const int* J, int64_t n_pairs, int n_dof )
   {
     nDof = n_dof;
     if ( n_pairs == 0 ) {
       // Empty pattern: indptr is all-zeros, indices/gather_sources/assembly_ptr
       // remain empty. update() is guarded by nnz==0 and is a no-op in that case.
       indptr.assign( nDof + 1, 0 );
-      gatherMapReleased = patternOnly;
       return;
     }
 
-    if ( patternOnly )
-      build< false >( I, J, n_pairs );
-    else
-      build< true >( I, J, n_pairs );
+    build( I, J, n_pairs );
   }
 
 private:
-  template < bool WithGatherMap >
   void build( const int* I, const int* J, int64_t n_pairs )
   {
-    // One key per pair, plus its origin index only when the gather map is wanted.
-    using Elem = std::conditional_t< WithGatherMap, PackedEdge, uint64_t >;
-
     // --- SAFETY & CONFIG ---
-    if constexpr ( WithGatherMap ) {
-      // gather_sources and assembly_ptr are int32 indices into the COO list
-      if ( n_pairs > std::numeric_limits< int32_t >::max() ) {
-        throw std::overflow_error( "CSRCore: n_pairs exceeds 32-bit limit. Build the pattern only "
-                                   "(patternOnly = true) if the gather map is not needed." );
-      }
-    }
-    else {
-      gatherMapReleased = true; // there never was one; update() must refuse
+    // gather_sources and assembly_ptr are int32 indices into the COO list
+    if ( n_pairs > std::numeric_limits< int32_t >::max() ) {
+      throw std::overflow_error( "CSRCore: n_pairs exceeds 32-bit limit. Assemble directly into CSR "
+                                 "(systemMatrixAssembly=direct), which has no such limit." );
     }
 
     // Determine Partitions based on threads
@@ -416,7 +377,7 @@ private:
 
     // --- STEP 2: PARALLEL SCATTER (BUCKETING) ---
     // Pack data into a structure that is fast to sort.
-    std::vector< Elem > edges( n_pairs );
+    std::vector< PackedEdge > edges( n_pairs );
 
 #pragma omp parallel
     {
@@ -438,10 +399,7 @@ private:
         // means only this thread writes to write_offsets[tid][*]).
         int64_t pos = write_offsets[tid][p_id]++;
 
-        if constexpr ( WithGatherMap )
-          edges[pos] = { key, (int32_t)k };
-        else
-          edges[pos] = key;
+        edges[pos] = { key, (int32_t)k };
       }
     }
 
@@ -482,14 +440,14 @@ private:
         // Determine Row range for this partition
         // We must be careful: indptr is size nDof+1.
         // We extract row from the key.
-        int prev_row = static_cast< int32_t >( keyOf( edges[start] ) >> 32 );
+        int prev_row = static_cast< int32_t >( edges[start].key >> 32 );
 
         // Mark first row count
         indptr[prev_row + 1]++;
 
         for ( int64_t k = start + 1; k < end; ++k ) {
-          uint64_t curr_key = keyOf( edges[k] );
-          uint64_t prev_key = keyOf( edges[k - 1] );
+          uint64_t curr_key = edges[k].key;
+          uint64_t prev_key = edges[k - 1].key;
 
           int curr_row = static_cast< int32_t >( curr_key >> 32 );
 
@@ -522,11 +480,9 @@ private:
 
     // --- STEP 5: FINAL FILL ---
     indices.resize( nnz );
-    if constexpr ( WithGatherMap ) {
-      gather_sources.resize( n_pairs );
-      assembly_ptr.resize( nnz + 1 );
-      assembly_ptr[nnz] = static_cast< int32_t >( n_pairs ); // Sentinel; safe: guarded by INT32_MAX above
-    }
+    gather_sources.resize( n_pairs );
+    assembly_ptr.resize( nnz + 1 );
+    assembly_ptr[nnz] = static_cast< int32_t >( n_pairs ); // Sentinel; safe: guarded by INT32_MAX above
 
 #pragma omp parallel for schedule( dynamic, 1 )
     for ( int p = 0; p < num_partitions; ++p ) {
@@ -538,28 +494,23 @@ private:
       int32_t write_idx = global_nnz_offsets[p];
 
       // Fill first entry of the partition
-      indices[write_idx] = static_cast< int32_t >( keyOf( edges[start] ) & 0xFFFFFFFFu );
-      if constexpr ( WithGatherMap ) {
-        assembly_ptr[write_idx] = start;
-        gather_sources[start]   = edges[start].orig;
-      }
+      indices[write_idx]      = static_cast< int32_t >( edges[start].key & 0xFFFFFFFFu );
+      assembly_ptr[write_idx] = start;
+      gather_sources[start]   = edges[start].orig;
 
       int32_t internal_count = 0;
 
       for ( int64_t k = start + 1; k < end; ++k ) {
-        uint64_t curr_key = keyOf( edges[k] );
-        uint64_t prev_key = keyOf( edges[k - 1] );
+        uint64_t curr_key = edges[k].key;
+        uint64_t prev_key = edges[k - 1].key;
 
-        if constexpr ( WithGatherMap )
-          gather_sources[k] = edges[k].orig;
+        gather_sources[k] = edges[k].orig;
 
         if ( curr_key != prev_key ) {
           internal_count++;
-          if constexpr ( WithGatherMap ) {
-            // Close previous assembly pointer
-            // (assembly_ptr[i+1] is start of next, which is current k)
-            assembly_ptr[write_idx + internal_count] = k;
-          }
+          // Close previous assembly pointer
+          // (assembly_ptr[i+1] is start of next, which is current k)
+          assembly_ptr[write_idx + internal_count] = k;
 
           // Write new column index
           indices[write_idx + internal_count] = static_cast< int32_t >( curr_key & 0xFFFFFFFFu );
@@ -569,20 +520,12 @@ private:
   }
 
 public:
-  // Give back the gather map, keeping the pattern. The direct-to-CSR assembler borrows only indptr
-  // and indices; gather_sources is one int32 per COO pair, so at 43k DOF the map is 6.69 GiB -- the
-  // second-largest allocation in the whole assembly, and larger than everything the direct path
-  // holds. Leaving it around would cancel most of what that path saves, so a solver that has
-  // committed to scattering releases it once the assembler has been built.
-  //
-  // update() must not be called afterwards. It cannot check cheaply enough to be worth it (it is a
-  // nogil hot loop over nnz), so the guard lives in the Python binding, which raises. The swap idiom
-  // is what actually returns the capacity; clear() alone would not.
+  // Give back the gather map, keeping the pattern: the generator does so when it goes, while a matrix it handed out
+  // may still use the pattern. The swap idiom is what actually returns the capacity; clear() alone would not.
   void releaseGatherMap()
   {
     std::vector< int32_t >().swap( gather_sources );
     std::vector< int32_t >().swap( assembly_ptr );
-    gatherMapReleased = true;
   }
 
   // Add entries that no COO pair contributes to, assembled as stored zeros: room for values that a caller writes
@@ -593,10 +536,6 @@ public:
                    std::vector< int >& retiredIndptr,
                    std::vector< int >& retiredIndices )
   {
-    if ( gatherMapReleased ) {
-      CSRPattern::addEntries( extraPtr, extraIdx, retiredIndptr, retiredIndices );
-      return;
-    }
     if ( assembly_ptr.empty() )
       assembly_ptr.assign( 1, 0 ); // an empty pattern: just the sentinel
 
@@ -670,7 +609,8 @@ public:
 // indptr[row] + offset, where offset is the position of its column within that row. Row length is
 // set by the stencil (for RKPM by the support radius), not by the DOF count, so the offset fits in
 // uint16 -- half the width of the int32 gather index it replaces, and it makes the value array
-// unnecessary entirely.
+// unnecessary entirely. It needs no I/J pair either: the pattern is derived from the entities
+// (CSRPattern::ofEntities), and so are the offsets and the rows of every block.
 //
 // All threads scatter into the ONE CSR data array, with `#pragma omp atomic` on every update. The
 // alternative, a private CSR copy per thread summed at the end, costs nThreads * nnz * 8 bytes and
@@ -682,152 +622,109 @@ public:
 // The order in which the threads add to an entry depends on their timing, so the assembled values
 // are not bit-reproducible from run to run; they agree to round-off.
 //
-// IMPORTANT: scatterBlock is called from EdelweissMeshfree's particle kernel, which includes this
-// header and therefore *inlines* this code into its own extension. Any change here needs BOTH
-// extensions rebuilt; a stale meshfree build keeps scattering the old way.
-struct CSRDirectAssembler {
-  const int*              indptr;  // borrowed from the shared pattern
-  const int*              indices; // borrowed
-  double*                 data;    // the CSR data array of the shared pattern, borrowed; what is assembled
-  int                     nnz      = 0;
-  int                     nDof     = 0;
-  int64_t                 nPairs   = 0;
-  int                     nThreads = 1;
-  std::vector< uint16_t > offsets; // within-row offset per entry; the whole map
+// IMPORTANT: a compiled entity loop in another extension may include this header and call scatterBlock,
+// which inlines this code into that extension. Any change here needs such an extension rebuilt as well.
 
-  // Builds the map against an existing pattern, so there is exactly one definition of what the
-  // CSR pattern is and the two assembly paths cannot drift apart.
-  CSRDirectAssembler( const int* indptr_,
-                      const int* indices_,
-                      double*    data_,
-                      int        nnz_,
-                      int        nDof_,
-                      const int* I,
-                      const int* J,
-                      int64_t    nPairs_,
-                      int        nThreads_ )
-    : indptr( indptr_ ),
-      indices( indices_ ),
-      data( data_ ),
-      nnz( nnz_ ),
-      nDof( nDof_ ),
-      nPairs( nPairs_ ),
-      nThreads( nThreads_ > 0 ? nThreads_ : 1 )
+/**
+ * @brief Scatters the blocks of the entities straight into the data array of its own CSR pattern.
+ *
+ * Built in three steps: the pattern from the entities (constructor), entries added to it (CSRPattern::addEntries, the
+ * fill-in of the multi-point-constraint condensation), then the map of every value of every block to its CSR entry
+ * (mapEntities). Two layouts of a block, as the entity declares it (SystemMatrixEntities::couplesAllItsDofs):
+ *
+ * - dense: the nDofE x nDofE block, column-major, as every element writes it. All values of a local row share the
+ *   global row, so only nDofE rows per entity are kept.
+ * - listed: the entity lists its entries itself (a constraint coupling only some of its degrees of freedom); each
+ *   value is scattered on its own, and keeps its global row.
+ *
+ * The layout is never guessed from the number of values: a list can have exactly nDofE^2 entries (a rigid body
+ * contact with one slave node in 3D: 36 + 9 + 18 + 18 = 81 = 9^2) in an order that is not column-major.
+ */
+struct CSRDirectAssembler : CSRPattern {
+  double*                           data     = nullptr; ///< the CSR data array, borrowed; what is assembled
+  int                               nThreads = 1;       ///< how many threads may scatter at the same time
+  std::vector< int64_t >            entryStart;         ///< nEntities + 1: where the values of each block begin
+  std::vector< uint16_t >           offsets;            ///< per value of every block: its position within its CSR row
+  std::vector< int64_t >            entityRowStart;  ///< nEntities: where the rows of each entity begin in entityRows
+  std::vector< int >                entityNDof;      ///< per entity: its number of DOFs
+  std::vector< char >               entityIsDense;   ///< per entity: the layout it declared
+  std::vector< int >                entityRows;      ///< per entity: the global row of each local row (dense) or value
+  std::vector< std::vector< int > > rowStartScratch; ///< per thread, size of the largest entity
+
+  /**
+   * @brief The pattern of the entities' blocks; the map follows with mapEntities, once the pattern is complete.
+   *
+   * @param entities the entities.
+   * @param nDof_ the number of rows and columns.
+   * @param nThreads_ how many threads build the pattern and the map, and may scatter at the same time.
+   */
+  CSRDirectAssembler( const SystemMatrixEntities& entities, int nDof_, int nThreads_ )
+    : CSRPattern( CSRPattern::ofEntities( entities, nDof_, nThreads_ ) ), nThreads( nThreads_ > 0 ? nThreads_ : 1 )
   {
-    offsets.resize( nPairs );
-    int64_t tooWide = 0;
+  }
 
-#pragma omp parallel for schedule( static ) reduction( + : tooWide )
-    for ( int64_t k = 0; k < nPairs; ++k ) {
-      const int  r     = I[k];
-      const int  start = indptr[r];
-      const int  end   = indptr[r + 1];
-      const int* found = std::lower_bound( indices + start, indices + end, J[k] );
-      if ( found == indices + end || *found != J[k] ) {
-        tooWide += 1; // reported as a build failure below; no entry may be unmapped
-        offsets[k] = 0;
-        continue;
+  /**
+   * @brief Map every value of every block to its CSR entry, on the complete pattern.
+   *
+   * @param entities the entities, the same as given to the constructor.
+   * @param data_ the CSR data array of the pattern, nnz values, which the assembler scatters into.
+   */
+  void mapEntities( const SystemMatrixEntities& entities, double* data_ )
+  {
+    const int64_t nEntities = entities.nEntities;
+    data                    = data_;
+
+    entryStart.assign( nEntities + 1, 0 );
+    entityRowStart.assign( nEntities, 0 );
+    entityNDof.resize( nEntities );
+    entityIsDense.resize( nEntities );
+    int64_t nRows   = 0;
+    int     maxNDof = 0;
+    for ( int64_t e = 0; e < nEntities; ++e ) {
+      const int64_t n       = entities.nDofOf( e );
+      const int64_t nListed = entities.localEntryStart[e + 1] - entities.localEntryStart[e];
+      entityNDof[e]         = static_cast< int >( n );
+      entityIsDense[e]      = entities.isDense( e );
+      entityRowStart[e]     = nRows;
+      entryStart[e + 1]     = entryStart[e] + ( entities.isDense( e ) ? n * n : nListed );
+      nRows += entities.isDense( e ) ? n : nListed;
+      maxNDof = std::max( maxNDof, entityNDof[e] );
+    }
+    offsets.resize( entryStart[nEntities] );
+    entityRows.resize( nRows );
+    rowStartScratch.assign( nThreads, std::vector< int >( maxNDof, 0 ) );
+
+    int64_t unmapped = 0;
+#pragma omp parallel for schedule( dynamic, 64 ) num_threads( nThreads ) reduction( + : unmapped )
+    for ( int64_t e = 0; e < nEntities; ++e ) {
+      const int32_t* d  = entities.dofs + entities.dofStart[e];
+      const int64_t  n  = entityNDof[e];
+      const int64_t  rs = entityRowStart[e];
+      const int64_t  es = entryStart[e];
+      if ( entityIsDense[e] ) {
+        // value k of the column-major block: local row k % n, local column k / n
+        for ( int64_t a = 0; a < n; ++a )
+          entityRows[rs + a] = d[a];
+        for ( int64_t k = 0; k < n * n; ++k )
+          unmapped += mapValue( d[k % n], d[k / n], offsets[es + k] ) ? 0 : 1;
       }
-      const int64_t off = found - ( indices + start );
-      if ( off > std::numeric_limits< uint16_t >::max() ) {
-        tooWide += 1;
-        offsets[k] = 0;
-        continue;
+      else {
+        const int64_t ls = entities.localEntryStart[e];
+        for ( int64_t k = 0; k < entryStart[e + 1] - es; ++k ) {
+          const int row      = d[entities.localRows[ls + k]];
+          entityRows[rs + k] = row;
+          unmapped += mapValue( row, d[entities.localColumns[ls + k]], offsets[es + k] ) ? 0 : 1;
+        }
       }
-      offsets[k] = static_cast< uint16_t >( off );
     }
 
-    if ( tooWide > 0 )
+    if ( unmapped > 0 )
       throw std::runtime_error( "CSRDirectAssembler: entry unmapped, or within-row offset exceeds "
                                 "the 16-bit range (row longer than 65535); a uint32 offset variant "
                                 "is required for this pattern." );
   }
 
-  // Scatter a whole VIJ value array through the map. This is the equivalence path used to validate
-  // the addressing against CSRCore::update; the fused path hands each entity's block straight in.
-  void assembleFromVIJ( const double* V, const int* I )
-  {
-    beginAssembly();
-
-#pragma omp parallel for schedule( static ) num_threads( nThreads )
-    for ( int64_t k = 0; k < nPairs; ++k ) {
-      double* dst = data + indptr[I[k]] + offsets[k];
-#pragma omp atomic
-      *dst += V[k];
-    }
-  }
-
-  // ---- fused path -------------------------------------------------------------------------
-  //
-  // beginAssembly() / scatterBlock() per entity. The entity writes its block into a small
-  // thread-local scratch buffer -- which stays in cache -- and scatterBlock adds it straight into
-  // the CSR data array. No sizeVIJ-sized value array is ever materialized, which is the entire point.
-  //
-  // Registration gives each entity its slice of the map. Two layouts of a block are supported, and
-  // the entity declares which one it writes (SystemMatrixContributorBase.couplesAllItsDofs):
-  //
-  //   dense    the nDofE x nDofE block, column-major, as every element writes it. For local row a,
-  //            every pair (a, b) shares the same global row, so the row is I[mapStart + a] and only
-  //            nDofE rows per entity need keeping rather than nDofE^2.
-  //   sparse   the entity declared its own list of (I, J) pairs (a constraint coupling only some of
-  //            its degrees of freedom), and its block is the list of values of these pairs. Each
-  //            entry is scattered on its own, so each keeps its global row.
-  //
-  // The layout is never guessed from the number of pairs: a sparse list can have exactly nDofE^2
-  // entries (a rigid body contact with one slave node in 3D: 36 + 9 + 18 + 18 = 81 = 9^2) in an
-  // order that is not column-major.
-  std::vector< int64_t >            entityMapStart;  // into offsets
-  std::vector< int64_t >            entityRowStart;  // into entityRows
-  std::vector< int >                entityNDof;
-  std::vector< int64_t >            entityVIJSize;   // nDofE^2 for a dense block, else the number of pairs
-  std::vector< char >               entityIsDense;   // the layout the entity declared
-  std::vector< int >                entityRows;      // per entity: the row of each local row (dense) or entry (sparse)
-  std::vector< std::vector< int > > rowStartScratch; // per thread, size maxNDof
-
-  bool isDense( int entity ) const { return entityIsDense[entity]; }
-
-  void registerEntities( const int64_t* mapStarts,
-                         const int*     nDofs,
-                         const int64_t* vijSizes,
-                         const int*     couplesAllItsDofs,
-                         int            nEntities,
-                         const int*     I )
-  {
-    for ( int e = 0; e < nEntities; ++e )
-      if ( couplesAllItsDofs[e] && vijSizes[e] != static_cast< int64_t >( nDofs[e] ) * nDofs[e] )
-        throw std::invalid_argument( "CSRDirectAssembler::registerEntities: an entity that couples all its DOFs "
-                                     "must contribute nDof^2 entries" );
-    entityMapStart.assign( mapStarts, mapStarts + nEntities );
-    entityNDof.assign( nDofs, nDofs + nEntities );
-    entityVIJSize.assign( vijSizes, vijSizes + nEntities );
-    entityIsDense.resize( nEntities );
-    for ( int e = 0; e < nEntities; ++e )
-      entityIsDense[e] = couplesAllItsDofs[e] != 0;
-    entityRowStart.resize( nEntities );
-    int64_t total = 0;
-    for ( int e = 0; e < nEntities; ++e ) {
-      entityRowStart[e] = total;
-      total += isDense( e ) ? nDofs[e] : vijSizes[e];
-    }
-    entityRows.resize( total );
-    // A dense block is stored COLUMN-major (denseBlockLocalEntries): I[k] = idcs[k % nDof]
-    // and J[k] = idcs[k / nDof], so the row index varies fastest and the first nDof entries of I are
-    // exactly the entity's global row list. A sparse block keeps the row of every entry.
-#pragma omp parallel for schedule( static )
-    for ( int e = 0; e < nEntities; ++e ) {
-      const int64_t ms   = entityMapStart[e];
-      const int64_t rows = isDense( e ) ? entityNDof[e] : entityVIJSize[e];
-      for ( int64_t a = 0; a < rows; ++a )
-        entityRows[entityRowStart[e] + a] = I[ms + a];
-    }
-
-    int maxNDof = 0;
-    for ( int e = 0; e < nEntities; ++e )
-      maxNDof = std::max( maxNDof, nDofs[e] );
-    rowStartScratch.assign( nThreads, std::vector< int >( maxNDof, 0 ) );
-  }
-
-  // Zero the CSR data array, with all threads. Call once before the entity loop.
+  /** @brief Zero the CSR data array, with all threads. Call once before the entity loop. */
   void beginAssembly()
   {
 #pragma omp parallel for schedule( static ) num_threads( nThreads )
@@ -835,21 +732,49 @@ struct CSRDirectAssembler {
       data[i] = 0.0;
   }
 
-  // Called from inside the entity loop, once per entity, by the thread that computed the block. tid
-  // selects the thread's own row scratch (0 <= tid < nThreads); no two concurrent callers may pass
-  // the same tid. The additions to the CSR data are atomic, so any number of threads scatter at once.
+  /**
+   * @brief Add the block of an entity to the CSR data, atomically.
+   *
+   * Called from inside the entity loop, once per entity, by the thread that computed the block. No two concurrent
+   * callers may pass the same @p tid; any number of threads scatter at once.
+   *
+   * @param tid the thread, which selects its own row scratch (0 <= tid < nThreads).
+   * @param entity the number of the entity.
+   * @param block its values, entryStart[entity + 1] - entryStart[entity] of them.
+   */
   void scatterBlock( int tid, int entity, const double* block ) noexcept
   {
-    if ( isDense( entity ) )
+    if ( entityIsDense[entity] )
       scatterDenseBlock( tid, entity, block );
     else
       scatterEntries( entity, block );
   }
 
 private:
+  /**
+   * @brief The position of entry (@p row, @p column) within its CSR row.
+   *
+   * @param row the global row.
+   * @param column the global column.
+   * @param offset receives the position.
+   * @return whether the entry is in the pattern, and its position fits in 16 bits.
+   */
+  bool mapValue( int row, int column, uint16_t& offset ) const
+  {
+    const int* first = indices.data() + indptr[row];
+    const int* last  = indices.data() + indptr[row + 1];
+    const int* found = std::lower_bound( first, last, column );
+    if ( found == last || *found != column || found - first > std::numeric_limits< uint16_t >::max() ) {
+      offset = 0;
+      return false;
+    }
+    offset = static_cast< uint16_t >( found - first );
+    return true;
+  }
+
   void scatterDenseBlock( int tid, int entity, const double* block ) noexcept
   {
-    const int64_t ms = entityMapStart[entity];
+    const int64_t es = entryStart[entity];
     const int64_t rs = entityRowStart[entity];
     const int     nd = entityNDof[entity];
 
@@ -871,7 +796,7 @@ private:
     // resident, and with enough repeats to see the variance -- rather than trust this comment.
     //
     // Concurrent writers to the same CSR data are the point, so there is no __restrict on it.
-    const uint16_t* off0 = offsets.data() + ms;
+    const uint16_t* off0 = offsets.data() + es;
     for ( int a = 0; a < nd; ++a ) {
       double* row = data + rowStart[a];
       for ( int b = 0; b < nd; ++b ) {
@@ -883,12 +808,12 @@ private:
     }
   }
 
-  // A sparse block: the values of the entity's own (I, J) pairs, each scattered on its own.
+  // A listed block: the values of the entity's own entries, each scattered on its own.
   void scatterEntries( int entity, const double* block ) noexcept
   {
     const int64_t   rs   = entityRowStart[entity];
-    const int64_t   size = entityVIJSize[entity];
-    const uint16_t* off0 = offsets.data() + entityMapStart[entity];
+    const int64_t   size = entryStart[entity + 1] - entryStart[entity];
+    const uint16_t* off0 = offsets.data() + entryStart[entity];
 
     for ( int64_t k = 0; k < size; ++k ) {
       double* dst = data + indptr[entityRows[rs + k]] + off0[k];
@@ -898,12 +823,15 @@ private:
   }
 
 public:
-  // Bytes held by the map and the entity tables -- the figure to compare against the VIJ value array
-  // and the gather map. The CSR data array is not counted: it belongs to the shared pattern, whose
-  // generator counts it.
+  /**
+   * @brief Bytes held by the pattern, the map and the entity tables -- the figure to compare against the VIJ arrays
+   * and the gather map. The CSR data array is not counted: it belongs to the Python matrix.
+   */
   int64_t memoryBytes() const
   {
-    return static_cast< int64_t >( offsets.size() ) * 2 + static_cast< int64_t >( entityRows.size() ) * 4 +
-           static_cast< int64_t >( entityMapStart.size() ) * 29;
+    return static_cast< int64_t >( indptr.size() + indices.size() ) * sizeof( int ) +
+           static_cast< int64_t >( offsets.size() ) * sizeof( uint16_t ) +
+           static_cast< int64_t >( entityRows.size() ) * sizeof( int ) +
+           static_cast< int64_t >( entityNDof.size() ) * ( 2 * sizeof( int64_t ) + sizeof( int ) + sizeof( char ) );
   }
 };

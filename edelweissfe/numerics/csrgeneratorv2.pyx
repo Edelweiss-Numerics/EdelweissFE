@@ -122,26 +122,27 @@ cdef extern from "_csrcore.h":
         int nnz
         int nDof
 
+        void addEntries(const int64_t* extraPtr, const int32_t* extraIdx, vector[int]& retiredIndptr,
+                        vector[int]& retiredIndices) except +
+
         @staticmethod
         CSRPattern ofEntities(const SystemMatrixEntities& entities, int nDof, int nThreads) except +
 
     cdef cppclass CSRCore(CSRPattern) nogil:
-        CSRCore(const int* I, const int* J, int64_t n_pairs, int n_dof, bint patternOnly) except +
+        CSRCore(const int* I, const int* J, int64_t n_pairs, int n_dof) except +
 
         void update(const double* V_data, double* csr_data) nogil
         void releaseGatherMap()
         void addEntries(const int64_t* extraPtr, const int32_t* extraIdx, vector[int]& retiredIndptr,
                         vector[int]& retiredIndices) except +
-        bint gatherMapReleased
         int64_t memoryBytes()
 
-    cdef cppclass CSRDirectAssembler nogil:
-        CSRDirectAssembler(const int* indptr, const int* indices, double* data, int nnz, int nDof,
-                           const int* I, const int* J, int64_t nPairs, int nThreads) except +
+    cdef cppclass CSRDirectAssembler(CSRPattern) nogil:
+        CSRDirectAssembler(const SystemMatrixEntities& entities, int nDof, int nThreads) except +
 
-        void assembleFromVIJ(const double* V, const int* I) nogil
-        void registerEntities(const int64_t* mapStarts, const int* nDofs, const int64_t* vijSizes,
-                              const int* couplesAllItsDofs, int nEntities, const int* I) except +
+        vector[int64_t] entryStart
+
+        void mapEntities(const SystemMatrixEntities& entities, double* data) except +
         void beginAssembly() nogil
         void scatterBlock(int tid, int entity, const double* block) nogil
         int64_t memoryBytes()
@@ -237,16 +238,27 @@ cdef class _CSRCoreOwner:
             del self.core
 
 
+cdef class _DirectCSRAssemblerOwner:
+    """Owns the C++ core of a :class:`DirectCSRAssembler`, its CSR pattern and its map, and frees it when it goes;
+    held like :class:`_CSRCoreOwner`."""
+
+    cdef CSRDirectAssembler* assembler
+
+    def __dealloc__(self):
+        if self.assembler != NULL:
+            del self.assembler
+
+
 cdef class _CSRPattern:
     """The NumPy base object of one pattern's arrays (``indptr``, ``indices``): they stay valid as long as any of
     them is kept, with or without its matrix.
 
-    While this pattern is the core's current one, its memory is the core's, kept alive by ``coreOwner``. When
-    :meth:`CSRGenerator.addToPattern` replaces it, the old vectors are moved here (their memory stays where it is)
-    and ``coreOwner`` is dropped.
+    While this pattern is the current one of a C++ core, its memory is the core's, kept alive by ``coreOwner``. When
+    entries are added to the pattern, the old vectors are moved here (their memory stays where it is) and
+    ``coreOwner`` is dropped.
     """
 
-    cdef _CSRCoreOwner coreOwner
+    cdef object coreOwner
     cdef vector[int] retiredIndptr
     cdef vector[int] retiredIndices
 
@@ -263,6 +275,34 @@ cdef np.ndarray _intArrayOwnedBy(_CSRPattern owner, int* data, np.npy_intp n):
     return array
 
 
+cdef tuple _matrixOnPattern(object coreOwner, CSRPattern* pattern):
+    """A matrix with zero values whose pattern arrays are the memory of ``pattern``, which ``coreOwner`` owns; and the
+    :class:`_CSRPattern` that keeps it alive.
+
+    Structural mutation of the matrix is forbidden once it is built (see :class:`AliasedCSRMatrix`).
+    """
+    cdef _CSRPattern holder = _CSRPattern()
+    holder.coreOwner = coreOwner
+    cdef np.ndarray nd_indptr = _intArrayOwnedBy(holder, pattern.indptr.data(), pattern.nDof + 1)
+    cdef np.ndarray nd_indices = _intArrayOwnedBy(holder, pattern.indices.data(), pattern.nnz)
+
+    cdef np.ndarray[double, ndim=1] data = np.zeros(pattern.nnz, dtype=np.double)
+    matrix = AliasedCSRMatrix((data, nd_indices, nd_indptr), shape=(pattern.nDof, pattern.nDof))
+
+    # Construction (incl. scipy's internal prune) is done; forbid structural mutation from now on.
+    matrix._locked = True
+    return holder, matrix
+
+
+cdef tuple _entriesToAdd(entries, tuple shape):
+    """The pattern of ``entries`` as the arrays ``CSRPattern::addEntries`` takes, or None if there is nothing to add."""
+    if entries.shape != shape:
+        raise ValueError("Entries to add to the pattern: shape {:} differs from {:}.".format(entries.shape, shape))
+    if entries.nnz == 0:
+        return None
+    return np.ascontiguousarray(entries.indptr, dtype=np.int64), np.ascontiguousarray(entries.indices, dtype=np.int32)
+
+
 cdef class CSRGenerator:
     """
     CSRGenerator class to create and manage a CSR matrix from COO format.
@@ -272,14 +312,8 @@ cdef class CSRGenerator:
     Parameters
     ----------
     systemMatrix : object
-        An object containing COO format data with attributes I, J, and nDof.
-    patternOnly : bool
-        Build only the CSR pattern (``indptr``/``indices``), not the gather map. Halves the sort
-        array and, more importantly, removes the 32-bit limit on the pair count -- ``gather_sources``
-        and ``assembly_ptr`` are int32 indices into the COO list, so a full build refuses more than
-        INT32_MAX pairs. :meth:`updateInPlace` and :meth:`updateCSR` then raise, exactly as after
-        :meth:`releaseGatherMap`. Use it when the pattern is being borrowed by a
-        :class:`DirectCSRAssembler` and nothing will gather.
+        An object containing COO format data with attributes I, J, and nDof. The gather map indexes the COO pairs
+        with 32-bit integers, so there may be at most ``INT32_MAX`` of them.
     """
 
     # the owner of the core, the owner of its current pattern (the base of csrMatrix's pattern arrays), and the core
@@ -295,9 +329,9 @@ cdef class CSRGenerator:
         # Only this generator gathers: its gather map goes with it, also while the matrix keeps the pattern alive.
         # A cyclic collection may have cleared coreOwner (to None) first, and freed the core with it.
         if self.coreOwner is not None:
-            self.coreOwner.core.releaseGatherMap()
+            self.core.releaseGatherMap()
 
-    def __init__(self, systemMatrix, bint patternOnly=False):
+    def __init__(self, systemMatrix):
         # Ensure int32 dtype regardless of the source array's dtype.
         cdef int[::1] I = np.asarray(systemMatrix.I, dtype=np.intc)  # noqa
         cdef int[::1] J = np.asarray(systemMatrix.J, dtype=np.intc)
@@ -309,7 +343,7 @@ cdef class CSRGenerator:
         # 1. Run C++ Core
         cdef CSRCore* core
         with nogil:
-            core = new CSRCore(&I[0], &J[0], self.nCooPairs, nDof, patternOnly)
+            core = new CSRCore(&I[0], &J[0], self.nCooPairs, nDof)
         self.coreOwner = _CSRCoreOwner()
         self.coreOwner.core = core
         self.core = core
@@ -318,22 +352,9 @@ cdef class CSRGenerator:
 
     cdef _wrapPattern(self):
         """(Re)create :attr:`csrMatrix` as a view of the core's pattern, with a zeroed data array."""
-        cdef int nDof = self.core.nDof
-        cdef int nnz = self.core.nnz
-
         # the pattern arrays point into the core and keep it alive (see _CSRPattern); the values are NumPy's own
-        self.pattern = _CSRPattern()
-        self.pattern.coreOwner = self.coreOwner
-        cdef np.ndarray nd_indptr = _intArrayOwnedBy(self.pattern, self.core.indptr.data(), nDof + 1)
-        cdef np.ndarray nd_indices = _intArrayOwnedBy(self.pattern, self.core.indices.data(), nnz)
-
-        cdef np.ndarray[double, ndim=1] data = np.zeros(nnz, dtype=np.double)
-        self.csrMatrix = AliasedCSRMatrix((data, nd_indices, nd_indptr), shape=(nDof, nDof))
-
+        self.pattern, self.csrMatrix = _matrixOnPattern(self.coreOwner, self.core)
         self.data_view = self.csrMatrix.data
-
-        # Construction (incl. scipy's internal prune) is done; forbid structural mutation from now on.
-        self.csrMatrix._locked = True
 
     def addToPattern(self, entries):
         """Add entries to the CSR pattern that no COO pair contributes to; they are assembled as stored zeros.
@@ -353,13 +374,10 @@ cdef class CSRGenerator:
         """
         cdef int64_t[::1] extraPtr
         cdef int32_t[::1] extraIdx
-        if entries.shape != self.csrMatrix.shape:
-            raise ValueError("CSRGenerator.addToPattern: shape {:} differs from {:}.".format(
-                entries.shape, self.csrMatrix.shape))
-        if entries.nnz == 0:
+        toAdd = _entriesToAdd(entries, self.csrMatrix.shape)
+        if toAdd is None:
             return
-        extraPtr = np.ascontiguousarray(entries.indptr, dtype=np.int64)
-        extraIdx = np.ascontiguousarray(entries.indices, dtype=np.int32)
+        extraPtr, extraIdx = toAdd
         # the old pattern moves to the owner its arrays already have, and no longer needs the core
         self.core.addEntries(&extraPtr[0], &extraIdx[0], self.pattern.retiredIndptr, self.pattern.retiredIndices)
         self.pattern.coreOwner = None
@@ -373,8 +391,7 @@ cdef class CSRGenerator:
         object owns. The dominant term is the gather map's ``gather_sources``, one int32 per COO
         pair, which is what the direct path replaces with a uint16 offset per pair.
 
-        Neither figure counts the VIJ value array or the ``I``/``J`` index arrays: those belong to
-        the DofManager, and ``I``/``J`` are needed by both paths.
+        The VIJ value array and the ``I``/``J`` index arrays are not counted: the generator does not own them.
         """
         return self.core.memoryBytes() + 8 * <int64_t> self.core.nnz
 
@@ -382,26 +399,6 @@ cdef class CSRGenerator:
     def nnz(self):
         """Number of stored entries in the CSR pattern."""
         return self.core.nnz
-
-    @property
-    def gatherMapReleased(self):
-        """True once :meth:`releaseGatherMap` has been called and this generator can no longer gather."""
-        return bool(self.core.gatherMapReleased)
-
-    def releaseGatherMap(self):
-        """Give back the gather map, keeping the CSR pattern -- and give up the ability to gather.
-
-        ``gather_sources`` is one int32 per COO pair, so the map is by far the largest thing this
-        object holds (6.69 GiB at 43,350 DOF against 0.80 GiB for the pattern and the data array).
-        A solver assembling directly into CSR borrows only the pattern, so holding the map would
-        cancel most of what the direct path saves.
-
-        After this call :meth:`updateInPlace` and :meth:`updateCSR` raise. That is deliberate: the
-        alternative is a ``nogil`` loop reading freed vectors, and a matrix that is quietly wrong is
-        worse than one that is loudly unavailable. :attr:`csrMatrix` and the pattern stay valid and
-        usable, and :attr:`memoryBytes` drops accordingly.
-        """
-        self.core.releaseGatherMap()
 
     def updateInPlace(self, double[:] V):
         """
@@ -425,14 +422,6 @@ cdef class CSRGenerator:
         AliasedCSRMatrix
             A live view of the internal CSR matrix (not a copy).
         """
-
-        if self.core.gatherMapReleased:
-            raise RuntimeError(
-                "CSRGenerator.updateInPlace on a generator with no gather map: it was either built "
-                "with patternOnly=True or gave the map back via releaseGatherMap(), and can only "
-                "supply the CSR pattern now. Assemble through the DirectCSRAssembler that borrowed "
-                "the pattern, or build a generator that keeps its map."
-            )
 
         cdef double* d_ptr = &self.data_view[0]
         cdef double* v_ptr = &V[0]
@@ -466,119 +455,90 @@ cdef class CSRGenerator:
 
 
 cdef class DirectCSRAssembler:
-    """Scatters entity blocks straight into a CSR data array, with no VIJ staging array.
+    """Scatters entity blocks straight into a CSR data array, with no VIJ staging array and no I/J pairs.
 
-    The alternative to :class:`CSRGenerator`'s stage-then-gather. It borrows an existing pattern
-    rather than deriving its own, so there is exactly one definition of the CSR pattern and the two
-    paths cannot drift apart -- and :meth:`assembleFromVIJ` exists so the addressing can be checked
-    against ``CSRGenerator.updateCSR`` on real models rather than argued about.
+    The alternative to :class:`CSRGenerator`'s stage-then-gather. It derives its own CSR pattern from the entities, row
+    by row (:func:`csrPatternOfEntities`), adds the entries ``patternFillIn`` asks for, and then maps every value of
+    every block to its CSR entry. The two derivations of the pattern are independent, and tested against each other.
 
-    It assembles into the CSR data array of the borrowed pattern, :attr:`csrMatrix`, itself: all threads
-    scatter into that one array, each addition atomic. The order in which the threads add to an entry
-    depends on their timing, so the values agree with a serial assembly to round-off, not bit for bit.
+    It assembles into the CSR data array of its own matrix, :attr:`csrMatrix`: all threads scatter into that one array,
+    each addition atomic. The order in which the threads add to an entry depends on their timing, so the values agree
+    with a serial assembly to round-off, not bit for bit.
 
     Parameters
     ----------
-    generator
-        A :class:`CSRGenerator` whose pattern is borrowed. It must outlive this object.
-    systemMatrix
-        The VIJ system matrix supplying the ``I``/``J`` index arrays the map is built from.
+    entities
+        The :class:`~edelweissfe.numerics.systemmatrixcontributor.SystemMatrixEntities` table; entity ``e`` is number
+        ``e`` in :meth:`scatterBlock`.
+    nDof
+        The number of rows and columns.
     numThreads
-        Threads used for the map build and the zeroing, and how many may scatter at the same time
+        Threads used for the pattern, the map and the zeroing, and how many may scatter at the same time
         (``0 <= tid < numThreads`` in :meth:`scatterBlock`).
+    patternFillIn
+        Called with the pattern (as :attr:`csrMatrix`, zero values) before the map is built; returns the entries to add
+        to it (CSR, sorted rows, none already in the pattern), assembled as stored zeros -- e.g.
+        :meth:`~edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation.condensedPatternFillIn`.
     """
 
+    cdef _DirectCSRAssemblerOwner owner
+    cdef _CSRPattern pattern
     cdef CSRDirectAssembler* asm_
-    cdef object _generator          # kept alive: the pattern is borrowed, not owned
-    cdef object _I
     cdef public object csrMatrix
-    cdef double[:] data_view
-    cdef int64_t nCooPairs
 
-    def __dealloc__(self):
-        if self.asm_ != NULL:
-            del self.asm_
-
-    def __init__(self, generator, systemMatrix, int numThreads=1):
-        cdef int[::1] I = np.asarray(systemMatrix.I, dtype=np.intc)  # noqa
-        cdef int[::1] J = np.asarray(systemMatrix.J, dtype=np.intc)
-        self._generator = generator
-        self._I = np.asarray(I)
-        self.nCooPairs = len(I)
-
-        self.csrMatrix = generator.csrMatrix
-        self.data_view = self.csrMatrix.data
-
-        cdef int[::1] indptr = np.asarray(self.csrMatrix.indptr, dtype=np.intc)
-        cdef int[::1] indices = np.asarray(self.csrMatrix.indices, dtype=np.intc)
-        cdef double[:] data = self.data_view
-        cdef int nnz = indices.shape[0]
-        cdef int nDof = int(systemMatrix.nDof)
-
+    def __init__(self, entities, int nDof, int numThreads=1, patternFillIn=None):
+        cdef SystemMatrixEntities table = _borrowedTable(
+            entities.dofStart,
+            entities.dofs,
+            entities.couplesAllItsDofs,
+            entities.localEntryStart,
+            entities.localRows,
+            entities.localColumns,
+        )
+        cdef CSRDirectAssembler* assembler
         with nogil:
-            self.asm_ = new CSRDirectAssembler(&indptr[0], &indices[0], &data[0], nnz, nDof,
-                                               &I[0], &J[0], self.nCooPairs, numThreads)
+            assembler = new CSRDirectAssembler(table, nDof, numThreads)
+        self.owner = _DirectCSRAssemblerOwner()
+        self.owner.assembler = assembler
+        self.asm_ = assembler
+        self.pattern, self.csrMatrix = _matrixOnPattern(self.owner, assembler)
+
+        cdef int64_t[::1] extraPtr
+        cdef int32_t[::1] extraIdx
+        toAdd = None if patternFillIn is None else _entriesToAdd(patternFillIn(self.csrMatrix), self.csrMatrix.shape)
+        if toAdd is not None:
+            extraPtr, extraIdx = toAdd
+            assembler.addEntries(&extraPtr[0], &extraIdx[0], self.pattern.retiredIndptr, self.pattern.retiredIndices)
+            self.pattern.coreOwner = None
+            self.pattern, self.csrMatrix = _matrixOnPattern(self.owner, assembler)
+
+        cdef double[::1] data = self.csrMatrix.data
+        cdef double* dataPointer = &data[0] if data.shape[0] > 0 else NULL
+        with nogil:
+            assembler.mapEntities(table, dataPointer)
+
+    @property
+    def entryStart(self):
+        """Where the values of the block of each entity begin, counted over all entities in their order, and in the
+        last place the number of all values: the block of entity ``e`` has ``entryStart[e + 1] - entryStart[e]``
+        values (int64, a copy)."""
+        cdef vector[int64_t]* starts = &self.asm_.entryStart
+        cdef np.ndarray[int64_t, ndim=1] result = np.empty(starts.size(), dtype=np.int64)
+        memcpy(&result[0], starts.data(), starts.size() * sizeof(int64_t))
+        return result
 
     @property
     def memoryBytes(self):
-        """Bytes held by the offset map and the entity tables.
-
-        The CSR pattern and data array are not counted: they belong to the borrowed generator, whose
-        :attr:`CSRGenerator.memoryBytes` counts them.
-        """
+        """Bytes held by the pattern, the offset map and the entity tables; the CSR data array is not counted."""
         return self.asm_.memoryBytes()
-
-    def assembleFromVIJ(self, double[::1] V):
-        """Scatter a VIJ value array into CSR through the map, and return the CSR matrix.
-
-        Equivalence path for validation and measurement. The fused assembly hands each entity's
-        block in directly and never builds ``V``.
-        """
-        cdef int[::1] I = self._I
-        with nogil:
-            self.asm_.assembleFromVIJ(&V[0], &I[0])
-        return self.csrMatrix
-
-    def registerEntities(self, int64_t[::1] mapStarts, int[::1] nDofs, int64_t[::1] vijSizes,
-                         int[::1] couplesAllItsDofs):
-        """Give each entity its slice of the offset map, once per connectivity change.
-
-        ``mapStarts[e]`` is entity e's offset into the VIJ ordering -- the start of its slice in the DofManager's
-        ``vijSliceOfEntity`` --, ``nDofs[e]`` its local DOF count, ``vijSizes[e]`` the number of entries it
-        contributes (the length of its
-        :meth:`~edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.localEntriesOfBlock`), and
-        ``couplesAllItsDofs[e]`` the layout of its block it declares
-        (:attr:`~edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.couplesAllItsDofs`):
-        nonzero for a dense block, column-major, of ``nDofs[e]**2`` entries; zero for a sparse one, the values of the
-        entries the entity lists, which :meth:`scatterBlock` scatters entry by entry. The layout is not inferred from
-        the number of entries, since a sparse pattern can have exactly ``nDofs[e]**2`` of them.
-        """
-        if (
-            mapStarts.shape[0] != nDofs.shape[0]
-            or mapStarts.shape[0] != vijSizes.shape[0]
-            or mapStarts.shape[0] != couplesAllItsDofs.shape[0]
-        ):
-            raise ValueError(
-                "registerEntities: mapStarts, nDofs, vijSizes and couplesAllItsDofs must have the same length (one "
-                "entry per entity), got {:}, {:}, {:} and {:}".format(
-                    mapStarts.shape[0], nDofs.shape[0], vijSizes.shape[0], couplesAllItsDofs.shape[0]
-                )
-            )
-        if mapStarts.shape[0] == 0:
-            return
-        cdef int[::1] I = self._I
-        self.asm_.registerEntities(
-            &mapStarts[0], &nDofs[0], &vijSizes[0], &couplesAllItsDofs[0], mapStarts.shape[0], &I[0]
-        )
 
     @property
     def corePointer(self):
         """Address of the underlying ``CSRDirectAssembler``, for a threaded caller in another extension.
 
-        EdelweissMeshfree's particle kernel calls ``scatterBlock`` from inside its ``prange``, which
-        cannot go through Python. It re-declares the C++ class (from ``edelweissfe.numerics.get_include()``)
-        and casts this address back, so the scatter -- including the column-major traversal and its
-        loop order -- exists in exactly one place.
+        A compiled entity loop that scatters from inside its own ``prange`` cannot go through Python. It re-declares
+        the C++ class (from ``edelweissfe.numerics.get_include()``) and casts this address back, so the scatter --
+        including the column-major traversal and its loop order -- exists in exactly one place.
 
         The assembler must outlive any caller holding this.
         """
@@ -590,12 +550,15 @@ cdef class DirectCSRAssembler:
             self.asm_.beginAssembly()
 
     def scatterBlock(self, int tid, int entity, double[::1] block):
-        """Add one entity's block -- dense or sparse, as registered -- from a scratch buffer to :attr:`csrMatrix`.
+        """Add one entity's block -- dense or listed, as the entity declared it -- from a scratch buffer to
+        :attr:`csrMatrix`.
 
         Every addition is atomic, so any number of threads scatter at the same time, as long as no two concurrent
         callers pass the same ``tid`` (``0 <= tid < numThreads``), which selects the caller's own row scratch.
         Releases the GIL, so the workers of a threaded entity loop scatter side by side; see
         :class:`~edelweissfe.numerics.systemmatrixassembly.DirectCSRSystemMatrixAssembly`.
         """
+        if block.shape[0] == 0:
+            return
         with nogil:
             self.asm_.scatterBlock(tid, entity, &block[0])

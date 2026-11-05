@@ -1566,7 +1566,7 @@ class NonlinearImplicitDynamic(NIST):
         dampingVIJValues = dampingVIJValues[keptDamping]
 
         # The mass matrix has the stiffness' VIJ layout, so K's CSR generator sums it into K's pattern.
-        M = self.csrGenerator.updateCSR(np.asarray(Mvij))
+        M = self._K.csrGenerator.updateCSR(np.asarray(Mvij))
         C = coo_matrix((dampingVIJValues, (I[dampingVIJIndices], J[dampingVIJIndices])), shape=(nDof, nDof)).tocsr()
 
         # Symmetry is checked per element type in the tests; see the module documentation.

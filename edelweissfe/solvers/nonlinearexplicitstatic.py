@@ -34,7 +34,6 @@ import edelweissfe.utils.performancetiming as performancetiming
 from edelweissfe.config.timing import createTimingDict
 from edelweissfe.constraints.base.constraintbase import ConstraintBase
 from edelweissfe.models.femodel import FEModel
-from edelweissfe.numerics.csrgeneratorv2 import CSRGenerator
 from edelweissfe.numerics.dofmanager import DofVector
 from edelweissfe.numerics.systemmatrixassembly import (
     SystemMatrixAssembly,
@@ -309,7 +308,6 @@ class NEST(NIST):
         U = self.theDofManager.constructDofVector()
         P = self.theDofManager.constructDofVector()
         dU = self.theDofManager.constructDofVector()
-        self.csrGenerator = CSRGenerator(self.theDofManager)
         K = self.createSystemMatrixAssembly(VIJSystemMatrixAssembly)
 
         self.readStateFromModel(U)
