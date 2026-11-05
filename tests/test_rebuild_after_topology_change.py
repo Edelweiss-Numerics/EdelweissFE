@@ -52,9 +52,7 @@ def test_the_vij_pattern_filled_on_the_thread_pool_is_the_serial_one_bitwise(mon
     assert chunkCounts and max(chunkCounts) > 1, "the entities were not split into several chunks"
     assert threaded.I.tobytes() == serial.I.tobytes()
     assert threaded.J.tobytes() == serial.J.tobytes()
-    assert list(threaded.idcsOfHigherOrderEntitiesInVIJ.values()) == list(
-        serial.idcsOfHigherOrderEntitiesInVIJ.values()
-    )
+    assert list(threaded.vijSliceOfEntity.values()) == list(serial.vijSliceOfEntity.values())
 
 
 class _StubEntity:

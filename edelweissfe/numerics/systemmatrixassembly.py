@@ -54,9 +54,9 @@ from edelweissfe.numerics.parallelizationutilities import forEachSliceInParallel
 class SystemMatrixBlocks(ABC):
     """Hands out the blocks of the system matrix: ``K[entity]`` returns the array an entity writes its block of the
     tangent into, shaped by the entity (see
-    :meth:`~edelweissfe.numerics.vijentitybase.VIJEntityBase.shapeVIJContribution`). A block that is handed out must
-    be committed to the matrix with :meth:`flush`; handing out the next block commits the previous one, so whoever
-    loops over entities flushes once after the loop.
+    :meth:`~edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.shapeBlock`). A block that is
+    handed out must be committed to the matrix with :meth:`flush`; handing out the next block commits the previous
+    one, so whoever loops over entities flushes once after the loop.
 
     A block is either the entity's own place in the matrix, which already holds what was assembled for the entity
     before, or a zeroed scratch array. So an entity adds its block to the array it is given or overwrites it, and
@@ -70,7 +70,7 @@ class SystemMatrixBlocks(ABC):
         Parameters
         ----------
         entity
-            An element, a constraint, or any other entity of the DOF manager's VIJ pattern.
+            An element, a constraint, or any other entity that contributes a block to the system matrix.
 
         Returns
         -------
@@ -94,12 +94,12 @@ class ScaledSystemMatrixBlocks(SystemMatrixBlocks):
     Parameters
     ----------
     target
-        The blocks the scaled blocks enter.
+        The assembly the scaled blocks enter.
     factor
         The factor.
     """
 
-    def __init__(self, target: SystemMatrixBlocks, factor: float):
+    def __init__(self, target: "SystemMatrixAssembly", factor: float):
         self._target = target
         self._factor = factor
         self._scratch = np.zeros(0)
@@ -109,13 +109,13 @@ class ScaledSystemMatrixBlocks(SystemMatrixBlocks):
     def __getitem__(self, entity) -> np.ndarray:
         self.flush()
 
-        size = entity.getVIJContributionSize()
+        size = self._target.numberOfEntriesInBlock(entity)
         if size > self._scratch.shape[0]:
             self._scratch = np.zeros(size)
         self._scratch[:size] = 0.0
 
         self._pendingEntity = entity
-        self._pendingBlock = entity.shapeVIJContribution(self._scratch[:size])
+        self._pendingBlock = entity.shapeBlock(self._scratch[:size])
         return self._pendingBlock
 
     def flush(self):
@@ -175,6 +175,21 @@ class SystemMatrixAssembly(SystemMatrixBlocks):
         -------
         SystemMatrixBlocks
             The blocks of this worker.
+        """
+
+    @abstractmethod
+    def numberOfEntriesInBlock(self, entity) -> int:
+        """The number of values of the block of ``entity``, as the assembly stored it when it was built.
+
+        Parameters
+        ----------
+        entity
+            An element, a constraint, or any other entity that contributes a block to the system matrix.
+
+        Returns
+        -------
+        int
+            The number of values.
         """
 
     @abstractmethod
@@ -245,6 +260,10 @@ class VIJSystemMatrixAssembly(SystemMatrixAssembly):
     def blocksOfWorker(self, worker: int) -> SystemMatrixBlocks:
         return self
 
+    def numberOfEntriesInBlock(self, entity) -> int:
+        vijSlice = self.vijArray.vijSliceOfEntity[entity]
+        return vijSlice.stop - vijSlice.start
+
     def __getitem__(self, entity) -> np.ndarray:
         return self.vijArray[entity]
 
@@ -261,19 +280,25 @@ class _DirectCSRBlocksOfWorker(SystemMatrixBlocks):
     """The blocks one worker of a :class:`DirectCSRSystemMatrixAssembly` writes: one zeroed scratch array, reused for
     every entity, added to the CSR values when the block is committed.
 
+    It holds what it needs of the assembly, not the assembly itself: a reference cycle would keep the whole assembly
+    alive until the cyclic garbage collector runs, also across a rebuild of the equation system.
+
     Parameters
     ----------
     assembler
         The scatter.
     entityIds
         The number of every entity in the assembler.
+    entryStart
+        Where the values of the block of every entity begin, see :attr:`DirectCSRSystemMatrixAssembly.entryStart`.
     worker
         The number of the worker, which selects its scratch in the scatter.
     """
 
-    def __init__(self, assembler: DirectCSRAssembler, entityIds: dict, worker: int):
+    def __init__(self, assembler: DirectCSRAssembler, entityIds: dict, entryStart: np.ndarray, worker: int):
         self._assembler = assembler
         self._entityIds = entityIds
+        self._entryStart = entryStart
         self._worker = worker
         self._scratch = np.zeros(0)
         self._pendingEntity = None
@@ -282,7 +307,7 @@ class _DirectCSRBlocksOfWorker(SystemMatrixBlocks):
     def __getitem__(self, entity) -> np.ndarray:
         self.flush()
 
-        size = entity.getVIJContributionSize()
+        size = self.numberOfEntriesInBlock(entity)
         if size > self._scratch.shape[0]:
             self._scratch = np.zeros(size)
         block = self._scratch[:size]
@@ -290,7 +315,7 @@ class _DirectCSRBlocksOfWorker(SystemMatrixBlocks):
 
         self._pendingEntity = entity
         self._pendingBlock = block
-        return entity.shapeVIJContribution(block)
+        return entity.shapeBlock(block)
 
     def flush(self):
         if self._pendingEntity is None:
@@ -298,6 +323,22 @@ class _DirectCSRBlocksOfWorker(SystemMatrixBlocks):
         self._assembler.scatterBlock(self._worker, self._entityIds[self._pendingEntity], self._pendingBlock)
         self._pendingEntity = None
         self._pendingBlock = None
+
+    def numberOfEntriesInBlock(self, entity) -> int:
+        """The number of values of the block of ``entity``, from the stored slice bounds.
+
+        Parameters
+        ----------
+        entity
+            An entity of the assembly.
+
+        Returns
+        -------
+        int
+            The number of values.
+        """
+        i = self._entityIds[entity]
+        return int(self._entryStart[i + 1] - self._entryStart[i])
 
     def dropPendingBlock(self):
         """Forget the block handed out last, without committing it."""
@@ -318,7 +359,8 @@ class DirectCSRSystemMatrixAssembly(SystemMatrixAssembly):
     Every block is a zeroed scratch array: an entity that is handed its block more than once in an assembly (an
     element, then a body load on it) has each one scattered on its own. Entities with a sparse VIJ pattern of their
     own (constraints that couple only some of their degrees of freedom, which say so through
-    :attr:`~edelweissfe.numerics.vijentitybase.VIJEntityBase.couplesAllItsDofs`) are scattered entry by entry.
+    :attr:`~edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.couplesAllItsDofs`) are scattered
+    entry by entry.
 
     Parameters
     ----------
@@ -336,18 +378,25 @@ class DirectCSRSystemMatrixAssembly(SystemMatrixAssembly):
     def __init__(self, csrGenerator: CSRGenerator, dofManager: DofManager, numberOfWorkers: int):
         super().__init__(numberOfWorkers)
 
-        entities = list(dofManager.idcsOfHigherOrderEntitiesInVIJ)
+        entities = list(dofManager.vijSliceOfEntity)
+        vijStarts = np.fromiter((s.start for s in dofManager.vijSliceOfEntity.values()), np.int64, len(entities))
+        #: Where the values of the block of every entity begin, counted over all entities in their order, and in the
+        #: last place the number of all values: the block of entity ``i`` has ``entryStart[i + 1] - entryStart[i]``
+        #: values.
+        self.entryStart = np.append(vijStarts, len(dofManager.I))
         #: The scatter, for a compiled entity loop that scatters from its own threads.
         self.assembler = DirectCSRAssembler(csrGenerator, dofManager, numberOfWorkers)
         self.assembler.registerEntities(
-            np.fromiter(dofManager.idcsOfHigherOrderEntitiesInVIJ.values(), dtype=np.int64, count=len(entities)),
+            vijStarts,
             np.fromiter((entity.nDof for entity in entities), dtype=np.intc, count=len(entities)),
-            np.fromiter((entity.getVIJContributionSize() for entity in entities), dtype=np.int64, count=len(entities)),
+            np.diff(self.entryStart),
             np.fromiter((entity.couplesAllItsDofs for entity in entities), dtype=np.intc, count=len(entities)),
         )
         #: The number of every entity in :attr:`assembler`.
         self.entityIds = {entity: i for i, entity in enumerate(entities)}
-        self._workers = [_DirectCSRBlocksOfWorker(self.assembler, self.entityIds, w) for w in range(numberOfWorkers)]
+        self._workers = [
+            _DirectCSRBlocksOfWorker(self.assembler, self.entityIds, self.entryStart, w) for w in range(numberOfWorkers)
+        ]
 
     def beginAssembly(self):
         for worker in self._workers:
@@ -356,6 +405,9 @@ class DirectCSRSystemMatrixAssembly(SystemMatrixAssembly):
 
     def blocksOfWorker(self, worker: int) -> SystemMatrixBlocks:
         return self._workers[worker]
+
+    def numberOfEntriesInBlock(self, entity) -> int:
+        return self._workers[0].numberOfEntriesInBlock(entity)
 
     def assembledMatrix(self) -> csr_matrix:
         for worker in self._workers:

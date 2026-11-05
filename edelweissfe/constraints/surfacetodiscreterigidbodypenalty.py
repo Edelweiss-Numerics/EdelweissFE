@@ -44,8 +44,7 @@ from edelweissfe.constraints.base.penaltylaw import (
 )
 from edelweissfe.constraints.base.rigidbodycontactstiffness import (
     RigidBodyContactStiffnessView,
-    fillRigidBodyContactIndices,
-    rigidBodyContactContributionSize,
+    rigidBodyContactLocalEntries,
 )
 from edelweissfe.constraints.base.surfacecontactpenaltyschema import (
     SurfaceContactPenaltySchema,
@@ -452,18 +451,15 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
 
     @property
     def couplesAllItsDofs(self) -> bool:
-        """``False``: the block is the list of the values of the sparse pattern of :meth:`initializeVIJContribution`."""
+        """``False``: the block is the list of the values of the entries of :meth:`localEntriesOfBlock`."""
         return False
 
-    def getVIJContributionSize(self) -> int:
-        return rigidBodyContactContributionSize(self.rpDofCount, self._slaveBlockSizes)
+    def localEntriesOfBlock(self) -> tuple[np.ndarray, np.ndarray]:
+        slaveBlockLocalIndices = [np.arange(first, first + m) for first, m in self._slaveBlockOffsets()]
+        return rigidBodyContactLocalEntries(np.arange(self.nSlaveDof, self.nDof), slaveBlockLocalIndices)
 
-    def shapeVIJContribution(self, flat_view: np.ndarray) -> RigidBodyContactStiffnessView:
-        return RigidBodyContactStiffnessView(flat_view, self.rpDofCount, self._slaveBlockSizes)
-
-    def initializeVIJContribution(self, idcs: np.ndarray, I_: np.ndarray, J_: np.ndarray, offset: int) -> None:
-        slaveBlockGlobalIndices = [idcs[first : first + m] for first, m in self._slaveBlockOffsets()]
-        fillRigidBodyContactIndices(idcs[self.nSlaveDof :], slaveBlockGlobalIndices, I_, J_, offset)
+    def shapeBlock(self, values: np.ndarray) -> RigidBodyContactStiffnessView:
+        return RigidBodyContactStiffnessView(values, self.rpDofCount, self._slaveBlockSizes)
 
     def _slaveBlockOffsets(self) -> list[tuple[int, int]]:
         """The first local index and the size of each slave facet's block."""

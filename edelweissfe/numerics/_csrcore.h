@@ -522,7 +522,7 @@ struct CSRDirectAssembler {
   // the CSR data array. No sizeVIJ-sized value array is ever materialized, which is the entire point.
   //
   // Registration gives each entity its slice of the map. Two layouts of a block are supported, and
-  // the entity declares which one it writes (VIJEntityBase.couplesAllItsDofs):
+  // the entity declares which one it writes (SystemMatrixContributorBase.couplesAllItsDofs):
   //
   //   dense    the nDofE x nDofE block, column-major, as every element writes it. For local row a,
   //            every pair (a, b) shares the same global row, so the row is I[mapStart + a] and only
@@ -568,7 +568,7 @@ struct CSRDirectAssembler {
       total += isDense( e ) ? nDofs[e] : vijSizes[e];
     }
     entityRows.resize( total );
-    // A dense block is stored COLUMN-major: initializeVIJContribution writes I[k] = idcs[k % nDof]
+    // A dense block is stored COLUMN-major (denseBlockLocalEntries): I[k] = idcs[k % nDof]
     // and J[k] = idcs[k / nDof], so the row index varies fastest and the first nDof entries of I are
     // exactly the entity's global row list. A sparse block keeps the row of every entry.
 #pragma omp parallel for schedule( static )

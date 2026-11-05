@@ -31,9 +31,9 @@ VIJSystemMatrix
    :undoc-members:
    :show-inheritance:
 
-VIJEntityBase
--------------
-.. automodule:: edelweissfe.numerics.vijentitybase
+SystemMatrixContributorBase
+---------------------------
+.. automodule:: edelweissfe.numerics.systemmatrixcontributor
    :members:
    :undoc-members:
    :show-inheritance:

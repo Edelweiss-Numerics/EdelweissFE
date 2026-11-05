@@ -454,15 +454,15 @@ cdef class DirectCSRAssembler:
                          int[::1] couplesAllItsDofs):
         """Give each entity its slice of the offset map, once per connectivity change.
 
-        ``mapStarts[e]`` is entity e's offset into the VIJ ordering -- the same value the DofManager
-        already records in ``idcsOfHigherOrderEntitiesInVIJ`` --, ``nDofs[e]`` its local DOF count,
-        ``vijSizes[e]`` the number of entries it contributes
-        (:meth:`~edelweissfe.numerics.vijentitybase.VIJEntityBase.getVIJContributionSize`), and
+        ``mapStarts[e]`` is entity e's offset into the VIJ ordering -- the start of its slice in the DofManager's
+        ``vijSliceOfEntity`` --, ``nDofs[e]`` its local DOF count, ``vijSizes[e]`` the number of entries it
+        contributes (the length of its
+        :meth:`~edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.localEntriesOfBlock`), and
         ``couplesAllItsDofs[e]`` the layout of its block it declares
-        (:attr:`~edelweissfe.numerics.vijentitybase.VIJEntityBase.couplesAllItsDofs`): nonzero for a dense block,
-        column-major, of ``nDofs[e]**2`` entries; zero for a sparse one, the values of the (I, J) pairs the entity
-        declared, which :meth:`scatterBlock` scatters entry by entry. The layout is not inferred from the number of
-        entries, since a sparse pattern can have exactly ``nDofs[e]**2`` of them.
+        (:attr:`~edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.couplesAllItsDofs`):
+        nonzero for a dense block, column-major, of ``nDofs[e]**2`` entries; zero for a sparse one, the values of the
+        entries the entity lists, which :meth:`scatterBlock` scatters entry by entry. The layout is not inferred from
+        the number of entries, since a sparse pattern can have exactly ``nDofs[e]**2`` of them.
         """
         if (
             mapStarts.shape[0] != nDofs.shape[0]

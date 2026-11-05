@@ -40,60 +40,33 @@ therefore made of
 
 import numpy as np
 
+from edelweissfe.numerics.systemmatrixcontributor import localEntriesOfSubBlocks
 
-def rigidBodyContactContributionSize(rpDofCount: int, slaveBlockSizes: list[int]) -> int:
-    """The number of sparse stiffness entries of a rigid body contact constraint.
+
+def rigidBodyContactLocalEntries(
+    rpLocalIndices: np.ndarray, slaveBlockLocalIndices: list[np.ndarray]
+) -> tuple[np.ndarray, np.ndarray]:
+    """The local row and column of every sparse stiffness entry, in the order :class:`RigidBodyContactStiffnessView`
+    expects: the RP self-block, then per slave block its self-block, the slave-to-RP and the RP-to-slave coupling,
+    each block row by row.
 
     Parameters
     ----------
-    rpDofCount
-        The number of RP degrees of freedom.
-    slaveBlockSizes
-        The number of degrees of freedom of each slave block.
+    rpLocalIndices
+        The local indices of the RP degrees of freedom in the constraint's DOF list.
+    slaveBlockLocalIndices
+        The local indices of the degrees of freedom of each slave block.
 
     Returns
     -------
-    int
-        The number of entries.
-    """
-    return rpDofCount**2 + sum(m * m + 2 * m * rpDofCount for m in slaveBlockSizes)
-
-
-def fillRigidBodyContactIndices(
-    rpGlobalIndices: np.ndarray,
-    slaveBlockGlobalIndices: list[np.ndarray],
-    I_: np.ndarray,
-    J_: np.ndarray,
-    offset: int,
-):
-    """Write the row and column indices of the sparse stiffness entries, in the order
-    :class:`RigidBodyContactStiffnessView` expects.
-
-    Parameters
-    ----------
-    rpGlobalIndices
-        The global indices of the RP degrees of freedom.
-    slaveBlockGlobalIndices
-        The global indices of the degrees of freedom of each slave block.
-    I_
-        The global row index array to write into.
-    J_
-        The global column index array to write into.
-    offset
-        The position of this constraint's first entry.
+    tuple[numpy.ndarray, numpy.ndarray]
+        The local rows and the local columns (int32).
     """
 
-    def writeBlock(k: int, rows: np.ndarray, columns: np.ndarray) -> int:
-        size = len(rows) * len(columns)
-        I_[k : k + size] = np.repeat(rows, len(columns))
-        J_[k : k + size] = np.tile(columns, len(rows))
-        return k + size
-
-    k = writeBlock(offset, rpGlobalIndices, rpGlobalIndices)
-    for slaveIndices in slaveBlockGlobalIndices:
-        k = writeBlock(k, slaveIndices, slaveIndices)
-        k = writeBlock(k, slaveIndices, rpGlobalIndices)
-        k = writeBlock(k, rpGlobalIndices, slaveIndices)
+    subBlocks = [(rpLocalIndices, rpLocalIndices)]
+    for slaveIndices in slaveBlockLocalIndices:
+        subBlocks += [(slaveIndices, slaveIndices), (slaveIndices, rpLocalIndices), (rpLocalIndices, slaveIndices)]
+    return localEntriesOfSubBlocks(subBlocks)
 
 
 class RigidBodyContactStiffnessView:

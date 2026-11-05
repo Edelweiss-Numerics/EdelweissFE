@@ -35,6 +35,7 @@ cimport cython
 cimport libcpp.cast
 cimport numpy as np
 
+from edelweissfe.numerics.systemmatrixcontributor import denseBlockLocalEntries
 from edelweissfe.utils.exceptions import CutbackRequest
 
 # Point Marmot's warning channel at stdout once, on import: MarmotJournal otherwise writes into a null
@@ -506,19 +507,11 @@ cdef class MarmotElementWrapper:
         """``True``: the block is the dense ``nDof x nDof`` matrix, column-major."""
         return True
 
-    def getVIJContributionSize(self) -> int:
-        """Return the number of entries this entity contributes to the VIJ (COO) system matrix."""
-        return self.nDof**2
+    def localEntriesOfBlock(self) -> tuple[np.ndarray, np.ndarray]:
+        """The entries of the dense block, see
+        :func:`~edelweissfe.numerics.systemmatrixcontributor.denseBlockLocalEntries`."""
+        return denseBlockLocalEntries(self.nDof)
 
-    def shapeVIJContribution(self, flat_view: np.ndarray) -> np.ndarray:
+    def shapeBlock(self, values: np.ndarray) -> np.ndarray:
         """Keep the view flat for Cython 1-D memoryview compatibility."""
-        return flat_view
-
-    def initializeVIJContribution(self, idcs: np.ndarray, I_: np.ndarray, J_: np.ndarray, offset: int) -> None:
-
-        """Initialize the I and J arrays for the VIJ (COO) system matrix assembly. """
-
-        n = len(idcs)
-        VIJLocations = np.tile(idcs, (n, 1))
-        I_[offset : offset + n**2] = VIJLocations.flatten()
-        J_[offset : offset + n**2] = VIJLocations.flatten("F")
+        return values
