@@ -37,7 +37,16 @@ documentation (counts, then sums of pair indices) checks the threaded, atomic sc
 import numpy as np
 import pytest
 
-from edelweissfe.numerics.csrgeneratorv2 import CSRGenerator, DirectCSRAssembler
+from edelweissfe.numerics.csrgeneratorv2 import (
+    CSRGenerator,
+    DirectCSRAssembler,
+    csrPatternOfEntities,
+)
+from edelweissfe.numerics.systemmatrixcontributor import (
+    SystemMatrixContributorBase,
+    SystemMatrixEntities,
+    countEntriesOfBlock,
+)
 
 
 class _SystemMatrix:
@@ -224,3 +233,106 @@ def test_patternOnly_generator_builds_the_same_pattern_as_a_full_one():
 
     with pytest.raises(RuntimeError):
         patternOnly.updateInPlace(V)
+
+
+# --- the pattern the direct path derives row by row, against the one the VIJ path derives by sort-and-sum
+
+
+class _DenseEntity(SystemMatrixContributorBase):
+    def __init__(self, nDof):
+        super().__init__(nDof)
+
+
+class _ListedEntity(SystemMatrixContributorBase):
+    """An entity that lists its entries: random local (row, column) pairs, duplicates included, or the given ones."""
+
+    def __init__(self, nDof, localRows, localColumns):
+        super().__init__(nDof)
+        self._entries = (np.asarray(localRows, dtype=np.intc), np.asarray(localColumns, dtype=np.intc))
+
+    @property
+    def couplesAllItsDofs(self):
+        return False
+
+    def localEntriesOfBlock(self):
+        return self._entries
+
+
+def _vijPairs(dofsOfEntity):
+    rows, columns = [np.zeros(0, dtype=np.intc)], [np.zeros(0, dtype=np.intc)]
+    for entity, dofs in dofsOfEntity.items():
+        localRows, localColumns = entity.localEntriesOfBlock()
+        rows.append(dofs[localRows])
+        columns.append(dofs[localColumns])
+    return np.concatenate(rows), np.concatenate(columns)
+
+
+def _randomEntities(nDof, seed):
+    """Dense entities, entities with random listed entries, and one listing exactly nDof**2 entries in an order that
+    is not column-major (a one-slave rigid body contact's count); DOF nDof - 1 belongs to no entity."""
+    rng = np.random.default_rng(seed)
+    dofsOfEntity = {}
+    for _ in range(30):
+        dofsOfEntity[_DenseEntity(4)] = rng.choice(nDof - 1, size=4, replace=False).astype(np.intc)
+    for _ in range(10):
+        n = int(rng.integers(2, 7))
+        nEntries = int(rng.integers(1, 2 * n))
+        entity = _ListedEntity(n, rng.integers(0, n, nEntries), rng.integers(0, n, nEntries))
+        dofsOfEntity[entity] = rng.choice(nDof - 1, size=n, replace=False).astype(np.intc)
+    order = rng.permutation(9)
+    squareCount = _ListedEntity(3, np.repeat(np.arange(3), 3)[order], np.tile(np.arange(3), 3)[order])
+    dofsOfEntity[squareCount] = rng.choice(nDof - 1, size=3, replace=False).astype(np.intc)
+    assert countEntriesOfBlock(squareCount) == squareCount.nDof**2
+    return dofsOfEntity
+
+
+@pytest.mark.parametrize("numThreads", [1, 4])
+@pytest.mark.parametrize("seed", [0, 1, 2])
+def test_the_row_wise_pattern_is_the_sort_and_sum_pattern(numThreads, seed):
+    nDof = 25
+    dofsOfEntity = _randomEntities(nDof, seed)
+    I, J = _vijPairs(dofsOfEntity)  # noqa: E741
+    generator = CSRGenerator(_SystemMatrix(I, J, nDof))
+
+    indptr, indices = csrPatternOfEntities(SystemMatrixEntities.ofEntities(dofsOfEntity), nDof, numThreads)
+
+    np.testing.assert_array_equal(indptr, generator.csrMatrix.indptr)
+    np.testing.assert_array_equal(indices, generator.csrMatrix.indices)
+    assert indptr[-1] == indptr[-2], "the DOF of no entity has an empty row"
+
+
+def test_the_pattern_of_no_entities_is_empty():
+    indptr, indices = csrPatternOfEntities(SystemMatrixEntities.ofEntities({}), 3, 2)
+    np.testing.assert_array_equal(indptr, [0, 0, 0, 0])
+    assert indices.shape == (0,)
+
+
+def test_a_listed_entry_outside_the_entity_is_refused():
+    entity = _ListedEntity(2, [0, 2], [1, 0])
+    with pytest.raises(IndexError):
+        csrPatternOfEntities(SystemMatrixEntities.ofEntities({entity: np.array([0, 1], dtype=np.intc)}), 2)
+
+
+def test_entries_are_added_to_the_sort_and_sum_pattern_by_the_same_merge():
+    """The fill-in of the multi-point-constraint condensation enters the pattern through one merge
+    (``CSRPattern::addEntries``), shared by both derivations; on the VIJ path the new entries gather nothing."""
+    from scipy.sparse import csr_matrix
+
+    nDof = 25
+    dofsOfEntity = _randomEntities(nDof, 7)
+    I, J = _vijPairs(dofsOfEntity)  # noqa: E741
+    generator = CSRGenerator(_SystemMatrix(I, J, nDof))
+    pattern = generator.csrMatrix.copy()
+    pattern.data[:] = 1.0
+    fillIn = csr_matrix(np.ones((nDof, nDof))) - pattern
+    fillIn.eliminate_zeros()
+    fillIn.sort_indices()
+
+    generator.addToPattern(fillIn)
+    V = np.arange(len(I), dtype=float)
+    assembled = generator.updateInPlace(V).toarray()
+
+    assert generator.csrMatrix.nnz == nDof * nDof
+    reference = np.zeros((nDof, nDof))
+    np.add.at(reference, (I, J), V)
+    np.testing.assert_array_equal(assembled, reference)

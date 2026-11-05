@@ -31,14 +31,283 @@ inline uint64_t keyOf( uint64_t k )
   return k;
 }
 
-class CSRCore {
-public:
-  // CSR Topology
-  std::vector< int > indptr;
-  std::vector< int > indices;
-  int                nnz  = 0;
-  int                nDof = 0;
+/**
+ * @brief The entities that contribute a block to the system matrix, as the direct assembly sees them: borrowed
+ * views of flat arrays, one entry per entity unless stated otherwise.
+ *
+ * Entity e has the global DOF list dofs[dofStart[e] .. dofStart[e + 1]). Its block is either dense (it couples
+ * all its DOFs, column-major: value k lies in local row k % nDofE and local column k / nDofE, the rule of
+ * edelweissfe.numerics.systemmatrixcontributor.denseBlockLocalEntries) or a list of entries of its own, given in
+ * its local DOF numbering in localRows and localColumns [localEntryStart[e] .. localEntryStart[e + 1]). A dense
+ * entity lists no entries.
+ */
+struct SystemMatrixEntities {
+  int64_t        nEntities;         ///< the number of entities
+  const int64_t* dofStart;          ///< nEntities + 1: where the DOF list of each entity begins in dofs
+  const int32_t* dofs;              ///< the global DOF lists of all entities, one after the other
+  const uint8_t* couplesAllItsDofs; ///< nonzero for a dense block
+  const int64_t* localEntryStart;   ///< nEntities + 1: where the listed entries of each entity begin
+  const int32_t* localRows;         ///< the local row of every listed entry
+  const int32_t* localColumns;      ///< the local column of every listed entry
 
+  /** @brief The number of DOFs of entity @p e. */
+  int nDofOf( int64_t e ) const { return static_cast< int >( dofStart[e + 1] - dofStart[e] ); }
+
+  /** @brief Whether the block of entity @p e is dense. */
+  bool isDense( int64_t e ) const { return couplesAllItsDofs[e] != 0; }
+};
+
+/**
+ * @brief The CSR pattern of a square matrix: for every row, the sorted columns of its entries.
+ *
+ * Both assembly paths keep their pattern in one, derived independently: CSRCore sorts and sums the (I, J) pairs of
+ * the VIJ path, CSRPattern::ofEntities unions the entities' columns row by row for the direct path. Entries that no
+ * entity contributes (the fill-in of the multi-point-constraint condensation) are added to either by addEntries.
+ */
+struct CSRPattern {
+  std::vector< int > indptr;   ///< nDof + 1: where the entries of each row begin in indices
+  std::vector< int > indices;  ///< the column of every entry, sorted within each row
+  int                nnz  = 0; ///< the number of entries
+  int                nDof = 0; ///< the number of rows and columns
+
+  /** @brief The observer of addEntries for a pattern without anything to keep in step with it. */
+  struct NoMergeObserver {
+    /** @brief Called once, before the merge, with the number of entries after it. */
+    void beginMerge( int ) {}
+    /** @brief Called for every entry after the merge, in parallel: its position, and the position of the next old
+     * entry at or after it (the old entry itself, if it is one). */
+    void entryMerged( int, int64_t ) {}
+  };
+
+  /**
+   * @brief Add entries, merged into the sorted rows.
+   *
+   * The old pattern is moved into @p retiredIndptr and @p retiredIndices, not freed: a matrix handed out before may
+   * still point into it.
+   *
+   * @tparam MergeObserver keeps a structure indexed by entry in step (see NoMergeObserver).
+   * @param extraPtr nDof + 1: where the entries to add of each row begin in @p extraIdx.
+   * @param extraIdx the columns of the entries to add, sorted within each row, none already in the pattern.
+   * @param retiredIndptr receives the old indptr.
+   * @param retiredIndices receives the old indices.
+   * @param observer is told about the merge.
+   */
+  template < class MergeObserver = NoMergeObserver >
+  void addEntries( const int64_t*      extraPtr,
+                   const int32_t*      extraIdx,
+                   std::vector< int >& retiredIndptr,
+                   std::vector< int >& retiredIndices,
+                   MergeObserver&&     observer = MergeObserver{} )
+  {
+    std::vector< int > newIndptr( nDof + 1 );
+    newIndptr[0] = 0;
+    for ( int r = 0; r < nDof; ++r ) {
+      const int64_t length = static_cast< int64_t >( indptr[r + 1] - indptr[r] ) + extraPtr[r + 1] - extraPtr[r];
+      if ( newIndptr[r] + length > std::numeric_limits< int >::max() )
+        throw std::overflow_error( "CSRPattern::addEntries: the pattern would exceed 2^31 - 1 entries." );
+      newIndptr[r + 1] = static_cast< int >( newIndptr[r] + length );
+    }
+    const int newNnz = newIndptr[nDof];
+
+    std::vector< int > newIndices( newNnz );
+    observer.beginMerge( newNnz );
+    int alreadyThere = 0;
+
+#pragma omp parallel for schedule( dynamic, 1024 ) reduction( + : alreadyThere )
+    for ( int r = 0; r < nDof; ++r ) {
+      int64_t k = indptr[r], e = extraPtr[r];
+      int     w = newIndptr[r];
+      while ( k < indptr[r + 1] || e < extraPtr[r + 1] ) {
+        const bool takeOld = e == extraPtr[r + 1] || ( k < indptr[r + 1] && indices[k] < extraIdx[e] );
+        if ( !takeOld && k < indptr[r + 1] && indices[k] == extraIdx[e] )
+          ++alreadyThere;
+        newIndices[w] = takeOld ? indices[k] : extraIdx[e];
+        observer.entryMerged( w, k );
+        ++w;
+        takeOld ? ++k : ++e;
+      }
+    }
+
+    if ( alreadyThere )
+      throw std::invalid_argument( "CSRPattern::addEntries: an entry to add is already in the pattern." );
+
+    retiredIndptr  = std::exchange( indptr, std::move( newIndptr ) );
+    retiredIndices = std::exchange( indices, std::move( newIndices ) );
+    nnz            = newNnz;
+  }
+
+  /**
+   * @brief The pattern of the entities' blocks, derived row by row from their DOF lists.
+   *
+   * The entity-to-DOF lists are transposed into, per row, the entities touching it and as which of their local
+   * rows (a counting sort). Each row is then the union of the columns these entities couple it with -- all of the
+   * entity's DOFs for a dense block, the columns of the listed entries in that local row otherwise --, collected
+   * with a marker array of nDof ints per thread, and sorted. A count pass sets indptr, a fill pass writes indices.
+   * The result does not depend on the number of threads.
+   *
+   * @param entities the entities.
+   * @param nDof the number of rows and columns.
+   * @param nThreads the number of threads.
+   * @return the pattern.
+   */
+  static CSRPattern ofEntities( const SystemMatrixEntities& entities, int nDof, int nThreads );
+
+private:
+  /**
+   * @brief The listed entries of every sparse entity, grouped by local row, as global columns.
+   *
+   * @param entities the entities.
+   * @param groupOffset nEntities + 1: where the groups of each entity begin in @p groupStart (nDofE + 1 of them for a
+   * sparse entity, none for a dense one).
+   * @param groupStart receives, per sparse entity and local row, where its columns begin in @p groupedColumns.
+   * @param groupedColumns receives the global column of every listed entry, grouped by local row.
+   * @param nThreads the number of threads.
+   */
+  static void groupListedEntriesByLocalRow( const SystemMatrixEntities&   entities,
+                                            const std::vector< int64_t >& groupOffset,
+                                            std::vector< int64_t >&       groupStart,
+                                            std::vector< int32_t >&       groupedColumns,
+                                            int                           nThreads );
+};
+
+inline void CSRPattern::groupListedEntriesByLocalRow( const SystemMatrixEntities&   entities,
+                                                      const std::vector< int64_t >& groupOffset,
+                                                      std::vector< int64_t >&       groupStart,
+                                                      std::vector< int32_t >&       groupedColumns,
+                                                      int                           nThreads )
+{
+  // each sparse entity on its own: disjoint parts of groupStart and groupedColumns
+#pragma omp parallel for schedule( dynamic, 16 ) num_threads( nThreads )
+  for ( int64_t e = 0; e < entities.nEntities; ++e ) {
+    if ( entities.isDense( e ) )
+      continue;
+    const int      n     = entities.nDofOf( e );
+    const int32_t* d     = entities.dofs + entities.dofStart[e];
+    const int64_t  first = entities.localEntryStart[e];
+    const int64_t  last  = entities.localEntryStart[e + 1];
+    int64_t*       group = groupStart.data() + groupOffset[e];
+
+    std::fill( group, group + n + 1, 0 );
+    for ( int64_t k = first; k < last; ++k )
+      ++group[entities.localRows[k] + 1];
+    std::partial_sum( group, group + n + 1, group );
+    std::vector< int64_t > next( group, group + n );
+    for ( int64_t k = first; k < last; ++k )
+      groupedColumns[first + next[entities.localRows[k]]++] = d[entities.localColumns[k]];
+    for ( int a = 0; a <= n; ++a )
+      group[a] += first;
+  }
+}
+
+inline CSRPattern CSRPattern::ofEntities( const SystemMatrixEntities& entities, int nDof, int nThreads )
+{
+  const int64_t nEntities = entities.nEntities;
+  nThreads                = nThreads > 0 ? nThreads : 1;
+
+  CSRPattern pattern;
+  pattern.nDof = nDof;
+
+  // --- the entities touching each row, and as which of their local rows: entity -> DOF, transposed
+  std::vector< int64_t > touchStart( static_cast< size_t >( nDof ) + 1, 0 );
+  for ( int64_t i = 0; i < entities.dofStart[nEntities]; ++i ) {
+    const int32_t dof = entities.dofs[i];
+    if ( dof < 0 || dof >= nDof )
+      throw std::out_of_range( "CSRPattern::ofEntities: a DOF of an entity lies outside [0, nDof)." );
+    ++touchStart[dof + 1];
+  }
+  std::partial_sum( touchStart.begin(), touchStart.end(), touchStart.begin() );
+
+  std::vector< int64_t > touchEntity( touchStart[nDof] );
+  std::vector< int32_t > touchLocalRow( touchStart[nDof] );
+  {
+    std::vector< int64_t > next( touchStart.begin(), touchStart.end() - 1 );
+    for ( int64_t e = 0; e < nEntities; ++e )
+      for ( int a = 0; a < entities.nDofOf( e ); ++a ) {
+        const int64_t t  = next[entities.dofs[entities.dofStart[e] + a]]++;
+        touchEntity[t]   = e;
+        touchLocalRow[t] = a;
+      }
+  }
+
+  // --- the listed entries of every sparse entity, grouped by local row, as global columns
+  for ( int64_t e = 0; e < nEntities; ++e )
+    for ( int64_t k = entities.localEntryStart[e]; k < entities.localEntryStart[e + 1]; ++k )
+      if ( entities.localRows[k] < 0 || entities.localRows[k] >= entities.nDofOf( e ) || entities.localColumns[k] < 0 ||
+           entities.localColumns[k] >= entities.nDofOf( e ) )
+        throw std::out_of_range( "CSRPattern::ofEntities: a listed entry lies outside the DOFs of its entity." );
+
+  std::vector< int64_t > groupOffset( nEntities + 1, 0 );
+  for ( int64_t e = 0; e < nEntities; ++e )
+    groupOffset[e + 1] = groupOffset[e] + ( entities.isDense( e ) ? 0 : entities.nDofOf( e ) + 1 );
+  std::vector< int64_t > groupStart( groupOffset[nEntities] );
+  std::vector< int32_t > groupedColumns( entities.localEntryStart[nEntities] );
+  groupListedEntriesByLocalRow( entities, groupOffset, groupStart, groupedColumns, nThreads );
+
+  // --- row by row: the union of the columns of the entities touching the row
+  // a dense entity couples the row with all its DOFs, a sparse one with the columns of its entries in that local row
+  auto collectRow = [&]( int r, std::vector< int >& marker, std::vector< int >& row ) {
+    row.clear();
+    for ( int64_t t = touchStart[r]; t < touchStart[r + 1]; ++t ) {
+      const int64_t  e        = touchEntity[t];
+      const int32_t* columns  = entities.dofs + entities.dofStart[e];
+      int64_t        nColumns = entities.nDofOf( e );
+      if ( !entities.isDense( e ) ) {
+        const int64_t* group = groupStart.data() + groupOffset[e] + touchLocalRow[t];
+        columns              = groupedColumns.data() + group[0];
+        nColumns             = group[1] - group[0];
+      }
+      for ( int64_t i = 0; i < nColumns; ++i )
+        if ( marker[columns[i]] != r ) {
+          marker[columns[i]] = r;
+          row.push_back( columns[i] );
+        }
+    }
+  };
+
+  std::vector< int64_t > rowLength( nDof );
+#pragma omp parallel num_threads( nThreads )
+  {
+    std::vector< int > marker( nDof, -1 );
+    std::vector< int > row;
+#pragma omp for schedule( dynamic, 64 )
+    for ( int r = 0; r < nDof; ++r ) {
+      collectRow( r, marker, row );
+      rowLength[r] = static_cast< int64_t >( row.size() );
+    }
+  }
+
+  pattern.indptr.assign( static_cast< size_t >( nDof ) + 1, 0 );
+  int64_t nnz = 0;
+  for ( int r = 0; r < nDof; ++r ) {
+    nnz += rowLength[r];
+    if ( nnz > std::numeric_limits< int >::max() )
+      throw std::overflow_error( "CSRPattern::ofEntities: the pattern would exceed 2^31 - 1 entries." );
+    pattern.indptr[r + 1] = static_cast< int >( nnz );
+  }
+  pattern.nnz = static_cast< int >( nnz );
+  pattern.indices.resize( nnz );
+
+#pragma omp parallel num_threads( nThreads )
+  {
+    std::vector< int > marker( nDof, -1 );
+    std::vector< int > row;
+#pragma omp for schedule( dynamic, 64 )
+    for ( int r = 0; r < nDof; ++r ) {
+      collectRow( r, marker, row );
+      std::sort( row.begin(), row.end() );
+      std::copy( row.begin(), row.end(), pattern.indices.begin() + pattern.indptr[r] );
+    }
+  }
+
+  return pattern;
+}
+
+/**
+ * @brief The CSR pattern of the VIJ path, derived from the (I, J) pairs by sort-and-sum, and its gather map: for every
+ * entry of the pattern, the VIJ values that sum to it.
+ */
+class CSRCore : public CSRPattern {
+public:
   // Assembly Mapping. Only the gather needs these; see releaseGatherMap().
   std::vector< int32_t > gather_sources;
   std::vector< int32_t > assembly_ptr;
@@ -58,8 +327,9 @@ public:
   //    orders of magnitude from its limit at these sizes.
   //
   // A direct-to-CSR assembler borrows only the pattern, so it should always ask for this.
-  CSRCore( const int* I, const int* J, int64_t n_pairs, int n_dof, bool patternOnly = false ) : nDof( n_dof )
+  CSRCore( const int* I, const int* J, int64_t n_pairs, int n_dof, bool patternOnly = false )
   {
+    nDof = n_dof;
     if ( n_pairs == 0 ) {
       // Empty pattern: indptr is all-zeros, indices/gather_sources/assembly_ptr
       // remain empty. update() is guarded by nnz==0 and is a no-op in that case.
@@ -316,60 +586,32 @@ public:
   }
 
   // Add entries that no COO pair contributes to, assembled as stored zeros: room for values that a caller writes
-  // after the assembly (the in-place multi-point-constraint condensation). They are given as a pattern of their own,
-  // extraPtr (nDof + 1 entries) and extraIdx, with sorted rows and none already in the pattern. Each gets an empty
-  // range of the gather map, so update() writes 0.0 there. The old pattern is moved into retiredIndptr and
-  // retiredIndices, not freed: a matrix handed out before may still point into it.
+  // after the assembly (the in-place multi-point-constraint condensation). The pattern merges them in
+  // (CSRPattern::addEntries); each new entry gets an empty range of the gather map, so update() writes 0.0 there.
   void addEntries( const int64_t*      extraPtr,
                    const int32_t*      extraIdx,
                    std::vector< int >& retiredIndptr,
                    std::vector< int >& retiredIndices )
   {
-    const bool hasGatherMap = !gatherMapReleased;
-    if ( hasGatherMap && assembly_ptr.empty() )
+    if ( gatherMapReleased ) {
+      CSRPattern::addEntries( extraPtr, extraIdx, retiredIndptr, retiredIndices );
+      return;
+    }
+    if ( assembly_ptr.empty() )
       assembly_ptr.assign( 1, 0 ); // an empty pattern: just the sentinel
 
-    std::vector< int > newIndptr( nDof + 1 );
-    newIndptr[0] = 0;
-    for ( int r = 0; r < nDof; ++r ) {
-      const int64_t length = static_cast< int64_t >( indptr[r + 1] - indptr[r] ) + extraPtr[r + 1] - extraPtr[r];
-      if ( newIndptr[r] + length > std::numeric_limits< int >::max() )
-        throw std::overflow_error( "CSRCore::addEntries: the pattern would exceed 2^31 - 1 entries." );
-      newIndptr[r + 1] = static_cast< int >( newIndptr[r] + length );
-    }
-    const int newNnz = newIndptr[nDof];
+    // a new entry's gather range is the empty one where the range of the next old entry starts
+    struct GatherRangesOfMergedEntries {
+      const std::vector< int32_t >& old;
+      std::vector< int32_t >        merged;
+      void                          beginMerge( int newNnz ) { merged.resize( static_cast< size_t >( newNnz ) + 1 ); }
+      void entryMerged( int newPosition, int64_t oldPosition ) { merged[newPosition] = old[oldPosition]; }
+    } ranges{ assembly_ptr, {} };
 
-    std::vector< int >     newIndices( newNnz );
-    std::vector< int32_t > newAssemblyPtr( hasGatherMap ? newNnz + 1 : 0 );
-    int                    alreadyThere = 0;
-
-#pragma omp parallel for schedule( dynamic, 1024 ) reduction( + : alreadyThere )
-    for ( int r = 0; r < nDof; ++r ) {
-      int64_t k = indptr[r], e = extraPtr[r];
-      int     w = newIndptr[r];
-      // merge the two sorted rows; a new entry's gather range is the empty one where the next old entry's starts
-      while ( k < indptr[r + 1] || e < extraPtr[r + 1] ) {
-        const bool takeOld = e == extraPtr[r + 1] || ( k < indptr[r + 1] && indices[k] < extraIdx[e] );
-        if ( !takeOld && k < indptr[r + 1] && indices[k] == extraIdx[e] )
-          ++alreadyThere;
-        newIndices[w] = takeOld ? indices[k] : extraIdx[e];
-        if ( hasGatherMap )
-          newAssemblyPtr[w] = assembly_ptr[k];
-        ++w;
-        takeOld ? ++k : ++e;
-      }
-    }
-
-    if ( alreadyThere )
-      throw std::invalid_argument( "CSRCore::addEntries: an entry to add is already in the pattern." );
-
-    if ( hasGatherMap ) {
-      newAssemblyPtr[newNnz] = assembly_ptr[nnz];
-      assembly_ptr.swap( newAssemblyPtr );
-    }
-    retiredIndptr  = std::exchange( indptr, std::move( newIndptr ) );
-    retiredIndices = std::exchange( indices, std::move( newIndices ) );
-    nnz            = newNnz;
+    const int32_t end = assembly_ptr.back();
+    CSRPattern::addEntries( extraPtr, extraIdx, retiredIndptr, retiredIndices, ranges );
+    ranges.merged[nnz] = end;
+    assembly_ptr.swap( ranges.merged );
   }
 
   void update( const double* V_data, double* csr_data ) const
