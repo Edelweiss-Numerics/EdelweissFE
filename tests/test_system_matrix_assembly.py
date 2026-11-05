@@ -59,7 +59,6 @@ from edelweissfe.numerics.systemmatrixcontributor import (
     SystemMatrixContributorBase,
     countEntriesOfBlock,
 )
-from edelweissfe.numerics.vijsystemmatrix import VIJSystemMatrix
 
 
 class _DenseEntity(SystemMatrixContributorBase):
@@ -108,25 +107,11 @@ class _OneSlaveRigidBodyContact(SystemMatrixContributorBase):
 
 
 class _DofManager:
-    """The part of a DofManager the assemblies use: the VIJ pattern of the entities."""
+    """The part of a DofManager the assemblies use: the number of DOFs and the global DOF list of every entity."""
 
     def __init__(self, entities, nDof):
         self.nDof = nDof
         self.idcsOfHigherOrderEntitiesInDofVector = {entity: entity.dofs for entity in entities}
-        self.vijSliceOfEntity = {}
-        rows, columns = [], []
-        nEntries = 0
-        for entity in entities:
-            localRows, localColumns = entity.localEntriesOfBlock()
-            self.vijSliceOfEntity[entity] = slice(nEntries, nEntries + len(localRows))
-            nEntries += len(localRows)
-            rows.append(entity.dofs[localRows])
-            columns.append(entity.dofs[localColumns])
-        self.I = np.concatenate(rows).astype(np.intc)  # noqa: E741
-        self.J = np.concatenate(columns).astype(np.intc)
-
-    def constructVIJSystemMatrix(self):
-        return VIJSystemMatrix(self.nDof, self.I, self.J, self.vijSliceOfEntity)
 
 
 def _model():

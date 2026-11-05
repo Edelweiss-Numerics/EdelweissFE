@@ -32,7 +32,7 @@
 import numpy as np
 from scipy.sparse import csr_matrix
 
-from edelweissfe.numerics.dofmanager import VIJSystemMatrix
+from edelweissfe.numerics.vijsystemmatrix import VIJSystemMatrix
 
 cimport numpy as np
 

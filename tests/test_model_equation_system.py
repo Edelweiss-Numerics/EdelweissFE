@@ -305,7 +305,7 @@ class _StripWithEquationSystemOnFirstElements(FEModel):
         super().updateConnectivity()
         return True
 
-    def buildEquationSystem(self, withSystemMatrix=True):
+    def buildEquationSystem(self):
         self.equationSystemBuilds += 1
         elements = list(self.elements.values())[: self.nElementsInSystem]
         nodesInSystem = NodeSet("in system", sorted({n for el in elements for n in el.nodes}, key=lambda n: n.label))
@@ -316,8 +316,6 @@ class _StripWithEquationSystemOnFirstElements(FEModel):
             nodeFieldsInSystem.values(),
             elements=elements,
             nodeSets=self.nodeSets.values(),
-            initializeVIJPattern=withSystemMatrix,
-            determiningIndexToHostObjectMapping=withSystemMatrix,
         )
         return _FirstElementsLayout(self, dofManager, elements, nodesInSystem, nodeFieldsInSystem)
 

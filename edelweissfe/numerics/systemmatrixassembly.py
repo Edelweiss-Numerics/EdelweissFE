@@ -49,8 +49,15 @@ from scipy.sparse import csr_matrix
 import edelweissfe.utils.performancetiming as performancetiming
 from edelweissfe.numerics.csrgeneratorv2 import CSRGenerator, DirectCSRAssembler
 from edelweissfe.numerics.dofmanager import DofManager
-from edelweissfe.numerics.parallelizationutilities import forEachSliceInParallel
-from edelweissfe.numerics.systemmatrixcontributor import SystemMatrixEntities
+from edelweissfe.numerics.parallelizationutilities import (
+    forEachSliceInParallel,
+    mapChunksInParallel,
+)
+from edelweissfe.numerics.systemmatrixcontributor import (
+    SystemMatrixEntities,
+    countEntriesOfBlock,
+)
+from edelweissfe.numerics.vijsystemmatrix import VIJSystemMatrix
 
 
 class SystemMatrixBlocks(ABC):
@@ -236,6 +243,10 @@ class VIJSystemMatrixAssembly(SystemMatrixAssembly):
     """Stage, then gather: every block is the entity's own slice of one value array in VIJ (COO) layout, which is
     gathered into CSR, summing the duplicates, once all blocks are written.
 
+    The textbook way: every value ``V[k]`` of a block has its global row ``I[k]`` and column ``J[k]``, the entity's
+    local row and column (:meth:`~edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.localEntriesOfBlock`)
+    looked up in its global DOF list, and the CSR matrix is the sum of all ``(I[k], J[k], V[k])``.
+
     The blocks of all workers are slices of the same array, and no two entities share a slice, so the workers need
     nothing of their own. An entity that is handed its block more than once in an assembly (an element, then a body
     load on it) adds to what is there.
@@ -243,7 +254,7 @@ class VIJSystemMatrixAssembly(SystemMatrixAssembly):
     Parameters
     ----------
     dofManager
-        The DOF manager of the equation system, with its VIJ pattern.
+        The DOF manager of the equation system: the global DOF list of every entity.
     numberOfWorkers
         How many threads may write blocks at the same time.
     patternFillIn
@@ -254,11 +265,55 @@ class VIJSystemMatrixAssembly(SystemMatrixAssembly):
 
     def __init__(self, dofManager: DofManager, numberOfWorkers: int, patternFillIn: Callable | None = None):
         super().__init__(numberOfWorkers)
-        #: The CSR pattern, derived from the VIJ pairs by sort-and-sum, and the gather map.
-        self.csrGenerator = CSRGenerator(dofManager)
+
+        idcsOfEntity = dofManager.idcsOfHigherOrderEntitiesInDofVector
+
+        # The entities follow one another in V, I and J, so where each one starts is known before any of them is
+        # located; each then fills only its own part of I and J, and they do so in chunks on the thread pool.
+        #: The slice of V, I and J that belongs to every entity.
+        self.vijSliceOfEntity = {}
+        nEntries = 0
+        for entity in idcsOfEntity:
+            nEntriesOfEntity = countEntriesOfBlock(entity)
+            self.vijSliceOfEntity[entity] = slice(nEntries, nEntries + nEntriesOfEntity)
+            nEntries += nEntriesOfEntity
+
+        #: The global row of every value.
+        self.I = np.empty(nEntries, dtype=np.intc)  # noqa: E741
+        #: The global column of every value.
+        self.J = np.empty(nEntries, dtype=np.intc)
+        mapChunksInParallel(list(idcsOfEntity.items()), self._locateEntriesInSystem)
+
+        #: The CSR pattern, derived from I and J by sort-and-sum, and the gather map.
+        self.csrGenerator = CSRGenerator(self.I, self.J, dofManager.nDof)
         if patternFillIn is not None:
             self.csrGenerator.addToPattern(patternFillIn(self.csrGenerator.csrMatrix))
-        self.vijArray = dofManager.constructVIJSystemMatrix()
+        self.vijArray = self.constructVIJSystemMatrix()
+
+    def _locateEntriesInSystem(self, entitiesWithIndices: list):
+        """The local-to-global step: the global row and column of every value of the blocks of some entities.
+
+        Parameters
+        ----------
+        entitiesWithIndices
+            The entities, each with its global DOF list.
+        """
+        for entity, idcs in entitiesWithIndices:
+            localRows, localColumns = entity.localEntriesOfBlock()
+            vijSlice = self.vijSliceOfEntity[entity]
+            self.I[vijSlice] = idcs[localRows]
+            self.J[vijSlice] = idcs[localColumns]
+
+    def constructVIJSystemMatrix(self) -> VIJSystemMatrix:
+        """A value array in the layout of this assembly, zeroed, for another matrix on the same pattern (the mass of a
+        dynamic solver); :attr:`csrGenerator` gathers it into CSR.
+
+        Returns
+        -------
+        VIJSystemMatrix
+            The value array.
+        """
+        return VIJSystemMatrix(len(self.I), self.vijSliceOfEntity)
 
     def beginAssembly(self):
         # the value array holds the entries of all blocks, far too many to zero on a single thread
@@ -268,7 +323,7 @@ class VIJSystemMatrixAssembly(SystemMatrixAssembly):
         return self
 
     def numberOfEntriesInBlock(self, entity) -> int:
-        vijSlice = self.vijArray.vijSliceOfEntity[entity]
+        vijSlice = self.vijSliceOfEntity[entity]
         return vijSlice.stop - vijSlice.start
 
     def __getitem__(self, entity) -> np.ndarray:

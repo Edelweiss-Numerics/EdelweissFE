@@ -31,40 +31,29 @@ import numpy as np
 
 class VIJSystemMatrix(np.ndarray):
     """
-    Represents the value vector `V` of a COO (VIJ triple) sparse matrix.
+    The value vector `V` of a VIJ (COO) system matrix: one value per entry of the block of every entity, the entities
+    one after the other, in the layout of a
+    :class:`~edelweissfe.numerics.systemmatrixassembly.VIJSystemMatrixAssembly`, which holds the row and column
+    indices `I` and `J` of the values.
 
-    `VIJSystemMatrix` stores matrix entry values for sparse global systems (Coordinate format),
-    maintaining associated row indices `I`, column indices `J`, and the slice of `V` of every entity.
-    It supports entity-aware indexing to slice, reshape, and assign local entity matrices directly.
+    Indexed by an entity, it is the entity's view of its block, so that an entity writes its block into it directly.
 
     Parameters
     ----------
-    nDof : int
-        The dimension (number of rows/columns) of the system matrix.
-    I : ndarray
-        The 1D integer array of global row indices.
-    J : ndarray
-        The 1D integer array of global column indices.
+    nEntries : int
+        The number of values.
     vijSliceOfEntity : dict
         A dictionary mapping entities to the slice of `V` that holds the values of their block.
     """
 
-    def __new__(cls, nDof: int, I: np.ndarray, J: np.ndarray, vijSliceOfEntity: dict):  # noqa: E741
-        obj = np.zeros_like(I, dtype=float).view(cls)
-
-        obj.nDof = nDof
-        obj.I = I  # noqa: E741
-        obj.J = J
+    def __new__(cls, nEntries: int, vijSliceOfEntity: dict):
+        obj = np.zeros(nEntries, dtype=float).view(cls)
         obj.vijSliceOfEntity = vijSliceOfEntity
-
         return obj
 
     def __array_finalize__(self, obj):
         if obj is None:
             return
-        self.nDof = getattr(obj, "nDof", None)
-        self.I = getattr(obj, "I", None)  # noqa: E741
-        self.J = getattr(obj, "J", None)  # noqa: E741
         self.vijSliceOfEntity = getattr(obj, "vijSliceOfEntity", None)
 
     def __getitem__(self, key):
@@ -130,11 +119,6 @@ class VIJSystemMatrix(np.ndarray):
             A new `VIJSystemMatrix` instance with copied values and metadata.
         """
         new_mat = super().copy(order).view(VIJSystemMatrix)
-        new_mat.nDof = self.nDof
-        if self.I is not None:
-            new_mat.I = self.I.copy()  # noqa: E741
-        if self.J is not None:
-            new_mat.J = self.J.copy()
         if self.vijSliceOfEntity is not None:
             new_mat.vijSliceOfEntity = self.vijSliceOfEntity.copy()
         return new_mat

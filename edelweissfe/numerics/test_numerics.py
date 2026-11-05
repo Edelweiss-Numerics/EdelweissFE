@@ -126,7 +126,7 @@ class TestNumerics(unittest.TestCase):
         np.testing.assert_array_equal(I_arr[:4], [0, 1, 0, 1])
         np.testing.assert_array_equal(J_arr[:4], [0, 0, 1, 1])
 
-        vij_mat = VIJSystemMatrix(nDof=4, I=I_arr, J=J_arr, vijSliceOfEntity=vijSliceOfEntity)
+        vij_mat = VIJSystemMatrix(13, vijSliceOfEntity)
         self.assertEqual(vij_mat.size, 13)
 
         # Entity read/write
