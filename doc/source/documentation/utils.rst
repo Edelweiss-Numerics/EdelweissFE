@@ -59,7 +59,7 @@ Memory Safety and Lifetime Management
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 - **Type Safety**:
-  The constructor of ``csrgeneratorv2.CSRGenerator`` explicitly casts the input coordinate arrays ``I`` and ``J`` to contiguous memoryviews of type ``int`` (representing 32-bit signed integers, ``np.intc``). This ensures memory safety even if the coordinates originate from non-standard array types outside the `dofmanager`.
+  The constructor of ``csrgeneratorv2.CSRGenerator`` explicitly casts the input coordinate arrays ``I`` and ``J`` to contiguous memoryviews of type ``int`` (representing 32-bit signed integers, ``np.intc``). This ensures memory safety whatever array type the coordinates come in.
 
 - **In-Place Matrix Updates**:
   ``updateInPlace(V)`` modifies the internal SciPy ``csr_matrix.data`` buffer directly using raw C++ pointers, avoiding any Python object creation or memory allocations during iteration loops. Note that the returned matrix is a live view; its contents are mutated on subsequent update calls.

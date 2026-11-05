@@ -539,7 +539,8 @@ public:
     if ( assembly_ptr.empty() )
       assembly_ptr.assign( 1, 0 ); // an empty pattern: just the sentinel
 
-    // a new entry's gather range is the empty one where the range of the next old entry starts
+    /** @brief Keeps assembly_ptr in step with the merge: a new entry's gather range is the empty one where the range
+     * of the next old entry starts. */
     struct GatherRangesOfMergedEntries {
       const std::vector< int32_t >& old;
       std::vector< int32_t >        merged;
@@ -772,6 +773,13 @@ private:
     return true;
   }
 
+  /**
+   * @brief Add a dense, column-major block to the CSR data, row by row.
+   *
+   * @param tid the thread, which selects its row scratch.
+   * @param entity the number of the entity.
+   * @param block its nDofE^2 values.
+   */
   void scatterDenseBlock( int tid, int entity, const double* block ) noexcept
   {
     const int64_t es = entryStart[entity];
@@ -808,7 +816,12 @@ private:
     }
   }
 
-  // A listed block: the values of the entity's own entries, each scattered on its own.
+  /**
+   * @brief Add a listed block to the CSR data: the values of the entity's own entries, each on its own.
+   *
+   * @param entity the number of the entity.
+   * @param block its values, one per listed entry.
+   */
   void scatterEntries( int entity, const double* block ) noexcept
   {
     const int64_t   rs   = entityRowStart[entity];
