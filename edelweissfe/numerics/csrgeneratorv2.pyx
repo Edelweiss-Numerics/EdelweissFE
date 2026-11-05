@@ -29,7 +29,8 @@ from scipy.sparse import csr_matrix
 
 cimport numpy as np
 from cpython.ref cimport Py_INCREF
-from libc.stdint cimport int32_t, int64_t
+from libc.stdint cimport int32_t, int64_t, uint8_t
+from libc.string cimport memcpy
 from libcpp.vector cimport vector
 
 np.import_array()
@@ -106,13 +107,26 @@ class AliasedCSRMatrix(csr_matrix):
 
 
 cdef extern from "_csrcore.h":
-    cdef cppclass CSRCore nogil:
-        CSRCore(const int* I, const int* J, int64_t n_pairs, int n_dof, bint patternOnly) except +
+    cdef cppclass SystemMatrixEntities nogil:
+        int64_t nEntities
+        const int64_t* dofStart
+        const int32_t* dofs
+        const uint8_t* couplesAllItsDofs
+        const int64_t* localEntryStart
+        const int32_t* localRows
+        const int32_t* localColumns
 
+    cdef cppclass CSRPattern nogil:
         vector[int] indptr
         vector[int] indices
         int nnz
         int nDof
+
+        @staticmethod
+        CSRPattern ofEntities(const SystemMatrixEntities& entities, int nDof, int nThreads) except +
+
+    cdef cppclass CSRCore(CSRPattern) nogil:
+        CSRCore(const int* I, const int* J, int64_t n_pairs, int n_dof, bint patternOnly) except +
 
         void update(const double* V_data, double* csr_data) nogil
         void releaseGatherMap()
@@ -131,6 +145,81 @@ cdef extern from "_csrcore.h":
         void beginAssembly() nogil
         void scatterBlock(int tid, int entity, const double* block) nogil
         int64_t memoryBytes()
+
+cdef SystemMatrixEntities _borrowedTable(
+    const int64_t[::1] dofStart,
+    const int32_t[::1] dofs,
+    const uint8_t[::1] couplesAllItsDofs,
+    const int64_t[::1] localEntryStart,
+    const int32_t[::1] localRows,
+    const int32_t[::1] localColumns,
+):
+    """The C++ view of a :class:`~edelweissfe.numerics.systemmatrixcontributor.SystemMatrixEntities` table; the arrays
+    must outlive it."""
+    cdef int64_t nEntities = dofStart.shape[0] - 1
+    if (
+        nEntities < 0
+        or couplesAllItsDofs.shape[0] != nEntities
+        or localEntryStart.shape[0] != nEntities + 1
+        or dofStart[nEntities] != dofs.shape[0]
+        or localEntryStart[nEntities] != localRows.shape[0]
+        or localRows.shape[0] != localColumns.shape[0]
+    ):
+        raise ValueError("SystemMatrixEntities: the arrays of the table do not fit together.")
+    cdef SystemMatrixEntities entities
+    entities.nEntities = nEntities
+    entities.dofStart = &dofStart[0]
+    entities.dofs = &dofs[0] if dofs.shape[0] > 0 else NULL
+    entities.couplesAllItsDofs = &couplesAllItsDofs[0] if nEntities > 0 else NULL
+    entities.localEntryStart = &localEntryStart[0]
+    entities.localRows = &localRows[0] if localRows.shape[0] > 0 else NULL
+    entities.localColumns = &localColumns[0] if localColumns.shape[0] > 0 else NULL
+    return entities
+
+
+cdef tuple _patternArrays(CSRPattern& pattern):
+    """Copies of ``indptr`` and ``indices`` of a C++ pattern, as NumPy arrays."""
+    cdef np.ndarray[int, ndim=1] indptr = np.empty(pattern.nDof + 1, dtype=np.intc)
+    cdef np.ndarray[int, ndim=1] indices = np.empty(pattern.nnz, dtype=np.intc)
+    memcpy(&indptr[0], pattern.indptr.data(), (pattern.nDof + 1) * sizeof(int))
+    if pattern.nnz > 0:
+        memcpy(&indices[0], pattern.indices.data(), pattern.nnz * sizeof(int))
+    return indptr, indices
+
+
+def csrPatternOfEntities(entities, int nDof, int numThreads=1):
+    """The CSR pattern of the entities' blocks, derived row by row from their DOF lists, as the direct assembly derives
+    it (``CSRPattern::ofEntities`` in ``_csrcore.h``): each row is the union of the columns the entities couple it
+    with. It is the same pattern as the one :class:`CSRGenerator` derives from the VIJ pairs of the same entities by
+    sort-and-sum, derived independently.
+
+    Parameters
+    ----------
+    entities
+        The :class:`~edelweissfe.numerics.systemmatrixcontributor.SystemMatrixEntities` table.
+    nDof
+        The number of rows and columns.
+    numThreads
+        The number of threads; the pattern does not depend on it.
+
+    Returns
+    -------
+    tuple[numpy.ndarray, numpy.ndarray]
+        ``indptr`` and ``indices``.
+    """
+    cdef SystemMatrixEntities table = _borrowedTable(
+        entities.dofStart,
+        entities.dofs,
+        entities.couplesAllItsDofs,
+        entities.localEntryStart,
+        entities.localRows,
+        entities.localColumns,
+    )
+    cdef CSRPattern pattern
+    with nogil:
+        pattern = CSRPattern.ofEntities(table, nDof, numThreads)
+    return _patternArrays(pattern)
+
 
 cdef class _CSRCoreOwner:
     """Owns the C++ core of a :class:`CSRGenerator`, its CSR pattern and its gather map, and frees it when it goes.

@@ -35,6 +35,8 @@ An entity knows its block only in its own numbering: row ``a`` and column ``b`` 
 system matrix assembly (:mod:`edelweissfe.numerics.systemmatrixassembly`).
 """
 
+from dataclasses import dataclass
+
 import numpy as np
 
 
@@ -179,3 +181,69 @@ class SystemMatrixContributorBase:
         if self.couplesAllItsDofs:
             return values.reshape((self.nDof, self.nDof), order="F")
         return values
+
+
+@dataclass(frozen=True)
+class SystemMatrixEntities:
+    """The entities of an equation system as the direct CSR assembly reads them: flat arrays, the counterpart of the
+    C++ struct of the same name in ``_csrcore.h``.
+
+    Entity ``e`` has the global DOF list ``dofs[dofStart[e] : dofStart[e + 1]]``. A dense block (``couplesAllItsDofs``)
+    is described by that list alone; the block of any other entity is the list of entries it gives in
+    :meth:`SystemMatrixContributorBase.localEntriesOfBlock`, stored in ``localRows`` and ``localColumns`` from
+    ``localEntryStart[e]`` to ``localEntryStart[e + 1]``. A dense entity lists no entries: its ``nDof**2`` pairs are
+    never materialised.
+    """
+
+    #: where the DOF list of each entity begins in :attr:`dofs` (int64, one more than there are entities)
+    dofStart: np.ndarray
+    #: the global DOF lists of all entities, one after the other (int32)
+    dofs: np.ndarray
+    #: whether the block of each entity is dense (uint8)
+    couplesAllItsDofs: np.ndarray
+    #: where the listed entries of each entity begin in :attr:`localRows` and :attr:`localColumns` (int64, one more
+    #: than there are entities)
+    localEntryStart: np.ndarray
+    #: the local row of every listed entry (int32)
+    localRows: np.ndarray
+    #: the local column of every listed entry (int32)
+    localColumns: np.ndarray
+
+    @classmethod
+    def ofEntities(cls, dofsOfEntity: dict) -> "SystemMatrixEntities":
+        """The table of the entities, in the order of ``dofsOfEntity``.
+
+        Parameters
+        ----------
+        dofsOfEntity
+            The global DOF list of every entity.
+
+        Returns
+        -------
+        SystemMatrixEntities
+            The table.
+        """
+
+        entities = list(dofsOfEntity)
+        nEntities = len(entities)
+        noEntries = np.zeros(0, dtype=np.intc)
+
+        couplesAllItsDofs = np.fromiter((entity.couplesAllItsDofs for entity in entities), np.uint8, nEntities)
+        listedEntries = [
+            (noEntries, noEntries) if couplesAll else entity.localEntriesOfBlock()
+            for entity, couplesAll in zip(entities, couplesAllItsDofs)
+        ]
+
+        def startsOf(lengths) -> np.ndarray:
+            starts = np.zeros(nEntities + 1, dtype=np.int64)
+            np.cumsum(np.fromiter(lengths, np.int64, nEntities), out=starts[1:])
+            return starts
+
+        return cls(
+            dofStart=startsOf(len(dofs) for dofs in dofsOfEntity.values()),
+            dofs=np.concatenate([noEntries, *dofsOfEntity.values()]).astype(np.intc),
+            couplesAllItsDofs=couplesAllItsDofs,
+            localEntryStart=startsOf(len(localRows) for localRows, _ in listedEntries),
+            localRows=np.concatenate([noEntries, *(localRows for localRows, _ in listedEntries)]).astype(np.intc),
+            localColumns=np.concatenate([noEntries, *(columns for _, columns in listedEntries)]).astype(np.intc),
+        )
