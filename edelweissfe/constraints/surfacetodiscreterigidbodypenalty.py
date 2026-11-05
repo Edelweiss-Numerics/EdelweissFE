@@ -450,6 +450,11 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
         self._searchClosestRigidTriangles(model)
         return True
 
+    @property
+    def couplesAllItsDofs(self) -> bool:
+        """``False``: the block is the list of the values of the sparse pattern of :meth:`initializeVIJContribution`."""
+        return False
+
     def getVIJContributionSize(self) -> int:
         return rigidBodyContactContributionSize(self.rpDofCount, self._slaveBlockSizes)
 

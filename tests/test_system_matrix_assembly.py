@@ -30,6 +30,23 @@ factor, and after an abandoned assembly; and the worker loop deals out its chunk
 import numpy as np
 import pytest
 
+from edelweissfe.constraints.base.rigidbodycontactstiffness import (
+    fillRigidBodyContactIndices,
+    rigidBodyContactContributionSize,
+)
+from edelweissfe.constraints.nodetodeformablesurfacepenalty import (
+    Constraint as NodeToDeformableSurfacePenalty,
+)
+from edelweissfe.constraints.nodetodiscreterigidbodypenalty import (
+    Constraint as NodeToDiscreteRigidBodyPenalty,
+)
+from edelweissfe.constraints.rigidbody import Constraint as RigidBody
+from edelweissfe.constraints.surfacetodeformablesurfacepenalty import (
+    Constraint as SurfaceToDeformableSurfacePenalty,
+)
+from edelweissfe.constraints.surfacetodiscreterigidbodypenalty import (
+    Constraint as SurfaceToDiscreteRigidBodyPenalty,
+)
 from edelweissfe.numerics.csrgeneratorv2 import CSRGenerator
 from edelweissfe.numerics.parallelizationutilities import mapChunksOnWorkers
 from edelweissfe.numerics.systemmatrixassembly import (
@@ -56,12 +73,40 @@ class _SparseEntity(VIJEntityBase):
         super().__init__(len(dofs))
         self.dofs = np.asarray(dofs, dtype=np.intc)
 
+    @property
+    def couplesAllItsDofs(self):
+        return False
+
     def getVIJContributionSize(self):
         return 3
 
     def initializeVIJContribution(self, idcs, I_, J_, offset):
         I_[offset : offset + 3] = [idcs[2], idcs[0], idcs[1]]
         J_[offset : offset + 3] = [idcs[0], idcs[2], idcs[1]]
+
+
+class _OneSlaveRigidBodyContact(VIJEntityBase):
+    """The pattern of a contact between one node and a rigid body in 3D, as
+    :class:`~edelweissfe.constraints.nodetodiscreterigidbodypenalty.Constraint` lays it out: the six degrees of
+    freedom of the reference point (first) coupled with each other, the three of the node (last) with each other, and
+    the two groups both ways. That is 36 + 9 + 18 + 18 = 81 entries on nDof = 9 degrees of freedom: exactly as many as
+    a dense 9 x 9 block, but ordered block by block, not column by column."""
+
+    rpDofCount = 6
+
+    def __init__(self, dofs):
+        super().__init__(len(dofs))
+        self.dofs = np.asarray(dofs, dtype=np.intc)
+
+    @property
+    def couplesAllItsDofs(self):
+        return False
+
+    def getVIJContributionSize(self):
+        return rigidBodyContactContributionSize(self.rpDofCount, [self.nDof - self.rpDofCount])
+
+    def initializeVIJContribution(self, idcs, I_, J_, offset):
+        fillRigidBodyContactIndices(idcs[: self.rpDofCount], [idcs[self.rpDofCount :]], I_, J_, offset)
 
 
 class _DofManager:
@@ -91,8 +136,8 @@ def _model():
     return entities, _DofManager(entities, 12), blocks
 
 
-def _assemble(assemblyType, numberOfWorkers, factor=None):
-    entities, dofManager, blocks = _model()
+def _assemble(assemblyType, numberOfWorkers, factor=None, model=_model):
+    entities, dofManager, blocks = model()
     generator = CSRGenerator(dofManager, patternOnly=not assemblyType.needsGatherMap)
     K = assemblyType(generator, dofManager, numberOfWorkers)
 
@@ -121,9 +166,9 @@ def _assemble(assemblyType, numberOfWorkers, factor=None):
     return K.assembledMatrix().toarray()
 
 
-def _reference(factor=None):
-    entities, dofManager, blocks = _model()
-    reference = np.zeros((12, 12))
+def _reference(factor=None, model=_model):
+    entities, dofManager, blocks = model()
+    reference = np.zeros((dofManager.nDof, dofManager.nDof))
     for entity in entities:
         start = dofManager.idcsOfHigherOrderEntitiesInVIJ[entity]
         size = entity.getVIJContributionSize()
@@ -146,6 +191,48 @@ def test_both_assemblies_assemble_the_same_matrix(assemblyType, numberOfWorkers)
 @pytest.mark.parametrize("assemblyType", [VIJSystemMatrixAssembly, DirectCSRSystemMatrixAssembly])
 def test_scaled_blocks_enter_scaled(assemblyType):
     np.testing.assert_allclose(_assemble(assemblyType, 2, factor=0.3), _reference(factor=0.3), rtol=1e-14, atol=1e-14)
+
+
+def _modelWithOneSlaveRigidBodyContact():
+    """Elements on twelve degrees of freedom, and one rigid body contact on nine of them whose pattern has exactly
+    nDof**2 entries."""
+    rng = np.random.default_rng(3)
+    entities = [_DenseEntity(rng.choice(12, size=4, replace=False)) for _ in range(10)]
+    entities += [_OneSlaveRigidBodyContact([11, 0, 4, 9, 2, 7, 5, 10, 1])]
+    assert entities[-1].getVIJContributionSize() == entities[-1].nDof ** 2
+    blocks = {entity: rng.standard_normal(entity.getVIJContributionSize()) for entity in entities}
+    return entities, _DofManager(entities, 12), blocks
+
+
+@pytest.mark.parametrize("assemblyType", [VIJSystemMatrixAssembly, DirectCSRSystemMatrixAssembly])
+@pytest.mark.parametrize("numberOfWorkers", [1, 3])
+def test_sparse_entity_whose_size_is_a_square_is_scattered_entry_by_entry(assemblyType, numberOfWorkers):
+    """How many entries a block has does not say how they are laid out. A rigid body contact with one slave node has
+    exactly as many as a dense block on its nine degrees of freedom; scattered as if it were one, its values would
+    land on the wrong rows and columns. It says it is sparse (``couplesAllItsDofs``), so both assemblies place every
+    value at its own (I, J) pair."""
+    model = _modelWithOneSlaveRigidBodyContact
+    np.testing.assert_allclose(
+        _assemble(assemblyType, numberOfWorkers, model=model), _reference(model=model), rtol=1e-14, atol=1e-14
+    )
+
+
+@pytest.mark.parametrize(
+    "constraintType",
+    [
+        RigidBody,
+        NodeToDiscreteRigidBodyPenalty,
+        SurfaceToDiscreteRigidBodyPenalty,
+        NodeToDeformableSurfacePenalty,
+        SurfaceToDeformableSurfacePenalty,
+    ],
+)
+def test_constraints_with_a_pattern_of_their_own_say_so(constraintType):
+    """Every constraint that lays out a sparse pattern of its own declares it, so that no assembly mistakes its block
+    for a dense one."""
+    assert constraintType.initializeVIJContribution is not VIJEntityBase.initializeVIJContribution
+    assert constraintType.couplesAllItsDofs is not VIJEntityBase.couplesAllItsDofs
+    assert constraintType.couplesAllItsDofs.fget(None) is False
 
 
 def test_direct_assembly_with_workers_agrees_with_itself_to_round_off():

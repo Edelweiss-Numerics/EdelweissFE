@@ -256,6 +256,11 @@ class Constraint(ConstraintBase):
     def getNumberOfAdditionalNeededScalarVariables(self):
         return self.nConstraints
 
+    @property
+    def couplesAllItsDofs(self) -> bool:
+        """``False``: the block is the list of the values of the sparse pattern of :meth:`initializeVIJContribution`."""
+        return False
+
     def getVIJContributionSize(self) -> int:
         """Return the actual (sparse) number of VIJ entries for this constraint.
 
