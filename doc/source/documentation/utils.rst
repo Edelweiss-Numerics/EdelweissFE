@@ -10,30 +10,15 @@ Matrix conversion from COO sparse format to CSR format
 
 Matrix assembly is a critical performance bottleneck in Finite Element simulations, particularly during non-linear implicit or explicit iterations where the system matrix structure (non-zero pattern) remains constant, but its numerical values are updated at every iteration.
 
-EdelweissFE offers two generators to convert COO (Coordinate) format sparse matrices to CSR (Compressed Sparse Row) format efficiently without re-analysing the sparsity pattern:
-
-1. **Legacy Generator (``csrgenerator``)**: a plain, single-threaded Cython implementation using a
-   binary search for the COO-to-CSR mapping. Kept deliberately simple and short -- **not used by any
-   solver**, its purpose is teaching: reading it end to end is the fastest way to understand what the
-   high-performance generator below does, before its parallelism, memory-layout tricks and the direct
-   scatter-to-CSR alternative are layered on top.
-2. **High-Performance Generator (``csrgeneratorv2``)**: A parallelized C++ engine with OpenMP support, thread-safe memory layouts, cache friendliness, and vectorized operations. This is what every solver actually uses.
+The CSR generator (``csrgeneratorv2``) converts COO (Coordinate) format sparse matrices to CSR (Compressed Sparse Row) format efficiently without re-analysing the sparsity pattern: a parallelized C++ engine with OpenMP support, thread-safe memory layouts, cache friendliness, and vectorized operations.
 
 .. seealso::
    :doc:`assembly` compares this stage-then-gather route against direct scatter-to-CSR assembly, which
    avoids the staging array entirely -- relevant whenever the number of stored contributions greatly
    exceeds the number of matrix entries, as it does for meshfree discretisations.
 
-Legacy Generator (teaching reference)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Module ``edelweissfe.numerics.csrgenerator``
-
-.. autoclass:: edelweissfe.numerics.csrgenerator.CSRGenerator
-   :members:
-
-High-Performance Generator
-~~~~~~~~~~~~~~~~~~~~~~~~~~
+CSR Generator
+~~~~~~~~~~~~~
 
 Module ``edelweissfe.numerics.csrgeneratorv2``
 
