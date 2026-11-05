@@ -162,16 +162,6 @@ extensions += [
     )
 ]
 
-print("Gather the extension for the fast CSR matrix generator")
-extensions += [
-    Extension(
-        "*",
-        ["edelweissfe/numerics/csrgenerator.pyx"],
-        include_dirs=[numpy.get_include()],
-        language="c++",
-    )
-]
-
 print("Gather the extension for the even faster CSR matrix v2 generator")
 extensions += [
     Extension(
