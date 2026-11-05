@@ -501,6 +501,11 @@ cdef class MarmotElementWrapper:
     def __dealloc__(self):
         del self.marmotElement
 
+    @property
+    def couplesAllItsDofs(self) -> bool:
+        """``True``: the block is the dense ``nDof x nDof`` matrix, column-major."""
+        return True
+
     def getVIJContributionSize(self) -> int:
         """Return the number of entries this entity contributes to the VIJ (COO) system matrix."""
         return self.nDof**2

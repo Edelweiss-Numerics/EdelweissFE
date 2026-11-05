@@ -110,7 +110,28 @@ def test_registerEntities_rejects_mismatched_lengths():
 
     with pytest.raises(ValueError):
         direct.registerEntities(
-            np.array([0, 4, 8], dtype=np.int64), np.array([2, 2], dtype=np.intc), np.array([4, 4], dtype=np.int64)
+            np.array([0, 4, 8], dtype=np.int64),
+            np.array([2, 2], dtype=np.intc),
+            np.array([4, 4], dtype=np.int64),
+            np.array([1, 1], dtype=np.intc),
+        )
+
+
+def test_registerEntities_rejects_a_dense_block_of_the_wrong_size():
+    """An entity that declares a dense block must contribute nDof**2 entries; anything else is a contradiction in
+    what the entity says about itself, not something to be guessed around."""
+
+    systemMatrix, V = _syntheticSystem()
+    generator = CSRGenerator(systemMatrix)
+    generator.updateCSR(V)
+    direct = DirectCSRAssembler(generator, systemMatrix, numThreads=1)
+
+    with pytest.raises(ValueError):
+        direct.registerEntities(
+            np.array([0, 4, 8], dtype=np.int64),
+            np.array([2, 2, 1], dtype=np.intc),
+            np.array([4, 3, 1], dtype=np.int64),
+            np.array([1, 1, 1], dtype=np.intc),
         )
 
 
@@ -131,7 +152,7 @@ def test_fused_scatter_path_matches_the_staged_generator():
     # mapStarts[e]: entity e's offset into the VIJ ordering above; nDofs[e]: its local DOF count.
     mapStarts = np.array([0, 4, 8], dtype=np.int64)
     nDofs = np.array([2, 2, 1], dtype=np.intc)
-    direct.registerEntities(mapStarts, nDofs, np.array([4, 4, 1], dtype=np.int64))
+    direct.registerEntities(mapStarts, nDofs, np.array([4, 4, 1], dtype=np.int64), np.array([1, 1, 1], dtype=np.intc))
 
     direct.beginAssembly()
     direct.scatterBlock(0, 0, V[0:4].copy())
@@ -164,7 +185,10 @@ def test_sparse_entity_is_scattered_entry_by_entry():
 
     direct = DirectCSRAssembler(CSRGenerator(systemMatrix, patternOnly=True), systemMatrix, numThreads=2)
     direct.registerEntities(
-        np.array([0, 4], dtype=np.int64), np.array([2, 3], dtype=np.intc), np.array([4, 3], dtype=np.int64)
+        np.array([0, 4], dtype=np.int64),
+        np.array([2, 3], dtype=np.intc),
+        np.array([4, 3], dtype=np.int64),
+        np.array([1, 0], dtype=np.intc),
     )
 
     direct.beginAssembly()

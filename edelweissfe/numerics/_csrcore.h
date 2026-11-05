@@ -521,35 +521,46 @@ struct CSRDirectAssembler {
   // thread-local scratch buffer -- which stays in cache -- and scatterBlock adds it straight into
   // the CSR data array. No sizeVIJ-sized value array is ever materialized, which is the entire point.
   //
-  // Registration gives each entity its slice of the map. Two layouts of a block are supported:
+  // Registration gives each entity its slice of the map. Two layouts of a block are supported, and
+  // the entity declares which one it writes (VIJEntityBase.couplesAllItsDofs):
   //
-  //   dense    the nDofE x nDofE block, column-major (vijSize == nDofE^2), as every element writes
-  //            it. For local row a, every pair (a, b) shares the same global row, so the row is
-  //            I[mapStart + a] and only nDofE rows per entity need keeping rather than nDofE^2.
-  //   sparse   any other vijSize: the entity declared its own list of (I, J) pairs (a constraint
-  //            coupling only some of its degrees of freedom), and its block is the list of values
-  //            of these pairs. Each entry is scattered on its own, so each keeps its global row.
+  //   dense    the nDofE x nDofE block, column-major, as every element writes it. For local row a,
+  //            every pair (a, b) shares the same global row, so the row is I[mapStart + a] and only
+  //            nDofE rows per entity need keeping rather than nDofE^2.
+  //   sparse   the entity declared its own list of (I, J) pairs (a constraint coupling only some of
+  //            its degrees of freedom), and its block is the list of values of these pairs. Each
+  //            entry is scattered on its own, so each keeps its global row.
+  //
+  // The layout is never guessed from the number of pairs: a sparse list can have exactly nDofE^2
+  // entries (a rigid body contact with one slave node in 3D: 36 + 9 + 18 + 18 = 81 = 9^2) in an
+  // order that is not column-major.
   std::vector< int64_t >            entityMapStart;  // into offsets
   std::vector< int64_t >            entityRowStart;  // into entityRows
   std::vector< int >                entityNDof;
   std::vector< int64_t >            entityVIJSize;   // nDofE^2 for a dense block, else the number of pairs
+  std::vector< char >               entityIsDense;   // the layout the entity declared
   std::vector< int >                entityRows;      // per entity: the row of each local row (dense) or entry (sparse)
   std::vector< std::vector< int > > rowStartScratch; // per thread, size maxNDof
 
-  bool isDense( int entity ) const
-  {
-    return entityVIJSize[entity] == static_cast< int64_t >( entityNDof[entity] ) * entityNDof[entity];
-  }
+  bool isDense( int entity ) const { return entityIsDense[entity]; }
 
   void registerEntities( const int64_t* mapStarts,
                          const int*     nDofs,
                          const int64_t* vijSizes,
+                         const int*     couplesAllItsDofs,
                          int            nEntities,
                          const int*     I )
   {
+    for ( int e = 0; e < nEntities; ++e )
+      if ( couplesAllItsDofs[e] && vijSizes[e] != static_cast< int64_t >( nDofs[e] ) * nDofs[e] )
+        throw std::invalid_argument( "CSRDirectAssembler::registerEntities: an entity that couples all its DOFs "
+                                     "must contribute nDof^2 entries" );
     entityMapStart.assign( mapStarts, mapStarts + nEntities );
     entityNDof.assign( nDofs, nDofs + nEntities );
     entityVIJSize.assign( vijSizes, vijSizes + nEntities );
+    entityIsDense.resize( nEntities );
+    for ( int e = 0; e < nEntities; ++e )
+      entityIsDense[e] = couplesAllItsDofs[e] != 0;
     entityRowStart.resize( nEntities );
     int64_t total = 0;
     for ( int e = 0; e < nEntities; ++e ) {
@@ -651,6 +662,6 @@ public:
   int64_t memoryBytes() const
   {
     return static_cast< int64_t >( offsets.size() ) * 2 + static_cast< int64_t >( entityRows.size() ) * 4 +
-           static_cast< int64_t >( entityMapStart.size() ) * 28;
+           static_cast< int64_t >( entityMapStart.size() ) * 29;
   }
 };

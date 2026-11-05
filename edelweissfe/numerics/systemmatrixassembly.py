@@ -317,7 +317,8 @@ class DirectCSRSystemMatrixAssembly(SystemMatrixAssembly):
 
     Every block is a zeroed scratch array: an entity that is handed its block more than once in an assembly (an
     element, then a body load on it) has each one scattered on its own. Entities with a sparse VIJ pattern of their
-    own (constraints that couple only some of their degrees of freedom) are scattered entry by entry.
+    own (constraints that couple only some of their degrees of freedom, which say so through
+    :attr:`~edelweissfe.numerics.vijentitybase.VIJEntityBase.couplesAllItsDofs`) are scattered entry by entry.
 
     Parameters
     ----------
@@ -342,6 +343,7 @@ class DirectCSRSystemMatrixAssembly(SystemMatrixAssembly):
             np.fromiter(dofManager.idcsOfHigherOrderEntitiesInVIJ.values(), dtype=np.int64, count=len(entities)),
             np.fromiter((entity.nDof for entity in entities), dtype=np.intc, count=len(entities)),
             np.fromiter((entity.getVIJContributionSize() for entity in entities), dtype=np.int64, count=len(entities)),
+            np.fromiter((entity.couplesAllItsDofs for entity in entities), dtype=np.intc, count=len(entities)),
         )
         #: The number of every entity in :attr:`assembler`.
         self.entityIds = {entity: i for i, entity in enumerate(entities)}

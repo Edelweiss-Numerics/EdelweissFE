@@ -126,8 +126,8 @@ cdef extern from "_csrcore.h":
                            const int* I, const int* J, int64_t nPairs, int nThreads) except +
 
         void assembleFromVIJ(const double* V, const int* I) nogil
-        void registerEntities(const int64_t* mapStarts, const int* nDofs, const int64_t* vijSizes, int nEntities,
-                              const int* I)
+        void registerEntities(const int64_t* mapStarts, const int* nDofs, const int64_t* vijSizes,
+                              const int* couplesAllItsDofs, int nEntities, const int* I) except +
         void beginAssembly() nogil
         void scatterBlock(int tid, int entity, const double* block) nogil
         int64_t memoryBytes()
@@ -450,25 +450,37 @@ cdef class DirectCSRAssembler:
             self.asm_.assembleFromVIJ(&V[0], &I[0])
         return self.csrMatrix
 
-    def registerEntities(self, int64_t[::1] mapStarts, int[::1] nDofs, int64_t[::1] vijSizes):
+    def registerEntities(self, int64_t[::1] mapStarts, int[::1] nDofs, int64_t[::1] vijSizes,
+                         int[::1] couplesAllItsDofs):
         """Give each entity its slice of the offset map, once per connectivity change.
 
         ``mapStarts[e]`` is entity e's offset into the VIJ ordering -- the same value the DofManager
-        already records in ``idcsOfHigherOrderEntitiesInVIJ`` --, ``nDofs[e]`` its local DOF count, and
+        already records in ``idcsOfHigherOrderEntitiesInVIJ`` --, ``nDofs[e]`` its local DOF count,
         ``vijSizes[e]`` the number of entries it contributes
-        (:meth:`~edelweissfe.numerics.vijentitybase.VIJEntityBase.getVIJContributionSize`). An entity with
-        ``vijSizes[e] == nDofs[e]**2`` writes a dense block, column-major; any other entity a sparse one, the
-        values of the (I, J) pairs it declared, which :meth:`scatterBlock` scatters entry by entry.
+        (:meth:`~edelweissfe.numerics.vijentitybase.VIJEntityBase.getVIJContributionSize`), and
+        ``couplesAllItsDofs[e]`` the layout of its block it declares
+        (:attr:`~edelweissfe.numerics.vijentitybase.VIJEntityBase.couplesAllItsDofs`): nonzero for a dense block,
+        column-major, of ``nDofs[e]**2`` entries; zero for a sparse one, the values of the (I, J) pairs the entity
+        declared, which :meth:`scatterBlock` scatters entry by entry. The layout is not inferred from the number of
+        entries, since a sparse pattern can have exactly ``nDofs[e]**2`` of them.
         """
-        if mapStarts.shape[0] != nDofs.shape[0] or mapStarts.shape[0] != vijSizes.shape[0]:
+        if (
+            mapStarts.shape[0] != nDofs.shape[0]
+            or mapStarts.shape[0] != vijSizes.shape[0]
+            or mapStarts.shape[0] != couplesAllItsDofs.shape[0]
+        ):
             raise ValueError(
-                "registerEntities: mapStarts, nDofs and vijSizes must have the same length (one entry per "
-                "entity), got {:}, {:} and {:}".format(mapStarts.shape[0], nDofs.shape[0], vijSizes.shape[0])
+                "registerEntities: mapStarts, nDofs, vijSizes and couplesAllItsDofs must have the same length (one "
+                "entry per entity), got {:}, {:}, {:} and {:}".format(
+                    mapStarts.shape[0], nDofs.shape[0], vijSizes.shape[0], couplesAllItsDofs.shape[0]
+                )
             )
         if mapStarts.shape[0] == 0:
             return
         cdef int[::1] I = self._I
-        self.asm_.registerEntities(&mapStarts[0], &nDofs[0], &vijSizes[0], mapStarts.shape[0], &I[0])
+        self.asm_.registerEntities(
+            &mapStarts[0], &nDofs[0], &vijSizes[0], &couplesAllItsDofs[0], mapStarts.shape[0], &I[0]
+        )
 
     @property
     def corePointer(self):

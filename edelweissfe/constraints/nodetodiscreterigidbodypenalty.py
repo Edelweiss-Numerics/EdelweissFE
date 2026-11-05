@@ -301,6 +301,11 @@ class Constraint(ConstraintBase, MeshDependent):
     def nDof(self) -> int:
         return self._nDof
 
+    @property
+    def couplesAllItsDofs(self) -> bool:
+        """``False``: the block is the list of the values of the sparse pattern of :meth:`initializeVIJContribution`."""
+        return False
+
     def getVIJContributionSize(self) -> int:
         """No coupling between different slave nodes: one shared RP self-block, plus per-slave
         self-block and slave-RP coupling blocks."""
