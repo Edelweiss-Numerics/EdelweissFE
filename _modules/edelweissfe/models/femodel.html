@@ -106,6 +106,7 @@
 
 <span class="c1"># @author: Matthias Neuner</span>
 
+<span class="kn">import</span><span class="w"> </span><span class="nn">itertools</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">textwrap</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">operator</span><span class="w"> </span><span class="kn">import</span> <span class="n">attrgetter</span>
 
@@ -271,7 +272,7 @@
 <span class="sd">        constraints.</span>
 <span class="sd">        """</span>
 
-        <span class="k">for</span> <span class="n">constraint</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">constraints</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+        <span class="k">for</span> <span class="n">constraint</span> <span class="ow">in</span> <span class="n">itertools</span><span class="o">.</span><span class="n">chain</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">constraints</span><span class="o">.</span><span class="n">values</span><span class="p">(),</span> <span class="bp">self</span><span class="o">.</span><span class="n">multiPointConstraints</span><span class="o">.</span><span class="n">values</span><span class="p">()):</span>
             <span class="k">for</span> <span class="n">node</span><span class="p">,</span> <span class="n">nodeFields</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">constraint</span><span class="o">.</span><span class="n">nodes</span><span class="p">,</span> <span class="n">constraint</span><span class="o">.</span><span class="n">fieldsOnNodes</span><span class="p">):</span>
                 <span class="k">for</span> <span class="n">field</span> <span class="ow">in</span> <span class="n">nodeFields</span><span class="p">:</span>
                     <span class="k">if</span> <span class="n">field</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">node</span><span class="o">.</span><span class="n">fields</span><span class="p">:</span>

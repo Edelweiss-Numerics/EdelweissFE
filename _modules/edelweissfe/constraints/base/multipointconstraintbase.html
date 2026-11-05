@@ -238,7 +238,23 @@
 
 <span class="sd">        The default implementation does nothing, which is correct for every stateless constraint</span>
 <span class="sd">        (i.e. every constraint that does not override this method)."""</span></div>
-</div>
+
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">nodes</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The nodes this constraint needs fields on, as for</span>
+<span class="sd">        :attr:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.nodes`.</span>
+
+<span class="sd">        The default is none: the slaves and masters of most multi-point constraints are element</span>
+<span class="sd">        nodes, which already carry their fields.</span>
+<span class="sd">        """</span>
+        <span class="k">return</span> <span class="p">[]</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">fieldsOnNodes</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The fields this constraint needs on each of :attr:`nodes`, as for</span>
+<span class="sd">        :attr:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.fieldsOnNodes`."""</span>
+        <span class="k">return</span> <span class="p">[]</span></div>
 
 </pre></div>
 
