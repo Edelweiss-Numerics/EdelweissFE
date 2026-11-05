@@ -32,14 +32,17 @@ import numpy as np
 
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
-from edelweissfe.numerics.vijentitybase import VIJEntityBase
+from edelweissfe.numerics.systemmatrixcontributor import (
+    SystemMatrixContributorBase,
+    countEntriesOfBlock,
+)
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.checkpointedstate import packState, unpackState
 from edelweissfe.utils.schema import OptionSchemaProvider
 from edelweissfe.variables.scalarvariable import ScalarVariable
 
 
-class ConstraintBase(OptionSchemaProvider, ABC, VIJEntityBase):
+class ConstraintBase(OptionSchemaProvider, ABC, SystemMatrixContributorBase):
     #: Scratch buffer for the tangent that :meth:`computeKernelsExplicit` computes and discards;
     #: re-allocated only when the DOF footprint changes.
     _discardedTangentScratch = None
@@ -290,14 +293,14 @@ class ConstraintBase(OptionSchemaProvider, ABC, VIJEntityBase):
         """
 
         # The discarded tangent buffer is kept across increments and re-zeroed rather than reallocated.
-        size = self.getVIJContributionSize()
+        size = countEntriesOfBlock(self)
         scratch = self._discardedTangentScratch
         if scratch is None or scratch.size != size:
             scratch = self._discardedTangentScratch = np.zeros(size)
         else:
             scratch[:] = 0.0
 
-        K = self.shapeVIJContribution(scratch)
+        K = self.shapeBlock(scratch)
         self.computeKernels(U_np, dU, P, K, timeStep)
 
     @abstractmethod
@@ -340,7 +343,7 @@ class ConstraintBase(OptionSchemaProvider, ABC, VIJEntityBase):
         P
             The residual contribution to augment.
         K
-            The tangent ``dP/dU`` to augment, in the shape :meth:`shapeVIJContribution` gives it (a
+            The tangent ``dP/dU`` to augment, in the shape :meth:`shapeBlock` gives it (a
             dense ``nDof x nDof`` view unless the constraint declares a sparser pattern). A
             constraint that inherits
             :class:`~edelweissfe.constraints.base.forcesonlyexplicitevaluation.ForcesOnlyExplicitEvaluation`

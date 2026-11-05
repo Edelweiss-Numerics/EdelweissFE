@@ -24,15 +24,17 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 """The two assemblies of the system matrix (:mod:`edelweissfe.numerics.systemmatrixassembly`) assemble the same
-matrix: from dense blocks and from a sparse custom VIJ pattern, from several worker threads, with blocks scaled by a
-factor, and after an abandoned assembly; and the worker loop deals out its chunks as documented."""
+matrix: from dense blocks and from blocks with entries of their own, from several worker threads, with blocks scaled
+by a factor, and after an abandoned assembly; the constraints with entries of their own list them in their local
+numbering; and the worker loop deals out its chunks as documented."""
+
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
 
 from edelweissfe.constraints.base.rigidbodycontactstiffness import (
-    fillRigidBodyContactIndices,
-    rigidBodyContactContributionSize,
+    rigidBodyContactLocalEntries,
 )
 from edelweissfe.constraints.nodetodeformablesurfacepenalty import (
     Constraint as NodeToDeformableSurfacePenalty,
@@ -53,11 +55,14 @@ from edelweissfe.numerics.systemmatrixassembly import (
     DirectCSRSystemMatrixAssembly,
     VIJSystemMatrixAssembly,
 )
-from edelweissfe.numerics.vijentitybase import VIJEntityBase
+from edelweissfe.numerics.systemmatrixcontributor import (
+    SystemMatrixContributorBase,
+    countEntriesOfBlock,
+)
 from edelweissfe.numerics.vijsystemmatrix import VIJSystemMatrix
 
 
-class _DenseEntity(VIJEntityBase):
+class _DenseEntity(SystemMatrixContributorBase):
     """An element-like entity: a dense block on its DOFs."""
 
     def __init__(self, dofs):
@@ -65,7 +70,7 @@ class _DenseEntity(VIJEntityBase):
         self.dofs = np.asarray(dofs, dtype=np.intc)
 
 
-class _SparseEntity(VIJEntityBase):
+class _SparseEntity(SystemMatrixContributorBase):
     """A constraint-like entity on three DOFs that couples only the first and the last, and the middle one with
     itself."""
 
@@ -77,16 +82,12 @@ class _SparseEntity(VIJEntityBase):
     def couplesAllItsDofs(self):
         return False
 
-    def getVIJContributionSize(self):
-        return 3
-
-    def initializeVIJContribution(self, idcs, I_, J_, offset):
-        I_[offset : offset + 3] = [idcs[2], idcs[0], idcs[1]]
-        J_[offset : offset + 3] = [idcs[0], idcs[2], idcs[1]]
+    def localEntriesOfBlock(self):
+        return np.array([2, 0, 1], dtype=np.intc), np.array([0, 2, 1], dtype=np.intc)
 
 
-class _OneSlaveRigidBodyContact(VIJEntityBase):
-    """The pattern of a contact between one node and a rigid body in 3D, as
+class _OneSlaveRigidBodyContact(SystemMatrixContributorBase):
+    """The block of a contact between one node and a rigid body in 3D, as
     :class:`~edelweissfe.constraints.nodetodiscreterigidbodypenalty.Constraint` lays it out: the six degrees of
     freedom of the reference point (first) coupled with each other, the three of the node (last) with each other, and
     the two groups both ways. That is 36 + 9 + 18 + 18 = 81 entries on nDof = 9 degrees of freedom: exactly as many as
@@ -102,11 +103,8 @@ class _OneSlaveRigidBodyContact(VIJEntityBase):
     def couplesAllItsDofs(self):
         return False
 
-    def getVIJContributionSize(self):
-        return rigidBodyContactContributionSize(self.rpDofCount, [self.nDof - self.rpDofCount])
-
-    def initializeVIJContribution(self, idcs, I_, J_, offset):
-        fillRigidBodyContactIndices(idcs[: self.rpDofCount], [idcs[self.rpDofCount :]], I_, J_, offset)
+    def localEntriesOfBlock(self):
+        return rigidBodyContactLocalEntries(np.arange(self.rpDofCount), [np.arange(self.rpDofCount, self.nDof)])
 
 
 class _DofManager:
@@ -114,25 +112,27 @@ class _DofManager:
 
     def __init__(self, entities, nDof):
         self.nDof = nDof
-        self.idcsOfHigherOrderEntitiesInVIJ = {}
-        size = sum(entity.getVIJContributionSize() for entity in entities)
-        self.I = np.zeros(size, dtype=np.intc)  # noqa: E741
-        self.J = np.zeros(size, dtype=np.intc)
-        offset = 0
+        self.vijSliceOfEntity = {}
+        rows, columns = [], []
+        nEntries = 0
         for entity in entities:
-            self.idcsOfHigherOrderEntitiesInVIJ[entity] = offset
-            entity.initializeVIJContribution(entity.dofs, self.I, self.J, offset)
-            offset += entity.getVIJContributionSize()
+            localRows, localColumns = entity.localEntriesOfBlock()
+            self.vijSliceOfEntity[entity] = slice(nEntries, nEntries + len(localRows))
+            nEntries += len(localRows)
+            rows.append(entity.dofs[localRows])
+            columns.append(entity.dofs[localColumns])
+        self.I = np.concatenate(rows).astype(np.intc)  # noqa: E741
+        self.J = np.concatenate(columns).astype(np.intc)
 
     def constructVIJSystemMatrix(self):
-        return VIJSystemMatrix(self.nDof, self.I, self.J, self.idcsOfHigherOrderEntitiesInVIJ)
+        return VIJSystemMatrix(self.nDof, self.I, self.J, self.vijSliceOfEntity)
 
 
 def _model():
     rng = np.random.default_rng(42)
     entities = [_DenseEntity(rng.choice(12, size=4, replace=False)) for _ in range(40)]
     entities += [_SparseEntity([0, 5, 11]), _SparseEntity([3, 7, 2])]
-    blocks = {entity: rng.standard_normal(entity.getVIJContributionSize()) for entity in entities}
+    blocks = {entity: rng.standard_normal(countEntriesOfBlock(entity)) for entity in entities}
     return entities, _DofManager(entities, 12), blocks
 
 
@@ -170,15 +170,12 @@ def _reference(factor=None, model=_model):
     entities, dofManager, blocks = model()
     reference = np.zeros((dofManager.nDof, dofManager.nDof))
     for entity in entities:
-        start = dofManager.idcsOfHigherOrderEntitiesInVIJ[entity]
-        size = entity.getVIJContributionSize()
-        for k in range(size):
-            reference[dofManager.I[start + k], dofManager.J[start + k]] += blocks[entity][k]
+        localRows, localColumns = entity.localEntriesOfBlock()
+        np.add.at(reference, (entity.dofs[localRows], entity.dofs[localColumns]), blocks[entity])
     if factor is not None:
         for entity in entities[:5]:
-            start = dofManager.idcsOfHigherOrderEntitiesInVIJ[entity]
-            for k in range(entity.getVIJContributionSize()):
-                reference[dofManager.I[start + k], dofManager.J[start + k]] += factor * blocks[entity][k]
+            localRows, localColumns = entity.localEntriesOfBlock()
+            np.add.at(reference, (entity.dofs[localRows], entity.dofs[localColumns]), factor * blocks[entity])
     return reference
 
 
@@ -194,13 +191,13 @@ def test_scaled_blocks_enter_scaled(assemblyType):
 
 
 def _modelWithOneSlaveRigidBodyContact():
-    """Elements on twelve degrees of freedom, and one rigid body contact on nine of them whose pattern has exactly
+    """Elements on twelve degrees of freedom, and one rigid body contact on nine of them whose block has exactly
     nDof**2 entries."""
     rng = np.random.default_rng(3)
     entities = [_DenseEntity(rng.choice(12, size=4, replace=False)) for _ in range(10)]
     entities += [_OneSlaveRigidBodyContact([11, 0, 4, 9, 2, 7, 5, 10, 1])]
-    assert entities[-1].getVIJContributionSize() == entities[-1].nDof ** 2
-    blocks = {entity: rng.standard_normal(entity.getVIJContributionSize()) for entity in entities}
+    assert countEntriesOfBlock(entities[-1]) == entities[-1].nDof ** 2
+    blocks = {entity: rng.standard_normal(countEntriesOfBlock(entity)) for entity in entities}
     return entities, _DofManager(entities, 12), blocks
 
 
@@ -210,7 +207,7 @@ def test_sparse_entity_whose_size_is_a_square_is_scattered_entry_by_entry(assemb
     """How many entries a block has does not say how they are laid out. A rigid body contact with one slave node has
     exactly as many as a dense block on its nine degrees of freedom; scattered as if it were one, its values would
     land on the wrong rows and columns. It says it is sparse (``couplesAllItsDofs``), so both assemblies place every
-    value at its own (I, J) pair."""
+    value at its own entry."""
     model = _modelWithOneSlaveRigidBodyContact
     np.testing.assert_allclose(
         _assemble(assemblyType, numberOfWorkers, model=model), _reference(model=model), rtol=1e-14, atol=1e-14
@@ -227,12 +224,64 @@ def test_sparse_entity_whose_size_is_a_square_is_scattered_entry_by_entry(assemb
         SurfaceToDeformableSurfacePenalty,
     ],
 )
-def test_constraints_with_a_pattern_of_their_own_say_so(constraintType):
-    """Every constraint that lays out a sparse pattern of its own declares it, so that no assembly mistakes its block
+def test_constraints_with_entries_of_their_own_say_so(constraintType):
+    """Every constraint that lists the entries of its block itself declares it, so that no assembly mistakes its block
     for a dense one."""
-    assert constraintType.initializeVIJContribution is not VIJEntityBase.initializeVIJContribution
-    assert constraintType.couplesAllItsDofs is not VIJEntityBase.couplesAllItsDofs
+    assert constraintType.localEntriesOfBlock is not SystemMatrixContributorBase.localEntriesOfBlock
+    assert constraintType.couplesAllItsDofs is not SystemMatrixContributorBase.couplesAllItsDofs
     assert constraintType.couplesAllItsDofs.fget(None) is False
+
+
+def test_the_entries_of_a_one_slave_rigid_body_contact():
+    """2D: the three degrees of freedom of the reference point (local 0, 1, 2) and the two of the slave node (3, 4).
+    Each sub-block row by row: the reference point with itself, the node with itself, node-to-RP, RP-to-node."""
+    localRows, localColumns = rigidBodyContactLocalEntries(np.arange(3), [np.arange(3, 5)])
+    rpRp = [(a, b) for a in range(3) for b in range(3)]
+    nodeNode = [(3, 3), (3, 4), (4, 3), (4, 4)]
+    nodeRp = [(a, b) for a in (3, 4) for b in range(3)]
+    rpNode = [(a, b) for a in range(3) for b in (3, 4)]
+    expected = np.array(rpRp + nodeNode + nodeRp + rpNode)
+    np.testing.assert_array_equal(localRows, expected[:, 0])
+    np.testing.assert_array_equal(localColumns, expected[:, 1])
+    assert localRows.dtype == np.intc and localColumns.dtype == np.intc
+
+
+def test_the_entries_of_a_rigid_body():
+    """2D, one slave node: its displacement (local 0, 1), the reference point's displacement (2, 3) and rotation (4),
+    and the two Lagrange multipliers of the slave (5, 6). The rotation with itself, then the five coupled degrees of
+    freedom with the multipliers and back, then the diagonal of all seven."""
+    rigidBody = SimpleNamespace(
+        nDim=2,
+        nRot=1,
+        nDofsOnNodes=5,
+        nDof=7,
+        slaveNodes=[None],
+        indicesOfSlaveNodesInP=[[0, 1]],
+        indicesOfRPUinP=[2, 3],
+        indicesOfRPPhiInP=[4],
+    )
+    localRows, localColumns = RigidBody.localEntriesOfBlock(rigidBody)
+    coupledToMultipliers = [(a, b) for a in range(5) for b in (5, 6)]
+    multipliersToCoupled = [(a, b) for a in (5, 6) for b in range(5)]
+    diagonal = [(a, a) for a in range(7)]
+    expected = np.array([(4, 4)] + coupledToMultipliers + multipliersToCoupled + diagonal)
+    np.testing.assert_array_equal(localRows, expected[:, 0])
+    np.testing.assert_array_equal(localColumns, expected[:, 1])
+
+
+def test_the_entries_of_a_surface_to_deformable_surface_contact():
+    """Two active contact points, on two and on three degrees of freedom: one dense block each, row by row."""
+    contact = SimpleNamespace(_activeBlockSizes=lambda: [2, 3])
+    localRows, localColumns = SurfaceToDeformableSurfacePenalty.localEntriesOfBlock(contact)
+    expected = np.array([(a, b) for a in (0, 1) for b in (0, 1)] + [(a, b) for a in (2, 3, 4) for b in (2, 3, 4)])
+    np.testing.assert_array_equal(localRows, expected[:, 0])
+    np.testing.assert_array_equal(localColumns, expected[:, 1])
+
+
+def test_a_contact_without_active_points_has_no_entries():
+    contact = SimpleNamespace(_activeBlockSizes=lambda: [])
+    localRows, localColumns = SurfaceToDeformableSurfacePenalty.localEntriesOfBlock(contact)
+    assert localRows.shape == (0,) and localColumns.shape == (0,)
 
 
 def test_direct_assembly_with_workers_agrees_with_itself_to_round_off():

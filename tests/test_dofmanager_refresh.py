@@ -41,6 +41,7 @@ from edelweissfe.config.materiallibrary import getMaterialClass
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.numerics.dofmanager import DofManager
+from edelweissfe.numerics.systemmatrixcontributor import denseBlockLocalEntries
 from edelweissfe.points.node import Node
 from edelweissfe.sections.plane import PlaneSectionSchema, Section
 from edelweissfe.sets.elementset import ElementSet
@@ -49,7 +50,10 @@ from edelweissfe.sets.nodeset import NodeSet
 
 class _FakeConstraint:
     """The face of a constraint the DofManager reads: its nodes, the fields it couples per node,
-    its scalar variables, its DOF count and its VIJ footprint."""
+    its scalar variables, its DOF count and the entries of its block."""
+
+    #: a dense block, like an element's
+    couplesAllItsDofs = True
 
     def __init__(self, nodes, fieldsPerNode):
         self.nodes = nodes
@@ -58,14 +62,8 @@ class _FakeConstraint:
         # a 2D displacement field: two degrees of freedom per node and field
         self.nDof = 2 * len(nodes) * len(fieldsPerNode)
 
-    def getVIJContributionSize(self):
-        return self.nDof**2
-
-    def initializeVIJContribution(self, indices, I, J, idxInVIJ):  # noqa: E741
-        # a dense block, like an element's
-        n = len(indices)
-        I[idxInVIJ : idxInVIJ + n * n] = np.repeat(indices, n)
-        J[idxInVIJ : idxInVIJ + n * n] = np.tile(indices, n)
+    def localEntriesOfBlock(self):
+        return denseBlockLocalEntries(self.nDof)
 
 
 def _buildTwoElementModel():
@@ -122,12 +120,9 @@ def _assertSameConstraintBookkeeping(refreshed, fresh, withVIJ):
         np.testing.assert_array_equal(refreshed.idcsOfHigherOrderEntitiesInDofVector[entity], indices)
 
     if withVIJ:
-        assert refreshed._sizeVIJ == fresh._sizeVIJ
         np.testing.assert_array_equal(refreshed.I, fresh.I)
         np.testing.assert_array_equal(refreshed.J, fresh.J)
-        assert refreshed.idcsOfHigherOrderEntitiesInVIJ.keys() == fresh.idcsOfHigherOrderEntitiesInVIJ.keys()
-        for entity, indices in fresh.idcsOfHigherOrderEntitiesInVIJ.items():
-            np.testing.assert_array_equal(refreshed.idcsOfHigherOrderEntitiesInVIJ[entity], indices)
+        assert refreshed.vijSliceOfEntity == fresh.vijSliceOfEntity
 
 
 def test_refresh_matches_a_fresh_dofmanager_without_the_vij_pattern():

@@ -41,11 +41,11 @@ import numpy as np
 from edelweissfe.nodecouplingentity.base.nodecouplingentity import (
     BaseNodeCouplingEntity,
 )
-from edelweissfe.numerics.vijentitybase import VIJEntityBase
+from edelweissfe.numerics.systemmatrixcontributor import SystemMatrixContributorBase
 from edelweissfe.points.node import Node
 
 
-class BaseElement(BaseNodeCouplingEntity, VIJEntityBase):
+class BaseElement(BaseNodeCouplingEntity, SystemMatrixContributorBase):
     @property
     @abstractmethod
     def elNumber(self) -> int:

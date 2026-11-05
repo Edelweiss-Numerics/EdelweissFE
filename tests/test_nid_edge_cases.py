@@ -183,7 +183,7 @@ def _reportADamping(monkeypatch, value: float):
     from edelweissfe.solvers.nonlinearimplicitdynamic import NonlinearImplicitDynamic
 
     def lumpedDampingOfElement(self, el):
-        start = self.theDofManager.idcsOfHigherOrderEntitiesInVIJ[el]
+        start = self.theDofManager.vijSliceOfEntity[el].start
         return np.array([start], dtype=np.int64), np.array([value])
 
     monkeypatch.setattr(NonlinearImplicitDynamic, "_lumpedDampingOfElement", lumpedDampingOfElement)

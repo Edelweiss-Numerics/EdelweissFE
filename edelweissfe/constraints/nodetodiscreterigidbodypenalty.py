@@ -37,8 +37,7 @@ from edelweissfe.constraints.base.penaltylaw import (
 )
 from edelweissfe.constraints.base.rigidbodycontactstiffness import (
     RigidBodyContactStiffnessView,
-    fillRigidBodyContactIndices,
-    rigidBodyContactContributionSize,
+    rigidBodyContactLocalEntries,
 )
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
@@ -303,25 +302,16 @@ class Constraint(ConstraintBase, MeshDependent):
 
     @property
     def couplesAllItsDofs(self) -> bool:
-        """``False``: the block is the list of the values of the sparse pattern of :meth:`initializeVIJContribution`."""
+        """``False``: the block is the list of the values of the entries of :meth:`localEntriesOfBlock`."""
         return False
 
-    def getVIJContributionSize(self) -> int:
-        """No coupling between different slave nodes: one shared RP self-block, plus per-slave
-        self-block and slave-RP coupling blocks."""
-        return rigidBodyContactContributionSize(self.rprpDof, [self.nDim] * self.nSlaves)
+    def localEntriesOfBlock(self) -> tuple[np.ndarray, np.ndarray]:
+        """No coupling between different slave nodes: one shared RP self-block, plus per-slave self-block and
+        slave-RP coupling blocks (see :func:`rigidBodyContactLocalEntries`)."""
+        return rigidBodyContactLocalEntries(self._indicesOfRPInLocal, self._indicesOfSlaveInLocal)
 
-    def shapeVIJContribution(self, flat_view: np.ndarray) -> RigidBodyContactStiffnessView:
-        return RigidBodyContactStiffnessView(flat_view, self.rprpDof, [self.nDim] * self.nSlaves)
-
-    def initializeVIJContribution(self, idcs: np.ndarray, I_: np.ndarray, J_: np.ndarray, offset: int) -> None:
-        fillRigidBodyContactIndices(
-            idcs[self._indicesOfRPInLocal],
-            [idcs[slaveIndices] for slaveIndices in self._indicesOfSlaveInLocal],
-            I_,
-            J_,
-            offset,
-        )
+    def shapeBlock(self, values: np.ndarray) -> RigidBodyContactStiffnessView:
+        return RigidBodyContactStiffnessView(values, self.rprpDof, [self.nDim] * self.nSlaves)
 
     def computeKernels(
         self,

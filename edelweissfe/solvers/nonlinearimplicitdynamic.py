@@ -1245,10 +1245,10 @@ class NonlinearImplicitDynamic(NIST):
 
         nElementVIJ = 0
         for el in model.elements.values():
-            start = new.idcsOfHigherOrderEntitiesInVIJ[el]
-            if start != old.idcsOfHigherOrderEntitiesInVIJ[el]:
+            vijSlice = new.vijSliceOfEntity[el]
+            if vijSlice != old.vijSliceOfEntity[el]:
                 return None
-            nElementVIJ = max(nElementVIJ, start + el.getVIJContributionSize())
+            nElementVIJ = max(nElementVIJ, vijSlice.stop)
 
         if not (
             np.array_equal(new.I[:nElementVIJ], old.I[:nElementVIJ])
@@ -1657,7 +1657,7 @@ class NonlinearImplicitDynamic(NIST):
         """The lumped (diagonal) damping one element reports, placed on the diagonal of its own
         block in the VIJ layout -- only the nonzero entries, as their VIJ indices and values.
 
-        An element's block occupies ``nDof * nDof`` consecutive VIJ entries in row-major order, so
+        An element's block occupies ``nDof * nDof`` consecutive VIJ entries in column-major order, so
         its ``k``-th diagonal entry is at ``start + k * (nDof + 1)``. Each slot belongs to one
         element, so indices collected over all elements are unique.
 
@@ -1676,7 +1676,7 @@ class NonlinearImplicitDynamic(NIST):
         el.computeLumpedDamping(Ce)
         nonzero = np.flatnonzero(Ce)
 
-        start = self.theDofManager.idcsOfHigherOrderEntitiesInVIJ[el]
+        start = self.theDofManager.vijSliceOfEntity[el].start
         return (start + nonzero * (el.nDof + 1)).astype(np.int64), Ce[nonzero]
 
     def _warnAboutDiscardedInertia(

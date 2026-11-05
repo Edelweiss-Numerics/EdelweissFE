@@ -81,11 +81,13 @@ array, and so does ``NEST``.
 
 What the direct path has to know about the entities and the solvers:
 
-- **Sparse blocks.** An entity may declare a VIJ pattern of its own, sparser than its dense
-  ``nDof x nDof`` block (see :class:`~edelweissfe.numerics.vijentitybase.VIJEntityBase`): a constraint
+- **Sparse blocks.** An entity may list the entries of its block itself, sparser than its dense
+  ``nDof x nDof`` block (see
+  :class:`~edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase`): a constraint
   that couples only some of its degrees of freedom. Its block is then the list of values of its own
-  ``(I, J)`` pairs, which the scatter places entry by entry. The entity says so
-  (:attr:`~edelweissfe.numerics.vijentitybase.VIJEntityBase.couplesAllItsDofs` is ``False``); the number
+  entries, which the scatter places entry by entry. The entity says so
+  (:attr:`~edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.couplesAllItsDofs` is
+  ``False``); the number
   of its entries cannot tell, since a sparse pattern can have exactly ``nDof**2`` of them, as a rigid body
   contact with a single slave node in 3D has.
 - **Worker threads.** Each thread of the parallel element loop writes through blocks of its own

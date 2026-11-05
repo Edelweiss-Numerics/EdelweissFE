@@ -44,6 +44,7 @@ from edelweissfe.nodecouplingentity.base.nodecouplingentity import (
 )
 from edelweissfe.numerics.dofvector import DofVector
 from edelweissfe.numerics.parallelizationutilities import mapChunksInParallel
+from edelweissfe.numerics.systemmatrixcontributor import countEntriesOfBlock
 from edelweissfe.numerics.vijsystemmatrix import VIJSystemMatrix
 from edelweissfe.points.node import Node
 from edelweissfe.sets.nodeset import NodeSet
@@ -136,10 +137,6 @@ class DofManager:
         self.idcsOfElementsInDofVector = dict()  #: Dictionary mapping an element to its indices in the DofVector
         self.idcsOfConstraintsInDofVector = dict()  #: Dictionary mapping a constraint to its indices in the DofVector
 
-        self._sizeVIJ = (
-            0  #: Total number of nonzero entries in the system matrix resulting from higher order entity contributions
-        )
-
         # initialization:
 
         self._determineDofsAndTheirIndices(nodeFields, scalarVariables)
@@ -162,8 +159,7 @@ class DofManager:
             self.nAccumulatedNodalFluxesFieldwise = self._computeAccumulatedNodalFluxesFieldWise(self.fields)
 
         if initializeVIJPattern:
-            self._sizeVIJ = self._accumulatedElementVIJSize + self._accumulatedConstraintVIJSize
-            self.I, self.J, self.idcsOfHigherOrderEntitiesInVIJ = self._initializeVIJPattern()
+            self.I, self.J, self.vijSliceOfEntity = self._initializeVIJPattern()
 
         if determiningIndexToHostObjectMapping:
             self.indexToHostObjectMapping |= self._determineIndexToNodeMap()
@@ -193,14 +189,12 @@ class DofManager:
 
         (
             self.accumulatedElementNDof,
-            self._accumulatedElementVIJSize,
             self._nAccumulatedNodalFluxesFieldwiseFromElements,
             self.largestNumberOfElNDof,
         ) = self._gatherElementsInformation(elements)
 
         (
             self.accumulatedConstraintNDof,
-            self._accumulatedConstraintVIJSize,
             self._nAccumulatedNodalFluxesFieldwiseFromConstraints,
             self.largestNumberOfConstraintNDof,
         ) = self._gatherConstraintsInformation(constraints)
@@ -240,7 +234,6 @@ class DofManager:
 
         (
             self.accumulatedConstraintNDof,
-            self._accumulatedConstraintVIJSize,
             self._nAccumulatedNodalFluxesFieldwiseFromConstraints,
             self.largestNumberOfConstraintNDof,
         ) = self._gatherConstraintsInformation(constraints)
@@ -251,8 +244,7 @@ class DofManager:
             self.nAccumulatedNodalFluxesFieldwise = self._computeAccumulatedNodalFluxesFieldWise(self.fields)
 
         if self._hasVIJPattern:
-            self._sizeVIJ = self._accumulatedElementVIJSize + self._accumulatedConstraintVIJSize
-            self.I, self.J, self.idcsOfHigherOrderEntitiesInVIJ = self._initializeVIJPattern()
+            self.I, self.J, self.vijSliceOfEntity = self._initializeVIJPattern()
 
     @cached_property
     def dofNumberingDigest(self) -> str:
@@ -436,7 +428,7 @@ class DofManager:
 
         return nAccumulatedFluxesFieldwise
 
-    def _gatherElementsInformation(self, entities: list) -> tuple[int, int, int, int]:
+    def _gatherElementsInformation(self, entities: list) -> tuple[int, dict, int]:
         """Generates some auxiliary information,
         which may be required by some modules of EdelweissFE.
 
@@ -447,32 +439,28 @@ class DofManager:
 
         Returns
         -------
-        tuple[int,int]
+        tuple[int, dict, int]
             The tuple of
                 - number of accumulated elemental degrees of freedom.
-                - number of accumulated system matrix sizes.
                 - the number of  acummulated fluxes Σ_entities Σ_nodes ( nDof (field) ) for Abaqus-like convergence tests.
                 - largest occuring number of dofs on any element.
         """
         accumulatedEntityNDof = 0
-        accumulatedEntityVIJSize = 0
         largestNumberOfAnyEntitityDof = 0
 
         for e in entities:
             accumulatedEntityNDof += e.nDof
-            accumulatedEntityVIJSize += e.nDof**2
             largestNumberOfAnyEntitityDof = max(e.nDof, largestNumberOfAnyEntitityDof)
 
         nAccumulatedFluxesFieldwise = self._accumulateNodalFluxesFieldwise(entities)
 
         return (
             accumulatedEntityNDof,
-            accumulatedEntityVIJSize,
             nAccumulatedFluxesFieldwise,
             largestNumberOfAnyEntitityDof,
         )
 
-    def _gatherConstraintsInformation(self, entities: list) -> tuple[int, int, int, int]:
+    def _gatherConstraintsInformation(self, entities: list) -> tuple[int, dict, int]:
         """Generates some auxiliary information,
         which may be required by some modules of EdelweissFE.
 
@@ -483,29 +471,24 @@ class DofManager:
 
         Returns
         -------
-        tuple[int,int]
+        tuple[int, dict, int]
             The tuple of
                 - number of accumulated elemental degrees of freedom.
-                - number of accumulated system matrix sizes.
                 - the number of  acummulated fluxes Σ_entities Σ_nodes ( nDof (field) ) for Abaqus-like convergence tests.
                 - largest occuring number of dofs on any element.
         """
 
         accumulatedEntityNDof = 0
-        accumulatedEntityVIJSize = 0
         largestNumberOfAnyEntitityDof = 0
 
         for e in entities:
             accumulatedEntityNDof += e.nDof
-            # Use the constraint-declared VIJ size (may be sparse, i.e. < nDof**2).
-            accumulatedEntityVIJSize += e.getVIJContributionSize()
             largestNumberOfAnyEntitityDof = max(e.nDof, largestNumberOfAnyEntitityDof)
 
         nAccumulatedFluxesFieldwise = self._accumulateNodalFluxesFieldwise(entities)
 
         return (
             accumulatedEntityNDof,
-            accumulatedEntityVIJSize,
             nAccumulatedFluxesFieldwise,
             largestNumberOfAnyEntitityDof,
         )
@@ -687,35 +670,41 @@ class DofManager:
     ) -> tuple[np.ndarray, np.ndarray, dict]:
         """Generate the IJ pattern for VIJ (COO) system matrices.
 
+        Every entity has its own slice of ``I`` and ``J``, one entry per value of its block, in the order of
+        :meth:`~edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.localEntriesOfBlock`. The
+        entity knows its entries in its own DOF numbering; their global row and column are the entries of its global
+        DOF list: ``I = idcs[localRows]``, ``J = idcs[localColumns]``.
+
         Returns
         -------
         tuple
              - I vector
              - J vector
-             - the entities to system matrix entry mapping.
+             - the slice of the VIJ vectors of every entity.
         """
-
-        entitiesInVIJ = {}
-
-        sizeVIJ = self._sizeVIJ
-
-        I = np.zeros(sizeVIJ, dtype=np.intc)  # noqa: E741
-        J = np.zeros(sizeVIJ, dtype=np.intc)  # noqa: E741
-        idxInVIJ = 0
 
         # The entities follow one another in the VIJ vectors, so where each one starts is known before any of them
         # writes; each then fills only its own part of I and J, and they do so in chunks on the thread pool.
+        vijSliceOfEntity = {}
+        nEntries = 0
         for entity in self.idcsOfHigherOrderEntitiesInDofVector:
-            entitiesInVIJ[entity] = idxInVIJ
-            idxInVIJ += entity.getVIJContributionSize()
+            nEntriesOfEntity = countEntriesOfBlock(entity)
+            vijSliceOfEntity[entity] = slice(nEntries, nEntries + nEntriesOfEntity)
+            nEntries += nEntriesOfEntity
 
-        def initializeChunk(entitiesWithIndices):
+        I = np.empty(nEntries, dtype=np.intc)  # noqa: E741
+        J = np.empty(nEntries, dtype=np.intc)  # noqa: E741
+
+        def localToGlobalChunk(entitiesWithIndices):
             for entity, entityIdcsInDofVector in entitiesWithIndices:
-                entity.initializeVIJContribution(entityIdcsInDofVector, I, J, entitiesInVIJ[entity])
+                localRows, localColumns = entity.localEntriesOfBlock()
+                vijSlice = vijSliceOfEntity[entity]
+                I[vijSlice] = entityIdcsInDofVector[localRows]
+                J[vijSlice] = entityIdcsInDofVector[localColumns]
 
-        mapChunksInParallel(list(self.idcsOfHigherOrderEntitiesInDofVector.items()), initializeChunk)
+        mapChunksInParallel(list(self.idcsOfHigherOrderEntitiesInDofVector.items()), localToGlobalChunk)
 
-        return I, J, entitiesInVIJ
+        return I, J, vijSliceOfEntity
 
     def constructVIJSystemMatrix(
         self,
@@ -733,7 +722,7 @@ class DofManager:
         I = self.I  # noqa: E741
         J = self.J
 
-        return VIJSystemMatrix(nDof, I, J, self.idcsOfHigherOrderEntitiesInVIJ)
+        return VIJSystemMatrix(nDof, I, J, self.vijSliceOfEntity)
 
     def constructDofVector(
         self,

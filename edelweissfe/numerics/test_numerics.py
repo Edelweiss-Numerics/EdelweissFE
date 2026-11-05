@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Unit tests for edelweissfe.numerics (DofVector, ScatterDofVector, VIJSystemMatrix, VIJEntityBase, DofManager).
+Unit tests for edelweissfe.numerics (DofVector, ScatterDofVector, VIJSystemMatrix, SystemMatrixContributorBase, DofManager).
 """
 
 import unittest
@@ -17,11 +17,11 @@ from edelweissfe.numerics.scatterdofvector import (
     ScatterDofVector,
     ScatterDofVectorTemplate,
 )
-from edelweissfe.numerics.vijentitybase import VIJEntityBase
+from edelweissfe.numerics.systemmatrixcontributor import SystemMatrixContributorBase
 from edelweissfe.numerics.vijsystemmatrix import VIJSystemMatrix
 
 
-class DummyEntity(VIJEntityBase):
+class DummyEntity(SystemMatrixContributorBase):
     """Mock entity for testing."""
 
     def __init__(self, nDof: int, entity_id: int):
@@ -115,12 +115,18 @@ class TestNumerics(unittest.TestCase):
         # 2 elements: ent1 (2x2=4 entries), ent2 (3x3=9 entries) -> size = 13
         I_arr = np.zeros(13, dtype=np.intc)
         J_arr = np.zeros(13, dtype=np.intc)
-        entities_in_vij = {self.ent1: 0, self.ent2: 4}
+        vijSliceOfEntity = {self.ent1: slice(0, 4), self.ent2: slice(4, 13)}
 
-        self.ent1.initializeVIJContribution(self.entity_map[self.ent1], I_arr, J_arr, 0)
-        self.ent2.initializeVIJContribution(self.entity_map[self.ent2], I_arr, J_arr, 4)
+        for entity, vijSlice in vijSliceOfEntity.items():
+            localRows, localColumns = entity.localEntriesOfBlock()
+            I_arr[vijSlice] = self.entity_map[entity][localRows]
+            J_arr[vijSlice] = self.entity_map[entity][localColumns]
 
-        vij_mat = VIJSystemMatrix(nDof=4, I=I_arr, J=J_arr, entitiesInVIJ=entities_in_vij)
+        # the dense block is column-major: the row varies fastest
+        np.testing.assert_array_equal(I_arr[:4], [0, 1, 0, 1])
+        np.testing.assert_array_equal(J_arr[:4], [0, 0, 1, 1])
+
+        vij_mat = VIJSystemMatrix(nDof=4, I=I_arr, J=J_arr, vijSliceOfEntity=vijSliceOfEntity)
         self.assertEqual(vij_mat.size, 13)
 
         # Entity read/write
