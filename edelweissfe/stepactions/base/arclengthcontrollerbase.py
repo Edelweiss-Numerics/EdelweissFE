@@ -47,7 +47,9 @@ class ArcLengthControllerBase(StepActionBase):
     :math:`\\Delta\\Delta U_0`, and for the one caused by the reference load alone, :math:`\\Delta\\Delta U_f`. The
     controller returns the correction of the load parameter :math:`\\Delta\\Delta\\lambda` such that the corrected
     increment :math:`\\Delta U + \\Delta\\Delta U_0 + \\Delta\\Delta\\lambda \\, \\Delta\\Delta U_f` satisfies its
-    equation.
+    equation. A line search asks it the same for every trial state, with :math:`\\Delta\\Delta U_0` scaled by the trial
+    step length, so that no trial state leaves the equation unsatisfied; the controller is asked several times per
+    iteration, and the answers must not change it.
     """
 
     #: The name of this step action, by which the solver option ``arcLengthController`` selects it.
@@ -65,7 +67,7 @@ class ArcLengthControllerBase(StepActionBase):
             The current increment of the solution.
         ddU_0
             The correction of the solution caused by the out-of-balance force, of the dead load and the reference load
-            scaled by the current load parameter.
+            scaled by the current load parameter; for a trial state of a line search, scaled by its step length.
         ddU_f
             The correction of the solution caused by the reference load alone.
         timeStep

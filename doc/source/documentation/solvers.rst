@@ -166,9 +166,11 @@ The options of Newton's method act on the pair of the solution increment and the
 * ``extrapolation``: both are predicted from the same accepted increments with the same weights, linearly or
   quadratically, so that the prediction stays on one extrapolated path; ``retryWithoutExtrapolation`` retries a failed
   increment from a zero prediction of both.
-* ``lineSearch``: a line search scales both corrections with the same step length, so that the trial states stay on
-  the Newton direction of the coupled problem. The controller's equation, which a shorter step leaves partly
-  unsatisfied, is enforced again in the next iteration.
+* ``lineSearch``: a line search scales the correction that the out-of-balance force causes, and the controller
+  completes every trial state with the correction of the load parameter its equation asks for at that step length, as
+  it completes the full correction. So every trial state satisfies the controller's equation, and so does the iterate
+  the line search chooses: the line search cannot leave the equation unsatisfied, also not from an iterate that does
+  not satisfy it yet.
 * ``fallBackToQuasiNewton``: the tangent of the first iteration serves both right-hand sides.
 
 Every converged increment publishes the load parameter of its step as
