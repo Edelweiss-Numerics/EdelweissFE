@@ -84,9 +84,10 @@ class EquationSystemLayout:
         system, from which the next increment starts (see the documentation page *Node field results*): the solution
         ``U``, and, for a solver that integrates in time, the velocity ``V`` and the acceleration ``A``.
 
-        In a finite element model, every node carries its total solution: the entry ``U`` of every node field is read
-        into ``U``, and the values of the scalar variables (e.g. the Lagrange multipliers of constraints). The entries
-        ``V`` and ``A`` of the node fields are read into ``V`` and ``A``, if given.
+        The entry ``U`` of every node field is read into ``U``, with the values of the scalar variables (e.g. the
+        Lagrange multipliers of constraints), and the entries ``V`` and ``A`` into ``V`` and ``A``, if given; every
+        entry through :meth:`readEntryOfNodeField`, which says on which nodes. In a finite element model, every node
+        carries its total solution and its velocity, so every entry is read on every node.
 
         Parameters
         ----------
@@ -102,14 +103,34 @@ class EquationSystemLayout:
         """
 
         for nodeField in self.model.nodeFields.values():
-            self.dofManager.writeNodeFieldToDofVector(U, nodeField, "U")
+            self.readEntryOfNodeField(U, nodeField, "U")
         self.dofManager.writeScalarVariablesToDofVector(U)
 
         for nodeField in self._nodeFieldsWithVelocity(dynamicFields):
             if V is not None:
-                self.dofManager.writeNodeFieldToDofVector(V, nodeField, "V")
+                self.readEntryOfNodeField(V, nodeField, "V")
             if A is not None:
-                self.dofManager.writeNodeFieldToDofVector(A, nodeField, "A")
+                self.readEntryOfNodeField(A, nodeField, "A")
+
+    def readEntryOfNodeField(self, dofVector: DofVector, nodeField: "NodeField", entry: str):
+        """Read one entry of one node field of the model into a vector of the equation system; every read of
+        :meth:`readStateFromModel` goes through here, as every write goes through :meth:`writeEntryOfNodeField`.
+
+        In a finite element model, the equation system numbers every node of the field, and every node carries its
+        total solution and its velocity: the whole entry is read. A model whose equation system covers a part of its
+        nodes reads the entry on the nodes that carry it.
+
+        Parameters
+        ----------
+        dofVector
+            The vector of the equation system, overwritten on the degrees of freedom of the field.
+        nodeField
+            The node field of the model.
+        entry
+            The entry, one of :attr:`NodeField.ENTRIES <edelweissfe.fields.nodefield.NodeField.ENTRIES>`.
+        """
+
+        self.dofManager.writeNodeFieldToDofVector(dofVector, nodeField, entry)
 
     def zeroIncrementalCoefficients(self, U: DofVector):
         """Set the degrees of freedom of the nodes that carry no total solution to zero in the solution vector of a
@@ -126,19 +147,11 @@ class EquationSystemLayout:
             The solution vector of the converged increment, modified in place.
         """
 
-    def writeResultsToModel(
-        self,
-        U: DofVector,
-        dU: DofVector | None,
-        P: DofVector | None,
-        V: DofVector = None,
-        A: DofVector = None,
-        dynamicFields: list = None,
-    ):
+    def writeResultsToModel(self, U: DofVector, dU: DofVector | None, P: DofVector | None):
         """Write the results of an accepted increment to the model, once (see the documentation page *Node field
         results*): the solution ``U``, its increment ``dU`` and the force ``P`` to the entries of the same
-        names of the node fields, the solution to the scalar variables, and, for a solver that integrates in time, the
-        velocity ``V`` and the acceleration ``A`` (see :meth:`writeVelocityAndAccelerationToModel`).
+        names of the node fields, and the solution to the scalar variables. The velocity and the acceleration, the
+        state of a solver that integrates in time, go through :meth:`writeVelocityAndAccelerationToModel`.
 
         A solver whose increment ends on another equation system than it started on writes in two parts, each through
         the layout of the system that holds the values: EdelweissMeshfree's explicit solver takes the increment on the
@@ -154,12 +167,6 @@ class EquationSystemLayout:
         P
             The internal force, the sum of the elements' residual contributions, with the inertial and damping forces
             of a solver that integrates in time; None to leave the entry ``P`` of the node fields as it is.
-        V
-            The velocity; None to leave the entry ``V`` of the node fields as it is.
-        A
-            The acceleration; None to leave the entry ``A`` of the node fields as it is.
-        dynamicFields
-            The names of the fields whose velocity and acceleration are written; None for every field.
         """
 
         for nodeField in self.model.nodeFields.values():
@@ -170,12 +177,11 @@ class EquationSystemLayout:
                 self.writeEntryOfNodeField(dU, nodeField, "dU")
         self.dofManager.writeDofVectorToScalarVariables(U)
 
-        self.writeVelocityAndAccelerationToModel(V, A, dynamicFields)
-
-    def writeVelocityAndAccelerationToModel(self, V: DofVector, A: DofVector, dynamicFields: list = None):
-        """Write the velocity and the acceleration to the entries ``V`` and ``A`` of the node fields: at acceptance,
-        as part of :meth:`writeResultsToModel`, and when a solver completes the state an increment starts from, e.g.
-        the acceleration the implicit dynamic solver computes from equilibrium at the start of a step.
+    def writeVelocityAndAccelerationToModel(self, V: DofVector | None, A: DofVector | None):
+        """Write the velocity and the acceleration to the entries ``V`` and ``A`` of every node field, the one way a
+        solver that integrates in time passes them to the model: at acceptance, with :meth:`writeResultsToModel`, and
+        when it completes the state an increment starts from, e.g. the acceleration the implicit dynamic solver
+        computes from equilibrium at the start of a step.
 
         Parameters
         ----------
@@ -183,11 +189,9 @@ class EquationSystemLayout:
             The velocity; None to leave the entry ``V`` as it is.
         A
             The acceleration; None to leave the entry ``A`` as it is.
-        dynamicFields
-            The names of the fields whose velocity and acceleration are written; None for every field.
         """
 
-        for nodeField in self._nodeFieldsWithVelocity(dynamicFields):
+        for nodeField in self.model.nodeFields.values():
             if V is not None:
                 self.writeEntryOfNodeField(V, nodeField, "V")
             if A is not None:
@@ -208,7 +212,8 @@ class EquationSystemLayout:
 
     def writeEntryOfNodeField(self, dofVector: DofVector, nodeField: "NodeField", entry: str):
         """Write a vector of the equation system to one entry of one node field of the model; every write of
-        :meth:`writeResultsToModel` and :meth:`writeVelocityAndAccelerationToModel` goes through here.
+        :meth:`writeResultsToModel` and :meth:`writeVelocityAndAccelerationToModel` goes through here, as every read goes
+        through :meth:`readEntryOfNodeField`.
 
         In a finite element model, the equation system numbers every node of the field, so the whole entry is written.
         A model whose equation system covers a part of its nodes writes the entry on these nodes, and sets it to zero
@@ -227,7 +232,7 @@ class EquationSystemLayout:
         self.dofManager.writeDofVectorToNodeField(dofVector, nodeField, entry)
 
     def _nodeFieldsWithVelocity(self, dynamicFields: list | None) -> list:
-        """The node fields of the model whose velocity and acceleration a solver reads or writes.
+        """The node fields of the model whose velocity and acceleration a solver reads.
 
         Parameters
         ----------

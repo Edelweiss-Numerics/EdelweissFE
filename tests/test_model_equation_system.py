@@ -191,12 +191,17 @@ def test_the_layout_of_a_finite_element_model_writes_the_results_to_every_node()
         np.testing.assert_array_equal(nodeField["V"], -1.0)
         np.testing.assert_array_equal(nodeField["A"], -1.0)
 
-    layout.writeResultsToModel(U, 2 * U, 3 * U, 4 * U, 5 * U, dynamicFields=[_FIELD])
-    displacement = model.nodeFields[_FIELD]
-    rows = np.asarray(U)[dofManager.idcsOfFieldsInDofVector[_FIELD]].reshape(-1, 2)
-    np.testing.assert_array_equal(displacement["V"], 4 * rows)
-    np.testing.assert_array_equal(displacement["A"], 5 * rows)
-    np.testing.assert_array_equal(model.nodeFields["rotation"]["V"], -1.0)
+    # the velocity and the acceleration, the state of a solver that integrates in time, go their own way, to every field
+    layout.writeVelocityAndAccelerationToModel(4 * U, 5 * U)
+    for nodeField in model.nodeFields.values():
+        rows = np.asarray(U)[dofManager.idcsOfFieldsInDofVector[nodeField.name]].reshape(-1, nodeField.dimension)
+        np.testing.assert_array_equal(nodeField["V"], 4 * rows)
+        np.testing.assert_array_equal(nodeField["A"], 5 * rows)
+    layout.writeVelocityAndAccelerationToModel(None, 6 * U)
+    for nodeField in model.nodeFields.values():
+        rows = np.asarray(U)[dofManager.idcsOfFieldsInDofVector[nodeField.name]].reshape(-1, nodeField.dimension)
+        np.testing.assert_array_equal(nodeField["V"], 4 * rows)
+        np.testing.assert_array_equal(nodeField["A"], 6 * rows)
 
 
 def test_the_layout_writes_the_state_of_a_quasi_static_solver_at_rest():
@@ -243,9 +248,9 @@ class _FirstElementsLayout(EquationSystemLayout):
         self.nodesInSystem = nodesInSystem
         self.nodeFieldsInSystem = nodeFieldsInSystem
 
-    def readStateFromModel(self, U, V=None, A=None, dynamicFields=None):
-        for nodeField in self.model.nodeFields.values():
-            self.dofManager.writeNodeFieldToDofVector(U, nodeField, "U", self.nodesInSystem)
+    def readEntryOfNodeField(self, dofVector, nodeField, entry):
+        # straight from the model's node fields, at the nodes in the system
+        self.dofManager.writeNodeFieldToDofVector(dofVector, nodeField, entry, self.nodesInSystem)
 
     def writeEntryOfNodeField(self, dofVector, nodeField, entry):
         # straight into the model's node fields, at the nodes in the system: the other nodes keep their values

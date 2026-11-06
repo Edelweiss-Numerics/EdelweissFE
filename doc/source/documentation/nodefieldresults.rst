@@ -41,7 +41,9 @@ Every solver passes these entries through the model's layout of its equation sys
 (:class:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout`), and in no other way:
 :meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.readStateFromModel` when it (re)builds the
 system, :meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeResultsToModel` when it accepts
-an increment. A quasi-static solver does not integrate in time: the state it accepts is at rest, and it writes zero to
+an increment, and, if it integrates in time,
+:meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeVelocityAndAccelerationToModel` for the
+velocity and the acceleration. A quasi-static solver does not integrate in time: the state it accepts is at rest, and it writes zero to
 ``V`` and ``A`` of every node field
 (:meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeZeroVelocityAndAccelerationToModel`), so
 that a dynamic step after it starts from rest.
