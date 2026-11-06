@@ -54,8 +54,8 @@ from test_nid_amr import (
     _run,
 )
 
+import edelweissfe.numerics.systemmatrixassembly as systemmatrixassembly
 import edelweissfe.solvers.nonlinearimplicitdynamic as nonlinearimplicitdynamic
-import edelweissfe.solvers.nonlinearimplicitstatic as nonlinearimplicitstatic
 from edelweissfe.numerics.parallelizationutilities import (
     forEachSliceInParallel,
     mapChunksInParallel,
@@ -181,7 +181,7 @@ def test_the_threaded_path_reproduces_the_serial_one_bitwise(tmp_path, monkeypat
         slicedLengths.append(length)
         return forEachSliceInParallel(work, length, 8)
 
-    for module in (nonlinearimplicitstatic, nonlinearimplicitdynamic):
+    for module in (systemmatrixassembly, nonlinearimplicitdynamic):
         monkeypatch.setattr(module, "forEachSliceInParallel", inSlicesOfEight)
     monkeypatch.setattr(nonlinearimplicitdynamic, "_MASS_ROWS_PER_BLOCK", 8)
     threadedModel, _ = _run(tmp_path, "threaded", deck)

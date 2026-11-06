@@ -1,0 +1,260 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+#  ---------------------------------------------------------------------
+#
+#  _____    _      _              _         _____ _____
+# | ____|__| | ___| |_      _____(_)___ ___|  ___| ____|
+# |  _| / _` |/ _ \ \ \ /\ / / _ \ / __/ __| |_  |  _|
+# | |__| (_| |  __/ |\ V  V /  __/ \__ \__ \  _| | |___
+# |_____\__,_|\___|_| \_/\_/ \___|_|___/___/_|   |_____|
+#
+#
+#  Unit of Strength of Materials and Structural Analysis
+#  University of Innsbruck,
+#  2017 - today
+#
+#  Matthias Neuner matthias.neuner@uibk.ac.at
+#
+#  This file is part of EdelweissFE.
+#
+#  This library is free software; you can redistribute it and/or
+#  modify it under the terms of the GNU Lesser General Public
+#  License as published by the Free Software Foundation; either
+#  version 2.1 of the License, or (at your option) any later version.
+#
+#  The full text of the license can be found in the file LICENSE.md at
+#  the top level directory of EdelweissFE.
+#  ---------------------------------------------------------------------
+
+"""What the global equation system of a model is made of: the answer a model gives a solver that (re)builds its
+equation system, see :meth:`~edelweissfe.models.femodel.FEModel.buildEquationSystem` and
+:ref:`model-equation-system`."""
+
+from collections.abc import Callable
+from typing import TYPE_CHECKING
+
+from edelweissfe.numerics.dofmanager import DofManager, DofVector
+from edelweissfe.timesteppers.timestep import TimeStep
+
+if TYPE_CHECKING:
+    from edelweissfe.fields.nodefield import NodeField
+    from edelweissfe.models.femodel import FEModel
+
+
+class EquationSystemLayout:
+    """The layout of the global equation system of a model: which degrees of freedom it has, which elements contribute
+    to it, and how the solution passes between the model and the vectors a solver iterates on.
+
+    A solver asks the model for it whenever it (re)builds its equation system
+    (:meth:`~edelweissfe.models.femodel.FEModel.buildEquationSystem`), and keeps it as long as the numbering of the
+    degrees of freedom it holds: until the next rebuild. The solver itself only solves; what the model is made of, the
+    layout says.
+
+    This class is the layout of a finite element model. A model made of other entities -- EdelweissMeshfree's material
+    point and RKPM models, with their background cells and particles -- returns a layout derived from it, which changes
+    what its methods do; the solver calls them the same way.
+
+    Parameters
+    ----------
+    model
+        The model.
+    dofManager
+        The numbering of the degrees of freedom.
+    elements
+        The elements, in the order in which the solver computes them.
+    """
+
+    def __init__(self, model: "FEModel", dofManager: DofManager, elements: list):
+        #: The model this equation system belongs to.
+        self.model = model
+        #: The numbering of the degrees of freedom of the equation system; see
+        #: :class:`~edelweissfe.numerics.dofmanager.DofManager`.
+        self.dofManager = dofManager
+        #: Everything the solver computes like an element in every evaluation of the model, see
+        #: :meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.computeElements`: the finite elements of the model,
+        #: and in a meshfree model its cells and particles as well. A list, which a parallel solver hands out in slices
+        #: to its threads.
+        self.elements = elements
+        #: The model the linear solver is set up for (see :meth:`~edelweissfe.linsolve.base.LinearSolver.setModel`),
+        #: whose node fields are the ones the DOF manager numbers: here, the model itself.
+        self.modelForLinearSolver = model
+
+    def readStateFromModel(self, U: DofVector, V: DofVector = None, A: DofVector = None, dynamicFields: list = None):
+        """Read the state the model carries from increment to increment into the vectors of a (re)built equation
+        system, from which the next increment starts (see the documentation page *Node field results*): the solution
+        ``U``, and, for a solver that integrates in time, the velocity ``V`` and the acceleration ``A``.
+
+        In a finite element model, every node carries its total solution: the entry ``U`` of every node field is read
+        into ``U``, and the values of the scalar variables (e.g. the Lagrange multipliers of constraints). The entries
+        ``V`` and ``A`` of the node fields are read into ``V`` and ``A``, if given.
+
+        Parameters
+        ----------
+        U
+            The solution vector of the equation system, zero, overwritten.
+        V
+            The velocity vector of the equation system, zero, overwritten; None if the solver has none.
+        A
+            The acceleration vector of the equation system, zero, overwritten; None if the solver has none.
+        dynamicFields
+            The names of the fields whose velocity and acceleration are read, e.g. those the solver integrates in time;
+            None for every field.
+        """
+
+        for nodeField in self.model.nodeFields.values():
+            self.dofManager.writeNodeFieldToDofVector(U, nodeField, "U")
+        self.dofManager.writeScalarVariablesToDofVector(U)
+
+        for nodeField in self._nodeFieldsWithVelocity(dynamicFields):
+            if V is not None:
+                self.dofManager.writeNodeFieldToDofVector(V, nodeField, "V")
+            if A is not None:
+                self.dofManager.writeNodeFieldToDofVector(A, nodeField, "A")
+
+    def zeroIncrementalCoefficients(self, U: DofVector):
+        """Set the degrees of freedom of the nodes that carry no total solution to zero in the solution vector of a
+        converged increment, before its results are written to the model: these *incremental* degrees of freedom are
+        the coefficients of one increment, and every increment starts them at zero (see
+        the documentation page *Node field results*).
+
+        In a finite element model, every node carries its total solution, so there is nothing to do here. A meshfree
+        model, whose background grid and kernel functions are incremental, sets their degrees of freedom to zero.
+
+        Parameters
+        ----------
+        U
+            The solution vector of the converged increment, modified in place.
+        """
+
+    def writeResultsToModel(
+        self,
+        U: DofVector,
+        dU: DofVector | None,
+        P: DofVector | None,
+        V: DofVector = None,
+        A: DofVector = None,
+        dynamicFields: list = None,
+    ):
+        """Write the results of an accepted increment to the model, once (see the documentation page *Node field
+        results*): the solution ``U``, its increment ``dU`` and the internal force ``P`` to the entries of the same
+        names of the node fields, the solution to the scalar variables, and, for a solver that integrates in time, the
+        velocity ``V`` and the acceleration ``A`` (see :meth:`writeVelocityAndAccelerationToModel`).
+
+        A solver whose increment ends on another equation system than it started on writes in two parts, each through
+        the layout of the system that holds the values: EdelweissMeshfree's explicit solver takes the increment on the
+        kernel functions the particles reached at its start, and evaluates the force on those they reach at its end.
+        It passes None for the entries the other part writes.
+
+        Parameters
+        ----------
+        U
+            The solution.
+        dU
+            The increment of the solution; None to leave the entry ``dU`` of the node fields as it is.
+        P
+            The internal force, the sum of the elements' residual contributions; None to leave the entry ``P`` of the
+            node fields as it is.
+        V
+            The velocity; None to leave the entry ``V`` of the node fields as it is.
+        A
+            The acceleration; None to leave the entry ``A`` of the node fields as it is.
+        dynamicFields
+            The names of the fields whose velocity and acceleration are written; None for every field.
+        """
+
+        for nodeField in self.model.nodeFields.values():
+            self.writeEntryOfNodeField(U, nodeField, "U")
+            if P is not None:
+                self.writeEntryOfNodeField(P, nodeField, "P")
+            if dU is not None:
+                self.writeEntryOfNodeField(dU, nodeField, "dU")
+        self.dofManager.writeDofVectorToScalarVariables(U)
+
+        self.writeVelocityAndAccelerationToModel(V, A, dynamicFields)
+
+    def writeVelocityAndAccelerationToModel(self, V: DofVector, A: DofVector, dynamicFields: list = None):
+        """Write the velocity and the acceleration to the entries ``V`` and ``A`` of the node fields: at acceptance,
+        as part of :meth:`writeResultsToModel`, and when a solver completes the state an increment starts from, e.g.
+        the acceleration the implicit dynamic solver computes from equilibrium at the start of a step.
+
+        Parameters
+        ----------
+        V
+            The velocity; None to leave the entry ``V`` as it is.
+        A
+            The acceleration; None to leave the entry ``A`` as it is.
+        dynamicFields
+            The names of the fields whose velocity and acceleration are written; None for every field.
+        """
+
+        for nodeField in self._nodeFieldsWithVelocity(dynamicFields):
+            if V is not None:
+                self.writeEntryOfNodeField(V, nodeField, "V")
+            if A is not None:
+                self.writeEntryOfNodeField(A, nodeField, "A")
+
+    def writeEntryOfNodeField(self, dofVector: DofVector, nodeField: "NodeField", entry: str):
+        """Write a vector of the equation system to one entry of one node field of the model; every write of
+        :meth:`writeResultsToModel` and :meth:`writeVelocityAndAccelerationToModel` goes through here.
+
+        In a finite element model, the equation system numbers every node of the field, so the whole entry is written.
+        A model whose equation system covers a part of its nodes writes the entry on these nodes, and sets it to zero
+        on the others.
+
+        Parameters
+        ----------
+        dofVector
+            The vector of the equation system.
+        nodeField
+            The node field of the model.
+        entry
+            The entry, one of :attr:`NodeField.ENTRIES <edelweissfe.fields.nodefield.NodeField.ENTRIES>`.
+        """
+
+        self.dofManager.writeDofVectorToNodeField(dofVector, nodeField, entry)
+
+    def _nodeFieldsWithVelocity(self, dynamicFields: list | None) -> list:
+        """The node fields of the model whose velocity and acceleration a solver reads or writes.
+
+        Parameters
+        ----------
+        dynamicFields
+            Their names, or None for every node field.
+
+        Returns
+        -------
+        list
+            The node fields.
+        """
+
+        if dynamicFields is None:
+            return list(self.model.nodeFields.values())
+
+        return [self.model.nodeFields[fieldName] for fieldName in dynamicFields]
+
+    def updateMaterialPoints(self, dU: DofVector, timeStep: TimeStep, forEachChunk: Callable[[list, Callable], None]):
+        """Bring the material points that belong to no element up to date with the trial solution increment, right
+        before the solver computes the elements. Called whenever a solver evaluates the elements (see
+        :meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.assembleInternalForces`), e.g. in every Newton
+        iteration and for every trial state of a line search.
+
+        The loops over the entities belong to the solver, as the loop over the elements does: ``forEachChunk(entities,
+        work)`` calls ``work(chunk)`` for chunks that together hold all ``entities``, in the calling thread or on the
+        threads of a parallel solver (see :meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.forEachChunk`). A
+        layout loops through it over entities that are independent of each other.
+
+        A finite element model has no such material points: every element evaluates the material at its own quadrature
+        points, in :meth:`~edelweissfe.elements.base.baseelement.BaseElement.computeKernels`, so there is nothing to do
+        here. In the material point method, the material points move through a fixed background grid, and belong to the
+        cell they currently lie in: here, each cell interpolates the solution increment to its material points, and the
+        material points evaluate their material, before the solver computes the cells, which integrate the result.
+
+        Parameters
+        ----------
+        dU
+            The trial solution increment.
+        timeStep
+            The time step.
+        forEachChunk
+            The solver's loop over chunks of independent entities.
+        """

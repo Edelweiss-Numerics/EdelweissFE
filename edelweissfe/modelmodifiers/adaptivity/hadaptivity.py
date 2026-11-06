@@ -240,7 +240,7 @@ def _connectedComponents(elements: list) -> dict:
 #: parent element: the solution ``"U"``, and the dynamic state ``"V"`` and ``"A"``, which nothing else can
 #: reproduce. The shape functions are a partition of unity, so a uniform velocity field (and its momentum)
 #: is carried exactly. The implicit dynamic solver re-solves ``"A"`` from equilibrium on the next increment
-#: (see :mod:`~edelweissfe.solvers.nonlinearimplicitdynamic`). Entries absent from a node field are skipped.
+#: (see :mod:`~edelweissfe.solvers.nonlinearimplicitdynamic`).
 WARM_STARTED_NODE_FIELD_ENTRIES = ("U", "V", "A")
 
 
@@ -657,11 +657,10 @@ class ModelModifier(ModelModifierBase):
         oldValues = {}
         for fieldName, nodeField in model.nodeFields.items():
             for entryName in WARM_STARTED_NODE_FIELD_ENTRIES:
-                if entryName in nodeField:
-                    entryValues = np.asarray(nodeField[entryName])
-                    oldValues[(fieldName, entryName)] = {
-                        node: entryValues[nodeField._indicesOfNodesInArray[node]].copy() for node in nodeField.nodes
-                    }
+                entryValues = np.asarray(nodeField[entryName])
+                oldValues[(fieldName, entryName)] = {
+                    node: entryValues[nodeField._indicesOfNodesInArray[node]].copy() for node in nodeField.nodes
+                }
         return oldValues
 
     def _createNewNodes(self, model: FEModel) -> dict:
@@ -890,13 +889,10 @@ class ModelModifier(ModelModifierBase):
         change.changedElementSets.add("all")
 
     def _resizeNodeFieldsAndWarmStart(self, model: FEModel, oldValues: dict, newValues: dict):
-        """Resize the node fields to the new nodes, then write the warm-start values: the
-        converged value on a retained node, the interpolated value on a new one.
-
-        ``U`` is also written to ``P`` (the previous converged solution), so the first Newton
-        iteration after refinement sees a normal residual rather than a spurious ``dU = U - P = U``
-        on every node. The other warm-started entries (``V``, ``A``, present only for the dynamic
-        solvers) get just their own value.
+        """Resize the node fields to the new nodes, then write the warm-start values of the state
+        entries ``U``, ``V`` and ``A`` (see :doc:`/documentation/nodefieldresults`): the converged
+        value on a retained node, the interpolated value on a new one. The results ``dU`` and ``P``
+        are not transferred: a new node holds zero until the next accepted increment writes them.
 
         On the replay path the model postpones the resize to the end of the replay window -- see
         :meth:`TopologyPipeline.changes` -- so the writes below are then dead work, overwritten by
@@ -905,23 +901,15 @@ class ModelModifier(ModelModifierBase):
 
         model._resizeNodeFieldsForNodes(self._journal)
         for fieldName, nodeField in model.nodeFields.items():
-            if "U" not in nodeField:
-                nodeField.createFieldValueEntry("U")
-            if "P" not in nodeField:
-                nodeField.createFieldValueEntry("P")
             for entryName in WARM_STARTED_NODE_FIELD_ENTRIES:
-                if entryName not in nodeField:
-                    continue
-                targets = [nodeField["U"], nodeField["P"]] if entryName == "U" else [nodeField[entryName]]
+                target = nodeField[entryName]
                 old = oldValues.get((fieldName, entryName), {})
                 new = newValues.get((fieldName, entryName), {})
                 for node in nodeField.nodes:
                     value = old[node] if node in old else new.get(node)
                     if value is None:
                         continue
-                    idx = nodeField._indicesOfNodesInArray[node]
-                    for target in targets:
-                        target[idx] = value
+                    target[nodeField._indicesOfNodesInArray[node]] = value
 
     def encodePlan(self, plan: "RefinementPlan") -> dict:
         """Serialize a :class:`RefinementPlan` -- just the octree eids it names."""

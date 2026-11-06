@@ -51,6 +51,7 @@ from edelweissfe.adaptivity.hex20shapefunctions import (
     hex20_shape,
     hex20_shape_grad,
 )
+from edelweissfe.fields.nodefield import NodeField
 from edelweissfe.utils.fieldoutput import ElementFieldOutput
 from edelweissfe.utils.schema import (
     OptionSchemaProvider,
@@ -887,7 +888,8 @@ class RecoveryErrorMarker(MarkerBase):
         Recovery method: ``'averaging'`` (volume-weighted nodal averaging, ZZ 1987) or ``'spr'``
         (superconvergent patch recovery, ZZ 1992 -- the sharper choice for serendipity elements).
     entry
-        Node-field value entry to read (``'U'``, the current converged field, by default).
+        Node-field value entry to read, one of :attr:`~edelweissfe.fields.nodefield.NodeField.ENTRIES`
+        (``'U'``, the current converged field, by default).
     """
 
     _RECOVERY_METHODS = ("averaging", "spr")
@@ -933,6 +935,10 @@ class RecoveryErrorMarker(MarkerBase):
                 f"RecoveryErrorMarker: unknown recovery={recovery!r}; expected one of {self._RECOVERY_METHODS}."
             )
         self.recovery = recovery
+        if entry not in NodeField.ENTRIES:
+            raise ValueError(
+                f"RecoveryErrorMarker: unknown entry={entry!r}; a node field holds the entries {NodeField.ENTRIES}."
+            )
         self.entry = entry
 
     def mark(self, model, candidateElements, mesh):
@@ -942,8 +948,6 @@ class RecoveryErrorMarker(MarkerBase):
                 "which is not defined on the model. Use the exact field name (e.g. 'nonlocal damage')."
             )
         nodeField = model.nodeFields[self.nodeFieldName]
-        if self.entry not in nodeField:
-            return set()
         values = nodeField[self.entry]
         indexOf = nodeField._indicesOfNodesInArray
 

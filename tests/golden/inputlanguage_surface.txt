@@ -877,6 +877,7 @@ Initialize materials to an geostatic stress state
 ===== module documentation: edelweissfe.stepactions.indirectcontrol =====
 < indirectcontrol > Indirect (displacement) controller for the NISTArcLength solver using a ring to control the contraction, e.g., for tunneling simulations.
   required arguments
+    [name] Name of the step action, by which the solver option arcLengthController selects it. (<class 'str'>)
     [dof1] Degree of freedom for the constraint (model access expression). (<class 'str'>)
     [dof2] Degree of freedom for the constraint (model access expression). (<class 'str'>)
     [cVector1] c vector. (<class 'str'>)
@@ -887,6 +888,7 @@ Initialize materials to an geostatic stress state
     [absolute] Use absolute formulation (<class 'bool'>, default = True)
 < indirectcontrol > Indirect (displacement) controller for the NISTArcLength solver using a ring to control the contraction, e.g., for tunneling simulations.
   required arguments
+    [name] Name of the step action, by which the solver option arcLengthController selects it. (<class 'str'>)
     [dof1] Degree of freedom for the constraint (model access expression). (<class 'str'>)
     [dof2] Degree of freedom for the constraint (model access expression). (<class 'str'>)
     [cVector1] c vector. (<class 'str'>)
