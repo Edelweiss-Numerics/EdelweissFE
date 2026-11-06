@@ -41,8 +41,8 @@ from edelweissfe.numerics.mpctransformation import (
     MultiPointConstraintTransformation,
     _flattenChainedRecords,
 )
-from edelweissfe.solvers.base.convergencecriteria import FieldConvergence
 from edelweissfe.solvers.base.convergencetable import ConvergenceTable
+from edelweissfe.stepactions.base.loadbase import LoadBase
 from edelweissfe.stepactions.base.stepactionbase import StepActionBase
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.checkpointedstate import packState, unpackState
@@ -62,8 +62,9 @@ class TopologyUpdate(NamedTuple):
     """A model modifier (e.g. AMR) changed the mesh."""
     meshDependentsRefreshed: bool
     """A mesh-dependent consumer (e.g. a tie or contact surface) was rebuilt on the changed mesh."""
-    constraintConnectivityChanged: bool
-    """A constraint changed the degrees of freedom it couples, e.g. after a contact search."""
+    connectivityChanged: bool
+    """The coupling of the degrees of freedom changed, e.g. a constraint after a contact search; see
+    :meth:`~edelweissfe.models.femodel.FEModel.updateConnectivity`."""
 
 
 class NonlinearSolverBase(OptionSchemaProvider, ABC):
@@ -174,12 +175,11 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
 
         Two phases. First, the model modifiers plan and apply to a fixed point inside one topology
         window (:meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.update`). Second, the pure
-        readers of the settled model -- tie and contact surfaces, constraint connectivity -- catch
-        up, once, on the net change. They may not create or delete elements: the topology window
-        is closed by then, so an attempt raises.
-
-        Both sweeps of the second phase are materialized lists rather than ``any()`` over a
-        generator, which would stop at the first consumer reporting a change and skip the rest.
+        readers of the settled model catch up, once, on the net change: the tie and contact surfaces,
+        then the coupling of the degrees of freedom, which the model brings up to date itself
+        (:meth:`~edelweissfe.models.femodel.FEModel.updateConnectivity`; the constraints of a finite
+        element model, e.g. a contact search). They may not create or delete elements: the topology
+        window is closed by then, so an attempt raises.
 
         Parameters
         ----------
@@ -199,129 +199,61 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
 
         topologyChanged = model.topology.update(step) if offerModelModifiers else False
         meshDependentsRefreshed = model.topology.refreshMeshDependents()
-        constraintConnectivityChanged = any(
-            [constraint.updateConnectivity(model) for constraint in model.constraints.values()]
-        )
-        return TopologyUpdate(topologyChanged, meshDependentsRefreshed, constraintConnectivityChanged)
+        connectivityChanged = model.updateConnectivity()
+        return TopologyUpdate(topologyChanged, meshDependentsRefreshed, connectivityChanged)
 
-    @performancetiming.timeit("distributed loads")
-    def computeDistributedLoads(
-        self,
-        distributedLoads: list[StepActionBase],
-        U_np: DofVector,
-        PExt: DofVector,
-        K: VIJSystemMatrix | None,
-        timeStep: TimeStep,
-    ) -> tuple[DofVector, VIJSystemMatrix]:
-        """Loop over all distributed loads acting on elements, and evaluate them.
-        Assembles into the global external load vector and, if given, the system matrix.
+    @staticmethod
+    def collectLoads(stepActions: dict) -> list[LoadBase]:
+        """The loads among a step's actions: every action that is a
+        :class:`~edelweissfe.stepactions.base.loadbase.LoadBase`, whatever step action module it is defined in, so
+        that a new kind of load needs no change to any solver.
+
+        They come in the order in which their contributions are summed, module by module: the node forces, the
+        distributed loads and the body forces first, then the loads of any other module, by the name of the module;
+        within a module, in the order of their definition. A fixed order makes the residual the same sum in every run.
 
         Parameters
         ----------
-        distributedLoads
-            The list of distributed loads.
-        U_np
-            The current solution vector.
-        PExt
-            The external load vector to assemble into.
-        K
-            The system matrix to assemble into; None for an explicit solver, which needs no tangent.
-        timeStep
-            The current time step.
+        stepActions
+            The step actions, by module.
 
         Returns
         -------
-        tuple[DofVector,VIJSystemMatrix]
-            The updated load vector and system matrix.
+        list[LoadBase]
+            The loads.
         """
 
-        time = timeStep.totalTime
-        dT = timeStep.timeIncrement
+        modulesSummedFirst = ("nodeforces", "distributedload", "bodyforce")
+        modules = [module for module in modulesSummedFirst if module in stepActions]
+        modules += sorted(module for module in stepActions if module not in modulesSummedFirst)
 
-        for dLoad in distributedLoads:
-            load = dLoad.getCurrentLoad(timeStep)
-            for faceID, elementSet in dLoad.surface.items():
-                for el in elementSet:
-                    Ke = K[el] if K is not None else np.zeros(el.nDof * el.nDof)
-                    Pe = np.zeros(el.nDof)
-
-                    el.computeDistributedLoad(dLoad.loadType, Pe, Ke, faceID, load, U_np[el], time, dT)
-
-                    PExt[el] += Pe
-
-        return PExt, K
-
-    @performancetiming.timeit("body forces")
-    def computeBodyForces(
-        self,
-        bodyForces: list[StepActionBase],
-        U_np: DofVector,
-        PExt: DofVector,
-        K: VIJSystemMatrix | None,
-        timeStep: TimeStep,
-    ) -> tuple[DofVector, VIJSystemMatrix]:
-        """Loop over all body forces loads acting on elements, and evaluate them.
-        Assembles into the global external load vector and, if given, the system matrix.
-
-        Parameters
-        ----------
-        distributedLoads
-            The list of distributed loads.
-        U_np
-            The current solution vector.
-        PExt
-            The external load vector to assemble into.
-        K
-            The system matrix to assemble into; None for an explicit solver, which needs no tangent.
-        increment
-            The increment.
-
-        Returns
-        -------
-        tuple[DofVector,VIJSystemMatrix]
-            The updated load vector and system matrix.
-        """
-
-        time = timeStep.totalTime
-        dT = timeStep.timeIncrement
-
-        for bForce in bodyForces:
-            force = bForce.getCurrentLoad(timeStep)
-            for el in bForce.elementSet:
-                Pe = np.zeros(el.nDof)
-                Ke = K[el] if K is not None else np.zeros(el.nDof * el.nDof)
-
-                el.computeBodyForce(Pe, Ke, force, U_np[el], time, dT)
-
-                PExt[el] += Pe
-
-        return PExt, K
+        return [action for module in modules for action in stepActions[module].values() if isinstance(action, LoadBase)]
 
     @performancetiming.timeit("assemble loads")
     def assembleLoads(
         self,
-        nodeForces: list[StepActionBase],
-        distributedLoads: list[StepActionBase],
-        bodyForces: list[StepActionBase],
+        loads: list[LoadBase],
         U_np: DofVector,
-        PExt: DofVector,
+        dU: DofVector,
+        P: DofVector,
         K: VIJSystemMatrix | None,
         timeStep: TimeStep,
     ) -> tuple[DofVector, VIJSystemMatrix]:
-        """Assemble all loads into a right hand side vector.
+        """Assemble the residual contributions of all loads: each adds the negative of the external load it
+        applies, and the tangent of that contribution, which is nonzero only for a load that follows the
+        deformation; see :ref:`residual-and-tangent-convention`. Every load knows where it acts, see
+        :meth:`~edelweissfe.stepactions.base.loadbase.LoadBase.assembleLoad`, so this only loops over them.
 
         Parameters
         ----------
-        nodeForces
-            The list of concentrated (nodal) loads.
-        distributedLoads
-            The list of distributed (surface) loads.
-        bodyForces
-            The list of body (volumetric) loads.
+        loads
+            The loads, see :meth:`collectLoads`.
         U_np
             The current solution vector.
-        PExt
-            The external load vector.
+        dU
+            The current solution increment.
+        P
+            The residual contribution vector to assemble into.
         K
             The system matrix to assemble into; None for an explicit solver, which needs no tangent.
         timeStep
@@ -330,17 +262,14 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
         Returns
         -------
         tuple[DofVector,VIJSystemMatrix]
-            - The updated external load vector.
+            - The updated residual contribution vector.
             - The updated system matrix.
         """
-        for cLoad in nodeForces:
-            PExt[
-                self.theDofManager.idcsOfFieldsOnNodeSetsInDofVector[cLoad.field][cLoad.nodeSet]
-            ] += cLoad.getCurrentLoad(timeStep).flatten()
-        PExt, K = self.computeDistributedLoads(distributedLoads, U_np, PExt, K, timeStep)
-        PExt, K = self.computeBodyForces(bodyForces, U_np, PExt, K, timeStep)
 
-        return PExt, K
+        for load in loads:
+            load.assembleLoad(P, K, U_np, dU, timeStep, self.theDofManager)
+
+        return P, K
 
     def getRestartData(self) -> dict[str, np.ndarray]:
         """The state this solver carries from one increment to the next, as it is; see
@@ -541,7 +470,7 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
             The modified residual vector.
         """
         for dirichlet in dirichlets:
-            R[dirichlet.constrainedDofIndices] = dirichlet.getPrescribedIncrement(timeStep).flatten()
+            R[dirichlet.constrainedDofIndices] = dirichlet.getPrescribedIncrementOfConstrainedDofs(timeStep)
 
         return R
 
@@ -556,9 +485,10 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
         iterationCounter: int,
         residualHistory: dict,
     ) -> tuple[bool, dict]:
-        """Check the convergence, individually for each field, based on the current flux residual and the field
-        correction, using the convergence criterion of the solver (see :mod:`edelweissfe.solvers.base.convergencecriteria`).
-        Is called by solveStep() to decide whether to continue iterating or stop.
+        """Check the convergence, individually for each field and for the scalar variables, based on the current flux
+        residual and the correction, using the convergence criterion of the solver (see
+        :mod:`edelweissfe.solvers.base.convergencecriteria`). Is called by solveIncrement() to decide whether to
+        continue iterating or stop.
 
         Parameters
         ----------
@@ -575,15 +505,24 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
         iterationCounter
             The current iteration number.
         residualHistory
-            The previous residuals.
+            The convergence state of every field in each iteration checked so far in this increment; the state of
+            this iteration is appended, for
+            :meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.checkDivergingSolution`.
 
         Returns
         -------
         tuple[bool,dict]
             - True if converged.
-            - The residual histories field wise.
+            - The nodes with the largest residual, per field.
 
+        Raises
+        ------
+        DivergingSolution
+            If the residual contains a NaN: no further iteration can recover from it.
         """
+
+        if np.isnan(R).any():
+            raise DivergingSolution("Obtained NaN in the residual")
 
         tableColumns = []
         convergedAtAll = True
@@ -602,16 +541,12 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
                 spatialAveragedFluxes[field],
                 iterationCounter,
             )
-            fluxResidual = fieldConvergence.fluxResidual
 
             nodesWithLargestResidual[field] = self.theDofManager.getNodeForIndexInDofVector(
                 range(len(R))[fieldIndices][fieldConvergence.indexOfLargestResidual]
             )
 
-            previousFluxResidual, nGrew = residualHistory[field]
-            if fluxResidual > previousFluxResidual:
-                nGrew += 1
-            residualHistory[field] = (fluxResidual, nGrew)
+            residualHistory[field].append(fieldConvergence)
 
             tableColumns.append(fieldConvergence)
             convergedAtAll = (
@@ -619,35 +554,20 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
             )
 
         if self.theDofManager.idcsOfScalarVariablesInDofVector:
-            fluxResidualTolerances = (
-                self.fluxResidualTolerances if iterationCounter < 15 else self.fluxResidualTolerancesAlt
-            )
-            scalarResiduals = np.abs(R[list(self.theDofManager.idcsOfScalarVariablesInDofVector.values())])
-            indexOfLargestScalarResidual = int(np.argmax(scalarResiduals))
-            residualScalarVariables = scalarResiduals[indexOfLargestScalarResidual]
-            correction = (
-                np.linalg.norm(
-                    ddU[list(self.theDofManager.idcsOfScalarVariablesInDofVector.values())],
-                    np.inf,
-                )
-                if ddU is not None
-                else 0.0
+            scalarVariableIndices = list(self.theDofManager.idcsOfScalarVariablesInDofVector.values())
+            scalarVariablesConvergence = self.convergenceCriterion.checkScalarVariables(
+                R[scalarVariableIndices],
+                ddU[scalarVariableIndices] if ddU is not None else None,
+                dU[scalarVariableIndices],
+                iterationCounter,
             )
 
-            convergedCorrection = correction < self.fieldCorrectionTolerances["scalar variables"]
-            convergedFlux = residualScalarVariables <= fluxResidualTolerances["scalar variables"]
-
-            tableColumns.append(
-                FieldConvergence(
-                    residualScalarVariables,
-                    convergedFlux,
-                    correction,
-                    convergedCorrection,
-                    indexOfLargestScalarResidual,
-                )
+            tableColumns.append(scalarVariablesConvergence)
+            convergedAtAll = (
+                convergedAtAll
+                and scalarVariablesConvergence.correctionConverged
+                and scalarVariablesConvergence.fluxResidualConverged
             )
-
-            convergedAtAll = convergedAtAll and convergedCorrection and convergedFlux
 
         summary = self.linSolver.lastSolveSummary if self.linSolver.reportsSolveSummary else None
         # ddU is None on the first iteration of an increment: no solve yet, so the column stays blank.
@@ -711,67 +631,6 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
         # keeps it across iterations and the Dirichlet application only overwrites values.
         KCsr = self.csrGenerator.updateInPlace(K)
         return KCsr
-
-    def extrapolateLastIncrement(
-        self,
-        extrapolation: str,
-        timeStep: TimeStep,
-        dU: DofVector,
-        dirichlets: list,
-        prevTimeStep: TimeStep,
-        model,
-    ) -> tuple[DofVector, bool]:
-        """Depending on the current setting, extrapolate the solution of the last increment.
-
-        Parameters
-        ----------
-        extrapolation
-            The type of extrapolation.
-        timeStep
-            The current time step.
-        dU
-            The last solution increment.
-        dirichlets
-            The list of active dirichlet boundary conditions.
-        lastIncrementSize
-            The size of the last increment.
-
-        Returns
-        -------
-        tuple[DofVector,bool]
-            - The extrapolated solution increment.
-            - True if an extrapolation was performed.
-        """
-
-        if extrapolation == "linear" and prevTimeStep and prevTimeStep.timeIncrement:
-            dU *= timeStep.stepProgressIncrement / prevTimeStep.stepProgressIncrement
-            dU = self.applyDirichletToResidual(timeStep, dU, dirichlets)
-            isExtrapolatedIncrement = True
-        else:
-            isExtrapolatedIncrement = False
-            dU[:] = 0.0
-
-        return dU, isExtrapolatedIncrement
-
-    def checkDivergingSolution(self, incrementResidualHistory: dict, maxGrowingIter: int) -> bool:
-        """Check if the iterative solution scheme is diverging.
-
-        Parameters
-        ----------
-        incrementResidualHistory
-            The dictionary containing the residual history of all fields.
-        maxGrowingIter
-            The maximum allows number of growths of a residual during the iterative solution scheme.
-
-        Returns
-        -------
-        bool
-            True if solution is diverging.
-        """
-        for previousFluxResidual, nGrew in incrementResidualHistory.values():
-            if nGrew > maxGrowingIter:
-                return True
-        return False
 
     def printResidualOutlierNodes(self, residualOutliers: dict):
         """Print which nodes have the largest residuals.
@@ -874,9 +733,12 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
     def locateConstrainedDofs(self, dirichlets: list[StepActionBase]):
         """Determine, up front, which global DOFs each Dirichlet BC constrains.
 
-        Called once when a step's boundary conditions are established. The result
-        is cached on each BC as :attr:`~DirichletBase.constrainedDofIndices`, so
-        that the Newton loop can address the constrained DOFs directly, instead
+        Called at the start of every increment, before its iterations: the numbering of the degrees of freedom may
+        have changed since the last increment -- a rebuild of the equation system after a change of the mesh or of the
+        coupling, or a new active domain of a meshfree model, which locates a node set anew. The result
+        is cached on each BC as :attr:`~DirichletBase.constrainedDofIndices`, together with the
+        positions of their nodes in the BC's node set (:attr:`~DirichletBase.constrainedNodePositions`),
+        so that the Newton loop can address the constrained DOFs directly, instead
         of recomputing the mapping on every residual update and every stiffness
         modification.
 
@@ -886,10 +748,11 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
             The list of dirichlet boundary conditions active in this step.
         """
         for dirichlet in dirichlets:
-            dirichlet.constrainedDofIndices = self._constrainedDofsOf(dirichlet)
+            dirichlet.constrainedDofIndices, dirichlet.constrainedNodePositions = self._constrainedDofsOf(dirichlet)
 
-    def _constrainedDofsOf(self, dirichlet: StepActionBase) -> np.ndarray:
-        """Return the global DOF indices prescribed by a single Dirichlet BC.
+    def _constrainedDofsOf(self, dirichlet: StepActionBase) -> tuple[np.ndarray, np.ndarray]:
+        """Return the global DOF indices prescribed by a single Dirichlet BC, and the positions of their nodes in its
+        node set.
 
         The DofManager knows every DOF of ``field`` on ``nSet``, laid out node
         by node in a single flat array::
@@ -900,12 +763,17 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
         ``dirichlet.components``, e.g. just u_x and u_z). So we view the flat
         array as one row per node, keep only the prescribed component columns,
         and flatten it back into a plain list of global DOF indices. The order
-        stays node-major, matching ``getPrescribedIncrement().flatten()``.
+        stays node-major, matching the prescribed values of these nodes
+        (:meth:`~DirichletBase.getPrescribedIncrementOfConstrainedDofs`).
+
+        Only the nodes of the set that are part of the equation system count, see
+        :meth:`~edelweissfe.numerics.dofmanager.DofManager.locateFieldOnNodeSet`: all nodes of the set in a
+        finite element model, those in the active domain in a meshfree one.
         """
-        dofsOfFieldOnNodeSet = self.theDofManager.idcsOfFieldsOnNodeSetsInDofVector[dirichlet.field][dirichlet.nSet]
+        dofsOfFieldOnNodeSet, nodePositions = self.theDofManager.locateFieldOnNodeSet(dirichlet.field, dirichlet.nSet)
         perNodeDofs = dofsOfFieldOnNodeSet.reshape((-1, dirichlet.fieldSize))
 
-        return perNodeDofs[:, dirichlet.components].flatten()
+        return perNodeDofs[:, dirichlet.components].flatten(), nodePositions
 
     def buildMPCTransformation(self, model: FEModel, stepActions: dict = None):
         """Collect the linear dependency records from all multi-point constraints of the model
@@ -974,8 +842,9 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
                 continue
             # the node set may have grown in place (adaptive refinement): let the BC catch up first
             dirichlet.reconcileIfSetChanged()
-            indices = np.asarray(self._constrainedDofsOf(dirichlet)).flatten()
-            values = np.asarray(dirichlet.delta).flatten()
+            indices, nodePositions = self._constrainedDofsOf(dirichlet)
+            # the prescribed values of the nodes that are part of the equation system, one row per node of the set
+            values = np.asarray(dirichlet.delta)[nodePositions].flatten()
             if indices.shape != values.shape:
                 raise ValueError(
                     "Dirichlet '{:}': {:} constrained DOF(s) but {:} prescribed value(s) -- the DOF "
@@ -1146,4 +1015,5 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
 
         # A post-condition: _reconcileMPCDirichletConflicts has already removed every conflicting record.
         for dirichlet in stepActions["dirichlet"].values():
-            transformation.checkDirichletConflicts(self._constrainedDofsOf(dirichlet))
+            constrainedDofIndices, _ = self._constrainedDofsOf(dirichlet)
+            transformation.checkDirichletConflicts(constrainedDofIndices)
