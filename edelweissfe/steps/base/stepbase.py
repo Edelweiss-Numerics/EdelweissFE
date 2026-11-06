@@ -259,7 +259,7 @@ class StepBase(ABC):
 
             solver.beginStep(self, model, fieldOutputController, outputManagers)
             if resumeFrom is not None:
-                resumeFrom.restoreStep(self, model.outputManagers)
+                resumeFrom.restoreStep(self)
                 # Closed here, before the first increment: see ResumeCheckpoint.close.
                 resumeFrom.close()
             try:
@@ -399,7 +399,7 @@ class StepBase(ABC):
                 solver.endStep(self, model)
                 checkpoint.restoreTimeStepper(self)
                 solver.beginStep(self, model, self.fieldOutputController, outputManagers)
-                checkpoint.restoreStep(self, model.outputManagers)
+                checkpoint.restoreStep(self)
             finally:
                 checkpoint.close()
 
