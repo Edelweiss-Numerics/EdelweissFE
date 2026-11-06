@@ -31,7 +31,8 @@ exactly the constraint-derived bookkeeping a freshly constructed DofManager woul
 hand out a NEW merged entity mapping, because consumers cache plans keyed on that mapping's identity.
 
 The explicit solver calls it instead of rebuilding the whole DofManager when a contact search
-changed which nodes a constraint couples.
+changed which nodes a constraint couples. A DofManager that is built that often must not pay for what only an
+implicit solver reads: the map from index to node is built on first use.
 """
 
 import numpy as np
@@ -157,3 +158,20 @@ def test_refresh_to_no_constraints_at_all():
 
     _assertSameConstraintBookkeeping(refreshed, fresh)
     assert refreshed.accumulatedConstraintNDof == 0
+
+
+def test_the_node_of_an_index_is_mapped_on_first_use_only(monkeypatch):
+    """Building the map from index to node costs a pass over every degree of freedom, and only the residual report of
+    an implicit solver reads it: a DOF manager builds it when it is first asked, once."""
+    builds = []
+    determine = DofManager._determineIndexToNodeMap
+    monkeypatch.setattr(DofManager, "_determineIndexToNodeMap", lambda self: builds.append(1) or determine(self))
+
+    model, n = _buildTwoElementModel()
+    dofManager = _dofManager(model, [])
+    assert builds == []
+
+    index = dofManager.idcsOfFieldVariablesInDofVector[n[2].fields["displacement"]][1]
+    assert dofManager.getNodeForIndexInDofVector(index) is n[2]
+    assert dofManager.getNodeForIndexInDofVector(index) is n[2]
+    assert builds == [1]
