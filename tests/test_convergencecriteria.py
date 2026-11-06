@@ -424,7 +424,7 @@ def test_zero_increment_rule():
 def test_zero_flux_rule_and_minimum_iterations():
     R = np.array([1.0])
     for threshold, converged in ((None, False), (1e-9, True)):
-        criterion = legacy(zeroFluxThreshold=threshold)
+        criterion = legacy(zeroFluxThreshold=threshold, minimumIterations=1)
         assert criterion.checkField("nonlocal damage", R, None, R, 1e-12, 1).fluxResidualConverged == converged
 
     # before the first correction, a model at rest reports no flux: the minimum of one iteration keeps the zero flux rule
@@ -432,6 +432,18 @@ def test_zero_flux_rule_and_minimum_iterations():
     criterion = legacy(zeroFluxThreshold=1e-9, minimumIterations=1)
     assert not criterion.checkField("nonlocal damage", R, None, R, 0.0, 0).fluxResidualConverged
     assert criterion.checkField("nonlocal damage", R, None, R, 0.0, 1).fluxResidualConverged
+
+
+def test_the_zero_flux_rule_refuses_less_than_one_minimum_iteration():
+    """Without a minimum iteration, the zero flux rule would accept the prediction of a model at rest, whose elements
+    report no flux before the first correction: a step held by constraints alone would end undeformed."""
+
+    with pytest.raises(ValueError, match="zeroFluxThreshold needs minimumIterations >= 1"):
+        legacy(zeroFluxThreshold=1e-9)
+    with pytest.raises(ValueError, match="zeroFluxThreshold needs minimumIterations >= 1"):
+        nist(zeroFluxThreshold=1e-9).createConvergenceCriterion()
+
+    assert nist(zeroFluxThreshold=1e-9, minimumIterations=1).createConvergenceCriterion().minimumIterations == 1
 
 
 def test_scalar_variables_are_checked_like_a_field_with_their_own_tolerances():

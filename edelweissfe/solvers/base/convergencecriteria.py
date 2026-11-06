@@ -69,8 +69,8 @@ Two criteria are available, selected by the solver option ``convergenceCriterion
       counts as converged.
     * Minimum iterations (``minimumIterations``, :math:`n`): no flux residual counts as converged before iteration
       :math:`n`, so an increment takes at least :math:`n` Newton iterations. With :math:`n = 0`, a prediction that
-      already satisfies the criterion is accepted as it is. The zero flux rule needs :math:`n \\geq 1`: before the
-      first correction, the elements of a model at rest report no flux at all.
+      already satisfies the criterion is accepted as it is. The zero flux rule needs :math:`n \\geq 1`, and refuses
+      a smaller :math:`n`: before the first correction, the elements of a model at rest report no flux at all.
 
     The scalar variables (e.g., Lagrange multipliers) are checked like a field, with the tolerances of the entry
     ``scalar variables``. No element flux acts on them, so their flux residual is compared with the tolerances
@@ -283,6 +283,11 @@ class LegacyConvergenceCriterion(ConvergenceCriterionBase):
         :math:`\\Delta u_0`, the largest increment up to which a field has not moved; None for no zero increment rule.
     minimumIterations
         :math:`n`, the iteration before which no flux residual counts as converged.
+
+    Raises
+    ------
+    ValueError
+        If the zero flux rule is on with :math:`n < 1`.
     """
 
     def __init__(
@@ -297,6 +302,14 @@ class LegacyConvergenceCriterion(ConvergenceCriterionBase):
         zeroIncrementThreshold: float | None,
         minimumIterations: int,
     ):
+        if zeroFluxThreshold is not None and minimumIterations < 1:
+            raise ValueError(
+                "zeroFluxThreshold needs minimumIterations >= 1, got {:}: before the first correction, the elements of a "
+                "model at rest report no flux, and the zero flux rule would accept the prediction".format(
+                    minimumIterations
+                )
+            )
+
         self.fluxResidualTolerances = fluxResidualTolerances
         self.fluxResidualTolerancesAlternative = fluxResidualTolerancesAlternative
         self.absoluteFluxResidualTolerances = absoluteFluxResidualTolerances
