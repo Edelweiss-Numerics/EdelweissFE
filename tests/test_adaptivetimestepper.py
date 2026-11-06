@@ -32,6 +32,9 @@ import pytest
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.steps.adaptivestep import AdaptiveStep
+from edelweissfe.steps.adaptivestepforexplicitsimulations import (
+    AdaptiveStepForExplicitSimulations,
+)
 from edelweissfe.timesteppers.adaptivetimestepper import AdaptiveTimeStepper
 from edelweissfe.utils.exceptions import ReachedMaxIncrements, ReachedMinIncrementSize
 
@@ -69,6 +72,17 @@ def test_an_adaptive_step_begins_with_a_zero_increment_unless_told_otherwise(mak
     first = step.timeStepper.proposeTimeStep()
 
     assert first.timeIncrement == (0.0 if makeZeroIncrementFirst else 0.25)
+
+
+def test_an_explicit_step_always_begins_with_the_zero_increment_and_refuses_to_leave_it_out():
+    def explicitStep(**options):
+        return AdaptiveStepForExplicitSimulations(
+            0, FEModel(2), None, Journal(verbose=False), {}, None, [], {}, startInc=0.25, maxInc=0.25, **options
+        )
+
+    assert explicitStep().timeStepper.proposeTimeStep().timeIncrement == 0.0
+    with pytest.raises(ValueError, match="always begins with the zero increment"):
+        explicitStep(makeZeroIncrementFirst=False)
 
 
 def test_the_first_increment_is_a_zero_increment():

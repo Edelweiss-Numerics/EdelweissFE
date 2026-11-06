@@ -97,7 +97,8 @@ class StepIncrementationSchema:
     makeZeroIncrementFirst: bool = schemaField(
         description=(
             "Begin the step with an increment of size zero, which brings the model into equilibrium with the state the "
-            "step starts from before time advances (adaptive steps only)."
+            "step starts from before time advances (AdaptiveStep only: an explicit step always begins with it, and "
+            "refuses False)."
         ),
         dtype=bool,
         default=True,
