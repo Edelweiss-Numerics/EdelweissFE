@@ -38,6 +38,9 @@ with the parametric coordinates :math:`\\boldsymbol{\\xi}_s` of the node in the 
 reference configuration. The embedded elements are meshed independently of the host mesh; they keep their own
 stiffness, which is added to the host's (the volume of the embedded material is not subtracted from the host).
 
+For bond-slip instead of perfect bond, see the ``embeddedBond`` generator
+(:mod:`edelweissfe.generators.embeddedbond`).
+
 Embedded beams (elements with a ``rotation`` field, e.g., Marmot ``B2D2``, ``B3D3``): their displacements are tied
 as above. Their rotations are left free by default (``rotations=free``): the beam then resists bending only by the
 tied displacements of its nodes, i.e., by the curvature of its nodal polygon. With ``rotations=axis``, the rotation

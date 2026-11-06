@@ -57,6 +57,11 @@ mapStateTypes={
      }
 
 
+#: Number of nodes of the Ensight shapes, see MarmotElementWrapper.visualizationNodes.
+_ENSIGHT_SHAPE_NODE_COUNTS = {"point": 1, "bar2": 2, "bar3": 3, "tria3": 3, "tria6": 6, "quad4": 4, "quad8": 8,
+                              "tetra4": 4, "tetra10": 10, "hexa8": 8, "hexa20": 20}
+
+
 @cython.final  # no subclassing -> cpdef with nogil possible
 cdef class MarmotElementWrapper:
     # cdef classes cannot subclass. Hence we do not subclass from the BaseElement,
@@ -150,7 +155,10 @@ cdef class MarmotElementWrapper:
 
     @property
     def visualizationNodes(self):
-        return self._nodes
+        # elements coupling several geometries (e.g., a bond element: the nodes of a bar, followed by the nodes of
+        # its host element) are visualized by the leading nodes of their Ensight shape only
+        nShapeNodes = _ENSIGHT_SHAPE_NODE_COUNTS.get(self._ensightType, self._nNodes)
+        return self._nodes[:nShapeNodes] if nShapeNodes < self._nNodes else self._nodes
 
     @property
     def hasMaterial(self):
