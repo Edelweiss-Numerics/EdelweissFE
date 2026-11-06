@@ -1,0 +1,126 @@
+** regression test: 3D large-slip pull-out of a bar inclined in both planes in a C3D8 cube (5 x 5 section), pulled 30 mm
+** along the bar (the same response as the aligned bar, EmbeddedBondPullOutLargeSlip3D)
+** 3D pull-out of a bar inclined in both planes, direction (0.85, 0.40, 0.34)/|.|, in the C3D8 cube (150 mm,
+** 15 x 9 x 9): bonded length 120 mm, free length 20 mm (one element), exiting the loaded face x = 150 at
+** (150, 100, 90); pulled along the bar
+*material, name=linearelastic, id=concrete, provider=marmot
+30000.0, 0.2
+
+*material, name=FiniteStrainJ2Plasticity, id=steel, provider=marmot
+** K, G, fy, fyInf, eta, H, implementation, rho (E = 200000, nu = 0.3)
+166667., 76923., 500, 500, 0.0, 1000., 1, 7.85e-9
+
+*material, name=ModelCode2010BondSlip, id=bond, provider=marmot
+**  tauMax, s1,  s2,  s3,   alpha, tauF, K0,    Kn
+    13.69,  1.0, 2.0, 10.0, 0.4,   5.48, 200.0, 1000.0
+
+*modelGenerator, generator=boxGen, name=gen
+lX=150
+lY=150
+lZ=150
+nX=15
+nY=5
+nZ=5
+elType=C3D8
+
+*node
+100001, 47.9029617, 51.95433492, 49.16118468
+100002, 52.15700496, 53.95623763, 50.86280198
+100003, 56.41104822, 55.95814034, 52.56441929
+100004, 60.66509149, 57.96004305, 54.26603659
+100005, 64.91913475, 59.96194576, 55.9676539
+100006, 69.17317801, 61.96384848, 57.6692712
+100007, 73.42722127, 63.96575119, 59.37088851
+100008, 77.68126454, 65.9676539, 61.07250581
+100009, 81.9353078, 67.96955661, 62.77412312
+100010, 86.18935106, 69.97145932, 64.47574042
+100011, 90.44339432, 71.97336203, 66.17735773
+100012, 94.69743759, 73.97526475, 67.87897503
+100013, 98.95148085, 75.97716746, 69.58059234
+100014, 103.2055241, 77.97907017, 71.28220964
+100015, 107.4595674, 79.98097288, 72.98382695
+100016, 111.7136106, 81.98287559, 74.68544425
+100017, 115.9676539, 83.98477831, 76.38706156
+100018, 120.2216972, 85.98668102, 78.08867886
+100019, 124.4757404, 87.98858373, 79.79029617
+100020, 128.7297837, 89.99048644, 81.49191347
+100021, 132.9838269, 91.99238915, 83.19353078
+100022, 137.2378702, 93.99429186, 84.89514808
+100023, 141.4919135, 95.99619458, 86.59676539
+100024, 145.7459567, 97.99809729, 88.29838269
+100025, 150, 100, 90
+100026, 167.0161731, 108.0076108, 96.80646922
+
+*element, type=T3D2CR
+100001, 100001, 100002
+100002, 100002, 100003
+100003, 100003, 100004
+100004, 100004, 100005
+100005, 100005, 100006
+100006, 100006, 100007
+100007, 100007, 100008
+100008, 100008, 100009
+100009, 100009, 100010
+100010, 100010, 100011
+100011, 100011, 100012
+100012, 100012, 100013
+100013, 100013, 100014
+100014, 100014, 100015
+100015, 100015, 100016
+100016, 100016, 100017
+100017, 100017, 100018
+100018, 100018, 100019
+100019, 100019, 100020
+100020, 100020, 100021
+100021, 100021, 100022
+100022, 100022, 100023
+100023, 100023, 100024
+100024, 100024, 100025
+100025, 100025, 100026
+
+*elSet, elSet=rebars, generate=True
+100001, 100025, 1
+
+*nSet, nSet=loadedEnd
+100026
+
+*section, name=concreteSection, material=concrete, type=solid
+gen_all
+
+*section, name=rebarSection, area=201.1, material=steel, type=truss
+rebars
+
+*modelGenerator, generator=embeddedBond, name=rebarBond, executeAfterManualGeneration=True
+rebarElSet=rebars
+hostElSet=gen_all
+material=bond
+perimeter=50.27
+largeSlip=True
+maxSlip=35.0
+
+*job, name=job, domain=3d
+*solver, solver=NIST, name=theSolver
+
+*fieldOutput
+>>perNode, name=displacement, elSet=all, field=displacement, result=U
+>>perNode, name=F, nSet=loadedEnd, field=displacement, result=P, f(x)='sum(x[:,0]) * 0.8508086525124560 + sum(x[:,1]) * 0.4003805423588029 + sum(x[:,2]) * 0.3403234610049825', saveHistory=True,
+>>perNode, name=uEnd, nSet=loadedEnd, field=displacement, result=U, f(x)='sum(x[:,0]) * 0.8508086525124560 + sum(x[:,1]) * 0.4003805423588029 + sum(x[:,2]) * 0.3403234610049825', saveHistory=True,
+>>perElement, name=slip, elSet=rebarBond_bond, result=slip, quadraturePoint=0, saveHistory=True,
+>>perElement, name=bondStress, elSet=rebarBond_bond, result=bond stress, quadraturePoint=0, saveHistory=True,
+>>perElement, name=concreteStress, elSet=gen_all, result=stress, quadraturePoint=0,
+>>perElement, name=rebarNormalForce, elSet=rebars, result=normal force, quadraturePoint=0, saveHistory=True,
+>>perNode, name=uBar, elSet=rebars, field=displacement, result=U, saveHistory=True,
+
+*output, type=ensight, name=esExport
+>>perNode, fieldOutput=displacement
+>>perElement, fieldOutput=rebarNormalForce
+>>perElement, fieldOutput=slip
+>>perElement, fieldOutput=bondStress
+>>perElement, fieldOutput=concreteStress
+>>configuration, overwrite=yes
+
+*step, solver=theSolver
+maxInc=0.02, minInc=1e-8, maxNumInc=2000, maxIter=20, stepLength=1
+>>initializematerial, name=init, elSet=rebars
+>>dirichlet, name=plate, nSet=gen_right, field=displacement, 1=0, 2=0, 3=0
+>>dirichlet, name=pull, nSet=loadedEnd, field=displacement, 1=25.5242595755, 2=12.0114162708, 3=10.2097038301

@@ -1,6 +1,7 @@
-"""Bond-slip of embedded reinforcement (small slip): the embeddedBond generator with the Marmot bond elements
-(EB<nDim>D<nBarNodes><host>) and bond-slip laws, for truss (T*) and beam (B*) bars, verified against analytical
-pull-out solutions and against the perfect bond of the embeddedRegion constraint.
+"""Bond-slip of embedded reinforcement: the embeddedBond generator with the Marmot bond elements
+(EB<nDim>D<nBarNodes><host>, small slip; EBLS<nDim>D<nBarNodes><host>W<n>, large slip) and bond-slip laws, for truss
+(T*) and beam (B*) bars, verified against analytical pull-out solutions and against the perfect bond of the
+embeddedRegion constraint.
 
 Needs the Marmot modules TrussElement, BeamElement, EmbeddedBondElement, LinearElasticBondSlip and
 ModelCode2010BondSlip.
@@ -519,3 +520,171 @@ maxInc=1.0, minInc=1e-8, maxNumInc=10, maxIter=10, stepLength=1
     rScale = np.abs(rPerfect.getLastResult()).max()
     assert rScale > 1e-4
     np.testing.assert_allclose(rBond.getLastResult(), rPerfect.getLastResult(), atol=1e-4 * rScale)
+
+
+# ---------------------------------------------------------------------------------------------------------------------
+# large slip (largeSlip=True): Marmot EBLS<nDim>D<nBarNodes><host>W<n> elements
+# ---------------------------------------------------------------------------------------------------------------------
+
+largeSlip = pytest.mark.skipif(
+    not _marmotHas("EBLS2D2Q4W1"), reason="Marmot is built without the EmbeddedLargeSlipBondElement"
+)
+
+
+def _reverseOddElements(elementBlock: str) -> str:
+    """swap the end nodes of every second element in the *element block of a *node + *element text: a chain with mixed orientation"""
+    lines = elementBlock.splitlines()
+    inElements = False
+    for i, line in enumerate(lines):
+        if line.startswith("*"):
+            inElements = line.lower().startswith("*element")
+            continue
+        parts = [p.strip() for p in line.split(",")]
+        if inElements and len(parts) >= 3 and int(parts[0]) % 2 == 0:
+            parts[1], parts[2] = parts[2], parts[1]
+            lines[i] = ", ".join(parts)
+    return "\n".join(lines) + "\n"
+
+
+def _largeSlipPullOutDeck(
+    bondMaterial: str,
+    generatorOptions: str,
+    pull: float,
+    maxInc: float = 0.05,
+    elType: str = "T2D2",
+    section: str = "area=100.0, type=truss",
+    reverse: bool = False,
+    nElements: int = 18,
+):
+    """a rigid bar along y = 0.37 from x = 0 to 9 (18 elements), bonded in the strip x = 0..4 (rigid host)"""
+    bar, first, last = _line(100001, (0.0, 0.37), (9.0, 0.37), nElements, elType)
+    if reverse:
+        bar = _reverseOddElements(bar)
+    midNodes = f"\n{first + 50000}, {last - 1 + 50000}, 1" if elType.endswith("3") else ""
+    return (
+        _concreteStrip(nX=5)
+        + f"""{bar}
+*elSet, elSet=rebars, generate=True
+{first}, {last - 1}, 1
+
+*nSet, nSet=barNodes, generate=True
+{first}, {last}, 1{midNodes}
+
+*nSet, nSet=loadedEnd
+{last}
+
+*section, name=rebarSection, {section}, material=steel
+rebars
+
+{bondMaterial}
+
+*modelGenerator, generator=embeddedBond, name=rebarBond, executeAfterManualGeneration=True
+rebarElSet=rebars
+hostElSet=gen_all
+material=bond
+perimeter={PERIMETER}
+{generatorOptions}
+
+*job, name=job, domain=2d
+*solver, solver=NIST, name=theSolver
+
+*fieldOutput
+>>perNode, name=F, nSet=loadedEnd, field=displacement, result=P, f(x)='sum(x[:,0])', saveHistory=True,
+>>perNode, name=s, nSet=loadedEnd, field=displacement, result=U, f(x)='sum(x[:,0])', saveHistory=True,
+
+*step, solver=theSolver
+maxInc={maxInc}, minInc=1e-8, maxNumInc=10000, maxIter=15, stepLength=1
+>>dirichlet, name=host, nSet=gen_all, field=displacement, 1=0, 2=0
+>>dirichlet, name=barY, nSet=barNodes, field=displacement, 2=0
+>>dirichlet, name=pull, nSet=loadedEnd, field=displacement, 1={pull}
+"""
+    )
+
+
+_MC2010 = (
+    "*material, name=ModelCode2010BondSlip, id=bond, provider=marmot\n13.69, 1.0, 2.0, 10.0, 0.4, 5.48, 200.0, 1e4"
+)
+
+
+@largeSlip
+def test_large_slip_equals_small_slip_for_small_slip(tmp_path):
+    """for slips small compared to the bonded length, the large-slip bond gives the small-slip response"""
+    _, (FSmall,) = _run(tmp_path, _largeSlipPullOutDeck(_MC2010, "", 0.02, 0.25), "F")
+    _, (FLarge,) = _run(tmp_path, _largeSlipPullOutDeck(_MC2010, "largeSlip=True\nmaxSlip=1.0", 0.02, 0.25), "F")
+    np.testing.assert_allclose(
+        np.asarray(FLarge.getResultHistory()), np.asarray(FSmall.getResultHistory()), rtol=2e-2, atol=1e-9
+    )
+
+
+def _completePullOut(tmp_path, **deckOptions):
+    Kt = 10.0
+    deck = _largeSlipPullOutDeck(
+        f"*material, name=LinearElasticBondSlip, id=bond, provider=marmot\n{Kt}, 1e4",
+        "largeSlip=True\nmaxSlip=6.0\nnIntegrationPoints=3",
+        6.0,
+        **deckOptions,
+    )
+    model, (F, s) = _run(tmp_path, deck, "F", "s")
+    return Kt, model, np.asarray(s.getResultHistory()).ravel(), np.asarray(F.getResultHistory()).ravel()
+
+
+@largeSlip
+def test_large_slip_complete_pull_out(tmp_path):
+    """a rigid bar pulled completely out of a rigid host with a linear bond law: the bonded length shrinks as
+    L_b - s, so F = K_t s p (L_b - s), and the force vanishes once the bar has left the host"""
+    Lb = 4.0
+    Kt, model, slip, force = _completePullOut(tmp_path)
+    assert all(el.elType.startswith("EBLS2D2Q4W") for el in model.elementSets["rebarBond_bond"])
+    for target in (0.5, 1.0, 2.0, 3.0):
+        i = np.argmin(np.abs(slip - target))
+        expected = Kt * slip[i] * PERIMETER * (Lb - slip[i])
+        # the bond fades smoothly over the tributary parts at the bar end: a small deviation from the exact length
+        np.testing.assert_allclose(force[i], expected, rtol=3e-2, err_msg=f"at s = {slip[i]}")
+    assert np.all(np.abs(force[slip > Lb + 0.1]) < 1e-6)  # Newton tolerance
+    assert force.max() == pytest.approx(Kt * PERIMETER * Lb**2 / 4, rel=3e-2)
+
+
+@largeSlip
+@pytest.mark.parametrize(
+    "elType, section, reverse",
+    [
+        ("T2D2", "area=100.0, type=truss", True),
+        ("T2D3", "area=100.0, type=truss", False),
+        ("T2D3", "area=100.0, type=truss", True),
+        ("B2D2", "type=beam, profile=generic, area=100.0, I=1.0", False),
+        ("B2D3", "type=beam, profile=generic, area=100.0, I=1.0", True),
+    ],
+)
+def test_large_slip_chains_of_quadratic_reversed_and_beam_bars(tmp_path, elType, section, reverse):
+    """the complete pull-out does not depend on the bar element type (quadratic, beam) or on the orientation of the
+    bar elements in the chain"""
+    _, _, slipRef, forceRef = _completePullOut(tmp_path)
+    _, model, slip, force = _completePullOut(tmp_path, elType=elType, section=section, reverse=reverse)
+    nBarNodes = 3 if elType.endswith("3") else 2
+    assert all(el.elType.startswith(f"EBLS2D{nBarNodes}Q4W") for el in model.elementSets["rebarBond_bond"])
+    np.testing.assert_allclose(np.interp(slipRef, slip, force), forceRef, rtol=1e-6, atol=1e-6 * forceRef.max())
+
+
+@largeSlip
+@pytest.mark.parametrize(
+    "generatorOptions, nElements, branched, match",
+    [
+        ("largeSlip=True", 18, False, "requires a positive maxSlip"),
+        ("largeSlip=True\nmaxSlip=-1.0", 18, False, "requires a positive maxSlip"),
+        ("largeSlip=True\nmaxSlip=6.0", 180, False, "needs a window of"),
+        ("largeSlip=True\nmaxSlip=1.0", 18, True, "unbranched"),
+    ],
+)
+def test_large_slip_invalid_input(tmp_path, generatorOptions, nElements, branched, match):
+    """large slip needs a positive maxSlip within the registered windows (48 bar elements), and unbranched bars"""
+    deck = _largeSlipPullOutDeck(_MC2010, generatorOptions, 0.01, nElements=nElements)
+    if branched:
+        # a third bar element joins the chain at its node 100005
+        deck = deck.replace(
+            "*elSet, elSet=rebars, generate=True\n100001, 100018, 1",
+            "*node\n200001, 2.0, 0.9\n\n*element, type=T2D2\n100100, 100005, 200001\n\n*elSet, elSet=rebars\n"
+            + ", ".join(str(label) for label in [*range(100001, 100019), 100100]),
+            1,
+        )
+    with pytest.raises(ValueError, match=match):
+        _run(tmp_path, deck, "F")
