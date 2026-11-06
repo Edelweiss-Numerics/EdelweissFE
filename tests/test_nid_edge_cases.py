@@ -41,6 +41,7 @@ import pytest
 # tests/ carries no __init__.py, so pytest's default (prepend) import mode puts this directory on
 # sys.path and sibling test modules import by their bare module name -- same convention as
 # test_nid_restart.py.
+from test_model_equation_system import _solve, _strip
 from test_nid_newmark import (
     BETA,
     FORCE,
@@ -58,6 +59,7 @@ from test_nid_newmark import (
 from edelweissfe.config.configurator import loadConfiguration
 from edelweissfe.drivers.inputfiledrivensimulation import finiteElementSimulation
 from edelweissfe.journal.journal import Journal
+from edelweissfe.models.equationsystemlayout import EquationSystemLayout
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.solvers.nonlinearimplicitdynamic import NonlinearImplicitDynamic
 from edelweissfe.solvers.nonlinearimplicitstatic import NIST
@@ -263,3 +265,38 @@ def test_the_explicit_static_solver_gives_the_entities_no_inertia(tmp_path, monk
         finiteElementSimulation(parseInputFile(str(_NEST_DECK)), verbose=False, suppressPlots=True)
 
     assert given == [(0.0, 0.0)]
+
+
+class _LayoutWithoutNodalInertia(EquationSystemLayout):
+    """The layout of a model none of whose nodes carries a mass the solver integrates: as in a meshfree model whose
+    particles carry the inertia and integrate it themselves (``meshfreeInertia=particles``)."""
+
+    def dofsWithNodalInertia(self, fieldNames):
+        return np.zeros(0, dtype=int)
+
+
+class _ModelWithoutNodalInertia(FEModel):
+    """A finite element model that answers with :class:`_LayoutWithoutNodalInertia`."""
+
+    def buildEquationSystem(self):
+        layout = super().buildEquationSystem()
+        return _LayoutWithoutNodalInertia(self, layout.dofManager, layout.elements)
+
+
+def test_a_model_without_nodal_inertia_gets_no_mass_assembled():
+    """With no degree of freedom to integrate in time, NID assembles no mass and adds no Newmark terms: the elements of
+    the strip, from the pure-Python library, have no consistent mass, which an assembly would ask them for. What is
+    left is the quasi-static answer."""
+
+    journal = Journal(verbose=False)
+    quasiStatic = _solve(_strip(FEModel(2), 2), NIST, journal)
+    withoutNodalInertia = _solve(_strip(_ModelWithoutNodalInertia(2), 2), NonlinearImplicitDynamic, journal)
+
+    expected, actual = quasiStatic.nodeFields["displacement"], withoutNodalInertia.nodeFields["displacement"]
+    assert np.max(np.abs(expected["U"])) > 0.0
+    for entry in ("U", "P"):
+        np.testing.assert_allclose(
+            actual[entry], expected[entry], rtol=1e-10, atol=1e-14 * np.max(np.abs(expected[entry]))
+        )
+    for entry in ("V", "A"):
+        np.testing.assert_array_equal(actual[entry], 0.0)
