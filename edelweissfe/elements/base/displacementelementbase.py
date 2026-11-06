@@ -218,16 +218,17 @@ class DisplacementElementBase(BaseElement):
         time: float,
         dTime: float,
     ):
-        """Evaluate residual and stiffness for given time, field, and field increment due to a surface load.
+        """Add the residual contribution of a surface load, the negative of the external load, and its
+        tangent.
 
         Parameters
         ----------
         loadType
             The type of load.
         P
-            The external load vector to be defined.
+            The residual contribution to augment, :math:`-\\boldsymbol{f}_\\mathrm{ext}`.
         K
-            The stiffness matrix to be defined.
+            The tangent ``dP/dU`` to augment.
         faceID
             The number of the elements face this load acts on.
         load
@@ -245,14 +246,15 @@ class DisplacementElementBase(BaseElement):
     def computeBodyForce(
         self, P: np.ndarray, K: np.ndarray, load: np.ndarray, U: np.ndarray, time: float, dTime: float
     ):
-        """Evaluate residual and stiffness for given time, field, and field increment due to a body force load.
+        """Add the residual contribution of a body force, the negative of the external load
+        :math:`-\\int \\boldsymbol{N}^T \\boldsymbol{b} \\, \\mathrm{d}V`; a dead load, so its tangent is zero.
 
         Parameters
         ----------
         P
-            The external load vector to be defined.
+            The residual contribution to augment, :math:`-\\boldsymbol{f}_\\mathrm{ext}`.
         K
-            The stiffness matrix to be defined.
+            The tangent ``dP/dU`` to augment.
         load
             The magnitude (or vector) describing the load.
         U
@@ -265,7 +267,7 @@ class DisplacementElementBase(BaseElement):
 
         N = computeNOperator(self._xi, self._eta, self._zeta, self._nInt, self.nNodes, self.nSpatialDimensions)
         for i in range(self._nInt):
-            P += np.outer(N[i], load).flatten() * lin.det(self.J[i]) * self._t * self._weight[i]
+            P -= np.outer(N[i], load).flatten() * lin.det(self.J[i]) * self._t * self._weight[i]
 
     def computeConsistentMassMatrix(self, M: np.ndarray):
         """Compute the consistent mass matrix.

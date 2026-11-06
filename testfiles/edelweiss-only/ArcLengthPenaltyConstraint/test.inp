@@ -1,0 +1,15 @@
+** NISTPArcLength with a penalty constraint: the tip load is the reference load, the self-weight the dead load,
+** and the load factor is controlled such that the tip moves down by 0.25. The end of the step is the state the
+** model reaches with the tip displacement prescribed instead (tests/test_arclength_with_constraints.py).
+
+*include, input=model.inp
+
+*solver, solver=NISTPArcLength, name=theSolver
+
+*step, solver=theSolver
+startInc=0.1, maxInc=0.1, minInc=1e-6, maxNumInc=100, maxIter=25, stepLength=1
+>>options, name=theSolver, arcLengthController=indirectcontrol
+>>indirectcontrol, dof1='model.nodeSets["gen_rightTop"][0].fields["displacement"]', cVector1='0, 1', dof2='model.nodeSets["gen_leftBottom"][0].fields["displacement"]', cVector2='0, 0', L=-0.25
+>>dirichlet, name=clamp, nSet=gen_left, field=displacement, 1=0.0, 2=0.0
+>>nodeforces, name=tipLoad, nSet=gen_rightTop, field=displacement, 2=-1.0
+>>bodyforce, name=selfWeight, elSet=gen_all, forceVector='0.0, -0.005', f(t)='1'

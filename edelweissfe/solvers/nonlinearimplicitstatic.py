@@ -170,6 +170,57 @@ class NISTSchema:
         dtype=str,
         default="legacy",
     )
+    iterationsForAlternativeTolerance: int | None = schemaField(
+        description=(
+            "legacy criterion: I, the iteration from which on the flux residual is checked against "
+            "fluxResidualToleranceAlternative instead of fluxResidualTolerance."
+        ),
+        dtype=int,
+        default=15,
+    )
+    zeroFluxThreshold: float | None = schemaField(
+        description=(
+            "legacy criterion: a field whose spatial average flux does not exceed this value carries no flux its "
+            "residual could be compared with, so its flux residual counts as converged; needs minimumIterations >= 1, "
+            "and refuses a smaller one. Off if not set."
+        ),
+        dtype=float,
+        default=None,
+        documentedDefault="off",
+    )
+    zeroIncrementThreshold: float | None = schemaField(
+        description=(
+            "legacy criterion: a field whose largest increment does not exceed this value has not moved, so there is "
+            "no increment to relate its correction to, and its correction counts as converged. Off if not set."
+        ),
+        dtype=float,
+        default=None,
+        documentedDefault="off",
+    )
+    minimumIterations: int | None = schemaField(
+        description=(
+            "legacy criterion: no flux residual counts as converged before this iteration, so an increment takes at "
+            "least this many Newton iterations; 0 accepts a prediction that already satisfies the criterion."
+        ),
+        dtype=int,
+        default=0,
+    )
+    countFirstResidualAsGrowth: bool | None = schemaField(
+        description=(
+            "Residual growths (the step option maxGrowIter): the residual history of a field starts from zero, so the "
+            "first checked residual of an increment counts as a growth; if False, counting starts with the second."
+        ),
+        dtype=bool,
+        default=True,
+    )
+    countGrowthOfConvergedFields: bool | None = schemaField(
+        description=(
+            "Residual growths (the step option maxGrowIter): count a growth of the flux residual of a field also in "
+            "an iteration in which this field is converged and only other fields keep the iterations going."
+        ),
+        dtype=bool,
+        default=True,
+    )
     abaqusResidualTolerance: float | None = schemaField(
         description="abaqus criterion: R_n, the flux residual tolerance relative to the time average flux.",
         dtype=float,
@@ -241,6 +292,12 @@ class NIST(NonlinearSolverBase):
         "useThreadedMPCCondensation": False,
         "report-performance-frequency": 0,
         "convergenceCriterion": "legacy",
+        "iterationsForAlternativeTolerance": 15,
+        "zeroFluxThreshold": None,
+        "zeroIncrementThreshold": None,
+        "minimumIterations": 0,
+        "countFirstResidualAsGrowth": True,
+        "countGrowthOfConvergedFields": True,
         "abaqusResidualTolerance": 5e-3,
         "abaqusCorrectionTolerance": 1e-2,
         "abaqusResidualToleranceAlternative": 2e-2,
@@ -260,9 +317,12 @@ class NIST(NonlinearSolverBase):
     def __init__(self, jobInfo, journal, **kwargs):
         self.journal = journal
 
-        self.fieldCorrectionTolerances = jobInfo["fieldCorrectionTolerance"]
+        # the tolerances of the legacy criterion per field, see edelweissfe.solvers.base.convergencecriteria
         self.fluxResidualTolerances = jobInfo["fluxResidualTolerance"]
-        self.fluxResidualTolerancesAlt = jobInfo["fluxResidualToleranceAlternative"]
+        self.fluxResidualTolerancesAlternative = jobInfo["fluxResidualToleranceAlternative"]
+        self.absoluteFluxResidualTolerances = jobInfo["absoluteFluxResidualTolerance"]
+        self.fieldCorrectionTolerances = jobInfo["fieldCorrectionTolerance"]
+        self.relativeFieldCorrectionTolerances = jobInfo["relativeFieldCorrectionTolerance"]
 
         self.options = self.SolverSpecificOptions.copy()
         # the *solver datalines belong only to this solver: unknown entries are typos
@@ -672,13 +732,24 @@ class NIST(NonlinearSolverBase):
         """
         criterion = self.options["convergenceCriterion"]
 
+        legacyCriterion = LegacyConvergenceCriterion(
+            fluxResidualTolerances=self.fluxResidualTolerances,
+            fluxResidualTolerancesAlternative=self.fluxResidualTolerancesAlternative,
+            absoluteFluxResidualTolerances=self.absoluteFluxResidualTolerances,
+            fieldCorrectionTolerances=self.fieldCorrectionTolerances,
+            relativeFieldCorrectionTolerances=self.relativeFieldCorrectionTolerances,
+            iterationsForAlternativeTolerance=self.options["iterationsForAlternativeTolerance"],
+            zeroFluxThreshold=self.options["zeroFluxThreshold"],
+            zeroIncrementThreshold=self.options["zeroIncrementThreshold"],
+            minimumIterations=self.options["minimumIterations"],
+        )
+
         if criterion == "legacy":
-            return LegacyConvergenceCriterion(
-                self.fluxResidualTolerances, self.fluxResidualTolerancesAlt, self.fieldCorrectionTolerances
-            )
+            return legacyCriterion
 
         if criterion == "abaqus":
             return AbaqusConvergenceCriterion(
+                scalarVariableCriterion=legacyCriterion,
                 residualTolerance=self.options["abaqusResidualTolerance"],
                 correctionTolerance=self.options["abaqusCorrectionTolerance"],
                 residualToleranceAlternative=self.options["abaqusResidualToleranceAlternative"],
@@ -746,7 +817,7 @@ class NIST(NonlinearSolverBase):
         """
 
         iterationCounter = 0
-        incrementResidualHistory = dict.fromkeys(self.theDofManager.idcsOfFieldsInDofVector, (0.0, 0))
+        incrementResidualHistory = {field: [] for field in self.theDofManager.idcsOfFieldsInDofVector}
 
         elements = model.elements
         constraints = model.constraints
@@ -754,7 +825,7 @@ class NIST(NonlinearSolverBase):
         R = self.theDofManager.constructDofVector()
         F = self.theDofManager.constructDofVector()
         FConstraints = self.theDofManager.constructDofVector()
-        PExt = self.theDofManager.constructDofVector()
+        PLoadsAndConstraints = self.theDofManager.constructDofVector()
         U_np = self.theDofManager.constructDofVector()
         ddU = None
 
@@ -784,16 +855,24 @@ class NIST(NonlinearSolverBase):
                 U_np[:] = U_n
                 U_np += dU
 
-                P[:] = F[:] = FConstraints[:] = PExt[:] = 0.0
+                P[:] = F[:] = FConstraints[:] = PLoadsAndConstraints[:] = 0.0
                 # K holds the entries of all element matrices, far too many to zero on a single thread
                 forEachSliceInParallel(lambda s: K[s].fill(0.0), len(K))
 
+            # Every element, load and constraint adds its residual contribution and the tangent of it.
+            # The elements' sum P is kept apart: it is the reaction force this increment reports.
             P, K, F = self.computeElements(elements, U_np, dU, P, K, F, timeStep)
-            PExt, K = self.assembleLoads(nodeforces, distributedLoads, bodyForces, U_np, PExt, K, timeStep)
-            PExt, K = self.assembleConstraints(constraints, U_np, dU, PExt, K, timeStep, FConstraints)
+            PLoadsAndConstraints, K = self.assembleLoads(
+                nodeforces, distributedLoads, bodyForces, U_np, PLoadsAndConstraints, K, timeStep
+            )
+            PLoadsAndConstraints, K = self.assembleConstraints(
+                constraints, U_np, dU, PLoadsAndConstraints, K, timeStep, FConstraints
+            )
 
+            # The right-hand side of K ddU = R is the negative of the summed contributions: the out-of-balance
+            # force R = f_ext - f_int.
             R[:] = -P
-            R += PExt
+            R -= PLoadsAndConstraints
 
             self.assembleAdditionalTerms(dU, R, F, K, timeStep)
 
@@ -854,6 +933,51 @@ class NIST(NonlinearSolverBase):
 
         return U_np, dU, P, iterationCounter, incrementResidualHistory
 
+    def checkDivergingSolution(self, incrementResidualHistory: dict, maxGrowingIter: int) -> bool:
+        """Check if the iterative solution scheme is diverging: if the flux residual of a field grew, from one
+        checked iteration to the next, more than ``maxGrowingIter`` times in this increment.
+
+        Two solver options decide what counts as a growth:
+
+        * ``countFirstResidualAsGrowth``: the residual history of a field starts from zero, so the first checked
+          residual of an increment is a growth already (EdelweissFE's original counting); otherwise, counting starts
+          with the second checked iteration.
+        * ``countGrowthOfConvergedFields``: a field that is converged, while other fields keep the Newton iterations
+          going, may still grow at the level of its round-off; such growths count too (EdelweissFE's original
+          counting), or are ignored.
+
+        Parameters
+        ----------
+        incrementResidualHistory
+            The convergence state of every field in each checked iteration of the increment, see
+            :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.checkConvergence`.
+        maxGrowingIter
+            The maximum allowed number of growths of a residual during the iterative solution scheme.
+
+        Returns
+        -------
+        bool
+            True if solution is diverging.
+        """
+
+        countFirstResidualAsGrowth = self.options["countFirstResidualAsGrowth"]
+        countGrowthOfConvergedFields = self.options["countGrowthOfConvergedFields"]
+
+        for fieldHistory in incrementResidualHistory.values():
+            nGrew = 0
+            previousFluxResidual = 0.0 if countFirstResidualAsGrowth else None
+            for fieldConvergence in fieldHistory:
+                if previousFluxResidual is not None and fieldConvergence.fluxResidual > previousFluxResidual:
+                    fieldConverged = fieldConvergence.fluxResidualConverged and fieldConvergence.correctionConverged
+                    if countGrowthOfConvergedFields or not fieldConverged:
+                        nGrew += 1
+                previousFluxResidual = fieldConvergence.fluxResidual
+
+            if nGrew > maxGrowingIter:
+                return True
+
+        return False
+
     def initializeIncrement(self, U_n: DofVector, stepActions: dict, model: FEModel, timeStep: TimeStep):
         """Prepare what :meth:`assembleAdditionalTerms` needs during this increment's Newton
         iterations. Called by :meth:`solveIncrement` once per increment, after the step actions have
@@ -880,10 +1004,11 @@ class NIST(NonlinearSolverBase):
     ):
         """Assemble terms of the equation system beyond the internal and external forces. Called
         by :meth:`solveIncrement` in every Newton iteration, next to :meth:`computeElements`,
-        :meth:`assembleLoads` and :meth:`assembleConstraints`: right after the residual
-        :math:`R = P_\\mathrm{ext} - P_\\mathrm{int}` is formed, and before the
-        multi-point-constraint condensation, the Dirichlet handling, the convergence test and the
-        linear solve -- which therefore all act on what is added here.
+        :meth:`assembleLoads` and :meth:`assembleConstraints`: right after the right-hand side
+        :math:`R = f_\\mathrm{ext} - f_\\mathrm{int}` is formed (see
+        :ref:`residual-and-tangent-convention`), and before the multi-point-constraint condensation,
+        the Dirichlet handling, the convergence test and the linear solve -- which therefore all act
+        on what is added here.
 
         A static analysis has no such terms. A dynamic one, for example, subtracts the inertia force
         :math:`M \\ddot{u}` from the residual and adds the corresponding mass term to the stiffness
@@ -1008,12 +1133,13 @@ class NIST(NonlinearSolverBase):
         constraints: list[ConstraintBase],
         U_np: DofVector,
         dU: DofVector,
-        PExt: DofVector,
+        P: DofVector,
         K: VIJSystemMatrix,
         timeStep: TimeStep,
         FConstraints: DofVector = None,
     ) -> tuple[DofVector, VIJSystemMatrix]:
-        """Loop over all constraints, and evaluate them.
+        """Loop over all constraints, and evaluate them: each adds its residual contribution and the
+        tangent of it, see :meth:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernels`.
         Is called by solveIncrement() in each iteration.
 
         Parameters
@@ -1024,8 +1150,8 @@ class NIST(NonlinearSolverBase):
             The current solution vector.
         dU
             The current solution increment vector.
-        PExt
-            The external load vector.
+        P
+            The residual contribution vector to assemble into.
         K
             The system matrix.
         timeStep
@@ -1036,7 +1162,7 @@ class NIST(NonlinearSolverBase):
         Returns
         -------
         tuple[DofVector,VIJSystemMatrix]
-            - The modified external load vector.
+            - The modified residual contribution vector.
             - The modified system matrix.
         """
 
@@ -1044,11 +1170,11 @@ class NIST(NonlinearSolverBase):
             Kc = K[constraint]
             Pc = np.zeros(constraint.nDof)
 
-            constraint.applyConstraint(U_np[constraint], dU[constraint], Pc, Kc, timeStep)
+            constraint.computeKernels(U_np[constraint], dU[constraint], Pc, Kc, timeStep)
 
-            # instead of PExt[constraint] += Pe, np.add.at allows for repeated indices
-            np.add.at(PExt, PExt.entitiesInDofVector[constraint], Pc)
+            # instead of P[constraint] += Pc, np.add.at allows for repeated indices
+            np.add.at(P, P.entitiesInDofVector[constraint], Pc)
             if FConstraints is not None:
                 np.add.at(FConstraints, FConstraints.entitiesInDofVector[constraint], np.abs(Pc))
 
-        return PExt, K
+        return P, K
