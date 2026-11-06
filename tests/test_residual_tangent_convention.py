@@ -32,8 +32,11 @@ internal forces, a load the negative of the external load, a constraint the nega
 nodes. The solvers then form ``R = f_ext - f_int`` as the negative of the summed contributions.
 
 - **Constraints**: ``K`` is compared with central differences of ``P``, at a state where every switch (contact, stick
-  or slip) stays on one side under the perturbation. A ``P`` of the wrong sign fails this as surely as a wrong ``K``.
-  The two integrated surface contact constraints are checked the same way in their own modules,
+  or slip) stays on one side under the perturbation. This catches a wrong ``K``, and a ``P`` whose sign alone is wrong,
+  but not a ``P`` and a ``K`` negated together. So every constraint is also checked for the direction of the forces it
+  exerts: a penalty pulls its nodes back towards what it prescribes, a contact pushes the bodies apart, and a Lagrange
+  multiplier acts on the nodes as ``lambda^T dg/du``, with the constraint equation ``g`` the constraint documents. The
+  two integrated surface contact constraints are checked the same way in their own modules,
   ``test_surfacetodeformablesurfacepenalty.py`` and ``test_surfacetodiscreterigidbodypenalty.py``.
 - **Element loads**: a dead load has no tangent, so the finite-difference check cannot see its sign. Its residual
   contribution is compared with the external load integrated independently instead. A load that follows the
@@ -202,6 +205,15 @@ def _localIndices(constraint, isWanted) -> np.ndarray:
     return np.array(indices, dtype=int)
 
 
+def _forcesOnNodes(constraint, P, isWanted) -> np.ndarray:
+    """The forces a constraint exerts on the displacements of the nodes for which ``isWanted(node)`` holds, the
+    negative of its residual contribution there: one row per node in the constraint's layout."""
+
+    rows = _localIndices(constraint, lambda node, field: field == "displacement" and isWanted(node))
+    domainSize = len(next(iter(constraint.nodes)).coordinates)
+    return -P[rows].reshape((-1, domainSize))
+
+
 def _assertTangentIsTheDerivative(constraint, U, dU, timeStep=None, rows=None, excluded=None, h=1e-7):
     """Assert ``K == dP/dU``, on the given rows, with the given (row, column) blocks excluded."""
 
@@ -261,7 +273,12 @@ penalty=10.0
     constraint = model.constraints["theConstraint"]
     U = localVector(constraint, lambda node, field: _noise(node, field, 1e-2))
 
-    _assertTangentIsTheDerivative(constraint, U, U)
+    P = _assertTangentIsTheDerivative(constraint, U, U)
+
+    # springs pull every node towards the mean of the constrained component, and leave the other one alone
+    values = U[1::2]
+    np.testing.assert_allclose(P[1::2], 10.0 * (values - values.mean()), rtol=1e-13)
+    np.testing.assert_array_equal(P[0::2], 0.0)
 
 
 def test_equal_value_lagrangian(tmp_path):
@@ -279,7 +296,14 @@ component=1
     constraint = model.constraints["theConstraint"]
     U = localVector(constraint, lambda node, field: _noise(node, field, 1e-2), scalarValues=[0.3, -0.7])
 
-    _assertTangentIsTheDerivative(constraint, U, U)
+    P = _assertTangentIsTheDerivative(constraint, U, U)
+
+    # g_s = u_s - u_master with the master the first node: the rows of the multipliers hold g, and each multiplier
+    # adds itself to its slave and its negative to the master
+    values, multipliers = U[1:6:2], U[6:]
+    np.testing.assert_allclose(P[6:], values[1:] - values[0], rtol=1e-14)
+    np.testing.assert_allclose(P[3:6:2], multipliers, rtol=1e-14)
+    np.testing.assert_allclose(P[1], -multipliers.sum(), rtol=1e-14)
 
 
 @pytest.mark.parametrize("contactType", ["linear", "quadratic"])
@@ -330,7 +354,13 @@ penaltyStiffness=1e3
     U = localVector(constraint, lambda node, field: _noise(node, field, 1e-2))
     timeStep = TimeStep(1, 0.1, 0.5, 0.1, 0.5, 0.5)
 
-    _assertTangentIsTheDerivative(constraint, U, U, timeStep)
+    P = _assertTangentIsTheDerivative(constraint, U, U, timeStep)
+
+    # the controlled load on the load node, the first one: the load vector, scaled by k (L - c u), by how far the
+    # constrained value c u of the three nodes after it lags behind its target L = length * t
+    lag = -1.0 * timeStep.stepProgress - np.array([0.0, 1.0, 0.0, 0.0, 0.0, -1.0]) @ U[2:]
+    np.testing.assert_allclose(-P[:2], 1e3 * lag * np.array([0.0, -1.0]), rtol=1e-13)
+    np.testing.assert_array_equal(P[2:], 0.0)
 
 
 @pytest.mark.parametrize("domainSize", [2, 3])
@@ -357,7 +387,16 @@ referencePoint={:}
         scalarValues=np.linspace(-1.0, 1.0, constraint.nConstraints),
     )
 
-    _assertTangentIsTheDerivative(constraint, U, U, rows=slice(0, constraint.nDof - constraint.nConstraints))
+    P = _assertTangentIsTheDerivative(constraint, U, U, rows=slice(0, constraint.nDof - constraint.nConstraints))
+
+    # g = u_s - u_RP - phi x (x_s - x_RP), with the slaves first and the reference point after them: each multiplier
+    # adds itself to its slave, and the reference point takes the negative of their sum
+    nConstraints = constraint.nConstraints
+    multipliers = U[-nConstraints:]
+    np.testing.assert_allclose(P[:nConstraints], multipliers, rtol=1e-14)
+    np.testing.assert_allclose(
+        P[nConstraints : nConstraints + domainSize], -multipliers.reshape((-1, domainSize)).sum(axis=0), rtol=1e-13
+    )
 
 
 def test_rigid_body(tmp_path):
@@ -379,7 +418,14 @@ referencePoint=gen_bottomLeftBack
         scalarValues=np.linspace(-1.0, 1.0, constraint.nConstraints),
     )
 
-    _assertTangentIsTheDerivative(constraint, U, U)
+    P = _assertTangentIsTheDerivative(constraint, U, U)
+
+    # g_s = -d0 - (u_s - u_RP) + T d0, with the slaves first and the reference point after them: each slave takes the
+    # negative of its multiplier, and the reference point their sum
+    nSlaves = len(constraint.slaveNodes)
+    multipliers = U[-constraint.nConstraints :].reshape((nSlaves, 3))
+    np.testing.assert_allclose(P[: 3 * nSlaves].reshape((nSlaves, 3)), -multipliers, rtol=1e-14)
+    np.testing.assert_allclose(P[3 * nSlaves : 3 * nSlaves + 3], multipliers.sum(axis=0), rtol=1e-13)
 
 
 def test_node_to_discrete_rigid_body_penalty(tmp_path):
@@ -417,8 +463,18 @@ searchDistance=1.0
     U = localVector(constraint, nodalValue)
     rpRotation = _localIndices(constraint, lambda node, field: node is rpNode and field == "rotation")
 
-    _assertTangentIsTheDerivative(constraint, U, U, excluded=rpRotation)
+    P = _assertTangentIsTheDerivative(constraint, U, U, excluded=rpRotation)
     assert constraint.totalNormalForce > 0.0, "the contact must be active"
+
+    # the support pushes every slave node up, out of its top face, and is pushed down
+    assert np.all(_forcesOnNodes(constraint, P, lambda node: node is not rpNode)[:, 1] > 0.0)
+    assert _forcesOnNodes(constraint, P, lambda node: node is rpNode)[0, 1] < 0.0
+
+
+def _isOfTheUpperBlock(node: Node) -> bool:
+    """Whether a node of ``_TWO_PLANE_BLOCKS`` or ``_TWO_SOLID_BLOCKS`` belongs to the upper block."""
+
+    return node.coordinates[1] > 1.02
 
 
 def _nodeToDeformableSurfaceCase(tmp_path, deck: str, domainSize: int, options: str, tangential: float):
@@ -439,13 +495,23 @@ slaveSurface=slaveSurf_facets, masterSurface=masterSurf_facets, penalty=1e3, sea
 
     def nodalValue(node, field):
         motion = np.zeros(domainSize)
-        if node.coordinates[1] > 1.02:
+        if _isOfTheUpperBlock(node):
             motion[0] = tangential
             motion[1] = -0.1
         return motion + _noise(node, field, 1e-4)
 
     U = localVector(constraint, nodalValue)
     return constraint, U
+
+
+def _slaveAndMasterForces(constraint, P) -> tuple[np.ndarray, np.ndarray]:
+    """The forces of a node-to-deformable-surface contact of :func:`_nodeToDeformableSurfaceCase` on the slave nodes
+    (the upper block's), one row each, and their sum on the master nodes (the lower block's)."""
+
+    return (
+        _forcesOnNodes(constraint, P, _isOfTheUpperBlock),
+        _forcesOnNodes(constraint, P, lambda node: not _isOfTheUpperBlock(node)).sum(axis=0),
+    )
 
 
 @pytest.mark.parametrize(
@@ -464,15 +530,25 @@ slaveSurface=slaveSurf_facets, masterSurface=masterSurf_facets, penalty=1e3, sea
 def test_node_to_deformable_surface_penalty_2d(tmp_path, options, tangential):
     constraint, U = _nodeToDeformableSurfaceCase(tmp_path, _TWO_PLANE_BLOCKS, 2, options, tangential)
 
-    _assertTangentIsTheDerivative(constraint, U, U)
+    P = _assertTangentIsTheDerivative(constraint, U, U)
     assert np.all(constraint._normalForceCurrent < 0.0), "every slave node must be in contact"
+
+    # the contact pushes the blocks apart: every slave node up, the master nodes down; and friction opposes the slide
+    slaveForces, masterForce = _slaveAndMasterForces(constraint, P)
+    assert np.all(slaveForces[:, 1] > 0.0) and masterForce[1] < 0.0
+    if tangential:
+        assert slaveForces[:, 0].sum() < 0.0
 
 
 def test_node_to_deformable_surface_penalty_3d_finite_sliding(tmp_path):
     constraint, U = _nodeToDeformableSurfaceCase(tmp_path, _TWO_SOLID_BLOCKS, 3, "type=quadratic, sliding=finite", 0.0)
 
-    _assertTangentIsTheDerivative(constraint, U, U)
+    P = _assertTangentIsTheDerivative(constraint, U, U)
     assert np.all(constraint._normalForceCurrent < 0.0), "every slave node must be in contact"
+
+    # the contact pushes the blocks apart: every slave node up, the master nodes down
+    slaveForces, masterForce = _slaveAndMasterForces(constraint, P)
+    assert np.all(slaveForces[:, 1] > 0.0) and masterForce[1] < 0.0
 
 
 # --- element loads

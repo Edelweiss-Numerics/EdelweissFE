@@ -276,7 +276,8 @@ class ConstraintBase(OptionSchemaProvider, ABC, VIJEntityBase):
 
         Both ``P`` and ``K`` are augmented, never overwritten. ``K`` must be the derivative of what is
         added to ``P``: a test can then check it by finite differences, which also catches a ``P``
-        of the wrong sign.
+        whose sign alone is wrong. A ``P`` and a ``K`` negated together pass that check, so a test
+        checks the direction of the forces the constraint exerts as well.
 
         Parameters
         ----------

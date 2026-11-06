@@ -151,6 +151,13 @@ class TestIntegratedSurfaceContact(unittest.TestCase):
             scale = max(np.abs(K).max(), 1.0)
             np.testing.assert_allclose(K, dP_dU, atol=1e-5 * scale, err_msg=f"type={contactType}")
 
+            # The check above passes a P and a K negated together, so the direction is checked as well: the contact
+            # pushes the faces apart, the slave face (the lower block's, at y = 0.05) down and the master face up.
+            forces = self._forces(constraint, U).reshape((-1, 3))
+            onTheSlaveFace = np.array([node.coordinates[1] > 0.025 for node in constraint.nodes])
+            self.assertLess(forces[onTheSlaveFace, 1].sum(), 0.0, f"type={contactType}")
+            self.assertGreater(forces[~onTheSlaveFace, 1].sum(), 0.0, f"type={contactType}")
+
     def test_batched_and_per_point_paths_agree(self):
         """The batched evaluation must reproduce the per-point loop, which is the reference
         implementation. Without this the loop is unreachable in tests -- every ordinary model takes

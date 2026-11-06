@@ -29,7 +29,9 @@
 ``K = dP/dU`` (see the solver documentation, "The residual and the tangent").
 
 Because ``K`` must be the derivative of what is added to ``P``, comparing it with central differences of ``P`` checks
-both at once: a wrong tangent and a ``P`` of the wrong sign each show up as a mismatch.
+both at once: a wrong tangent, or a ``P`` whose sign alone is wrong, shows up as a mismatch. A ``P`` and a ``K`` negated
+together pass, so a test checks the direction of the forces the constraint exerts as well, which only the mechanics of
+the constraint can say: that a penalty pulls its nodes back, that a contact pushes the bodies apart.
 
 They are part of the package, so that the tests of a package that adds constraints of its own can check them the same
 way as the tests of EdelweissFE check its constraints.

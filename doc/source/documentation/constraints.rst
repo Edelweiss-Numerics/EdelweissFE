@@ -517,11 +517,15 @@ and implement its ``computeKernels``. A constraint enters the equation system li
   \mathbf{0} \end{bmatrix}`. ``equalvaluelagrangian`` and ``rigidbody`` are such constraints.
 
 Because :math:`\mathbf{K}` is the derivative of exactly what is added to :math:`\mathbf{P}`, a
-constraint can be checked by finite differences of its own ``computeKernels``: a wrong tangent and a
-wrong sign of :math:`\mathbf{P}` both show up as a mismatch. ``tests/test_residual_tangent_convention.py``
-does this for the constraints shipped with EdelweissFE (the two integrated surface contact constraints in their own
-test modules); add a case there for a new one. The helpers it uses are part of the package, so that the tests of a
-package with constraints of its own use them as well:
+constraint can be checked by finite differences of its own ``computeKernels``: a wrong tangent, or a
+wrong sign of :math:`\mathbf{P}` alone, shows up as a mismatch. :math:`\mathbf{P}` and :math:`\mathbf{K}` negated
+together pass this check, so the test of a constraint also checks the direction of the forces it exerts on its nodes:
+a penalty pulls them back towards what it prescribes, a contact pushes the bodies apart, a Lagrange multiplier acts on
+them as :math:`\boldsymbol{\lambda}^T \partial \mathbf{g} / \partial \mathbf{u}` with the constraint's own
+:math:`\mathbf{g}`. ``tests/test_residual_tangent_convention.py`` does both for the constraints shipped with
+EdelweissFE (the two integrated surface contact constraints in their own test modules); add a case there for a new
+one. The helpers it uses are part of the package, so that the tests of a package with constraints of its own use them
+as well:
 
 .. automodule:: edelweissfe.utils.residualtangentcheck
     :members:

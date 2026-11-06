@@ -57,10 +57,11 @@ sums:
 
 Why one rule? Because then :math:`\boldsymbol{K}` is always the derivative of exactly what was added to
 :math:`\boldsymbol{P}`, for every entity alike. That can be checked by finite differences, entity by entity, and the
-same check catches a contribution of the wrong sign: :math:`\boldsymbol{K}` then comes out as
-:math:`-\partial \boldsymbol{P} / \partial \boldsymbol{U}`. ``tests/test_residual_tangent_convention.py`` does this
-for every constraint; a dead load has no tangent, so there the sign of each element load is checked against the load
-integrated independently.
+same check catches a contribution whose sign alone is wrong: :math:`\boldsymbol{K}` then comes out as
+:math:`-\partial \boldsymbol{P} / \partial \boldsymbol{U}`. A contribution negated together with its tangent passes it,
+so ``tests/test_residual_tangent_convention.py`` checks every constraint this way and also checks the direction of the
+forces it exerts (see :doc:`constraints`); a dead load has no tangent, so there the sign of each element load is
+checked against the load integrated independently.
 
 The elements' sum alone, :math:`\boldsymbol{f}_\mathrm{int}`, is what the implicit solvers and ``NEST`` report as the
 nodal result ``P`` of a field output: at a degree of freedom with a Dirichlet boundary condition and no load, it is the
