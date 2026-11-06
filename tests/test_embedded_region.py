@@ -110,10 +110,15 @@ REACTION_PERFECT_BOND = (E_CONCRETE / (1 - NU_CONCRETE**2) * 1.0 + E_STEEL * A_S
 
 def test_embedded_region_uniaxial_tension(tmp_path):
     """perfect bond: the non-matching rebar follows the host strain, the reaction is concrete + steel"""
-    deck = _concreteStrip() + _rebarsInStrip() + """
+    deck = (
+        _concreteStrip()
+        + _rebarsInStrip()
+        + """
 *constraint, type=embeddedRegion, name=embedded
 embeddedElSet=rebars, hostElSet=gen_all
-""" + _UNIAXIAL_STEP
+"""
+        + _UNIAXIAL_STEP
+    )
     _, (RF, RFrebar, strain) = _run(tmp_path, deck, "RF", "RFrebar", "rebarStrain")
     np.testing.assert_allclose(strain.getLastResult(), 1e-3, rtol=1e-10)
     # the end node of the rebar is a slave: its share of the reaction is reported on it
@@ -121,10 +126,15 @@ embeddedElSet=rebars, hostElSet=gen_all
 
 
 def test_embedded_region_rejects_unembedded_nodes(tmp_path):
-    deck = _concreteStrip() + _rebarsInStrip().replace("100001, 0, 0.37", "100001, -0.5, 0.37") + """
+    deck = (
+        _concreteStrip()
+        + _rebarsInStrip().replace("100001, 0, 0.37", "100001, -0.5, 0.37")
+        + """
 *constraint, type=embeddedRegion, name=embedded
 embeddedElSet=rebars, hostElSet=gen_all
-""" + _UNIAXIAL_STEP
+"""
+        + _UNIAXIAL_STEP
+    )
     with pytest.raises(ValueError, match="outside of all host elements"):
         _run(tmp_path, deck, "RF")
 
@@ -178,7 +188,9 @@ def test_embedded_beam_follows_uniform_host_strain(tmp_path, rotations):
     material line"""
     start, end = np.array([0.3, 0.2]), np.array([3.7, 0.8])
     line, first, last = _line(100001, start, end, 5, "B2D2")
-    deck = _strip() + f"""{line}
+    deck = (
+        _strip()
+        + f"""{line}
 *elSet, elSet=beams, generate=True
 {first}, {last - 1}, 1
 
@@ -201,6 +213,7 @@ maxInc=1.0, minInc=1e-8, maxNumInc=10, maxIter=10, stepLength=1
 >>dirichlet, name=corner, nSet=gen_leftBottom, field=displacement, 2=0
 >>dirichlet, name=right, nSet=gen_right, field=displacement, 1=0.004
 """
+    )
     _, (strain, kappa) = _run(tmp_path, deck, "strain", "kappa")
     t = (end - start) / np.linalg.norm(end - start)
     # the beam is negligibly stiff (E A / (E_c A_c) ~ 7e-5): the host stays in the uniform strain of the plain strip
@@ -231,7 +244,9 @@ def test_embedded_cantilever_clamped_in_stiff_block(tmp_path, rotations, elType)
     embedded, _, _ = _line(100001, (50.0, 50.0), (100.0, 50.0), 2, elType)
     free, _, tip = _line(100003, (100.0, 50.0), (100.0 + L, 50.0), 8, elType)
     free = free.replace("100003, 100, 50\n", "")  # the face node is the last node of the embedded part
-    deck = _strip(nX=4, nY=4, E=E_STEEL * 1e4, lX=100.0, lY=100.0) + f"""{embedded}
+    deck = (
+        _strip(nX=4, nY=4, E=E_STEEL * 1e4, lX=100.0, lY=100.0)
+        + f"""{embedded}
 {free}
 *elSet, elSet=beams, generate=True
 100001, 100010, 1
@@ -256,6 +271,7 @@ maxInc=1.0, minInc=1e-8, maxNumInc=10, maxIter=10, stepLength=1
 >>dirichlet, name=left, nSet=gen_left, field=displacement, 1=0, 2=0
 >>nodeforces, name=P, nSet=tip, field=displacement, 2={P}
 """
+    )
     _, (u,) = _run(tmp_path, deck, "u")
     deflection = u.getLastResult().ravel()[1]
     clamped = P * L**3 / (3 * E_STEEL * I)
