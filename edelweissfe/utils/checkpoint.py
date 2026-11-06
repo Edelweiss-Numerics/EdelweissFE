@@ -29,7 +29,8 @@
 
 A checkpoint is an HDF5 file holding
 
-- the attribute ``stepNumber``, the step the run was in;
+- the attribute ``stepNumber``, the step the run was in, and ``numberOfIncrementsDone``, how many
+  increments of it were accepted;
 - the model's state, written by :meth:`~edelweissfe.models.femodel.FEModel.writeRestart`;
 - groups ``timestepper`` and ``solver`` with the time stepper's and the solver's state;
 - a group ``stepActions`` with the state of every step action, by type and name -- including what
@@ -123,6 +124,7 @@ def writeCheckpoint(fileName: str, model, step, outputManagers: dict, serial: in
         f.attrs["formatVersion"] = CHECKPOINT_FORMAT_VERSION
         f.attrs["serial"] = serial
         f.attrs["stepNumber"] = step.number
+        f.attrs["numberOfIncrementsDone"] = step.timeStepper.numberOfIncrementsDone()
         model.writeRestart(f)
         writeRestartDataOf(f, {"timestepper": step.timeStepper, "solver": step.solver})
         stepActionsGroup = f.create_group("stepActions")
@@ -161,6 +163,9 @@ class ResumeCheckpoint:
             )
         #: The step the checkpointed run was in; the steps before it are not solved again.
         self.stepNumber = int(self._file.attrs["stepNumber"])
+        #: How many increments of that step were accepted when the checkpoint was written (see
+        #: :meth:`~edelweissfe.timesteppers.base.timestepperbase.TimeStepperBase.numberOfIncrementsDone`).
+        self.numberOfIncrementsDone = int(self._file.attrs["numberOfIncrementsDone"])
         #: The model time the checkpoint was written at.
         self.time = float(self._file.attrs["time"])
 

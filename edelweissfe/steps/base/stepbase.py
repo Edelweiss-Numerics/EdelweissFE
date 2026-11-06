@@ -327,6 +327,12 @@ class StepBase(ABC):
         load history. If the increment the checkpoint holds cannot be cut back either, the step
         falls back further, to the checkpoint before it.
 
+        A checkpoint written after the last increment the step accepted holds the state the failed
+        increment started from, from where every increment size down to the minimum has just
+        failed: falling back to it would only retry them. The step goes back to the checkpoint
+        before it instead. With a checkpoint after every accepted increment (``writeInterval=1``), the
+        latest one always is such a checkpoint.
+
         The checkpoints are those of the step's restart output, of which there is exactly one.
         Every checkpoint serves one fallback at most: falling back again takes the checkpoint before
         it, unless newer ones were written since. The step may fall back to checkpoints of its own
@@ -363,6 +369,15 @@ class StepBase(ABC):
             if checkpoint is None:
                 journal.errorMessage("No restart checkpoint of this step left to fall back to", solver.identification)
                 raise ReachedMinIncrementSize()
+            if checkpoint.numberOfIncrementsDone == self.timeStepper.numberOfIncrementsDone():
+                journal.message(
+                    "Restart checkpoint {:} holds the state the failed increment started from: going back to the one "
+                    "before it".format(checkpoint.fileName),
+                    solver.identification,
+                    1,
+                )
+                checkpoint.close()
+                continue
             try:
                 try:
                     checkpoint.restoreModel(model, journal)

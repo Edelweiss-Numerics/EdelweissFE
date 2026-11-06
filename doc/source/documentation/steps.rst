@@ -54,6 +54,10 @@ back to the checkpoint before it.
 
 - The checkpoints are those of the restart output, of which the job must define exactly one: with none, or several,
   the step refuses to start.
+- The step does not go back to a checkpoint that holds the state the failed increment started from, i.e., one written
+  after the last increment it accepted: from there, every increment size down to ``minInc`` has just failed. It goes
+  back to the checkpoint before it instead. With ``writeInterval=1``, the latest checkpoint always is such a one, so
+  a fallback goes back at least one increment before the failed one.
 - Every checkpoint serves one fallback: falling back again takes the checkpoint before it, unless the step has written
   newer ones since. How far back the step can go is set by ``writeInterval`` and ``numberOfFilesToKeep`` of the restart
   output.
