@@ -194,7 +194,10 @@ class NISTSchema:
         default=False,
     )
     lineSearchAfterIterations: int | None = schemaField(
-        description="The line search starts after this many iterations of an increment.",
+        description=(
+            "The line search starts after this many iterations of an increment, at least 0: the first correction of an "
+            "increment, which makes the prescribed increments, is never scaled."
+        ),
         dtype=int,
         default=5,
     )
@@ -479,6 +482,9 @@ class NIST(NonlinearSolverBase):
                     "lineSearchStepLengths: a parabola needs at least three different positive step lengths, got "
                     "{:}".format(stepLengths)
                 )
+            # The first correction of an increment makes the prescribed increments, which a line search would scale.
+            if self.options["lineSearchAfterIterations"] < 0:
+                raise ValueError("lineSearchAfterIterations must not be negative")
             if self.options["lineSearchEveryIterations"] < 1:
                 raise ValueError("lineSearchEveryIterations must be at least 1")
 
