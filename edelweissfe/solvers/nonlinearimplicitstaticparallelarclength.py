@@ -65,7 +65,11 @@ class NISTPArcLengthSchema(NISTParallel.schema):
         default="off",
     )
     stopCondition: str | None = schemaField(
-        description="A model accessible expression; the step ends once it is true (under arc length control).",
+        description=(
+            "A model accessible expression; the step ends once it is true, checked before every increment after the "
+            "first (under arc length control). It belongs to the controller it is declared with: an >>options block "
+            "that names arcLengthController without a stopCondition clears it."
+        ),
         dtype=str,
         default=None,
     )
@@ -168,6 +172,26 @@ class NISTPArcLength(NISTParallel):
         self.arcLengthIncrement = None
 
         return super().__init__(jobInfo, journal, **kwargs)
+
+    def applyOptionsOverride(self, fieldValues: dict) -> None:
+        """Apply an override of this solver's options, see
+        :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.applyOptionsOverride`.
+
+        A stop condition belongs to the arc length control it is declared with: an override that names the controller
+        (``arcLengthController``, ``off`` too) without a ``stopCondition`` clears the stop condition of an earlier step.
+        Otherwise a step would stop by the condition that ended the step before it -- which typically holds already --
+        at its first check.
+
+        Parameters
+        ----------
+        fieldValues
+            Maps schema field name to its new, already-coerced value.
+        """
+
+        if "arcLengthController" in fieldValues and "stopCondition" not in fieldValues:
+            fieldValues = fieldValues | {"stopCondition": None}
+
+        super().applyOptionsOverride(fieldValues)
 
     def beginStep(
         self,

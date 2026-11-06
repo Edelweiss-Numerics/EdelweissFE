@@ -176,6 +176,42 @@ def test_a_controller_the_step_does_not_have_is_refused(tmp_path):
         run(tmp_path, deck(controller="crackOpening"))
 
 
+#: A second arc length step: it names the controller of the first step again, without a stop condition, with the
+#: absolute target of the tip, and adds the change of the tip load of the first step on top of the load reached.
+_SECOND_STEP = """
+*step, solver=theSolver
+startInc={increment}, maxInc={increment}, minInc=1e-6, maxNumInc=100, maxIter=25, stepLength=1
+>>options, name=theSolver, arcLengthController=tipDisplacement
+>>indirectcontrol, name=tipDisplacement, dof1='model.nodeSets["gen_rightTop"][0].fields["displacement"]', cVector1='0, 1', dof2='model.nodeSets["gen_leftBottom"][0].fields["displacement"]', cVector2='0, 0', L=-0.25
+>>nodeforces, name=tipLoad, 2=-1.0
+""".format(
+    increment=INCREMENT
+)
+
+
+def test_a_stop_condition_belongs_to_the_controller_it_is_declared_with(tmp_path, monkeypatch):
+    """A stop condition ends the arc length step it is declared for, and no later step that names its controller anew:
+    the first step stops before its second increment, by a condition that holds from then on; the second step names the
+    controller again, without a stop condition, and runs to its end, where the tip reaches the target. (A stop condition
+    carried over would end the second step at its first check, too.)"""
+
+    tipAtStepEnds = []
+    originalStepEnd = NISTPArcLength.applyStepActionsAtStepEnd
+
+    def applyStepActionsAtStepEnd(self, model, stepActions):
+        tipAtStepEnds.append(tipDisplacement(model))
+        return originalStepEnd(self, model, stepActions)
+
+    monkeypatch.setattr(NISTPArcLength, "applyStepActionsAtStepEnd", applyStepActionsAtStepEnd)
+    model = run(tmp_path, deck(solverOptions=", stopCondition='True'") + _SECOND_STEP)
+
+    stopped, completed = tipAtStepEnds
+    # the first step's one increment: a tenth of the way to the target
+    np.testing.assert_allclose(stopped, INCREMENT * -0.25, rtol=1e-10)
+    np.testing.assert_allclose(completed, -0.25, rtol=1e-10)
+    assert model.solvers["theSolver"].options["stopCondition"] is None
+
+
 def test_without_a_controller_the_loads_follow_the_time(tmp_path):
     model = run(tmp_path, deck(controller="off"))
 

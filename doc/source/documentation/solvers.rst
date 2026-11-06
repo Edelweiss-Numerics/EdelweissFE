@@ -157,6 +157,16 @@ option is a constructor argument of the solver:
     stepActions["indirectcontrol"]["opening"] = IndirectControl("opening", dof1, dof2, [-1.0, 0.0], [1.0, 0.0], 0.01, model, journal)
     solver = NISTPArcLength(jobInfo, journal, arcLengthController="opening")
 
+A step under arc length control may end before its time is up: the solver option ``stopCondition``, an expression of
+the model and its field outputs, e.g. ``stopCondition='fieldOutputs["UTop"] < -1.0'``, is checked before every increment
+after the first, and the step ends once it is true. A stop condition belongs to the controller it is declared with: an
+``>>options`` block that names ``arcLengthController`` (``off`` too) without a ``stopCondition`` clears the one of an
+earlier step, so that a later step does not stop by the condition that ended the step before it:
+
+.. code-block:: edelweiss
+
+    >>options, name=theSolver, arcLengthController=opening, stopCondition='fieldOutputs["UTop"] < -1.0'
+
 Every controller derives from :class:`~edelweissfe.stepactions.base.arclengthcontrollerbase.ArcLengthControllerBase`,
 which states what the solver asks of it.
 
