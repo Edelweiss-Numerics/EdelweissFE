@@ -1128,7 +1128,7 @@ class NIST(NonlinearSolverBase):
         dirichlets = stepActions["dirichlet"].values()
 
         with performancetiming.timeit("step actions at increment start"):
-            # Find which global DOFs the Dirichlet BCs constrain, once up front.
+            # Find which global DOFs the Dirichlet BCs constrain, in every increment: the numbering may have changed.
             self.locateConstrainedDofs(dirichlets)
 
             self.applyStepActionsAtIncrementStart(model, timeStep, stepActions)

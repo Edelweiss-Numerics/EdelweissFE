@@ -733,7 +733,9 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
     def locateConstrainedDofs(self, dirichlets: list[StepActionBase]):
         """Determine, up front, which global DOFs each Dirichlet BC constrains.
 
-        Called once when a step's boundary conditions are established. The result
+        Called at the start of every increment, before its iterations: the numbering of the degrees of freedom may
+        have changed since the last increment -- a rebuild of the equation system after a change of the mesh or of the
+        coupling, or a new active domain of a meshfree model, which locates a node set anew. The result
         is cached on each BC as :attr:`~DirichletBase.constrainedDofIndices`, together with the
         positions of their nodes in the BC's node set (:attr:`~DirichletBase.constrainedNodePositions`),
         so that the Newton loop can address the constrained DOFs directly, instead
