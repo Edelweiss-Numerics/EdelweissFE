@@ -140,6 +140,7 @@ cdef extern from "_csrcore.h":
     cdef cppclass CSRDirectAssembler(CSRPattern) nogil:
         CSRDirectAssembler(const SystemMatrixEntities& entities, int nDof, int nThreads) except +
 
+        int nThreads
         vector[int64_t] entryStart
 
         void mapEntities(const SystemMatrixEntities& entities, double* data) except +
@@ -189,6 +190,12 @@ cdef tuple _patternArrays(CSRPattern& pattern):
     return indptr, indices
 
 
+cdef _checkNumberOfDofs(int nDof):
+    """Refuse a negative number of rows and columns."""
+    if nDof < 0:
+        raise ValueError("The number of rows and columns is negative ({:}).".format(nDof))
+
+
 def csrPatternOfEntities(entities, int nDof, int numThreads=1):
     """The CSR pattern of the entities' blocks, derived row by row from their DOF lists, as the direct assembly derives
     it (``CSRPattern::ofEntities`` in ``_csrcore.h``): each row is the union of the columns the entities couple it
@@ -209,6 +216,7 @@ def csrPatternOfEntities(entities, int nDof, int numThreads=1):
     tuple[numpy.ndarray, numpy.ndarray]
         ``indptr`` and ``indices``.
     """
+    _checkNumberOfDofs(nDof)
     cdef SystemMatrixEntities table = _borrowedTable(
         entities.dofStart,
         entities.dofs,
@@ -316,10 +324,15 @@ cdef tuple _matrixOnPattern(object coreOwner, CSRPattern* pattern):
 
 cdef tuple _entriesToAdd(entries, tuple shape):
     """The pattern of ``entries`` as the arrays ``CSRPattern::addEntries`` takes, or None if there is nothing to add."""
+    if entries.format != "csr":
+        raise ValueError("Entries to add to the pattern: CSR expected, not {:}.".format(entries.format))
     if entries.shape != shape:
         raise ValueError("Entries to add to the pattern: shape {:} differs from {:}.".format(entries.shape, shape))
     if entries.nnz == 0:
         return None
+    # the merge walks the rows in order: an unsorted row would leave the pattern unsorted, without an error
+    if not entries.has_canonical_format:
+        raise ValueError("Entries to add to the pattern: each row must be sorted and free of duplicates.")
     return np.ascontiguousarray(entries.indptr, dtype=np.int64), np.ascontiguousarray(entries.indices, dtype=np.int32)
 
 
@@ -338,7 +351,8 @@ cdef class CSRGenerator:
     nDof
         The number of rows and columns.
 
-    The gather map indexes the COO pairs with 32-bit integers, so there may be at most ``INT32_MAX`` of them.
+    The gather map indexes the COO pairs with 32-bit integers, so there may be at most ``INT32_MAX`` of them. ``I``
+    and ``J`` must have the same length and lie in ``[0, nDof)``; ``IndexError`` otherwise.
     """
 
     # the owner of the core, the owner of its current pattern (the base of csrMatrix's pattern arrays), and the core
@@ -361,6 +375,11 @@ cdef class CSRGenerator:
         cdef int[::1] rows = np.asarray(I, dtype=np.intc)
         cdef int[::1] columns = np.asarray(J, dtype=np.intc)
 
+        _checkNumberOfDofs(nDof)
+        if rows.shape[0] != columns.shape[0]:
+            raise ValueError(
+                "CSRGenerator: I and J differ in length ({:} and {:}).".format(rows.shape[0], columns.shape[0])
+            )
         self.nCooPairs = len(rows)  # Length is still 64-bit capable
 
         # 1. Run C++ Core
@@ -447,6 +466,12 @@ cdef class CSRGenerator:
             A live view of the internal CSR matrix (not a copy).
         """
 
+        if V.shape[0] != self.nCooPairs:
+            raise ValueError(
+                "CSRGenerator: {:} values given, the pattern was derived from {:} pairs.".format(
+                    V.shape[0], self.nCooPairs
+                )
+            )
         cdef double* d_ptr = &self.data_view[0]
         cdef double* v_ptr = &V[0]
 
@@ -518,6 +543,7 @@ cdef class DirectCSRAssembler:
             self.asm_.releaseMap()
 
     def __init__(self, entities, int nDof, int numThreads=1, patternFillIn=None):
+        _checkNumberOfDofs(nDof)
         cdef SystemMatrixEntities table = _borrowedTable(
             entities.dofStart,
             entities.dofs,
@@ -588,8 +614,23 @@ cdef class DirectCSRAssembler:
         callers pass the same ``tid`` (``0 <= tid < numThreads``), which selects the caller's own row scratch.
         Releases the GIL, so the workers of a threaded entity loop scatter side by side; see
         :class:`~edelweissfe.numerics.systemmatrixassembly.DirectCSRSystemMatrixAssembly`.
+
+        Raises ``IndexError`` for a ``tid`` or an ``entity`` out of range, and ``ValueError`` for a block that does not
+        have the number of values of the entity's block. (A compiled caller that scatters through :attr:`corePointer`
+        is not checked.)
         """
-        if block.shape[0] == 0:
+        cdef int64_t nEntities = <int64_t> self.asm_.entryStart.size() - 1
+        cdef int64_t size
+        if tid < 0 or tid >= self.asm_.nThreads:
+            raise IndexError("scatterBlock: thread {:} outside [0, {:}).".format(tid, self.asm_.nThreads))
+        if entity < 0 or entity >= nEntities:
+            raise IndexError("scatterBlock: entity {:} outside [0, {:}).".format(entity, nEntities))
+        size = self.asm_.entryStart[entity + 1] - self.asm_.entryStart[entity]
+        if block.shape[0] != size:
+            raise ValueError(
+                "scatterBlock: {:} values given, the block of entity {:} has {:}.".format(block.shape[0], entity, size)
+            )
+        if size == 0:
             return
         with nogil:
             self.asm_.scatterBlock(tid, entity, &block[0])
