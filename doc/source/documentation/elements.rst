@@ -159,6 +159,12 @@ Implementing your own elements
 
 Relevant module: ``edelweissfe.elements.base.baseelement``
 
+An element follows the rule every entity of the equation system follows (see
+:ref:`residual-and-tangent-convention`): each method adds a residual contribution ``P`` and its tangent
+``K = dP/dU``. ``computeKernels`` adds the internal forces and the stiffness matrix; the load methods
+``computeDistributedLoad`` and ``computeBodyForce`` add the *negative* of the external load, and its tangent if the
+load follows the deformation.
+
 An element carrying a material should also implement
 :meth:`~edelweissfe.elements.base.baseelement.BaseElement.updateMaterialProperty`, through which the
 :doc:`changeMaterialProperty <stepactions>` step action changes a material property during an

@@ -41,7 +41,6 @@ from edelweissfe.numerics.mpctransformation import (
     MultiPointConstraintTransformation,
     _flattenChainedRecords,
 )
-from edelweissfe.solvers.base.convergencecriteria import FieldConvergence
 from edelweissfe.solvers.base.convergencetable import ConvergenceTable
 from edelweissfe.stepactions.base.stepactionbase import StepActionBase
 from edelweissfe.timesteppers.timestep import TimeStep
@@ -209,12 +208,14 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
         self,
         distributedLoads: list[StepActionBase],
         U_np: DofVector,
-        PExt: DofVector,
+        P: DofVector,
         K: VIJSystemMatrix | None,
         timeStep: TimeStep,
     ) -> tuple[DofVector, VIJSystemMatrix]:
         """Loop over all distributed loads acting on elements, and evaluate them.
-        Assembles into the global external load vector and, if given, the system matrix.
+        Assembles their residual contributions, the negative of the external loads, into the given
+        vector and, if given, their tangents into the system matrix; see
+        :ref:`residual-and-tangent-convention`.
 
         Parameters
         ----------
@@ -222,8 +223,8 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
             The list of distributed loads.
         U_np
             The current solution vector.
-        PExt
-            The external load vector to assemble into.
+        P
+            The residual contribution vector to assemble into.
         K
             The system matrix to assemble into; None for an explicit solver, which needs no tangent.
         timeStep
@@ -232,7 +233,7 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
         Returns
         -------
         tuple[DofVector,VIJSystemMatrix]
-            The updated load vector and system matrix.
+            The updated residual contribution vector and system matrix.
         """
 
         time = timeStep.totalTime
@@ -247,39 +248,41 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
 
                     el.computeDistributedLoad(dLoad.loadType, Pe, Ke, faceID, load, U_np[el], time, dT)
 
-                    PExt[el] += Pe
+                    P[el] += Pe
 
-        return PExt, K
+        return P, K
 
     @performancetiming.timeit("body forces")
     def computeBodyForces(
         self,
         bodyForces: list[StepActionBase],
         U_np: DofVector,
-        PExt: DofVector,
+        P: DofVector,
         K: VIJSystemMatrix | None,
         timeStep: TimeStep,
     ) -> tuple[DofVector, VIJSystemMatrix]:
         """Loop over all body forces loads acting on elements, and evaluate them.
-        Assembles into the global external load vector and, if given, the system matrix.
+        Assembles their residual contributions, the negative of the external loads, into the given
+        vector and, if given, their tangents into the system matrix; see
+        :ref:`residual-and-tangent-convention`.
 
         Parameters
         ----------
-        distributedLoads
-            The list of distributed loads.
+        bodyForces
+            The list of body forces.
         U_np
             The current solution vector.
-        PExt
-            The external load vector to assemble into.
+        P
+            The residual contribution vector to assemble into.
         K
             The system matrix to assemble into; None for an explicit solver, which needs no tangent.
-        increment
-            The increment.
+        timeStep
+            The current time step.
 
         Returns
         -------
         tuple[DofVector,VIJSystemMatrix]
-            The updated load vector and system matrix.
+            The updated residual contribution vector and system matrix.
         """
 
         time = timeStep.totalTime
@@ -293,9 +296,9 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
 
                 el.computeBodyForce(Pe, Ke, force, U_np[el], time, dT)
 
-                PExt[el] += Pe
+                P[el] += Pe
 
-        return PExt, K
+        return P, K
 
     @performancetiming.timeit("assemble loads")
     def assembleLoads(
@@ -304,11 +307,13 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
         distributedLoads: list[StepActionBase],
         bodyForces: list[StepActionBase],
         U_np: DofVector,
-        PExt: DofVector,
+        P: DofVector,
         K: VIJSystemMatrix | None,
         timeStep: TimeStep,
     ) -> tuple[DofVector, VIJSystemMatrix]:
-        """Assemble all loads into a right hand side vector.
+        """Assemble the residual contributions of all loads: each adds the negative of the external
+        load it applies, and the tangent of that contribution, which is nonzero only for a load that
+        follows the deformation; see :ref:`residual-and-tangent-convention`.
 
         Parameters
         ----------
@@ -320,8 +325,8 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
             The list of body (volumetric) loads.
         U_np
             The current solution vector.
-        PExt
-            The external load vector.
+        P
+            The residual contribution vector to assemble into.
         K
             The system matrix to assemble into; None for an explicit solver, which needs no tangent.
         timeStep
@@ -330,17 +335,16 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
         Returns
         -------
         tuple[DofVector,VIJSystemMatrix]
-            - The updated external load vector.
+            - The updated residual contribution vector.
             - The updated system matrix.
         """
         for cLoad in nodeForces:
-            PExt[
-                self.theDofManager.idcsOfFieldsOnNodeSetsInDofVector[cLoad.field][cLoad.nodeSet]
-            ] += cLoad.getCurrentLoad(timeStep).flatten()
-        PExt, K = self.computeDistributedLoads(distributedLoads, U_np, PExt, K, timeStep)
-        PExt, K = self.computeBodyForces(bodyForces, U_np, PExt, K, timeStep)
+            dofIndices = self.theDofManager.idcsOfFieldsOnNodeSetsInDofVector[cLoad.field][cLoad.nodeSet]
+            P[dofIndices] -= cLoad.getCurrentLoad(timeStep).flatten()
+        P, K = self.computeDistributedLoads(distributedLoads, U_np, P, K, timeStep)
+        P, K = self.computeBodyForces(bodyForces, U_np, P, K, timeStep)
 
-        return PExt, K
+        return P, K
 
     def getRestartData(self) -> dict[str, np.ndarray]:
         """The state this solver carries from one increment to the next, as it is; see
@@ -556,9 +560,10 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
         iterationCounter: int,
         residualHistory: dict,
     ) -> tuple[bool, dict]:
-        """Check the convergence, individually for each field, based on the current flux residual and the field
-        correction, using the convergence criterion of the solver (see :mod:`edelweissfe.solvers.base.convergencecriteria`).
-        Is called by solveStep() to decide whether to continue iterating or stop.
+        """Check the convergence, individually for each field and for the scalar variables, based on the current flux
+        residual and the correction, using the convergence criterion of the solver (see
+        :mod:`edelweissfe.solvers.base.convergencecriteria`). Is called by solveIncrement() to decide whether to
+        continue iterating or stop.
 
         Parameters
         ----------
@@ -575,15 +580,24 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
         iterationCounter
             The current iteration number.
         residualHistory
-            The previous residuals.
+            The convergence state of every field in each iteration checked so far in this increment; the state of
+            this iteration is appended, for
+            :meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.checkDivergingSolution`.
 
         Returns
         -------
         tuple[bool,dict]
             - True if converged.
-            - The residual histories field wise.
+            - The nodes with the largest residual, per field.
 
+        Raises
+        ------
+        DivergingSolution
+            If the residual contains a NaN: no further iteration can recover from it.
         """
+
+        if np.isnan(R).any():
+            raise DivergingSolution("Obtained NaN in the residual")
 
         tableColumns = []
         convergedAtAll = True
@@ -602,16 +616,12 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
                 spatialAveragedFluxes[field],
                 iterationCounter,
             )
-            fluxResidual = fieldConvergence.fluxResidual
 
             nodesWithLargestResidual[field] = self.theDofManager.getNodeForIndexInDofVector(
                 range(len(R))[fieldIndices][fieldConvergence.indexOfLargestResidual]
             )
 
-            previousFluxResidual, nGrew = residualHistory[field]
-            if fluxResidual > previousFluxResidual:
-                nGrew += 1
-            residualHistory[field] = (fluxResidual, nGrew)
+            residualHistory[field].append(fieldConvergence)
 
             tableColumns.append(fieldConvergence)
             convergedAtAll = (
@@ -619,35 +629,20 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
             )
 
         if self.theDofManager.idcsOfScalarVariablesInDofVector:
-            fluxResidualTolerances = (
-                self.fluxResidualTolerances if iterationCounter < 15 else self.fluxResidualTolerancesAlt
-            )
-            scalarResiduals = np.abs(R[list(self.theDofManager.idcsOfScalarVariablesInDofVector.values())])
-            indexOfLargestScalarResidual = int(np.argmax(scalarResiduals))
-            residualScalarVariables = scalarResiduals[indexOfLargestScalarResidual]
-            correction = (
-                np.linalg.norm(
-                    ddU[list(self.theDofManager.idcsOfScalarVariablesInDofVector.values())],
-                    np.inf,
-                )
-                if ddU is not None
-                else 0.0
+            scalarVariableIndices = list(self.theDofManager.idcsOfScalarVariablesInDofVector.values())
+            scalarVariablesConvergence = self.convergenceCriterion.checkScalarVariables(
+                R[scalarVariableIndices],
+                ddU[scalarVariableIndices] if ddU is not None else None,
+                dU[scalarVariableIndices],
+                iterationCounter,
             )
 
-            convergedCorrection = correction < self.fieldCorrectionTolerances["scalar variables"]
-            convergedFlux = residualScalarVariables <= fluxResidualTolerances["scalar variables"]
-
-            tableColumns.append(
-                FieldConvergence(
-                    residualScalarVariables,
-                    convergedFlux,
-                    correction,
-                    convergedCorrection,
-                    indexOfLargestScalarResidual,
-                )
+            tableColumns.append(scalarVariablesConvergence)
+            convergedAtAll = (
+                convergedAtAll
+                and scalarVariablesConvergence.correctionConverged
+                and scalarVariablesConvergence.fluxResidualConverged
             )
-
-            convergedAtAll = convergedAtAll and convergedCorrection and convergedFlux
 
         summary = self.linSolver.lastSolveSummary if self.linSolver.reportsSolveSummary else None
         # ddU is None on the first iteration of an increment: no solve yet, so the column stays blank.
@@ -711,67 +706,6 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
         # keeps it across iterations and the Dirichlet application only overwrites values.
         KCsr = self.csrGenerator.updateInPlace(K)
         return KCsr
-
-    def extrapolateLastIncrement(
-        self,
-        extrapolation: str,
-        timeStep: TimeStep,
-        dU: DofVector,
-        dirichlets: list,
-        prevTimeStep: TimeStep,
-        model,
-    ) -> tuple[DofVector, bool]:
-        """Depending on the current setting, extrapolate the solution of the last increment.
-
-        Parameters
-        ----------
-        extrapolation
-            The type of extrapolation.
-        timeStep
-            The current time step.
-        dU
-            The last solution increment.
-        dirichlets
-            The list of active dirichlet boundary conditions.
-        lastIncrementSize
-            The size of the last increment.
-
-        Returns
-        -------
-        tuple[DofVector,bool]
-            - The extrapolated solution increment.
-            - True if an extrapolation was performed.
-        """
-
-        if extrapolation == "linear" and prevTimeStep and prevTimeStep.timeIncrement:
-            dU *= timeStep.stepProgressIncrement / prevTimeStep.stepProgressIncrement
-            dU = self.applyDirichletToResidual(timeStep, dU, dirichlets)
-            isExtrapolatedIncrement = True
-        else:
-            isExtrapolatedIncrement = False
-            dU[:] = 0.0
-
-        return dU, isExtrapolatedIncrement
-
-    def checkDivergingSolution(self, incrementResidualHistory: dict, maxGrowingIter: int) -> bool:
-        """Check if the iterative solution scheme is diverging.
-
-        Parameters
-        ----------
-        incrementResidualHistory
-            The dictionary containing the residual history of all fields.
-        maxGrowingIter
-            The maximum allows number of growths of a residual during the iterative solution scheme.
-
-        Returns
-        -------
-        bool
-            True if solution is diverging.
-        """
-        for previousFluxResidual, nGrew in incrementResidualHistory.values():
-            if nGrew > maxGrowingIter:
-                return True
-        return False
 
     def printResidualOutlierNodes(self, residualOutliers: dict):
         """Print which nodes have the largest residuals.

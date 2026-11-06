@@ -192,11 +192,11 @@ class Constraint(ConstraintBase, MeshDependent):
     def getNumberOfAdditionalNeededScalarVariables(self):
         return self.nNodes - 1
 
-    def applyConstraint(
+    def computeKernels(
         self,
         U_np: np.ndarray,
         dU: np.ndarray,
-        PExt: np.ndarray,
+        P: np.ndarray,
         K: np.ndarray,
         timeStep: TimeStep,
     ):
@@ -207,11 +207,12 @@ class Constraint(ConstraintBase, MeshDependent):
         vals_slaves = U_np[self.indices_slaves]
         multipliers = U_np[self.indices_multipliers]
 
+        # the constraints g_s = u_slave_s - u_master: lambda^T dg/du on the nodes, g on the multipliers
         gs = vals_slaves - val_master
 
-        PExt[self.index_master] -= -np.sum(multipliers)
-        PExt[self.indices_slaves] -= multipliers
-        PExt[self.indices_multipliers] -= gs
+        P[self.index_master] += -np.sum(multipliers)
+        P[self.indices_slaves] += multipliers
+        P[self.indices_multipliers] += gs
 
         K[self.index_master, self.indices_multipliers] += -1.0
 

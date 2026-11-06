@@ -345,16 +345,25 @@ cdef class MarmotElementWrapper:
                                const double[::1] U,
                                double time,
                                double dTime):
-        """Evaluate residual and stiffness for given time, field, and field increment due to a surface load."""
+        """Add the residual contribution of a surface load, the negative of the external load, and its tangent.
+
+        Marmot adds the external load itself, so it integrates into a buffer of its own, which is then
+        subtracted: only this load's contribution changes sign, whatever ``P`` holds already."""
+
+        cdef double[::1] externalLoad = np.zeros(P.shape[0])
+        cdef Py_ssize_t i
 
         self.marmotElement.computeDistributedLoad(mapLoadTypes[loadType],
-                                                  &P[0],
+                                                  &externalLoad[0],
                                                   &K[0],
                                                   faceID,
                                                   &load[0],
                                                   &U[0],
                                                   time,
                                                   dTime)
+
+        for i in range(P.shape[0]):
+            P[i] -= externalLoad[i]
 
     def computeBodyForce(self,
                          double[::1] P,
@@ -363,15 +372,24 @@ cdef class MarmotElementWrapper:
                          const double[::1] U,
                          double time,
                          double dTime):
-        """Evaluate residual and stiffness for given time, field, and field increment due to a volume load."""
+        """Add the residual contribution of a body force, the negative of the external load, and its tangent.
+
+        Marmot adds the external load itself, so it integrates into a buffer of its own, which is then
+        subtracted: only this load's contribution changes sign, whatever ``P`` holds already."""
+
+        cdef double[::1] externalLoad = np.zeros(P.shape[0])
+        cdef Py_ssize_t i
 
         self.marmotElement.computeBodyForce(
-                                    &P[0],
+                                    &externalLoad[0],
                                     &K[0],
                                     &load[0],
                                     &U[0],
                                     time,
                                     dTime)
+
+        for i in range(P.shape[0]):
+            P[i] -= externalLoad[i]
 
     def computeLumpedInertia(self, double[::1] M):
         """Compute the lumped mass matrix of the underlying MarmotElement"""

@@ -240,7 +240,7 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
     re-assigning each slave node to its single closest facet (within ``searchDistance``, if given)
     based on the last converged configuration -- mirroring the pattern already used by
     EdelweissMeshfree's ``NonlinearQuasistaticSolver``/``DiscreteRigidBodyPenaltyContact`` for
-    dynamic contact-pair connectivity. Within :meth:`applyConstraint`, the gap, its exact gradient,
+    dynamic contact-pair connectivity. Within :meth:`computeKernels`, the gap, its exact gradient,
     and its exact Hessian (see :mod:`~edelweissfe.utils.facetcontactgeometry`, including the
     second-derivative term from the facet normal's own pose-dependence -- not curvature, since the
     facet is flat) are recomputed fresh from the *current Newton iterate* every iteration, exactly
@@ -714,15 +714,15 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
                     J_[k] = pIdcs[j]
                     k += 1
 
-    def applyConstraint(
+    def computeKernels(
         self,
         U_np: np.ndarray,
         dU: np.ndarray,
-        PExt: np.ndarray,
+        P: np.ndarray,
         K: DeformableSurfaceContactStiffnessView | None,
         timeStep: TimeStep,
     ):
-        """Evaluate the contact forces, and the tangent unless ``K`` is None."""
+        """Add the residual contribution of the contact forces, and the tangent unless ``K`` is None."""
 
         self.totalNormalForce = 0.0
 
@@ -792,12 +792,13 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
                 f_n = lambdaForce
                 stiffness = 0.0
             else:
-                # f_n carries the sign of g (negative in contact), so that PExt -= f_n * w pushes
-                # the slave outward; see edelweissfe.constraints.base.penaltylaw.
+                # f_n carries the sign of g (negative in contact), so that the contact force on the nodes,
+                # -f_n * w, pushes the slave outward; see edelweissfe.constraints.base.penaltylaw.
                 penaltyForce, stiffness = normalPenaltyForce(self.type, penaltyTimesArea, g)
                 f_n = lambdaForce + penaltyForce
 
-            PLocal = -f_n * w
+            # the residual contribution is the negative of the contact force on the nodes
+            PLocal = f_n * w
 
             # K is None in explicit runs -- see ForcesOnlyExplicitEvaluation.
             KLocal = None
@@ -815,7 +816,7 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
                     KLocal += KFriction
 
             globalIdcs = pIdcs + fIdcs
-            PExt[globalIdcs] += PLocal
+            P[globalIdcs] += PLocal
 
             if KLocal is not None:
                 K.K_pp[activeIdx] += KLocal[: self.nDim, : self.nDim]
@@ -875,9 +876,9 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
         converged tangential force and the incremental tangential relative displacement, radial
         return onto the friction cone ``|f_T| <= mu * N`` on slip.
 
-        Returns the local external-force contribution and the local stiffness contribution
-        ``K = -dPExt_dU`` (nonsymmetric on slip), in the same ``[slave, facet nodes]`` block
-        layout as the normal contact contribution.
+        Returns the local residual contribution ``P = -G.T f_T``, the negative of the friction force on
+        the nodes, and its tangent ``K = dP_dU`` (nonsymmetric on slip), in the same
+        ``[slave, facet nodes]`` block layout as the normal contact contribution.
 
         The incremental relative displacement maps through the constant matrix
         ``G = kron(c, I)`` (``u_rel = xs - sum_a NBar_a xa``), so ``G.T M G = kron(outer(c, c), M)``
@@ -918,7 +919,8 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
                 KFriction = None
 
         self._tangentialForceCurrent[s] = tangentialForce
-        PFriction = np.kron(c, tangentialForce)
+        # the friction force on the slave is f_T and on the facet nodes -NBar_a f_T, i.e. G.T f_T
+        PFriction = -np.kron(c, tangentialForce)
         return PFriction, KFriction
 
     def acceptLastState(self):
