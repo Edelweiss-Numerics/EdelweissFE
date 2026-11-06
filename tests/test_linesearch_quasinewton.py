@@ -225,6 +225,12 @@ def test_too_few_line_search_step_lengths_are_refused(tmp_path):
         run(tmp_path, deck(solverOptions="lineSearch=True, lineSearchStepLengths='1.0, 1.0, 0.5'"))
 
 
+def test_a_negative_start_of_the_line_search_is_refused(tmp_path):
+    # it would scale the first correction of an increment, which makes the prescribed increments
+    with pytest.raises(ValueError, match="lineSearchAfterIterations must not be negative"):
+        run(tmp_path, deck(solverOptions="lineSearch=True, lineSearchAfterIterations=-1"))
+
+
 def test_without_the_fallback_a_diverging_increment_is_cut_back_until_the_step_fails(tmp_path):
     model = run(tmp_path, deck(stepOptions=", maxGrowIter=0"))
     assert model.time < 1.0
