@@ -11,7 +11,8 @@ class _DummySolver(NonlinearSolverBase):
         self.options = {}
 
     def _constrainedDofsOf(self, dirichlet):
-        return dirichlet.dofIndices
+        # one prescribed component per node: the positions of the nodes are those of the degrees of freedom
+        return dirichlet.dofIndices, np.arange(len(dirichlet.dofIndices))
 
     def solveIncrement(self, *args, **kwargs):
         pass

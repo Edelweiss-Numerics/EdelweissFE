@@ -49,7 +49,7 @@ from edelweissfe.stepactions.base.stepactionbase import StepActionBase
 from edelweissfe.timesteppers.base.timestepperbase import TimeStepperBase
 
 #: Solvers that do not support restart. Writing a checkpoint with one of them refuses.
-_NOT_RESTARTABLE = {"NEST", "NESTParallel", "NISTPArcLength"}
+_NOT_RESTARTABLE = {"NEST", "NESTParallel"}
 
 
 def _concreteSubclasses(package, base) -> list[type]:
