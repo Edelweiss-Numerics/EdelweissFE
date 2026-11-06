@@ -43,6 +43,7 @@ from edelweissfe.drivers.inputfiledrivensimulation import finiteElementSimulatio
 from edelweissfe.journal.journal import Journal
 from edelweissfe.solvers.nonlinearimplicitstatic import NIST
 from edelweissfe.solvers.nonlinearimplicitstaticparallelarclength import NISTPArcLength
+from edelweissfe.utils.exceptions import DivergingSolution
 from edelweissfe.utils.inputfileparser import parseInputFile
 
 
@@ -166,6 +167,25 @@ def test_a_parabola_without_minimum_gives_the_end_of_the_range_where_it_is_small
     # a straight line, whose fitted curvature is round-off of either sign
     assert lineSearchStepLength(lambda a: 1.0 + a) == pytest.approx(0.1)
     assert lineSearchStepLength(lambda a: 3.0 - a) == pytest.approx(1.5)
+
+
+def test_a_trial_without_a_finite_residual_fits_no_parabola():
+    # beyond the full step, the model cannot be evaluated: the trial of the smallest finite residual, not the end of the
+    # range towards the blow-up
+    assert lineSearchStepLength(lambda a: np.inf if a > 1.0 else abs(1.1 - a)) == pytest.approx(1.0)
+    assert lineSearchStepLength(lambda a: np.nan if a > 1.0 else abs(1.1 - a)) == pytest.approx(1.0)
+    # of equal finite residuals, the shortest step length
+    assert lineSearchStepLength(lambda a: np.nan if a < 0.9 else 2.0, "0.8, 1.0, 1.2") == pytest.approx(1.0)
+    # at no trial: the increment is cut back
+    with pytest.raises(DivergingSolution, match="not finite at any trial step length"):
+        lineSearchStepLength(lambda a: np.nan)
+
+
+def test_equal_trial_residuals_take_the_full_correction():
+    # the correction does not change the largest residual: a parabola fitted to round-off would choose any step length
+    assert lineSearchStepLength(lambda a: 3.0) == 1.0
+    assert lineSearchStepLength(lambda a: 3.0 * (1.0 + 1e-15 * a), "0.15, 0.4, 0.7, 1.0") == 1.0
+    assert lineSearchStepLength(lambda a: 0.0) == 1.0
 
 
 def test_the_line_search_schedule():
