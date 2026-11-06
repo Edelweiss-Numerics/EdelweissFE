@@ -27,6 +27,8 @@ An adaptive step begins with an increment of size zero, which brings the model i
 step starts from before time advances. ``makeZeroIncrementFirst=False`` leaves it out, e.g. for a model whose entities
 integrate in time and cannot be evaluated over a time increment of zero. The zero increment cannot be cut back: if it
 fails, the step fails. Any other increment, including a first increment of nonzero size, is cut back when it fails.
+An explicit step (``AdaptiveStepForExplicitSimulations``) always begins with the zero increment, in which the explicit
+solver builds its initial state, and refuses ``makeZeroIncrementFirst=False``.
 
 ``AdaptiveStep`` - A classical adpative step for transient simulations
 ----------------------------------------------------------------------

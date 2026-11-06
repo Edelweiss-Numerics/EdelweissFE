@@ -33,6 +33,10 @@ from edelweissfe.timesteppers.simpletimestepper import SimpleTimeStepper
 class AdaptiveStepForExplicitSimulations(StepBase):
     """
     An adaptive incremental step to be used in nonlinear simulations with explicit time integration.
+
+    It always begins with the zero increment, in which the explicit solver builds its initial state before time
+    advances (see :class:`~edelweissfe.timesteppers.simpletimestepper.SimpleTimeStepper`), and refuses
+    ``makeZeroIncrementFirst=False``.
     """
 
     #: Option schema for this step, per OptionSchemaProvider. Shared with
@@ -40,6 +44,25 @@ class AdaptiveStepForExplicitSimulations(StepBase):
     schema = StepIncrementationSchema
 
     def _createTimeStepper(self) -> SimpleTimeStepper:
+        """The time stepper of the step, which begins with the zero increment.
+
+        Returns
+        -------
+        SimpleTimeStepper
+            The time stepper.
+
+        Raises
+        ------
+        ValueError
+            If the step is asked to begin without the zero increment (``makeZeroIncrementFirst=False``).
+        """
+
+        if not self.makeZeroIncrementFirst:
+            raise ValueError(
+                "step {:}: an explicit step always begins with the zero increment, in which the explicit solver builds "
+                "its initial state; makeZeroIncrementFirst=False is an option of AdaptiveStep only".format(self.number)
+            )
+
         return SimpleTimeStepper(
             self.model.time,
             self.length,
