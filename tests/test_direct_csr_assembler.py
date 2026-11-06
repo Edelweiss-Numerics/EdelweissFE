@@ -456,3 +456,32 @@ def test_the_scatter_refuses_a_block_that_is_not_the_entitys():
     np.testing.assert_array_equal(direct.csrMatrix.data, 0.0)
     with pytest.raises(ValueError, match="negative"):
         DirectCSRAssembler(SystemMatrixEntities.ofEntities({}), -1)
+
+
+def test_the_matrix_of_an_assembly_keeps_the_arrays_the_assembly_writes_into():
+    """The direct assembler scatters into the data array of its matrix through a raw pointer, which it holds on to,
+    and both assemblies write into their matrix in place: neither the matrix of an assembly nor one of its arrays can
+    be replaced, while the values can be changed in place."""
+    dense = _DenseEntity(2)
+    dofsOfEntity = {dense: np.array([0, 1], dtype=np.intc)}
+    rows, columns = _vijPairs(dofsOfEntity)
+
+    for assembly in (
+        DirectCSRAssembler(SystemMatrixEntities.ofEntities(dofsOfEntity), 2),
+        CSRGenerator(rows, columns, 2),
+    ):
+        with pytest.raises(AttributeError):
+            assembly.csrMatrix = None
+
+        matrix = assembly.csrMatrix
+        with pytest.raises(RuntimeError, match="reassign 'data'"):
+            matrix.data = np.zeros_like(matrix.data)
+        with pytest.raises(RuntimeError, match="reassign 'indices'"):
+            matrix.indices = matrix.indices.copy()
+        with pytest.raises(RuntimeError, match="reassign 'indptr'"):
+            matrix.indptr = matrix.indptr.copy()
+
+        data = matrix.data
+        matrix.data += 1.0
+        assert matrix.data is data
+        np.testing.assert_array_equal(assembly.csrMatrix.data, 1.0)
