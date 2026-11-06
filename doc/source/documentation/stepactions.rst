@@ -176,7 +176,9 @@ A load is a step action that derives from :class:`~edelweissfe.stepactions.base.
 own contribution to the equation system in ``assembleLoad``: the *negative* of the external load it applies, and the
 tangent of that contribution, nonzero only for a load that follows the deformation (see
 :ref:`residual-and-tangent-convention`). The solvers do not need to know what a load acts on; their ``assembleLoads``
-only loops over the loads of the step and lets each assemble itself.
+only loops over the loads of the step and lets each assemble itself. They find the loads by this base class, whatever
+step action module defines them: a load module of its own, registered like any step action, needs no change to any
+solver, and an arc length step scales it at its end like any other load.
 
 Three bases implement ``assembleLoad`` once for all loads of their kind, so that a load deriving from them only says
 how large it is at a time (``getCurrentLoad``) and where it acts:

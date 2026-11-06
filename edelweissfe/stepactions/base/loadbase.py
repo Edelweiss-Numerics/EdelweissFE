@@ -41,8 +41,10 @@ class LoadBase(StepActionBase):
     Every load assembles its own contribution in :meth:`assembleLoad`, wherever it acts: a node force goes to the
     degrees of freedom of its nodes, a distributed load or a body force asks each of its elements for the integral
     over the loaded face or volume. A solver therefore only loops over the loads, see
-    :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.assembleLoads`, and a new kind of
-    load -- one acting on the cells or particles of a meshfree model, say -- needs no change to any solver.
+    :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.assembleLoads`, which it finds among the
+    step's actions by this base class, whatever step action module holds them (see
+    :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.collectLoads`): a new kind of load -- one
+    acting on the cells or particles of a meshfree model, say -- needs no change to any solver.
     """
 
     @abstractmethod

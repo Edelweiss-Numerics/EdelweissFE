@@ -246,9 +246,13 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
 
     @staticmethod
     def collectLoads(stepActions: dict) -> list[LoadBase]:
-        """The loads among a step's actions, in the order in which their contributions are summed: the node
-        forces, then the distributed loads, then the body forces. A fixed order makes the residual the same sum in
-        every run.
+        """The loads among a step's actions: every action that is a
+        :class:`~edelweissfe.stepactions.base.loadbase.LoadBase`, whatever step action module it is defined in, so
+        that a new kind of load needs no change to any solver.
+
+        They come in the order in which their contributions are summed, module by module: the node forces, the
+        distributed loads and the body forces first, then the loads of any other module, by the name of the module;
+        within a module, in the order of their definition. A fixed order makes the residual the same sum in every run.
 
         Parameters
         ----------
@@ -261,11 +265,11 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
             The loads.
         """
 
-        return [
-            *stepActions["nodeforces"].values(),
-            *stepActions["distributedload"].values(),
-            *stepActions["bodyforce"].values(),
-        ]
+        modulesSummedFirst = ("nodeforces", "distributedload", "bodyforce")
+        modules = [module for module in modulesSummedFirst if module in stepActions]
+        modules += sorted(module for module in stepActions if module not in modulesSummedFirst)
+
+        return [action for module in modules for action in stepActions[module].values() if isinstance(action, LoadBase)]
 
     @performancetiming.timeit("assemble loads")
     def assembleLoads(
