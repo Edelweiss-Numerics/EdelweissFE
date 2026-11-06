@@ -170,7 +170,7 @@ def test_a_constraint_declares_the_state_it_carries():
         def nDof(self):
             return 0
 
-        def applyConstraint(self, U_np, dU, PExt, V, timeStep):
+        def computeKernels(self, U_np, dU, P, K, timeStep):
             pass
 
     class _StatelessConstraint(_Constraint):

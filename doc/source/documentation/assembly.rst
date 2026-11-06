@@ -1,3 +1,5 @@
+.. _system-matrix-assembly:
+
 System matrix assembly
 ======================
 
@@ -45,9 +47,6 @@ value array is ever materialised.
     * - ``offsets`` (within-row position)
       - --
       - **2 bytes / pair**
-    * - private CSR copies
-      - --
-      - ``nBuffers`` x 8 bytes / nnz
     * - CSR pattern and data
       - 4 + 8 bytes / nnz
       - 4 + 8 bytes / nnz
@@ -59,14 +58,63 @@ they produce. Their size is set by the number of COO pairs; the CSR pattern's is
 discretisation where many entities contribute to the same entries (a wide stencil, or overlapping
 supports) can have the staging array and gather map dwarf the actual result by a wide margin.
 
+In the implicit solvers
+-----------------------
+
+The implicit solvers assemble their tangent through one interface,
+:class:`~edelweissfe.numerics.systemmatrixassembly.SystemMatrixAssembly`, so that neither the solver nor
+an element, constraint or load knows which path is in use. Every entity asks for its block --
+``Ke = K[element]`` -- and writes it; the solver then asks for the assembled matrix. The solver option
+``systemMatrixAssembly`` selects the path:
+
+.. code-block:: edelweiss
+
+    *solver, solver=NISTParallel, name=theSolver
+        systemMatrixAssembly=direct
+
+``vij`` (the default) is :class:`~edelweissfe.numerics.systemmatrixassembly.VIJSystemMatrixAssembly`,
+stage then gather; ``direct`` is
+:class:`~edelweissfe.numerics.systemmatrixassembly.DirectCSRSystemMatrixAssembly`, scatter directly.
+``NIST``, ``NISTParallel`` and ``NISTPArcLength`` support both. ``NonlinearImplicitDynamic`` (and
+``NIDParallel``) assemble on the VIJ path only, since they add the mass entry by entry to the VIJ value
+array, and so does ``NEST``.
+
+What the direct path has to know about the entities and the solvers:
+
+- **Sparse blocks.** An entity may declare a VIJ pattern of its own, sparser than its dense
+  ``nDof x nDof`` block (see :class:`~edelweissfe.numerics.vijentitybase.VIJEntityBase`): a constraint
+  that couples only some of its degrees of freedom. Its block is then the list of values of its own
+  ``(I, J)`` pairs, which the scatter places entry by entry. The entity says so
+  (:attr:`~edelweissfe.numerics.vijentitybase.VIJEntityBase.couplesAllItsDofs` is ``False``); the number
+  of its entries cannot tell, since a sparse pattern can have exactly ``nDof**2`` of them, as a rigid body
+  contact with a single slave node in 3D has.
+- **Worker threads.** Each thread of the parallel element loop writes through blocks of its own
+  (:meth:`~edelweissfe.numerics.systemmatrixassembly.SystemMatrixAssembly.blocksOfWorker`), a scratch
+  array, and adds every block to the one CSR matrix of the assembly with atomic additions, see
+  `One CSR array, atomic additions`_. The loop deals the elements out to the workers in a fixed way
+  (:func:`~edelweissfe.numerics.parallelizationutilities.mapChunksOnWorkers`), so that no two threads
+  use the same scratch array at the same time.
+- **More than one matrix.** The arc length method needs the tangents of its dead load and its reference
+  load besides the tangent of the elements. It adds them to the tangent of the increment as blocks
+  scaled by :math:`1 - \lambda` and :math:`\lambda`
+  (:meth:`~edelweissfe.numerics.systemmatrixassembly.SystemMatrixAssembly.scaledBy`), on both paths, so
+  that no further matrix is held.
+- **The complete pattern.** The multi-point-constraint condensation adds entries to the CSR pattern. The
+  assembly is built after them, on the complete pattern, whenever the equation system is (re)built.
+
+Every block of the direct path is a zeroed scratch array, so an entity that is handed its block twice in
+one assembly (an element, and a body load on it) has each scattered on its own; on the VIJ path the
+second adds to the first in the same slice. Either way, an entity only adds to or overwrites its block,
+and never reads it.
+
 Why the direct path is also faster
 ----------------------------------
 
 Three effects:
 
 - **Nothing has to be cleared.** The staging array must be zeroed every Newton iteration; that cost
-  scales with the number of COO pairs, not with ``nnz``. The direct path clears only the private CSR
-  copies, sized by ``nnz``.
+  scales with the number of COO pairs, not with ``nnz``. The direct path clears only the CSR data
+  array, sized by ``nnz``.
 - **Nothing has to be re-read.** The gather random-accesses the staging array, which can be many times
   larger than the CSR data the scatter touches instead.
 - **The evaluation itself is not slower**, because each entity writes into a small reused scratch block
@@ -112,33 +160,26 @@ that is quietly wrong is worse than one that is loudly unavailable.
 Dropping the gather map lowers peak memory and shortens the pattern build, since half the sort payload
 and the 32-bit index arrays it removes never need writing in the first place.
 
-Private copies, or atomics
---------------------------
+One CSR array, atomic additions
+-------------------------------
 
-Threads scattering into one CSR array must not collide. The default is one private copy of the CSR data
-per thread, summed at the end: no synchronisation, a fixed summation order, and therefore
-bit-reproducible results -- at ``nThreads`` x ``nnz`` x 8 bytes.
-:meth:`~edelweissfe.numerics.csrgeneratorv2.DirectCSRAssembler.setNumBuffers` trades that memory for
-atomics: fewer private copies means threads share one and synchronise the scatter with atomics
-instead, down to a single, fully atomic copy at ``n == 1``.
+All threads scatter into the one CSR data array of the matrix being assembled, and every addition to an
+entry is atomic (``#pragma omp atomic``), so threads that add to the same entry at the same time cannot
+lose a contribution. Nothing else is held per thread but a scratch array the size of one block.
 
-Two things worth knowing, from measuring this tradeoff on a real assembly:
+The alternative, a private copy of the CSR data per thread summed at the end, needs no synchronisation,
+but it holds ``nThreads`` x ``nnz`` x 8 bytes and sums all copies once per assembly. Measured on real
+assemblies, it was not faster than the atomic additions, and its memory grows with the number of threads
+until it exceeds what the direct path saves by not staging the values. So there is one way, the atomic
+one:
 
-- **The penalty is the atomic instruction itself, not contention.** Most of the slowdown from going
-  fully atomic already shows up after dropping from one copy per thread to just a handful of shared
-  copies -- so an intermediate setting pays nearly all of the time cost for only part of the memory
-  saving, and isn't a good middle ground in practice.
-- **What atomics actually cost is exact reproducibility, not correctness.** The summation order
-  becomes dependent on thread interleaving, so re-running the same computation no longer returns
-  bit-identical values -- results still agree to round-off, verifiably: an internal control that
-  re-evaluates the same kernel twice reports exactly zero difference with private copies and a
-  round-off-scale difference with atomics.
-
-.. note::
-
-   Once the staging array is gone the assembly is usually no longer what sets peak memory, so the
-   memory saving from atomics may buy nothing in practice while the reproducibility loss is real.
-   Measure where your peak actually is before switching.
+- **The cost of an atomic addition is the instruction, not contention.** Threads rarely add to the same
+  entry at the same time, so the cost does not grow with the number of threads.
+- **What the atomic additions give up is bit-reproducibility, not correctness.** The order in which the
+  threads add to an entry depends on their timing, so the same assembly repeated with more than one
+  thread agrees with itself to round-off, not bit for bit. A Newton iteration whose convergence hinges on
+  the last bit (e.g., a frictional contact that sticks or slips by a hair) may take a different path than
+  the VIJ path does.
 
 Validation
 ----------
@@ -149,7 +190,8 @@ pairs, then to its own index ``k`` so it becomes the *sum of their indices*. Bot
 inside 2\ :sup:`53`, so a bitwise comparison against
 :meth:`~edelweissfe.numerics.csrgeneratorv2.CSRGenerator.updateCSR` validates the grouping exactly
 rather than approximately. A transposition or an off-by-one shows up as an unmistakable mismatch instead
-of a judgement call about how large a deviation is acceptable.
+of a judgement call about how large a deviation is acceptable. Sums of such integers are exact in any
+order, so the check stays exact with the threads adding in an order set by their timing.
 
 :meth:`~edelweissfe.numerics.csrgeneratorv2.DirectCSRAssembler.assembleFromVIJ` exists for this purpose:
 it pushes a whole staging array through the offset map, so the two paths can be compared on identical
@@ -157,6 +199,9 @@ values with the physics held fixed.
 
 Reference
 ---------
+
+.. automodule:: edelweissfe.numerics.systemmatrixassembly
+   :members:
 
 :class:`~edelweissfe.numerics.csrgeneratorv2.CSRGenerator` and the C++ engine behind it are described
 under :doc:`utils`; only the direct-scatter side is documented here.

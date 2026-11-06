@@ -250,7 +250,7 @@ class ContactFacetElementBase(BaseElement):
     ):
         pass
 
-    def computeKernels(self, P: np.ndarray, K: np.ndarray, U: np.ndarray, dU: np.ndarray, time: float, dT: float):
+    def computeKernels(self, K: np.ndarray, P: np.ndarray, U: np.ndarray, dU: np.ndarray, time: float, dT: float):
         pass
 
     def computeKernelsExplicit(self, P: np.ndarray, U: np.ndarray, dU: np.ndarray, time: float, dT: float):

@@ -180,7 +180,7 @@ class StepAction(StepActionBase):
             journal,
         )
 
-    def applyAtStepEnd(self, model, stepMagnitude=None):
+    def applyAtStepEnd(self, model):
         if not self.active:
             return
 

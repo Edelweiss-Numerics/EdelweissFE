@@ -33,6 +33,8 @@ Parallel implementation of the NIST solver.
 import edelweissfe.utils.performancetiming as performancetiming
 from edelweissfe.numerics.parallelizationutilities import (
     getNumberOfThreads,
+    getNumberOfWorkerThreads,
+    mapChunksInParallel,
     reportThreadAvailability,
 )
 from edelweissfe.solvers.base.parallelelementcomputation import (
@@ -42,6 +44,16 @@ from edelweissfe.solvers.nonlinearimplicitstatic import NIST
 
 
 class NISTParallel(NIST):
+    """:class:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST`, with the elements computed on the available threads
+    (:meth:`computeElements`).
+
+    Parameters
+    ----------
+    jobInfo
+        A dictionary containing the job information.
+    journal
+        The journal instance for logging.
+    """
 
     identification = "NISTPSolver"
 
@@ -50,6 +62,27 @@ class NISTParallel(NIST):
         reportThreadAvailability(getNumberOfThreads(), self.journal, self.identification)
         return super().beginStep(step, model, fieldOutputController, outputmanagers)
 
+    def forEachChunk(self, entities: list, work):
+        """Call ``work(chunk)`` for chunks of ``entities`` on the available threads, as the elements are computed (see
+        :func:`~edelweissfe.numerics.parallelizationutilities.mapChunksInParallel`); otherwise as
+        :meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.forEachChunk`."""
+
+        mapChunksInParallel(entities, work)
+
+    def numberOfAssemblyWorkers(self) -> int:
+        """How many threads write blocks of the system matrix at the same time: those that compute the elements.
+
+        Returns
+        -------
+        int
+            The number of workers.
+        """
+
+        return getNumberOfWorkerThreads()
+
     @performancetiming.timeit("elements")
     def computeElements(self, elements, Un1, dU, P, K, F, timeStep):
+        """Compute the elements on the available threads, see
+        :func:`~edelweissfe.solvers.base.parallelelementcomputation.computeElementsInParallel`; otherwise as
+        :meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.computeElements`."""
         return computeElementsInParallel(elements, Un1, dU, P, K, F, timeStep)
