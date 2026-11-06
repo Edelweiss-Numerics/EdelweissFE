@@ -256,6 +256,11 @@ class Constraint(ConstraintBase):
     def getNumberOfAdditionalNeededScalarVariables(self):
         return self.nConstraints
 
+    @property
+    def couplesAllItsDofs(self) -> bool:
+        """``False``: the block is the list of the values of the sparse pattern of :meth:`initializeVIJContribution`."""
+        return False
+
     def getVIJContributionSize(self) -> int:
         """Return the actual (sparse) number of VIJ entries for this constraint.
 
@@ -398,8 +403,9 @@ class Constraint(ConstraintBase):
             ]
         )
 
-    def applyConstraint(self, U_np, dU, PExt, K, timeStep):
-        """Apply the rigid body constraint.
+    def computeKernels(self, U_np, dU, P, K, timeStep):
+        """Add the residual contribution of the rigid body constraint and its tangent: ``Lambda^T G`` on the
+        nodes and the constraint ``g`` on the Lagrange multipliers, with ``G = dg/dU``.
 
         ``K`` is received as a RigidBodyStiffnessView object.
         """
@@ -476,10 +482,10 @@ class Constraint(ConstraintBase):
 
             indcsU = np.array(indcsUNode + self.indicesOfRPUinP + self.indicesOfRPPhiInP, dtype=int)
 
-            L0 = nU + s * nDim  # local start of Lambda_s in PExt / U_np
+            L0 = nU + s * nDim  # local start of Lambda_s in P / U_np
 
-            PExt[indcsU] -= Lambda.T @ G
-            PExt[L0 : L0 + nDim] -= g
+            P[indcsU] += Lambda.T @ G
+            P[L0 : L0 + nDim] += g
 
             # ---- Write to the sparse structured K view ----
             K.K_UU += np.einsum("i,ijk->jk", Lambda, H[:, -nRot:, -nRot:])

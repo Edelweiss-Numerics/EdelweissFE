@@ -28,9 +28,10 @@
 """``DirectCSRAssembler``'s own docstring names ``assembleFromVIJ`` the equivalence path meant to
 check its addressing against ``CSRGenerator.updateCSR`` "on real models rather than argued about" --
 but no such test existed anywhere in this codebase. This pins that comparison, plus the fused
-begin/scatter/reduce path a threaded entity loop actually uses, against a small synthetic COO system
+begin/scatter path a threaded entity loop actually uses, against a small synthetic COO system
 with duplicate (row, col) pairs (multiple "entities" contributing to the same DOF pair), which is
-exactly the case that would expose a wrong offset into a shared CSR entry.
+exactly the case that would expose a wrong offset into a shared CSR entry. The integer trick of the
+documentation (counts, then sums of pair indices) checks the threaded, atomic scatter exactly.
 """
 
 import numpy as np
@@ -78,8 +79,28 @@ def test_assembleFromVIJ_matches_the_staged_generator_bit_for_bit():
     np.testing.assert_array_equal(directResult.toarray(), staged.toarray())
 
 
-def test_registerEntities_rejects_mismatched_mapStarts_and_nDofs_lengths():
-    """Both arrays are read by raw pointer on the C++ side, indexed by the same entity count -- a
+@pytest.mark.parametrize("numThreads", [1, 4])
+def test_assembleFromVIJ_addresses_every_pair_exactly(numThreads):
+    """The integer trick: every value 1 makes each CSR entry the count of its pairs, every value its own pair index k
+    the sum of their indices. Both are integers, exact in any summation order, so the threaded atomic scatter must
+    match the staged gather bit for bit on a pattern with many duplicates per entry."""
+
+    rng = np.random.default_rng(7)
+    nDof = 50
+    I = rng.integers(0, nDof, size=20000).astype(np.intc)  # noqa: E741
+    J = rng.integers(0, nDof, size=20000).astype(np.intc)
+    systemMatrix = _SystemMatrix(I, J, nDof)
+
+    generator = CSRGenerator(systemMatrix)
+    direct = DirectCSRAssembler(CSRGenerator(systemMatrix, patternOnly=True), systemMatrix, numThreads=numThreads)
+
+    for V in (np.ones(len(I)), np.arange(len(I), dtype=np.double)):
+        staged = generator.updateCSR(V)
+        np.testing.assert_array_equal(direct.assembleFromVIJ(V).data, staged.data)
+
+
+def test_registerEntities_rejects_mismatched_lengths():
+    """The arrays are read by raw pointer on the C++ side, indexed by the same entity count -- a
     length mismatch would read past the end of the shorter one rather than raising."""
 
     systemMatrix, V = _syntheticSystem()
@@ -88,12 +109,35 @@ def test_registerEntities_rejects_mismatched_mapStarts_and_nDofs_lengths():
     direct = DirectCSRAssembler(generator, systemMatrix, numThreads=1)
 
     with pytest.raises(ValueError):
-        direct.registerEntities(np.array([0, 4, 8], dtype=np.int64), np.array([2, 2], dtype=np.intc))
+        direct.registerEntities(
+            np.array([0, 4, 8], dtype=np.int64),
+            np.array([2, 2], dtype=np.intc),
+            np.array([4, 4], dtype=np.int64),
+            np.array([1, 1], dtype=np.intc),
+        )
 
 
-def test_fused_scatter_reduce_path_matches_the_staged_generator():
+def test_registerEntities_rejects_a_dense_block_of_the_wrong_size():
+    """An entity that declares a dense block must contribute nDof**2 entries; anything else is a contradiction in
+    what the entity says about itself, not something to be guessed around."""
+
+    systemMatrix, V = _syntheticSystem()
+    generator = CSRGenerator(systemMatrix)
+    generator.updateCSR(V)
+    direct = DirectCSRAssembler(generator, systemMatrix, numThreads=1)
+
+    with pytest.raises(ValueError):
+        direct.registerEntities(
+            np.array([0, 4, 8], dtype=np.int64),
+            np.array([2, 2, 1], dtype=np.intc),
+            np.array([4, 3, 1], dtype=np.int64),
+            np.array([1, 1, 1], dtype=np.intc),
+        )
+
+
+def test_fused_scatter_path_matches_the_staged_generator():
     """The path a threaded entity loop actually uses: registerEntities() once, then
-    beginAssembly()/scatterBlock() per entity/reduce() -- rather than assembleFromVIJ's one-shot COO
+    beginAssembly()/scatterBlock() per entity -- rather than assembleFromVIJ's one-shot COO
     scatter. Same synthetic system, grouped into its three entities (two 2x2 blocks sharing DOF 1,
     one 1x1 block), each entity's dense block scattered in the column-major order
     ``_syntheticSystem`` already lays out."""
@@ -108,15 +152,49 @@ def test_fused_scatter_reduce_path_matches_the_staged_generator():
     # mapStarts[e]: entity e's offset into the VIJ ordering above; nDofs[e]: its local DOF count.
     mapStarts = np.array([0, 4, 8], dtype=np.int64)
     nDofs = np.array([2, 2, 1], dtype=np.intc)
-    direct.registerEntities(mapStarts, nDofs)
+    direct.registerEntities(mapStarts, nDofs, np.array([4, 4, 1], dtype=np.int64), np.array([1, 1, 1], dtype=np.intc))
 
     direct.beginAssembly()
     direct.scatterBlock(0, 0, V[0:4].copy())
     direct.scatterBlock(0, 1, V[4:8].copy())
     direct.scatterBlock(0, 2, V[8:9].copy())
-    fusedResult = direct.reduce()
 
-    np.testing.assert_array_equal(fusedResult.toarray(), staged.toarray())
+    np.testing.assert_array_equal(direct.csrMatrix.toarray(), staged.toarray())
+
+    # a second assembly starts from zero
+    direct.beginAssembly()
+    direct.scatterBlock(0, 0, V[0:4].copy())
+    direct.scatterBlock(0, 1, V[4:8].copy())
+    direct.scatterBlock(0, 2, V[8:9].copy())
+    np.testing.assert_array_equal(direct.csrMatrix.toarray(), staged.toarray())
+
+
+def test_sparse_entity_is_scattered_entry_by_entry():
+    """An entity with a sparse VIJ pattern of its own -- a constraint coupling only some of its DOFs -- registers as
+    many pairs as it declares, not nDof**2, and its block is the list of their values, in any order of rows."""
+
+    # a dense 2x2 element on DOFs {0, 1}, then a "constraint" with nDof 3 on DOFs {0, 1, 2} that couples only
+    # (2, 0), (0, 2) and (1, 1): three pairs instead of nine
+    I = [0, 1, 0, 1, 2, 0, 1]  # noqa: E741
+    J = [0, 0, 1, 1, 0, 2, 1]
+    V = np.array([4.0, 1.0, 1.0, 5.0, -2.0, -2.0, 3.0])
+    systemMatrix = _SystemMatrix(I, J, 3)
+
+    generator = CSRGenerator(systemMatrix)
+    staged = generator.updateCSR(V)
+
+    direct = DirectCSRAssembler(CSRGenerator(systemMatrix, patternOnly=True), systemMatrix, numThreads=2)
+    direct.registerEntities(
+        np.array([0, 4], dtype=np.int64),
+        np.array([2, 3], dtype=np.intc),
+        np.array([4, 3], dtype=np.int64),
+        np.array([1, 0], dtype=np.intc),
+    )
+
+    direct.beginAssembly()
+    direct.scatterBlock(0, 0, V[0:4].copy())
+    direct.scatterBlock(1, 1, V[4:7].copy())
+    np.testing.assert_array_equal(direct.csrMatrix.toarray(), staged.toarray())
 
 
 def test_releaseGatherMap_leaves_the_pattern_usable_but_forbids_further_gathering():

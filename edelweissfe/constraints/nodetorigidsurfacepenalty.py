@@ -150,8 +150,6 @@ class Constraint(ConstraintBase, MeshDependent):
         self._nodes = nSet
         self._rebuildFromNodes()
 
-        self.active = True
-
         self.journal.message(
             f"{self._nNodes} nodes, field={self._field}, component={self.component}, "
             f"type={self.type}, direction={self.direction:+.1f}",
@@ -199,17 +197,14 @@ class Constraint(ConstraintBase, MeshDependent):
     def nDof(self) -> int:
         return self._nDof
 
-    def applyConstraint(
+    def computeKernels(
         self,
         U_np: np.ndarray,
         dU: np.ndarray,
-        PExt: np.ndarray,
+        P: np.ndarray,
         K: np.ndarray,
         timeStep: TimeStep,
     ):
-        if not self.active:
-            return
-
         values = U_np[self.indices_component]
         gap = (values - self.value) * self.direction
 
@@ -226,5 +221,6 @@ class Constraint(ConstraintBase, MeshDependent):
         normalForce, stiffness = normalPenaltyForce(self.type, self.penalty, -active_gaps)
         force_magnitude = -normalForce
 
-        PExt[active_indices] -= force_magnitude * self.direction
+        # the boundary pushes the nodes back, against direction; P is the negative of that force
+        P[active_indices] += force_magnitude * self.direction
         K[active_indices, active_indices] += stiffness
