@@ -117,7 +117,10 @@ The other solvers ask a part of these questions. ``NID`` and ``NEST`` derive fro
 back their equation systems through the layout; ``NEST`` builds its system once per step and has no topology update,
 and ``NID`` assembles its mass matrix from the model's finite elements. ``NED`` takes the numbering of the
 degrees of freedom from the layout and passes the state and the results through it, keeps the net force that drives
-its velocity update as its own state, and evaluates the model's finite elements in its own loop.
+its velocity update as its own state, and evaluates the model's finite elements in its own loop. A step of it starts
+from the velocity and the acceleration the model holds, and leaves the velocity at its end time
+(:meth:`~edelweissfe.models.femodel.FEModel.advanceVelocity`), so that the steps of a dynamic analysis follow each
+other whichever solver solves them.
 
 A finite element model answers as follows: its constraints update the nodes they couple (a contact constraint
 searches for the surface it touches); its equation system numbers all nodes and the active constraints with their
