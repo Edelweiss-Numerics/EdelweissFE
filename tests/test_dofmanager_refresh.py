@@ -92,9 +92,6 @@ def _buildTwoElementModel():
     for element in (e1, e2):
         section.assignSectionPropertiesToElement(element)
     model.prepareYourself(Journal(verbose=False))
-    for nodeField in model.nodeFields.values():
-        nodeField.createFieldValueEntry("U")
-        nodeField.createFieldValueEntry("P")
     model._linkFieldVariableObjects(model.nodeSets["all"])
     return model, n
 

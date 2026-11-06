@@ -30,7 +30,9 @@
 This module contains important classes for describing the global equation system by means of a sparse system.
 """
 
+import hashlib
 from collections import Counter
+from functools import cached_property
 from itertools import chain
 
 import numpy as np
@@ -128,9 +130,9 @@ class DofManager:
         self.accumulatedConstraintNDof = 0  #: Accumulated number of constraint DOFs (= sum of constraint vector sizes)
         self.largestNumberOfConstraintNDof = 0  #: Size of the largest constraint DOF vector
 
-        self.idcsOfFieldsOnNodeSetsInDofVector = (
-            dict()
-        )  #: Dictionary mapping for each field a NodeSet to its respective indices in the DofVector
+        #: For each field, the node sets located so far, each with the indices of the field's degrees of freedom on its
+        #: nodes and the positions of these nodes in the set; see :meth:`locateFieldOnNodeSet`.
+        self._fieldsOnNodeSets = dict()
         self.idcsOfElementsInDofVector = dict()  #: Dictionary mapping an element to its indices in the DofVector
         self.idcsOfConstraintsInDofVector = dict()  #: Dictionary mapping a constraint to its indices in the DofVector
 
@@ -168,6 +170,10 @@ class DofManager:
 
     def _determineDofsAndTheirIndices(self, nodeFields: list, scalarVariables: list):
 
+        nodeFields = list(nodeFields)
+        #: The NodeFields this DofManager numbers, by name: the only ones it reads from and writes to as a whole.
+        self.numberedNodeFields = {nodeField.name: nodeField for nodeField in nodeFields}
+
         (
             self._nDofNodeFields,
             self.idcsOfFieldVariablesInDofVector,
@@ -199,7 +205,10 @@ class DofManager:
             self.largestNumberOfConstraintNDof,
         ) = self._gatherConstraintsInformation(constraints)
 
-        self.idcsOfFieldsOnNodeSetsInDofVector = self._locateFieldsOnNodeSetsInDofVector(nodeSets)
+        self._fieldsOnNodeSets = {
+            field: {nodeSet: self._locateFieldOnNodeSet(field, nodeSet) for nodeSet in nodeSets}
+            for field in self.idcsOfNodeFieldsInDofVector
+        }
         self.idcsOfElementsInDofVector = self._locateNodeCouplingEntitiesInDofVector(elements)
         self.idcsOfConstraintsInDofVector = self._locateConstraintsInDofVector(constraints)
 
@@ -244,6 +253,30 @@ class DofManager:
         if self._hasVIJPattern:
             self._sizeVIJ = self._accumulatedElementVIJSize + self._accumulatedConstraintVIJSize
             self.I, self.J, self.idcsOfHigherOrderEntitiesInVIJ = self._initializeVIJPattern()
+
+    @cached_property
+    def dofNumberingDigest(self) -> str:
+        """A digest, a hexadecimal string, of what decides the index of every degree of freedom: for every field, its
+        name, its dimension, its slice in the DofVector and the labels of its nodes in the order they are numbered; and
+        the number of the scalar variables, which follow. Two equation systems of a step with the same digest give
+        every degree of freedom the same index, so a DofVector of one is a DofVector of the other -- e.g., before and
+        after a rebuild caused by a contact search, which changes the coupling of the degrees of freedom but not their
+        numbering. Their number stands for the scalar variables: within a step, these are always those of the
+        constraints switched on, in their order, and only a step switches constraints on or off.
+
+        The digest names the nodes by their labels, so it is the same in every run of a model: a restart checkpoint
+        holds it together with the vectors it numbers. Computed at the first request; the numbering of a DofManager
+        does not change."""
+
+        digest = hashlib.blake2b(digest_size=16)
+        for fieldName, fieldIndices in self.idcsOfFieldsInDofVector.items():
+            nodeField = self.numberedNodeFields[fieldName]
+            digest.update(repr((fieldName, nodeField.dimension, fieldIndices.start, fieldIndices.stop)).encode())
+            labels = np.fromiter((node.label for node in nodeField.nodes), dtype=np.int64, count=len(nodeField.nodes))
+            digest.update(labels.tobytes())
+        digest.update(repr(len(self.idcsOfScalarVariablesInDofVector)).encode())
+
+        return digest.hexdigest()
 
     def _reserveSpaceForNodeFields(
         self,
@@ -574,34 +607,79 @@ class DofManager:
 
         return idcsOfConstraintsInDofVector
 
-    def _locateFieldsOnNodeSetsInDofVector(self, nodeSets: list) -> dict:
-        """Creates a dictionary containing the location (indices) of each entity (elements, constraints)
-        within the DofVector structure.
+    def locateFieldOnNodeSet(self, field: str, nodeSet: NodeSet) -> tuple[np.ndarray, np.ndarray]:
+        """Where the degrees of freedom of a field on the nodes of a node set lie in the DofVector, e.g. those a
+        Dirichlet boundary condition prescribes, or those a node force acts on.
+
+        Only the nodes whose field is part of this equation system count. In a finite element model, these are all
+        nodes of the set that carry the field. A model whose equation system covers a part of its nodes only -- the
+        active domain of a material point method model, the nodes in the support of an RKPM model's particles --
+        leaves the other nodes of a set out. Values given per node of the set (the prescribed values of a boundary
+        condition, the forces of a node force) are then selected by the positions of the remaining nodes in the set,
+        which this method returns along with the indices.
+
+        The node sets given at construction are located up front, any other one at its first request.
 
         Parameters
         ----------
-        nodeSets
-                The list of NodeSets to consider.
+        field
+            The name of the field, one of this equation system.
+        nodeSet
+            The node set.
 
         Returns
         -------
-        dict
-            A dictionary containing the location mapping.
+        tuple[np.ndarray, np.ndarray]
+            - The indices of the degrees of freedom in the DofVector, node after node in the order of the set, on each
+              node the components of the field.
+            - The positions of these nodes in the set: the rows of an array that holds one row per node of the set.
         """
 
-        nodeSetFieldsInDofVector = {}
-        field_var_map = self.idcsOfFieldVariablesInDofVector
+        locatedNodeSets = self._fieldsOnNodeSets[field]
+        if nodeSet not in locatedNodeSets:
+            locatedNodeSets[nodeSet] = self._locateFieldOnNodeSet(field, nodeSet)
 
-        for field in self.idcsOfNodeFieldsInDofVector:
-            nodeSetFieldsInDofVector[field] = dict()
-            for nSet in nodeSets:
-                # Concatenate the per-node index arrays as whole arrays, not element by element.
-                indicesPerNode = [field_var_map[node.fields[field]] for node in nSet if field in node.fields]
-                nodeSetFieldsInDofVector[field][nSet] = (
-                    np.concatenate(indicesPerNode).astype(int, copy=False) if indicesPerNode else np.empty(0, dtype=int)
-                )
+        return locatedNodeSets[nodeSet]
 
-        return nodeSetFieldsInDofVector
+    def _locateFieldOnNodeSet(self, field: str, nodeSet: NodeSet) -> tuple[np.ndarray, np.ndarray]:
+        """Locate the degrees of freedom of a field on the nodes of a node set; see :meth:`locateFieldOnNodeSet`.
+
+        Parameters
+        ----------
+        field
+            The name of the field.
+        nodeSet
+            The node set.
+
+        Returns
+        -------
+        tuple[np.ndarray, np.ndarray]
+            The indices of the degrees of freedom, and the positions of their nodes in the set.
+        """
+
+        idcsOfFieldVariables = self.idcsOfFieldVariablesInDofVector
+
+        # The indices of the field on the nodes of the set, skipping a node without the field or with a field variable
+        # that is not part of this equation system (whose lookup gives None).
+        indicesPerNode = [
+            indices for node in nodeSet if (indices := idcsOfFieldVariables.get(node.fields.get(field))) is not None
+        ]
+
+        if len(indicesPerNode) == len(nodeSet):
+            # every node of the set, as in a finite element model
+            nodePositions = np.arange(len(nodeSet))
+        else:
+            nodePositions = np.array(
+                [position for position, node in enumerate(nodeSet) if node.fields.get(field) in idcsOfFieldVariables],
+                dtype=int,
+            )
+
+        # Concatenate the per-node index arrays as whole arrays, not element by element.
+        dofIndices = (
+            np.concatenate(indicesPerNode).astype(int, copy=False) if indicesPerNode else np.empty(0, dtype=int)
+        )
+
+        return dofIndices, nodePositions
 
     def _initializeVIJPattern(
         self,
@@ -686,6 +764,43 @@ class DofManager:
 
         return self.indexToHostObjectMapping[index]
 
+    def _checkNodeFieldAccess(self, nodeField: NodeField, resultName: str, wholeField: bool):
+        """Refuse an access to a node field entry this DofManager cannot serve: an entry no node field holds, a field
+        it does not number, or -- for an access to the field as a whole, which addresses its rows by position -- a
+        node field other than the one it numbers, even of the same name (e.g. the node field of the model, while
+        this DofManager numbers that of an active domain).
+
+        Parameters
+        ----------
+        nodeField
+            The NodeField accessed.
+        resultName
+            The entry accessed.
+        wholeField
+            Whether the field is accessed as a whole, rather than on the nodes of a node set.
+
+        Raises
+        ------
+        KeyError
+            If the entry is not one of :attr:`NodeField.ENTRIES <edelweissfe.fields.nodefield.NodeField.ENTRIES>`.
+        ValueError
+            If this DofManager does not number the field, or, for an access as a whole, numbers another node field
+            of that name.
+        """
+
+        if resultName not in NodeField.ENTRIES:
+            raise KeyError(
+                "a node field holds the entries {:}, not '{:}'".format(", ".join(NodeField.ENTRIES), resultName)
+            )
+        numberedNodeField = self.numberedNodeFields.get(nodeField.name)
+        if numberedNodeField is None:
+            raise ValueError("this equation system does not number the node field '{:}'".format(nodeField.name))
+        if wholeField and nodeField is not numberedNodeField:
+            raise ValueError(
+                "this equation system numbers another node field '{:}' than the one given: a node field is read or "
+                "written as a whole only by the DofManager that numbers it".format(nodeField.name)
+            )
+
     def writeDofVectorToNodeField(self, dofVector, nodeField, resultName):
         """Write the current values of an entire NodeField from the respective locations in a given DofVector.
 
@@ -695,18 +810,25 @@ class DofManager:
         dofVector
             The source DofVector.
         nodeField
-            The NodeField to get the updated values.
-        resultname
-            The name of the value entries held by the NodeField.
+            The NodeField to get the updated values: one this DofManager numbers, see :attr:`numberedNodeFields`.
+        resultName
+            The entry of the NodeField to write, one of
+            :attr:`NodeField.ENTRIES <edelweissfe.fields.nodefield.NodeField.ENTRIES>`.
 
         Returns
         -------
         NodeField
             The updated NodeField.
+
+        Raises
+        ------
+        KeyError
+            If the entry is not one a node field holds.
+        ValueError
+            If this DofManager does not number the NodeField.
         """
 
-        if resultName not in nodeField:
-            nodeField.createFieldValueEntry(resultName)
+        self._checkNodeFieldAccess(nodeField, resultName, wholeField=True)
 
         indices = self.idcsOfNodeFieldsInDofVector[nodeField.name]
         data = dofVector[indices]
@@ -725,11 +847,52 @@ class DofManager:
         dofVector
             The result DofVector.
         nodeField
-            The NodeField holding the values.
-        resultname
-            The name of the value entries held by the NodeField.
+            The NodeField holding the values. Read as a whole, it must be the one this DofManager numbers (see
+            :attr:`numberedNodeFields`); read on a node set, any node field of a field this DofManager numbers, since
+            its rows are then found by node.
+        resultName
+            The entry of the NodeField to read, one of
+            :attr:`NodeField.ENTRIES <edelweissfe.fields.nodefield.NodeField.ENTRIES>`.
         NodeSet
-            The NodeSet to consider. If None, all nodes of the NodeField are considered.
+            The NodeSet to consider: its nodes whose field is part of this equation system (see
+            :meth:`locateFieldOnNodeSet`). If None, all nodes of the NodeField are considered.
+
+        Returns
+        -------
+        DofVector
+            The DofVector.
+
+        Raises
+        ------
+        KeyError
+            If the entry is not one a node field holds.
+        ValueError
+            If this DofManager does not number the field, or, read as a whole, numbers another NodeField of that name.
+        """
+
+        self._checkNodeFieldAccess(nodeField, resultName, wholeField=nodeSet is None)
+
+        if nodeSet is not None:
+            indices, nodePositions = self.locateFieldOnNodeSet(nodeField.name, nodeSet)
+            nodes = list(nodeSet)
+            rowsInNodeField = [nodeField.indexOfNode(nodes[position]) for position in nodePositions]
+            dofVector[indices] = nodeField[resultName][rowsInNodeField].flatten()
+
+        else:
+            indices = self.idcsOfNodeFieldsInDofVector[nodeField.name]
+            dofVector[indices] = nodeField[resultName].flatten()
+
+        return dofVector
+
+    def writeScalarVariablesToDofVector(self, dofVector: DofVector) -> DofVector:
+        """Write the values of the scalar variables of this equation system to their locations in a given
+        DofVector. Only the scalar variables this DofManager numbers are written: those of a constraint that is
+        switched off are not part of the equation system.
+
+        Parameters
+        ----------
+        dofVector
+            The result DofVector.
 
         Returns
         -------
@@ -737,18 +900,21 @@ class DofManager:
             The DofVector.
         """
 
-        if nodeSet is not None:
-            if nodeSet not in self.idcsOfFieldsOnNodeSetsInDofVector.get(nodeField.name, {}):
-                new_map = self._locateFieldsOnNodeSetsInDofVector([nodeSet])
-                if nodeField.name not in self.idcsOfFieldsOnNodeSetsInDofVector:
-                    self.idcsOfFieldsOnNodeSetsInDofVector[nodeField.name] = {}
-                self.idcsOfFieldsOnNodeSetsInDofVector[nodeField.name].update(new_map[nodeField.name])
-
-            indices = self.idcsOfFieldsOnNodeSetsInDofVector[nodeField.name][nodeSet]
-            dofVector[indices] = nodeField.subset(nodeSet)[resultName].flatten()
-
-        else:
-            indices = self.idcsOfNodeFieldsInDofVector[nodeField.name]
-            dofVector[indices] = nodeField[resultName].flatten()
+        for scalarVariable, index in self.idcsOfScalarVariablesInDofVector.items():
+            dofVector[index] = scalarVariable.value
 
         return dofVector
+
+    def writeDofVectorToScalarVariables(self, dofVector: DofVector):
+        """Set the values of the scalar variables of this equation system from their locations in a given
+        DofVector; the counterpart of :meth:`writeScalarVariablesToDofVector`. A scalar variable this DofManager
+        does not number keeps its value.
+
+        Parameters
+        ----------
+        dofVector
+            The source DofVector.
+        """
+
+        for scalarVariable, index in self.idcsOfScalarVariablesInDofVector.items():
+            scalarVariable.value = dofVector[index]

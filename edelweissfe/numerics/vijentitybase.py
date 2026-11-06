@@ -35,12 +35,37 @@ class VIJEntityBase:
     By default, the base implementation assumes that the entity contributes a full dense block of size
     ``nDof × nDof``.  If the nonzero pattern of the contribution is sparser, the entity should override
     :meth:`getVIJContributionSize` to return the actual number of nonzero entries, and override
-    :meth:`initializeVIJContribution` to fill the corresponding ``I`` and ``J`` index arrays.
+    :meth:`initializeVIJContribution` to fill the corresponding ``I`` and ``J`` index arrays.  Such an entity also
+    overrides :attr:`couplesAllItsDofs` to return ``False``: that is how an assembly learns that the block is a list
+    of the values of the entity's own ``(I, J)`` pairs rather than a dense matrix.
     """
 
     def __init__(self, nDof: int):
         """Initialize the VIJEntityBase."""
         self.nDof = nDof
+
+    @property
+    def couplesAllItsDofs(self) -> bool:
+        """Whether the entity's block couples every one of its degrees of freedom with every other one.
+
+        ``True`` (the default, every element) means the block is the dense ``nDof × nDof`` matrix, stored
+        column-major, with the entity's global DOF indices as its rows and its columns. ``False`` means the entity
+        declared a sparse pattern of its own in :meth:`initializeVIJContribution` (a constraint that couples only
+        some of its degrees of freedom), and its block is the list of the values of these ``(I, J)`` pairs, in the
+        order it declared them.
+
+        The entity says which, because the number of entries cannot tell: a sparse pattern can happen to have
+        exactly ``nDof**2`` entries. A rigid body contact with a single slave node in 3D couples the six degrees of
+        freedom of the reference point with each other, the three of the node with each other, and the two groups
+        both ways: 36 + 9 + 18 + 18 = 81 = 9², yet its entries are ordered block by block, not column by column.
+
+        Returns
+        -------
+        bool
+            ``True`` for a dense block, ``False`` for a pattern of the entity's own.
+        """
+
+        return True
 
     def getVIJContributionSize(self) -> int:
         """Return the number of entries this entity contributes to the VIJ (COO) system matrix.
@@ -84,10 +109,10 @@ class VIJEntityBase:
     def shapeVIJContribution(self, flat_view: np.ndarray) -> np.ndarray:
         """Shape the flat VIJ values slice for this entity.
 
-        By default, if the contribution is dense (size = nDof**2),
+        By default, if the contribution is dense (:attr:`couplesAllItsDofs`),
         it reshapes the flat view to a 2-D array of shape (nDof, nDof)
         using column-major (Fortran) order.
         """
-        if self.getVIJContributionSize() == self.nDof**2:
+        if self.couplesAllItsDofs:
             return flat_view.reshape((self.nDof, self.nDof), order="F")
         return flat_view

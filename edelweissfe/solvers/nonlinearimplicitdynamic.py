@@ -60,7 +60,7 @@ so that the effective residual and tangent handed to the Newton loop are
 
 .. math::
 
-    \\boldsymbol{R} &= \\boldsymbol{P}_\\mathrm{ext} - \\boldsymbol{P}_\\mathrm{int}
+    \\boldsymbol{R} &= \\boldsymbol{f}_\\mathrm{ext} - \\boldsymbol{f}_\\mathrm{int}
         - \\boldsymbol{M} \\ddot{\\boldsymbol{u}}_{n+1} - \\boldsymbol{C} \\dot{\\boldsymbol{u}}_{n+1}, \\\\
     \\boldsymbol{K}_\\mathrm{eff} &= \\boldsymbol{K} + \\frac{1}{\\beta \\, \\Delta t^2} \\boldsymbol{M}
         + \\frac{\\gamma}{\\beta \\, \\Delta t} \\boldsymbol{C}.
@@ -70,7 +70,7 @@ Dirichlet handling, the convergence test, cutbacks and the linear solver -- is t
 solver runs :meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.solveIncrement` itself and
 enters it only through its three hooks -- :meth:`NonlinearImplicitDynamic.initializeIncrement`
 (mass, damping, dynamic stiffness, initial acceleration), :meth:`NonlinearImplicitDynamic.assembleAdditionalTerms`
-(two terms in the residual and two in the tangent, where the parent forms ``R = P_ext - P_int``
+(two terms in the residual and two in the tangent, where the parent forms ``R = f_ext - f_int``
 and before the tangent is converted to CSR) and :meth:`NonlinearImplicitDynamic.finalizeIncrement`
 (the converged velocity and acceleration become the state).
 
@@ -204,6 +204,10 @@ from edelweissfe.numerics.dofmanager import DofManager, DofVector, VIJSystemMatr
 from edelweissfe.numerics.parallelizationutilities import (
     forEachSliceInParallel,
     mapChunksInParallel,
+)
+from edelweissfe.numerics.systemmatrixassembly import (
+    SystemMatrixAssembly,
+    VIJSystemMatrixAssembly,
 )
 from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
 from edelweissfe.solvers.base.conservationchecks import (
@@ -415,6 +419,10 @@ class NonlinearImplicitDynamic(NIST):
     #: Option schema for this solver, per OptionSchemaProvider.
     schema = NIDSchema
 
+    #: Only the VIJ assembly: the effective tangent adds the mass and the damping entry by entry to the VIJ value array
+    #: (see :meth:`assembleAdditionalTerms`), and the mass is gathered into CSR by the generator's gather map.
+    systemMatrixAssemblies = {"vij": VIJSystemMatrixAssembly}
+
     #: The predictor's state, as in the parent, the drift the conservation checks accumulate over the
     #: step, and the conserved totals after the last accepted increment, which a topology change is
     #: compared against. The velocity and acceleration are node-field entries, restored with the model.
@@ -547,7 +555,7 @@ class NonlinearImplicitDynamic(NIST):
         U_n: DofVector,
         dU: DofVector,
         P: DofVector,
-        K: VIJSystemMatrix,
+        K: SystemMatrixAssembly,
         stepActions: list,
         model: FEModel,
         timeStep: TimeStep,
@@ -618,7 +626,7 @@ class NonlinearImplicitDynamic(NIST):
                 2,
             )
             dU[:] = 0.0
-            return U_n, dU, P, 0, dict.fromkeys(self.theDofManager.idcsOfFieldsInDofVector, (0.0, 0))
+            return U_n, dU, P, 0, {field: [] for field in self.theDofManager.idcsOfFieldsInDofVector}
 
         return super().solveIncrement(
             U_n, dU, P, K, stepActions, model, timeStep, prevTimeStep, extrapolation, maxIter, maxGrowingIter
@@ -667,7 +675,7 @@ class NonlinearImplicitDynamic(NIST):
 
     @performancetiming.timeit("inertia and damping terms")
     def assembleAdditionalTerms(
-        self, dU: DofVector, R: DofVector, F: DofVector, K: VIJSystemMatrix, timeStep: TimeStep
+        self, dU: DofVector, R: DofVector, F: DofVector, K: SystemMatrixAssembly, timeStep: TimeStep
     ):
         """Add the inertia and damping forces to the residual and their derivatives to the
         tangent; see the parent's hook. The trial displacement increment fixes the trial kinematics.
@@ -681,7 +689,7 @@ class NonlinearImplicitDynamic(NIST):
         F
             The reference flux scale of the convergence test, augmented in place.
         K
-            The tangent in VIJ layout, augmented in place.
+            The tangent being assembled; its VIJ value array is augmented in place.
         timeStep
             The time step.
         """
@@ -719,19 +727,20 @@ class NonlinearImplicitDynamic(NIST):
         # is an entry-wise sum, before the parent's CSR conversion, MPC condensation and Dirichlet row
         # replacement. The mass is added slice by slice on the thread pool; the damping is diagonal.
         with performancetiming.timeit("effective tangent"):
+            Kvij = K.vijArray
             # A slice-wise sum would silently add only a prefix of a longer mass vector.
-            if len(system.Mvij) != len(K):
+            if len(system.Mvij) != len(Kvij):
                 raise ValueError(
                     "The mass ({:} entries) and the tangent ({:} entries) differ in their VIJ layout.".format(
-                        len(system.Mvij), len(K)
+                        len(system.Mvij), len(Kvij)
                     )
                 )
 
             def addScaledMass(s: slice):
-                K[s] += increment.massFactor * system.Mvij[s]
+                Kvij[s] += increment.massFactor * system.Mvij[s]
 
-            forEachSliceInParallel(addScaledMass, len(K))
-            K[system.dampingVIJIndices] += increment.dampingFactor * system.dampingVIJValues
+            forEachSliceInParallel(addScaledMass, len(Kvij))
+            Kvij[system.dampingVIJIndices] += increment.dampingFactor * system.dampingVIJValues
 
     @performancetiming.timeit("finalize increment")
     def finalizeIncrement(self, model: FEModel):
@@ -880,11 +889,8 @@ class NonlinearImplicitDynamic(NIST):
                 A = self.theDofManager.constructDofVector()
                 for fieldName in dynamicFields:
                     field = model.nodeFields[fieldName]
-                    # A missing entry (programmatically assembled model) means a start from rest.
-                    if "V" in field:
-                        V = self.theDofManager.writeNodeFieldToDofVector(V, field, "V")
-                    if "A" in field:
-                        A = self.theDofManager.writeNodeFieldToDofVector(A, field, "A")
+                    V = self.theDofManager.writeNodeFieldToDofVector(V, field, "V")
+                    A = self.theDofManager.writeNodeFieldToDofVector(A, field, "A")
             else:
                 V, A = system.V, system.A
 
@@ -1397,7 +1403,7 @@ class NonlinearImplicitDynamic(NIST):
     ):
         """Compute the acceleration from equilibrium at the start of an increment, and commit it.
 
-        Solves :math:`M a_0 = P_\\mathrm{ext}(t_0) - P_\\mathrm{int}(u_0) - C v_0` on the dynamic,
+        Solves :math:`M a_0 = f_\\mathrm{ext}(t_0) - f_\\mathrm{int}(u_0) - C v_0` on the dynamic,
         free degrees of freedom. The loads are evaluated with a synthetic time step at the start of
         the increment passed in (zero step-progress increment and zero time increment -- an ``f(t)``
         amplitude at that instant), the elements with a zero displacement increment, which leaves
@@ -1434,23 +1440,27 @@ class NonlinearImplicitDynamic(NIST):
         )
 
         dirichlets = stepActions["dirichlet"].values()
-        nodeforces = stepActions["nodeforces"].values()
-        distributedLoads = stepActions["distributedload"].values()
-        bodyForces = stepActions["bodyforce"].values()
+        loads = self.collectLoads(stepActions)
 
         P = self.theDofManager.constructDofVector()
         F = self.theDofManager.constructDofVector()
-        PExt = self.theDofManager.constructDofVector()
+        PLoadsAndConstraints = self.theDofManager.constructDofVector()
         dU0 = self.theDofManager.constructDofVector()
-        K = self.theDofManager.constructVIJSystemMatrix()
+        # the tangent is not needed: assembled into the increment's own system matrix, which the Newton iterations
+        # assemble anew
+        K = self._K
+        K.beginAssembly()
 
-        P, K, F = self.computeElements(model.elements, U_n, dU0, P, K, F, startTimeStep)
-        PExt, K = self.assembleLoads(nodeforces, distributedLoads, bodyForces, U_n, PExt, K, startTimeStep)
-        PExt, K = self.assembleConstraints(model.constraints, U_n, dU0, PExt, K, startTimeStep)
+        P, K, F = self.assembleInternalForces(U_n, dU0, P, K, F, startTimeStep)
+        PLoadsAndConstraints, K = self.assembleLoads(loads, U_n, dU0, PLoadsAndConstraints, K, startTimeStep)
+        PLoadsAndConstraints, K = self.assembleConstraints(
+            model.constraints, U_n, dU0, PLoadsAndConstraints, K, startTimeStep
+        )
 
+        # f_ext - f_int is the negative of the summed residual contributions, as in solveIncrement
         R = self.theDofManager.constructDofVector()
-        R[:] = PExt
-        R -= P
+        R[:] = -P
+        R -= PLoadsAndConstraints
         R -= system.C @ np.asarray(system.V)
 
         nDof = self.theDofManager.nDof

@@ -156,7 +156,9 @@ Penalty force laws
 Contact is active for :math:`g < 0`. With :math:`\kappa = p\, A_s` (``penalty`` :math:`p`, an
 interface stiffness modulus per unit area, times the tributary area), two force laws are
 available; :math:`f_n \leq 0` denotes the normal force carried by the slave node (compression
-negative), assembled as :math:`\boldsymbol{P}^{ext} \mathrel{-}= f_n\, \boldsymbol{w}`:
+negative). The contact force on the nodes is :math:`-f_n\, \boldsymbol{w}`, so the residual
+contribution is :math:`\boldsymbol{P} \mathrel{+}= f_n\, \boldsymbol{w}` (see
+:ref:`residual-and-tangent-convention`):
 
 .. list-table::
    :header-rows: 1
@@ -287,8 +289,9 @@ cutbacks automatically state-safe):
 
 with :math:`N = -f_n \geq 0` the current normal force (multiplier-augmented if AL is active).
 The force on the slave node is :math:`\boldsymbol{t}_T` and the facet nodes receive the reaction
-:math:`-\bar{N}_a \boldsymbol{t}_T`, i.e. the assembly is :math:`\boldsymbol{P}^{ext}
-\mathrel{+}= \boldsymbol{G}^T \boldsymbol{t}_T = \boldsymbol{c} \otimes \boldsymbol{t}_T`.
+:math:`-\bar{N}_a \boldsymbol{t}_T`, i.e. the force on the nodes is :math:`\boldsymbol{G}^T
+\boldsymbol{t}_T = \boldsymbol{c} \otimes \boldsymbol{t}_T`, and the residual contribution is its
+negative, :math:`\boldsymbol{P} \mathrel{-}= \boldsymbol{c} \otimes \boldsymbol{t}_T`.
 
 Note the continuity at liftoff: as :math:`N \to 0` the slip branch caps the force at :math:`\mu N
 \to 0`, so the frictional force is continuous through gap activation. The *tangent*, however, is
@@ -305,7 +308,8 @@ the tangential force of the converged iterate is promoted to the history:
 Consistent tangent
 ^^^^^^^^^^^^^^^^^^
 
-With :math:`\boldsymbol{K} = -\partial \boldsymbol{P}^{ext} / \partial \boldsymbol{U}` and the
+With :math:`\boldsymbol{K} = \partial \boldsymbol{P} / \partial \boldsymbol{U}`, the derivative of the
+residual contribution :math:`\boldsymbol{P} = -\boldsymbol{c} \otimes \boldsymbol{t}_T`, and the
 Kronecker identities above:
 
 **Stick** (symmetric, positive semi-definite):
@@ -850,7 +854,7 @@ is shared with the rigid-body variant (:ref:`integrated-contact-rigid-body`).
    it backs the public ``getGaps()``, whose callers cannot mask unassigned entries because they do
    not know the assignment.
 
-**Every evaluation**, in ``applyConstraint`` (implicit) or ``applyConstraintExplicit``:
+**Every evaluation**, in ``computeKernels`` (implicit) or ``computeKernelsExplicit``:
 
 #. The gap of each assigned point follows from the frozen data by the expression above; the point
    is closed where :math:`g < 0`.
@@ -994,10 +998,11 @@ The constraint participates in the implicit solution through three hooks:
     constraint reports a change. (All constraints are always polled -- the poll must not
     short-circuit, since every dynamic constraint relies on the call to refresh its state.)
 
-``applyConstraint(U, dU, PExt, K, timeStep)`` (every Newton iteration)
-    Assembles forces and consistent tangent from the current iterate, as derived above. All
-    quantities derive from (converged state, :math:`d\boldsymbol{U}`); nothing accumulates
-    across iterations, so failed increments and cutbacks need no state rollback.
+``computeKernels(U, dU, P, K, timeStep)`` (every Newton iteration)
+    Assembles the residual contribution of the contact forces and its consistent tangent from the
+    current iterate, as derived above. All quantities derive from (converged state,
+    :math:`d\boldsymbol{U}`); nothing accumulates across iterations, so failed increments and
+    cutbacks need no state rollback.
 
 ``acceptLastState()`` (on increment acceptance)
     Promotes the tangential forces of the converged iterate to the frictional history and
@@ -1009,7 +1014,7 @@ ordered like the generator's ``<prefix>_nodes`` node set, and are typically requ
 ``fromExpression`` field outputs.
 
 The integrated constraint (:ref:`integrated-contact-algorithm`) presents the same
-``updateConnectivity`` / ``applyConstraint`` pair, with three differences worth knowing at the
+``updateConnectivity`` / ``computeKernels`` pair, with three differences worth knowing at the
 solver boundary. It carries no history, so it has no ``acceptLastState`` to promote -- every
 quantity derives from the converged state and :math:`d\boldsymbol{U}`. Its DOF footprint is the set
 of *assigned* contact points and does not respond to gap activation, so the sparsity pattern
@@ -1029,9 +1034,9 @@ what an explicit increment is.
 
 **No tangent is assembled.** An explicit increment solves no linear system, so a constraint
 stiffness enters nothing. The solver calls
-:meth:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.applyConstraintExplicit`
-instead of ``applyConstraint``, and this constraint overrides it to evaluate the contact forces
-without building a tangent at all. The base-class default forwards to ``applyConstraint`` with a
+:meth:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernelsExplicit`
+instead of ``computeKernels``, and this constraint overrides it to evaluate the contact forces
+without building a tangent at all. The base-class default forwards to ``computeKernels`` with a
 discarded tangent contribution, so a constraint that has not been ported still works -- correctly,
 but paying for a stiffness nobody reads. Constraints for which the tangent is a material part of
 the cost should override the method; for this one it is, at a per-slave outer product and four
