@@ -32,6 +32,7 @@ guard against a dynamic degree of freedom that received no mass.
 Reuses the SDOF deck from ``test_nid_newmark`` (one Marmot ``C3D8``/``LinearElastic`` bar).
 """
 
+import functools
 import re
 from pathlib import Path
 
@@ -269,14 +270,23 @@ def test_the_explicit_static_solver_gives_the_entities_no_inertia(tmp_path, monk
 
 class _LayoutWithoutNodalInertia(EquationSystemLayout):
     """The layout of a model none of whose nodes carries a mass the solver integrates: as in a meshfree model whose
-    particles carry the inertia and integrate it themselves (``meshfreeInertia=particles``)."""
+    particles carry the inertia and integrate it themselves (``meshfreeInertia=particles``). It reports the motion of
+    the particles where the model says."""
 
     def dofsWithNodalInertia(self, fieldNames):
         return np.zeros(0, dtype=int)
 
+    def carriersOfTheMotionOfParticles(self):
+        return set(self.model.motionOfParticlesHeldIn)
+
 
 class _ModelWithoutNodalInertia(FEModel):
-    """A finite element model that answers with :class:`_LayoutWithoutNodalInertia`."""
+    """A finite element model that answers with :class:`_LayoutWithoutNodalInertia`, and holds the motion of
+    particles (which it does not model) in the given places."""
+
+    def __init__(self, dimension, motionOfParticlesHeldIn=()):
+        super().__init__(dimension)
+        self.motionOfParticlesHeldIn = motionOfParticlesHeldIn
 
     def buildEquationSystem(self):
         layout = super().buildEquationSystem()
@@ -300,3 +310,34 @@ def test_a_model_without_nodal_inertia_gets_no_mass_assembled():
         )
     for entry in ("V", "A"):
         np.testing.assert_array_equal(actual[entry], 0.0)
+
+
+@pytest.mark.parametrize(
+    "meshfreeInertia, motionOfParticlesHeldIn, refused",
+    [
+        ("nodes", ("particles",), True),
+        ("particles", ("nodes",), True),
+        ("particles", ("particles",), False),
+        ("nodes", ("nodes",), False),
+        ("particles", ("particles", "nodes"), False),
+        ("nodes", (), False),
+    ],
+)
+def test_a_step_refuses_to_start_where_the_motion_of_the_particles_is_not_taken_from(
+    meshfreeInertia, motionOfParticlesHeldIn, refused
+):
+    """NID takes the motion of meshfree particles from their state (``particles``) or from the nodes of their kernel
+    functions (``nodes``), and nothing transfers it between the two: a step that would take it from where the model
+    does not hold it refuses to start, rather than starting the particles from rest. Held in both places (after the
+    explicit meshfree solver), or nowhere (at rest), the step starts."""
+
+    journal = Journal(verbose=False)
+    model = _strip(_ModelWithoutNodalInertia(2, motionOfParticlesHeldIn), 2)
+    solverClass = functools.partial(NonlinearImplicitDynamic, meshfreeInertia=meshfreeInertia)
+
+    if refused:
+        with pytest.raises(ValueError, match="meshfreeInertia={:} takes it".format(meshfreeInertia)):
+            _solve(model, solverClass, journal)
+    else:
+        _solve(model, solverClass, journal)
+        assert np.max(np.abs(model.nodeFields["displacement"]["U"])) > 0.0

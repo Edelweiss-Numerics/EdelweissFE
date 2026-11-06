@@ -154,7 +154,17 @@ Where their inertia is integrated, the option ``meshfreeInertia`` selects:
   covers these nodes, as every node.
 
 Both report the same force ``P``: in ``particles``, the particles' inertia is in their internal force, and this solver
-adds the inertial and damping forces of the nodes it integrates; in ``nodes``, it adds those of all nodes. The
+adds the inertial and damping forces of the nodes it integrates; in ``nodes``, it adds those of all nodes.
+
+The two keep the motion of the particles in different places: ``particles`` in the particles' state, ``nodes`` in the
+entries ``V`` and ``A`` of the kernel functions' nodes (and the explicit meshfree solver in both: it keeps the velocity
+of the nodes, and the particles take theirs from it). Nothing transfers the motion from the one place to the other --
+a projection from the particles to the nodes is not offered, since it works poorly -- so a step that would take the
+motion from where the model does not hold it refuses to start
+(:meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.carriersOfTheMotionOfParticles`): a step in
+``nodes`` after a step in ``particles``, or after an initial velocity given to the particles; a step in ``particles``
+after a step in ``nodes``. Either continue in the place of the step before, or let a quasi-static step bring the model
+to rest in between. The
 material point method is refused: its material points carry no inertia, and its background grid is reset in every
 increment.
 
@@ -510,6 +520,10 @@ class NonlinearImplicitDynamic(NIST):
         self._newmarkSystem = None
         #: Whether the next increment has to compute the acceleration from equilibrium first.
         self._initialAccelerationPending = False
+        #: Whether the first equation system of a step checks where the model holds the motion of its meshfree
+        #: particles (see :meth:`_refuseMotionOfParticlesItDoesNotTakeOver`); not on a resumed step, which continues
+        #: from its own checkpoint.
+        self._motionOfParticlesToBeChecked = False
         #: Length of ``model.topology.history`` when the current equation system was assembled; tells
         #: a mesh change from a constraint re-reporting its connectivity (see :meth:`_updateNewmarkSystem`).
         self._topologyRecordsAtLastBuild = 0
@@ -607,6 +621,7 @@ class NonlinearImplicitDynamic(NIST):
 
         resumed = not step.timeStepper.isAtStepStart()
         self._initialAccelerationPending = bool(self.options["computeInitialAcceleration"]) and not resumed
+        self._motionOfParticlesToBeChecked = not resumed
 
         self.journal.message(
             "Newmark-beta time integration, beta={:}, gamma={:}; consistent mass{:}{:}".format(
@@ -929,7 +944,8 @@ class NonlinearImplicitDynamic(NIST):
         (re)built: the solution, as in the parent, and the velocity and the acceleration of the fields carrying a mass,
         where the last accepted increment (or the checkpoint, or nothing -- a start from rest) left them, and where a
         refinement has meanwhile interpolated them onto the nodes it created. After a quasi-static step, they are zero:
-        the step starts from rest.
+        the step starts from rest. At the start of a step, the motion of meshfree particles must be where this solver
+        takes it from (see :meth:`_refuseMotionOfParticlesItDoesNotTakeOver`).
 
         Parameters
         ----------
@@ -941,6 +957,10 @@ class NonlinearImplicitDynamic(NIST):
         self._V = self.theDofManager.constructDofVector()
         self._A = self.theDofManager.constructDofVector()
         self.equationSystemLayout.readStateFromModel(U, self._V, self._A, self._dynamicFields)
+
+        if self._motionOfParticlesToBeChecked:
+            self._motionOfParticlesToBeChecked = False
+            self._refuseMotionOfParticlesItDoesNotTakeOver()
 
     def writeResultsToModel(self, U: DofVector, dU: DofVector, P: DofVector):
         """Write the results of a converged increment to the model, as the parent does, with the velocity and the
@@ -1107,6 +1127,42 @@ class NonlinearImplicitDynamic(NIST):
             )
 
         return self._newmarkSystem
+
+    #: Where each option of ``meshfreeInertia`` takes the motion of the particles from, and keeps it.
+    _placesOfTheMotionOfParticles = {
+        "particles": "in the particles' own state (their velocity and acceleration)",
+        "nodes": "at the nodes of their kernel functions (V and A of the node fields)",
+    }
+
+    def _refuseMotionOfParticlesItDoesNotTakeOver(self):
+        """At the start of a step: refuse to start if the model holds the motion of its meshfree particles, but not
+        where this solver's ``meshfreeInertia`` takes it from (see the module documentation, "Meshfree particles"):
+        nothing transfers it from the other place, so the step would start the particles from rest.
+
+        Raises
+        ------
+        ValueError
+            If the model holds the motion of its particles only where this solver does not take it from.
+        """
+
+        carriers = self.equationSystemLayout.carriersOfTheMotionOfParticles()
+        meshfreeInertia = self.options["meshfreeInertia"]
+        if not carriers or meshfreeInertia in carriers:
+            return
+
+        (carrier,) = carriers
+        raise ValueError(
+            "The model holds the motion of its meshfree particles {:}, but {:} with meshfreeInertia={:} takes it {:}. "
+            "Nothing transfers it from one place to the other (a projection from the particles to the nodes is not "
+            "offered), so this step would start the particles from rest. Continue with meshfreeInertia={:}, or bring "
+            "the model to rest first with a quasi-static step.".format(
+                self._placesOfTheMotionOfParticles[carrier],
+                self.identification,
+                meshfreeInertia,
+                self._placesOfTheMotionOfParticles[meshfreeInertia],
+                carrier,
+            )
+        )
 
     def _noMassAndDamping(self) -> tuple[None, tuple[np.ndarray, np.ndarray], csr_matrix, csr_matrix, dict]:
         """The mass and the damping of an equation system none of whose degrees of freedom is integrated in time here --
