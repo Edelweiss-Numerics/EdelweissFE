@@ -52,14 +52,17 @@ class AliasedCSRMatrix(csr_matrix):
     This subclass turns that into a loud failure instead of silent corruption. If you
     need to reduce/reshape the pattern for a one-off use, copy the matrix first --
     ``.copy()`` (here and via :meth:`CSRGenerator.updateCSR`) always returns a plain,
-    unrestricted ``csr_matrix``.
+    unrestricted ``csr_matrix``. Reassigning ``.data``, ``.indices`` or ``.indptr`` to another array, even of the same
+    length, is refused as well: the next update writes into the old one. The values are changed in place
+    (``matrix.data[...] = ...``, ``matrix.data *= ...``).
 
-    The guard only applies once :class:`CSRGenerator` marks construction complete
-    (``_locked = True``): scipy's own ``csr_matrix.__init__`` calls ``self.prune()``
-    internally as part of its format check, which must go through unhindered.
+    The guard only applies once the matrix is locked (:meth:`lock`), when its construction is complete: scipy's own
+    ``csr_matrix.__init__`` calls ``self.prune()`` internally as part of its format check, which must go through
+    unhindered.
     """
 
-    _locked = False
+    #: The arrays of the matrix when it was locked, by name; None before (see :meth:`lock`).
+    _lockedBuffers = None
 
     _MUTATION_ERROR = (
         "Refusing to call {:}() on a CSRGenerator.updateInPlace() matrix: this is the "
@@ -68,36 +71,40 @@ class AliasedCSRMatrix(csr_matrix):
         ".copy() first if you need an independently mutable snapshot."
     )
 
+    def lock(self):
+        """Forbid structural mutation from now on, and the reassignment of the arrays the matrix has now."""
+        self._lockedBuffers = {"data": self.data, "indices": self.indices, "indptr": self.indptr}
+
     def eliminate_zeros(self):
-        if self._locked:
+        if self._lockedBuffers is not None:
             raise RuntimeError(self._MUTATION_ERROR.format("eliminate_zeros"))
         super().eliminate_zeros()
 
     def prune(self):
-        if self._locked:
+        if self._lockedBuffers is not None:
             raise RuntimeError(self._MUTATION_ERROR.format("prune"))
         super().prune()
 
     def sum_duplicates(self):
-        if self._locked:
+        if self._lockedBuffers is not None:
             raise RuntimeError(self._MUTATION_ERROR.format("sum_duplicates"))
         super().sum_duplicates()
 
     def resize(self, *shape):
-        if self._locked:
+        if self._lockedBuffers is not None:
             raise RuntimeError(self._MUTATION_ERROR.format("resize"))
         super().resize(*shape)
 
     def __setattr__(self, name, value):
-        if self._locked and name in ("data", "indices", "indptr"):
-            existing = getattr(self, name, None)
-            if existing is not None and len(value) != len(existing):
-                raise RuntimeError(
-                    "Refusing to reassign '{:}' to an array of a different length on a "
-                    "CSRGenerator.updateInPlace() matrix (see AliasedCSRMatrix docstring, "
-                    "GitHub issue #72). Call .copy() first if you need an independently "
-                    "mutable snapshot.".format(name)
-                )
+        # An in-place operator (``matrix.data *= 2``) assigns the array to itself; any other array would no longer be
+        # the buffer the generator or the assembler writes into, so later assemblies would not reach the matrix.
+        buffers = self._lockedBuffers
+        if buffers is not None and name in buffers and value is not buffers[name]:
+            raise RuntimeError(
+                "Refusing to reassign '{:}' on a CSRGenerator.updateInPlace() matrix: its buffers are the ones the "
+                "assembly writes into (see AliasedCSRMatrix docstring, GitHub issue #72). Write into them in place, or "
+                "call .copy() first if you need an independently mutable snapshot.".format(name)
+            )
         super().__setattr__(name, value)
 
     def copy(self):
@@ -318,7 +325,7 @@ cdef tuple _matrixOnPattern(object coreOwner, CSRPattern* pattern):
     matrix = AliasedCSRMatrix((data, nd_indices, nd_indptr), shape=(pattern.nDof, pattern.nDof))
 
     # Construction (incl. scipy's internal prune) is done; forbid structural mutation from now on.
-    matrix._locked = True
+    matrix.lock()
     return holder, matrix
 
 
@@ -360,7 +367,8 @@ cdef class CSRGenerator:
     cdef _CSRCoreOwner coreOwner
     cdef _CSRPattern pattern
     cdef CSRCore* core
-    cdef public object csrMatrix
+    #: The CSR matrix the generator writes into; its pattern arrays are the core's.
+    cdef readonly object csrMatrix
     cdef double[:] data_view
     cdef int64_t nCooPairs
 
@@ -533,7 +541,11 @@ cdef class DirectCSRAssembler:
     cdef _DirectCSRAssemblerOwner owner
     cdef _CSRPattern pattern
     cdef CSRDirectAssembler* asm_
-    cdef public object csrMatrix
+    #: The CSR matrix the assembler scatters into; its pattern arrays are the core's.
+    cdef readonly object csrMatrix
+    # the data array of csrMatrix, which the core scatters into through a raw pointer: held here, so that the pointer
+    # is valid as long as the assembler, whatever becomes of the matrix object
+    cdef double[::1] scatteredData
 
     def __dealloc__(self):
         # Only this assembler scatters: its map goes with it, also while the matrix, or a linear solver that keeps the
@@ -569,8 +581,8 @@ cdef class DirectCSRAssembler:
             self.pattern.coreOwner = None
             self.pattern, self.csrMatrix = _matrixOnPattern(self.owner, assembler)
 
-        cdef double[::1] data = self.csrMatrix.data
-        cdef double* dataPointer = &data[0] if data.shape[0] > 0 else NULL
+        self.scatteredData = self.csrMatrix.data
+        cdef double* dataPointer = &self.scatteredData[0] if self.scatteredData.shape[0] > 0 else NULL
         with nogil:
             assembler.mapEntities(table, dataPointer)
 
