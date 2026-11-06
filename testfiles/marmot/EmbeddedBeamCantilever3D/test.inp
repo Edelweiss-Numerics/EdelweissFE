@@ -1,0 +1,83 @@
+** a steel cantilever (B3D2, 20 x 10 rectangle, h = 20 along the local y axis = global y) embedded with its root in
+** a practically rigid block (C3D8); rotations tied to the host (rotations=axis); tip forces Py = 1, Pz = 0.5 and
+** torque T = 20 on the 200 mm free part: u_y = Py L^3 / (3 E Iz) = 2e-3, u_z = Pz L^3 / (3 E Iy) = 4e-3,
+** twist = T L / (G J)
+*material, name=linearelastic, id=block, provider=marmot
+2.1e9, 0.2
+
+*material, name=linearelastic, id=steel, provider=marmot
+200000.0, 0.3
+
+*modelGenerator, generator=boxGen, name=gen
+lX=100
+lY=100
+lZ=100
+nX=2
+nY=2
+nZ=2
+elType=C3D8
+
+*section, name=blockSection, material=block, type=solid
+gen_all
+
+*node
+100001, 50, 50, 50
+100002, 75, 50, 50
+100003, 100, 50, 50
+
+*element, type=B3D2
+100001, 100001, 100002
+100002, 100002, 100003
+
+*node
+100004, 133.333333333, 50, 50
+100005, 166.666666667, 50, 50
+100006, 200, 50, 50
+100007, 233.333333333, 50, 50
+100008, 266.666666667, 50, 50
+100009, 300, 50, 50
+
+*element, type=B3D2
+100003, 100003, 100004
+100004, 100004, 100005
+100005, 100005, 100006
+100006, 100006, 100007
+100007, 100007, 100008
+100008, 100008, 100009
+
+*elSet, elSet=beams, generate=True
+100001, 100008, 1
+
+*nSet, nSet=tip
+100009
+
+*section, name=beamSection, type=beam, profile=rectangle, b=10, h=20, n1x=0, n1y=1, n1z=0, nY=4, nZ=4, material=steel
+beams
+
+*constraint, type=embeddedRegion, name=embedded
+embeddedElSet=beams, hostElSet=gen_all, rotations=axis, allowUnembedded=True
+
+*job, name=job, domain=3d
+*solver, solver=NIST, name=theSolver
+
+*fieldOutput
+>>perNode, name=displacement, elSet=gen_all, field=displacement, result=U
+>>perNode, name=beamDisplacement, elSet=beams, field=displacement, result=U
+>>perNode, name=beamRotation, elSet=beams, field=rotation, result=U
+>>perElement, name=bendingMoments, elSet=beams, result=bending moments, quadraturePoint=0,
+>>perElement, name=bendingMomentZ, elSet=beams, result=bending moments, quadraturePoint=0, f(x)='x[:,1:2]'
+>>perElement, name=torque, elSet=beams, result=torque, quadraturePoint=0,
+
+*output, type=ensight, name=esExport
+>>perNode, fieldOutput=displacement
+>>perNode, fieldOutput=beamDisplacement
+>>perNode, fieldOutput=beamRotation
+>>perElement, fieldOutput=bendingMomentZ
+>>perElement, fieldOutput=torque
+>>configuration, overwrite=yes
+
+*step, solver=theSolver
+maxInc=1.0, minInc=1e-8, maxNumInc=10, maxIter=10, stepLength=1
+>>dirichlet, name=left, nSet=gen_left, field=displacement, 1=0, 2=0, 3=0
+>>nodeforces, name=P, nSet=tip, field=displacement, 2=1.0, 3=0.5
+>>nodeforces, name=T, nSet=tip, field=rotation, 1=20.0

@@ -1,0 +1,82 @@
+** a steel cantilever (B2D2, 10 x 10 rectangle, 5 Gauss points) embedded with its root (2 elements, 50 mm) in a
+** practically rigid block (CPE4, E = 2.1e9); perfect bond by the embedded region constraint with the beam rotations
+** tied to the rotation of the host material line along the axis (rotations=axis); the 200 mm free part deflects as
+** a cantilever clamped at the block face: tip deflection P L^3 / (3 E I) = 0.0152381
+*material, name=linearelastic, id=block, provider=marmot
+2.1e9, 0.2
+
+*material, name=linearelastic, id=steel, provider=marmot
+210000.0, 0.3
+
+*modelGenerator, generator=planeRectQuad, name=gen
+l=100
+h=100
+nX=4
+nY=4
+elType=CPE4
+
+*section, name=blockSection, thickness=1.0, material=block, type=plane
+gen_all
+
+*node
+100001, 50, 50
+100002, 75, 50
+100003, 100, 50
+
+*element, type=B2D2
+100001, 100001, 100002
+100002, 100002, 100003
+
+*node
+100004, 125, 50
+100005, 150, 50
+100006, 175, 50
+100007, 200, 50
+100008, 225, 50
+100009, 250, 50
+100010, 275, 50
+100011, 300, 50
+
+*element, type=B2D2
+100003, 100003, 100004
+100004, 100004, 100005
+100005, 100005, 100006
+100006, 100006, 100007
+100007, 100007, 100008
+100008, 100008, 100009
+100009, 100009, 100010
+100010, 100010, 100011
+
+*elSet, elSet=beams, generate=True
+100001, 100010, 1
+
+*nSet, nSet=tip
+100011
+
+*section, name=beamSection, type=beam, profile=rectangle, b=10, h=10, material=steel
+beams
+
+*constraint, type=embeddedRegion, name=embedded
+embeddedElSet=beams, hostElSet=gen_all, rotations=axis, allowUnembedded=True
+
+*job, name=job, domain=2d
+*solver, solver=NIST, name=theSolver
+
+*fieldOutput
+>>perNode, name=displacement, elSet=gen_all, field=displacement, result=U
+>>perNode, name=beamDisplacement, elSet=beams, field=displacement, result=U
+>>perNode, name=beamRotation, elSet=beams, field=rotation, result=U
+>>perElement, name=bendingMoment, elSet=beams, result=bending moment, quadraturePoint=0,
+>>perNode, name=tipDeflection, nSet=tip, field=displacement, result=U, f(x)='x[:,1]', saveHistory=True,
+
+*output, type=ensight, name=esExport
+>>perNode, fieldOutput=displacement
+>>perNode, fieldOutput=beamDisplacement
+>>perNode, fieldOutput=beamRotation
+>>perElement, fieldOutput=bendingMoment
+>>configuration, overwrite=yes
+
+*step, solver=theSolver
+maxInc=1.0, minInc=1e-8, maxNumInc=10, maxIter=10, stepLength=1
+>>dirichlet, name=left, nSet=gen_left, field=displacement, 1=0, 2=0
+>>nodeforces, name=P, nSet=tip, field=displacement, 2=1.0

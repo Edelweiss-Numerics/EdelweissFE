@@ -1,0 +1,63 @@
+** a concrete strip (CPE4) with an embedded, non-matching steel rebar (T2D2) in uniaxial tension; perfect bond by
+** the embedded region constraint; reaction = (E_c/(1-nu^2) A_c + E_s A_s) eps = 33.25
+*material, name=linearelastic, id=concrete, provider=marmot
+30000.0, 0.2
+
+*material, name=linearelastic, id=steel, provider=marmot
+200000.0, 0.3
+
+*modelGenerator, generator=planeRectQuad, name=gen
+l=4
+h=1
+nX=8
+nY=2
+elType=CPE4
+
+*node
+100001, 0, 0.37
+100002, 0.8, 0.37
+100003, 1.6, 0.37
+100004, 2.4, 0.37
+100005, 3.2, 0.37
+100006, 4, 0.37
+
+*element, type=T2D2
+100001, 100001, 100002
+100002, 100002, 100003
+100003, 100003, 100004
+100004, 100004, 100005
+100005, 100005, 100006
+
+*elSet, elSet=rebars, generate=True
+100001, 100005, 1
+
+*section, name=concreteSection, thickness=1.0, material=concrete, type=plane
+gen_all
+
+*section, name=rebarSection, area=0.01, material=steel, type=truss
+rebars
+
+*constraint, type=embeddedRegion, name=embedded
+embeddedElSet=rebars, hostElSet=gen_all
+
+*job, name=job, domain=2d
+*solver, solver=NIST, name=theSolver
+
+*fieldOutput
+>>perNode, name=displacement, elSet=gen_all, field=displacement, result=U
+>>perElement, name=rebarStress, elSet=rebars, result=stress, quadraturePoint=0,
+>>perNode, name=rebarDisplacement, elSet=rebars, field=displacement, result=U
+>>perElement, name=rebarNormalForce, elSet=rebars, result=normal force, quadraturePoint=0,
+
+*output, type=ensight, name=esExport
+>>perNode, fieldOutput=rebarDisplacement
+>>perElement, fieldOutput=rebarNormalForce
+>>perNode, fieldOutput=displacement
+>>perElement, fieldOutput=rebarStress
+>>configuration, overwrite=yes
+
+*step, solver=theSolver
+maxInc=1.0, minInc=1e-8, maxNumInc=10, maxIter=10, stepLength=1
+>>dirichlet, name=left, nSet=gen_left, field=displacement, 1=0
+>>dirichlet, name=corner, nSet=gen_leftBottom, field=displacement, 2=0
+>>dirichlet, name=right, nSet=gen_right, field=displacement, 1=0.004
