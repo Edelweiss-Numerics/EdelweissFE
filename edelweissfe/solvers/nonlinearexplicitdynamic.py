@@ -1300,10 +1300,11 @@ class NED(NonlinearSolverBase):
     @performancetiming.timeit("write results to nodes")
     def writeResultsToModel(self, U: DofVector, dU: DofVector, P: DofVector | None, V: DofVector, A: DofVector | None):
         """Write the results of an increment to the model, through the model's layout of the equation system: the
-        solution, its increment, the internal, inertial and damping force, the velocity and the acceleration to the node
-        fields, and the solution to the scalar variables (see
-        :meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeResultsToModel`); the incremental
-        degrees of freedom are set to zero first, from where the next increment starts them (see
+        solution, its increment and the internal, inertial and damping force to the node fields, and the solution to the
+        scalar variables (see :meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeResultsToModel`),
+        then the velocity and the acceleration (see
+        :meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeVelocityAndAccelerationToModel`); the
+        incremental degrees of freedom are set to zero first, from where the next increment starts them (see
         :meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.zeroIncrementalCoefficients`).
 
         Written at every accepted increment, not only on output increments, for two reasons: an h-adaptivity
@@ -1328,7 +1329,8 @@ class NED(NonlinearSolverBase):
         """
 
         self.equationSystemLayout.zeroIncrementalCoefficients(U)
-        self.equationSystemLayout.writeResultsToModel(U, dU, P, V=V, A=A)
+        self.equationSystemLayout.writeResultsToModel(U, dU, P)
+        self.equationSystemLayout.writeVelocityAndAccelerationToModel(V, A)
 
     @performancetiming.timeit("constraint connectivity")
     def updateConstraintConnectivity(self, model: FEModel) -> bool:

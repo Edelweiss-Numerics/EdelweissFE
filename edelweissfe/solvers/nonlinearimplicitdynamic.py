@@ -851,7 +851,7 @@ class NonlinearImplicitDynamic(NIST):
 
     def writeResultsToModel(self, U: DofVector, dU: DofVector, P: DofVector):
         """Write the results of a converged increment to the model, as the parent does, with the velocity and the
-        acceleration of the fields carrying a mass (see :meth:`writeVelocityAndAccelerationToModel`).
+        acceleration (see :meth:`writeVelocityAndAccelerationToModel`).
 
         The force written is the internal force with the inertial and damping forces of the converged state,
         :math:`\\boldsymbol{f}_\\mathrm{int} + \\boldsymbol{M} \\ddot{\\boldsymbol{u}}_{n+1} + \\boldsymbol{C}
