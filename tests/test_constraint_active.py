@@ -31,12 +31,16 @@ of freedom, the solver does not evaluate it, and its Lagrange multipliers leave 
 A Lagrange multiplier constraint is the sharp case: if its multipliers stayed in the equation system without the
 constraint that gives them an equation, the system matrix would be singular. Switched off by a ``modelupdate``, the
 constraint below lets the loaded corner of a plate move freely; switched on in the next step, it pulls the top edge
-back to one common displacement.
+back to one common displacement. The explicit solver ``NED``, which refuses a constraint with multipliers, does not
+refuse one that is switched off.
 """
 
 import numpy as np
+import pytest
 
 from edelweissfe.drivers.inputfiledrivensimulation import finiteElementSimulation
+from edelweissfe.journal.journal import Journal
+from edelweissfe.solvers.nonlinearexplicitdynamic import NED
 from edelweissfe.utils.inputfileparser import parseInputFile
 
 DECK = """
@@ -106,3 +110,17 @@ def test_switched_on_again_the_constraint_takes_part_again(tmp_path):
     uTop = _verticalDisplacementOfTopEdge(model)
     assert np.ptp(uTop) < 1e-10 * np.abs(uTop).max()
     assert any(model.scalarVariables[name].value != 0.0 for name in model.scalarVariables)
+
+
+def test_the_explicit_solver_refuses_a_lagrange_constraint_only_while_it_is_switched_on(tmp_path):
+    """NED refuses a constraint with scalar variables: they carry no inertia, so it has no equation of motion for
+    them. A constraint that is switched off takes no part in the equation system, nor do its multipliers."""
+
+    model = _run(tmp_path, secondStep="")
+    explicitSolver = NED({}, Journal(verbose=False))
+
+    explicitSolver.validateModelCapabilities(model)
+
+    model.constraints["topEqual"].active = True
+    with pytest.raises(NotImplementedError, match="topEqual"):
+        explicitSolver.validateModelCapabilities(model)

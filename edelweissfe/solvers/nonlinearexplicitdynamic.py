@@ -1012,6 +1012,9 @@ class NED(NonlinearSolverBase):
         and the explicit update leaves them untouched forever -- the constraint would appear active
         and enforce nothing. Penalty-type constraints, which act through nodal forces alone, are
         supported: see :meth:`assembleConstraintForces`.
+        A constraint that is switched off
+        (:attr:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.active`) is not refused: it takes no
+        part in the equation system, and its scalar variables leave it with it.
 
         Parameters
         ----------
@@ -1077,6 +1080,9 @@ class NED(NonlinearSolverBase):
                 )
 
         for constraintName, constraint in model.constraints.items():
+            # a constraint that is switched off has no place in the equation system, nor have its scalar variables
+            if not constraint.active:
+                continue
             nScalarVariables = constraint.getNumberOfAdditionalNeededScalarVariables()
             if nScalarVariables:
                 raise NotImplementedError(
