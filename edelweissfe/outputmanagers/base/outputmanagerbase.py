@@ -194,11 +194,11 @@ class OutputManagerBase(OptionSchemaProvider, ABC):
             The final reaction vector.
         """
 
-    def takeLatestCheckpoint(self) -> str | None:
-        """Hand over the latest restart checkpoint this output manager wrote that no fallback has taken
-        yet, for a step to fall back to (see
-        :meth:`~edelweissfe.steps.base.stepbase.StepBase.fallBackToCheckpoint`); it is not handed
-        over again. Only an output manager that :attr:`writesRestartCheckpoints` has any.
+    def latestCheckpoint(self) -> str | None:
+        """The latest restart checkpoint this output manager wrote that is still on disk and that no
+        fallback has used yet, for a step to fall back to (see
+        :meth:`~edelweissfe.steps.base.stepbase.StepBase.fallBackToCheckpoint`). Only an output
+        manager that :attr:`writesRestartCheckpoints` has any.
 
         Returns
         -------
@@ -207,6 +207,11 @@ class OutputManagerBase(OptionSchemaProvider, ABC):
         """
 
         return None
+
+    def dropLatestCheckpoint(self):
+        """Offer the latest checkpoint (see :meth:`latestCheckpoint`) no more: a step has fallen back
+        to it, or found that it holds the state its failed increment started from. Every checkpoint
+        serves one fallback at most."""
 
     def getRestartData(self) -> dict[str, np.ndarray]:
         """The state this output manager carries from one increment to the next; by default the

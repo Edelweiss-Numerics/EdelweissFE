@@ -94,7 +94,9 @@ The model is first rebuilt from the same input file, then restored in this order
    * - constraint state (e.g. a frozen contact search)
      - read; adopted only if it refers to the restored model's contact points, otherwise refused
    * - output managers' sequence bookkeeping
-     - read, including each restart writer's position in its write interval
+     - read, including each restart writer's position in its write interval and its record of the
+       checkpoints a step may fall back to: the one resumed from, and those before it whose files
+       still hold them
    * - time stepper
      - its state after the last accepted increment, as it is: progress, increment counter, the size
        of the next increment, the enforced time increment, and whether the zero increment was done
