@@ -404,6 +404,18 @@ class FEModel:
         self._prepareElements(journal)
         self.topology.recordSetupFingerprint()
 
+    def activeConstraints(self) -> list:
+        """The constraints that take part in the equation system: all constraints, in their order, except those
+        switched off (see :attr:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.active`).
+
+        Returns
+        -------
+        list[ConstraintBase]
+            The active constraints.
+        """
+
+        return [constraint for constraint in self.constraints.values() if constraint.active]
+
     def advanceToTime(self, time: float):
         """Accept the current state of the model and sub instances, and
         set the new time.
@@ -456,8 +468,9 @@ class FEModel:
 
         Does not serialize model topology (nodes/elements/sets/sections/materials) -- only state
         that a rebuild from the original ``.inp`` file cannot reproduce: node field values, element
-        quadrature-point history, scalar variables (e.g. Lagrange multipliers), and stateful
-        constraints' internal history (e.g. frictional contact).
+        quadrature-point history, scalar variables (e.g. Lagrange multipliers), stateful
+        constraints' internal history (e.g. frictional contact), and the additional parameters
+        (e.g. the load parameter of the arc length method).
 
         Parameters
         ----------
@@ -478,6 +491,10 @@ class FEModel:
         scalarVariablesGroup = f.create_group("scalarVariables")
         for name, scalarVariable in self.scalarVariables.items():
             scalarVariablesGroup.attrs[name] = scalarVariable.value
+
+        additionalParametersGroup = f.create_group("additionalParameters")
+        for name, value in self.additionalParameters.items():
+            additionalParametersGroup.attrs[name] = value
 
         writeRestartDataOf(f.create_group("modelModifiers"), self.modelModifiers)
 
@@ -559,6 +576,8 @@ class FEModel:
 
         for name, scalarVariable in self.scalarVariables.items():
             scalarVariable.value = f["scalarVariables"].attrs[name]
+
+        self.additionalParameters = dict(f["additionalParameters"].attrs)
 
         # Sound only because the replay reproduces the original numbering exactly (verified by fingerprint):
         # a missing element means a mismatched model and must be reported.

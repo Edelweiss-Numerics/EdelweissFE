@@ -40,8 +40,9 @@ interruption, writing a checkpoint after every increment, and then resumes from 
 checkpoints -- including checkpoint 0, written at the start of the step (one more per step). Each resume is its
 own test case (``<solver>-<scenario>-resume<k>``) and must end bitwise identical to the uninterrupted
 run: time, element numbering and connectivity, every node field entry, every scalar variable, every
-element's quadrature-point state, every constraint's restart data and the times of the topology
-history. No tolerances, no per-case exceptions.
+element's quadrature-point state, every constraint's restart data, the model's additional parameters (e.g. the
+load parameter of the arc length method) and the times of the topology history. No tolerances, no per-case
+exceptions.
 
 Every CI run resumes from the first, the middle and the last checkpoint of each scenario (and its
 first chain); the other cases are marked ``exhaustive`` and run with ``pytest -m exhaustive`` --
@@ -238,6 +239,7 @@ _JOB = "\n*job, name=exhaustiveRestart, domain=3d\n"
 _SOLVERS = {
     "implicit": "*solver, solver=NIST, name=theSolver\n{solverOptions}\n",
     "NID": "*solver, solver=NID, name=theSolver\nnewmarkBeta=0.25\nnewmarkGamma=0.5\n{solverOptions}\n",
+    "arcLength": "*solver, solver=NISTPArcLength, name=theSolver\n{solverOptions}\n",
     "explicit": """*solver, solver=NED, name=theSolver
 courant-number=0.1
 output-frequency=1
@@ -258,10 +260,11 @@ maxInc=1, minInc=1e-14, maxNumInc={maxNumInc}, maxIter=25, stepLength=1.0
 """,
 }
 _STEP["NID"] = _STEP["implicit"]
+_STEP["arcLength"] = _STEP["implicit"]
 
 #: The prescribed displacement at the end of a step. The explicit run covers a far shorter time
 #: span within its increments, so it is loaded correspondingly faster.
-_AMPLITUDE = {"implicit": 0.05, "NID": 0.05, "explicit": 50.0}
+_AMPLITUDE = {"implicit": 0.05, "NID": 0.05, "arcLength": 0.05, "explicit": 50.0}
 
 _LOADS_BEND = """
 >>dirichlet, name=clamp, nSet=beam_left, field=displacement, 1=0, 2=0, 3=0
@@ -296,6 +299,28 @@ _LOADS_BEND_AND_DEACTIVATE = (
     + """>>modelupdate, update='model.constraints["topFaceEqualZ"].active=False'
 """
 )
+
+#: The bend by a load at the right end, scaled by the load parameter of the arc length method, which the right end's
+#: displacement controls.
+_LOADS_ARC_LENGTH = """
+>>options, name=theSolver, arcLengthController=bendControl
+>>indirectcontrol, name=bendControl, dof1='model.nodeSets["beam_right"][0].fields["displacement"]', cVector1='0, 1, 0', dof2='model.nodeSets["beam_left"][0].fields["displacement"]', cVector2='0, 0, 0', L=-{amplitude}
+>>dirichlet, name=clamp, nSet=beam_left, field=displacement, 1=0, 2=0, 3=0
+>>nodeforces, name=push, nSet=beam_right, field=displacement, components='0,-1,0'
+"""
+
+#: The step after the arc length controlled one holds the load it reached, without arc length control.
+_LOADS_HOLD_WITHOUT_ARC_LENGTH = """
+>>options, name=theSolver, arcLengthController=off
+>>dirichlet, name=clamp, nSet=beam_left, field=displacement, 1=0, 2=0, 3=0
+"""
+
+#: A second arc length step bends the right end back to its initial position: it declares the same change of the push
+#: on top of the load reached, and scales it by its own load parameter, from zero, which turns negative.
+_LOADS_ARC_LENGTH_BACK = """
+>>indirectcontrol, name=bendControl, dof1='model.nodeSets["beam_right"][0].fields["displacement"]', cVector1='0, 1, 0', dof2='model.nodeSets["beam_left"][0].fields["displacement"]', cVector2='0, 0, 0', L=0.0
+>>nodeforces, name=push, components='0,-1,0'
+"""
 
 _LOADS_SLIDE = """
 >>dirichlet, name=clamp, nSet=beam_left, field=displacement, 1=0, 2=0, 3=0
@@ -353,6 +378,11 @@ def _frictionalContact(model, run) -> str:
     if not np.any(np.asarray(data["tangentialForceConverged"]) != 0.0):
         return "no frictional contact history was built up"
     return ""
+
+
+def _loadParameterChanged(model, run) -> str:
+    loadParameter = model.additionalParameters.get("arc length parameter", 0.0)
+    return "" if loadParameter != 0.0 else "the load parameter did not change"
 
 
 def _all(*checks):
@@ -491,6 +521,30 @@ _SCENARIOS = {
         steps=[_LOADS_PRESS_AND_DRAG],
         check=_frictionalContact,
     ),
+    # (p) Arc length control: the load parameter of the step, and the predictor's history of its increments,
+    # with the quadratic prediction, which keeps the increments before the last one, too.
+    "arcLength": dict(
+        solvers=["arcLength"],
+        blocks=[_BEAM_GEOMETRY],
+        solverOptions="extrapolation=quadratic",
+        steps=[_LOADS_ARC_LENGTH],
+        check=_loadParameterChanged,
+    ),
+    # (q) Two steps: resumes in the second must hold the loads the arc length controlled first one ended with.
+    "arcLengthTwoSteps": dict(
+        solvers=["arcLength"],
+        blocks=[_BEAM_GEOMETRY],
+        steps=[_LOADS_ARC_LENGTH, _LOADS_HOLD_WITHOUT_ARC_LENGTH],
+        check=_loadParameterChanged,
+    ),
+    # (r) Two arc length steps: the second scales its own change of the push from the load parameter zero, so resumes
+    # in it must continue from the load parameter of the second step, and from the loads the first one ended with.
+    "twoArcLengthSteps": dict(
+        solvers=["arcLength"],
+        blocks=[_BEAM_GEOMETRY],
+        steps=[_LOADS_ARC_LENGTH, _LOADS_ARC_LENGTH_BACK],
+        check=_loadParameterChanged,
+    ),
     # (o) A modelupdate executed at the start of step 1 changes the model by an arbitrary expression
     # (here: switches a penalty constraint off). No checkpoint records its effect, so every resume
     # after it -- in step 1 or step 2 -- is refused with a RestartError instead of silently running
@@ -506,12 +560,12 @@ _SCENARIOS = {
 
 #: Fixed increments per step: implicit runs are costlier per increment; explicit runs need more
 #: increments for the load (and AMR) to develop, and to put most checkpoints off the topology cycle.
-_N_INCREMENTS = {"implicit": 10, "NID": 10, "explicit": 20}
+_N_INCREMENTS = {"implicit": 10, "NID": 10, "arcLength": 10, "explicit": 20}
 
 #: How often an element may be split. The explicit runs need a second level to refine more than once
 #: within their short time span; the implicit ones refine repeatedly with one level, which keeps
 #: their meshes -- and so the test's runtime -- small.
-_MAX_LEVEL = {"implicit": 1, "NID": 1, "explicit": 2}
+_MAX_LEVEL = {"implicit": 1, "NID": 1, "arcLength": 1, "explicit": 2}
 
 #: Adaptive runs have no a-priori increment count: this is the count calibrated for the adaptive
 #: scenario (25 increments with cutbacks, plus the step-start checkpoint). The test asserts it, so a
@@ -616,6 +670,8 @@ def _state(model) -> dict:
             state["{:}/{:}".format(name, entry)] = np.array(field[entry])
     for name in sorted(model.scalarVariables):
         state["scalar variable {:}".format(name)] = np.array([model.scalarVariables[name].value])
+    for name in sorted(model.additionalParameters):
+        state["additional parameter {:}".format(name)] = np.array([model.additionalParameters[name]])
     for number in sorted(model.elements):
         try:
             state["element {:} state".format(number)] = np.array(model.elements[number].getStateVars())

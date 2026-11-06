@@ -35,7 +35,7 @@ from edelweissfe.config.timing import createTimingDict
 from edelweissfe.constraints.base.constraintbase import ConstraintBase
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.numerics.csrgeneratorv2 import CSRGenerator
-from edelweissfe.numerics.dofmanager import DofManager, DofVector, VIJSystemMatrix
+from edelweissfe.numerics.dofmanager import DofVector, VIJSystemMatrix
 from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
 from edelweissfe.solvers.nonlinearimplicitstatic import NIST
 from edelweissfe.timesteppers.timestep import TimeStep
@@ -269,13 +269,7 @@ class NEST(NIST):
 
         self.journal.message("Creating monolithic equation system", self.identification, 0)
         self.forgetEquationSystem()
-        self.theDofManager = DofManager(
-            model.nodeFields.values(),
-            model.scalarVariables.values(),
-            model.elements.values(),
-            model.constraints.values(),
-            model.nodeSets.values(),
-        )
+        self.theDofManager = self.createDofManager(model)
         self.journal.message(
             "total size of eq. system: {:}".format(self.theDofManager.nDof),
             self.identification,
@@ -309,8 +303,7 @@ class NEST(NIST):
         for fieldName, field in model.nodeFields.items():
             U = self.theDofManager.writeNodeFieldToDofVector(U, field, "U")
 
-        for variable in model.scalarVariables.values():
-            U[self.theDofManager.idcsOfScalarVariablesInDofVector[variable]] = variable.value
+        U = self.theDofManager.writeScalarVariablesToDofVector(U)
 
         self._U, self._dU, self._P, self._K = U, dU, P, K
 
@@ -406,8 +399,7 @@ class NEST(NIST):
             self.theDofManager.writeDofVectorToNodeField(P, field, "P")
             self.theDofManager.writeDofVectorToNodeField(dU, field, "dU")
 
-        for variable in model.scalarVariables.values():
-            variable.value = U[self.theDofManager.idcsOfScalarVariablesInDofVector[variable]]
+        self.theDofManager.writeDofVectorToScalarVariables(U)
 
         self.updateRigidBodies(model, timeStep)
 
@@ -477,16 +469,14 @@ class NEST(NIST):
 
         R = self.theDofManager.constructDofVector()
         F = self.theDofManager.constructDofVector()
-        PExt = self.theDofManager.constructDofVector()
+        PLoadsAndConstraints = self.theDofManager.constructDofVector()
         U_np = self.theDofManager.constructDofVector()
         dU_ = [self.theDofManager.constructDofVector() for i in range(self.rkStages)]
         err = self.theDofManager.constructDofVector()
         err[:] = 0.0
 
         dirichlets = stepActions["dirichlet"].values()
-        nodeforces = stepActions["nodeforces"].values()
-        distributedLoads = stepActions["distributedload"].values()
-        bodyForces = stepActions["bodyforce"].values()
+        loads = self.collectLoads(stepActions)
 
         # Find which global DOFs the Dirichlet BCs constrain, once up front.
         self.locateConstrainedDofs(dirichlets)
@@ -510,14 +500,17 @@ class NEST(NIST):
 
             U_np += dU_[k]
 
-            P[:] = K[:] = F[:] = PExt[:] = 0.0
+            P[:] = K[:] = F[:] = PLoadsAndConstraints[:] = 0.0
 
             P, K, F = self.computeElements(elements, U_np, dU_[k], P, K, F, timeStep)
-            PExt, K = self.assembleLoads(nodeforces, distributedLoads, bodyForces, U_np, PExt, K, timeStep)
-            PExt, K = self.assembleConstraints(constraints, U_np, dU_[k], PExt, K, timeStep)
+            PLoadsAndConstraints, K = self.assembleLoads(loads, U_np, dU_[k], PLoadsAndConstraints, K, timeStep)
+            PLoadsAndConstraints, K = self.assembleConstraints(
+                constraints, U_np, dU_[k], PLoadsAndConstraints, K, timeStep
+            )
 
+            # the right-hand side is the negative of all residual contributions, R = f_ext - f_int
             R[:] = -P
-            R += PExt
+            R -= PLoadsAndConstraints
 
             R = self.applyDirichletToResidual(timeStep, R, dirichlets)
 
@@ -545,7 +538,7 @@ class NEST(NIST):
             raise CutbackRequest("Estimated error too high!", np.sqrt(self.tol / normErr) * 0.9)
 
         # compute elements once more to get the final reaction
-        P[:] = K[:] = F[:] = PExt[:] = 0.0
+        P[:] = K[:] = F[:] = 0.0
         P, K, F = self.computeElements(elements, U_np, dU, P, K, F, timeStep)
 
         # compute new increment size scale factor
