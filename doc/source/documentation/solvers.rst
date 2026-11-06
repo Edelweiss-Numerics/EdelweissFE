@@ -98,7 +98,8 @@ A solver solves; what the equation system is made of, the model says. ``NIST``, 
    * the model the linear solver is set up for.
 
 3. **Is anything to be updated before the elements are computed?** In every evaluation of the model -- every Newton
-   iteration, every trial state of a line search -- the solver calls
+   iteration, every trial state of a line search -- the solver assembles the internal forces
+   (:meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.assembleInternalForces`): it calls
    :meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.updateMaterialPoints`, right before it computes
    the elements.
 

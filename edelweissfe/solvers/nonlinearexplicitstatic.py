@@ -456,7 +456,6 @@ class NEST(NIST):
                 - the scale factor for the next increment size
         """
 
-        elements = self.equationSystemLayout.elements
         constraints = model.constraints
 
         R = self.theDofManager.constructDofVector()
@@ -494,8 +493,7 @@ class NEST(NIST):
 
             P[:] = K[:] = F[:] = PLoadsAndConstraints[:] = 0.0
 
-            self.equationSystemLayout.updateMaterialPoints(dU_[k], timeStep)
-            P, K, F = self.computeElements(elements, U_np, dU_[k], P, K, F, timeStep)
+            P, K, F = self.assembleInternalForces(U_np, dU_[k], P, K, F, timeStep)
             PLoadsAndConstraints, K = self.assembleLoads(loads, U_np, dU_[k], PLoadsAndConstraints, K, timeStep)
             PLoadsAndConstraints, K = self.assembleConstraints(
                 constraints, U_np, dU_[k], PLoadsAndConstraints, K, timeStep
@@ -532,8 +530,7 @@ class NEST(NIST):
 
         # compute elements once more to get the final reaction
         P[:] = K[:] = F[:] = 0.0
-        self.equationSystemLayout.updateMaterialPoints(dU, timeStep)
-        P, K, F = self.computeElements(elements, U_np, dU, P, K, F, timeStep)
+        P, K, F = self.assembleInternalForces(U_np, dU, P, K, F, timeStep)
 
         # compute new increment size scale factor
         if self.options.get("runge-kutta-error-control", "on") == "off":
