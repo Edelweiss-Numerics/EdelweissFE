@@ -300,11 +300,6 @@ class Constraint(ConstraintBase, MeshDependent):
     def nDof(self) -> int:
         return self._nDof
 
-    @property
-    def couplesAllItsDofs(self) -> bool:
-        """``False``: the block is the list of the values of the entries of :meth:`localEntriesOfBlock`."""
-        return False
-
     def localEntriesOfBlock(self) -> tuple[np.ndarray, np.ndarray]:
         """No coupling between different slave nodes: one shared RP self-block, plus per-slave self-block and
         slave-RP coupling blocks (see :func:`rigidBodyContactLocalEntries`)."""

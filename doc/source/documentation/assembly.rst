@@ -22,15 +22,20 @@ knows nothing about the system matrix.
 - By default an entity couples all its degrees of freedom: its block is the dense ``nDof x nDof`` matrix, stored
   column-major, as every element writes it.
 - An entity that couples only some of its degrees of freedom (a contact constraint couples each slave node with the
-  master side, but not the slave nodes with each other) says so
-  (:attr:`~edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.couplesAllItsDofs` is ``False``)
-  and lists the local row and column of every value of its block in
-  :meth:`~edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.localEntriesOfBlock`.
+  master side, but not the slave nodes with each other) lists the local row and column of every value of its block:
+  it overrides
+  :meth:`~edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.localEntriesOfBlock`, and its block
+  is the list of the values of these entries
+  (:attr:`~edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.couplesAllItsDofs` is then
+  ``False``).
 
 The number of values of a block is ``nDof**2`` for a dense block, and the length of the list otherwise. It cannot tell
 the layout: a list can have exactly ``nDof**2`` entries, as a rigid body contact with a single slave node in 3D has
 (36 + 9 + 18 + 18 = 81 = 9\ :sup:`2`), in an order that is not column-major. So the entity declares the layout, and an
-assembly never guesses it.
+assembly never guesses it. It declares it once, by overriding the list or not: a subclass that also declares
+``couplesAllItsDofs`` is refused when it is defined, since the direct path reads the flag and the VIJ path the list,
+and two declarations that disagree would assemble two different matrices. An extension type, which cannot inherit the
+base class (the Marmot elements, cells and particles), declares a dense block itself, with the dense list.
 
 The entity writes its tangent into the view
 :meth:`~edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.shapeBlock` makes of the values of

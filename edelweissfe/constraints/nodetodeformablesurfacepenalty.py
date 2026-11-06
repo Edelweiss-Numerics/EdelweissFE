@@ -659,11 +659,6 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
         self._frozenWeights = [None] * self.nSlaves
         self._frozenNormals = [None] * self.nSlaves
 
-    @property
-    def couplesAllItsDofs(self) -> bool:
-        """``False``: the block is the list of the values of the entries of :meth:`localEntriesOfBlock`."""
-        return False
-
     def shapeBlock(self, values: np.ndarray) -> DeformableSurfaceContactStiffnessView:
         facetNodeCounts = [
             len(self.facetElements[self._assignedFacetIdx[s]].nodes)

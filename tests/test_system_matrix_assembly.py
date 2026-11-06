@@ -77,10 +77,6 @@ class _SparseEntity(SystemMatrixContributorBase):
         super().__init__(len(dofs))
         self.dofs = np.asarray(dofs, dtype=np.intc)
 
-    @property
-    def couplesAllItsDofs(self):
-        return False
-
     def localEntriesOfBlock(self):
         return np.array([2, 0, 1], dtype=np.intc), np.array([0, 2, 1], dtype=np.intc)
 
@@ -97,10 +93,6 @@ class _OneSlaveRigidBodyContact(SystemMatrixContributorBase):
     def __init__(self, dofs):
         super().__init__(len(dofs))
         self.dofs = np.asarray(dofs, dtype=np.intc)
-
-    @property
-    def couplesAllItsDofs(self):
-        return False
 
     def localEntriesOfBlock(self):
         return rigidBodyContactLocalEntries(np.arange(self.rpDofCount), [np.arange(self.rpDofCount, self.nDof)])
@@ -217,7 +209,7 @@ def _modelWithOneSlaveRigidBodyContact():
 def test_sparse_entity_whose_size_is_a_square_is_scattered_entry_by_entry(assemblyType, numberOfWorkers):
     """How many entries a block has does not say how they are laid out. A rigid body contact with one slave node has
     exactly as many as a dense block on its nine degrees of freedom; scattered as if it were one, its values would
-    land on the wrong rows and columns. It says it is sparse (``couplesAllItsDofs``), so both assemblies place every
+    land on the wrong rows and columns. It lists its entries (``localEntriesOfBlock``), so both assemblies place every
     value at its own entry."""
     model = _modelWithOneSlaveRigidBodyContact
     np.testing.assert_allclose(
@@ -236,11 +228,11 @@ def test_sparse_entity_whose_size_is_a_square_is_scattered_entry_by_entry(assemb
     ],
 )
 def test_constraints_with_entries_of_their_own_say_so(constraintType):
-    """Every constraint that lists the entries of its block itself declares it, so that no assembly mistakes its block
-    for a dense one."""
+    """Every constraint that lists the entries of its block itself overrides ``localEntriesOfBlock``, and that alone
+    makes its block a list for both assemblies, so that no assembly mistakes it for a dense one."""
     assert constraintType.localEntriesOfBlock is not SystemMatrixContributorBase.localEntriesOfBlock
-    assert constraintType.couplesAllItsDofs is not SystemMatrixContributorBase.couplesAllItsDofs
-    assert constraintType.couplesAllItsDofs.fget(None) is False
+    # the layout is a property of the class: an instance without its state tells it
+    assert object.__new__(constraintType).couplesAllItsDofs is False
 
 
 def test_the_entries_of_a_one_slave_rigid_body_contact():
