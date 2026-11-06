@@ -58,10 +58,13 @@ def computeElementsInParallel(
     the DofVector: the finite elements, and the cells and particles of a meshfree model alike (see
     :attr:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.elements`). Every element writes its forces
     into its own part of a scatter vector, and every worker thread writes the tangents of its elements through blocks of
-    its own (:meth:`~edelweissfe.numerics.systemmatrixassembly.SystemMatrixAssembly.blocksOfWorker`), so the threads
-    never write to the same memory. Each worker handles a fixed share of the elements in a fixed order (see
-    :func:`~edelweissfe.numerics.parallelizationutilities.mapChunksOnWorkers`), so the assembled matrix does not
-    depend on the timing of the threads.
+    its own (:meth:`~edelweissfe.numerics.systemmatrixassembly.SystemMatrixAssembly.blocksOfWorker`). Each worker
+    handles a fixed share of the elements in a fixed order (see
+    :func:`~edelweissfe.numerics.parallelizationutilities.mapChunksOnWorkers`), so that no two threads write through
+    the same blocks at the same time. On the VIJ path every block is a slice of its own, and the assembled matrix does
+    not depend on the timing of the threads; on the direct path the workers add their blocks to the shared entries of
+    the CSR matrix atomically, in an order set by their timing, so the matrix agrees from run to run to round-off (see
+    :ref:`system-matrix-assembly`).
 
     Parameters
     ----------
