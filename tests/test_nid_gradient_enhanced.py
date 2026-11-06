@@ -145,3 +145,27 @@ def test_the_discarded_nonlocal_inertia_is_warned_about_once(tmp_path, monkeypat
     finiteElementSimulation(parseInputFile(str(path)), verbose=False, suppressPlots=True)
 
     assert warned == ["nonlocal damage"], warned
+
+
+def test_a_field_kept_quasi_static_is_written_at_rest(tmp_path, monkeypatch):
+    """The nonlocal field, which this solver keeps quasi-static, is at rest, and the model receives exactly that at
+    acceptance -- also when the step before left it moving, as the explicit solver does, which integrates it in
+    time."""
+
+    beginStep = NonlinearImplicitDynamic.beginStep
+
+    def beginStepAfterAMovingNonlocalField(self, step, model, fieldOutputController, outputmanagers):
+        nonlocalField = model.nodeFields["nonlocal damage"]
+        nonlocalField["V"][:] = 1.0
+        nonlocalField["A"][:] = 2.0
+        beginStep(self, step, model, fieldOutputController, outputmanagers)
+
+    monkeypatch.setattr(NonlinearImplicitDynamic, "beginStep", beginStepAfterAMovingNonlocalField)
+
+    path = tmp_path / "nid_gc3d8_at2_at_rest.inp"
+    path.write_text(DECK)
+    model, _ = finiteElementSimulation(parseInputFile(str(path)), verbose=False, suppressPlots=True)
+
+    nonlocalField = model.nodeFields["nonlocal damage"]
+    assert not np.any(nonlocalField["V"]) and not np.any(nonlocalField["A"])
+    assert np.max(np.abs(model.nodeFields["displacement"]["V"])) > 0.0

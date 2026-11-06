@@ -82,19 +82,53 @@ The entries
        summed over the nodes of a support, it is the reaction force. Zero at a node without element.
      - at acceptance
 
+The Lagrange multipliers of constraints are scalar variables, not node field entries
+(:class:`~edelweissfe.variables.scalarvariable.ScalarVariable`). They are state as well: each holds its total
+value, written at acceptance and read back at every rebuild. A constraint that is switched off keeps the value it
+had.
+
+What each solver writes
+-----------------------
+
+Every solver writes ``U`` and ``dU`` of every node field at acceptance, and these:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 18 28 28 26
+
+   * - Solver
+     - ``P``
+     - ``V``
+     - ``A``
+   * - ``NIST``, ``NISTParallel``, ``NISTPArcLength``, ``NEST``
+     - the internal force
+     - zero
+     - zero
+   * - ``NID``, ``NIDParallel``
+     - :math:`\boldsymbol{f}_\mathrm{int} + \boldsymbol{M} \boldsymbol{a} + \boldsymbol{C} \boldsymbol{v}` of the
+       converged state
+     - :math:`\boldsymbol{v}_{n+1}` on the fields with a mass; zero on the others, which it treats quasi-statically
+     - :math:`\boldsymbol{a}_{n+1}`, likewise; at the start of a step and after a refinement, the acceleration from
+       equilibrium, written at the start of the increment
+   * - ``NED``, ``NEDParallel``
+     - :math:`\boldsymbol{f}_\mathrm{int} + \boldsymbol{f}_\mathrm{net}`; :math:`\boldsymbol{f}_\mathrm{int}` at a
+       prescribed motion and on a multi-point-constraint slave
+     - :math:`\boldsymbol{v}_{n+1/2}` (on a field integrated by forward Euler, the rate of the increment just taken);
+       at the end of the step, the velocity at its end time
+     - :math:`\boldsymbol{a}_{n+1}`; zero at a prescribed motion
+   * - ``MeshfreeExplicitDynamic`` (EdelweissMeshfree)
+     - :math:`\boldsymbol{f}_\mathrm{int} + \boldsymbol{M} \boldsymbol{a}`
+     - as ``NED``, on the nodes of the kernel functions
+     - :math:`\boldsymbol{a} = \boldsymbol{M}^{-1} \boldsymbol{f}_\mathrm{net}`; zero on a node without mass
+
 In the explicit solver (``NED``), the inertial and damping forces of a node with an equation of motion are the
 net force the next velocity update divides by, so its ``P`` is the internal force plus that net force: the force of
 the loads and the constraints acting there. At a node with a prescribed motion, the acceleration at the end of an
 increment is set by the prescribed velocity of the next one, which is not known when the increment is accepted, so
 its ``P`` is the internal force alone: the support reaction, without the inertia of the support node's own lumped
-mass. Its ``A`` is the acceleration at the end of the increment, the one with which the velocity at that time, half an
-increment after its ``V``, satisfies the equation of motion; zero at a prescribed motion. The net force itself is the
-solver's state, not an entry (see :mod:`~edelweissfe.solvers.nonlinearexplicitdynamic`).
-
-The Lagrange multipliers of constraints are scalar variables, not node field entries
-(:class:`~edelweissfe.variables.scalarvariable.ScalarVariable`). They are state as well: each holds its total
-value, written at acceptance and read back at every rebuild. A constraint that is switched off keeps the value it
-had.
+mass, and its ``A`` is zero. Elsewhere, its ``A`` is the acceleration with which the velocity at the end of the
+increment, half an increment after its ``V``, satisfies the equation of motion. The net force itself is the solver's
+state, not an entry (see :mod:`~edelweissfe.solvers.nonlinearexplicitdynamic`).
 
 Models whose equation system covers a part of their nodes
 ---------------------------------------------------------
@@ -107,12 +141,12 @@ accepted increment, which is their meaningful nodal value. Nodes outside the act
 zero in every entry.
 
 The explicit meshfree solver carries the velocity of the kernel functions in ``V``: it writes ``V`` by node at
-acceptance and reads it back by node whenever its equation system is rebuilt, so that a node keeps its velocity
-when the active domain changes around it; a node that becomes active starts at rest. Its increment ends on other
-kernel functions than it started on -- the particles move, and reach other nodes -- so it writes the results in two
-parts, each through the layout of the equation system that holds them: ``dU`` on the nodes the increment was taken
-on, ``P`` and ``V`` on the nodes of the configuration it ends in. A node that left the active domain in that
-increment therefore keeps its ``dU``, and holds zero in ``P`` and ``V``.
+acceptance and reads it back by node whenever its equation system is rebuilt, also at the start of a step, so that a
+node keeps its velocity when the active domain changes around it; a node that becomes active starts at rest. Its
+increment ends on other kernel functions than it started on -- the particles move, and reach other nodes -- so it
+writes the results in two parts, each through the layout of the equation system that holds them: ``dU`` on the nodes
+the increment was taken on, ``P``, ``V`` and ``A`` on the nodes of the configuration it ends in. A node that left the
+active domain in that increment therefore keeps its ``dU``, and holds zero in ``P``, ``V`` and ``A``.
 
 Using the entries in code
 -------------------------
