@@ -780,6 +780,25 @@ struct CSRDirectAssembler : CSRPattern {
       throw std::runtime_error( "CSRDirectAssembler: a value of a block has no entry in the pattern." );
   }
 
+  /**
+   * @brief Give back the map and the entity tables, keeping the pattern: the assembler that owns this core is gone, and
+   * nothing is scattered any more, while a matrix it handed out (or a linear solver that keeps its pattern arrays) may
+   * still use the pattern. The swap idiom is what actually returns the capacity; clear() alone would not.
+   */
+  void releaseMap()
+  {
+    data = nullptr;
+    std::vector< int64_t >().swap( entryStart );
+    std::vector< int >().swap( entityNDof );
+    std::vector< char >().swap( entityScatteredByRow );
+    std::vector< int64_t >().swap( entityMapStart );
+    std::vector< int64_t >().swap( entityRowStart );
+    std::vector< int >().swap( entityRows );
+    std::vector< uint16_t >().swap( offsets );
+    std::vector< int >().swap( positions );
+    std::vector< std::vector< int > >().swap( rowStartScratch );
+  }
+
   /** @brief Zero the CSR data array, with all threads. Call once before the entity loop. */
   void beginAssembly()
   {

@@ -275,6 +275,29 @@ def test_a_listed_block_with_nDof_squared_entries_is_scattered_entry_by_entry():
     np.testing.assert_array_equal(direct.csrMatrix.toarray(), reference)
 
 
+def test_a_matrix_that_outlives_its_assembly_keeps_only_the_pattern_alive():
+    """A linear solver may keep the pattern arrays of the last matrix after the equation system was rebuilt (PARDISO
+    does, to compare the next pattern with). They keep the pattern alive, not the map of the assembly that is gone:
+    the offsets and positions of the direct path, the gather map of the VIJ path."""
+    nDof = 25
+    dofsOfEntity = _randomEntities(nDof, 4)
+    rows, columns = _vijPairs(dofsOfEntity)
+
+    for makeAssembly in (
+        lambda: DirectCSRAssembler(SystemMatrixEntities.ofEntities(dofsOfEntity), nDof, 2),
+        lambda: CSRGenerator(rows, columns, nDof),
+    ):
+        assembly = makeAssembly()
+        indptr, indices = assembly.csrMatrix.indptr, assembly.csrMatrix.indices
+        pattern = indptr.base
+        patternBytes = indptr.nbytes + indices.nbytes
+        assert pattern.memoryBytesKeptAlive > patternBytes
+
+        del assembly
+        assert pattern.memoryBytesKeptAlive == patternBytes
+        np.testing.assert_array_equal(indptr[-1], len(indices))
+
+
 def test_an_entity_without_entries_scatters_nothing():
     dense = _DenseEntity(2)
     empty = _ListedEntity(2, [], [])
