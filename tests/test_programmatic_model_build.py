@@ -50,6 +50,7 @@ a real ``FieldOutputController``, mirroring the lifecycle of
 from a parsed input file.
 """
 
+import h5py
 import numpy as np
 import pytest
 
@@ -58,6 +59,8 @@ from edelweissfe.config.elementlibrary import getElementClass
 from edelweissfe.config.materiallibrary import getMaterialClass
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
+from edelweissfe.outputmanagers.restart import OutputManager as RestartOutputManager
+from edelweissfe.outputmanagers.restart import RestartOutputManagerSchema
 from edelweissfe.points.node import Node
 from edelweissfe.sections.plane import PlaneSectionSchema, Section
 from edelweissfe.sets.elementset import ElementSet
@@ -68,6 +71,7 @@ from edelweissfe.stepactions.nodeforces import StepAction as NodeForcesStepActio
 from edelweissfe.steps.adaptivestep import AdaptiveStep
 from edelweissfe.steps.stepmanager import StepActionCollection
 from edelweissfe.timesteppers.timestep import TimeStep
+from edelweissfe.utils.checkpoint import ResumeCheckpoint
 from edelweissfe.utils.fieldoutput import FieldOutputController
 
 
@@ -458,3 +462,103 @@ def test_full_step_and_solver_cycle_driven_programmatically():
     # the upward pull on the middle row lifts it beyond the prescribed top displacement, so the
     # solution is not merely the homogeneous stretch: the load genuinely deforms the patch
     assert leftU[1, 1] > uyPrescribed
+
+
+def _runPatchWithRestartOutput(directory, journal, resumeFrom: str = None) -> FEModel:
+    """The patch, stretched by a prescribed top edge in four increments, built and solved from Python objects as in
+    the test above, with a restart output writing a checkpoint after every increment into ``directory``; resumed from
+    the checkpoint ``resumeFrom``, if given, as the driver resumes a run.
+
+    Returns
+    -------
+    FEModel
+        The model.
+    """
+
+    model = _buildPatchModel(1000.0, 0.3, 1.0)
+    model.prepareYourself(journal)
+    model.advanceToTime(0.0)
+    jobInfo = loadConfiguration(dict())
+    for nodeField in model.nodeFields.values():
+        nodeField.createFieldValueEntry("U")
+        nodeField.createFieldValueEntry("P")
+    model._linkFieldVariableObjects(model.nodeSets["all"])
+
+    resumeCheckpoint = ResumeCheckpoint(resumeFrom) if resumeFrom is not None else None
+    if resumeCheckpoint is not None:
+        resumeCheckpoint.restoreModel(model, journal)
+
+    fieldOutputController = FieldOutputController(model, journal)
+    model.fieldOutputController = fieldOutputController
+    fieldOutputController.initializeJob()
+
+    restartOutput = RestartOutputManager(
+        "restart",
+        model,
+        fieldOutputController,
+        journal,
+        None,
+        configuration=RestartOutputManagerSchema(
+            writeInterval=1, baseName=str(directory / "ckpt"), numberOfFilesToKeep=10
+        ),
+    )
+
+    stepActions = StepActionCollection()
+    stepActions["dirichlet"]["clamp"] = DirichletStepAction(
+        "clamp", model.nodeSets["bottom"], "displacement", {0: 0.0, 1: 0.0}, model, journal
+    )
+    stepActions["dirichlet"]["stretch"] = DirichletStepAction(
+        "stretch", model.nodeSets["top"], "displacement", {1: 0.02}, model, journal
+    )
+    step = AdaptiveStep(
+        0,
+        model,
+        fieldOutputController,
+        journal,
+        jobInfo,
+        NIST(jobInfo, journal),
+        [restartOutput],
+        stepActions,
+        stepLength=1.0,
+        startInc=0.25,
+        maxInc=0.25,
+    )
+    step.solve(resumeCheckpoint)
+    fieldOutputController.finalizeJob()
+
+    return model
+
+
+def _serialsOfCheckpoints(directory) -> dict:
+    """The serial number of every checkpoint in ``directory``, by file name."""
+
+    serials = {}
+    for path in directory.glob("ckpt_*.h5"):
+        with h5py.File(path, "r") as f:
+            serials[path.name] = int(f.attrs["serial"])
+    return serials
+
+
+def test_a_programmatically_built_run_checkpoints_and_restores_the_output_managers_of_its_step(tmp_path):
+    """Restart without the input-file driver: a checkpoint holds the state of the output managers of the step, and the
+    resumed step restores it -- here the restart output's own position in its sequence of checkpoints. A run built from
+    Python objects has no other list of its output managers."""
+
+    journal = Journal(verbose=False)
+    uninterrupted = tmp_path / "uninterrupted"
+    uninterrupted.mkdir()
+    model = _runPatchWithRestartOutput(uninterrupted, journal)
+
+    # after the zero increment and each of the four increments
+    assert _serialsOfCheckpoints(uninterrupted) == {"ckpt_{:}.h5".format(i): i for i in range(5)}
+    with h5py.File(uninterrupted / "ckpt_2.h5", "r") as f:
+        assert list(f["outputManagers"]) == ["restart"]
+
+    # Resumed from the checkpoint after the second increment, into a directory of its own: the restart output continues
+    # the sequence of the checkpoint it resumed from, not the empty one it finds on disk.
+    resumed = tmp_path / "resumed"
+    resumed.mkdir()
+    resumedModel = _runPatchWithRestartOutput(resumed, journal, str(uninterrupted / "ckpt_2.h5"))
+
+    assert _serialsOfCheckpoints(resumed) == {"ckpt_3.h5": 3, "ckpt_4.h5": 4}
+    np.testing.assert_array_equal(resumedModel.nodeFields["displacement"]["U"], model.nodeFields["displacement"]["U"])
