@@ -30,25 +30,45 @@
 
 import numpy as np
 
-from edelweissfe.numerics.dofmanager import DofVector, VIJSystemMatrix
+from edelweissfe.numerics.dofmanager import DofVector
 from edelweissfe.numerics.parallelizationutilities import (
     chunked_iterable,
     getNumberOfWorkerThreads,
     getThreadPool,
-    mapChunksInParallel,
+    mapChunksOnWorkers,
 )
+from edelweissfe.numerics.systemmatrixassembly import SystemMatrixAssembly
 from edelweissfe.timesteppers.timestep import TimeStep
 
 
 def computeElementsInParallel(
-    elements: dict, Un1: DofVector, dU: DofVector, P: DofVector, K: VIJSystemMatrix, F: DofVector, timeStep: TimeStep
-) -> tuple[DofVector, VIJSystemMatrix, DofVector]:
+    elements: list,
+    Un1: DofVector,
+    dU: DofVector,
+    P: DofVector,
+    K: SystemMatrixAssembly,
+    F: DofVector,
+    timeStep: TimeStep,
+) -> tuple[DofVector, SystemMatrixAssembly, DofVector]:
     """
     Compute the elements in parallel for quasi-static anlysis.
 
+    The elements are anything that contributes like an element (a block of the system matrix and a part of the
+    internal forces, see :meth:`~edelweissfe.elements.base.baseelement.BaseElement.computeKernels`) and is located in
+    the DofVector: the finite elements, and the cells and particles of a meshfree model alike (see
+    :attr:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.elements`). Every element writes its forces
+    into its own part of a scatter vector, and every worker thread writes the tangents of its elements through blocks of
+    its own (:meth:`~edelweissfe.numerics.systemmatrixassembly.SystemMatrixAssembly.blocksOfWorker`). Each worker
+    handles a fixed share of the elements in a fixed order (see
+    :func:`~edelweissfe.numerics.parallelizationutilities.mapChunksOnWorkers`), so that no two threads write through
+    the same blocks at the same time. On the VIJ path every block is a slice of its own, and the assembled matrix does
+    not depend on the timing of the threads; on the direct path the workers add their blocks to the shared entries of
+    the CSR matrix atomically, in an order set by their timing, so the matrix agrees from run to run to round-off (see
+    :ref:`system-matrix-assembly`).
+
     Parameters
     ----------
-    elements : dict
+    elements : list
         The elements to compute.
     Un1 : DofVector
         The displacement vector.
@@ -56,8 +76,8 @@ def computeElementsInParallel(
         The displacement increment vector.
     P : DofVector
         The internal force vector.
-    K : VIJSystemMatrix
-        The stiffness matrix.
+    K : SystemMatrixAssembly
+        The stiffness matrix being assembled; one worker per thread.
     F : DofVector
         The flux vector.
     timeStep : TimeStep
@@ -67,8 +87,8 @@ def computeElementsInParallel(
     -------
     P : DofVector
         The internal force vector.
-    K : VIJSystemMatrix
-        The stiffness matrix.
+    K : SystemMatrixAssembly
+        The stiffness matrix being assembled.
     F : DofVector
         The flux vector.
     """
@@ -80,16 +100,18 @@ def computeElementsInParallel(
     time = timeStep.totalTime
     dT = timeStep.timeIncrement
 
-    # One chunk of elements per task, to keep the dispatch overhead negligible.
-    def computeElementsWorker(elementChunk):
+    # One chunk of elements per call, to keep the dispatch overhead negligible.
+    def computeElementsOfWorker(worker, elementChunk):
+        blocks = K.blocksOfWorker(worker)
         for element in elementChunk:
             Pe = scatter_P[element]
             Ue = Un1[element]
             dUe = dU[element]
-            Ke = K[element]
+            Ke = blocks[element]
             element.computeKernels(Ke, Pe, Ue, dUe, time, dT)
+        blocks.flush()
 
-    mapChunksInParallel(elements.values(), computeElementsWorker)
+    mapChunksOnWorkers(elements, computeElementsOfWorker, K.numberOfWorkers)
 
     scatter_P.assembleInto(P)
     scatter_P.assembleInto(F, absolute=True)

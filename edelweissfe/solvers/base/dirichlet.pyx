@@ -55,8 +55,8 @@ def applyDirichletToStiffness(K: csr_matrix, dirichlets: Iterable, rhs=None) -> 
     every constrained DOF, which equilibration then amplifies by orders of magnitude). Without
     ``rhs``, only the rows are replaced -- still correct, just not symmetric.
 
-    The constrained DOF indices are precomputed once per step (by the solver's
-    ``locateConstrainedDofs``) and cached on each boundary condition, so here we
+    The constrained DOF indices are precomputed at the start of every increment (by the
+    solver's ``locateConstrainedDofs``) and cached on each boundary condition, so here we
     just read ``dirichlet.constrainedDofIndices``.
 
     Cythonized version for speed!

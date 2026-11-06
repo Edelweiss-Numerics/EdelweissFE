@@ -30,6 +30,11 @@ advances the step, a rejected one is retried smaller from exactly where the step
 import pytest
 
 from edelweissfe.journal.journal import Journal
+from edelweissfe.models.femodel import FEModel
+from edelweissfe.steps.adaptivestep import AdaptiveStep
+from edelweissfe.steps.adaptivestepforexplicitsimulations import (
+    AdaptiveStepForExplicitSimulations,
+)
 from edelweissfe.timesteppers.adaptivetimestepper import AdaptiveTimeStepper
 from edelweissfe.utils.exceptions import ReachedMaxIncrements, ReachedMinIncrementSize
 
@@ -46,6 +51,38 @@ def _timeStepper(**overrides) -> AdaptiveTimeStepper:
     )
     kwargs.update(overrides)
     return AdaptiveTimeStepper(**kwargs)
+
+
+@pytest.mark.parametrize("makeZeroIncrementFirst", [True, False])
+def test_an_adaptive_step_begins_with_a_zero_increment_unless_told_otherwise(makeZeroIncrementFirst):
+    step = AdaptiveStep(
+        0,
+        FEModel(2),
+        None,
+        Journal(verbose=False),
+        {},
+        None,
+        [],
+        {},
+        startInc=0.25,
+        maxInc=0.25,
+        makeZeroIncrementFirst=makeZeroIncrementFirst,
+    )
+
+    first = step.timeStepper.proposeTimeStep()
+
+    assert first.timeIncrement == (0.0 if makeZeroIncrementFirst else 0.25)
+
+
+def test_an_explicit_step_always_begins_with_the_zero_increment_and_refuses_to_leave_it_out():
+    def explicitStep(**options):
+        return AdaptiveStepForExplicitSimulations(
+            0, FEModel(2), None, Journal(verbose=False), {}, None, [], {}, startInc=0.25, maxInc=0.25, **options
+        )
+
+    assert explicitStep().timeStepper.proposeTimeStep().timeIncrement == 0.0
+    with pytest.raises(ValueError, match="always begins with the zero increment"):
+        explicitStep(makeZeroIncrementFirst=False)
 
 
 def test_the_first_increment_is_a_zero_increment():
@@ -154,6 +191,16 @@ def test_a_failed_zero_increment_cannot_be_cut_back():
     timeStepper.proposeTimeStep()
     with pytest.raises(ReachedMinIncrementSize):
         timeStepper.rejectTimeStep(0.5)
+
+
+def test_a_failed_first_increment_of_nonzero_size_is_cut_back():
+    timeStepper = _timeStepper(makeZeroIncrementFirst=False)
+    timeStepper.proposeTimeStep()
+    timeStepper.rejectTimeStep(0.5)
+    retry = timeStepper.proposeTimeStep()
+
+    assert retry.number == 0
+    assert retry.stepProgressIncrement == 0.05
 
 
 def test_more_increments_than_allowed_are_refused():

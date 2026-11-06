@@ -142,12 +142,12 @@ class Constraint(ConstraintBase):
                 )
         return False
 
-    def applyConstraint(
+    def computeKernels(
         self,
         U_np: np.ndarray,
         dU: np.ndarray,
-        PExt: np.ndarray,
-        V: np.ndarray,
+        P: np.ndarray,
+        K: np.ndarray,
         timeStep: TimeStep,
     ):
         pass

@@ -98,9 +98,6 @@ def _buildModel(tmp_path: Path, name: str) -> FEModel:
     model.prepareYourself(journal)
     model.advanceToTime(job.get("startTime", 0.0))
 
-    for nodeField in model.nodeFields.values():
-        nodeField.createFieldValueEntry("U")
-        nodeField.createFieldValueEntry("P")
     model._linkFieldVariableObjects(model.nodeSets["all"])
 
     return model
