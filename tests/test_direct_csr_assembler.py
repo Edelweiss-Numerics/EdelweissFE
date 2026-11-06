@@ -29,8 +29,8 @@
 :class:`~edelweissfe.numerics.csrgeneratorv2.CSRGenerator`, built independently from the same entities: the pattern
 the direct path derives row by row equals the one sort-and-sum derives from the VIJ pairs, and the blocks it scatters
 sum to the matrix the generator gathers -- dense blocks, listed entries (including a list with exactly nDof**2
-entries), several threads, entries added to the pattern. The integer trick (counts, then sums of entry indices) checks
-the threaded, atomic scatter exactly.
+entries), several threads, entries added to the pattern, rows longer than a 16-bit offset within the row reaches. The
+integer trick (counts, then sums of entry indices) checks the threaded, atomic scatter exactly.
 """
 
 import numpy as np
@@ -285,3 +285,109 @@ def test_an_entity_without_entries_scatters_nothing():
     direct.scatterBlock(0, 0, np.ones(4))
     direct.scatterBlock(0, 1, np.zeros(0))
     np.testing.assert_array_equal(direct.csrMatrix.toarray(), [[1, 1, 0], [1, 1, 0], [0, 0, 0]])
+
+
+# --- rows longer than a 16-bit offset within the row reaches
+
+
+def _hubTable(nSprings):
+    """``nSprings`` dense two-DOF entities that couple a hub DOF 0 with a DOF of their own (springs to a reference
+    point), a listed entity that couples the hub with every spring DOF and each of them with itself (a rigid body's
+    reference point), and dense two-DOF entities between neighbouring spring DOFs, away from the hub. The row of the
+    hub has ``nSprings + 1`` entries. Built as the arrays of the table directly, to keep the entities cheap."""
+    springDofs = np.arange(1, nSprings + 1, dtype=np.intc)
+    neighbours = np.arange(1, nSprings, dtype=np.intc)
+
+    dofsOfSprings = np.stack([np.zeros(nSprings, dtype=np.intc), springDofs], axis=1).ravel()
+    dofsOfNeighbours = np.stack([neighbours, neighbours + 1], axis=1).ravel()
+    dofsOfHub = np.concatenate([[0], springDofs]).astype(np.intc)
+    # the listed entity: its local DOF 0 is the hub; entries (0, b) and (b, b) for every spring b
+    localSprings = np.arange(1, nSprings + 1, dtype=np.intc)
+    localRows = np.concatenate([np.zeros(nSprings, dtype=np.intc), localSprings])
+    localColumns = np.concatenate([localSprings, localSprings])
+
+    nDense = nSprings + len(neighbours)
+    dofStart = np.zeros(nDense + 2, dtype=np.int64)
+    dofStart[1 : nDense + 1] = 2 * np.arange(1, nDense + 1)
+    dofStart[-1] = dofStart[-2] + len(dofsOfHub)
+    localEntryStart = np.zeros(nDense + 2, dtype=np.int64)
+    localEntryStart[-1] = len(localRows)
+    table = SystemMatrixEntities(
+        dofStart=dofStart,
+        dofs=np.concatenate([dofsOfSprings, dofsOfNeighbours, dofsOfHub]).astype(np.intc),
+        couplesAllItsDofs=np.concatenate([np.ones(nDense, dtype=np.uint8), [0]]).astype(np.uint8),
+        localEntryStart=localEntryStart,
+        localRows=localRows,
+        localColumns=localColumns,
+    )
+
+    # the VIJ pairs of the same entities, in the same order of the values
+    dense = np.concatenate([dofsOfSprings, dofsOfNeighbours]).reshape(-1, 2)
+    I = np.concatenate([dense[:, [0, 1, 0, 1]].ravel(), dofsOfHub[localRows]])  # noqa: E741
+    J = np.concatenate([dense[:, [0, 0, 1, 1]].ravel(), dofsOfHub[localColumns]])
+    return table, nSprings + 1, I.astype(np.intc), J.astype(np.intc)
+
+
+def _scatterTable(direct, table, values, numThreads):
+    """Scatter the values of every block of a table, the entities dealt out to ``numThreads`` threads in turn."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    nEntities = len(table.dofStart) - 1
+    starts = direct.entryStart
+    direct.beginAssembly()
+
+    def work(tid):
+        for e in range(tid, nEntities, numThreads):
+            direct.scatterBlock(tid, e, values[starts[e] : starts[e + 1]])
+
+    with ThreadPoolExecutor(numThreads) as pool:
+        list(pool.map(work, range(numThreads)))
+    return direct.csrMatrix
+
+
+@pytest.mark.parametrize("numThreads", [1, 4])
+def test_a_row_longer_than_16_bit_offsets_reach_is_assembled(numThreads):
+    """The row of a hub -- a reference point coupled with every one of its slave nodes -- grows with the model, not
+    with the stencil: here it has 70,001 entries, past what a 16-bit offset within the row reaches. The blocks with a
+    DOF in it, dense or listed, are scattered value by value to their positions; the others row by row. The integer
+    trick checks the result exactly against the gather of the same entities."""
+    table, nDof, I, J = _hubTable(70_000)  # noqa: E741
+    generator = CSRGenerator(I, J, nDof)
+    direct = DirectCSRAssembler(table, nDof, numThreads)
+    assert generator.csrMatrix.indptr[1] - generator.csrMatrix.indptr[0] == 70_001
+
+    np.testing.assert_array_equal(direct.entryStart[-1], len(I))
+    for values in (np.ones(len(I)), np.arange(len(I), dtype=float)):
+        scattered = _scatterTable(direct, table, values, numThreads)
+        gathered = generator.updateInPlace(values)
+        np.testing.assert_array_equal(scattered.indptr, gathered.indptr)
+        np.testing.assert_array_equal(scattered.indices, gathered.indices)
+        np.testing.assert_array_equal(scattered.data, gathered.data)
+
+
+def test_a_row_made_long_by_the_entries_added_to_the_pattern_is_assembled():
+    """The fill-in of the multi-point-constraint condensation can make a row long, too: a dense block whose value
+    lies past the 16-bit reach of a row only once the entries are added is scattered to its position."""
+    nDof = 70_002
+    entity = _DenseEntity(2)
+    dofsOfEntity = {entity: np.array([0, nDof - 1], dtype=np.intc)}
+
+    def fillIn(pattern):
+        # the hub row 0 gets every column between the two DOFs of the entity
+        columns = np.arange(1, nDof - 1, dtype=np.intc)
+        indptr = np.zeros(nDof + 1, dtype=np.intc)
+        indptr[1:] = len(columns)
+        return csr_matrix((np.zeros(len(columns)), columns, indptr), shape=pattern.shape)
+
+    I, J = _vijPairs(dofsOfEntity)  # noqa: E741
+    generator = CSRGenerator(I, J, nDof)
+    generator.addToPattern(fillIn(generator.csrMatrix))
+    direct = DirectCSRAssembler(SystemMatrixEntities.ofEntities(dofsOfEntity), nDof, 2, fillIn)
+
+    values = np.arange(4, dtype=float) + 1.0
+    direct.beginAssembly()
+    direct.scatterBlock(0, 0, values)
+    gathered = generator.updateInPlace(values)
+    np.testing.assert_array_equal(direct.csrMatrix.indices, gathered.indices)
+    np.testing.assert_array_equal(direct.csrMatrix.data, gathered.data)
+    assert direct.csrMatrix[0, nDof - 1] == 3.0
