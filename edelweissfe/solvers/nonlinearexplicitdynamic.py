@@ -402,9 +402,6 @@ class NED(NonlinearSolverBase):
         #: the first increment of a cold step the leapfrog's half step; a resumed step uses the
         #: checkpointed one, since the checkpointed velocity already carries the half-step offset.
         self.prevTimeStep = None
-        #: Per-constraint force buffer and scatter plan, by constraint name; cleared on every
-        #: DofManager rebuild.
-        self._constraintForcePlans = {}
         #: The elements the increment loop evaluates (those with kernels, i.e. without contact
         #: facets); filled by :meth:`buildEquationSystem`. None, not {}, so an unbuilt system fails.
         self._kernelElements = None
@@ -1267,9 +1264,6 @@ class NED(NonlinearSolverBase):
         self.mpcTransformation = self.buildMPCTransformation(model, step.actions)
         self.checkMPCDirichletConflicts(self.mpcTransformation, step.actions)
 
-        # The force plans are indexed by the old DofManager; stale ones would scatter to wrong DOFs.
-        self._constraintForcePlans = {}
-
         # Elements without kernels (contact facets) are left out of the per-increment loop. The loop's
         # gather plan is keyed on this dict's identity.
         self._kernelElements = {number: element for number, element in model.elements.items() if element.hasKernels}
@@ -1443,9 +1437,6 @@ class NED(NonlinearSolverBase):
 
         if not isRebuild:
             self.journal.printSeperationLine()
-
-        # The force plans are indexed by the old constraint indices; stale ones would scatter to wrong DOFs.
-        self._constraintForcePlans = {}
 
         if reuseOperators:
             M, Minv = self._restoreLumpedOperators()
