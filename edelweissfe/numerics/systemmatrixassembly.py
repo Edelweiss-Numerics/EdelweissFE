@@ -92,7 +92,69 @@ class SystemMatrixBlocks(ABC):
         """Commit the block handed out last to the matrix, if any."""
 
 
-class ScaledSystemMatrixBlocks(SystemMatrixBlocks):
+class _ScratchSystemMatrixBlocks(SystemMatrixBlocks):
+    """Blocks handed out as one zeroed scratch array, reused for every entity, and committed elsewhere: the block
+    handed out last is pending until the next one is handed out or :meth:`flush` is called, which commits it
+    (:meth:`_commit`)."""
+
+    def __init__(self):
+        self._scratch = np.zeros(0)
+        self._pendingEntity = None
+        self._pendingValues = None
+
+    @abstractmethod
+    def numberOfEntriesInBlock(self, entity) -> int:
+        """The number of values of the block of ``entity``, from the stored slice bounds.
+
+        Parameters
+        ----------
+        entity
+            An entity of the assembly.
+
+        Returns
+        -------
+        int
+            The number of values.
+        """
+
+    @abstractmethod
+    def _commit(self, entity, values: np.ndarray):
+        """Commit the values of the block of ``entity``.
+
+        Parameters
+        ----------
+        entity
+            The entity.
+        values
+            The values of its block, flat, in the order of the block.
+        """
+
+    def __getitem__(self, entity) -> np.ndarray:
+        self.flush()
+
+        size = self.numberOfEntriesInBlock(entity)
+        if size > self._scratch.shape[0]:
+            self._scratch = np.zeros(size)
+        values = self._scratch[:size]
+        values[:] = 0.0
+
+        self._pendingEntity = entity
+        self._pendingValues = values
+        return entity.shapeBlock(values)
+
+    def flush(self):
+        if self._pendingEntity is None:
+            return
+        self._commit(self._pendingEntity, self._pendingValues)
+        self.dropPendingBlock()
+
+    def dropPendingBlock(self):
+        """Forget the block handed out last, without committing it."""
+        self._pendingEntity = None
+        self._pendingValues = None
+
+
+class ScaledSystemMatrixBlocks(_ScratchSystemMatrixBlocks):
     """Blocks that enter another :class:`SystemMatrixBlocks` scaled by a factor: every block is handed out as a zeroed
     scratch array, and is added, times the factor, to the entity's block of the target when it is committed.
 
@@ -109,32 +171,17 @@ class ScaledSystemMatrixBlocks(SystemMatrixBlocks):
     """
 
     def __init__(self, target: "SystemMatrixAssembly", factor: float):
+        super().__init__()
         self._target = target
         self._factor = factor
-        self._scratch = np.zeros(0)
-        self._pendingEntity = None
-        self._pendingBlock = None
 
-    def __getitem__(self, entity) -> np.ndarray:
-        self.flush()
+    def numberOfEntriesInBlock(self, entity) -> int:
+        return self._target.numberOfEntriesInBlock(entity)
 
-        size = self._target.numberOfEntriesInBlock(entity)
-        if size > self._scratch.shape[0]:
-            self._scratch = np.zeros(size)
-        self._scratch[:size] = 0.0
-
-        self._pendingEntity = entity
-        self._pendingBlock = entity.shapeBlock(self._scratch[:size])
-        return self._pendingBlock
-
-    def flush(self):
-        if self._pendingEntity is None:
-            return
-        targetBlock = self._target[self._pendingEntity]
-        targetBlock += self._factor * self._pendingBlock
+    def _commit(self, entity, values: np.ndarray):
+        targetBlock = self._target[entity]
+        targetBlock += self._factor * entity.shapeBlock(values)
         self._target.flush()
-        self._pendingEntity = None
-        self._pendingBlock = None
 
 
 class SystemMatrixAssembly(SystemMatrixBlocks):
@@ -342,7 +389,7 @@ class VIJSystemMatrixAssembly(SystemMatrixAssembly):
         return self.csrGenerator.updateInPlace(self.vijArray)
 
 
-class _DirectCSRBlocksOfWorker(SystemMatrixBlocks):
+class _DirectCSRBlocksOfWorker(_ScratchSystemMatrixBlocks):
     """The blocks one worker of a :class:`DirectCSRSystemMatrixAssembly` writes: one zeroed scratch array, reused for
     every entity, added to the CSR values when the block is committed.
 
@@ -362,54 +409,18 @@ class _DirectCSRBlocksOfWorker(SystemMatrixBlocks):
     """
 
     def __init__(self, assembler: DirectCSRAssembler, entityIds: dict, entryStart: np.ndarray, worker: int):
+        super().__init__()
         self._assembler = assembler
         self._entityIds = entityIds
         self._entryStart = entryStart
         self._worker = worker
-        self._scratch = np.zeros(0)
-        self._pendingEntity = None
-        self._pendingBlock = None
-
-    def __getitem__(self, entity) -> np.ndarray:
-        self.flush()
-
-        size = self.numberOfEntriesInBlock(entity)
-        if size > self._scratch.shape[0]:
-            self._scratch = np.zeros(size)
-        block = self._scratch[:size]
-        block[:] = 0.0
-
-        self._pendingEntity = entity
-        self._pendingBlock = block
-        return entity.shapeBlock(block)
-
-    def flush(self):
-        if self._pendingEntity is None:
-            return
-        self._assembler.scatterBlock(self._worker, self._entityIds[self._pendingEntity], self._pendingBlock)
-        self._pendingEntity = None
-        self._pendingBlock = None
 
     def numberOfEntriesInBlock(self, entity) -> int:
-        """The number of values of the block of ``entity``, from the stored slice bounds.
-
-        Parameters
-        ----------
-        entity
-            An entity of the assembly.
-
-        Returns
-        -------
-        int
-            The number of values.
-        """
         i = self._entityIds[entity]
         return int(self._entryStart[i + 1] - self._entryStart[i])
 
-    def dropPendingBlock(self):
-        """Forget the block handed out last, without committing it."""
-        self._pendingEntity = None
-        self._pendingBlock = None
+    def _commit(self, entity, values: np.ndarray):
+        self._assembler.scatterBlock(self._worker, self._entityIds[entity], values)
 
 
 class DirectCSRSystemMatrixAssembly(SystemMatrixAssembly):
