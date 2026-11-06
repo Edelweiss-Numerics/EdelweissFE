@@ -33,6 +33,7 @@ Reuses the SDOF deck from ``test_nid_newmark`` (one Marmot ``C3D8``/``LinearElas
 """
 
 import re
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -55,9 +56,15 @@ from test_nid_newmark import (
 )
 
 from edelweissfe.config.configurator import loadConfiguration
+from edelweissfe.drivers.inputfiledrivensimulation import finiteElementSimulation
 from edelweissfe.journal.journal import Journal
+from edelweissfe.models.femodel import FEModel
 from edelweissfe.solvers.nonlinearimplicitdynamic import NonlinearImplicitDynamic
 from edelweissfe.solvers.nonlinearimplicitstatic import NIST
+from edelweissfe.utils.inputfileparser import parseInputFile
+
+#: A deck of the explicit static solver NEST.
+_NEST_DECK = Path(__file__).resolve().parent.parent / "testfiles" / "marmot" / "NEST" / "test.inp"
 
 
 def test_backward_euler_damps_energy_monotonically(tmp_path):
@@ -233,3 +240,26 @@ def test_the_quasi_static_and_the_dynamic_solver_give_the_entities_their_newmark
 
     with pytest.raises(ValueError, match=re.escape("meshfreeInertia=particles|nodes")):
         NonlinearImplicitDynamic(jobInfo, journal, meshfreeInertia="grid")
+
+
+class _NewmarkParametersGiven(Exception):
+    """Stops the run once the solver has given the entities their Newmark parameters."""
+
+
+def test_the_explicit_static_solver_gives_the_entities_no_inertia(tmp_path, monkeypatch):
+    """NEST is quasi-static: at the start of its step, it gives the entities that integrate their own inertia zero
+    Newmark parameters, as NIST does, so that particles that a dynamic step before gave its parameters carry no inertia
+    under it."""
+
+    given = []
+
+    def recordAndStop(self, beta, gamma):
+        given.append((beta, gamma))
+        raise _NewmarkParametersGiven()
+
+    monkeypatch.setattr(FEModel, "setNewmarkParametersOfEntities", recordAndStop)
+    monkeypatch.chdir(tmp_path)
+    with pytest.raises(_NewmarkParametersGiven):
+        finiteElementSimulation(parseInputFile(str(_NEST_DECK)), verbose=False, suppressPlots=True)
+
+    assert given == [(0.0, 0.0)]
