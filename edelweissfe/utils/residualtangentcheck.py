@@ -30,6 +30,9 @@
 
 Because ``K`` must be the derivative of what is added to ``P``, comparing it with central differences of ``P`` checks
 both at once: a wrong tangent and a ``P`` of the wrong sign each show up as a mismatch.
+
+They are part of the package, so that the tests of a package that adds constraints of its own can check them the same
+way as the tests of EdelweissFE check its constraints.
 """
 
 import numpy as np

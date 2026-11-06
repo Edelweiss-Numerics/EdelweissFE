@@ -38,10 +38,6 @@ from _hexa20cube import (  # noqa: E402  (tests/ is on sys.path)
     _YMIN,
     _hexa20Coordinates,
 )
-from _residualtangent import (  # noqa: E402  (tests/ is on sys.path)
-    finiteDifferenceTangent,
-    residualContributionAndTangent,
-)
 
 import edelweissfe.utils.inputfileparser  # noqa: F401 bootstrap input language
 from edelweissfe.constraints.surfacetodiscreterigidbodypenalty import (
@@ -63,6 +59,10 @@ from edelweissfe.models.modelchangeobserver import ModelChangeType
 from edelweissfe.points.node import Node
 from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.sets.nodeset import NodeSet
+from edelweissfe.utils.residualtangentcheck import (
+    finiteDifferenceTangent,
+    residualContributionAndTangent,
+)
 
 
 class TestSurfaceToDiscreteRigidBodyContact(unittest.TestCase):

@@ -44,12 +44,6 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from _residualtangent import (  # noqa: E402  (tests/ is on sys.path)
-    centralDifferences,
-    finiteDifferenceTangent,
-    localVector,
-    residualContributionAndTangent,
-)
 
 from edelweissfe.config.phenomena import getFieldSize
 from edelweissfe.elements.pointmass import PointMass
@@ -59,6 +53,12 @@ from edelweissfe.models.femodel import FEModel
 from edelweissfe.points.node import Node
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.inputfileparser import parseInputFile
+from edelweissfe.utils.residualtangentcheck import (
+    centralDifferences,
+    finiteDifferenceTangent,
+    localVector,
+    residualContributionAndTangent,
+)
 
 _MATERIAL = """
 *material, name=LinearElastic, id=linearelastic, provider=edelweiss
