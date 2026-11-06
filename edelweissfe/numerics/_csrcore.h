@@ -371,20 +371,29 @@ private:
     std::vector< std::vector< int64_t > > thread_local_counts( num_threads,
                                                                std::vector< int64_t >( num_partitions, 0 ) );
 
-#pragma omp parallel
+    // A pair outside the matrix would be counted into a partition that does not exist and written past the end of
+    // indptr: the rows are checked here, where they are read first, the columns where they are read first (step 2).
+    int64_t rowsOutside = 0;
+#pragma omp parallel reduction( + : rowsOutside )
     {
       int   tid          = omp_get_thread_num();
       auto& local_counts = thread_local_counts[tid];
 
 #pragma omp for schedule( static )
       for ( int64_t k = 0; k < n_pairs; ++k ) {
-        int r    = I[k];
+        int r = I[k];
+        if ( r < 0 || r >= nDof ) {
+          ++rowsOutside;
+          continue;
+        }
         int p_id = (int)( r / rows_per_partition );
         if ( p_id >= num_partitions )
           p_id = num_partitions - 1;
         local_counts[p_id]++;
       }
     }
+    if ( rowsOutside > 0 )
+      throw std::out_of_range( "CSRCore: a row of a pair (I) lies outside [0, nDof)." );
 
     // Reduce thread counts to global partition counts & calculate offsets
     // This matrix transposition (thread x part -> part x thread) allows us
@@ -408,7 +417,8 @@ private:
     // Pack data into a structure that is fast to sort.
     std::vector< PackedEdge > edges( n_pairs );
 
-#pragma omp parallel
+    int64_t columnsOutside = 0;
+#pragma omp parallel reduction( + : columnsOutside )
     {
       int tid = omp_get_thread_num();
 
@@ -416,6 +426,8 @@ private:
       for ( int64_t k = 0; k < n_pairs; ++k ) {
         int r = I[k];
         int c = J[k];
+        if ( c < 0 || c >= nDof )
+          ++columnsOutside;
 
         // Pack (Row, Col) into 64-bit key
         uint64_t key = ( (uint64_t)r << 32 ) | (uint32_t)c;
@@ -431,6 +443,8 @@ private:
         edges[pos] = { key, (int32_t)k };
       }
     }
+    if ( columnsOutside > 0 )
+      throw std::out_of_range( "CSRCore: a column of a pair (J) lies outside [0, nDof)." );
 
     // --- STEP 3: PARALLEL SORT & SYMBOLIC COMPRESSION ---
     // Each thread takes ownership of specific partitions, sorts them,

@@ -414,3 +414,45 @@ def test_a_row_made_long_by_the_entries_added_to_the_pattern_is_assembled():
     np.testing.assert_array_equal(direct.csrMatrix.indices, gathered.indices)
     np.testing.assert_array_equal(direct.csrMatrix.data, gathered.data)
     assert direct.csrMatrix[0, nDof - 1] == 3.0
+
+
+# --- the input of the public entry points, which the compiled code does not check
+
+
+def test_the_generator_refuses_pairs_that_do_not_fit_the_matrix():
+    with pytest.raises(ValueError, match="differ in length"):
+        CSRGenerator(np.array([0, 1]), np.array([0]), 2)
+    with pytest.raises(IndexError, match="row"):
+        CSRGenerator(np.array([0, 2]), np.array([0, 1]), 2)
+    with pytest.raises(IndexError, match="column"):
+        CSRGenerator(np.array([0, 1]), np.array([-1, 1]), 2)
+    with pytest.raises(ValueError, match="negative"):
+        CSRGenerator(np.array([0]), np.array([0]), -1)
+
+    generator = CSRGenerator(np.array([0, 1]), np.array([0, 1]), 2)
+    with pytest.raises(ValueError, match="pairs"):
+        generator.updateInPlace(np.ones(3))
+
+
+def test_entries_to_add_are_sorted_csr_rows():
+    generator = CSRGenerator(np.array([0, 1]), np.array([0, 1]), 3)
+    unsorted = csr_matrix((np.zeros(2), np.array([2, 1]), np.array([0, 2, 2, 2])), shape=(3, 3))
+    with pytest.raises(ValueError, match="sorted"):
+        generator.addToPattern(unsorted)
+    with pytest.raises(ValueError, match="CSR"):
+        generator.addToPattern(unsorted.tocoo())
+
+
+def test_the_scatter_refuses_a_block_that_is_not_the_entitys():
+    dense = _DenseEntity(2)
+    direct = DirectCSRAssembler(SystemMatrixEntities.ofEntities({dense: np.array([0, 1], dtype=np.intc)}), 2, 2)
+    direct.beginAssembly()
+    with pytest.raises(IndexError, match="thread"):
+        direct.scatterBlock(2, 0, np.ones(4))
+    with pytest.raises(IndexError, match="entity"):
+        direct.scatterBlock(0, 1, np.ones(4))
+    with pytest.raises(ValueError, match="values given"):
+        direct.scatterBlock(0, 0, np.ones(3))
+    np.testing.assert_array_equal(direct.csrMatrix.data, 0.0)
+    with pytest.raises(ValueError, match="negative"):
+        DirectCSRAssembler(SystemMatrixEntities.ofEntities({}), -1)
