@@ -54,6 +54,8 @@ class ConstraintBase(OptionSchemaProvider, ABC, VIJEntityBase):
     #: multipliers) leave the equation system with it, so that they leave no empty rows behind. It is switched
     #: off either from outside, e.g. by a ``modelupdate`` step action at the start of a step, or by the
     #: constraint itself in :meth:`updateConnectivity`, e.g. a contact constraint whose partner is out of reach.
+    #: A switch-off from outside lasts until the constraint is switched on again from outside: a constraint that
+    #: switches itself on does not undo it.
     #: A constraint that switches itself on or off reports that as a change of its connectivity, so that the
     #: solver rebuilds its equation system.
     active: bool = True

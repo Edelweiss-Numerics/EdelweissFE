@@ -536,7 +536,8 @@ part of the equation system: it gets no degrees of freedom, the solvers do not e
 no unknowns without an equation behind. A ``modelupdate`` step action switches a constraint off for a step, as in
 ``testfiles/marmot/PenaltyBasedIndirectControl``; a constraint may also switch itself off in its
 ``updateConnectivity``, e.g. a contact constraint whose partner is out of reach, and then reports a change of its
-connectivity, so that the solver rebuilds its equation system.
+connectivity, so that the solver rebuilds its equation system. A switch-off from outside lasts until the constraint is
+switched on again from outside: a constraint that switches itself on does not undo it.
 
 .. automodule:: edelweissfe.constraints.base.constraintbase
     :members:
