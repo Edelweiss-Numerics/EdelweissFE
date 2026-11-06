@@ -97,8 +97,9 @@ startInc=0.1, maxInc=0.3, minInc=0.025, cutbackFactor=0.25, increaseFactor=2, go
 #: The increments of the step without the obstacle: the zero increment, then 0.1 (t = 0.1), 0.2 (0.3), 0.3 (0.6),
 #: 0.3 (0.9) and 0.1 (1.0). An increment starting at OBSTACLE_TIME = 0.55 or later fails if fewer than
 #: INCREMENTS_BEFORE_OBSTACLE increments were accepted, so the increment starting at t = 0.6 fails at every size.
-#: Falling back to the checkpoint at t = 0.6 does not help (still 4 increments); the one at t = 0.3 does: from there,
-#: the cut back increments reach t = 0.375, 0.525 and 0.825, and the step passes the obstacle with 6 increments.
+#: The checkpoint at t = 0.6 holds the state that increment started from, so the step goes back to the one at t = 0.3:
+#: from there, the cut back increments reach t = 0.375, 0.525 and 0.825, and the step passes the obstacle with 6
+#: increments.
 OBSTACLE_TIME = 0.55
 INCREMENTS_BEFORE_OBSTACLE = 6
 
@@ -158,15 +159,18 @@ def _exportedTimes(directory: Path) -> np.ndarray:
 
 
 def test_a_step_falls_back_to_an_earlier_checkpoint_and_finishes(tmp_path, obstacle):
+    """One fallback suffices: the step does not go back to the checkpoint at t = 0.6, the state the failed increment
+    started from, from where every increment size down to the minimum has just failed."""
+
     reference = _run(tmp_path, _deck(tmp_path, maxCheckpointFallbacks=0))
     referenceU = reference.nodeFields["displacement"]["U"].copy()
 
     fallbackDirectory = tmp_path / "fallback"
     fallbackDirectory.mkdir()
     fallenBackTo = obstacle()
-    model = _run(fallbackDirectory, _deck(fallbackDirectory, maxCheckpointFallbacks=2))
+    model = _run(fallbackDirectory, _deck(fallbackDirectory, maxCheckpointFallbacks=1))
 
-    assert fallenBackTo == pytest.approx([0.6, 0.3])
+    assert fallenBackTo == pytest.approx([0.3])
     assert model.time == pytest.approx(1.0)
     # linear elastic: the end state does not depend on the load path
     np.testing.assert_allclose(model.nodeFields["displacement"]["U"], referenceU, rtol=1e-10, atol=1e-14)
@@ -186,14 +190,15 @@ def test_without_fallbacks_the_step_fails_at_the_minimum_increment(tmp_path, obs
 
 
 def test_the_number_of_fallbacks_is_bounded(tmp_path, obstacle):
-    """Past the obstacle, nothing helps: after its two fallbacks, the step passes t = 0.55 on the finer path, and
-    fails at t = 0.825."""
+    """Past the obstacle, nothing helps. The first fallback goes back to t = 0.3, and on the finer path the step
+    passes t = 0.55 within one increment, to fail at t = 0.825; the second goes back to t = 0.525, the checkpoint
+    before that failed increment's start, and the step fails at t = 0.6, with no fallback left."""
 
     fallenBackTo = obstacle(failsAlways=True)
     model = _run(tmp_path, _deck(tmp_path, maxCheckpointFallbacks=2))
 
-    assert fallenBackTo == pytest.approx([0.6, 0.3])
-    assert model.time == pytest.approx(0.825)
+    assert fallenBackTo == pytest.approx([0.3, 0.525])
+    assert model.time == pytest.approx(0.6)
 
 
 def test_a_step_falls_back_to_checkpoints_of_its_own_only(tmp_path, obstacle):
