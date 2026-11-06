@@ -59,6 +59,7 @@ from edelweissfe.numerics.systemmatrixcontributor import (
     SystemMatrixContributorBase,
     countEntriesOfBlock,
 )
+from edelweissfe.numerics.vijsystemmatrix import VIJSystemMatrix
 
 
 class _DenseEntity(SystemMatrixContributorBase):
@@ -312,3 +313,27 @@ def test_the_first_failing_chunk_raises():
     with pytest.raises(ValueError) as error:
         mapChunksOnWorkers(list(range(100)), work, numberOfWorkers=4, chunksPerWorker=2)
     assert error.value.args[0] == 36
+
+
+def test_an_error_in_the_view_of_an_entity_is_not_taken_for_an_array_index():
+    """The VIJ value array hands an entity its block through the entity's own view of its values. An error in that view
+    is the entity's, and comes out as it is, not as an index of the array that numpy does not understand."""
+
+    class _BrokenView(_DenseEntity):
+        def shapeBlock(self, values):
+            raise AttributeError("the view of this entity is broken")
+
+    entity = _BrokenView([0, 1])
+    V = VIJSystemMatrix(4, {entity: slice(0, 4)})
+    with pytest.raises(AttributeError, match="the view of this entity is broken"):
+        V[entity]
+
+
+def test_the_value_array_keeps_its_layout_in_a_copy_and_answers_array_indices():
+    entity = _DenseEntity([0, 1])
+    V = VIJSystemMatrix(4, {entity: slice(0, 4)})
+    V[entity] = [1.0, 2.0, 3.0, 4.0]
+    np.testing.assert_array_equal(V.copy()[entity], [[1.0, 3.0], [2.0, 4.0]])
+    np.testing.assert_array_equal(V[1:3], [2.0, 3.0])
+    assert V[np.int64(3)] == 4.0
+    np.testing.assert_array_equal(V[np.array([0, 3])], [1.0, 4.0])
