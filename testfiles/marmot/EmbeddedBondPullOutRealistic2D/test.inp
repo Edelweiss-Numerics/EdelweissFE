@@ -1,0 +1,125 @@
+** regression test: realistic pull-out test (RILEM-like): the bar (28 T2D2 elements of 5 mm) is pulled out of a
+** concrete block (CPE8R) bearing on the loaded face; bond-slip by the fib Model Code 2010 law; peak = tauMax p L_b
+** realistic pull-out: concrete block 150 x 150 (plane strain section, thickness 150), Ø16 bar, bonded length
+** 120 mm (x = 30..150), free length 20 mm; the block bears on the loaded face (x = 150); units N, mm
+*material, name=linearelastic, id=concrete, provider=marmot
+30000.0, 0.2
+
+*material, name=VonMises, id=steel, provider=marmot
+200000., 0.3, 500, 1000., 0.0, 1.0, 7.85e-9
+
+*material, name=ModelCode2010BondSlip, id=bond, provider=marmot
+13.69, 1.0, 2.0, 10.0, 0.4, 5.48, 200.0, 1000.0
+
+*modelGenerator, generator=planeRectQuad, name=gen
+l=150
+h=150
+nX=15
+nY=15
+elType=CPE8R
+
+*node
+100001, 30, 75.0
+100002, 35, 75.0
+100003, 40, 75.0
+100004, 45, 75.0
+100005, 50, 75.0
+100006, 55, 75.0
+100007, 60, 75.0
+100008, 65, 75.0
+100009, 70, 75.0
+100010, 75, 75.0
+100011, 80, 75.0
+100012, 85, 75.0
+100013, 90, 75.0
+100014, 95, 75.0
+100015, 100, 75.0
+100016, 105, 75.0
+100017, 110, 75.0
+100018, 115, 75.0
+100019, 120, 75.0
+100020, 125, 75.0
+100021, 130, 75.0
+100022, 135, 75.0
+100023, 140, 75.0
+100024, 145, 75.0
+100025, 150, 75.0
+100026, 155, 75.0
+100027, 160, 75.0
+100028, 165, 75.0
+100029, 170, 75.0
+
+*element, type=T2D2
+100001, 100001, 100002
+100002, 100002, 100003
+100003, 100003, 100004
+100004, 100004, 100005
+100005, 100005, 100006
+100006, 100006, 100007
+100007, 100007, 100008
+100008, 100008, 100009
+100009, 100009, 100010
+100010, 100010, 100011
+100011, 100011, 100012
+100012, 100012, 100013
+100013, 100013, 100014
+100014, 100014, 100015
+100015, 100015, 100016
+100016, 100016, 100017
+100017, 100017, 100018
+100018, 100018, 100019
+100019, 100019, 100020
+100020, 100020, 100021
+100021, 100021, 100022
+100022, 100022, 100023
+100023, 100023, 100024
+100024, 100024, 100025
+100025, 100025, 100026
+100026, 100026, 100027
+100027, 100027, 100028
+100028, 100028, 100029
+
+*elSet, elSet=rebars, generate=True
+100001, 100028, 1
+
+*nSet, nSet=loadedEnd
+100029
+
+*section, name=concreteSection, thickness=150.0, material=concrete, type=plane
+gen_all
+
+*section, name=rebarSection, area=201.1, material=steel, type=truss
+rebars
+
+*modelGenerator, generator=embeddedBond, name=rebarBond, executeAfterManualGeneration=True
+rebarElSet=rebars
+hostElSet=gen_all
+material=bond
+perimeter=50.27
+splitBars=True
+
+*job, name=job, domain=2d
+*solver, solver=NIST, name=theSolver
+
+*fieldOutput
+>>perNode, name=displacement, elSet=all, field=displacement, result=U
+>>perNode, name=F, nSet=loadedEnd, field=displacement, result=P, f(x)='sum(x[:,0])', saveHistory=True,
+>>perNode, name=uEnd, nSet=loadedEnd, field=displacement, result=U, f(x)='sum(x[:,0])', saveHistory=True,
+>>perElement, name=slip, elSet=rebarBond_bond, result=slip, quadraturePoint=0, saveHistory=True,
+>>perElement, name=bondStress, elSet=rebarBond_bond, result=bond stress, quadraturePoint=0, saveHistory=True,
+>>perElement, name=concreteStress, elSet=gen_all, result=stress, quadraturePoint=0,
+>>perElement, name=rebarNormalForce, elSet=rebars, result=normal force, quadraturePoint=0,
+
+*output, type=ensight, name=esExport
+>>perNode, fieldOutput=displacement
+>>perElement, fieldOutput=rebarNormalForce
+>>perElement, fieldOutput=slip
+>>perElement, fieldOutput=bondStress
+>>perElement, fieldOutput=concreteStress
+>>configuration, overwrite=yes
+
+*step, solver=theSolver
+maxInc=0.05, minInc=1e-8, maxNumInc=1000, maxIter=20, stepLength=1
+>>dirichlet, name=plate, nSet=gen_right, field=displacement, 1=0
+>>dirichlet, name=fixY, nSet=gen_rightBottom, field=displacement, 2=0
+>>dirichlet, name=pull, nSet=loadedEnd, field=displacement, 1=4.0, 2=0

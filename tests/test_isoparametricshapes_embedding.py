@@ -1,12 +1,17 @@
-"""Unit tests of the isoparametric shape functions, the inverse isoparametric mapping and the host element locator
-(collected by CI from tests/)."""
+"""Unit tests of the isoparametric shape functions, the inverse isoparametric mapping, the host element locator
+and the splitting of bars at host boundaries (collected by CI from tests/)."""
 
 from types import SimpleNamespace
 
 import numpy as np
 import pytest
 
-from edelweissfe.utils.embedding import HostElementLocator
+from edelweissfe.utils.embedding import (
+    HostElementLocator,
+    barLength,
+    barPoint,
+    findBarPartsInHosts,
+)
 from edelweissfe.utils.isoparametricshapes import (
     NODE_PARAMETRIC_COORDINATES,
     SIMPLEX_SHAPES,
@@ -112,9 +117,14 @@ def _element(number, shape, nodes):
     return SimpleNamespace(elNumber=number, ensightType=shape, nodes=nodes)
 
 
-def _quadGrid(nx, ny, lx, ly):
-    """A structured grid of quad4 elements on [0, lx] x [0, ly]."""
-    nodes = {(i, j): _node(i * (ny + 1) + j, (lx * i / nx, ly * j / ny)) for i in range(nx + 1) for j in range(ny + 1)}
+def _quadGrid(nx, ny, lx, ly, origin=(0.0, 0.0)):
+    """A structured grid of quad4 elements on [0, lx] x [0, ly], shifted by ``origin``."""
+    x0, y0 = origin
+    nodes = {
+        (i, j): _node(i * (ny + 1) + j, (x0 + lx * i / nx, y0 + ly * j / ny))
+        for i in range(nx + 1)
+        for j in range(ny + 1)
+    }
     elements = []
     for i in range(nx):
         for j in range(ny):
@@ -137,3 +147,128 @@ def test_locator_finds_host_and_shape_functions_interpolate():
     coords = np.array([n.coordinates for n in p.element.nodes])
     np.testing.assert_allclose(p.shapeFunctions() @ coords, x, atol=1e-12)
     assert locator.locate(np.array([5.0, 1.0])) is None
+
+
+@pytest.mark.parametrize("barShape", ["bar2", "bar3"])
+def test_split_inclined_bar(barShape):
+    """an inclined bar crossing a grid is split into parts, one per crossed host element, that tile the bar"""
+    hosts = _quadGrid(4, 3, 4.0, 3.0)
+    locator = HostElementLocator(hosts)
+    a, b = np.array([0.2, 0.35]), np.array([3.7, 2.6])
+    barNodes = [_node(100, a), _node(101, b)] + ([_node(102, 0.5 * (a + b))] if barShape == "bar3" else [])
+    bar = _element(1000, barShape, barNodes)
+
+    parts, unbonded = findBarPartsInHosts(bar, locator)
+
+    assert unbonded == 0.0
+    assert parts[0].etaStart == -1.0 and parts[-1].etaEnd == 1.0
+    for p, q in zip(parts[:-1], parts[1:]):
+        assert abs(p.etaEnd - q.etaStart) < 1e-9
+        assert p.hostElement is not q.hostElement
+    # the crossed cells, by walking the line in fine steps
+    crossed = []
+    for t in np.linspace(0, 1, 20001):
+        x = a + t * (b - a)
+        cell = int(x[0]) * 3 + int(x[1])
+        if not crossed or crossed[-1] != cell:
+            crossed.append(cell)
+    assert [p.hostElement.elNumber for p in parts] == crossed
+    coords = np.array([n.coordinates for n in barNodes])
+    total = sum(barLength(barShape, coords, p.etaStart, p.etaEnd) for p in parts)
+    assert abs(total - np.linalg.norm(b - a)) < 1e-9
+
+
+def test_split_bar_sticking_out():
+    hosts = _quadGrid(2, 2, 2.0, 2.0)
+    locator = HostElementLocator(hosts)
+    bar = _element(1000, "bar2", [_node(100, (-1.0, 0.5)), _node(101, (1.5, 0.5))])
+    parts, unbonded = findBarPartsInHosts(bar, locator)
+    # the bar is outside on x in [-1, 0]: length 1, up to the boundary tolerance of the hosts (1e-8 in parametric
+    # coordinates, i.e., 5e-9 here)
+    assert abs(unbonded - 1.0) < 1e-8
+    assert [p.hostElement.elNumber for p in parts] == [0, 2]
+    assert abs(parts[0].etaStart - (-0.2)) < 1e-8
+
+
+@pytest.mark.parametrize("start, end", [((1.0, 1.0), (3.0, 1.0)), ((1.0, 0.5), (3.0, 1.7)), ((1.0, 1.0), (1.0, 3.0))])
+def test_split_bar_starting_on_host_boundary_has_no_degenerate_parts(start, end):
+    """a bar starting on a host edge or node must not get a zero-length part in a host it only touches"""
+    hosts = _quadGrid(4, 4, 4.0, 4.0)
+    locator = HostElementLocator(hosts)
+    bar = _element(1000, "bar2", [_node(100, start), _node(101, end)])
+    parts, unbonded = findBarPartsInHosts(bar, locator)
+    assert unbonded == 0.0
+    assert all(p.etaEnd - p.etaStart > 1e-6 for p in parts)
+    assert parts[0].etaStart == -1.0 and parts[-1].etaEnd == 1.0
+
+
+@pytest.mark.parametrize("barShape", ["bar2", "bar3"])
+def test_split_bar_through_mesh_corners_has_no_slivers(barShape):
+    """a bar at 45 degrees through the nodes of a structured grid touches the side neighbors only at the corners: no
+    sliver parts, and the parts tile the bar"""
+    hosts = _quadGrid(6, 6, 6.0, 6.0)
+    locator = HostElementLocator(hosts)
+    a, b = np.array([0.5, 0.5]), np.array([5.5, 5.5])  # through the grid nodes (1,1), (2,2), ...
+    barNodes = [_node(100, a), _node(101, b)] + ([_node(102, 0.5 * (a + b))] if barShape == "bar3" else [])
+    parts, unbonded = findBarPartsInHosts(_element(1000, barShape, barNodes), locator)
+    assert unbonded == 0.0
+    assert all(p.etaEnd - p.etaStart > 1e-3 for p in parts)
+    assert [p.hostElement.elNumber for p in parts] == [0, 7, 14, 21, 28, 35]  # the diagonal cells
+    assert parts[0].etaStart == -1.0 and parts[-1].etaEnd == 1.0
+    for p, q in zip(parts[:-1], parts[1:]):
+        assert p.etaEnd == q.etaStart
+
+
+def _assertPartsInTheirHosts(parts, bar, locator):
+    """every part starts and ends inside its host (within the locator tolerance), and parts do not overlap"""
+    shape = bar.ensightType
+    coords = np.array([n.coordinates for n in bar.nodes])
+    for p in parts:
+        for eta in (p.etaStart, 0.5 * (p.etaStart + p.etaEnd), p.etaEnd):
+            assert locator.contains(p.hostElement, barPoint(shape, coords, eta))
+    for p, q in zip(parts[:-1], parts[1:]):
+        assert p.etaEnd <= q.etaStart
+
+
+@pytest.mark.parametrize("y", [1.0, 2.0])
+def test_split_bar_along_a_host_edge(y):
+    """a bar lying exactly on the edges between two rows of hosts is split into one part per column, each in one of the
+    two hosts sharing the edge, without gaps"""
+    hosts = _quadGrid(4, 3, 4.0, 3.0)
+    locator = HostElementLocator(hosts)
+    bar = _element(1000, "bar2", [_node(100, (0.3, y)), _node(101, (3.6, y))])
+    parts, unbonded = findBarPartsInHosts(bar, locator)
+    assert unbonded == 0.0
+    assert parts[0].etaStart == -1.0 and parts[-1].etaEnd == 1.0
+    assert len(parts) == 4
+    for p, q in zip(parts[:-1], parts[1:]):
+        assert p.etaEnd == q.etaStart
+    _assertPartsInTheirHosts(parts, bar, locator)
+
+
+def test_split_bar_far_from_the_origin():
+    """the split far from the origin (offset 1e5 times the host size) equals the one at the origin"""
+    a, b = np.array([0.2, 0.35]), np.array([3.7, 2.6])
+    results = []
+    for origin in (np.zeros(2), np.array([1e5, -4e5])):
+        locator = HostElementLocator(_quadGrid(4, 3, 4.0, 3.0, origin))
+        parts, unbonded = findBarPartsInHosts(_element(1000, "bar2", [_node(100, origin + a), _node(101, origin + b)]), locator)
+        assert unbonded == 0.0
+        results.append([(p.hostElement.elNumber, p.etaStart, p.etaEnd) for p in parts])
+    assert [r[0] for r in results[0]] == [r[0] for r in results[1]]
+    np.testing.assert_allclose([r[1:] for r in results[0]], [r[1:] for r in results[1]], atol=1e-9)
+
+
+def test_split_long_bar_passing_beside_a_host_node():
+    """a bar of 10 host sizes passing 1e-7 host sizes beside a host node (BOND-07): the sliver in the corner host is
+    dropped as unbonded, and no part reaches outside of its host"""
+    hosts = _quadGrid(10, 2, 10.0, 2.0)
+    locator = HostElementLocator(hosts)
+    # slightly inclined bar through (5, 1 + 1e-7): just above the node (5, 1)
+    a, b = np.array([0.0, 1.0 + 1e-7 - 5 * 1e-3]), np.array([10.0, 1.0 + 1e-7 + 5 * 1e-3])
+    bar = _element(1000, "bar2", [_node(100, a), _node(101, b)])
+    parts, unbonded = findBarPartsInHosts(bar, locator)
+    _assertPartsInTheirHosts(parts, bar, locator)
+    assert unbonded < 1e-5
+    total = sum(barLength("bar2", np.array([a, b]), p.etaStart, p.etaEnd) for p in parts)
+    assert abs(total + unbonded - np.linalg.norm(b - a)) < 1e-9

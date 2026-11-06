@@ -1,0 +1,95 @@
+** a laterally loaded steel pile (B2D2, 12 elements, 200 x 200 rectangle, 10 Lobatto points, von Mises) in a soil block (CPE4, 2000 x 3000);
+** bond-slip coupling by the embeddedBond generator (linear bond law, splitBars=True: the pile is re-meshed with B2D2
+** elements at the host element boundaries); the pile head sticks out 500 mm and is pushed laterally by 60 mm, the
+** pile yields in bending
+*material, name=linearelastic, id=soil, provider=marmot
+100.0, 0.3
+
+*material, name=VonMises, id=steel, provider=marmot
+**  E,       nu,  fy,  H,     dfy, delta, rho
+    210000., 0.3, 235, 1000., 0.0, 1.0,   7.85e-9
+
+*material, name=LinearElasticBondSlip, id=bond, provider=marmot
+**  Kt,  Kn
+    1.0, 10.0
+
+*modelGenerator, generator=planeRectQuad, name=gen
+l=2000
+h=3000
+nX=8
+nY=12
+elType=CPE4
+
+*section, name=soilSection, thickness=200.0, material=soil, type=plane
+gen_all
+
+*node
+100001, 1060, 1100
+100002, 1060, 1300
+100003, 1060, 1500
+100004, 1060, 1700
+100005, 1060, 1900
+100006, 1060, 2100
+100007, 1060, 2300
+100008, 1060, 2500
+100009, 1060, 2700
+100010, 1060, 2900
+100011, 1060, 3100
+100012, 1060, 3300
+100013, 1060, 3500
+
+*element, type=B2D2
+100001, 100001, 100002
+100002, 100002, 100003
+100003, 100003, 100004
+100004, 100004, 100005
+100005, 100005, 100006
+100006, 100006, 100007
+100007, 100007, 100008
+100008, 100008, 100009
+100009, 100009, 100010
+100010, 100010, 100011
+100011, 100011, 100012
+100012, 100012, 100013
+
+*elSet, elSet=pile, generate=True
+100001, 100012, 1
+
+*nSet, nSet=pileHead
+100013
+
+*section, name=pileSection, type=beam, profile=rectangle, b=200, h=200, nY=10, nZ=1, rule=lobatto, material=steel
+pile
+
+*modelGenerator, generator=embeddedBond, name=pileBond, executeAfterManualGeneration=True
+rebarElSet=pile
+hostElSet=gen_all
+material=bond
+perimeter=800
+splitBars=True
+
+*job, name=job, domain=2d
+*solver, solver=NIST, name=theSolver
+
+*fieldOutput
+>>perNode, name=displacement, elSet=gen_all, field=displacement, result=U
+>>perNode, name=pileDisplacement, elSet=pile, field=displacement, result=U
+>>perNode, name=pileRotation, elSet=pile, field=rotation, result=U
+>>perElement, name=bendingMoment, elSet=pile, result=bending moment, quadraturePoint=0,
+>>perElement, name=slip, elSet=pileBond_bond, result=slip, quadraturePoint=0,
+>>perNode, name=F, nSet=pileHead, field=displacement, result=P, f(x)='x[:,0]', saveHistory=True,
+
+*output, type=ensight, name=esExport
+>>perNode, fieldOutput=displacement
+>>perNode, fieldOutput=pileDisplacement
+>>perNode, fieldOutput=pileRotation
+>>perElement, fieldOutput=bendingMoment
+>>perElement, fieldOutput=slip
+>>configuration, overwrite=yes
+
+*step, solver=theSolver
+maxInc=0.1, minInc=1e-8, maxNumInc=100, maxIter=15, stepLength=1
+>>dirichlet, name=bottom, nSet=gen_bottom, field=displacement, 1=0, 2=0
+>>dirichlet, name=sides, nSet=gen_left, field=displacement, 1=0
+>>dirichlet, name=sides2, nSet=gen_right, field=displacement, 1=0
+>>dirichlet, name=head, nSet=pileHead, field=displacement, 1=60

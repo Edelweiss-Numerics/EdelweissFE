@@ -1,0 +1,81 @@
+** pull-out of a steel bar (T2D2) from a concrete block (CPE8R), bond-slip by the fib Model Code 2010 law; the
+** loaded end of the bar sticks out of the block (unbonded free length), the bar is split at the host boundaries
+*material, name=linearelastic, id=concrete, provider=marmot
+30000.0, 0.2
+
+*material, name=VonMises, id=steel, provider=marmot
+**  E,       nu,  fy,  H,     dfy, delta, rho
+    200000., 0.3, 500, 1000., 0.0, 1.0,   7.85e-9
+
+*material, name=ModelCode2010BondSlip, id=bond, provider=marmot
+**  tauMax, s1,  s2,  s3,   alpha, tauF, K0,    Kn
+    13.69,  1.0, 2.0, 10.0, 0.4,   5.48, 200.0, 1000.0
+
+*modelGenerator, generator=planeRectQuad, name=gen
+l=4
+h=1
+nX=6
+nY=2
+elType=CPE8R
+
+*node
+100001, 1, 0.5
+100002, 1.571428571, 0.5
+100003, 2.142857143, 0.5
+100004, 2.714285714, 0.5
+100005, 3.285714286, 0.5
+100006, 3.857142857, 0.5
+100007, 4.428571429, 0.5
+100008, 5, 0.5
+
+*element, type=T2D2
+100001, 100001, 100002
+100002, 100002, 100003
+100003, 100003, 100004
+100004, 100004, 100005
+100005, 100005, 100006
+100006, 100006, 100007
+100007, 100007, 100008
+
+*elSet, elSet=rebars, generate=True
+100001, 100007, 1
+
+*nSet, nSet=loadedEnd
+100008
+
+*section, name=concreteSection, thickness=50.0, material=concrete, type=plane
+gen_all
+
+*section, name=rebarSection, area=78.5, material=steel, type=truss
+rebars
+
+*modelGenerator, generator=embeddedBond, name=rebarBond, executeAfterManualGeneration=True
+rebarElSet=rebars
+hostElSet=gen_all
+material=bond
+perimeter=31.4
+splitBars=True
+
+*job, name=job, domain=2d
+*solver, solver=NIST, name=theSolver
+
+*fieldOutput
+>>perNode, name=displacement, elSet=gen_all, field=displacement, result=U
+>>perNode, name=F, nSet=loadedEnd, field=displacement, result=P, f(x)='sum(x[:,0])', saveHistory=True,
+>>perElement, name=slip, elSet=rebarBond_bond, result=slip, quadraturePoint=0,
+>>perElement, name=bondStress, elSet=rebarBond_bond, result=bond stress, quadraturePoint=0,
+>>perNode, name=rebarDisplacement, elSet=rebars, field=displacement, result=U
+>>perElement, name=rebarNormalForce, elSet=rebars, result=normal force, quadraturePoint=0,
+
+*output, type=ensight, name=esExport
+>>perNode, fieldOutput=rebarDisplacement
+>>perElement, fieldOutput=rebarNormalForce
+>>perNode, fieldOutput=displacement
+>>perElement, fieldOutput=slip
+>>perElement, fieldOutput=bondStress
+>>configuration, overwrite=yes
+
+*step, solver=theSolver
+maxInc=0.05, minInc=1e-8, maxNumInc=1000, maxIter=15, stepLength=1
+>>dirichlet, name=support, nSet=gen_left, field=displacement, 1=0, 2=0
+>>dirichlet, name=pull, nSet=loadedEnd, field=displacement, 1=3.0, 2=0
