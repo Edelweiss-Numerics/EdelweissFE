@@ -100,9 +100,12 @@ The model is first rebuilt from the same input file, then restored in this order
        of the next increment, the enforced time increment, and whether the zero increment was done
    * - solver
      - its state between increments: the implicit solver's predictor (the last accepted increments
-       and their ``dU``, under arc length control also their increments of the load parameter, and the
-       load parameter of the step) and the time average fluxes of the Abaqus convergence criterion, the
-       explicit solver's last increment and accumulated external work
+       and their ``dU``, with the digest of the numbering of the degrees of freedom these are vectors
+       of, under arc length control also their increments of the load parameter, and the load
+       parameter of the step) and the time average fluxes of the Abaqus convergence criterion, the
+       explicit solver's last increment and accumulated external work. The resumed step
+       extrapolates the last accepted increments only if its first equation system numbers the
+       degrees of freedom as they are numbered (see :doc:`solvers`)
 
 Going back to a checkpoint within a run
 ---------------------------------------
