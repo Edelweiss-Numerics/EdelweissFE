@@ -31,9 +31,11 @@ Created on Mon Apr 10 20:26:22 2017
 @author: Matthias Neuner
 """
 from edelweissfe.config.phenomena import (
+    absoluteFluxResidualTolerance,
     fieldCorrectionTolerance,
     fluxResidualTolerance,
     fluxResidualToleranceAlternative,
+    relativeFieldCorrectionTolerance,
 )
 from edelweissfe.utils.misc import convertLinesToStringDictionary
 
@@ -41,8 +43,10 @@ from edelweissfe.utils.misc import convertLinesToStringDictionary
 def loadConfiguration(jobInfo):
     """load the default (field) tolerance settings from phenomena.py"""
     jobInfo["fieldCorrectionTolerance"] = fieldCorrectionTolerance
+    jobInfo["relativeFieldCorrectionTolerance"] = relativeFieldCorrectionTolerance
     jobInfo["fluxResidualTolerance"] = fluxResidualTolerance
     jobInfo["fluxResidualToleranceAlternative"] = fluxResidualToleranceAlternative
+    jobInfo["absoluteFluxResidualTolerance"] = absoluteFluxResidualTolerance
     return jobInfo
 
 

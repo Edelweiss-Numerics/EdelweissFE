@@ -84,7 +84,10 @@ inertiaKind = {
 }
 
 
-# field                  tolerance
+# The tolerances of the legacy convergence criterion per field; see edelweissfe.solvers.base.convergencecriteria.
+# The entry "scalar variables" applies to the scalar variables (e.g., Lagrange multipliers) of the model.
+
+# field                  absolute correction tolerance
 fieldCorrectionTolerance = {
     "displacement": 1e-7,
     "rotation": 1e-3,
@@ -100,6 +103,23 @@ fieldCorrectionTolerance = {
     "jacobi": 1e-8,
 }
 
+# field                  correction tolerance relative to the largest increment of the field; 0: none
+relativeFieldCorrectionTolerance = {
+    "displacement": 0.0,
+    "rotation": 0.0,
+    "micro rotation": 0.0,
+    "nonlocal damage": 0.0,
+    "nonlocal damage 2": 0.0,
+    "concentration": 0.0,
+    "chemical potential": 0.0,
+    "strain symmetric": 0.0,
+    "scalar variables": 0.0,
+    "plastic multiplier": 0.0,
+    "pressure": 0.0,
+    "jacobi": 0.0,
+}
+
+# field                  flux residual tolerance relative to the spatial average flux
 fluxResidualTolerance = {
     "displacement": 1e-8,
     "rotation": 1e-4,
@@ -115,6 +135,7 @@ fluxResidualTolerance = {
     "jacobi": 1e-8,
 }
 
+# field                  relative flux residual tolerance from iteration iterationsForAlternativeTolerance on
 fluxResidualToleranceAlternative = {
     "displacement": 5e-3,
     "rotation": 5e-3,
@@ -128,6 +149,23 @@ fluxResidualToleranceAlternative = {
     "plastic multiplier": 5e-3,
     "pressure": 5e-3,
     "jacobi": 5e-3,
+}
+
+# field                  absolute flux residual tolerance; the scalar variables' flux residual tolerances above are
+#                        absolute already
+absoluteFluxResidualTolerance = {
+    "displacement": 1e-7,
+    "rotation": 1e-7,
+    "micro rotation": 1e-7,
+    "nonlocal damage": 1e-7,
+    "nonlocal damage 2": 1e-7,
+    "concentration": 1e-7,
+    "chemical potential": 1e-7,
+    "strain symmetric": 1e-7,
+    "scalar variables": 0.0,
+    "plastic multiplier": 1e-7,
+    "pressure": 1e-7,
+    "jacobi": 1e-7,
 }
 
 # domain                 dimensions

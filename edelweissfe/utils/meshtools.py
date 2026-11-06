@@ -131,7 +131,7 @@ def currentNodeCoordinates(nodes: list, model: "FEModel", referenceCoordinates: 
         The current coordinates, of shape (nNodes, nDim).
     """
     displacementField = model.nodeFields.get("displacement")
-    if displacementField is None or "U" not in displacementField:
+    if displacementField is None:
         return referenceCoordinates.copy()
     indexOfNode = displacementField._indicesOfNodesInArray
     nDim = referenceCoordinates.shape[1]

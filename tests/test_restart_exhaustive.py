@@ -40,8 +40,17 @@ interruption, writing a checkpoint after every increment, and then resumes from 
 checkpoints -- including checkpoint 0, written at the start of the step (one more per step). Each resume is its
 own test case (``<solver>-<scenario>-resume<k>``) and must end bitwise identical to the uninterrupted
 run: time, element numbering and connectivity, every node field entry, every scalar variable, every
-element's quadrature-point state, every constraint's restart data and the times of the topology
-history. No tolerances, no per-case exceptions.
+element's quadrature-point state, every constraint's restart data, the model's additional parameters (e.g. the
+load parameter of the arc length method) and the times of the topology history. No tolerances, no per-case
+exceptions.
+
+That holds for the system matrix summed in VIJ form (``systemMatrixAssembly=vij``, the default), whose sums run in a
+fixed order: this is where the restart machinery is verified. Scenarios that name ``systemMatrixAssembly=direct``, too
+(cases ``<solver>-direct-<scenario>-...``), scatter the matrix straight into CSR by atomic additions, whose order follows
+the timing of the threads, so that two uninterrupted runs already differ by round-off. There, the resumed run must write
+the same checkpoints (count, step and time) and end with the same time, elements and topology history, exactly, and
+with the same node fields, scalar variables and additional parameters to round-off (see
+``_SOLUTION_RELATIVE_TOLERANCE``).
 
 Every CI run resumes from the first, the middle and the last checkpoint of each scenario (and its
 first chain); the other cases are marked ``exhaustive`` and run with ``pytest -m exhaustive`` --
@@ -238,6 +247,7 @@ _JOB = "\n*job, name=exhaustiveRestart, domain=3d\n"
 _SOLVERS = {
     "implicit": "*solver, solver=NIST, name=theSolver\n{solverOptions}\n",
     "NID": "*solver, solver=NID, name=theSolver\nnewmarkBeta=0.25\nnewmarkGamma=0.5\n{solverOptions}\n",
+    "arcLength": "*solver, solver=NISTPArcLength, name=theSolver\n{solverOptions}\n",
     "explicit": """*solver, solver=NED, name=theSolver
 courant-number=0.1
 output-frequency=1
@@ -258,10 +268,11 @@ maxInc=1, minInc=1e-14, maxNumInc={maxNumInc}, maxIter=25, stepLength=1.0
 """,
 }
 _STEP["NID"] = _STEP["implicit"]
+_STEP["arcLength"] = _STEP["implicit"]
 
 #: The prescribed displacement at the end of a step. The explicit run covers a far shorter time
 #: span within its increments, so it is loaded correspondingly faster.
-_AMPLITUDE = {"implicit": 0.05, "NID": 0.05, "explicit": 50.0}
+_AMPLITUDE = {"implicit": 0.05, "NID": 0.05, "arcLength": 0.05, "explicit": 50.0}
 
 _LOADS_BEND = """
 >>dirichlet, name=clamp, nSet=beam_left, field=displacement, 1=0, 2=0, 3=0
@@ -296,6 +307,28 @@ _LOADS_BEND_AND_DEACTIVATE = (
     + """>>modelupdate, update='model.constraints["topFaceEqualZ"].active=False'
 """
 )
+
+#: The bend by a load at the right end, scaled by the load parameter of the arc length method, which the right end's
+#: displacement controls.
+_LOADS_ARC_LENGTH = """
+>>options, name=theSolver, arcLengthController=bendControl
+>>indirectcontrol, name=bendControl, dof1='model.nodeSets["beam_right"][0].fields["displacement"]', cVector1='0, 1, 0', dof2='model.nodeSets["beam_left"][0].fields["displacement"]', cVector2='0, 0, 0', L=-{amplitude}
+>>dirichlet, name=clamp, nSet=beam_left, field=displacement, 1=0, 2=0, 3=0
+>>nodeforces, name=push, nSet=beam_right, field=displacement, components='0,-1,0'
+"""
+
+#: The step after the arc length controlled one holds the load it reached, without arc length control.
+_LOADS_HOLD_WITHOUT_ARC_LENGTH = """
+>>options, name=theSolver, arcLengthController=off
+>>dirichlet, name=clamp, nSet=beam_left, field=displacement, 1=0, 2=0, 3=0
+"""
+
+#: A second arc length step bends the right end back to its initial position: it declares the same change of the push
+#: on top of the load reached, and scales it by its own load parameter, from zero, which turns negative.
+_LOADS_ARC_LENGTH_BACK = """
+>>indirectcontrol, name=bendControl, dof1='model.nodeSets["beam_right"][0].fields["displacement"]', cVector1='0, 1, 0', dof2='model.nodeSets["beam_left"][0].fields["displacement"]', cVector2='0, 0, 0', L=0.0
+>>nodeforces, name=push, components='0,-1,0'
+"""
 
 _LOADS_SLIDE = """
 >>dirichlet, name=clamp, nSet=beam_left, field=displacement, 1=0, 2=0, 3=0
@@ -355,15 +388,25 @@ def _frictionalContact(model, run) -> str:
     return ""
 
 
+def _loadParameterChanged(model, run) -> str:
+    loadParameter = model.additionalParameters.get("arc length parameter", 0.0)
+    return "" if loadParameter != 0.0 else "the load parameter did not change"
+
+
 def _all(*checks):
     return lambda model, run: "; ".join(message for message in (check(model, run) for check in checks) if message)
 
+
+#: The ways of summing the system matrix a scenario row may name, per solver (key ``assemblies``): each is a case of
+#: its own. A row that names none runs its solvers with their default, VIJ, and does not write the option.
+_ASSEMBLIES = ("vij", "direct")
 
 #: One row per scenario: the solvers, the model blocks, the steps (their load blocks), and what the
 #: uninterrupted run must show to prove it exercises the feature. Remaining keys parametrize the deck.
 _SCENARIOS = {
     "amr": dict(
         solvers=["implicit", "explicit"],
+        assemblies={"implicit": _ASSEMBLIES},
         blocks=[_BEAM],
         threshold={"implicit": 6.0, "explicit": 20.0},
         steps=[_LOADS_BEND],
@@ -491,6 +534,33 @@ _SCENARIOS = {
         steps=[_LOADS_PRESS_AND_DRAG],
         check=_frictionalContact,
     ),
+    # (p) Arc length control: the load parameter of the step, and the predictor's history of its increments,
+    # with the quadratic prediction, which keeps the increments before the last one, too.
+    "arcLength": dict(
+        solvers=["arcLength"],
+        assemblies={"arcLength": _ASSEMBLIES},
+        blocks=[_BEAM_GEOMETRY],
+        solverOptions="extrapolation=quadratic",
+        steps=[_LOADS_ARC_LENGTH],
+        check=_loadParameterChanged,
+    ),
+    # (q) Two steps: resumes in the second must hold the loads the arc length controlled first one ended with.
+    "arcLengthTwoSteps": dict(
+        solvers=["arcLength"],
+        assemblies={"arcLength": _ASSEMBLIES},
+        blocks=[_BEAM_GEOMETRY],
+        steps=[_LOADS_ARC_LENGTH, _LOADS_HOLD_WITHOUT_ARC_LENGTH],
+        check=_loadParameterChanged,
+    ),
+    # (r) Two arc length steps: the second scales its own change of the push from the load parameter zero, so resumes
+    # in it must continue from the load parameter of the second step, and from the loads the first one ended with.
+    "twoArcLengthSteps": dict(
+        solvers=["arcLength"],
+        assemblies={"arcLength": _ASSEMBLIES},
+        blocks=[_BEAM_GEOMETRY],
+        steps=[_LOADS_ARC_LENGTH, _LOADS_ARC_LENGTH_BACK],
+        check=_loadParameterChanged,
+    ),
     # (o) A modelupdate executed at the start of step 1 changes the model by an arbitrary expression
     # (here: switches a penalty constraint off). No checkpoint records its effect, so every resume
     # after it -- in step 1 or step 2 -- is refused with a RestartError instead of silently running
@@ -506,12 +576,12 @@ _SCENARIOS = {
 
 #: Fixed increments per step: implicit runs are costlier per increment; explicit runs need more
 #: increments for the load (and AMR) to develop, and to put most checkpoints off the topology cycle.
-_N_INCREMENTS = {"implicit": 10, "NID": 10, "explicit": 20}
+_N_INCREMENTS = {"implicit": 10, "NID": 10, "arcLength": 10, "explicit": 20}
 
 #: How often an element may be split. The explicit runs need a second level to refine more than once
 #: within their short time span; the implicit ones refine repeatedly with one level, which keeps
 #: their meshes -- and so the test's runtime -- small.
-_MAX_LEVEL = {"implicit": 1, "NID": 1, "explicit": 2}
+_MAX_LEVEL = {"implicit": 1, "NID": 1, "arcLength": 1, "explicit": 2}
 
 #: Adaptive runs have no a-priori increment count: this is the count calibrated for the adaptive
 #: scenario (25 increments with cutbacks, plus the step-start checkpoint). The test asserts it, so a
@@ -547,7 +617,7 @@ def _writePlateStl(path: Path):
     path.write_text(_PLATE_STL.format("\n".join(facets)))
 
 
-def _deck(directory: Path, scenario: str, solver: str, extra: str = "") -> str:
+def _deck(directory: Path, scenario: str, solver: str, assembly: str | None, extra: str = "") -> str:
     spec = _SCENARIOS[scenario]
     stl = directory / "plate.stl"
     _writePlateStl(stl)
@@ -562,8 +632,9 @@ def _deck(directory: Path, scenario: str, solver: str, extra: str = "") -> str:
         )
         for block in spec["blocks"]
     )
+    solverOptions = [spec.get("solverOptions", "")] + ([] if assembly is None else ["systemMatrixAssembly=" + assembly])
     solverBlock = _SOLVERS[solver].format(
-        solverOptions=spec.get("solverOptions", ""),
+        solverOptions="\n".join(option for option in solverOptions if option),
         contactUpdateFrequency=spec.get("contactUpdateFrequency", 1),
         topologyCheckFrequency=TOPOLOGY_CHECK_FREQUENCY,
     )
@@ -612,10 +683,12 @@ def _state(model) -> dict:
         "topology history modifiers": np.array([str(record.modifier) for record in history]),
     }
     for name, field in model.nodeFields.items():
-        for entry in field._values:
+        for entry in field.ENTRIES:
             state["{:}/{:}".format(name, entry)] = np.array(field[entry])
     for name in sorted(model.scalarVariables):
         state["scalar variable {:}".format(name)] = np.array([model.scalarVariables[name].value])
+    for name in sorted(model.additionalParameters):
+        state["additional parameter {:}".format(name)] = np.array([model.additionalParameters[name]])
     for number in sorted(model.elements):
         try:
             state["element {:} state".format(number)] = np.array(model.elements[number].getStateVars())
@@ -628,6 +701,65 @@ def _state(model) -> dict:
         for key in sorted(data):
             state["constraint {:}/{:}".format(name, key)] = np.asarray(data[key])
     return state
+
+
+#: The parts of :func:`_state` a run with ``systemMatrixAssembly=direct`` must reproduce exactly: where the run is and
+#: what its mesh is. Round-off cannot move them; the rest of the state compares to round-off or, derived from it (the
+#: elements' and constraints' state), not at all.
+_EXACT_UNDER_ROUND_OFF = (
+    "time",
+    "element numbers",
+    "connectivity",
+    "topology history times",
+    "topology history modifiers",
+)
+
+#: The tolerances of the comparison under ``systemMatrixAssembly=direct``, relative to the largest magnitude a quantity
+#: reaches over the uninterrupted run (:func:`_magnitudes`). Two runs sum the same blocks in different orders, each
+#: solve differs by a few units in the last place, and the increments carry that on: the solution (U, dU, scalar
+#: variables, the load parameter) of two uninterrupted runs, or of a resumed and an uninterrupted one, deviates by up
+#: to a few dozen units in the last place of its magnitude. The forces P = K U deviate by up to about a thousand: the
+#: round-off in U is rough from node to node, and the stiffness amplifies such a field far more than the smooth
+#: deformation that sets the magnitude of P. Each tolerance is four times the largest deviation measured, rounded up to
+#: a power of two -- many orders of magnitude below the deviation a restart defect causes, of the order of an increment.
+_SOLUTION_RELATIVE_TOLERANCE = 256 * np.finfo(float).eps
+_FORCE_RELATIVE_TOLERANCE = 8192 * np.finfo(float).eps
+
+
+def _magnitudes(model) -> dict:
+    """The magnitude of each quantity :func:`_state` compares to round-off: node field entries, scalar variables and
+    additional parameters, keyed as there."""
+
+    magnitudes = {}
+    for name, field in model.nodeFields.items():
+        for entry in field._values:
+            magnitudes["{:}/{:}".format(name, entry)] = float(np.abs(field[entry]).max(initial=0.0))
+    for name in model.scalarVariables:
+        magnitudes["scalar variable {:}".format(name)] = abs(model.scalarVariables[name].value)
+    for name in model.additionalParameters:
+        magnitudes["additional parameter {:}".format(name)] = abs(model.additionalParameters[name])
+    return magnitudes
+
+
+def _differingBeyondRoundOff(resumed: dict, reference: dict, magnitudes: dict) -> list:
+    """The parts of two :func:`_state` snapshots of direct-assembly runs that differ by more than round-off: the
+    exact ones (:data:`_EXACT_UNDER_ROUND_OFF`) by anything, the others by more than
+    :data:`_SOLUTION_RELATIVE_TOLERANCE` (the forces P: :data:`_FORCE_RELATIVE_TOLERANCE`) relative to their largest
+    magnitude over the run."""
+
+    differing = []
+    for key in _EXACT_UNDER_ROUND_OFF:
+        if not np.array_equal(resumed[key], reference[key]):
+            differing.append(key)
+    for key in sorted(magnitudes):
+        if key not in resumed or key not in reference or resumed[key].shape != reference[key].shape:
+            differing.append(key)
+            continue
+        deviation = float(np.abs(resumed[key] - reference[key]).max(initial=0.0))
+        tolerance = _FORCE_RELATIVE_TOLERANCE if key.endswith("/P") else _SOLUTION_RELATIVE_TOLERANCE
+        if deviation > tolerance * magnitudes[key]:
+            differing.append("{:} by {:.3e} of its magnitude {:.3e}".format(key, deviation, magnitudes[key]))
+    return differing
 
 
 def _checkpoints(directory: Path) -> list:
@@ -700,12 +832,12 @@ def _plainValue(value, directory: str, depth: int = 0):
     return None
 
 
-def _components(model, step, outputManagers, directory: Path) -> dict:
+def _components(model, step, directory: Path) -> dict:
     """Every plain-valued attribute of every component a checkpoint concerns, by component."""
     components = {"solver": step.solver, "timeStepper": step.timeStepper}
     components |= {"constraint " + name: c for name, c in model.constraints.items()}
     components |= {"modifier " + name: m for name, m in model.modelModifiers.items()}
-    components |= {"output " + name: m for name, m in outputManagers.items()}
+    components |= {"output " + m.name: m for m in step.outputManagers}
     components |= {"fieldOutput " + name: o for name, o in step.fieldOutputController.fieldOutputs.items()}
     for actionType, actions in step.actions.items():
         components |= {"{:} {:}".format(actionType, name): a for name, a in actions.items()}
@@ -731,9 +863,10 @@ def _differingComponents(resumed: dict, reference: dict) -> list:
 
 
 @cache
-def _uninterrupted(scenario: str, solver: str, directory: Path):
+def _uninterrupted(scenario: str, solver: str, assembly: str | None, directory: Path):
     """The reference run, writing a checkpoint after every increment; returns its final state, its
-    checkpoints, and why it does not exercise its feature ('' if it does)."""
+    checkpoints, what it wrote at them and the largest magnitudes it reached (:func:`_magnitudes`), and why it does
+    not exercise its feature ('' if it does)."""
 
     directory.mkdir(parents=True, exist_ok=True)
     # Instrument the time stepper to see increment sizes and cutbacks (the feature check only).
@@ -743,6 +876,8 @@ def _uninterrupted(scenario: str, solver: str, directory: Path):
     write = restartOutputManager.writeCheckpoint
     #: The components' attributes at each checkpoint, by checkpoint key.
     componentsAtCheckpoint = {}
+    #: The largest magnitude of each quantity over the checkpoints.
+    magnitudes = {}
 
     def recordingPropose(self):
         timeStep = propose(self)
@@ -759,11 +894,11 @@ def _uninterrupted(scenario: str, solver: str, directory: Path):
         nCutbacks[0] += 1
         return reject(self, cutbackFactor)
 
-    def recordingWrite(fileName, model, step, outputManagers, **kwargs):
-        write(fileName, model, step, outputManagers, **kwargs)
-        componentsAtCheckpoint[_checkpointKey(Path(fileName))] = _components(
-            model, step, outputManagers, Path(fileName).parent
-        )
+    def recordingWrite(fileName, model, step, **kwargs):
+        write(fileName, model, step, **kwargs)
+        componentsAtCheckpoint[_checkpointKey(Path(fileName))] = _components(model, step, Path(fileName).parent)
+        for key, magnitude in _magnitudes(model).items():
+            magnitudes[key] = max(magnitudes.get(key, 0.0), magnitude)
 
     AdaptiveTimeStepper.proposeTimeStep = recordingPropose
     AdaptiveTimeStepper.rejectTimeStep = countingReject
@@ -771,7 +906,7 @@ def _uninterrupted(scenario: str, solver: str, directory: Path):
     restartOutputManager.writeCheckpoint = recordingWrite
     spec = _SCENARIOS[scenario]
     try:
-        deck = _deck(directory, scenario, solver, _writer(directory, spec.get("writeInterval", 1)))
+        deck = _deck(directory, scenario, solver, assembly, _writer(directory, spec.get("writeInterval", 1)))
         model = _run(directory / "uninterrupted.inp", deck)
     finally:
         AdaptiveTimeStepper.proposeTimeStep, AdaptiveTimeStepper.rejectTimeStep = propose, reject
@@ -787,6 +922,7 @@ def _uninterrupted(scenario: str, solver: str, directory: Path):
     output = dict(
         checkpointKeys=[_checkpointKey(c) for c in checkpoints],
         componentsAtCheckpoint=componentsAtCheckpoint,
+        magnitudes=magnitudes,
     )
     return _state(model), checkpoints, output, spec["check"](model, run)
 
@@ -811,17 +947,19 @@ def _cases():
     exhaustive = pytest.mark.exhaustive
     for scenario, spec in _SCENARIOS.items():
         for solver in spec["solvers"]:
-            n = _nCheckpoints(scenario, solver)
-            everyRun = {0, n // 2, n - 1}
-            for k in range(n):
-                marks = () if k in everyRun else (exhaustive,)
-                yield pytest.param(
-                    scenario, solver, (k,), id="{:}-{:}-resume{:02d}".format(solver, scenario, k), marks=marks
-                )
-            if scenario in _CHAINED_SCENARIOS:
-                for index, (k, j) in enumerate(_CHAINS):
-                    caseId = "{:}-{:}-chain{:02d}-{:02d}".format(solver, scenario, k, j)
-                    yield pytest.param(scenario, solver, (k, j), id=caseId, marks=() if index == 0 else (exhaustive,))
+            for assembly in spec.get("assemblies", {}).get(solver, (None,)):
+                label = solver if assembly is None else "{:}-{:}".format(solver, assembly)
+                n = _nCheckpoints(scenario, solver)
+                everyRun = {0, n // 2, n - 1}
+                for k in range(n):
+                    marks = () if k in everyRun else (exhaustive,)
+                    caseId = "{:}-{:}-resume{:02d}".format(label, scenario, k)
+                    yield pytest.param(scenario, solver, assembly, (k,), id=caseId, marks=marks)
+                if scenario in _CHAINED_SCENARIOS:
+                    for index, (k, j) in enumerate(_CHAINS):
+                        caseId = "{:}-{:}-chain{:02d}-{:02d}".format(label, scenario, k, j)
+                        marks = () if index == 0 else (exhaustive,)
+                        yield pytest.param(scenario, solver, assembly, (k, j), id=caseId, marks=marks)
 
 
 @pytest.fixture(scope="module")
@@ -829,10 +967,11 @@ def workDirectory(tmp_path_factory) -> Path:
     return tmp_path_factory.mktemp("exhaustiveRestart")
 
 
-@pytest.mark.parametrize("scenario, solver, chain", list(_cases()))
-def test_resume_from_every_checkpoint_is_exact(workDirectory, scenario, solver, chain):
+@pytest.mark.parametrize("scenario, solver, assembly, chain", list(_cases()))
+def test_resume_from_every_checkpoint_is_exact(workDirectory, scenario, solver, assembly, chain):
     spec = _SCENARIOS[scenario]
-    reference, checkpoints, output, featureMissing = _uninterrupted(scenario, solver, workDirectory / scenario / solver)
+    runDirectory = workDirectory / scenario / solver / (assembly or "default")
+    reference, checkpoints, output, featureMissing = _uninterrupted(scenario, solver, assembly, runDirectory)
     assert not featureMissing, featureMissing
     assert len(checkpoints) == _nCheckpoints(scenario, solver), "expected {:} checkpoints, got {:}".format(
         _nCheckpoints(scenario, solver), len(checkpoints)
@@ -841,15 +980,15 @@ def test_resume_from_every_checkpoint_is_exact(workDirectory, scenario, solver, 
     def writer(directory):
         return _writer(directory, spec.get("writeInterval", 1))
 
-    resumeDirectory = workDirectory / scenario / solver / "resume{:}".format("-".join(map(str, chain)))
+    resumeDirectory = runDirectory / "resume{:}".format("-".join(map(str, chain)))
     resumeDirectory.mkdir()
     # Each resumed run finds the export file as an interrupted run leaves it: written past the
     # checkpoint it resumes from (here, all the way to the end). It must continue it exactly.
-    referenceExport = workDirectory / scenario / solver / "exportU.csv"
+    referenceExport = runDirectory / "exportU.csv"
     checkpoint = checkpoints[chain[0]]
     for j in chain[1:]:
         shutil.copy(referenceExport, resumeDirectory / "exportU.csv")
-        deck = _deck(resumeDirectory, scenario, solver, _reader(checkpoint) + writer(resumeDirectory))
+        deck = _deck(resumeDirectory, scenario, solver, assembly, _reader(checkpoint) + writer(resumeDirectory))
         _run(resumeDirectory / "resumed.inp", deck)
         written = _checkpoints(resumeDirectory)
         assert j < len(written), "the resumed run wrote only {:} checkpoints".format(len(written))
@@ -859,7 +998,7 @@ def test_resume_from_every_checkpoint_is_exact(workDirectory, scenario, solver, 
 
     resumeKey = _checkpointKey(checkpoint)
     shutil.copy(referenceExport, resumeDirectory / "exportU.csv")
-    deck = _deck(resumeDirectory, scenario, solver, _reader(checkpoint) + writer(resumeDirectory))
+    deck = _deck(resumeDirectory, scenario, solver, assembly, _reader(checkpoint) + writer(resumeDirectory))
     if spec.get("resumeIsRefused"):
         with pytest.raises(RestartError):
             _run(resumeDirectory / "resumed.inp", deck)
@@ -867,11 +1006,9 @@ def test_resume_from_every_checkpoint_is_exact(workDirectory, scenario, solver, 
     componentsAtCheckpoint = {}
     write = restartOutputManager.writeCheckpoint
 
-    def recordingWrite(fileName, model, step, outputManagers, **kwargs):
-        write(fileName, model, step, outputManagers, **kwargs)
-        componentsAtCheckpoint[_checkpointKey(Path(fileName))] = _components(
-            model, step, outputManagers, Path(fileName).parent
-        )
+    def recordingWrite(fileName, model, step, **kwargs):
+        write(fileName, model, step, **kwargs)
+        componentsAtCheckpoint[_checkpointKey(Path(fileName))] = _components(model, step, Path(fileName).parent)
 
     restartOutputManager.writeCheckpoint = recordingWrite
     try:
@@ -879,15 +1016,23 @@ def test_resume_from_every_checkpoint_is_exact(workDirectory, scenario, solver, 
     finally:
         restartOutputManager.writeCheckpoint = write
 
-    differing = [key for key in reference if key not in resumed or not np.array_equal(resumed[key], reference[key])]
-    differing += [key for key in resumed if key not in reference]
-
     # The resumed run writes the checkpoints the uninterrupted run wrote after the resume point --
-    # the same number, at the same (step, time) -- and ends with the same export file, byte for byte.
+    # the same number, at the same (step, time).
     expectedKeys = [key for key in output["checkpointKeys"] if key > resumeKey]
     writtenKeys = [_checkpointKey(c) for c in _checkpoints(resumeDirectory)]
+    differing = []
     if writtenKeys != expectedKeys:
         differing.append("checkpoints written {:} != expected {:}".format(writtenKeys, expectedKeys))
+
+    if assembly == "direct":
+        # Summed in an order that follows the threads' timing: the state to round-off, see the module docstring.
+        differing += _differingBeyondRoundOff(resumed, reference, output["magnitudes"])
+        assert not differing, "resuming from {:} ends elsewhere: {:}".format(checkpoint, differing[:8])
+        return
+
+    differing += [key for key in reference if key not in resumed or not np.array_equal(resumed[key], reference[key])]
+    differing += [key for key in resumed if key not in reference]
+    # It ends with the same export file, byte for byte.
     if (resumeDirectory / "exportU.csv").read_bytes() != referenceExport.read_bytes():
         differing.append("the export file differs from the uninterrupted run's")
 
@@ -911,5 +1056,15 @@ if __name__ == "__main__":
         if len(sys.argv) > 1 and scenario not in sys.argv[1:]:
             continue
         for solver in spec["solvers"]:
-            _, checkpoints, _, missing = _uninterrupted(scenario, solver, Path(tempfile.mkdtemp()))
-            print(scenario, solver, "checkpoints:", len(checkpoints), "feature:", missing or "ok", file=sys.stderr)
+            for assembly in spec.get("assemblies", {}).get(solver, (None,)):
+                _, checkpoints, _, missing = _uninterrupted(scenario, solver, assembly, Path(tempfile.mkdtemp()))
+                print(
+                    scenario,
+                    solver,
+                    assembly,
+                    "checkpoints:",
+                    len(checkpoints),
+                    "feature:",
+                    missing or "ok",
+                    file=sys.stderr,
+                )

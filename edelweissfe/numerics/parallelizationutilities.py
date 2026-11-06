@@ -262,6 +262,68 @@ def mapChunksInParallel(items, work, chunksPerThread: int = 4) -> list:
     return _mapOnPoolAndWaitForRunningCalls(work, chunked_iterable(items, chunkSize), numThreads)
 
 
+def mapChunksOnWorkers(items, work, numberOfWorkers: int, chunksPerWorker: int = 4) -> list:
+    """Call ``work(worker, chunk)`` for consecutive chunks of ``items``, each chunk on a fixed worker thread, and return
+    what the calls returned, in the order of the chunks.
+
+    For an entity loop whose workers write through memory of their own, which no other call may use at the same
+    time -- each worker its own scratch array for the blocks of the system matrix (see
+    :meth:`~edelweissfe.numerics.systemmatrixassembly.SystemMatrixAssembly.blocksOfWorker`). Unlike
+    :func:`mapChunksInParallel`, which hands each chunk to whichever thread is free, the chunks are dealt out to the
+    workers in turn: worker ``w`` handles chunks ``w``, ``w + numberOfWorkers``, ..., in this order, so every worker
+    meets the same entities in every run. Several chunks per worker, interleaved, spread a region of expensive
+    entities (e.g., at a damage front, adjacent in the element order) over all workers.
+
+    Runs serially in the calling thread, as worker 0 with one chunk holding all ``items``, for one worker.
+
+    When it returns or raises, no call is running. If a call raises, the exception is that of the first failing chunk in
+    the order of the chunks, the one a serial loop meets first: a worker stops at its first failing chunk, so every
+    chunk before the first failing one has run, and none of them failed.
+
+    Parameters
+    ----------
+    items
+        The entities, a sized iterable (a list, a dictionary view).
+    work
+        Called once per chunk, with the number of the worker (``0 <= worker < numberOfWorkers``) and a tuple of
+        consecutive items; a worker must write only to what belongs to its items, or to what belongs to the worker.
+    numberOfWorkers
+        The number of worker threads.
+    chunksPerWorker
+        How many chunks each worker is handed.
+
+    Returns
+    -------
+    list
+        What ``work`` returned for each chunk, in order.
+    """
+
+    if numberOfWorkers == 1:
+        return [work(0, items)]
+
+    chunkSize = max(1, len(items) // (numberOfWorkers * chunksPerWorker))
+    chunks = list(chunked_iterable(items, chunkSize))
+    results = [None] * len(chunks)
+
+    def workOfWorker(worker):
+        for chunkNumber in range(worker, len(chunks), numberOfWorkers):
+            try:
+                results[chunkNumber] = work(worker, chunks[chunkNumber])
+            except Exception as e:
+                return chunkNumber, e
+        return None
+
+    failures = [
+        failure
+        for failure in _mapOnPoolAndWaitForRunningCalls(workOfWorker, range(numberOfWorkers), numberOfWorkers)
+        if failure
+    ]
+    if failures:
+        raise min(failures, key=lambda failure: failure[0])[1]
+
+    return results
+
+
 def forEachSliceInParallel(work, length: int, sliceLength: int = 1 << 20) -> list:
     """Call ``work(s)`` for consecutive slices ``s`` that together cover ``range(length)``, on the
     persistent thread pool, and return what the calls returned, in the order of the slices.

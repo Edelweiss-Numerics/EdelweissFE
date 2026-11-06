@@ -199,11 +199,12 @@ direction vectors
         (\mathbf{r}_s \times \mathbf{n}_s)
     \end{bmatrix},
 
-and the residual (external force) and stiffness contributions are assembled exactly as in the
-node-to-rigid-surface penalty constraint,
+and, since the contact force on the nodes is :math:`-f_n\, \mathbf{w}`, the residual contribution
+-- its negative, see :ref:`residual-and-tangent-convention` -- and its tangent are assembled exactly
+as in the node-to-rigid-surface penalty constraint,
 
 .. math::
-    \mathbf{P}_{ext} \mathrel{-{=}} f_n\, \mathbf{w} , \qquad
+    \mathbf{P} \mathrel{+{=}} f_n\, \mathbf{w} , \qquad
     \mathbf{K} \mathrel{+{=}} k\, (\mathbf{w} \otimes \mathbf{w}) + f_n\, \nabla \mathbf{w} ,
 
 per slave node, where :math:`\mathbf{w}` collects the slave and RP blocks.
@@ -239,7 +240,7 @@ implemented blocks (verified against finite differences for arbitrary accumulate
 :math:`\boldsymbol{\theta}_{RP}\boldsymbol{\theta}_{RP}` self-block, which would require the second
 derivative of the exponential map, is omitted; this affects only the convergence rate, not the
 correctness of the converged solution. The per-block breakdown of the tangent is given in the inline
-comments of the ``applyConstraint`` method in the module source.
+comments of the ``computeKernels`` method in the module source.
 
 .. pprint:: constraint:nodetodiscreterigidbodypenalty
     :caption: Options:
@@ -515,6 +516,44 @@ Implementing your own constraints
 ---------------------------------
 
 Subclass from the constraint base class in module ``edelweissfe.constraints.base.constraintbase``
+and implement its ``computeKernels``. A constraint enters the equation system like an element does
+(see :ref:`residual-and-tangent-convention`): it adds its residual contribution :math:`\mathbf{P}`
+-- the negative of the force it exerts on its nodes -- and the tangent
+:math:`\mathbf{K} = \partial \mathbf{P} / \partial \mathbf{U}`. Two examples:
+
+* A **penalty** spring of stiffness :math:`k` that pulls a degree of freedom :math:`u` towards
+  :math:`\bar{u}` exerts the force :math:`-k\,(u - \bar{u})` on its node, so it adds
+  :math:`P \mathrel{+}= k\,(u - \bar{u})` and :math:`K \mathrel{+}= k`, exactly as a spring element
+  would. ``directionalspringpenalty`` is this constraint.
+* A **Lagrange multiplier** :math:`\boldsymbol{\lambda}` enforcing :math:`\mathbf{g}(\mathbf{u}) =
+  \mathbf{0}` adds :math:`\boldsymbol{\lambda}^T \partial \mathbf{g} / \partial \mathbf{u}` to the rows
+  of the nodes and :math:`\mathbf{g}` to the rows of the multipliers, with the tangent
+  :math:`\begin{bmatrix} \boldsymbol{\lambda}^T \partial^2 \mathbf{g} / \partial \mathbf{u}^2 &
+  (\partial \mathbf{g} / \partial \mathbf{u})^T \\ \partial \mathbf{g} / \partial \mathbf{u} &
+  \mathbf{0} \end{bmatrix}`. ``equalvaluelagrangian`` and ``rigidbody`` are such constraints.
+
+Because :math:`\mathbf{K}` is the derivative of exactly what is added to :math:`\mathbf{P}`, a
+constraint can be checked by finite differences of its own ``computeKernels``: a wrong tangent, or a
+wrong sign of :math:`\mathbf{P}` alone, shows up as a mismatch. :math:`\mathbf{P}` and :math:`\mathbf{K}` negated
+together pass this check, so the test of a constraint also checks the direction of the forces it exerts on its nodes:
+a penalty pulls them back towards what it prescribes, a contact pushes the bodies apart, a Lagrange multiplier acts on
+them as :math:`\boldsymbol{\lambda}^T \partial \mathbf{g} / \partial \mathbf{u}` with the constraint's own
+:math:`\mathbf{g}`. ``tests/test_residual_tangent_convention.py`` does both for the constraints shipped with
+EdelweissFE (the two integrated surface contact constraints in their own test modules); add a case there for a new
+one. The helpers it uses are part of the package, so that the tests of a package with constraints of its own use them
+as well:
+
+.. automodule:: edelweissfe.utils.residualtangentcheck
+    :members:
+
+A constraint can be **switched off** through its ``active`` attribute. A constraint that is switched off is not
+part of the equation system: it gets no degrees of freedom, the solvers do not evaluate it, and its scalar variables
+-- the Lagrange multipliers of ``equalvaluelagrangian``, say -- leave the equation system with it, so that they leave
+no unknowns without an equation behind. A ``modelupdate`` step action switches a constraint off for a step, as in
+``testfiles/marmot/PenaltyBasedIndirectControl``; a constraint may also switch itself off in its
+``updateConnectivity``, e.g. a contact constraint whose partner is out of reach, and then reports a change of its
+connectivity, so that the solver rebuilds its equation system. A switch-off from outside lasts until the constraint is
+switched on again from outside: a constraint that switches itself on does not undo it.
 
 .. automodule:: edelweissfe.constraints.base.constraintbase
     :members:
