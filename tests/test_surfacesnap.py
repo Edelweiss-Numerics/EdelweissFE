@@ -236,9 +236,6 @@ def _buildModel(tmp_path: Path, midsideNodes: str, maxLevel: int = 1, nSectors: 
     model.prepareYourself(journal)
     model.advanceToTime(0.0)
 
-    for nodeField in model.nodeFields.values():
-        nodeField.createFieldValueEntry("U")
-        nodeField.createFieldValueEntry("P")
     model._linkFieldVariableObjects(model.nodeSets["all"])
 
     return model, wallLabels
@@ -464,9 +461,6 @@ maxInc=1.0, minInc=1.0, maxNumInc=1, maxIter=25, stepLength=1
     model = fillFEModelFromInputFile(model, inputfile, journal)
     model.prepareYourself(journal)
     model.advanceToTime(0.0)
-    for nodeField in model.nodeFields.values():
-        nodeField.createFieldValueEntry("U")
-        nodeField.createFieldValueEntry("P")
     model._linkFieldVariableObjects(model.nodeSets["all"])
     return model, wallLabels
 

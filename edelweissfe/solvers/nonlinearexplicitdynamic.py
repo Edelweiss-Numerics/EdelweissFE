@@ -78,7 +78,7 @@ the latter two, and what they cost in accuracy, is documented under
 **Constraints.** Multi-point constraints are enforced by folding a slave's mass and force onto its
 masters (row-sum, mass-conserving) and slaving it kinematically, which leaves the critical time step
 untouched. Other constraints -- contact above all -- are evaluated through
-:meth:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.applyConstraintExplicit`, which
+:meth:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernelsExplicit`, which
 asks for forces and no tangent, since a tangent assembled here would enter nothing. A constraint
 that can act *only* through its tangent contributes nothing to an explicit increment and is
 refused at validation rather than silently ignored.
@@ -110,12 +110,66 @@ smallest coefficient the increment divides by is reported alongside -- an inerti
 second-order degree of freedom, a damping at a first-order one -- since that is what bounds the
 step.
 
+**The force it publishes.** The node field result ``P`` is, as in every solver, the internal force
+with the inertial and damping forces, :math:`\\boldsymbol{f}_\\mathrm{int} + \\boldsymbol{M}
+\\boldsymbol{a} + \\boldsymbol{C} \\boldsymbol{v}`, without the loads and the constraints (see
+:doc:`/documentation/nodefieldresults`). The central difference makes the inertial and damping
+forces at the end of an increment exactly the net force :math:`\\boldsymbol{f}_\\mathrm{net}` the
+next velocity update divides by -- that update solves :math:`\\boldsymbol{M} (\\boldsymbol{v}_{n+3/2}
+- \\boldsymbol{v}_{n+1/2}) / \\Delta \\bar{t} + \\boldsymbol{C} (\\boldsymbol{v}_{n+3/2} +
+\\boldsymbol{v}_{n+1/2}) / 2 = \\boldsymbol{f}_\\mathrm{net}` -- so ``P`` is
+:math:`\\boldsymbol{f}_\\mathrm{int} + \\boldsymbol{f}_\\mathrm{net}` at every degree of freedom with
+an equation of motion. Two kinds have none. At a degree of freedom with a prescribed motion, the
+acceleration at the end of the increment is set by the prescribed velocity of the next increment,
+which is not known when the increment is accepted, so ``P`` there is
+:math:`\\boldsymbol{f}_\\mathrm{int}` alone: the reaction, without the inertia of the support's own
+lumped mass. A multi-point-constraint slave carries no inertia of its own -- it is folded onto its
+masters, whose ``P`` holds it -- so ``P`` there is its :math:`\\boldsymbol{f}_\\mathrm{int}` as well.
+
+**The velocity and the acceleration it publishes.** Within a step, the velocity ``V`` the model
+receives at every accepted increment is the leapfrog's own, :math:`\\boldsymbol{v}_{n+1/2}`, half an
+increment behind the solution; on a field integrated by forward Euler, it is the rate of the
+increment just taken. The acceleration ``A`` is the one at the end of the increment: the one with
+which the velocity at that time, :math:`\\boldsymbol{v}_{n+1} = \\boldsymbol{v}_{n+1/2} + \\tfrac{1}{2}
+\\Delta t \\, \\boldsymbol{a}_{n+1}`, satisfies the equation of motion, :math:`\\boldsymbol{M}
+\\boldsymbol{a}_{n+1} + \\boldsymbol{C} \\boldsymbol{v}_{n+1} = \\boldsymbol{f}_\\mathrm{net}`, so
+
+.. math::
+
+    \\left( \\boldsymbol{M} + \\tfrac{1}{2} \\Delta t \\, \\boldsymbol{C} \\right) \\boldsymbol{a}_{n+1}
+        = \\boldsymbol{f}_\\mathrm{net} - \\boldsymbol{C} \\boldsymbol{v}_{n+1/2},
+
+which is :math:`\\boldsymbol{M}^{-1} \\boldsymbol{f}_\\mathrm{net}` without damping. On a field
+integrated by forward Euler, which has no inertia, it is the change of the rate from the increment
+just taken to the rate at the end of it. It is zero where the motion is prescribed, as the next
+increment's prescribed velocity sets it, and a multi-point-constraint slave takes it from its
+masters, as it takes its velocity. At the end of the step, the velocity is advanced by the half
+increment it lags behind (:meth:`~edelweissfe.models.femodel.FEModel.advanceVelocity`), so that the
+step leaves the velocity at its end time, as every solver does (see
+:doc:`/documentation/nodefieldresults`).
+
+**The net force is solver state, and a step starts from the model's state.** The net force lives
+within one equation system, and is never read back from the model. A rebuild after a change of a
+constraint's connectivity carries it over by numbering, and a resumed step takes it from its
+checkpoint. After a mesh change it starts at zero: re-evaluating it would run the constitutive law
+off-cycle and write into the material state, and zero is an O(dT) error for one increment. At the
+start of a step, it is the net force of the state the model holds, :math:`\\boldsymbol{f}_\\mathrm{net}
+= \\boldsymbol{M} \\boldsymbol{a}_0 + \\boldsymbol{C} \\boldsymbol{v}_0`, formed from the model's
+velocity and acceleration with the lumped operators, without evaluating anything (and zero where the
+motion is prescribed), and the first increment is the leapfrog's half step from
+:math:`\\boldsymbol{v}_0`. After a quasi-static step, which leaves the model at rest, it is zero: the
+start state is taken as in equilibrium, exact after a quasi-static step that converged there (a
+gravity preload, for instance), and a lag of one increment for a load applied suddenly at the start.
+After an explicit step, it is the net force that step ended with, and the leapfrog continues as
+though the two steps were one (with damping, to second order in the time increment). After an
+implicit dynamic step, the step starts from the velocity and the acceleration that step ended with.
+
 **Restart.** A resumed run must not repeat the half-step that starts a leapfrog: the velocity in
 the checkpoint already carries the half-increment offset, so applying the startup again would apply
-one half-impulse too few. The solver therefore takes the previous time increment from the restart
-state rather than synthesising it, and the velocity field is checkpointed in its own right -- an
-implicit solver reconstructs everything it needs from the displacement, a central-difference scheme
-does not.
+one half-impulse too few. The solver therefore takes the previous time increment and the net force
+from the restart state rather than synthesising them, and the velocity field is checkpointed in its
+own right, with the model -- an implicit solver reconstructs everything it needs from the
+displacement, a central-difference scheme does not.
 """
 
 from copy import deepcopy
@@ -128,7 +182,7 @@ import edelweissfe.utils.performancetiming as performancetiming
 from edelweissfe.config.phenomena import carriesKineticEnergy, carriesLinearMomentum
 from edelweissfe.constraints.base.constraintbase import ConstraintBase
 from edelweissfe.models.femodel import FEModel
-from edelweissfe.numerics.dofmanager import DofManager, DofVector
+from edelweissfe.numerics.dofmanager import DofVector
 from edelweissfe.numerics.mpctransformation import MultiPointConstraintTransformation
 from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
 from edelweissfe.solvers.base.conservationchecks import (
@@ -281,8 +335,16 @@ class ExplicitSystem:
         The solution increment of the increment being computed.
     V
         The velocity vector, staggered half an increment behind ``U``.
-    P
-        The net nodal force -- external minus internal -- which drives the velocity update.
+    A
+        The acceleration at the end of the last increment (see :meth:`NED.accelerationAtTheEndOfTheIncrement`),
+        which the model receives with the velocity. At the start of a step, the one the model holds, from which the
+        step's first net force is formed (see :meth:`NED.formNetForceOfTheModelsState`).
+    netForce
+        The net nodal force -- external minus internal, with the loads and the constraints -- which drives the
+        velocity update of the next increment.
+    internalForce
+        The elements' sum of the increment, :math:`\\boldsymbol{f}_\\mathrm{int}`, from which the published
+        force is formed at acceptance (see :meth:`NED.internalInertialAndDampingForce`).
     criticalTimeStep
         The stable time increment for the current mesh, already scaled by the courant number.
     """
@@ -291,7 +353,9 @@ class ExplicitSystem:
     U: DofVector
     dU: DofVector
     V: DofVector
-    P: DofVector
+    A: DofVector
+    netForce: DofVector
+    internalForce: DofVector
     criticalTimeStep: float
 
 
@@ -353,10 +417,13 @@ class NED(NonlinearSolverBase):
         "expect-first-order-fields": [],
     }
 
-    #: The last completed increment (read by the central-difference velocity update) and the external
-    #: work, an accumulator that cannot be reconstructed from the solution.
+    #: The last completed increment and the net force, both read by the central-difference velocity
+    #: update of the next increment, and the external work, an accumulator that cannot be reconstructed
+    #: from the solution. The velocity and the acceleration are the model's (entries ``V`` and ``A`` of its
+    #: node fields).
     checkpointedState = {
         "prevTimeStep": TimeStep,
+        "_netForce": np.ndarray,
         "_externalWork": float,
         # The energy-balance warnings are given once per step, not again after a resume.
         "_warnedAboutMissingInternalEnergy": bool,
@@ -402,15 +469,25 @@ class NED(NonlinearSolverBase):
         #: the first increment of a cold step the leapfrog's half step; a resumed step uses the
         #: checkpointed one, since the checkpointed velocity already carries the half-step offset.
         self.prevTimeStep = None
-        #: Per-constraint force buffer and scatter plan, by constraint name; cleared on every
-        #: DofManager rebuild.
-        self._constraintForcePlans = {}
+        #: The net force of the last completed increment, which the next velocity update divides by; a
+        #: vector of the current equation system. None between steps, so that the first build of a step
+        #: can tell a resumed step (whose checkpoint holds it) from a cold one, which forms it from the
+        #: state of the model (see :meth:`formNetForceOfTheModelsState`).
+        self._netForce = None
+        #: The inertia and the damping of every degree of freedom of the current equation system, the
+        #: coefficients of its equation of motion :math:`M a + C v = f_\mathrm{net}`; see buildEquationSystem.
+        self._inertia = None
+        self._damping = None
         #: The elements the increment loop evaluates (those with kernels, i.e. without contact
         #: facets); filled by :meth:`buildEquationSystem`. None, not {}, so an unbuilt system fails.
         self._kernelElements = None
         #: Lumped operators kept across a connectivity-only rebuild; see
         #: :class:`_ReusableExplicitOperators`.
         self._reusableOperators = None
+        #: What the model's current equation system is made of (see
+        #: :meth:`~edelweissfe.models.femodel.FEModel.buildEquationSystem`): the numbering of its degrees of
+        #: freedom, and how the state and the results pass between the model and the vectors of the increments.
+        self.equationSystemLayout = None
 
     def beginStep(
         self,
@@ -444,6 +521,7 @@ class NED(NonlinearSolverBase):
 
         self._externalWork = 0.0
         self.prevTimeStep = None
+        self._netForce = None
         self._conservationCheck.reset()
         self._warnedAboutMissingInternalEnergy = False
         self._warnedAboutMissingExternalWork = False
@@ -494,7 +572,18 @@ class NED(NonlinearSolverBase):
             self.updateTopologyAndConnectivity(model, step)
 
         if self._system is None:
+            # The net force of the checkpoint on a resumed step, None on a cold one.
+            resumedNetForce = self._netForce
             self._buildSystem(self.buildEquationSystem(model, step))
+            if resumedNetForce is not None:
+                if len(resumedNetForce) != len(self._netForce):
+                    raise ValueError(
+                        "The checkpoint holds a net force of {:} entries, but the equation system rebuilt from "
+                        "the resumed model has {:}.".format(len(resumedNetForce), len(self._netForce))
+                    )
+                self._netForce[:] = resumedNetForce
+            else:
+                self.formNetForceOfTheModelsState(step.actions["dirichlet"].values())
             # The time stepper carries (and checkpoints) the stable increment; a resumed step keeps its own.
             if step.timeStepper.enforcedTimeIncrement is None:
                 step.timeStepper.enforceTimeIncrement(self._system.criticalTimeStep)
@@ -520,21 +609,18 @@ class NED(NonlinearSolverBase):
 
         topologyUpdate = self.updateTopologyAndConnectivity(model, step)
         meshChanged = topologyUpdate.topologyChanged or topologyUpdate.meshDependentsRefreshed
-        connectivityChanged = topologyUpdate.constraintConnectivityChanged
+        connectivityChanged = topologyUpdate.connectivityChanged
 
         if meshChanged or connectivityChanged:
-            # A connectivity-only change carries solution, velocity and force over to the new system.
+            # A connectivity-only change carries solution, velocity and net force over to the new system; a
+            # mesh change reads solution and velocity from the model, and starts the net force at zero (see
+            # buildEquationSystem).
             self._buildSystem(self.buildEquationSystem(model, step, previous=None if meshChanged else theSystem))
             theSystem = self._system
 
-        U, V, P = self._U, self._V, self._P
+        V = self._V
 
         if meshChanged:
-            # The net force is not re-evaluated on the new mesh: that would run the constitutive law
-            # off-cycle and write into the material state. Zeroing it is an O(dT) error for one increment.
-            P[:] = 0.0
-            self.publishNodeFields(model, U, V, P)
-
             self.reportTopologyChangeConservation(lumpedTotalsBefore, momentumBefore, kineticBefore, V, model)
 
             # Lower only: refinement tightens the limit; a raised limit is not taken up mid-step.
@@ -558,7 +644,8 @@ class NED(NonlinearSolverBase):
 
         self._system = theSystem
         self._Minv = theSystem.Minv
-        self._U, self._dU, self._V, self._P = theSystem.U, theSystem.dU, theSystem.V, theSystem.P
+        self._U, self._dU, self._V, self._A = theSystem.U, theSystem.dU, theSystem.V, theSystem.A
+        self._netForce, self._internalForce = theSystem.netForce, theSystem.internalForce
 
     def isOutputIncrement(self, timeStep: TimeStep) -> bool:
         """Only every ``output-frequency``-th increment: an explicit run has millions.
@@ -598,7 +685,7 @@ class NED(NonlinearSolverBase):
         contactUpdateFrequency = self.options["contact-update-frequency"]
         topologyCheckFrequency = self.options["topology-check-frequency"]
         theSystem, Minv = self._system, self._Minv
-        U, dU, V, P = self._U, self._dU, self._V, self._P
+        U, dU, V, netForce, internalForce = self._U, self._dU, self._V, self._netForce, self._internalForce
 
         if timeStep.number % self.options["output-frequency"] == 0:
             self.journal.printSeperationLine()
@@ -643,15 +730,22 @@ class NED(NonlinearSolverBase):
                 self.journal.message("Constraint connectivity changed", self.identification, 2)
                 self._buildSystem(self.buildEquationSystem(model, step, previous=theSystem))
                 theSystem, Minv = self._system, self._Minv
-                U, dU, V, P = self._U, self._dU, self._V, self._P
+                U, dU, V, netForce, internalForce = (
+                    self._U,
+                    self._dU,
+                    self._V,
+                    self._netForce,
+                    self._internalForce,
+                )
 
         dU[:] = 0.0
         try:
-            U, V, P = self.solveIncrement(
+            U, V, netForce = self.solveIncrement(
                 U,
                 dU,
                 V,
-                P,
+                netForce,
+                internalForce,
                 Minv,
                 step.actions,
                 model,
@@ -670,7 +764,7 @@ class NED(NonlinearSolverBase):
                 "model looked at, not a smaller step.".format(timeStep.number, e)
             ) from e
 
-        self._U, self._V, self._P = U, V, P
+        self._U, self._V, self._netForce = U, V, netForce
 
     def acceptIncrement(self, step, model: FEModel, timeStep: TimeStep):
         """Commit the increment to the model; see
@@ -686,13 +780,20 @@ class NED(NonlinearSolverBase):
             The increment.
         """
 
-        U, V, P = self._U, self._V, self._P
+        U, dU, V = self._U, self._dU, self._V
 
-        # The zero increment is not recorded, so the first real increment is the leapfrog's half step.
         if timeStep.timeIncrement > 0.0:
+            # The zero increment is not recorded, so the first real increment is the leapfrog's half step.
             self.prevTimeStep = timeStep
+            dirichlets = step.actions["dirichlet"].values()
+            P = self.internalInertialAndDampingForce(dirichlets)
+            A = self.accelerationAtTheEndOfTheIncrement(dirichlets, timeStep.timeIncrement)
+        else:
+            # The zero increment integrates nothing and evaluates no force: the model keeps the force and the
+            # acceleration the last accepted increment published, of this step or of the step before.
+            P = A = None
 
-        self.publishNodeFields(model, U, V, P)
+        self.writeResultsToModel(U, dU, P, V, A)
 
         self.updateRigidBodies(model, timeStep)
 
@@ -701,7 +802,14 @@ class NED(NonlinearSolverBase):
             model.advanceToTime(timeStep.totalTime)
 
     def endStep(self, step, model: FEModel):
-        """Report the step's performance timing.
+        """Leave the model's state at the end time of the step, and report the step's performance timing.
+
+        The velocity the model holds lags half of the last increment behind the solution; it is advanced by that half
+        increment with the acceleration (:meth:`~edelweissfe.models.femodel.FEModel.advanceVelocity`), so that the
+        next step starts from the velocity at its start time (see the module documentation, "The velocity and the
+        acceleration it publishes"). A step resumed at its very end does so as well: its checkpoint holds the
+        staggered velocity and the last increment. This solver retries no increment, so its step never falls back to
+        a checkpoint, which ends the abandoned attempt here too.
 
         Parameters
         ----------
@@ -711,9 +819,102 @@ class NED(NonlinearSolverBase):
             The model tree.
         """
 
+        if self.prevTimeStep is not None:
+            model.advanceVelocity(0.5 * self.prevTimeStep.timeIncrement)
+
         prettyTable = performancetiming.makePrettyTable(wallTime=perf_counter() - self._stepWallClockTic)
         self.journal.printPrettyTable(prettyTable, self.identification)
         performancetiming.reset()
+
+    def accelerationAtTheEndOfTheIncrement(self, dirichlets, timeIncrement: float) -> DofVector:
+        """The acceleration this solver publishes as the node field entry ``A`` of the increment just completed, the
+        one at its end (see the module documentation, "The velocity and the acceleration it publishes"): with the
+        velocity at that time, half an increment after the staggered one, it satisfies the equation of motion,
+        :math:`\\left( \\boldsymbol{M} + \\tfrac{1}{2} \\Delta t \\, \\boldsymbol{C} \\right) \\boldsymbol{a} =
+        \\boldsymbol{f}_\\mathrm{net} - \\boldsymbol{C} \\boldsymbol{v}_{n+1/2}`.
+
+        On a degree of freedom with a prescribed motion, whose acceleration the next increment's prescribed velocity
+        sets, it is zero. A multi-point-constraint slave, which integrates no equation of motion of its own, takes it
+        from its masters.
+
+        Parameters
+        ----------
+        dirichlets
+            The Dirichlet boundary conditions of the step, located on the current equation system.
+        timeIncrement
+            The time increment just completed.
+
+        Returns
+        -------
+        DofVector
+            The acceleration, the system's vector.
+        """
+
+        A = self._A
+        A[:] = 0.0
+        coefficient = self._inertia + (0.5 * timeIncrement) * self._damping
+        hasEquationOfMotion = coefficient > 0.0
+        forceNotSpentOnDamping = np.asarray(self._netForce) - self._damping * np.asarray(self._V)
+        A[hasEquationOfMotion] = forceNotSpentOnDamping[hasEquationOfMotion] / coefficient[hasEquationOfMotion]
+        for dirichlet in dirichlets:
+            A[dirichlet.constrainedDofIndices] = 0.0
+        if self.mpcTransformation is not None:
+            self.mpcTransformation.applySlaveKinematics(A)
+
+        return A
+
+    def formNetForceOfTheModelsState(self, dirichlets):
+        """Form the net force a cold step starts from: that of the state the model holds,
+        :math:`\\boldsymbol{f}_\\mathrm{net} = \\boldsymbol{M} \\boldsymbol{a}_0 + \\boldsymbol{C} \\boldsymbol{v}_0`,
+        from its velocity and acceleration, read with the solution when the equation system was built, and the lumped
+        operators; nothing is evaluated (see the module documentation, "The net force is solver state, and a step
+        starts from the model's state"). Zero on a degree of freedom with a prescribed motion, which has no equation of
+        motion, and on a multi-point-constraint slave, whose inertia and damping are folded onto its masters.
+
+        Parameters
+        ----------
+        dirichlets
+            The Dirichlet boundary conditions of the step.
+        """
+
+        netForce = self._netForce
+        netForce[:] = self._inertia * np.asarray(self._A) + self._damping * np.asarray(self._V)
+        self.locateConstrainedDofs(dirichlets)
+        for dirichlet in dirichlets:
+            netForce[dirichlet.constrainedDofIndices] = 0.0
+
+    def internalInertialAndDampingForce(self, dirichlets) -> DofVector:
+        """The force this solver publishes as the node field result ``P`` of the increment just completed: the internal
+        force with the inertial and damping forces, :math:`\\boldsymbol{f}_\\mathrm{int} + \\boldsymbol{M}
+        \\boldsymbol{a} + \\boldsymbol{C} \\boldsymbol{v}`, without the loads and the constraints (see the module
+        documentation, "The force it publishes").
+
+        On a degree of freedom with an equation of motion, the inertial and damping forces are the net force, since the
+        next velocity update solves exactly :math:`\\boldsymbol{M} \\boldsymbol{a} + \\boldsymbol{C}
+        \\boldsymbol{v} = \\boldsymbol{f}_\\mathrm{net}` -- so :math:`\\boldsymbol{f}_\\mathrm{int} +
+        \\boldsymbol{f}_\\mathrm{net}`, which is the force of the loads and the constraints there. On a degree of
+        freedom with a prescribed motion, whose acceleration the next increment's prescribed velocity sets, it is the
+        internal force alone. A multi-point-constraint slave has a zero net force (it is folded onto its masters), so
+        it gets its internal force as well.
+
+        Parameters
+        ----------
+        dirichlets
+            The Dirichlet boundary conditions of the step, located on the current equation system.
+
+        Returns
+        -------
+        DofVector
+            The internal, inertial and damping force.
+        """
+
+        internalForce = self._internalForce
+        force = self.theDofManager.constructDofVector()
+        np.add(internalForce, self._netForce, out=force)
+        for dirichlet in dirichlets:
+            force[dirichlet.constrainedDofIndices] = internalForce[dirichlet.constrainedDofIndices]
+
+        return force
 
     @performancetiming.timeit("increment")
     def solveIncrement(
@@ -721,7 +922,8 @@ class NED(NonlinearSolverBase):
         U_n: DofVector,
         dU: DofVector,
         V: DofVector,
-        P: DofVector,
+        netForce: DofVector,
+        internalForce: DofVector,
         Minv: DofVector,
         stepActions: list,
         model: FEModel,
@@ -732,16 +934,19 @@ class NED(NonlinearSolverBase):
 
         Parameters
         ----------
-        Un
-            The old solution vector.
+        U_n
+            The old solution vector, overwritten with the new one.
+        dU
+            The solution increment, overwritten.
         V
-            The old velocity vector.
-        P
-            The old reaction vector.
-        M
-            The lumped mass matrix to be used.
-        elements
-            The dictionary containing all elements.
+            The old velocity vector, overwritten with the new one.
+        netForce
+            The net force of the last increment, which accelerates the nodes in this one, overwritten with the net
+            force of this increment.
+        internalForce
+            Overwritten with the elements' sum of this increment, the internal force.
+        Minv
+            The inverse lumped mass.
         stepActions
             The list of active step actions.
         model
@@ -753,26 +958,23 @@ class NED(NonlinearSolverBase):
 
         Returns
         -------
-        tuple[DofVector,DofVector,DofVector,DofVector]
+        tuple[DofVector,DofVector,DofVector]
             A tuple containing
                 - the new solution vector
-                - the solution increment
                 - the new velocity vector
-                - the new reaction vector
+                - the net force of this increment
         """
 
         # only the entities that have kernels to evaluate; see buildEquationSystem()
         elements = self._kernelElements
         dirichlets = stepActions["dirichlet"].values()
-        nodeforces = stepActions["nodeforces"].values()
-        distributedLoads = stepActions["distributedload"].values()
-        bodyForces = stepActions["bodyforce"].values()
+        loads = self.collectLoads(stepActions)
 
         # Find which global DOFs the Dirichlet BCs constrain, once up front.
         self.locateConstrainedDofs(dirichlets)
 
         if timeStep.timeIncrement == 0.0:
-            return U_n, V, P
+            return U_n, V, netForce
 
         if prevTimeStep is None:
 
@@ -787,31 +989,31 @@ class NED(NonlinearSolverBase):
 
         with performancetiming.timeit("kinematic update"):
             # Enforce the Dirichlet boundary conditions on the constrained DOFs:
-            # there is no free equilibrium there, so their force P is set to zero,
+            # there is no free equilibrium there, so their net force is set to zero,
             # and their velocity is prescribed as (prescribed increment) / (time step).
             prescribedVelocities = []
             for dirichlet in dirichlets:
-                prescribedIncrement = dirichlet.getPrescribedIncrement(timeStep).flatten()
+                prescribedIncrement = dirichlet.getPrescribedIncrementOfConstrainedDofs(timeStep)
 
-                # External work = reaction (-P, the carried-over net force) times the prescribed
-                # increment. Must be accumulated before P is zeroed below. Only for fields where this
+                # External work = reaction (minus the carried-over net force) times the prescribed
+                # increment. Must be accumulated before the net force is zeroed below. Only for fields where this
                 # product is an energy (not, e.g., a nonlocal damage field).
                 if carriesKineticEnergy(dirichlet.field):
-                    self._externalWork -= float(np.dot(P[dirichlet.constrainedDofIndices], prescribedIncrement))
+                    self._externalWork -= float(np.dot(netForce[dirichlet.constrainedDofIndices], prescribedIncrement))
 
                 prescribedVelocity = prescribedIncrement / timeStep.timeIncrement
 
-                P[dirichlet.constrainedDofIndices] = 0.0
+                netForce[dirichlet.constrainedDofIndices] = 0.0
                 V[dirichlet.constrainedDofIndices] = prescribedVelocity
                 prescribedVelocities.append((dirichlet.constrainedDofIndices, prescribedVelocity))
 
             # Second-order DOFs: central difference with mass-proportional damping,
-            # V = ((1 - h) V + Minv P dt) / (1 + h), h = alpha dt / 2, alpha = C/M; at alpha = 0 this is
+            # V = ((1 - h) V + Minv f_net dt) / (1 + h), h = alpha dt / 2, alpha = C/M; at alpha = 0 this is
             # exactly the undamped update. Written on whole vectors: h and the mask are zero off the
-            # second-order DOFs. First-order DOFs: V = Minv P (forward Euler).
+            # second-order DOFs. First-order DOFs: V = Minv f_net (forward Euler).
             dtAverage = 0.5 * (timeStep.timeIncrement + prevTimeStep.timeIncrement)
             halfRateStep = self._halfDampingRate * dtAverage
-            forceOverMass = Minv.asPlainArray() * P.asPlainArray()
+            forceOverMass = Minv.asPlainArray() * netForce.asPlainArray()
 
             velocity = V.asPlainArray()
             velocity *= 1.0 - halfRateStep
@@ -838,17 +1040,21 @@ class NED(NonlinearSolverBase):
             for geostatic in stepActions["geostatic"].values():
                 geostatic.applyAtIterationStart()
 
-        P[:] = 0.0
-        P, psi = self.computeElements(elements, U_n, dU, P, timeStep)
-        P[:] = -P[:]
-        P, _ = self.assembleLoads(nodeforces, distributedLoads, bodyForces, U_n, P, None, timeStep)
-        P = self.assembleConstraintForces(model.constraints, U_n, dU, P, timeStep)
+        # Every element, load and constraint adds its residual contribution; the net force that
+        # accelerates the nodes is the negative of their sum, f_ext - f_int. The elements' sum alone, the
+        # internal force, is kept for the force published at acceptance.
+        internalForce[:] = 0.0
+        internalForce, psi = self.computeElements(elements, U_n, dU, internalForce, timeStep)
+        netForce[:] = internalForce
+        netForce, _ = self.assembleLoads(loads, U_n, dU, netForce, None, timeStep)
+        netForce = self.assembleConstraintForces(model.constraints, U_n, dU, netForce, timeStep)
+        netForce[:] = -netForce[:]
 
         # Fold slave forces onto their masters here, so the next increment's Dirichlet handling sees
         # the folded vector.
         if self.mpcTransformation is not None:
             with performancetiming.timeit("mpc force fold"):
-                P[:] = self.mpcTransformation.foldExplicitForce(P)
+                netForce[:] = self.mpcTransformation.foldExplicitForce(netForce)
 
         if timeStep.number % self.options["output-frequency"] == 0:
             Wint = psi
@@ -949,7 +1155,7 @@ class NED(NonlinearSolverBase):
                     1,
                 )
 
-        return U_n, V, P
+        return U_n, V, netForce
 
     @performancetiming.timeit("elements")
     def computeElements(
@@ -959,34 +1165,32 @@ class NED(NonlinearSolverBase):
         dU: DofVector,
         P: DofVector,
         timeStep: TimeStep,
-    ) -> tuple[DofVector]:
-        """Loop over all elements, and evalute them.
-        Is called by solveIncrement() in each iteration.
+    ) -> tuple[DofVector, float]:
+        """Loop over all elements, and evaluate them: their residual contributions, summed, are the internal force.
+        Called by :meth:`solveIncrement` once per increment.
 
         Parameters
         ----------
         elements
-            The list of finite elements.
-        U_n
+            The finite elements, by number.
+        U_np
             The current solution vector.
         dU
-            The  solution increment vector.
+            The solution increment vector.
         P
-            The reaction vector.
+            The vector the elements' residual contributions are added to; zero.
         timeStep
             The time step.
 
         Returns
         -------
-        tuple[DofVector,VIJSystemMatrix,DofVector]
-            - The modified reaction vector.
-            - The modified system matrix.
-            - The modified accumulated flux vector.
+        tuple[DofVector,float]
+            - The internal force.
+            - The internal (strain) energy the elements publish.
         """
 
         time = timeStep.totalTime
         dT = timeStep.timeIncrement
-        P[:] = 0.0
         psi = 0.0
         for el in elements.values():
             Pe = np.zeros(el.nDof)
@@ -1011,7 +1215,11 @@ class NED(NonlinearSolverBase):
         indirect-control unknown). Those DOFs carry no inertia, so their inverse lumped mass is zero
         and the explicit update leaves them untouched forever -- the constraint would appear active
         and enforce nothing. Penalty-type constraints, which act through nodal forces alone, are
-        supported: see :meth:`assembleConstraintForces`.
+        supported: see
+        :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.assembleConstraintForces`.
+        A constraint that is switched off
+        (:attr:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.active`) is not refused: it takes no
+        part in the equation system, and its scalar variables leave it with it.
 
         Parameters
         ----------
@@ -1077,6 +1285,9 @@ class NED(NonlinearSolverBase):
                 )
 
         for constraintName, constraint in model.constraints.items():
+            # a constraint that is switched off has no place in the equation system, nor have its scalar variables
+            if not constraint.active:
+                continue
             nScalarVariables = constraint.getNumberOfAdditionalNeededScalarVariables()
             if nScalarVariables:
                 raise NotImplementedError(
@@ -1086,34 +1297,40 @@ class NED(NonlinearSolverBase):
                     "(penalty formulations) are supported here."
                 )
 
-    @performancetiming.timeit("publish node fields")
-    def publishNodeFields(self, model: FEModel, U, V, P):
-        """Write the solution, velocity and force to the node fields and the scalar variables.
+    @performancetiming.timeit("write results to nodes")
+    def writeResultsToModel(self, U: DofVector, dU: DofVector, P: DofVector | None, V: DofVector, A: DofVector | None):
+        """Write the results of an increment to the model, through the model's layout of the equation system: the
+        solution, its increment and the internal, inertial and damping force to the node fields, and the solution to the
+        scalar variables (see :meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeResultsToModel`),
+        then the velocity and the acceleration (see
+        :meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeVelocityAndAccelerationToModel`); the
+        incremental degrees of freedom are set to zero first, from where the next increment starts them (see
+        :meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.zeroIncrementalCoefficients`).
 
-        Published every increment, not only on output increments, for two reasons: an h-adaptivity
+        Written at every accepted increment, not only on output increments, for two reasons: an h-adaptivity
         event can fall on any increment and its interpolation reads these entries, and a restart
         checkpoint written from the node fields is the only way an explicit run can resume with its
         kinetic state intact. It is an O(nDof) copy.
 
         Parameters
         ----------
-        model
-            The model tree.
         U
             The solution vector.
+        dU
+            The solution increment vector of the increment.
+        P
+            The internal, inertial and damping force (see :meth:`internalInertialAndDampingForce`); None to leave the
+            model's as it is.
         V
             The velocity vector.
-        P
-            The net force vector.
+        A
+            The acceleration at the end of the increment (see :meth:`accelerationAtTheEndOfTheIncrement`); None to leave
+            the model's as it is.
         """
 
-        for field in model.nodeFields.values():
-            self.theDofManager.writeDofVectorToNodeField(U, field, "U")
-            self.theDofManager.writeDofVectorToNodeField(P, field, "P")
-            self.theDofManager.writeDofVectorToNodeField(V, field, "V")
-
-        for variable in model.scalarVariables.values():
-            variable.value = U[self.theDofManager.idcsOfScalarVariablesInDofVector[variable]]
+        self.equationSystemLayout.zeroIncrementalCoefficients(U)
+        self.equationSystemLayout.writeResultsToModel(U, dU, P)
+        self.equationSystemLayout.writeVelocityAndAccelerationToModel(V, A)
 
     @performancetiming.timeit("constraint connectivity")
     def updateConstraintConnectivity(self, model: FEModel) -> bool:
@@ -1252,9 +1469,6 @@ class NED(NonlinearSolverBase):
         self.mpcTransformation = self.buildMPCTransformation(model, step.actions)
         self.checkMPCDirichletConflicts(self.mpcTransformation, step.actions)
 
-        # The force plans are indexed by the old DofManager; stale ones would scatter to wrong DOFs.
-        self._constraintForcePlans = {}
-
         # Elements without kernels (contact facets) are left out of the per-increment loop. The loop's
         # gather plan is keyed on this dict's identity.
         self._kernelElements = {number: element for number, element in model.elements.items() if element.hasKernels}
@@ -1318,7 +1532,7 @@ class NED(NonlinearSolverBase):
             [f for f in self.secondOrderFields if carriesKineticEnergy(f)]
         )
 
-        # First-order fields integrate C * rate = P, so from here on M is "the divisor": the inertia at
+        # First-order fields integrate C * rate = f_net, so from here on M is "the divisor": the inertia at
         # second-order DOFs, the damping at first-order ones.
         M[self.ids_1st] = damping[self.ids_1st]
 
@@ -1388,11 +1602,11 @@ class NED(NonlinearSolverBase):
             against the prescribed Dirichlet conditions.
         previous
             The system being replaced, when this is a rebuild rather than the initial build. Its
-            solution, velocity and force are carried over verbatim rather than re-read from the node
-            fields, which do not hold the velocity at all. A rebuild triggered by a constraint's
-            connectivity leaves the mesh -- hence the DOF layout -- untouched, and that is checked
-            rather than assumed: copying between two different layouts would mis-index every vector
-            silently.
+            solution, velocity and net force are carried over verbatim rather than re-read from the model:
+            they are the vectors the increment continues from. A rebuild triggered by a
+            constraint's connectivity leaves the mesh -- hence the DOF layout -- untouched, and that is
+            checked rather than assumed: copying between two different layouts would mis-index every
+            vector silently.
 
         Returns
         -------
@@ -1414,19 +1628,13 @@ class NED(NonlinearSolverBase):
                 self.identification,
                 verbosity,
             )
-            self.theDofManager.refreshConstraintIndices(model.constraints.values())
+            self.theDofManager.refreshConstraintIndices(model.activeConstraints())
         else:
             self.journal.message("Creating monolithic equation system", self.identification, verbosity)
-            # No system matrix, so neither the VIJ pattern nor the index-to-host-object map is needed.
-            self.theDofManager = DofManager(
-                model.nodeFields.values(),
-                model.scalarVariables.values(),
-                model.elements.values(),
-                model.constraints.values(),
-                model.nodeSets.values(),
-                initializeVIJPattern=False,
-                determiningIndexToHostObjectMapping=False,
-            )
+            # The numbering of the model's degrees of freedom, and how the state passes between the model and the
+            # vectors; this solver evaluates the model's elements itself, and assembles no system matrix.
+            self.equationSystemLayout = model.buildEquationSystem()
+            self.theDofManager = self.equationSystemLayout.dofManager
         self.journal.message(
             "total size of eq. system: {:}".format(self.theDofManager.nDof),
             self.identification,
@@ -1435,9 +1643,6 @@ class NED(NonlinearSolverBase):
 
         if not isRebuild:
             self.journal.printSeperationLine()
-
-        # The force plans are indexed by the old constraint indices; stale ones would scatter to wrong DOFs.
-        self._constraintForcePlans = {}
 
         if reuseOperators:
             M, Minv = self._restoreLumpedOperators()
@@ -1461,23 +1666,26 @@ class NED(NonlinearSolverBase):
             self._secondOrderMask[self.ids_2nd] = 1.0
         self._halfDampingRate = 0.5 * np.asarray(self._dampingRate) * self._secondOrderMask
 
-        U = self.theDofManager.constructDofVector()  # initialize displacement vector
-        dU = self.theDofManager.constructDofVector()  # initialize displacement vector
-        V = self.theDofManager.constructDofVector()  # initilize velocity vector
-        P = self.theDofManager.constructDofVector()  # initialize reaction vector
+        # The coefficients of every degree of freedom's equation of motion, M a + C v = f_net: by central differences,
+        # the inertia and the damping (rate times inertia); by forward Euler, no inertia, and the damping the increment
+        # divides by. Zero on a multi-point-constraint slave, whose inertia and damping are folded onto its masters.
+        lumpedMass = np.asarray(self._lumpedMass)
+        self._inertia = lumpedMass * self._secondOrderMask
+        self._damping = lumpedMass * (np.asarray(self._dampingRate) + (1.0 - self._secondOrderMask))
+
+        U = self.theDofManager.constructDofVector()
+        dU = self.theDofManager.constructDofVector()
+        V = self.theDofManager.constructDofVector()
+        A = self.theDofManager.constructDofVector()
+        # Zero unless carried over below or formed at the start of a step: see the module documentation, "The net force
+        # is solver state, and a step starts from the model's state".
+        netForce = self.theDofManager.constructDofVector()
+        internalForce = self.theDofManager.constructDofVector()
 
         if not isRebuild:
-            for fieldName, field in model.nodeFields.items():
-                U = self.theDofManager.writeNodeFieldToDofVector(U, field, "U")
-                P = self.theDofManager.writeNodeFieldToDofVector(P, field, "P")
-
-                # After an h-adaptivity event, the velocity interpolated onto the new nodes is read back
-                # here (see hadaptivity.WARM_STARTED_NODE_FIELD_ENTRIES); it exists from the second build on.
-                if "V" in field:
-                    V = self.theDofManager.writeNodeFieldToDofVector(V, field, "V")
-
-            for variable in model.scalarVariables.values():
-                U[self.theDofManager.idcsOfScalarVariablesInDofVector[variable]] = variable.value
+            # After an h-adaptivity event, the solution, the velocity and the acceleration interpolated onto the new
+            # nodes are read back here (see hadaptivity.WARM_STARTED_NODE_FIELD_ENTRIES).
+            self.equationSystemLayout.readStateFromModel(U, V, A)
         else:
             if previous.U.shape != U.shape:
                 raise RuntimeError(
@@ -1487,11 +1695,12 @@ class NED(NonlinearSolverBase):
                     "cannot be carried across safely.".format(U.shape[0], previous.U.shape[0])
                 )
 
-            # Carried straight over, not re-read from the node fields: the velocity is not a node
-            # field, so re-reading would silently resume from rest.
+            # Carried straight over: the numbering is the same, and these are the vectors the increment
+            # continues from.
             U[:] = previous.U
             V[:] = previous.V
-            P[:] = previous.P
+            A[:] = previous.A
+            netForce[:] = previous.netForce
 
         if isRebuild:
             # The mesh is unchanged, so the stable time increment is kept (recomputing costs an element pass).
@@ -1509,78 +1718,11 @@ class NED(NonlinearSolverBase):
             U=U,
             dU=dU,
             V=V,
-            P=P,
+            A=A,
+            netForce=netForce,
+            internalForce=internalForce,
             criticalTimeStep=criticalTimeStep,
         )
-
-    @performancetiming.timeit("assemble constraints")
-    def assembleConstraintForces(
-        self,
-        constraints: dict,
-        U_np: DofVector,
-        dU: DofVector,
-        P: DofVector,
-        timeStep: TimeStep,
-    ) -> DofVector:
-        """Evaluate every constraint and add its nodal forces to the net force vector.
-
-        The explicit counterpart of
-        :meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.assembleConstraints`, and it shares
-        that method's sign convention: a constraint writes what the implicit solver calls ``PExt``,
-        which is why this is called after :meth:`assembleLoads`, on a ``P`` that already holds
-        ``-P_internal``.
-
-        No tangent is requested. An explicit increment solves no linear system, so a constraint's
-        stiffness enters nothing, and
-        :meth:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.applyConstraintExplicit`
-        is the entry point that evaluates the constraint forces directly without assembling a tangent.
-        A constraint that could act *only* through its tangent would contribute nothing here; that is
-        precisely the class :meth:`validateModelCapabilities` refuses.
-
-        Parameters
-        ----------
-        constraints
-            The constraints of the model, by name.
-        U_np
-            The current solution vector.
-        dU
-            The current solution increment.
-        P
-            The net force vector to be augmented.
-        timeStep
-            The current time step.
-
-        Returns
-        -------
-        DofVector
-            The augmented net force vector.
-        """
-
-        # Per-constraint buffers and index plans, built once per equation system.
-        PPlain = P.asPlainArray()
-
-        for name, constraint in constraints.items():
-            plan = self._constraintForcePlans.get(name)
-            if plan is None:
-                indices = P.entitiesInDofVector[constraint]
-                # np.add.at only if a DOF appears more than once (e.g. a slave node in its own master
-                # facet), since fancy-indexed += would drop repeated contributions.
-                plan = (np.zeros(constraint.nDof), indices, len(np.unique(indices)) != len(indices))
-                self._constraintForcePlans[name] = plan
-
-            Pc, indices, namesDofMoreThanOnce = plan
-
-            # Reused, so it must be cleared: applyConstraintExplicit augments what it is handed.
-            Pc[:] = 0.0
-
-            constraint.applyConstraintExplicit(U_np[constraint], dU[constraint], Pc, timeStep)
-
-            if namesDofMoreThanOnce:
-                np.add.at(PPlain, indices, Pc)
-            else:
-                PPlain[indices] += Pc
-
-        return P
 
     def secondOrderMomentum(self, mass: DofVector, V: DofVector, model: FEModel) -> np.ndarray:
         """The linear momentum of the fields whose inertia is a mass, per spatial component; see

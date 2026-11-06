@@ -48,6 +48,7 @@ from edelweissfe.constraints.base.penaltylaw import (
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.models.meshdependent import MeshDependent
+from edelweissfe.numerics.systemmatrixcontributor import localEntriesOfSubBlocks
 from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.facetcontactgeometry import (
@@ -240,7 +241,7 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
     re-assigning each slave node to its single closest facet (within ``searchDistance``, if given)
     based on the last converged configuration -- mirroring the pattern already used by
     EdelweissMeshfree's ``NonlinearQuasistaticSolver``/``DiscreteRigidBodyPenaltyContact`` for
-    dynamic contact-pair connectivity. Within :meth:`applyConstraint`, the gap, its exact gradient,
+    dynamic contact-pair connectivity. Within :meth:`computeKernels`, the gap, its exact gradient,
     and its exact Hessian (see :mod:`~edelweissfe.utils.facetcontactgeometry`, including the
     second-derivative term from the facet normal's own pose-dependence -- not curvature, since the
     facet is flat) are recomputed fresh from the *current Newton iterate* every iteration, exactly
@@ -658,71 +659,47 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
         self._frozenWeights = [None] * self.nSlaves
         self._frozenNormals = [None] * self.nSlaves
 
-    def getVIJContributionSize(self) -> int:
-        size = 0
-        for s in range(self.nSlaves):
-            if self._assignedFacetIdx[s] is None:
-                continue
-            m = len(self.facetElements[self._assignedFacetIdx[s]].nodes) * self.nDim
-            size += self.nDim**2 + m * m + 2 * self.nDim * m
-        return size
-
-    def shapeVIJContribution(self, flat_view: np.ndarray) -> DeformableSurfaceContactStiffnessView:
+    def shapeBlock(self, values: np.ndarray) -> DeformableSurfaceContactStiffnessView:
         facetNodeCounts = [
             len(self.facetElements[self._assignedFacetIdx[s]].nodes)
             for s in range(self.nSlaves)
             if self._assignedFacetIdx[s] is not None
         ]
-        return DeformableSurfaceContactStiffnessView(flat_view, nDim=self.nDim, facetNodeCounts=facetNodeCounts)
+        return DeformableSurfaceContactStiffnessView(values, nDim=self.nDim, facetNodeCounts=facetNodeCounts)
 
-    def initializeVIJContribution(self, idcs: np.ndarray, I_: np.ndarray, J_: np.ndarray, offset: int) -> None:
-        k = offset
+    def localEntriesOfBlock(self) -> tuple[np.ndarray, np.ndarray]:
+        """Per assigned slave node, the blocks slave-slave, facet-facet, slave-facet and facet-slave, each row by row;
+        a slave node without a facet has no entries."""
+        subBlocks = []
         localOffset = 0
         for s in range(self.nSlaves):
-            pIdcs = [idcs[localOffset + i] for i in range(self.nDim)]
+            slaveIndices = np.arange(localOffset, localOffset + self.nDim)
             localOffset += self.nDim
 
             if self._assignedFacetIdx[s] is None:
                 continue
 
-            nFacetNodes = len(self.facetElements[self._assignedFacetIdx[s]].nodes)
-            m = nFacetNodes * self.nDim
-            fIdcs = [idcs[localOffset + i] for i in range(m)]
+            m = len(self.facetElements[self._assignedFacetIdx[s]].nodes) * self.nDim
+            facetIndices = np.arange(localOffset, localOffset + m)
             localOffset += m
 
-            for i in range(self.nDim):
-                for j in range(self.nDim):
-                    I_[k] = pIdcs[i]
-                    J_[k] = pIdcs[j]
-                    k += 1
+            subBlocks += [
+                (slaveIndices, slaveIndices),
+                (facetIndices, facetIndices),
+                (slaveIndices, facetIndices),
+                (facetIndices, slaveIndices),
+            ]
+        return localEntriesOfSubBlocks(subBlocks)
 
-            for i in range(m):
-                for j in range(m):
-                    I_[k] = fIdcs[i]
-                    J_[k] = fIdcs[j]
-                    k += 1
-
-            for i in range(self.nDim):
-                for j in range(m):
-                    I_[k] = pIdcs[i]
-                    J_[k] = fIdcs[j]
-                    k += 1
-
-            for i in range(m):
-                for j in range(self.nDim):
-                    I_[k] = fIdcs[i]
-                    J_[k] = pIdcs[j]
-                    k += 1
-
-    def applyConstraint(
+    def computeKernels(
         self,
         U_np: np.ndarray,
         dU: np.ndarray,
-        PExt: np.ndarray,
+        P: np.ndarray,
         K: DeformableSurfaceContactStiffnessView | None,
         timeStep: TimeStep,
     ):
-        """Evaluate the contact forces, and the tangent unless ``K`` is None."""
+        """Add the residual contribution of the contact forces, and the tangent unless ``K`` is None."""
 
         self.totalNormalForce = 0.0
 
@@ -792,12 +769,13 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
                 f_n = lambdaForce
                 stiffness = 0.0
             else:
-                # f_n carries the sign of g (negative in contact), so that PExt -= f_n * w pushes
-                # the slave outward; see edelweissfe.constraints.base.penaltylaw.
+                # f_n carries the sign of g (negative in contact), so that the contact force on the nodes,
+                # -f_n * w, pushes the slave outward; see edelweissfe.constraints.base.penaltylaw.
                 penaltyForce, stiffness = normalPenaltyForce(self.type, penaltyTimesArea, g)
                 f_n = lambdaForce + penaltyForce
 
-            PLocal = -f_n * w
+            # the residual contribution is the negative of the contact force on the nodes
+            PLocal = f_n * w
 
             # K is None in explicit runs -- see ForcesOnlyExplicitEvaluation.
             KLocal = None
@@ -815,7 +793,7 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
                     KLocal += KFriction
 
             globalIdcs = pIdcs + fIdcs
-            PExt[globalIdcs] += PLocal
+            P[globalIdcs] += PLocal
 
             if KLocal is not None:
                 K.K_pp[activeIdx] += KLocal[: self.nDim, : self.nDim]
@@ -875,9 +853,9 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
         converged tangential force and the incremental tangential relative displacement, radial
         return onto the friction cone ``|f_T| <= mu * N`` on slip.
 
-        Returns the local external-force contribution and the local stiffness contribution
-        ``K = -dPExt_dU`` (nonsymmetric on slip), in the same ``[slave, facet nodes]`` block
-        layout as the normal contact contribution.
+        Returns the local residual contribution ``P = -G.T f_T``, the negative of the friction force on
+        the nodes, and its tangent ``K = dP_dU`` (nonsymmetric on slip), in the same
+        ``[slave, facet nodes]`` block layout as the normal contact contribution.
 
         The incremental relative displacement maps through the constant matrix
         ``G = kron(c, I)`` (``u_rel = xs - sum_a NBar_a xa``), so ``G.T M G = kron(outer(c, c), M)``
@@ -918,7 +896,8 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
                 KFriction = None
 
         self._tangentialForceCurrent[s] = tangentialForce
-        PFriction = np.kron(c, tangentialForce)
+        # the friction force on the slave is f_T and on the facet nodes -NBar_a f_T, i.e. G.T f_T
+        PFriction = -np.kron(c, tangentialForce)
         return PFriction, KFriction
 
     def acceptLastState(self):

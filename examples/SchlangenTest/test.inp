@@ -60,9 +60,9 @@ maxInc=1e-0, minInc=1e-8, maxNumInc=1000, maxIter=25, stepLength=1
 
 *step, solver=theSolver
 maxInc=1e-2, minInc=1e-6, maxNumInc=1000, maxIter=10, stepLength=1
->>options, name=theSolver, arcLengthController=indirectcontrol
+>>options, name=theSolver, arcLengthController=cmod
 
->>indirectcontrol, dof1=' nodeSets["cmod_left"][0].fields["displacement"][1] ', dof2='nodeSets["cmod_right"][0].fields["displacement"][1] ' , L=+0.5, cVector1='[-1]', cVector2='[1]',
+>>indirectcontrol, name=cmod, dof1='model.nodeSets["cmod_left"][0].fields["displacement"]', cVector1='0, -1, 0', dof2='model.nodeSets["cmod_right"][0].fields["displacement"]', cVector2='0, 1, 0', L=+0.5
 
 >>nodeforces, name=low_p, nSet=low_p, field=displacement, 2=1
 >>nodeforces, name=high_p, nSet=high_p, field=displacement, 2=10

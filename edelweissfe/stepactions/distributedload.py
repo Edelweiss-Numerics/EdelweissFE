@@ -353,8 +353,9 @@ class StepAction(DistributedLoadBase):
 
         return self._magnitudeAtStepStart + self.delta * self.amplitude(t)
 
-    def applyAtStepEnd(self, model, stepMagnitude=None):
-        """Fold this step's increment into the accumulated magnitude and go idle.
+    def applyAtStepEnd(self, model, loadParameter: float | None = None):
+        """Fold the part of this step's increment that the step applied into the accumulated magnitude, and go idle;
+        see :meth:`~edelweissfe.stepactions.base.loadbase.LoadBase.applyAtStepEnd`.
 
         Idle means "no increment pending": until a later step re-declares this load, it stays at the
         accumulated level.
@@ -363,19 +364,12 @@ class StepAction(DistributedLoadBase):
         ----------
         model
             The current state of the model.
-        stepMagnitude
-            The fraction of the increment that was actually applied. None means the full increment,
-            i.e. the amplitude evaluated at the end of the step; the arc length solvers pass their
-            load parameter here instead.
+        loadParameter
+            The load parameter an arc length step ended at; None for a step that follows the amplitudes.
         """
 
         if not self.idle:
-            if stepMagnitude is None:
-                # standard case
-                self._magnitudeAtStepStart += self.delta * self.amplitude(1.0)
-            else:
-                # set the 'actual' increment manually, e.g. for arc length method
-                self._magnitudeAtStepStart += self.delta * stepMagnitude
+            self._magnitudeAtStepStart += self.delta * self.amplitudeAtStepEnd(self.amplitude, loadParameter)
 
             self.delta = 0
             self.idle = True

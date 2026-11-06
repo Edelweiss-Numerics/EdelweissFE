@@ -19,6 +19,7 @@ Documentation
    assembly
    fieldoutputmanager
    fields
+   nodefieldresults
    elements
    exceptions
    generators

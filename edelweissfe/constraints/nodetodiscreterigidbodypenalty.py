@@ -37,8 +37,7 @@ from edelweissfe.constraints.base.penaltylaw import (
 )
 from edelweissfe.constraints.base.rigidbodycontactstiffness import (
     RigidBodyContactStiffnessView,
-    fillRigidBodyContactIndices,
-    rigidBodyContactContributionSize,
+    rigidBodyContactLocalEntries,
 )
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
@@ -136,7 +135,7 @@ class Constraint(ConstraintBase, MeshDependent):
     where :math:`J_r` is the right Jacobian of the SO(3) exponential map (see
     :func:`~edelweissfe.utils.rotations.rightJacobianSO3`), and ``dPhysicalSpin_dTheta`` maps a perturbation of the *stored*
     rotation pseudo-vector DOF onto the physical (spatial) infinitesimal rotation it actually
-    produces (see :meth:`Constraint.applyConstraint`). The plain physical moment
+    produces (see :meth:`Constraint.computeKernels`). The plain physical moment
     :math:`\\mathbf{r}_s \\times \\mathbf{n}_s` is only the exact gap gradient w.r.t. the RP
     rotation DOF when the RP has zero *total accumulated* rotation (where
     ``dPhysicalSpin_dTheta = I``); in general the ``dPhysicalSpin_dTheta``:math:`^T` factor is
@@ -151,11 +150,13 @@ class Constraint(ConstraintBase, MeshDependent):
     finite differences of the underlying closed-form gap function).
 
     The penalty normal force is :math:`f_n = k \\, g_s` (``type=linear``, constant tangent :math:`k`)
-    or :math:`f_n = \\tfrac{1}{2} k \\, g_s^2` (``type=quadratic``, tangent :math:`k \\, g_s`), and is
-    assembled -- exactly like :mod:`~edelweissfe.constraints.nodetorigidsurfacepenalty` -- as
+    or :math:`f_n = \\tfrac{1}{2} k \\, g_s^2` (``type=quadratic``, tangent :math:`k \\, g_s`). The contact
+    force on the nodes is :math:`-f_n \\, \\mathbf{w}_s`, so -- exactly like
+    :mod:`~edelweissfe.constraints.nodetorigidsurfacepenalty` -- the residual contribution and its
+    tangent are
 
     .. math::
-        P_{ext} \\mathrel{-{=}} f_n \\, \\mathbf{w}_s \\, , \\qquad
+        P \\mathrel{+{=}} f_n \\, \\mathbf{w}_s \\, , \\qquad
         K \\mathrel{+{=}} k \\, (\\mathbf{w}_s \\otimes \\mathbf{w}_s)
 
     Both :math:`\\mathbf{n}_s` and :math:`\\mathbf{r}_s` are recomputed from the current, total
@@ -166,7 +167,7 @@ class Constraint(ConstraintBase, MeshDependent):
     linearization of :math:`\\mathbf{w}_s` with respect to all of
     :math:`(\\mathbf{u}_s, \\mathbf{u}_{RP}, \\boldsymbol{\\theta}_{RP})`, valid for any accumulated
     rotation, not just a small-angle approximation (verified against finite differences); see the
-    inline comments in :meth:`Constraint.applyConstraint`. Because :math:`\\mathbf{w}_s` is now
+    inline comments in :meth:`Constraint.computeKernels`. Because :math:`\\mathbf{w}_s` is now
     exactly the gap gradient (no residual approximation left), this tangent is the true, symmetric
     Hessian of the gap function restricted to the implemented blocks. Not included: the
     :math:`\\boldsymbol{\\theta}_{RP}\\boldsymbol{\\theta}_{RP}` self-block -- symmetric on its own
@@ -299,28 +300,19 @@ class Constraint(ConstraintBase, MeshDependent):
     def nDof(self) -> int:
         return self._nDof
 
-    def getVIJContributionSize(self) -> int:
-        """No coupling between different slave nodes: one shared RP self-block, plus per-slave
-        self-block and slave-RP coupling blocks."""
-        return rigidBodyContactContributionSize(self.rprpDof, [self.nDim] * self.nSlaves)
+    def localEntriesOfBlock(self) -> tuple[np.ndarray, np.ndarray]:
+        """No coupling between different slave nodes: one shared RP self-block, plus per-slave self-block and
+        slave-RP coupling blocks (see :func:`rigidBodyContactLocalEntries`)."""
+        return rigidBodyContactLocalEntries(self._indicesOfRPInLocal, self._indicesOfSlaveInLocal)
 
-    def shapeVIJContribution(self, flat_view: np.ndarray) -> RigidBodyContactStiffnessView:
-        return RigidBodyContactStiffnessView(flat_view, self.rprpDof, [self.nDim] * self.nSlaves)
+    def shapeBlock(self, values: np.ndarray) -> RigidBodyContactStiffnessView:
+        return RigidBodyContactStiffnessView(values, self.rprpDof, [self.nDim] * self.nSlaves)
 
-    def initializeVIJContribution(self, idcs: np.ndarray, I_: np.ndarray, J_: np.ndarray, offset: int) -> None:
-        fillRigidBodyContactIndices(
-            idcs[self._indicesOfRPInLocal],
-            [idcs[slaveIndices] for slaveIndices in self._indicesOfSlaveInLocal],
-            I_,
-            J_,
-            offset,
-        )
-
-    def applyConstraint(
+    def computeKernels(
         self,
         U_np: np.ndarray,
         dU: np.ndarray,
-        PExt: np.ndarray,
+        P: np.ndarray,
         K: RigidBodyContactStiffnessView,
         timeStep: TimeStep,
     ):
@@ -362,8 +354,9 @@ class Constraint(ConstraintBase, MeshDependent):
             pIdcs = self._indicesOfSlaveInLocal[s]
             rpIdcs = self._indicesOfRPInLocal
 
-            PExt[pIdcs] -= f_n * w_p
-            PExt[rpIdcs] -= f_n * w_rp
+            # the contact force on the slave and on the rigid body is -f_n * w; P is its negative
+            P[pIdcs] += f_n * w_p
+            P[rpIdcs] += f_n * w_rp
 
             K.K_ss[s] += stiffness * np.outer(w_p, w_p)
             K.K_srp[s] += stiffness * np.outer(w_p, w_rp)

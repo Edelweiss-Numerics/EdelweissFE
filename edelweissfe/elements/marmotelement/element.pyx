@@ -35,6 +35,7 @@ cimport cython
 cimport libcpp.cast
 cimport numpy as np
 
+from edelweissfe.numerics.systemmatrixcontributor import denseBlockLocalEntries
 from edelweissfe.utils.exceptions import CutbackRequest
 
 # Point Marmot's warning channel at stdout once, on import: MarmotJournal otherwise writes into a null
@@ -345,16 +346,25 @@ cdef class MarmotElementWrapper:
                                const double[::1] U,
                                double time,
                                double dTime):
-        """Evaluate residual and stiffness for given time, field, and field increment due to a surface load."""
+        """Add the residual contribution of a surface load, the negative of the external load, and its tangent.
+
+        Marmot adds the external load itself, so it integrates into a buffer of its own, which is then
+        subtracted: only this load's contribution changes sign, whatever ``P`` holds already."""
+
+        cdef double[::1] externalLoad = np.zeros(P.shape[0])
+        cdef Py_ssize_t i
 
         self.marmotElement.computeDistributedLoad(mapLoadTypes[loadType],
-                                                  &P[0],
+                                                  &externalLoad[0],
                                                   &K[0],
                                                   faceID,
                                                   &load[0],
                                                   &U[0],
                                                   time,
                                                   dTime)
+
+        for i in range(P.shape[0]):
+            P[i] -= externalLoad[i]
 
     def computeBodyForce(self,
                          double[::1] P,
@@ -363,15 +373,24 @@ cdef class MarmotElementWrapper:
                          const double[::1] U,
                          double time,
                          double dTime):
-        """Evaluate residual and stiffness for given time, field, and field increment due to a volume load."""
+        """Add the residual contribution of a body force, the negative of the external load, and its tangent.
+
+        Marmot adds the external load itself, so it integrates into a buffer of its own, which is then
+        subtracted: only this load's contribution changes sign, whatever ``P`` holds already."""
+
+        cdef double[::1] externalLoad = np.zeros(P.shape[0])
+        cdef Py_ssize_t i
 
         self.marmotElement.computeBodyForce(
-                                    &P[0],
+                                    &externalLoad[0],
                                     &K[0],
                                     &load[0],
                                     &U[0],
                                     time,
                                     dTime)
+
+        for i in range(P.shape[0]):
+            P[i] -= externalLoad[i]
 
     def computeLumpedInertia(self, double[::1] M):
         """Compute the lumped mass matrix of the underlying MarmotElement"""
@@ -483,19 +502,16 @@ cdef class MarmotElementWrapper:
     def __dealloc__(self):
         del self.marmotElement
 
-    def getVIJContributionSize(self) -> int:
-        """Return the number of entries this entity contributes to the VIJ (COO) system matrix."""
-        return self.nDof**2
+    @property
+    def couplesAllItsDofs(self) -> bool:
+        """``True``: the block is the dense ``nDof x nDof`` matrix, column-major."""
+        return True
 
-    def shapeVIJContribution(self, flat_view: np.ndarray) -> np.ndarray:
+    def localEntriesOfBlock(self) -> tuple[np.ndarray, np.ndarray]:
+        """The entries of the dense block, see
+        :func:`~edelweissfe.numerics.systemmatrixcontributor.denseBlockLocalEntries`."""
+        return denseBlockLocalEntries(self.nDof)
+
+    def shapeBlock(self, values: np.ndarray) -> np.ndarray:
         """Keep the view flat for Cython 1-D memoryview compatibility."""
-        return flat_view
-
-    def initializeVIJContribution(self, idcs: np.ndarray, I_: np.ndarray, J_: np.ndarray, offset: int) -> None:
-
-        """Initialize the I and J arrays for the VIJ (COO) system matrix assembly. """
-
-        n = len(idcs)
-        VIJLocations = np.tile(idcs, (n, 1))
-        I_[offset : offset + n**2] = VIJLocations.flatten()
-        J_[offset : offset + n**2] = VIJLocations.flatten("F")
+        return values

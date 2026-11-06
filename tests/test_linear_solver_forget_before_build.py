@@ -198,7 +198,6 @@ def test_a_csr_generator_and_its_matrix_form_no_reference_cycle():
     """The matrix's pattern arrays keep the C++ core alive, not the generator: a replaced generator is freed by
     reference counting, and its matrix stays valid without it."""
     A = displacementDamageSystem(n=6, coupling="symmetric")[0].tocoo()
-    vij = SimpleNamespace(I=A.row.astype(np.intc), J=A.col.astype(np.intc), nDof=A.shape[0])
 
     def generatorsAlive():
         return sum(isinstance(obj, CSRGenerator) for obj in gc.get_objects())
@@ -207,7 +206,7 @@ def test_a_csr_generator_and_its_matrix_form_no_reference_cycle():
     gc.disable()
     try:
         before = generatorsAlive()
-        generator = CSRGenerator(vij)
+        generator = CSRGenerator(A.row.astype(np.intc), A.col.astype(np.intc), A.shape[0])
         matrix = generator.updateInPlace(A.data.copy())
         assert generatorsAlive() == before + 1
         del generator

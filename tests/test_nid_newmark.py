@@ -70,7 +70,7 @@ BETA = 0.25
 GAMMA = 0.5
 
 
-def _deck(dt: float, maxNumInc: int = 100000, extra: str = "") -> str:
+def _deck(dt: float, maxNumInc: int = 100000, extra: str = "", stepLength: float = STEP_LENGTH) -> str:
     return f"""
 *material, name=LinearElastic, id=bar
 {E!r}, 0.0, {RHO!r}
@@ -98,7 +98,7 @@ elType=C3D8
 >>perNode, nSet=gen_right, field=displacement, result=A, name=tipA, f(x)='np.mean(x[:,0])', saveHistory=True
 {extra}
 *step, solver=theSolver
-stepLength={STEP_LENGTH}, startInc={dt / STEP_LENGTH!r}, maxInc={dt / STEP_LENGTH!r}, minInc=1e-6, maxNumInc={maxNumInc}, maxIter=25
+stepLength={stepLength!r}, startInc={dt / stepLength!r}, maxInc={dt / stepLength!r}, minInc=1e-6, maxNumInc={maxNumInc}, maxIter=25
 >>options, name=theSolver, extrapolation=off
 >>dirichlet, name=fixedEnd, nSet=gen_left, field=displacement, 1=0.0
 >>dirichlet, name=lateral, nSet=all, field=displacement, 2=0.0, 3=0.0
@@ -219,6 +219,97 @@ def test_period_is_reproduced(tmp_path):
     # and at half a period it is at the far turning point, 2 u_static
     atHalfPeriod = np.argmin(np.abs(t - 0.5))
     assert abs(u[atHalfPeriod] - 2.0 * U_STATIC) < 1e-3 * U_STATIC
+
+
+def test_the_published_force_is_the_internal_inertial_and_damping_force(tmp_path):
+    """``P = f_int + M a + C v`` (documentation page *Node field results*). At the loaded end, which no support holds,
+    it is the end load at every increment, while the internal force alone, ``K u``, swings between 0 and twice the load.
+    At the fixed end it is the reaction, the inertia of the consistent mass there included: the internal forces of the
+    bar sum to zero, so the two ends add up to its inertial force, the row sums of the mass (``rho V / 8`` per node)
+    times the acceleration of the four loaded nodes. The zero-length increment of a second step integrates nothing
+    and keeps the force the first step ended with."""
+
+    dt = 0.02
+    sums = (
+        ">>perNode, nSet=gen_right, field=displacement, result=P, name=tipP, f(x)='np.sum(x[:,0])', saveHistory=True\n"
+        ">>perNode, nSet=gen_left, field=displacement, result=P, name=fixedP, f(x)='np.sum(x[:,0])', saveHistory=True\n"
+    )
+    secondStep = f"""
+*step, solver=theSolver
+stepLength={2 * dt!r}, startInc=0.5, maxInc=0.5, minInc=1e-6, maxNumInc=10, maxIter=25
+"""
+    _, fieldOutputController = _run(tmp_path, "nid_force", _deck(dt, extra=sums) + secondStep)
+    outputs = fieldOutputController.fieldOutputs
+    t = np.asarray(outputs["tipP"].getTimeHistory(), dtype=float)
+    tipP = np.asarray(outputs["tipP"].getResultHistory(), dtype=float).ravel()
+    fixedP = np.asarray(outputs["fixedP"].getResultHistory(), dtype=float).ravel()
+    a = np.asarray(outputs["tipA"].getResultHistory(), dtype=float).ravel()
+
+    # every sample after the start, the skipped increments included: they keep the state, and with it the force
+    moving = t > 0.0
+    assert np.count_nonzero(t > STEP_LENGTH + 1e-9) == 2, "the second step has two increments of motion"
+    np.testing.assert_allclose(tipP[moving], FORCE, rtol=1e-10)
+    np.testing.assert_allclose(tipP[moving] + fixedP[moving], 4 * (RHO / 8.0) * a[moving], rtol=0.0, atol=1e-10 * FORCE)
+
+    # the last increment of the first step, the zero-length increment of the second (and a skipped round-off
+    # remainder of the first, if the stepper leaves one)
+    atTheSwitch = np.flatnonzero(np.isclose(t, STEP_LENGTH, rtol=0.0, atol=1e-9))
+    assert len(atTheSwitch) >= 2
+    assert fixedP[atTheSwitch[0]] != 0.0
+    np.testing.assert_array_equal(tipP[atTheSwitch], tipP[atTheSwitch[0]])
+    np.testing.assert_array_equal(fixedP[atTheSwitch], fixedP[atTheSwitch[0]])
+
+
+def test_a_quasi_static_step_leaves_the_model_at_rest(tmp_path):
+    """A quasi-static step between two dynamic ones (documentation page *Node field results*). The first ``NID`` step
+    ends a quarter period after the load was applied, at the static deflection with the largest velocity. ``NIST``
+    then holds the load: its solution is the static one, and the state it accepts is at rest, ``V = A = 0`` on every
+    node. The second ``NID`` step starts from there -- at rest in equilibrium, its acceleration from equilibrium zero
+    -- and stays at the static deflection. Had the quasi-static step left the velocity of the first dynamic step in
+    the model, the bar would swing about the static deflection with an amplitude of about that deflection."""
+
+    dt = 0.025
+    quarterPeriod = 0.25
+    endOfQuasiStaticStep = quarterPeriod + 1.0
+    extra = (
+        ">>perNode, nSet=all, field=displacement, result=V, name=maxV, f(x)='np.max(np.abs(x))', saveHistory=True\n"
+        ">>perNode, nSet=all, field=displacement, result=A, name=maxA, f(x)='np.max(np.abs(x))', saveHistory=True\n"
+        "\n*solver, solver=NIST, name=quasiStatic\n"
+    )
+    deck = (
+        _deck(dt, extra=extra, stepLength=quarterPeriod)
+        + f"""
+*step, solver=quasiStatic
+stepLength=1.0, startInc=0.5, maxInc=0.5, minInc=1e-6, maxNumInc=10, maxIter=25
+
+*step, solver=theSolver
+stepLength={quarterPeriod!r}, startInc={dt / quarterPeriod!r}, maxInc={dt / quarterPeriod!r}, minInc=1e-6, maxNumInc=100, maxIter=25
+"""
+    )
+    _, fieldOutputController = _run(tmp_path, "nid_after_nist_after_nid", deck)
+    outputs = fieldOutputController.fieldOutputs
+    t = np.asarray(outputs["tipU"].getTimeHistory(), dtype=float)
+    u, v, maxV, maxA = (
+        np.asarray(outputs[name].getResultHistory(), dtype=float).ravel() for name in ("tipU", "tipV", "maxV", "maxA")
+    )
+
+    # the last increment of the first dynamic step ends moving: the defect would show
+    endOfFirstStep = np.flatnonzero(np.isclose(t, quarterPeriod, rtol=0.0, atol=1e-9))[0]
+    assert abs(v[endOfFirstStep]) > 0.5 * U_STATIC * OMEGA
+
+    # both increments of the quasi-static step (the following zero-length increment of NID, at the same time, completes
+    # the acceleration from equilibrium: zero up to round-off)
+    quasiStatic = np.flatnonzero((t > quarterPeriod + 1e-9) & (t < endOfQuasiStaticStep - 1e-9))
+    quasiStatic = np.r_[quasiStatic, np.flatnonzero(np.isclose(t, endOfQuasiStaticStep, rtol=0.0, atol=1e-9))[0]]
+    assert len(quasiStatic) == 2
+    np.testing.assert_allclose(u[quasiStatic], U_STATIC, rtol=1e-8)
+    np.testing.assert_array_equal(maxV[quasiStatic], 0.0)
+    np.testing.assert_array_equal(maxA[quasiStatic], 0.0)
+
+    secondDynamic = t > endOfQuasiStaticStep + 1e-9
+    assert np.count_nonzero(secondDynamic) >= int(round(quarterPeriod / dt))
+    np.testing.assert_allclose(u[secondDynamic], U_STATIC, rtol=1e-8)
+    np.testing.assert_allclose(v[secondDynamic], 0.0, rtol=0.0, atol=1e-8 * U_STATIC * OMEGA)
 
 
 @pytest.mark.parametrize("beta", [0.0, -0.25])

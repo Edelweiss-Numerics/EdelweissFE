@@ -34,8 +34,11 @@ import edelweissfe.utils.performancetiming as performancetiming
 from edelweissfe.config.timing import createTimingDict
 from edelweissfe.constraints.base.constraintbase import ConstraintBase
 from edelweissfe.models.femodel import FEModel
-from edelweissfe.numerics.csrgeneratorv2 import CSRGenerator
-from edelweissfe.numerics.dofmanager import DofManager, DofVector, VIJSystemMatrix
+from edelweissfe.numerics.dofmanager import DofVector
+from edelweissfe.numerics.systemmatrixassembly import (
+    SystemMatrixAssembly,
+    VIJSystemMatrixAssembly,
+)
 from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
 from edelweissfe.solvers.nonlinearimplicitstatic import NIST
 from edelweissfe.timesteppers.timestep import TimeStep
@@ -207,6 +210,9 @@ class NEST(NIST):
     supportsMPC = False
     supportsModelModifiers = False
 
+    #: The VIJ assembly of the system matrix; NEST has no option to choose.
+    systemMatrixAssemblies = {"vij": VIJSystemMatrixAssembly}
+
     #: Option schema for this solver, per OptionSchemaProvider.
     schema = NESTSchema
 
@@ -241,7 +247,9 @@ class NEST(NIST):
         outputmanagers: dict[str, OutputManagerBase],
     ):
         """Build the equation system, once per step, and start the step; see
-        :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.beginStep`.
+        :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.beginStep`. As every quasi-static
+        solver, it gives the entities that integrate their own inertia no inertia
+        (:meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.newmarkParametersOfEntities`).
 
         Parameters
         ----------
@@ -259,6 +267,8 @@ class NEST(NIST):
 
         self.validateModelCapabilities(model)
 
+        model.setNewmarkParametersOfEntities(*self.newmarkParametersOfEntities())
+
         for constraintName, constraint in model.constraints.items():
             if type(constraint).updateConnectivity is not ConstraintBase.updateConnectivity:
                 raise Exception(
@@ -269,13 +279,8 @@ class NEST(NIST):
 
         self.journal.message("Creating monolithic equation system", self.identification, 0)
         self.forgetEquationSystem()
-        self.theDofManager = DofManager(
-            model.nodeFields.values(),
-            model.scalarVariables.values(),
-            model.elements.values(),
-            model.constraints.values(),
-            model.nodeSets.values(),
-        )
+        self.equationSystemLayout = model.buildEquationSystem()
+        self.theDofManager = self.equationSystemLayout.dofManager
         self.journal.message(
             "total size of eq. system: {:}".format(self.theDofManager.nDof),
             self.identification,
@@ -298,19 +303,14 @@ class NEST(NIST):
         # derive anything beyond the plain (A, b) call -- a field-split solver such as blockamg raises
         # without the field structure setModel supplies. NEST's equation system is built once per step here
         # rather than being rebuilt on connectivity changes, so one call per step is enough.
-        self.linSolver.setModel(model, self.theDofManager)
+        self.linSolver.setModel(self.equationSystemLayout.modelForLinearSolver, self.theDofManager)
 
         U = self.theDofManager.constructDofVector()
         P = self.theDofManager.constructDofVector()
         dU = self.theDofManager.constructDofVector()
-        K = self.theDofManager.constructVIJSystemMatrix()
-        self.csrGenerator = CSRGenerator(K)
+        K = self.createSystemMatrixAssembly(VIJSystemMatrixAssembly)
 
-        for fieldName, field in model.nodeFields.items():
-            U = self.theDofManager.writeNodeFieldToDofVector(U, field, "U")
-
-        for variable in model.scalarVariables.values():
-            U[self.theDofManager.idcsOfScalarVariablesInDofVector[variable]] = variable.value
+        self.readStateFromModel(U)
 
         self._U, self._dU, self._P, self._K = U, dU, P, K
 
@@ -400,14 +400,7 @@ class NEST(NIST):
         step.timeStepper.changeIncrementSize(self._incScaleFactor)
         self.prevTimeStep = timeStep
 
-        # write results to nodes:
-        for fieldName, field in model.nodeFields.items():
-            self.theDofManager.writeDofVectorToNodeField(U, field, "U")
-            self.theDofManager.writeDofVectorToNodeField(P, field, "P")
-            self.theDofManager.writeDofVectorToNodeField(dU, field, "dU")
-
-        for variable in model.scalarVariables.values():
-            variable.value = U[self.theDofManager.idcsOfScalarVariablesInDofVector[variable]]
+        self.writeResultsToModel(U, dU, P)
 
         self.updateRigidBodies(model, timeStep)
 
@@ -433,7 +426,7 @@ class NEST(NIST):
         U_n: DofVector,
         dU: DofVector,
         P: DofVector,
-        K: VIJSystemMatrix,
+        K: SystemMatrixAssembly,
         stepActions: list,
         model: FEModel,
         timeStep: TimeStep,
@@ -472,21 +465,18 @@ class NEST(NIST):
                 - the scale factor for the next increment size
         """
 
-        elements = model.elements
         constraints = model.constraints
 
         R = self.theDofManager.constructDofVector()
         F = self.theDofManager.constructDofVector()
-        PExt = self.theDofManager.constructDofVector()
+        PLoadsAndConstraints = self.theDofManager.constructDofVector()
         U_np = self.theDofManager.constructDofVector()
         dU_ = [self.theDofManager.constructDofVector() for i in range(self.rkStages)]
         err = self.theDofManager.constructDofVector()
         err[:] = 0.0
 
         dirichlets = stepActions["dirichlet"].values()
-        nodeforces = stepActions["nodeforces"].values()
-        distributedLoads = stepActions["distributedload"].values()
-        bodyForces = stepActions["bodyforce"].values()
+        loads = self.collectLoads(stepActions)
 
         # Find which global DOFs the Dirichlet BCs constrain, once up front.
         self.locateConstrainedDofs(dirichlets)
@@ -510,14 +500,18 @@ class NEST(NIST):
 
             U_np += dU_[k]
 
-            P[:] = K[:] = F[:] = PExt[:] = 0.0
+            P[:] = F[:] = PLoadsAndConstraints[:] = 0.0
+            K.beginAssembly()
 
-            P, K, F = self.computeElements(elements, U_np, dU_[k], P, K, F, timeStep)
-            PExt, K = self.assembleLoads(nodeforces, distributedLoads, bodyForces, U_np, PExt, K, timeStep)
-            PExt, K = self.assembleConstraints(constraints, U_np, dU_[k], PExt, K, timeStep)
+            P, K, F = self.assembleInternalForces(U_np, dU_[k], P, K, F, timeStep)
+            PLoadsAndConstraints, K = self.assembleLoads(loads, U_np, dU_[k], PLoadsAndConstraints, K, timeStep)
+            PLoadsAndConstraints, K = self.assembleConstraints(
+                constraints, U_np, dU_[k], PLoadsAndConstraints, K, timeStep
+            )
 
+            # the right-hand side is the negative of all residual contributions, R = f_ext - f_int
             R[:] = -P
-            R += PExt
+            R -= PLoadsAndConstraints
 
             R = self.applyDirichletToResidual(timeStep, R, dirichlets)
 
@@ -545,8 +539,9 @@ class NEST(NIST):
             raise CutbackRequest("Estimated error too high!", np.sqrt(self.tol / normErr) * 0.9)
 
         # compute elements once more to get the final reaction
-        P[:] = K[:] = F[:] = PExt[:] = 0.0
-        P, K, F = self.computeElements(elements, U_np, dU, P, K, F, timeStep)
+        P[:] = F[:] = 0.0
+        K.beginAssembly()
+        P, K, F = self.assembleInternalForces(U_np, dU, P, K, F, timeStep)
 
         # compute new increment size scale factor
         if self.options.get("runge-kutta-error-control", "on") == "off":
