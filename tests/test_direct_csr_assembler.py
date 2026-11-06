@@ -57,18 +57,35 @@ class _DenseEntity(SystemMatrixContributorBase):
 
 
 class _ListedEntity(SystemMatrixContributorBase):
-    """An entity that lists its entries: random local (row, column) pairs, duplicates included, or the given ones."""
+    """An entity that lists its entries: random local (row, column) pairs, duplicates included, or the given ones.
+    Overriding :meth:`localEntriesOfBlock` is all it does to declare its layout."""
 
     def __init__(self, nDof, localRows, localColumns):
         super().__init__(nDof)
         self._entries = (np.asarray(localRows, dtype=np.intc), np.asarray(localColumns, dtype=np.intc))
 
-    @property
-    def couplesAllItsDofs(self):
-        return False
-
     def localEntriesOfBlock(self):
         return self._entries
+
+
+def test_the_layout_of_a_block_follows_from_the_override_of_its_entries():
+    assert _DenseEntity(3).couplesAllItsDofs
+    assert not _ListedEntity(3, [0], [1]).couplesAllItsDofs
+
+
+def test_a_second_declaration_of_the_layout_is_refused():
+    """The direct path reads the flag, the VIJ path the list: an entity that declared both could make them disagree."""
+    with pytest.raises(TypeError, match="couplesAllItsDofs"):
+
+        class _DeclaresItsLayout(_ListedEntity):
+            couplesAllItsDofs = True
+
+    with pytest.raises(TypeError, match="couplesAllItsDofs"):
+
+        class _DeclaresItsLayoutAsAProperty(SystemMatrixContributorBase):
+            @property
+            def couplesAllItsDofs(self):
+                return True
 
 
 def _vijPairs(dofsOfEntity):
@@ -241,7 +258,8 @@ def test_entries_added_to_the_pattern_are_stored_zeros_on_both_paths():
 
 def test_a_listed_block_with_nDof_squared_entries_is_scattered_entry_by_entry():
     """A list of exactly nDof**2 entries in an order that is not column-major: scattered as a dense block, its values
-    would land on the wrong rows and columns."""
+    would land on the wrong rows and columns. The entity declares nothing but the list, as an entity migrated from
+    ``initializeVIJContribution`` by renaming it does."""
     order = np.array([4, 0, 8, 2, 6, 1, 3, 7, 5])
     entity = _ListedEntity(3, np.repeat(np.arange(3), 3)[order], np.tile(np.arange(3), 3)[order])
     dofs = np.array([2, 0, 1], dtype=np.intc)

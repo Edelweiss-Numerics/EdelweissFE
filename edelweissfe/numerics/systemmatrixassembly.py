@@ -424,9 +424,9 @@ class DirectCSRSystemMatrixAssembly(SystemMatrixAssembly):
 
     Every block is a zeroed scratch array: an entity that is handed its block more than once in an assembly (an
     element, then a body load on it) has each one scattered on its own. Entities that list the entries of their block
-    themselves (constraints that couple only some of their degrees of freedom, which say so through
-    :attr:`~edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.couplesAllItsDofs`) are scattered
-    entry by entry.
+    themselves (constraints that couple only some of their degrees of freedom, see
+    :meth:`~edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.localEntriesOfBlock`) are
+    scattered entry by entry.
 
     Parameters
     ----------

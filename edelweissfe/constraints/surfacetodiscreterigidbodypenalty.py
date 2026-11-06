@@ -449,11 +449,6 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
         self._searchClosestRigidTriangles(model)
         return True
 
-    @property
-    def couplesAllItsDofs(self) -> bool:
-        """``False``: the block is the list of the values of the entries of :meth:`localEntriesOfBlock`."""
-        return False
-
     def localEntriesOfBlock(self) -> tuple[np.ndarray, np.ndarray]:
         slaveBlockLocalIndices = [np.arange(first, first + m) for first, m in self._slaveBlockOffsets()]
         return rigidBodyContactLocalEntries(np.arange(self.nSlaveDof, self.nDof), slaveBlockLocalIndices)

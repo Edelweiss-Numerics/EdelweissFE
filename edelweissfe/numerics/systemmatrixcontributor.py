@@ -112,15 +112,37 @@ class SystemMatrixContributorBase:
     The block couples the entity's degrees of freedom with each other. By default it couples all of them: the block is
     the dense ``nDof x nDof`` matrix, stored column-major. An entity that couples only some of its degrees of freedom
     (a contact constraint, which couples every slave node with the master side but not the slave nodes with each
-    other) sets :attr:`couplesAllItsDofs` to ``False`` and lists the local row and column of each value of its block in
-    :meth:`localEntriesOfBlock`. The number of values of a block is always the length of that list
-    (:func:`countEntriesOfBlock`).
+    other) lists the local row and column of each value of its block: it overrides :meth:`localEntriesOfBlock`, and
+    that is all it does to declare the layout of its block (:attr:`couplesAllItsDofs` follows from it). The number of
+    values of a block is always the length of that list (:func:`countEntriesOfBlock`).
+
+    The layout is declared once, by the override: a subclass that declares :attr:`couplesAllItsDofs` itself is refused
+    when it is defined, as a second declaration could contradict the first. An extension type, which cannot inherit
+    this class (the Marmot elements, cells and particles), declares both itself: a dense block, whose
+    :meth:`localEntriesOfBlock` is :func:`denseBlockLocalEntries`.
 
     Parameters
     ----------
     nDof
         The number of degrees of freedom of the entity.
     """
+
+    def __init_subclass__(cls, **kwargs):
+        """Refuse a subclass that declares :attr:`couplesAllItsDofs` itself: the layout of its block follows from
+        whether it overrides :meth:`localEntriesOfBlock`.
+
+        Raises
+        ------
+        TypeError
+            If the subclass declares :attr:`couplesAllItsDofs`.
+        """
+
+        super().__init_subclass__(**kwargs)
+        if cls.couplesAllItsDofs is not SystemMatrixContributorBase.couplesAllItsDofs:
+            raise TypeError(
+                "{:} declares couplesAllItsDofs: the layout of the block follows from localEntriesOfBlock alone, "
+                "which an entity that couples only some of its degrees of freedom overrides.".format(cls.__qualname__)
+            )
 
     def __init__(self, nDof: int):
         self.nDof = nDof
@@ -130,12 +152,13 @@ class SystemMatrixContributorBase:
         """Whether the entity's block couples every one of its degrees of freedom with every other one.
 
         ``True`` (the default, every element) means the block is the dense ``nDof x nDof`` matrix, stored
-        column-major. ``False`` means the entity lists the entries of its block itself in
-        :meth:`localEntriesOfBlock`, and its block is the list of their values, in that order.
+        column-major. ``False`` means the entity lists the entries of its block itself, by overriding
+        :meth:`localEntriesOfBlock`, and its block is the list of their values, in that order. It is ``False``
+        exactly for the entities that override it.
 
-        The entity says which, because the number of entries cannot tell: a sparse pattern can happen to have
-        exactly ``nDof**2`` entries. A rigid body contact with a single slave node in 3D couples the six degrees of
-        freedom of the reference point with each other, the three of the node with each other, and the two groups
+        The layout is never guessed from the number of entries, which cannot tell: a sparse pattern can happen to
+        have exactly ``nDof**2`` entries. A rigid body contact with a single slave node in 3D couples the six degrees
+        of freedom of the reference point with each other, the three of the node with each other, and the two groups
         both ways: 36 + 9 + 18 + 18 = 81 = 9², yet its entries are ordered block by block, not column by column.
 
         Returns
@@ -144,14 +167,15 @@ class SystemMatrixContributorBase:
             ``True`` for a dense block, ``False`` for a list of entries of the entity's own.
         """
 
-        return True
+        return type(self).localEntriesOfBlock is SystemMatrixContributorBase.localEntriesOfBlock
 
     def localEntriesOfBlock(self) -> tuple[np.ndarray, np.ndarray]:
         """The local row and column of every value of the entity's block, in the order of the values.
 
         Local means in the entity's own list of degrees of freedom: row ``a`` is the entity's ``a``-th degree of
         freedom. The default is the dense column-major block (:func:`denseBlockLocalEntries`); an entity that does not
-        couple all its degrees of freedom (:attr:`couplesAllItsDofs` is ``False``) overrides it.
+        couple all its degrees of freedom overrides it, which makes its block the list of the values of these entries
+        (:attr:`couplesAllItsDofs` is then ``False``).
 
         Returns
         -------

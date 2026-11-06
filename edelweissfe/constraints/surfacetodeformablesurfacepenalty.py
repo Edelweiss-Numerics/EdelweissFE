@@ -661,11 +661,6 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
             if self._assignedFacetIdx[p] is not None
         ]
 
-    @property
-    def couplesAllItsDofs(self) -> bool:
-        """``False``: the block is the list of the values of the entries of :meth:`localEntriesOfBlock`."""
-        return False
-
     def localEntriesOfBlock(self) -> tuple[np.ndarray, np.ndarray]:
         """One dense block per active contact point, row by row, over its slave and master DOFs."""
         subBlocks = []
