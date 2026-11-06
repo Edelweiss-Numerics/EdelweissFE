@@ -1,0 +1,57 @@
+** shallow two-bar (von Mises) truss of finite strain trusses (Neo-Hooke), pushed through its snap-through by
+** displacement control of the apex; the supports are tied by a quadratic truss; tests the co-rotated finite strain truss formulation
+*material, name=compressibleneohooke, id=rubber, provider=marmot
+3000.0, 1000.0, 1e-9
+
+*node
+1, 0.0, 0.0
+2, 10.0, 1.0
+3, 20.0, 0.0
+4, 10.0, 0.0
+
+*element, type=T2D2CR
+1, 1, 2
+2, 2, 3
+
+*element, type=T2D3CR
+3, 1, 3, 4
+
+*elSet, elSet=bars
+1, 2
+
+*elSet, elSet=tie
+3
+
+*nSet, nSet=supports
+1, 3
+*nSet, nSet=apex
+2
+*nSet, nSet=tieMid
+4
+
+*section, name=barSection, area=1.0, material=rubber, type=truss
+bars
+
+*section, name=tieSection, area=0.2, material=rubber, type=truss
+tie
+
+*job, name=job, domain=2d
+*solver, solver=NIST, name=theSolver
+
+*fieldOutput
+>>perNode, name=displacement, elSet=all, field=displacement, result=U
+>>perElement, name=normalForce, elSet=all, result=normal force, quadraturePoint=0,
+>>perNode, name=F, nSet=apex, field=displacement, result=P, f(x)='sum(x[:,1])', saveHistory=True,
+>>perElement, name=N, elSet=bars, result=normal force, quadraturePoint=0, saveHistory=True,
+
+*output, type=ensight, name=esExport
+>>perNode, fieldOutput=displacement
+>>perElement, fieldOutput=normalForce
+>>configuration, overwrite=yes
+
+*step, solver=theSolver
+maxInc=0.05, minInc=1e-8, maxNumInc=1000, maxIter=15, stepLength=1
+>>initializematerial, name=init, elSet=all
+>>dirichlet, name=supports, nSet=supports, field=displacement, 2=0
+>>dirichlet, name=tieMid, nSet=tieMid, field=displacement, 2=0
+>>dirichlet, name=apex, nSet=apex, field=displacement, 1=0, 2=-2.0
