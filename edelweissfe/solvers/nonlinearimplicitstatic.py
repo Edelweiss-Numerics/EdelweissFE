@@ -1377,6 +1377,14 @@ class NIST(NonlinearSolverBase):
         and otherwise the end of the range where the parabola is smaller. Each trial costs one evaluation of the model;
         the next Newton iteration evaluates the chosen one.
 
+        Two kinds of trials fit no parabola:
+
+        * A trial state at which the residual is not finite, which the model could not evaluate: the trials decide
+          themselves, and the step length is the trial step length of the smallest finite residual (of equal ones, the
+          shortest), limited to the range. If no trial residual is finite, the increment is cut back.
+        * Trial residuals that are equal to round-off, which do not tell the step lengths apart: the correction is
+          taken in full, the step length is 1.
+
         Parameters
         ----------
         ddU
@@ -1410,6 +1418,11 @@ class NIST(NonlinearSolverBase):
         -------
         DofVector
             The scaled correction.
+
+        Raises
+        ------
+        DivergingSolution
+            If the residual is not finite at any trial step length.
         """
 
         stepLengths = self.lineSearchStepLengths()
@@ -1440,14 +1453,29 @@ class NIST(NonlinearSolverBase):
                 2,
             )
 
-        # the minimum of the parabola on the allowed range: its vertex if it opens upwards, else an end of the range
-        parabola = np.polyfit(stepLengths, largestResiduals, 2)
-        curvature, slope, _ = parabola
         smallest, largest = self.lineSearchStepLengthRange
-        if curvature > 0.0:
-            stepLength = min(max(-slope / (2.0 * curvature), smallest), largest)
+
+        if not np.all(np.isfinite(largestResiduals)):
+            # no parabola fits through a residual that is not finite: the smallest finite one decides
+            finiteTrials = [
+                (largestResidual, stepLength)
+                for stepLength, largestResidual in zip(stepLengths, largestResiduals)
+                if np.isfinite(largestResidual)
+            ]
+            if not finiteTrials:
+                raise DivergingSolution("Residual not finite at any trial step length of the line search, cutting back")
+            stepLength = min(max(min(finiteTrials)[1], smallest), largest)
+        elif max(largestResiduals) - min(largestResiduals) <= 1e-12 * max(largestResiduals):
+            # a parabola fitted to round-off would choose any step length: the full correction
+            stepLength = 1.0
         else:
-            stepLength = smallest if np.polyval(parabola, smallest) <= np.polyval(parabola, largest) else largest
+            # the minimum of the parabola on the allowed range: its vertex if it opens upwards, else an end of the range
+            parabola = np.polyfit(stepLengths, largestResiduals, 2)
+            curvature, slope, _ = parabola
+            if curvature > 0.0:
+                stepLength = min(max(-slope / (2.0 * curvature), smallest), largest)
+            else:
+                stepLength = smallest if np.polyval(parabola, smallest) <= np.polyval(parabola, largest) else largest
 
         self.journal.message("line search: step length {:7.4f}".format(stepLength), self.identification, 2)
 

@@ -208,10 +208,13 @@ default; neither is available yet under an arc length controller.
 the largest residual :math:`\| R(\Delta U + \alpha \, \Delta\Delta U) \|_\infty` (without the Dirichlet degrees of
 freedom) is evaluated at the trial step lengths ``lineSearchStepLengths`` (default ``0.8, 1.0, 1.2``), a parabola is
 fitted to these values, and :math:`\alpha` minimizes the parabola on :math:`[0.1, 1.5]`: its vertex, limited to that
-range, or, for a parabola that does not open upwards, the end of the range where it is smaller. Each trial costs one
-evaluation of the model, so the line search is done only after ``lineSearchAfterIterations`` iterations (default 5),
-and then in every iteration whose number is a multiple of ``lineSearchEveryIterations`` (default 2). Small trial step
-lengths, e.g. ``lineSearchStepLengths='0.15, 0.4, 0.7, 1.0'``, damp an iteration that cycles between two states.
+range, or, for a parabola that does not open upwards, the end of the range where it is smaller. A trial at which the
+residual is not finite fits no parabola: :math:`\alpha` is then the trial step length of the smallest finite residual,
+and without one, the increment is cut back. Trial residuals that are equal to round-off do not tell the step lengths
+apart, and the correction is taken in full. Each trial costs one evaluation of the model, so the line search is done
+only after ``lineSearchAfterIterations`` iterations (default 5), and then in every iteration whose number is a multiple
+of ``lineSearchEveryIterations`` (default 2). Small trial step lengths, e.g.
+``lineSearchStepLengths='0.15, 0.4, 0.7, 1.0'``, damp an iteration that cycles between two states.
 
 **Quasi-Newton fallback** (``fallBackToQuasiNewton``). An increment whose residual grew more often than the step
 option ``maxGrowIter`` allows is cut back. With this option, it continues instead with the tangent of its first
