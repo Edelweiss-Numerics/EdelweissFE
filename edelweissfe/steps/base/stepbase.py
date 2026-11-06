@@ -333,10 +333,12 @@ class StepBase(ABC):
         before it instead. With a checkpoint after every accepted increment (``writeInterval=1``), the
         latest one always is such a checkpoint.
 
-        The checkpoints are those of the step's restart output, of which there is exactly one.
-        Every checkpoint serves one fallback at most: falling back again takes the checkpoint before
-        it, unless newer ones were written since. The step may fall back to checkpoints of its own
-        only, and only as long as its mesh has not changed since (a mesh change cannot be undone).
+        The checkpoints are those of the step's restart output, of which there is exactly one, as
+        long as their files hold them -- a resumed step's included: the checkpoint it resumed from,
+        and those before it. Every checkpoint serves one fallback at most: falling back again takes
+        the checkpoint before it, unless newer ones were written since. The step may fall back to
+        checkpoints of its own only, and only as long as its mesh has not changed since (a mesh
+        change cannot be undone).
 
         Parameters
         ----------
@@ -365,7 +367,7 @@ class StepBase(ABC):
         restartWriter = next(m for m in outputManagers if m.writesRestartCheckpoints)
 
         while fallbacksLeft:
-            checkpoint = self.takeLatestCheckpointOfStep(restartWriter)
+            checkpoint = self.latestCheckpointOfStep(restartWriter)
             if checkpoint is None:
                 journal.errorMessage("No restart checkpoint of this step left to fall back to", solver.identification)
                 raise ReachedMinIncrementSize()
@@ -377,12 +379,13 @@ class StepBase(ABC):
                     1,
                 )
                 checkpoint.close()
+                restartWriter.dropLatestCheckpoint()
                 continue
             try:
                 try:
                     checkpoint.restoreModel(model, journal)
                 except MeshChangedSinceCheckpoint as e:
-                    # The checkpoints are taken newest first: all that are left are older still.
+                    # The checkpoints are offered newest first: all that are left are older still.
                     raise StepFailed(
                         "cannot fall back to restart checkpoint {:} at time {:}: it predates a mesh change (model "
                         "modifier {:} at time {:}), and a mesh change cannot be undone. No usable checkpoint is "
@@ -402,6 +405,9 @@ class StepBase(ABC):
                 checkpoint.restoreStep(self)
             finally:
                 checkpoint.close()
+            # It has served its fallback. Restored with the step, the restart output's record of its checkpoints is the
+            # one of when this checkpoint was written, which ends with it.
+            restartWriter.dropLatestCheckpoint()
 
             try:
                 self.timeStepper.rejectTimeStep(self.cutbackFactor)
@@ -412,10 +418,11 @@ class StepBase(ABC):
         journal.errorMessage("No checkpoint fallback left", solver.identification)
         raise ReachedMinIncrementSize()
 
-    def takeLatestCheckpointOfStep(self, restartWriter) -> ResumeCheckpoint | None:
-        """Open the latest restart checkpoint ``restartWriter`` wrote that no fallback has taken yet, if
-        it belongs to this step. The writer's checkpoints are taken newest first, so once one belongs
-        to an earlier step, all that remain do.
+    def latestCheckpointOfStep(self, restartWriter) -> ResumeCheckpoint | None:
+        """Open the latest restart checkpoint ``restartWriter`` offers (see
+        :meth:`~edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase.latestCheckpoint`),
+        if it belongs to this step. The writer's checkpoints are offered newest first, so once one
+        belongs to an earlier step, all that remain do.
 
         Parameters
         ----------
@@ -428,7 +435,7 @@ class StepBase(ABC):
             The opened checkpoint, or None if no checkpoint of this step is left.
         """
 
-        fileName = restartWriter.takeLatestCheckpoint()
+        fileName = restartWriter.latestCheckpoint()
         if fileName is None:
             return None
         checkpoint = ResumeCheckpoint(fileName)

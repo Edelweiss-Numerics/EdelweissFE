@@ -181,6 +181,30 @@ def test_a_step_falls_back_to_an_earlier_checkpoint_and_finishes(tmp_path, obsta
     )
 
 
+def test_a_resumed_step_falls_back_to_the_checkpoints_of_the_run_it_resumes(tmp_path, obstacle):
+    """A run resumed from the checkpoint at t = 0.6 meets the obstacle at its first increment. The checkpoint it resumed
+    from holds the state that increment started from, so the step goes back to the one before it, at t = 0.3, which
+    the interrupted run wrote, and passes the obstacle on the finer path."""
+
+    text = (
+        _BEAM
+        + _OUTPUT.format(directory=tmp_path, numberOfFilesToKeep=10)
+        + _JOB
+        + _STEP.format(maxCheckpointFallbacks=1)
+    )
+    interrupted = _run(tmp_path, text)
+    referenceU = interrupted.nodeFields["displacement"]["U"].copy()
+    checkpoint = next(path for path in tmp_path.glob("ckpt_*.h5") if _modelTime(path) == pytest.approx(0.6))
+
+    fallenBackTo = obstacle()
+    resumed = _run(tmp_path, text.replace(_JOB, "\n*restart, readFrom={:}\n".format(checkpoint) + _JOB))
+
+    # the resume itself, then the fallback
+    assert fallenBackTo == pytest.approx([0.6, 0.3])
+    assert resumed.time == pytest.approx(1.0)
+    np.testing.assert_allclose(resumed.nodeFields["displacement"]["U"], referenceU, rtol=1e-10, atol=1e-14)
+
+
 def test_without_fallbacks_the_step_fails_at_the_minimum_increment(tmp_path, obstacle):
     fallenBackTo = obstacle()
     model = _run(tmp_path, _deck(tmp_path, maxCheckpointFallbacks=0))
