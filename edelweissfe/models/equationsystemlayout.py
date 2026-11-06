@@ -305,6 +305,22 @@ class EquationSystemLayout:
 
         return None
 
+    def carriersOfTheMotionOfParticles(self) -> set[str]:
+        """Where the model holds the motion of its meshfree particles: ``"particles"`` if a particle carries a velocity
+        or an acceleration in its own state, ``"nodes"`` if a node of their kernel functions carries one in the entries
+        ``V`` and ``A`` of the model's node fields. Asked by the implicit dynamic solver at the start of a step: it takes
+        the motion from one of the two, as its option ``meshfreeInertia`` says, and nothing transfers it from the other.
+
+        A finite element model has no particles: none.
+
+        Returns
+        -------
+        set[str]
+            ``"particles"``, ``"nodes"``, both or none.
+        """
+
+        return set()
+
     def updateMaterialPoints(self, dU: DofVector, timeStep: TimeStep, forEachChunk: Callable[[list, Callable], None]):
         """Bring the material points that belong to no element up to date with the trial solution increment, right
         before the solver computes the elements. Called whenever ``NIST``, or a solver derived from it (``NEST``,

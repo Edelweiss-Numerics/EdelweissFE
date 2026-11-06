@@ -121,7 +121,9 @@ and ``NID`` assembles its mass matrix from the model's finite elements, asks the
 carry the mass of the nodes
 (:meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.dofsWithNodalInertia`) and, if it integrates the
 inertia of meshfree particles at the nodes, for their lumped mass
-(:meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.assembleLumpedMassOfParticles`). At the start
+(:meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.assembleLumpedMassOfParticles`), and, at the
+start of a step, where the model holds the motion of the particles
+(:meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.carriersOfTheMotionOfParticles`). At the start
 of every step, the implicit solvers give the entities of the model that integrate their own inertia their Newmark
 parameters (:meth:`~edelweissfe.models.femodel.FEModel.setNewmarkParametersOfEntities`): ``NID`` its own, every
 quasi-static solver zero, so that a quasi-static solver is quasi-static by construction. ``NED`` takes the numbering of the

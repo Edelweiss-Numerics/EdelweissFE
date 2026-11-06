@@ -170,6 +170,9 @@ nodes (option ``meshfreeInertia``, see :mod:`~edelweissfe.solvers.nonlinearimpli
 particles carry their velocity and acceleration in their state, and ``V`` and ``A`` of the kernel functions' nodes
 are zero; at the nodes, ``NID`` carries them in ``V`` and ``A`` by node, as the explicit meshfree solver carries
 ``V``. Either way, ``P`` holds the inertial force: in the particles' residual contributions, or added at the nodes.
+The two keep the motion of the particles in different places, and nothing transfers it between them: a step whose
+``meshfreeInertia`` would take it from where the model does not hold it refuses to start
+(:meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.carriersOfTheMotionOfParticles`).
 
 Using the entries in code
 -------------------------
