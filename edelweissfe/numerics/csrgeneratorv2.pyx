@@ -143,6 +143,7 @@ cdef extern from "_csrcore.h":
         vector[int64_t] entryStart
 
         void mapEntities(const SystemMatrixEntities& entities, double* data) except +
+        void releaseMap()
         void beginAssembly() nogil
         void scatterBlock(int tid, int entity, const double* block) nogil
         int64_t memoryBytes()
@@ -237,16 +238,27 @@ cdef class _CSRCoreOwner:
         if self.core != NULL:
             del self.core
 
+    @property
+    def memoryBytes(self):
+        """Bytes the core still holds: its pattern, and its gather map while the generator lives."""
+        return self.core.memoryBytes()
+
 
 cdef class _DirectCSRAssemblerOwner:
     """Owns the C++ core of a :class:`DirectCSRAssembler`, its CSR pattern and its map, and frees it when it goes;
-    held like :class:`_CSRCoreOwner`."""
+    held like :class:`_CSRCoreOwner`: the pattern lives as long as the assembler or its matrix, the map only as long as
+    the assembler."""
 
     cdef CSRDirectAssembler* assembler
 
     def __dealloc__(self):
         if self.assembler != NULL:
             del self.assembler
+
+    @property
+    def memoryBytes(self):
+        """Bytes the core still holds: its pattern, and its map while the assembler lives."""
+        return self.assembler.memoryBytes()
 
 
 cdef class _CSRPattern:
@@ -261,6 +273,14 @@ cdef class _CSRPattern:
     cdef object coreOwner
     cdef vector[int] retiredIndptr
     cdef vector[int] retiredIndices
+
+    @property
+    def memoryBytesKeptAlive(self):
+        """Bytes that the arrays of this pattern keep alive: all that the core still holds while this is its current
+        pattern, else the retired arrays alone."""
+        if self.coreOwner is not None:
+            return self.coreOwner.memoryBytes
+        return <int64_t> (self.retiredIndptr.size() + self.retiredIndices.size()) * sizeof(int)
 
 
 cdef np.ndarray _intArrayOwnedBy(_CSRPattern owner, int* data, np.npy_intp n):
@@ -489,6 +509,13 @@ cdef class DirectCSRAssembler:
     cdef _CSRPattern pattern
     cdef CSRDirectAssembler* asm_
     cdef public object csrMatrix
+
+    def __dealloc__(self):
+        # Only this assembler scatters: its map goes with it, also while the matrix, or a linear solver that keeps the
+        # pattern arrays to compare the next pattern with, keeps the pattern alive. A cyclic collection may have
+        # cleared owner (to None) first, and freed the core with it.
+        if self.owner is not None:
+            self.asm_.releaseMap()
 
     def __init__(self, entities, int nDof, int numThreads=1, patternFillIn=None):
         cdef SystemMatrixEntities table = _borrowedTable(
