@@ -36,7 +36,7 @@ import numpy as np
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.sets.nodeset import NodeSet
-from edelweissfe.stepactions.base.stepactionbase import StepActionBase
+from edelweissfe.stepactions.base.arclengthcontrollerbase import ArcLengthControllerBase
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
 from edelweissfe.utils.misc import withoutParserBookkeepingKeys
@@ -82,7 +82,7 @@ class IndirectContractionControlSchema:
     absolute: bool | None = schemaField(description="Use absolute formulation", dtype=bool, default=True)
 
 
-class StepAction(StepActionBase):
+class StepAction(ArcLengthControllerBase):
     """Indirect (displacement) controller for the NISTPArcLength solver, controlling the average
     radial contraction of a ring of nodes, e.g. for tunneling simulations.
 
@@ -121,8 +121,9 @@ class StepAction(StepActionBase):
     #: Option schema for this step action, consumed by OptionSchemaProvider's registry.
     schema = IndirectContractionControlSchema
 
-    #: The controlled quantity at the end of the previous step, and its current value.
-    checkpointedState = {"currentL0": float, "_currentL": float}
+    #: The controlled quantity at the end of the previous step, its current value, and the target of this step, which
+    #: the absolute formulation derives from it when the action is declared.
+    checkpointedState = {"currentL0": float, "_currentL": float, "L": float}
 
     def __init__(
         self,
@@ -149,7 +150,8 @@ class StepAction(StepActionBase):
     @classmethod
     def fromStepActionDefinition(cls, name, definition, jobInfo, model, fieldOutputController, journal):
         """Build this controller from a parsed ``>>indirectcontractioncontrol`` definition. See
-        :class:`StepActionBase` for why this is separate from ``__init__``.
+        :class:`~edelweissfe.stepactions.base.stepactionbase.StepActionBase` for why this is separate from
+        ``__init__``.
 
         The ``exportCVector`` dump is written here rather than in ``__init__`` because appending
         ``.csv`` to a user-supplied file name is input-file shaping, and a typed constructor should
