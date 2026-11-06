@@ -256,23 +256,17 @@ class DofManager:
 
     @cached_property
     def dofNumberingDigest(self) -> str:
-        """A digest of what decides the index of every degree of freedom: for every field, its name, its dimension, its
-        slice in the DofVector and the labels of its nodes in the order they are numbered; and the number of the scalar
-        variables, which follow. Two equation systems of a step with the same digest give every degree of freedom the
-        same index, so a DofVector of one is a DofVector of the other -- e.g., before and after a rebuild caused by a
-        contact search, which changes the coupling of the degrees of freedom but not their numbering. Their number
-        stands for the scalar variables: within a step, these are always those of the constraints switched on, in their
-        order, and only a step switches constraints on or off.
+        """A digest, a hexadecimal string, of what decides the index of every degree of freedom: for every field, its
+        name, its dimension, its slice in the DofVector and the labels of its nodes in the order they are numbered; and
+        the number of the scalar variables, which follow. Two equation systems of a step with the same digest give
+        every degree of freedom the same index, so a DofVector of one is a DofVector of the other -- e.g., before and
+        after a rebuild caused by a contact search, which changes the coupling of the degrees of freedom but not their
+        numbering. Their number stands for the scalar variables: within a step, these are always those of the
+        constraints switched on, in their order, and only a step switches constraints on or off.
 
         The digest names the nodes by their labels, so it is the same in every run of a model: a restart checkpoint
         holds it together with the vectors it numbers. Computed at the first request; the numbering of a DofManager
-        does not change.
-
-        Returns
-        -------
-        str
-            The digest, as a hexadecimal string.
-        """
+        does not change."""
 
         digest = hashlib.blake2b(digest_size=16)
         for fieldName, fieldIndices in self.idcsOfFieldsInDofVector.items():
