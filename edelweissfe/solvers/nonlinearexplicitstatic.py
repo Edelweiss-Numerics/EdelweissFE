@@ -268,7 +268,9 @@ class NEST(NIST):
         outputmanagers: dict[str, OutputManagerBase],
     ):
         """Build the equation system, once per step, and start the step; see
-        :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.beginStep`.
+        :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.beginStep`. As every quasi-static
+        solver, it gives the entities that integrate their own inertia no inertia
+        (:meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.newmarkParametersOfEntities`).
 
         Parameters
         ----------
@@ -285,6 +287,8 @@ class NEST(NIST):
         performancetiming.reset()
 
         self.validateModelCapabilities(model)
+
+        model.setNewmarkParametersOfEntities(*self.newmarkParametersOfEntities())
 
         self.journal.message("Creating monolithic equation system", self.identification, 0)
         self.forgetEquationSystem()
