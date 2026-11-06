@@ -148,7 +148,7 @@ def clampHistory(monkeypatch):
         ClampHistory.constrainedDofIndices = clamp.constrainedDofIndices
         changeOverTheStep = clamp.getPrescribedIncrement(TimeStep(timeStep.number, 1.0, 1.0, 0.0, 0.0, 0.0)).flatten()
         result = originalAssembleLoads(self, stepActions, U_np, dU, P, K, timeStep)
-        loadParameterIncrement = self.arcLengthLoads.loadParameter - self.Lambda
+        loadParameterIncrement = self.arcLengthIncrement.loadParameter - self.Lambda
         ClampHistory.evaluations.append(
             (loadParameterIncrement, np.array(dU[clamp.constrainedDofIndices]), changeOverTheStep)
         )
@@ -224,8 +224,8 @@ def steps(monkeypatch):
     def assembleLoadsAtIncrementEnd(self, stepActions, U_np, dU, P, K, timeStep):
         before = np.array(P)
         result = originalAssembleLoads(self, stepActions, U_np, dU, P, K, timeStep)
-        if not Steps.externalLoads[-1] and self.arcLengthLoads is not None:
-            Steps.startLoadParameters.append(self.arcLengthLoads.loadParameter)
+        if not Steps.externalLoads[-1] and self.arcLengthIncrement is not None:
+            Steps.startLoadParameters.append(self.arcLengthIncrement.loadParameter)
         Steps.externalLoads[-1].append(before - np.array(P))
         return result
 
