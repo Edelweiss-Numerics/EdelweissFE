@@ -108,12 +108,6 @@ class DofManager:
         self.idcsOfNodeFieldsInDofVector = (
             dict()
         )  #: Dictionary mapping a complete NodeField to all its indices in the DofVector
-        #: Reverse dictionary mapping an index to its Host object (e.g., a Node).
-        #:
-        #: .. warning::
-        #:    Not read within EdelweissFE (kept for external callers); building it costs a pass over
-        #:    every degree of freedom.
-        self.indexToHostObjectMapping = dict()
         self.accumulatedElementNDof = 0  #: Accumulated number of element DOFs (= sum of element vector sizes)
         self.largestNumberOfElNDof = 0  #: Size of the largest element DOF vector
         self.accumulatedConstraintNDof = 0  #: Accumulated number of constraint DOFs (= sum of constraint vector sizes)
@@ -144,8 +138,6 @@ class DofManager:
 
         if initializeAccumulatedNodalFluxesFieldwise:
             self.nAccumulatedNodalFluxesFieldwise = self._computeAccumulatedNodalFluxesFieldWise(self.fields)
-
-        self.indexToHostObjectMapping |= self._determineIndexToNodeMap()
 
     def _determineDofsAndTheirIndices(self, nodeFields: list, scalarVariables: list):
 
@@ -325,6 +317,22 @@ class DofManager:
             nDof,
             idcsOfScalarVariablesInDofVector,
         )
+
+    @cached_property
+    def indexToHostObjectMapping(self) -> dict[int, Node]:
+        """The map from each index of a field variable in the DofVector to the node it belongs to, built on first use.
+
+        Only the report of the largest residual of an implicit solver reads it, through
+        :meth:`getNodeForIndexInDofVector`, while building it costs a pass over every degree of freedom: a DOF manager
+        that is never asked, e.g. one of the many an explicit solver builds over a run, never builds it.
+
+        Returns
+        -------
+        dict[int, Node]
+            The node of every index of a field variable.
+        """
+
+        return self._determineIndexToNodeMap()
 
     def _determineIndexToNodeMap(
         self,
