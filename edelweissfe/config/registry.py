@@ -174,7 +174,7 @@ _addBuiltins(
 _addBuiltins(
     "section",
     "Section",
-    ["plane", "planerandomthickness", "solid"],
+    ["beam", "plane", "planerandomthickness", "solid"],
     "edelweissfe.sections",
 )
 
