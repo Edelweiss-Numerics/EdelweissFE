@@ -347,19 +347,24 @@ cdef class CSRGenerator:
     """
     CSRGenerator class to create and manage a CSR matrix from COO format.
 
-    This class utilizes a C++ core for efficient conversion and updating of the CSR matrix.
+    This class utilizes a C++ core for efficient conversion and updating of the CSR matrix. The gather map indexes the
+    COO pairs with 32-bit integers, so there may be at most ``INT32_MAX`` of them.
 
     Parameters
     ----------
     I
-        The row of every COO pair.
+        The row of every COO pair, in ``[0, nDof)``.
     J
-        The column of every COO pair.
+        The column of every COO pair, in ``[0, nDof)``; as many as rows.
     nDof
         The number of rows and columns.
 
-    The gather map indexes the COO pairs with 32-bit integers, so there may be at most ``INT32_MAX`` of them. ``I``
-    and ``J`` must have the same length and lie in ``[0, nDof)``; ``IndexError`` otherwise.
+    Raises
+    ------
+    ValueError
+        If ``I`` and ``J`` differ in length, or ``nDof`` is negative.
+    IndexError
+        If a row or a column lies outside the matrix.
     """
 
     # the owner of the core, the owner of its current pattern (the base of csrMatrix's pattern arrays), and the core
