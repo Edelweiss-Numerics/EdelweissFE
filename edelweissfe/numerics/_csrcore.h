@@ -10,11 +10,20 @@
 #include <utility>
 #include <vector>
 
+/**
+ * @brief A (row, column) pair of the VIJ path, packed for the sort of CSRCore: one 64-bit key that orders the pairs
+ * row by row, then column by column, and the index of the pair in the VIJ arrays.
+ */
 struct PackedEdge {
-  uint64_t key;  // High 32: Row, Low 32: Col
-  int32_t  orig; // Original index
+  uint64_t key;  ///< the row in the high 32 bits, the column in the low 32 bits
+  int32_t  orig; ///< the index of the pair in I and J
 
-  // Default comparison for std::sort is now extremely fast
+  /**
+   * @brief Order by row, then by column: a comparison of the keys alone.
+   *
+   * @param other the other pair.
+   * @return whether this pair comes first.
+   */
   bool operator<( const PackedEdge& other ) const { return key < other.key; }
 };
 
@@ -324,12 +333,22 @@ inline CSRPattern CSRPattern::ofEntities( const SystemMatrixEntities& entities, 
  */
 class CSRCore : public CSRPattern {
 public:
-  // Assembly Mapping. Only the gather needs these; see releaseGatherMap().
+  /// The gather map, per VIJ value sorted by its CSR entry: the index of the value in V (only the gather needs it).
   std::vector< int32_t > gather_sources;
+  /// The gather map, nnz + 1: where the values of each CSR entry begin in gather_sources.
   std::vector< int32_t > assembly_ptr;
 
-  // gather_sources and assembly_ptr are int32 indices into the COO list, so the build refuses more than INT32_MAX
-  // pairs; the direct path, which derives its pattern from the entities, has no such limit.
+  /**
+   * @brief The pattern and the gather map of the (I, J) pairs, by sort-and-sum.
+   *
+   * gather_sources and assembly_ptr are int32 indices into the COO list, so the build refuses more than INT32_MAX
+   * pairs; the direct path, which derives its pattern from the entities, has no such limit.
+   *
+   * @param I the row of every pair, in [0, n_dof).
+   * @param J the column of every pair, in [0, n_dof).
+   * @param n_pairs the number of pairs.
+   * @param n_dof the number of rows and columns.
+   */
   CSRCore( const int* I, const int* J, int64_t n_pairs, int n_dof )
   {
     nDof = n_dof;
@@ -344,6 +363,16 @@ public:
   }
 
 private:
+  /**
+   * @brief Sort the pairs into rows and columns, collapse the duplicates, and record which values sum to each entry.
+   *
+   * The pairs are bucketed into partitions of rows (several per thread), each partition is sorted on its own, and the
+   * entries are counted and written per partition, all in parallel.
+   *
+   * @param I the row of every pair.
+   * @param J the column of every pair.
+   * @param n_pairs the number of pairs, at least one.
+   */
   void build( const int* I, const int* J, int64_t n_pairs )
   {
     // --- SAFETY & CONFIG ---
@@ -563,17 +592,28 @@ private:
   }
 
 public:
-  // Give back the gather map, keeping the pattern: the generator does so when it goes, while a matrix it handed out
-  // may still use the pattern. The swap idiom is what actually returns the capacity; clear() alone would not.
+  /**
+   * @brief Give back the gather map, keeping the pattern: the generator does so when it goes, while a matrix it handed
+   * out may still use the pattern. The swap idiom is what actually returns the capacity; clear() alone would not.
+   */
   void releaseGatherMap()
   {
     std::vector< int32_t >().swap( gather_sources );
     std::vector< int32_t >().swap( assembly_ptr );
   }
 
-  // Add entries that no COO pair contributes to, assembled as stored zeros: room for values that a caller writes
-  // after the assembly (the in-place multi-point-constraint condensation). The pattern merges them in
-  // (CSRPattern::addEntries); each new entry gets an empty range of the gather map, so update() writes 0.0 there.
+  /**
+   * @brief Add entries that no COO pair contributes to, assembled as stored zeros.
+   *
+   * Room for values that a caller writes after the assembly (the in-place multi-point-constraint condensation). The
+   * pattern merges them in (CSRPattern::addEntries); each new entry gets an empty range of the gather map, so update()
+   * writes 0.0 there.
+   *
+   * @param extraPtr nDof + 1: where the entries to add of each row begin in @p extraIdx.
+   * @param extraIdx the columns of the entries to add, sorted within each row, none already in the pattern.
+   * @param retiredIndptr receives the old indptr.
+   * @param retiredIndices receives the old indices.
+   */
   void addEntries( const int64_t*      extraPtr,
                    const int32_t*      extraIdx,
                    std::vector< int >& retiredIndptr,
@@ -585,9 +625,22 @@ public:
     /** @brief Keeps assembly_ptr in step with the merge: a new entry's gather range is the empty one where the range
      * of the next old entry starts. */
     struct GatherRangesOfMergedEntries {
-      const std::vector< int32_t >& old;
-      std::vector< int32_t >        merged;
-      void                          beginMerge( int newNnz ) { merged.resize( static_cast< size_t >( newNnz ) + 1 ); }
+      const std::vector< int32_t >& old;    ///< assembly_ptr before the merge
+      std::vector< int32_t >        merged; ///< assembly_ptr after the merge
+
+      /**
+       * @brief Size the merged ranges.
+       *
+       * @param newNnz the number of entries after the merge.
+       */
+      void beginMerge( int newNnz ) { merged.resize( static_cast< size_t >( newNnz ) + 1 ); }
+
+      /**
+       * @brief The range of an entry after the merge begins where the range of the next old entry began.
+       *
+       * @param newPosition the position of the entry after the merge.
+       * @param oldPosition the position of the next old entry at or after it.
+       */
       void entryMerged( int newPosition, int64_t oldPosition ) { merged[newPosition] = old[oldPosition]; }
     } ranges{ assembly_ptr, {} };
 
@@ -597,6 +650,12 @@ public:
     assembly_ptr.swap( ranges.merged );
   }
 
+  /**
+   * @brief The gather: every CSR value is the sum of its VIJ values.
+   *
+   * @param V_data the VIJ values, one per pair.
+   * @param csr_data receives the nnz CSR values.
+   */
   void update( const double* V_data, double* csr_data ) const
   {
     if ( nnz == 0 )
@@ -622,16 +681,20 @@ public:
     }
   }
 
-  // Bytes held by the CSR pattern and the gather map -- the counterpart to
-  // CSRDirectAssembler::memoryBytes(), so the two assembly paths can be compared on the same
-  // basis: what the object itself owns. That is the pattern (indptr, indices) plus the gather map,
-  // which is the term the direct path does away with -- gather_sources is one int32 per COO pair,
-  // so it scales with sizeVIJ rather than with nnz and is the second-largest array in the VIJ path
-  // after the value array itself.
-  //
-  // Not counted here, because this object does not own them: the VIJ value and index arrays (held
-  // by the DofManager) and the CSR data array (allocated by the Python-level CSRGenerator, which
-  // adds it in its own memoryBytes).
+  /**
+   * @brief Bytes held by the CSR pattern and the gather map -- the counterpart to CSRDirectAssembler::memoryBytes(),
+   * so the two assembly paths can be compared on the same basis: what the object itself owns.
+   *
+   * That is the pattern (indptr, indices) plus the gather map, which is the term the direct path does away with --
+   * gather_sources is one int32 per COO pair, so it scales with the number of pairs rather than with nnz and is the
+   * second-largest array in the VIJ path after the value array itself.
+   *
+   * Not counted here, because this object does not own them: the VIJ value and index arrays (held by the VIJ
+   * assembly) and the CSR data array (allocated by the Python-level CSRGenerator, which adds it in its own
+   * memoryBytes).
+   *
+   * @return the bytes.
+   */
   int64_t memoryBytes() const
   {
     return static_cast< int64_t >( indptr.size() ) * sizeof( int ) +
