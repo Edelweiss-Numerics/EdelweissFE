@@ -26,25 +26,24 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 """
-(Parallel) Arc Length Solver, based on the proposed approach in Jirásek/Bažant 2001.
-Replaces the NewtonRaphson scheme of the NISTParallel Solver.
+(Parallel) Arc length solver, based on the approach of Jirásek/Bažant 2001: the Newton iterations of the NISTParallel
+solver, with the load parameter as an unknown of every increment besides the solution.
 """
 
 from dataclasses import dataclass
 
 import numpy as np
+from scipy.sparse import csr_matrix
 
-import edelweissfe.utils.performancetiming as performancetiming
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.numerics.dofmanager import DofVector, VIJSystemMatrix
 from edelweissfe.numerics.parallelizationutilities import forEachSliceInParallel
 from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
-from edelweissfe.solvers.nonlinearimplicitstatic import QuasiNewtonFallback
 from edelweissfe.solvers.nonlinearimplicitstaticparallel import NISTParallel
 from edelweissfe.stepactions.base.arclengthcontrollerbase import ArcLengthControllerBase
 from edelweissfe.stepactions.base.stepactionbase import StepActionBase
 from edelweissfe.timesteppers.timestep import TimeStep
-from edelweissfe.utils.exceptions import ConditionalStop, ReachedMaxIterations
+from edelweissfe.utils.exceptions import ConditionalStop
 from edelweissfe.utils.fieldoutput import FieldOutputController
 from edelweissfe.utils.math import createModelAccessibleFunction
 from edelweissfe.utils.schema import schemaField
@@ -73,15 +72,23 @@ class NISTPArcLengthSchema(NISTParallel.schema):
 
 
 @dataclass
-class ArcLengthLoads:
-    """The external load of an arc length increment, :math:`\\boldsymbol{f}_\\mathrm{ext} = \\boldsymbol{f}_0 +
-    \\lambda \\, \\boldsymbol{f}_\\mathrm{ref}`: the residual contributions of the dead load (the loads at the start of
-    the step, :math:`-\\boldsymbol{f}_0`) and of the reference load (their change over the step,
-    :math:`-\\boldsymbol{f}_\\mathrm{ref}`), with their tangents, and the load parameter :math:`\\lambda` of the state
-    being evaluated. Allocated per increment by :meth:`NISTPArcLength.solveIncrement`, assembled by
-    :meth:`NISTPArcLength.assembleLoadsAtIncrementEnd`.
+class ArcLengthIncrement:
+    """What the arc length method adds to the Newton iterations of an increment: the load parameter :math:`\\lambda`,
+    an unknown besides the solution, and the external load it scales, :math:`\\boldsymbol{f}_\\mathrm{ext} =
+    \\boldsymbol{f}_0 + \\lambda \\, \\boldsymbol{f}_\\mathrm{ref}`, with the residual contributions of the dead load
+    (the loads at the start of the step, :math:`-\\boldsymbol{f}_0`) and of the reference load (their change over the
+    step, :math:`-\\boldsymbol{f}_\\mathrm{ref}`), and their tangents. Created for every attempt of an increment by
+    :meth:`NISTPArcLength.solveIncrement`; the loads are assembled by :meth:`NISTPArcLength.assembleLoadsAtIncrementEnd`,
+    which adds their tangents to the tangent of the increment.
     """
 
+    #: The load parameter at the start of the increment, the one the last accepted increment reached.
+    loadParameterAtStart: float
+    #: The increment being solved.
+    timeStep: TimeStep
+    #: The whole step as one time step: at it, the Dirichlet boundary conditions give the change of their prescribed
+    #: values over the step, which the load parameter scales like the reference load.
+    referenceTimeStep: TimeStep
     #: The residual contribution of the dead load.
     deadLoad: DofVector
     #: The residual contribution of the reference load.
@@ -90,7 +97,16 @@ class ArcLengthLoads:
     deadLoadTangent: VIJSystemMatrix
     #: The tangent of the reference load's contribution.
     referenceLoadTangent: VIJSystemMatrix
-    #: The load parameter at the end of the increment, of the state being evaluated.
+    #: The two right-hand sides of the linearized system, solved at once as its columns: the out-of-balance force
+    #: :math:`\\boldsymbol{R}_0`, of the dead load and of the reference load scaled by the load parameter of the
+    #: iterate, and the reference load alone, :math:`\\boldsymbol{R}_f`.
+    rightHandSides: np.ndarray
+    #: The correction of the solution :math:`\\boldsymbol{R}_f` causes, :math:`\\Delta\\Delta \\boldsymbol{U}_f`, of the
+    #: last linear solve.
+    referenceCorrection: np.ndarray | None = None
+    #: The increment of the load parameter of the iterate, :math:`\\Delta\\lambda`.
+    loadParameterIncrement: float = 0.0
+    #: The load parameter of the state being evaluated: of the iterate, or of a trial state of a line search.
     loadParameter: float = 0.0
 
 
@@ -104,6 +120,12 @@ class NISTPArcLength(NISTParallel):
     :class:`~edelweissfe.stepactions.base.arclengthcontrollerbase.ArcLengthControllerBase`); without one
     (``arcLengthController=off``), the step is solved as by
     :class:`~edelweissfe.solvers.nonlinearimplicitstaticparallel.NISTParallel`.
+
+    The Newton iterations are those of :meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.solveIncrement`; the
+    load parameter enters them through its hooks: the prediction (:meth:`extrapolateLastIncrement`), the loads of the
+    evaluated state (:meth:`assembleLoadsAtIncrementEnd`), the first iterate (:meth:`firstIterateNeedsCorrection`), the
+    linear solve for two right-hand sides (:meth:`solveForCorrection`), and the corrections of the pair of the solution
+    and the load parameter (:meth:`setTrialState`, :meth:`applyCorrection`).
 
     Every arc length step scales its own reference load -- the change of its loads and prescribed displacements over
     the step -- from :math:`\\lambda = 0`, so it starts from the loads the steps before it ended with; at its end, every
@@ -142,8 +164,8 @@ class NISTPArcLength(NISTParallel):
         self._dLambda = None
         #: The controller of the current step, or None.
         self.arcLengthController = None
-        #: The loads of the increment being solved, None between increments.
-        self.arcLengthLoads = None
+        #: What the arc length method adds to the iterations of the increment being solved; None between increments.
+        self.arcLengthIncrement = None
 
         return super().__init__(jobInfo, journal, **kwargs)
 
@@ -247,19 +269,25 @@ class NISTPArcLength(NISTParallel):
         maxIter: int,
         maxGrowingIter: int,
     ) -> tuple[DofVector, DofVector, DofVector, int, dict]:
-        """Newton's method for the solution increment and the increment of the load parameter together.
+        """Newton's method for the solution increment and the increment of the load parameter together: the iterations
+        of :meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.solveIncrement`, into which the load parameter
+        enters through the hooks of this class.
 
-        Each iteration evaluates the model at the trial state (:meth:`assembleResidualAndTangent`, with the loads of
-        :meth:`assembleLoadsAtIncrementEnd`), and solves the linearized system for two right-hand sides at once: the
-        out-of-balance force :math:`R_0`, and the reference load :math:`R_f`. The controller combines the two
-        corrections, :math:`\\Delta\\Delta U = \\Delta\\Delta U_0 + \\Delta\\Delta\\lambda \\, \\Delta\\Delta U_f`, and
-        returns the correction of the load parameter :math:`\\Delta\\Delta\\lambda`. The prescribed degrees of freedom
-        follow the load parameter, like the loads: the reference solve carries their prescribed change over the step,
-        so every correction of the load parameter moves them along, while the out-of-balance solve leaves them where
-        they are -- they are no unknowns, and their rows are left out of the convergence check. The options of
-        Newton's method apply to the pair :math:`(\\Delta U, \\Delta\\lambda)`: the prediction extrapolates both with
-        the same weights, a line search scales both corrections with the same step length, and the quasi-Newton
-        fallback keeps the tangent of the first iteration for both right-hand sides.
+        Each iteration evaluates the model at the iterate (with the loads of :meth:`assembleLoadsAtIncrementEnd`), and
+        solves the linearized system for two right-hand sides at once: the out-of-balance force :math:`R_0`, and the
+        reference load :math:`R_f` (:meth:`solveForCorrection`). The controller combines the two corrections,
+        :math:`\\Delta\\Delta U = \\Delta\\Delta U_0 + \\Delta\\Delta\\lambda \\, \\Delta\\Delta U_f`, and returns the
+        correction of the load parameter :math:`\\Delta\\Delta\\lambda` (:meth:`applyCorrection`). The prescribed degrees
+        of freedom follow the load parameter, like the loads: the reference solve carries their prescribed change over
+        the step, so every correction of the load parameter moves them along, while the out-of-balance solve leaves
+        them where they are -- they are no unknowns, and their rows are left out of the convergence check. The options
+        of Newton's method apply to the pair :math:`(\\Delta U, \\Delta\\lambda)`: the prediction extrapolates both with
+        the same weights (:meth:`extrapolateLastIncrement`), a line search scales both corrections with the same step
+        length (:meth:`setTrialState`), and the quasi-Newton fallback keeps the tangent of the first iteration for both
+        right-hand sides.
+
+        Before the iterations, the step's stop condition is checked (see the option ``stopCondition``); once they have
+        converged, the load parameter advances with the solution it belongs to.
 
         Parameters
         ----------
@@ -315,133 +343,34 @@ class NISTPArcLength(NISTParallel):
         if timeStep.number > 1 and self.checkConditionalStop():
             raise ConditionalStop
 
-        iterationCounter = 0
-        incrementResidualHistory = {field: [] for field in self.theDofManager.idcsOfFieldsInDofVector}
-
-        dirichlets = stepActions["dirichlet"].values()
-
-        with performancetiming.timeit("step actions at increment start"):
-            # Find which global DOFs the Dirichlet BCs constrain, once up front.
-            self.locateConstrainedDofs(dirichlets)
-
-            self.applyStepActionsAtIncrementStart(model, timeStep, stepActions)
-
-        # the two right-hand sides, solved at once: R_0 of the dead and the scaled reference load, R_f of the reference
-        # load alone
-        R_ = np.tile(self.theDofManager.constructDofVector(), (2, 1)).T
-        R_0 = R_[:, 0]
-        R_f = R_[:, 1]
-        F = self.theDofManager.constructDofVector()
-        FConstraints = self.theDofManager.constructDofVector()
-        PLoadsAndConstraints = self.theDofManager.constructDofVector()
-        U_np = self.theDofManager.constructDofVector()
-        self.arcLengthLoads = ArcLengthLoads(
-            self.theDofManager.constructDofVector(),
-            self.theDofManager.constructDofVector(),
-            self.theDofManager.constructVIJSystemMatrix(),
-            self.theDofManager.constructVIJSystemMatrix(),
+        self.arcLengthIncrement = ArcLengthIncrement(
+            loadParameterAtStart=self.Lambda,
+            timeStep=timeStep,
+            referenceTimeStep=TimeStep(timeStep.number, 1.0, 1.0, 0.0, 0.0, 0.0),
+            deadLoad=self.theDofManager.constructDofVector(),
+            referenceLoad=self.theDofManager.constructDofVector(),
+            deadLoadTangent=self.theDofManager.constructVIJSystemMatrix(),
+            referenceLoadTangent=self.theDofManager.constructVIJSystemMatrix(),
+            rightHandSides=np.tile(self.theDofManager.constructDofVector(), (2, 1)).T,
         )
-        ddU = None
-
-        Lambda = self.Lambda
-
-        # The whole step as one time step: at it, the Dirichlet boundary conditions give the change of their prescribed
-        # values over the step, which the load parameter scales like the reference load.
-        referenceTimeStep = TimeStep(timeStep.number, 1.0, 1.0, 0.0, 0.0, 0.0)
-
-        with performancetiming.timeit("predictor"):
-            dU, isExtrapolatedIncrement = self.extrapolateLastIncrement(
-                extrapolation, timeStep, dU, (), prevTimeStep, model
+        try:
+            U_np, dU, P, iterationCounter, incrementResidualHistory = super().solveIncrement(
+                U_n,
+                dU,
+                P,
+                K,
+                stepActions,
+                model,
+                timeStep,
+                prevTimeStep,
+                extrapolation,
+                maxIter,
+                maxGrowingIter,
             )
-            dLambda = self.extrapolateLoadParameterIncrement(extrapolation, timeStep, prevTimeStep)
-            # the prescribed degrees of freedom where the predicted load parameter puts them: their prescribed change
-            # over the step, scaled by it
-            for dirichlet in dirichlets:
-                dU[dirichlet.constrainedDofIndices] = (
-                    dLambda * dirichlet.getPrescribedIncrement(referenceTimeStep).flatten()
-                )
+            dLambda = self.arcLengthIncrement.loadParameterIncrement
+        finally:
+            self.arcLengthIncrement = None
 
-        quasiNewton = QuasiNewtonFallback(self.options["fallBackToQuasiNewton"])
-
-        while True:
-            self.arcLengthLoads.loadParameter = Lambda + dLambda
-            P, K, F = self.assembleResidualAndTangent(
-                U_n, dU, U_np, R_0, P, PLoadsAndConstraints, F, FConstraints, K, stepActions, model, timeStep
-            )
-            R_f[:] = -self.arcLengthLoads.referenceLoad
-
-            # The prescribed degrees of freedom move with the load parameter, and only with it: the reference solve
-            # carries their prescribed change over the step, so a correction ddLambda moves them by ddLambda times that
-            # change, as it scales the reference load. The out-of-balance solve leaves them where they are, at the
-            # place the load parameter of this iterate puts them -- so they are no unknowns, and their rows are left
-            # out of the convergence check, as in NIST's later iterations.
-            for dirichlet in dirichlets:
-                R_0[dirichlet.constrainedDofIndices] = 0.0
-            R_f = self.applyDirichletToResidual(referenceTimeStep, R_f, dirichlets)
-
-            if iterationCounter > 0 or isExtrapolatedIncrement:
-                converged, nodesWithLargestResidual = self.checkConvergence(
-                    R_0, ddU, dU, F, FConstraints, iterationCounter, incrementResidualHistory
-                )
-
-                if converged:
-                    break
-
-                self.checkDivergingSolutionOrFallBack(
-                    quasiNewton, incrementResidualHistory, maxGrowingIter, nodesWithLargestResidual
-                )
-
-                if iterationCounter == maxIter:
-                    self.printResidualOutlierNodes(nodesWithLargestResidual)
-                    raise ReachedMaxIterations("Reached max. iterations in current increment, cutting back")
-
-            K_ = self.assembleSystemMatrix(K, quasiNewton)
-            # identity rows, and the columns eliminated into both right-hand sides R_0 and R_f
-            K_ = self.applyDirichletToStiffness(K_, dirichlets, R_)
-
-            # solve 2 eq. systems at once: ddU_0 = K⁻¹ R_0 and ddU_f = K⁻¹ R_f
-            ddU_ = self.linearSolve(K_, R_)
-            ddU_0, ddU_f = ddU_[:, 0], ddU_[:, 1]
-
-            # compute the increment of the load parameter. Method depends on the employed arc length controller
-            ddLambda = self.arcLengthController.computeDDLambda(dU, ddU_0, ddU_f, timeStep, self.theDofManager)
-
-            # assemble total solution
-            ddU = ddU_0 + ddLambda * ddU_f
-
-            if self.lineSearchIsDue(iterationCounter):
-
-                def largestResidualAt(stepLength):
-                    # the trial state along the correction of the pair: the solution and the load parameter
-                    self.arcLengthLoads.loadParameter = Lambda + (dLambda + stepLength * ddLambda)
-                    self.assembleResidualAndTangent(
-                        U_n,
-                        dU + stepLength * ddU,
-                        U_np,
-                        R_0,
-                        P,
-                        PLoadsAndConstraints,
-                        F,
-                        FConstraints,
-                        K,
-                        stepActions,
-                        model,
-                        timeStep,
-                    )
-                    for dirichlet in dirichlets:
-                        R_0[dirichlet.constrainedDofIndices] = 0.0
-                    return np.linalg.norm(R_0, np.inf)
-
-                stepLength = self.quadraticLineSearch(largestResidualAt)
-                ddU = stepLength * ddU
-                ddLambda = stepLength * ddLambda
-
-            dU += ddU
-            dLambda += ddLambda
-
-            iterationCounter += 1
-
-        self.arcLengthLoads = None
         self.Lambda += dLambda
         self._dLambda = dLambda
 
@@ -461,6 +390,226 @@ class NISTPArcLength(NISTParallel):
 
         return U_np, dU, P, iterationCounter, incrementResidualHistory
 
+    def extrapolateLastIncrement(
+        self,
+        extrapolation: str,
+        timeStep: TimeStep,
+        dU: DofVector,
+        dirichlets: list,
+        prevTimeStep: TimeStep,
+        model: FEModel,
+    ) -> tuple[DofVector, bool]:
+        """Predict the pair of the solution increment and the increment of the load parameter: the solution increment
+        as :meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.extrapolateLastIncrement` predicts it, the increment
+        of the load parameter with the same weights (:meth:`extrapolateLoadParameterIncrement`), and the prescribed
+        degrees of freedom where the predicted load parameter puts them: their prescribed change over the step, scaled
+        by it. Without a controller, as NIST.
+
+        Parameters
+        ----------
+        extrapolation
+            The type of extrapolation.
+        timeStep
+            The new increment.
+        dU
+            The solution increment to predict, overwritten.
+        dirichlets
+            The active dirichlet boundary conditions.
+        prevTimeStep
+            The last accepted increment, or None for no prediction.
+        model
+            The model tree.
+
+        Returns
+        -------
+        tuple[DofVector,bool]
+            - The predicted solution increment.
+            - True if an extrapolation was performed.
+        """
+
+        if self.arcLengthController is None:
+            return super().extrapolateLastIncrement(extrapolation, timeStep, dU, dirichlets, prevTimeStep, model)
+
+        increment = self.arcLengthIncrement
+
+        dU, isExtrapolatedIncrement = super().extrapolateLastIncrement(
+            extrapolation, timeStep, dU, (), prevTimeStep, model
+        )
+        dLambda = self.extrapolateLoadParameterIncrement(extrapolation, timeStep, prevTimeStep)
+        for dirichlet in dirichlets:
+            dU[dirichlet.constrainedDofIndices] = (
+                dLambda * dirichlet.getPrescribedIncrement(increment.referenceTimeStep).flatten()
+            )
+
+        increment.loadParameterIncrement = dLambda
+        increment.loadParameter = increment.loadParameterAtStart + dLambda
+
+        return dU, isExtrapolatedIncrement
+
+    def firstIterateNeedsCorrection(self, dirichlets: list) -> bool:
+        """Under arc length control, the first iterate of an increment without a prediction always needs a correction:
+        it is the converged state of the last increment, at the load parameter that increment reached, and the first
+        correction moves the load parameter as the controller prescribes. Without a controller, as
+        :meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.firstIterateNeedsCorrection`.
+
+        Parameters
+        ----------
+        dirichlets
+            The Dirichlet boundary conditions of the step.
+
+        Returns
+        -------
+        bool
+            True if the first iterate is corrected before the first convergence check.
+        """
+
+        if self.arcLengthController is None:
+            return super().firstIterateNeedsCorrection(dirichlets)
+
+        return True
+
+    def solveForCorrection(self, K_: csr_matrix, R: DofVector, dirichlets: list) -> DofVector:
+        """Solve the linearized system for two right-hand sides at once: the out-of-balance force :math:`R_0 = R`, and
+        the reference load :math:`R_f`, for the corrections :math:`\\Delta\\Delta U_0` and :math:`\\Delta\\Delta U_f`.
+        Without a controller, as :meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.solveForCorrection`.
+
+        The prescribed degrees of freedom move with the load parameter, and only with it: the reference solve carries
+        their prescribed change over the step, so a correction :math:`\\Delta\\Delta\\lambda` moves them by
+        :math:`\\Delta\\Delta\\lambda` times that change, as it scales the reference load. The out-of-balance solve
+        leaves them where they are, at the place the load parameter of the iterate puts them, in every iteration --
+        also in the first iteration of an increment without a prediction, where NIST's would move them by their
+        prescribed increment.
+
+        The controller completes :math:`\\Delta\\Delta U_0` with :math:`\\Delta\\Delta U_f` when the iterate is moved
+        (:meth:`setTrialState`, :meth:`applyCorrection`).
+
+        Parameters
+        ----------
+        K_
+            The system matrix of the iteration.
+        R
+            The out-of-balance force.
+        dirichlets
+            The Dirichlet boundary conditions of the step.
+
+        Returns
+        -------
+        DofVector
+            The correction the out-of-balance force causes, :math:`\\Delta\\Delta U_0`.
+        """
+
+        if self.arcLengthController is None:
+            return super().solveForCorrection(K_, R, dirichlets)
+
+        increment = self.arcLengthIncrement
+        rightHandSides = increment.rightHandSides
+        R_0, R_f = rightHandSides[:, 0], rightHandSides[:, 1]
+
+        R_0[:] = R
+        R_f[:] = -increment.referenceLoad
+        for dirichlet in dirichlets:
+            R_0[dirichlet.constrainedDofIndices] = 0.0
+        R_f = self.applyDirichletToResidual(increment.referenceTimeStep, R_f, dirichlets)
+
+        # identity rows, and the columns eliminated into both right-hand sides R_0 and R_f
+        K_ = self.applyDirichletToStiffness(K_, dirichlets, rightHandSides)
+
+        # solve 2 eq. systems at once: ddU_0 = K⁻¹ R_0 and ddU_f = K⁻¹ R_f
+        ddU_ = self.linearSolve(K_, rightHandSides)
+        increment.referenceCorrection = ddU_[:, 1]
+
+        return ddU_[:, 0]
+
+    def correctionAtStepLength(self, dU: DofVector, ddU_0: DofVector, stepLength: float) -> tuple[DofVector, float]:
+        """The correction of the pair of the solution and the load parameter at a step length :math:`\\alpha`: the
+        controller combines the two corrections of the linear solve, :math:`\\Delta\\Delta U = \\Delta\\Delta U_0 +
+        \\Delta\\Delta\\lambda \\, \\Delta\\Delta U_f`, with the correction of the load parameter
+        :math:`\\Delta\\Delta\\lambda` its equation asks for, and both are scaled by :math:`\\alpha`.
+
+        Parameters
+        ----------
+        dU
+            The solution increment of the iterate.
+        ddU_0
+            The correction the out-of-balance force causes, see :meth:`solveForCorrection`.
+        stepLength
+            The step length.
+
+        Returns
+        -------
+        tuple[DofVector,float]
+            - The correction of the solution.
+            - The correction of the load parameter.
+        """
+
+        increment = self.arcLengthIncrement
+        ddU_f = increment.referenceCorrection
+
+        ddLambda = self.arcLengthController.computeDDLambda(dU, ddU_0, ddU_f, increment.timeStep, self.theDofManager)
+
+        return stepLength * (ddU_0 + ddLambda * ddU_f), stepLength * ddLambda
+
+    def setTrialState(self, dU: DofVector, ddU_0: DofVector, stepLength: float) -> DofVector:
+        """Set the trial state of a line search at a step length along the correction of the pair: the solution
+        increment and the load parameter, both moved by their corrections at that step length (see
+        :meth:`correctionAtStepLength`); the iterate stays where it is. Without a controller, as
+        :meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.setTrialState`.
+
+        Parameters
+        ----------
+        dU
+            The solution increment of the iterate.
+        ddU_0
+            The correction the out-of-balance force causes, see :meth:`solveForCorrection`.
+        stepLength
+            The step length.
+
+        Returns
+        -------
+        DofVector
+            The solution increment of the trial state.
+        """
+
+        if self.arcLengthController is None:
+            return super().setTrialState(dU, ddU_0, stepLength)
+
+        increment = self.arcLengthIncrement
+        ddU, ddLambda = self.correctionAtStepLength(dU, ddU_0, stepLength)
+        increment.loadParameter = increment.loadParameterAtStart + (increment.loadParameterIncrement + ddLambda)
+
+        return dU + ddU
+
+    def applyCorrection(self, dU: DofVector, ddU_0: DofVector, stepLength: float) -> DofVector:
+        """Move the iterate, the pair of the solution increment and the increment of the load parameter, by their
+        corrections at the step length a line search chose (1 without one), see :meth:`correctionAtStepLength`. Without
+        a controller, as :meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.applyCorrection`.
+
+        Parameters
+        ----------
+        dU
+            The solution increment of the iterate, moved in place.
+        ddU_0
+            The correction the out-of-balance force causes, see :meth:`solveForCorrection`.
+        stepLength
+            The step length.
+
+        Returns
+        -------
+        DofVector
+            The correction the solution increment was moved by.
+        """
+
+        if self.arcLengthController is None:
+            return super().applyCorrection(dU, ddU_0, stepLength)
+
+        increment = self.arcLengthIncrement
+        ddU, ddLambda = self.correctionAtStepLength(dU, ddU_0, stepLength)
+        dU += ddU
+        increment.loadParameterIncrement += ddLambda
+        increment.loadParameter = increment.loadParameterAtStart + increment.loadParameterIncrement
+
+        return ddU
+
     def assembleLoadsAtIncrementEnd(
         self,
         stepActions: dict,
@@ -473,7 +622,7 @@ class NISTPArcLength(NISTParallel):
         """Assemble the loads at the end of the increment: under arc length control, the dead load plus the reference
         load scaled by the load parameter of the evaluated state, :math:`-(\\boldsymbol{f}_0 + \\lambda \\,
         \\boldsymbol{f}_\\mathrm{ref})`, with their tangents. The loads are evaluated at the start of the step (the dead
-        load) and at its end, and their difference is the reference load (see :class:`ArcLengthLoads`). Without a
+        load) and at its end, and their difference is the reference load (see :class:`ArcLengthIncrement`). Without a
         controller, the loads of the step at the time of the increment, as in
         :meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.assembleLoadsAtIncrementEnd`.
 
@@ -501,42 +650,42 @@ class NISTPArcLength(NISTParallel):
         if self.arcLengthController is None:
             return super().assembleLoadsAtIncrementEnd(stepActions, U_np, dU, P, K, timeStep)
 
-        arcLengthLoads = self.arcLengthLoads
+        increment = self.arcLengthIncrement
         loads = self.collectLoads(stepActions)
 
-        arcLengthLoads.deadLoad[:] = arcLengthLoads.referenceLoad[:] = 0.0
+        increment.deadLoad[:] = increment.referenceLoad[:] = 0.0
 
         # the tangents hold the entries of all element matrices, far too many to zero on a single thread
         def zeroTangents(s):
-            arcLengthLoads.referenceLoadTangent[s] = arcLengthLoads.deadLoadTangent[s] = 0.0
+            increment.referenceLoadTangent[s] = increment.deadLoadTangent[s] = 0.0
 
-        forEachSliceInParallel(zeroTangents, len(arcLengthLoads.deadLoadTangent))
+        forEachSliceInParallel(zeroTangents, len(increment.deadLoadTangent))
 
-        arcLengthLoads.deadLoad, arcLengthLoads.deadLoadTangent = self.assembleLoads(
+        increment.deadLoad, increment.deadLoadTangent = self.assembleLoads(
             loads,
             U_np,
             dU,
-            arcLengthLoads.deadLoad,
-            arcLengthLoads.deadLoadTangent,
+            increment.deadLoad,
+            increment.deadLoadTangent,
             TimeStep(timeStep.number, 0.0, 0.0, 0.0, 0.0, 0.0),
         )
-        arcLengthLoads.referenceLoad, arcLengthLoads.referenceLoadTangent = self.assembleLoads(
+        increment.referenceLoad, increment.referenceLoadTangent = self.assembleLoads(
             loads,
             U_np,
             dU,
-            arcLengthLoads.referenceLoad,
-            arcLengthLoads.referenceLoadTangent,
+            increment.referenceLoad,
+            increment.referenceLoadTangent,
             TimeStep(timeStep.number, 1.0, 1.0, 0.0, 0.0, 0.0),
         )
         # the change of the loads over the step: the homogeneous, linear part
-        arcLengthLoads.referenceLoad -= arcLengthLoads.deadLoad
-        arcLengthLoads.referenceLoadTangent -= arcLengthLoads.deadLoadTangent
+        increment.referenceLoad -= increment.deadLoad
+        increment.referenceLoadTangent -= increment.deadLoadTangent
 
-        P += arcLengthLoads.deadLoad
-        P += arcLengthLoads.loadParameter * arcLengthLoads.referenceLoad
+        P += increment.deadLoad
+        P += increment.loadParameter * increment.referenceLoad
 
-        K[:] += arcLengthLoads.deadLoadTangent
-        K[:] += arcLengthLoads.loadParameter * arcLengthLoads.referenceLoadTangent
+        K[:] += increment.deadLoadTangent
+        K[:] += increment.loadParameter * increment.referenceLoadTangent
 
         return P, K
 

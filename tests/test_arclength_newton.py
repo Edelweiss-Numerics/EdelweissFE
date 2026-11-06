@@ -309,7 +309,7 @@ def test_the_line_search_scales_the_load_parameter_with_the_solution(tmp_path, m
     originalLineSearch = NIST.quadraticLineSearch
 
     def assembleLoadsAtIncrementEnd(self, *args):
-        loadParameters.append(self.arcLengthLoads.loadParameter)
+        loadParameters.append(self.arcLengthIncrement.loadParameter)
         return originalAssembleLoads(self, *args)
 
     def quadraticLineSearch(self, largestResidualAt):

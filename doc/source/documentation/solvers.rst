@@ -116,9 +116,11 @@ unknown of every increment besides the solution. A controller adds the equation 
 combination of displacements -- a crack opening, the mean contraction of a tunnel ring -- grows steadily over the
 step. Every Newton iteration solves the linearized system for two right-hand sides at once, the out-of-balance force
 and the reference load, and the controller combines the two corrections into the correction of the solution and of
-the load parameter. Every arc length step scales its own reference load: its load parameter starts from zero, where
-the external load is the dead load -- the loads the steps before it ended with. An analysis that continues under arc
-length control in a later step declares there the change of the loads it applies on top of them.
+the load parameter. The Newton iterations are those of ``NIST``, into which the load parameter enters through the
+hooks of the solver (see its class documentation above). Every arc length step scales its own reference load: its load
+parameter starts from zero, where the external load is the dead load -- the loads the steps before it ended with. An
+analysis that continues under arc length control in a later step declares there the change of the loads it applies on
+top of them.
 
 Prescribed displacements belong to the reference loading of the step, like the loads: a Dirichlet boundary condition
 that prescribes a change :math:`\Delta\bar{\boldsymbol{u}}` over the step moves its degrees of freedom by

@@ -1060,7 +1060,7 @@ class NIST(NonlinearSolverBase):
         dU: DofVector,
         P: DofVector,
         K: VIJSystemMatrix,
-        stepActions: list,
+        stepActions: dict,
         model: FEModel,
         timeStep: TimeStep,
         prevTimeStep: TimeStep,
@@ -1068,34 +1068,47 @@ class NIST(NonlinearSolverBase):
         maxIter: int,
         maxGrowingIter: int,
     ) -> tuple[DofVector, DofVector, DofVector, int, dict]:
-        """Standard Newton-Raphson scheme to solve for an increment.
+        """Newton's method for the solution increment of an increment. It starts from the prediction
+        (:meth:`extrapolateLastIncrement`), and every iteration
+
+        1. evaluates the model at the iterate (:meth:`assembleResidualAndTangent`) and imposes the Dirichlet boundary
+           conditions on the residual,
+        2. checks the iterate for convergence -- except the first iterate of an increment without a prediction, if it
+           needs a correction first (:meth:`firstIterateNeedsCorrection`),
+        3. solves the linearized system for the correction (:meth:`solveForCorrection`),
+        4. and moves the iterate by the correction (:meth:`applyCorrection`), scaled by the step length of a line
+           search, if one is due, which evaluates the trial states :meth:`setTrialState` sets.
+
+        This is the Newton loop of every implicit solver. The dynamics enter it through :meth:`initializeIncrement`,
+        :meth:`assembleAdditionalTerms` and :meth:`finalizeIncrement`
+        (:class:`~edelweissfe.solvers.nonlinearimplicitdynamic.NonlinearImplicitDynamic`). The arc length method makes
+        the load parameter an unknown of the iterations, through the predictor and the methods of steps 2 to 4
+        (:meth:`~edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength.solveIncrement`).
 
         Parameters
         ----------
-        Un
-            The old solution vector.
+        U_n
+            The solution at the start of the increment.
         dU
-            The old solution increment.
+            The solution increment, overwritten.
         P
-            The old reaction vector.
+            The internal forces (the reaction), overwritten.
         K
-            The system matrix to be used.
-        elements
-            The dictionary containing all elements.
+            The tangent being assembled, assembled anew.
         stepActions
-            The list of active step actions.
+            The active step actions.
         model
             The model tree.
-        increment
-            The increment.
-        lastIncrementSize
-            The size of the previous increment.
+        timeStep
+            The time step.
+        prevTimeStep
+            The last accepted increment, from which the prediction extrapolates, or None.
         extrapolation
-            The type of extrapolation to be used.
+            The type of extrapolation.
         maxIter
-            The maximum number of iterations to be used.
+            The maximum number of iterations.
         maxGrowingIter
-            The maximum number of growing residuals until the Newton-Raphson is terminated.
+            The maximum number of residual growths before the increment is cut back.
 
         Returns
         -------
@@ -1148,7 +1161,7 @@ class NIST(NonlinearSolverBase):
             #     K: zero row i, set K[i, i] = 1, and eliminate column i: R[r] -= K[r, i] R[i]
             #        for every other row r, then K[r, i] = 0   (see applyDirichletToStiffness)
             # Together these give  ddU[i] = R[i]  exactly, and keep a symmetric K symmetric.
-            if iterationCounter == 0 and not isExtrapolatedIncrement and dirichlets:
+            if iterationCounter == 0 and not isExtrapolatedIncrement and self.firstIterateNeedsCorrection(dirichlets):
                 # First iteration: the constrained DOFs still move by their prescribed increment.
                 R = self.applyDirichletToResidual(timeStep, R, dirichlets)
             else:
@@ -1173,22 +1186,16 @@ class NIST(NonlinearSolverBase):
 
             K_ = self.assembleSystemMatrix(K, quasiNewton)
 
-            # identity rows, and the columns eliminated into R
-            K_ = self.applyDirichletToStiffness(K_, dirichlets, R)
-
-            ddU = self.linearSolve(K_, R)
-
-            # add the master-interpolated part at the slave DOFs
-            if self.mpcTransformation is not None:
-                ddU = self.mpcTransformation.recoverSlaveSolution(ddU)
+            ddU = self.solveForCorrection(K_, R, dirichlets)
 
             if self.lineSearchIsDue(iterationCounter):
 
                 def largestResidualAt(stepLength):
-                    # the trial solution increment along the correction, without the Dirichlet degrees of freedom
+                    # the trial state at this step length along the correction, without the Dirichlet degrees of
+                    # freedom
                     self.assembleResidualAndTangent(
                         U_n,
-                        dU + stepLength * ddU,
+                        self.setTrialState(dU, ddU, stepLength),
                         U_np,
                         R,
                         P,
@@ -1204,14 +1211,122 @@ class NIST(NonlinearSolverBase):
                         R[dirichlet.constrainedDofIndices] = 0.0
                     return np.linalg.norm(R, np.inf)
 
-                ddU = self.quadraticLineSearch(largestResidualAt) * ddU
+                stepLength = self.quadraticLineSearch(largestResidualAt)
+            else:
+                stepLength = 1.0
 
-            dU += ddU
+            ddU = self.applyCorrection(dU, ddU, stepLength)
             iterationCounter += 1
 
         self.finalizeIncrement(model)
 
         return U_np, dU, P, iterationCounter, incrementResidualHistory
+
+    def firstIterateNeedsCorrection(self, dirichlets: list) -> bool:
+        """Whether the first iterate of an increment without a prediction -- the converged state of the last increment
+        -- needs a correction before it can be checked for convergence (see :meth:`solveIncrement`): if Dirichlet
+        boundary conditions act, whose prescribed increment the first correction makes. Without them, the first iterate
+        is checked like every later one, and is converged already if the loads have not changed. The arc length method
+        always corrects it first, see
+        :meth:`~edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength.firstIterateNeedsCorrection`.
+
+        Parameters
+        ----------
+        dirichlets
+            The Dirichlet boundary conditions of the step.
+
+        Returns
+        -------
+        bool
+            True if the first iterate is corrected before the first convergence check.
+        """
+
+        return bool(dirichlets)
+
+    def solveForCorrection(self, K_: csr_matrix, R: DofVector, dirichlets: list) -> DofVector:
+        """Solve the linearized system of a Newton iteration, :math:`\\boldsymbol{K} \\, \\Delta\\Delta \\boldsymbol{U} =
+        \\boldsymbol{R}`, for the correction :math:`\\Delta\\Delta \\boldsymbol{U}`. The Dirichlet boundary conditions
+        replace the rows of their degrees of freedom by identity rows, and eliminate their columns into
+        :math:`\\boldsymbol{R}` (see :meth:`applyDirichletToStiffness`); with multi-point constraints, the slave degrees
+        of freedom take the part their masters interpolate. The arc length method solves for two right-hand sides here,
+        see :meth:`~edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength.solveForCorrection`.
+
+        Parameters
+        ----------
+        K_
+            The system matrix of the iteration, see :meth:`assembleSystemMatrix`.
+        R
+            The right-hand side, the out-of-balance force with the Dirichlet boundary conditions imposed; the columns
+            of the Dirichlet degrees of freedom are eliminated into it.
+        dirichlets
+            The Dirichlet boundary conditions of the step.
+
+        Returns
+        -------
+        DofVector
+            The correction.
+        """
+
+        # identity rows, and the columns eliminated into R
+        K_ = self.applyDirichletToStiffness(K_, dirichlets, R)
+
+        ddU = self.linearSolve(K_, R)
+
+        # add the master-interpolated part at the slave DOFs
+        if self.mpcTransformation is not None:
+            ddU = self.mpcTransformation.recoverSlaveSolution(ddU)
+
+        return ddU
+
+    def setTrialState(self, dU: DofVector, ddU: DofVector, stepLength: float) -> DofVector:
+        """Set the trial state of a line search at a step length :math:`\\alpha` along the correction, and return its
+        solution increment, :math:`\\Delta \\boldsymbol{U} + \\alpha \\, \\Delta\\Delta \\boldsymbol{U}`, at which the
+        model is evaluated next; the iterate stays where it is. The arc length method sets the load parameter of the
+        trial state, too, see
+        :meth:`~edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength.setTrialState`.
+
+        Parameters
+        ----------
+        dU
+            The solution increment of the iterate.
+        ddU
+            The correction of the iterate, see :meth:`solveForCorrection`.
+        stepLength
+            The step length.
+
+        Returns
+        -------
+        DofVector
+            The solution increment of the trial state.
+        """
+
+        return dU + stepLength * ddU
+
+    def applyCorrection(self, dU: DofVector, ddU: DofVector, stepLength: float) -> DofVector:
+        """Move the iterate by the correction, scaled by the step length :math:`\\alpha` a line search chose (1 without a
+        line search): :math:`\\Delta \\boldsymbol{U} \\leftarrow \\Delta \\boldsymbol{U} + \\alpha \\, \\Delta\\Delta
+        \\boldsymbol{U}`. The arc length method moves the load parameter, too, see
+        :meth:`~edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength.applyCorrection`.
+
+        Parameters
+        ----------
+        dU
+            The solution increment of the iterate, moved in place.
+        ddU
+            The correction of the iterate, see :meth:`solveForCorrection`.
+        stepLength
+            The step length.
+
+        Returns
+        -------
+        DofVector
+            The correction the iterate was moved by, which the convergence check of the next iteration measures.
+        """
+
+        ddU = stepLength * ddU
+        dU += ddU
+
+        return ddU
 
     def assembleResidualAndTangent(
         self,
@@ -1231,10 +1346,9 @@ class NIST(NonlinearSolverBase):
         """Evaluate the model at the trial solution :math:`U_{n+1} = U_n + \\Delta U`: the right-hand side
         :math:`R = f_\\mathrm{ext} - f_\\mathrm{int}` (see :ref:`residual-and-tangent-convention`) with the terms of
         :meth:`assembleAdditionalTerms`, condensed by the multi-point constraints, and the tangent. The one place
-        where the model is evaluated during the Newton iterations: called by :meth:`solveIncrement` -- and by the
-        arc length method's -- once per iteration, and by their line searches once per trial step length. The loads
-        are those at the end of the increment, see :meth:`assembleLoadsAtIncrementEnd`. The Dirichlet boundary
-        conditions are imposed by the callers.
+        where the model is evaluated during the Newton iterations: called by :meth:`solveIncrement` once per
+        iteration, and by its line search once per trial step length. The loads are those at the end of the increment,
+        see :meth:`assembleLoadsAtIncrementEnd`. The Dirichlet boundary conditions are imposed by the caller.
 
         Parameters
         ----------
@@ -1400,10 +1514,9 @@ class NIST(NonlinearSolverBase):
         * Trial residuals that are equal to round-off, which do not tell the step lengths apart: the correction is
           taken in full, the step length is 1.
 
-        What the correction is, the caller says: :meth:`solveIncrement` scales the solution correction
-        :math:`\\Delta\\Delta U`, and the arc length method the pair of the solution correction and the correction of
-        the load parameter, with the same step length, so that the trial states stay on the Newton direction of the
-        coupled problem.
+        The trial states are those :meth:`setTrialState` sets: the solution increment moved along the correction
+        :math:`\\Delta\\Delta U`, and, under arc length control, the load parameter moved with it (see
+        :meth:`~edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength.setTrialState`).
 
         Parameters
         ----------
@@ -1515,7 +1628,7 @@ class NIST(NonlinearSolverBase):
     ):
         """Cut an increment back whose residual grew more often than ``maxGrowingIter`` allows (see
         :meth:`checkDivergingSolution`) -- or, with the option ``fallBackToQuasiNewton``, let it continue with the tangent
-        of its first iteration (a quasi-Newton method), see :meth:`assembleSystemMatrix`. Called by the Newton loops after
+        of its first iteration (a quasi-Newton method), see :meth:`assembleSystemMatrix`. Called by the Newton loop after
         every check that does not converge.
 
         Parameters
