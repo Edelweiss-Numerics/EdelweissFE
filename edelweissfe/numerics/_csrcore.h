@@ -37,11 +37,40 @@ struct SystemMatrixEntities {
   const int32_t* localRows;         ///< the local row of every listed entry
   const int32_t* localColumns;      ///< the local column of every listed entry
 
-  /** @brief The number of DOFs of entity @p e. */
+  /**
+   * @brief The number of DOFs of an entity.
+   *
+   * @param e the entity.
+   * @return its number of DOFs.
+   */
   int nDofOf( int64_t e ) const { return static_cast< int >( dofStart[e + 1] - dofStart[e] ); }
 
-  /** @brief Whether the block of entity @p e is dense. */
+  /**
+   * @brief Whether the block of an entity is dense.
+   *
+   * @param e the entity.
+   * @return whether it couples all its DOFs.
+   */
   bool isDense( int64_t e ) const { return couplesAllItsDofs[e] != 0; }
+
+  /**
+   * @brief The global row and column of a value of the block of an entity.
+   *
+   * @param e the entity.
+   * @param k the value, in the order of the block: of the column-major block if it is dense (local row k % nDofE,
+   * local column k / nDofE), of the k-th listed entry otherwise.
+   * @return the global row and the global column.
+   */
+  std::pair< int32_t, int32_t > entryOfValue( int64_t e, int64_t k ) const
+  {
+    const int32_t* d = dofs + dofStart[e];
+    if ( isDense( e ) ) {
+      const int64_t n = nDofOf( e );
+      return { d[k % n], d[k / n] };
+    }
+    const int64_t listed = localEntryStart[e] + k;
+    return { d[localRows[listed]], d[localColumns[listed]] };
+  }
 };
 
 /**
@@ -606,12 +635,20 @@ public:
 // per matrix entry (alongside I, J and gather_sources), and it exists only because assembly and
 // reduction are separated in time.
 //
-// This assembler removes it by *scattering* instead: each entry knows its CSR slot directly, as
-// indptr[row] + offset, where offset is the position of its column within that row. Row length is
-// set by the stencil (for RKPM by the support radius), not by the DOF count, so the offset fits in
-// uint16 -- half the width of the int32 gather index it replaces, and it makes the value array
-// unnecessary entirely. It needs no I/J pair either: the pattern is derived from the entities
-// (CSRPattern::ofEntities), and so are the offsets and the rows of every block.
+// This assembler removes it by *scattering* instead: each value knows its CSR slot in advance. It
+// needs no I/J pair either: the pattern is derived from the entities (CSRPattern::ofEntities), and so
+// is the slot of every value of every block. A block is scattered one of two ways:
+//
+// - row by row: the slot of a value is indptr[row] + offset, where offset is the position of its
+//   column within its row. The length of most rows is set by the stencil (for RKPM by the support
+//   radius), not by the DOF count, so the offset fits in uint16 -- half the width of the int32 gather
+//   index it replaces, and it makes the value array unnecessary entirely. This is how the dense
+//   blocks of the elements, cells and particles are scattered.
+// - value by value: every value keeps its absolute slot, an int. This is how a listed block is
+//   scattered (its values share no rows to factor out), and a dense block with a DOF in a row too
+//   long for a 16-bit offset: a row that grows with the model, not with the stencil -- the reference
+//   point of a rigid body coupled with every one of its slave nodes, or a master DOF of a
+//   multi-point constraint that the condensation couples with many others.
 //
 // All threads scatter into the ONE CSR data array, with `#pragma omp atomic` on every update. The
 // alternative, a private CSR copy per thread summed at the end, costs nThreads * nnz * 8 bytes and
@@ -634,22 +671,28 @@ public:
  * (mapEntities). Two layouts of a block, as the entity declares it (SystemMatrixEntities::couplesAllItsDofs):
  *
  * - dense: the nDofE x nDofE block, column-major, as every element writes it. All values of a local row share the
- *   global row, so only nDofE rows per entity are kept.
+ *   global row; if every row of the entity is short enough for 16-bit offsets (longestRowOfOffsets), the block is
+ *   scattered row by row, with nDofE rows and a 16-bit offset per value; otherwise value by value.
  * - listed: the entity lists its entries itself (a constraint coupling only some of its degrees of freedom); each
- *   value is scattered on its own, and keeps its global row.
+ *   value is scattered on its own, to its absolute position.
  *
  * The layout is never guessed from the number of values: a list can have exactly nDofE^2 entries (a rigid body
  * contact with one slave node in 3D: 36 + 9 + 18 + 18 = 81 = 9^2) in an order that is not column-major.
  */
 struct CSRDirectAssembler : CSRPattern {
-  double*                           data     = nullptr; ///< the CSR data array, borrowed; what is assembled
-  int                               nThreads = 1;       ///< how many threads may scatter at the same time
-  std::vector< int64_t >            entryStart;         ///< nEntities + 1: where the values of each block begin
-  std::vector< uint16_t >           offsets;            ///< per value of every block: its position within its CSR row
-  std::vector< int64_t >            entityRowStart;  ///< nEntities: where the rows of each entity begin in entityRows
-  std::vector< int >                entityNDof;      ///< per entity: its number of DOFs
-  std::vector< char >               entityIsDense;   ///< per entity: the layout it declared
-  std::vector< int >                entityRows;      ///< per entity: the global row of each local row (dense) or value
+  /// The longest row whose entries a 16-bit offset within the row reaches: positions 0 to 65535.
+  static constexpr int64_t longestRowOfOffsets = static_cast< int64_t >( std::numeric_limits< uint16_t >::max() ) + 1;
+
+  double*                           data     = nullptr;   ///< the CSR data array, borrowed; what is assembled
+  int                               nThreads = 1;         ///< how many threads may scatter at the same time
+  std::vector< int64_t >            entryStart;           ///< nEntities + 1: where the values of each block begin
+  std::vector< int >                entityNDof;           ///< per entity: its number of DOFs
+  std::vector< char >               entityScatteredByRow; ///< per entity: whether its block is scattered row by row
+  std::vector< int64_t >            entityMapStart;  ///< per entity: where its map begins, in offsets or in positions
+  std::vector< int64_t >            entityRowStart;  ///< per entity scattered row by row: where its rows begin
+  std::vector< int >                entityRows;      ///< the global row of every local row of the blocks by row
+  std::vector< uint16_t >           offsets;         ///< per value of the blocks by row: its position within its row
+  std::vector< int >                positions;       ///< per value of the other blocks: its position in the CSR data
   std::vector< std::vector< int > > rowStartScratch; ///< per thread, size of the largest entity
 
   /**
@@ -667,6 +710,9 @@ struct CSRDirectAssembler : CSRPattern {
   /**
    * @brief Map every value of every block to its CSR entry, on the complete pattern.
    *
+   * Decides first how each block is scattered (see the class description), then finds the entry of every value by a
+   * binary search in its row.
+   *
    * @param entities the entities, the same as given to the constructor.
    * @param data_ the CSR data array of the pattern, nnz values, which the assembler scatters into.
    */
@@ -675,54 +721,63 @@ struct CSRDirectAssembler : CSRPattern {
     const int64_t nEntities = entities.nEntities;
     data                    = data_;
 
+    // --- how each block is scattered, and where its part of the map begins
     entryStart.assign( nEntities + 1, 0 );
-    entityRowStart.assign( nEntities, 0 );
     entityNDof.resize( nEntities );
-    entityIsDense.resize( nEntities );
-    int64_t nRows   = 0;
+    entityScatteredByRow.resize( nEntities );
+    entityMapStart.resize( nEntities );
+    entityRowStart.assign( nEntities, 0 );
+    int64_t nOffsets = 0, nPositions = 0, nRows = 0;
     int     maxNDof = 0;
     for ( int64_t e = 0; e < nEntities; ++e ) {
-      const int64_t n       = entities.nDofOf( e );
-      const int64_t nListed = entities.localEntryStart[e + 1] - entities.localEntryStart[e];
-      entityNDof[e]         = static_cast< int >( n );
-      entityIsDense[e]      = entities.isDense( e );
-      entityRowStart[e]     = nRows;
-      entryStart[e + 1]     = entryStart[e] + ( entities.isDense( e ) ? n * n : nListed );
-      nRows += entities.isDense( e ) ? n : nListed;
+      const int64_t  n        = entities.nDofOf( e );
+      const int32_t* d        = entities.dofs + entities.dofStart[e];
+      const int64_t  nValues  = entities.isDense( e ) ? n * n
+                                                      : entities.localEntryStart[e + 1] - entities.localEntryStart[e];
+      const bool     byRow    = entities.isDense( e ) && rowsAreShortEnoughForOffsets( d, n );
+      entityNDof[e]           = static_cast< int >( n );
+      entityScatteredByRow[e] = byRow;
+      entryStart[e + 1]       = entryStart[e] + nValues;
+      if ( byRow ) {
+        entityMapStart[e] = nOffsets;
+        entityRowStart[e] = nRows;
+        nOffsets += nValues;
+        nRows += n;
+      }
+      else {
+        entityMapStart[e] = nPositions;
+        nPositions += nValues;
+      }
       maxNDof = std::max( maxNDof, entityNDof[e] );
     }
-    offsets.resize( entryStart[nEntities] );
+    offsets.resize( nOffsets );
+    positions.resize( nPositions );
     entityRows.resize( nRows );
     rowStartScratch.assign( nThreads, std::vector< int >( maxNDof, 0 ) );
 
+    // --- the CSR entry of every value
     int64_t unmapped = 0;
 #pragma omp parallel for schedule( dynamic, 64 ) num_threads( nThreads ) reduction( + : unmapped )
     for ( int64_t e = 0; e < nEntities; ++e ) {
-      const int32_t* d  = entities.dofs + entities.dofStart[e];
-      const int64_t  n  = entityNDof[e];
-      const int64_t  rs = entityRowStart[e];
-      const int64_t  es = entryStart[e];
-      if ( entityIsDense[e] ) {
-        // value k of the column-major block: local row k % n, local column k / n
-        for ( int64_t a = 0; a < n; ++a )
-          entityRows[rs + a] = d[a];
-        for ( int64_t k = 0; k < n * n; ++k )
-          unmapped += mapValue( d[k % n], d[k / n], offsets[es + k] ) ? 0 : 1;
-      }
-      else {
-        const int64_t ls = entities.localEntryStart[e];
-        for ( int64_t k = 0; k < entryStart[e + 1] - es; ++k ) {
-          const int row      = d[entities.localRows[ls + k]];
-          entityRows[rs + k] = row;
-          unmapped += mapValue( row, d[entities.localColumns[ls + k]], offsets[es + k] ) ? 0 : 1;
-        }
+      const int64_t m       = entityMapStart[e];
+      const int64_t nValues = entryStart[e + 1] - entryStart[e];
+      if ( entityScatteredByRow[e] )
+        for ( int a = 0; a < entityNDof[e]; ++a )
+          entityRows[entityRowStart[e] + a] = entities.dofs[entities.dofStart[e] + a];
+      for ( int64_t k = 0; k < nValues; ++k ) {
+        const auto [row, column] = entities.entryOfValue( e, k );
+        const int64_t position   = positionOf( row, column );
+        if ( position < 0 )
+          ++unmapped;
+        else if ( entityScatteredByRow[e] )
+          offsets[m + k] = static_cast< uint16_t >( position - indptr[row] );
+        else
+          positions[m + k] = static_cast< int >( position );
       }
     }
 
     if ( unmapped > 0 )
-      throw std::runtime_error( "CSRDirectAssembler: entry unmapped, or within-row offset exceeds "
-                                "the 16-bit range (row longer than 65535); a uint32 offset variant "
-                                "is required for this pattern." );
+      throw std::runtime_error( "CSRDirectAssembler: a value of a block has no entry in the pattern." );
   }
 
   /** @brief Zero the CSR data array, with all threads. Call once before the entity loop. */
@@ -745,44 +800,52 @@ struct CSRDirectAssembler : CSRPattern {
    */
   void scatterBlock( int tid, int entity, const double* block ) noexcept
   {
-    if ( entityIsDense[entity] )
-      scatterDenseBlock( tid, entity, block );
+    if ( entityScatteredByRow[entity] )
+      scatterByRow( tid, entity, block );
     else
-      scatterEntries( entity, block );
+      scatterByPosition( entity, block );
   }
 
 private:
   /**
-   * @brief The position of entry (@p row, @p column) within its CSR row.
+   * @brief Whether every row of the given DOFs is short enough for 16-bit offsets within it.
+   *
+   * @param dofs the DOFs.
+   * @param nDofs their number.
+   * @return whether no row is longer than longestRowOfOffsets.
+   */
+  bool rowsAreShortEnoughForOffsets( const int32_t* dofs, int64_t nDofs ) const
+  {
+    for ( int64_t a = 0; a < nDofs; ++a )
+      if ( indptr[dofs[a] + 1] - indptr[dofs[a]] > longestRowOfOffsets )
+        return false;
+    return true;
+  }
+
+  /**
+   * @brief The position of entry (@p row, @p column) in the CSR data.
    *
    * @param row the global row.
    * @param column the global column.
-   * @param offset receives the position.
-   * @return whether the entry is in the pattern, and its position fits in 16 bits.
+   * @return the position, or -1 if the entry is not in the pattern.
    */
-  bool mapValue( int row, int column, uint16_t& offset ) const
+  int64_t positionOf( int row, int column ) const
   {
     const int* first = indices.data() + indptr[row];
     const int* last  = indices.data() + indptr[row + 1];
     const int* found = std::lower_bound( first, last, column );
-    if ( found == last || *found != column || found - first > std::numeric_limits< uint16_t >::max() ) {
-      offset = 0;
-      return false;
-    }
-    offset = static_cast< uint16_t >( found - first );
-    return true;
+    return found == last || *found != column ? -1 : found - indices.data();
   }
 
   /**
    * @brief Add a dense, column-major block to the CSR data, row by row.
    *
    * @param tid the thread, which selects its row scratch.
-   * @param entity the number of the entity.
+   * @param entity the number of the entity, scattered by row.
    * @param block its nDofE^2 values.
    */
-  void scatterDenseBlock( int tid, int entity, const double* block ) noexcept
+  void scatterByRow( int tid, int entity, const double* block ) noexcept
   {
-    const int64_t es = entryStart[entity];
     const int64_t rs = entityRowStart[entity];
     const int     nd = entityNDof[entity];
 
@@ -804,7 +867,7 @@ private:
     // resident, and with enough repeats to see the variance -- rather than trust this comment.
     //
     // Concurrent writers to the same CSR data are the point, so there is no __restrict on it.
-    const uint16_t* off0 = offsets.data() + es;
+    const uint16_t* off0 = offsets.data() + entityMapStart[entity];
     for ( int a = 0; a < nd; ++a ) {
       double* row = data + rowStart[a];
       for ( int b = 0; b < nd; ++b ) {
@@ -817,21 +880,19 @@ private:
   }
 
   /**
-   * @brief Add a listed block to the CSR data: the values of the entity's own entries, each on its own.
+   * @brief Add a block to the CSR data value by value, each to its position.
    *
-   * @param entity the number of the entity.
-   * @param block its values, one per listed entry.
+   * @param entity the number of the entity, not scattered by row.
+   * @param block its values, in the order of the block.
    */
-  void scatterEntries( int entity, const double* block ) noexcept
+  void scatterByPosition( int entity, const double* block ) noexcept
   {
-    const int64_t   rs   = entityRowStart[entity];
-    const int64_t   size = entryStart[entity + 1] - entryStart[entity];
-    const uint16_t* off0 = offsets.data() + entryStart[entity];
+    const int64_t size     = entryStart[entity + 1] - entryStart[entity];
+    const int*    position = positions.data() + entityMapStart[entity];
 
     for ( int64_t k = 0; k < size; ++k ) {
-      double* dst = data + indptr[entityRows[rs + k]] + off0[k];
 #pragma omp atomic
-      *dst += block[k];
+      data[position[k]] += block[k];
     }
   }
 
@@ -839,12 +900,16 @@ public:
   /**
    * @brief Bytes held by the pattern, the map and the entity tables -- the figure to compare against the VIJ arrays
    * and the gather map. The CSR data array is not counted: it belongs to the Python matrix.
+   *
+   * @return the bytes.
    */
   int64_t memoryBytes() const
   {
     return static_cast< int64_t >( indptr.size() + indices.size() ) * sizeof( int ) +
            static_cast< int64_t >( offsets.size() ) * sizeof( uint16_t ) +
-           static_cast< int64_t >( entityRows.size() ) * sizeof( int ) +
-           static_cast< int64_t >( entityNDof.size() ) * ( 2 * sizeof( int64_t ) + sizeof( int ) + sizeof( char ) );
+           static_cast< int64_t >( positions.size() + entityRows.size() + entityNDof.size() ) * sizeof( int ) +
+           static_cast< int64_t >( entryStart.size() + entityMapStart.size() + entityRowStart.size() ) *
+             sizeof( int64_t ) +
+           static_cast< int64_t >( entityScatteredByRow.size() ) * sizeof( char );
   }
 };

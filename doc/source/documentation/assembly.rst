@@ -56,9 +56,16 @@ the duplicates into CSR.
 **Scatter directly** (:class:`~edelweissfe.numerics.systemmatrixassembly.DirectCSRSystemMatrixAssembly`), the
 memory-efficient path, chosen with the solver option ``systemMatrixAssembly=direct``. It derives its own CSR pattern
 from the entities' DOF lists, row by row, without any ``I``/``J`` pair, and knows for every value of every block its
-destination in advance -- ``indptr[row] + offset``, where ``offset`` is the position of the column within that row
-(:class:`~edelweissfe.numerics.csrgeneratorv2.DirectCSRAssembler`). Each block is pushed straight into the CSR data
-array. Neither a value array nor index arrays of the VIJ layout are ever materialised.
+destination in advance (:class:`~edelweissfe.numerics.csrgeneratorv2.DirectCSRAssembler`). Each block is pushed
+straight into the CSR data array. Neither a value array nor index arrays of the VIJ layout are ever materialised. The
+destination of a value is kept one of two ways:
+
+- **by row**, for a dense block: the global row of each local row, and for every value ``offset``, the position of its
+  column within its row, so that the destination is ``indptr[row] + offset``. The offset takes 16 bits, which reach the
+  first 65,536 entries of a row.
+- **by position**, for every other block: every value keeps its destination, a 32-bit position in the CSR data. That
+  is a listed block, whose values share no rows to factor out, and a dense block with a degree of freedom in a row
+  longer than 16-bit offsets reach.
 
 .. list-table:: What each path stores, per value of all blocks, per entity DOF, per listed entry, or per nnz
     :width: 100%
@@ -80,10 +87,13 @@ array. Neither a value array nor index arrays of the VIJ layout are ever materia
     * - ``assembly_ptr``
       - 4 bytes / nnz
       - --
-    * - ``offsets`` (within-row position)
+    * - ``offsets`` (within-row position), and the rows of the blocks
       - --
-      - **2 bytes / value**
-    * - entity table (DOF lists, listed entries)
+      - **2 bytes / value** of a block by row, 4 bytes / its entity DOF
+    * - ``positions`` (position in the CSR data)
+      - --
+      - 4 bytes / value of a block by position
+    * - entity table (DOF lists, listed entries), while the assembly is built
       - --
       - 4 bytes / entity DOF, 8 bytes / listed entry
     * - CSR pattern and data
@@ -94,8 +104,8 @@ The entries in bold are why this matters: the more duplicate contributions land 
 grows with the number of entities touching a DOF, not with the DOF count itself -- the larger the VIJ arrays and
 ``gather_sources`` become relative to the CSR result they produce. Their size is set by the number of values of all
 blocks; the CSR pattern's is set by ``nnz``. A discretisation where many entities contribute to the same entries (a
-wide stencil, or overlapping supports) can have the staging arrays dwarf the actual result by a wide margin. The
-direct path holds 2 bytes per value instead of 20.
+wide stencil, or overlapping supports) can have the staging arrays dwarf the actual result by a wide margin. For the
+dense blocks of the elements, cells and particles, the direct path holds 2 bytes per value instead of 20.
 
 In the implicit solvers
 -----------------------
@@ -121,7 +131,8 @@ array, and so does ``NEST``.
 What the direct path has to know about the entities and the solvers:
 
 - **Listed blocks.** The block of an entity that lists its entries itself (see `The block of an entity`_) is
-  scattered entry by entry; a dense block row by row.
+  scattered entry by entry; a dense block row by row, unless it has a degree of freedom in a row too long for 16-bit
+  offsets (see `Two independent derivations of the pattern, tested against each other`_).
 - **Worker threads.** Each thread of the parallel element loop writes through blocks of its own
   (:meth:`~edelweissfe.numerics.systemmatrixassembly.SystemMatrixAssembly.blocksOfWorker`), a scratch
   array, and adds every block to the one CSR matrix of the assembly with atomic additions, see
@@ -181,10 +192,14 @@ The two paths derive the CSR pattern each in their own way, from the same entiti
 The tests derive both patterns for random dense and listed entities (among them a list with exactly ``nDof**2``
 entries), with and without added entries, on one and on several threads, and require them to be identical.
 
-The offset map of the direct path is built by binary-searching each value's ``(row, column)`` in the pattern, and
-stores the *within-row* position, which is why 2 bytes suffice: row length is set by the stencil, not by the problem
-size, so it stays well within a ``uint16`` even for a wide stencil. An entry that cannot be mapped, or an offset that
-does not fit, raises rather than being silently misplaced.
+The map of the direct path is built by binary-searching each value's ``(row, column)`` in the pattern. For a dense
+block it stores the *within-row* position, which is why 2 bytes suffice for the bulk of a model: the length of most
+rows is set by the stencil, not by the problem size. Not every row's is: the row of a rigid body's reference point
+has an entry for every slave node it is coupled with, and the condensation of a multi-point constraint can couple a
+master degree of freedom with many others. Before mapping, the assembly looks at the rows of every dense block; a
+block with a degree of freedom in a row longer than 65,536 entries keeps the positions of its values in the CSR data
+instead, as every listed block does. So no row is too long for the direct path, and a model without such rows pays
+nothing for them. A value whose entry is not in the pattern raises rather than being silently misplaced.
 
 One CSR array, atomic additions
 -------------------------------

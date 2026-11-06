@@ -392,7 +392,8 @@ cdef class CSRGenerator:
 
         The counterpart to :attr:`DirectCSRAssembler.memoryBytes`, on the same basis -- what the
         object owns. The dominant term is the gather map's ``gather_sources``, one int32 per COO
-        pair, which is what the direct path replaces with a uint16 offset per pair.
+        pair, which is what the direct path replaces with a uint16 offset per pair (of a dense block in rows short
+        enough for it; any other pair keeps an int32 position).
 
         The VIJ value array and the ``I``/``J`` index arrays are not counted: the generator does not own them.
         """
