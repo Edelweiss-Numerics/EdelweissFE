@@ -319,17 +319,10 @@ class DofManager:
 
     @cached_property
     def indexToHostObjectMapping(self) -> dict[int, Node]:
-        """The map from each index of a field variable in the DofVector to the node it belongs to, built on first use.
-
-        Only the report of the largest residual of an implicit solver reads it, through
-        :meth:`getNodeForIndexInDofVector`, while building it costs a pass over every degree of freedom: a DOF manager
-        that is never asked, e.g. one of the many an explicit solver builds over a run, never builds it.
-
-        Returns
-        -------
-        dict[int, Node]
-            The node of every index of a field variable.
-        """
+        """The node of every index of a field variable in the DofVector, built on first use: only the report of the
+        largest residual of an implicit solver reads it (through :meth:`getNodeForIndexInDofVector`), while building it
+        costs a pass over every degree of freedom, which a DOF manager that is never asked -- one of the many an explicit
+        solver builds over a run, say -- does not pay."""
 
         return self._determineIndexToNodeMap()
 
