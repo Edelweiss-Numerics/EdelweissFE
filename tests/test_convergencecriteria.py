@@ -26,7 +26,7 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 """The convergence criteria of the implicit solvers (:mod:`edelweissfe.solvers.base.convergencecriteria`) and the
-counting of residual growths (:meth:`NonlinearSolverBase.checkDivergingSolution`).
+counting of residual growths (:meth:`NIST.checkDivergingSolution`).
 
 Besides the behaviour of each rule, two equivalences are pinned, each against a replica of the code it replaces:
 
