@@ -161,8 +161,6 @@ class Constraint(ConstraintBase, MeshDependent):
 
         self._nDim = model.domainSize
 
-        self.active = True
-
         self.constrainedValue = 0.0
 
         self._lastSeenTopologyVersion = model.topology.version
@@ -238,10 +236,7 @@ class Constraint(ConstraintBase, MeshDependent):
         self._rebuildDerivedState()
         return True
 
-    def applyConstraint(self, U_np, dU, PExt, K, timeStep: TimeStep):
-        if not self.active:
-            return
-
+    def computeKernels(self, U_np, dU, P, K, timeStep: TimeStep):
         sBL = self.startBlock_loadNodes
         eBL = self.endBlock_loadNodes
         sBC = self.startBlock_constrainedNodes
@@ -260,5 +255,6 @@ class Constraint(ConstraintBase, MeshDependent):
 
         t = self.unitResidual
 
-        PExt[sBL:eBL] = -t * loadFactor
-        K[sBL:eBL, sBC:eBC] = np.outer(t, dLoadFactor_ddU)
+        # the controlled load acts on the load nodes as -t * loadFactor; P is its negative
+        P[sBL:eBL] += t * loadFactor
+        K[sBL:eBL, sBC:eBC] += np.outer(t, dLoadFactor_ddU)

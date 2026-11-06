@@ -122,17 +122,15 @@ cdef extern from "_csrcore.h":
         int64_t memoryBytes()
 
     cdef cppclass CSRDirectAssembler nogil:
-        CSRDirectAssembler(const int* indptr, const int* indices, int nnz, int nDof,
+        CSRDirectAssembler(const int* indptr, const int* indices, double* data, int nnz, int nDof,
                            const int* I, const int* J, int64_t nPairs, int nThreads) except +
 
-        void assembleFromVIJ(const double* V, const int* I, double* csr_data) nogil
-        void registerEntities(const int64_t* mapStarts, const int* nDofs, int nEntities, const int* I)
+        void assembleFromVIJ(const double* V, const int* I) nogil
+        void registerEntities(const int64_t* mapStarts, const int* nDofs, const int64_t* vijSizes,
+                              const int* couplesAllItsDofs, int nEntities, const int* I) except +
         void beginAssembly() nogil
         void scatterBlock(int tid, int entity, const double* block) nogil
-        void reduce(double* csr_data) nogil
-        void setNumBuffers(int n) except +
         int64_t memoryBytes()
-        int nBuffers
 
 cdef class _CSRCoreOwner:
     """Owns the C++ core of a :class:`CSRGenerator`, its CSR pattern and its gather map, and frees it when it goes.
@@ -386,10 +384,9 @@ cdef class DirectCSRAssembler:
     paths cannot drift apart -- and :meth:`assembleFromVIJ` exists so the addressing can be checked
     against ``CSRGenerator.updateCSR`` on real models rather than argued about.
 
-    Reduction defaults to one private CSR copy per thread -- no synchronisation and a fixed summation
-    order, so results are bit-reproducible, at ``nThreads * nnz * 8`` bytes. :meth:`setNumBuffers`
-    trades that memory for atomics; see the header's design note for why the earlier "atomics are
-    1.57-2.13x slower" figure does not settle the question.
+    It assembles into the CSR data array of the borrowed pattern, :attr:`csrMatrix`, itself: all threads
+    scatter into that one array, each addition atomic. The order in which the threads add to an entry
+    depends on their timing, so the values agree with a serial assembly to round-off, not bit for bit.
 
     Parameters
     ----------
@@ -398,7 +395,8 @@ cdef class DirectCSRAssembler:
     systemMatrix
         The VIJ system matrix supplying the ``I``/``J`` index arrays the map is built from.
     numThreads
-        Threads used for the map build, the scatter and the reduction.
+        Threads used for the map build and the zeroing, and how many may scatter at the same time
+        (``0 <= tid < numThreads`` in :meth:`scatterBlock`).
     """
 
     cdef CSRDirectAssembler* asm_
@@ -424,35 +422,22 @@ cdef class DirectCSRAssembler:
 
         cdef int[::1] indptr = np.asarray(self.csrMatrix.indptr, dtype=np.intc)
         cdef int[::1] indices = np.asarray(self.csrMatrix.indices, dtype=np.intc)
+        cdef double[:] data = self.data_view
         cdef int nnz = indices.shape[0]
         cdef int nDof = int(systemMatrix.nDof)
 
         with nogil:
-            self.asm_ = new CSRDirectAssembler(&indptr[0], &indices[0], nnz, nDof,
+            self.asm_ = new CSRDirectAssembler(&indptr[0], &indices[0], &data[0], nnz, nDof,
                                                &I[0], &J[0], self.nCooPairs, numThreads)
 
     @property
     def memoryBytes(self):
-        """Bytes held by the offset map plus the private buffers."""
-        return self.asm_.memoryBytes()
+        """Bytes held by the offset map and the entity tables.
 
-    @property
-    def numBuffers(self):
-        """How many private CSR copies are currently held. Equal to ``numThreads`` unless changed."""
-        return self.asm_.nBuffers
-
-    def setNumBuffers(self, int n):
-        """Set how many private CSR copies to keep, reallocating them.
-
-        ``n == numThreads`` is the default: one copy per thread, no synchronisation, fixed summation
-        order and therefore bit-reproducible results. Any smaller ``n`` makes threads share a copy
-        and synchronise the scatter with atomics, saving ``(numThreads - n) * nnz * 8`` bytes at the
-        cost of reproducibility -- ``n == 1`` is the fully atomic case. Values are clamped to
-        ``[1, numThreads]``.
-
-        Not to be called during an assembly: it releases and reallocates the buffers.
+        The CSR pattern and data array are not counted: they belong to the borrowed generator, whose
+        :attr:`CSRGenerator.memoryBytes` counts them.
         """
-        self.asm_.setNumBuffers(n)
+        return self.asm_.memoryBytes()
 
     def assembleFromVIJ(self, double[::1] V):
         """Scatter a VIJ value array into CSR through the map, and return the CSR matrix.
@@ -461,24 +446,41 @@ cdef class DirectCSRAssembler:
         block in directly and never builds ``V``.
         """
         cdef int[::1] I = self._I
-        cdef double[:] out = self.data_view
         with nogil:
-            self.asm_.assembleFromVIJ(&V[0], &I[0], &out[0])
+            self.asm_.assembleFromVIJ(&V[0], &I[0])
         return self.csrMatrix
 
-    def registerEntities(self, int64_t[::1] mapStarts, int[::1] nDofs):
+    def registerEntities(self, int64_t[::1] mapStarts, int[::1] nDofs, int64_t[::1] vijSizes,
+                         int[::1] couplesAllItsDofs):
         """Give each entity its slice of the offset map, once per connectivity change.
 
         ``mapStarts[e]`` is entity e's offset into the VIJ ordering -- the same value the DofManager
-        already records in ``idcsOfHigherOrderEntitiesInVIJ`` -- and ``nDofs[e]`` its local DOF count.
+        already records in ``idcsOfHigherOrderEntitiesInVIJ`` --, ``nDofs[e]`` its local DOF count,
+        ``vijSizes[e]`` the number of entries it contributes
+        (:meth:`~edelweissfe.numerics.vijentitybase.VIJEntityBase.getVIJContributionSize`), and
+        ``couplesAllItsDofs[e]`` the layout of its block it declares
+        (:attr:`~edelweissfe.numerics.vijentitybase.VIJEntityBase.couplesAllItsDofs`): nonzero for a dense block,
+        column-major, of ``nDofs[e]**2`` entries; zero for a sparse one, the values of the (I, J) pairs the entity
+        declared, which :meth:`scatterBlock` scatters entry by entry. The layout is not inferred from the number of
+        entries, since a sparse pattern can have exactly ``nDofs[e]**2`` of them.
         """
-        if mapStarts.shape[0] != nDofs.shape[0]:
+        if (
+            mapStarts.shape[0] != nDofs.shape[0]
+            or mapStarts.shape[0] != vijSizes.shape[0]
+            or mapStarts.shape[0] != couplesAllItsDofs.shape[0]
+        ):
             raise ValueError(
-                "registerEntities: mapStarts and nDofs must have the same length (one entry per "
-                "entity), got {:} and {:}".format(mapStarts.shape[0], nDofs.shape[0])
+                "registerEntities: mapStarts, nDofs, vijSizes and couplesAllItsDofs must have the same length (one "
+                "entry per entity), got {:}, {:}, {:} and {:}".format(
+                    mapStarts.shape[0], nDofs.shape[0], vijSizes.shape[0], couplesAllItsDofs.shape[0]
+                )
             )
+        if mapStarts.shape[0] == 0:
+            return
         cdef int[::1] I = self._I
-        self.asm_.registerEntities(&mapStarts[0], &nDofs[0], mapStarts.shape[0], &I[0])
+        self.asm_.registerEntities(
+            &mapStarts[0], &nDofs[0], &vijSizes[0], &couplesAllItsDofs[0], mapStarts.shape[0], &I[0]
+        )
 
     @property
     def corePointer(self):
@@ -487,30 +489,24 @@ cdef class DirectCSRAssembler:
         EdelweissMeshfree's particle kernel calls ``scatterBlock`` from inside its ``prange``, which
         cannot go through Python. It re-declares the C++ class (from ``edelweissfe.numerics.get_include()``)
         and casts this address back, so the scatter -- including the column-major traversal and its
-        measured loop order -- exists in exactly one place.
+        loop order -- exists in exactly one place.
 
         The assembler must outlive any caller holding this.
         """
         return <size_t> self.asm_
 
     def beginAssembly(self):
-        """Zero the private buffers. Call once before the entity loop."""
+        """Zero the values of :attr:`csrMatrix`. Call once before the entity loop."""
         with nogil:
             self.asm_.beginAssembly()
 
     def scatterBlock(self, int tid, int entity, double[::1] block):
-        """Scatter one entity's dense block from a scratch buffer into thread ``tid``'s private CSR.
+        """Add one entity's block -- dense or sparse, as registered -- from a scratch buffer to :attr:`csrMatrix`.
 
-        Race-free by construction. Intended to be called from inside a threaded entity loop; this
-        Python-level binding exists for testing and for the constraint contributions, which are
-        assembled sequentially and account for under 2% of runtime.
+        Every addition is atomic, so any number of threads scatter at the same time, as long as no two concurrent
+        callers pass the same ``tid`` (``0 <= tid < numThreads``), which selects the caller's own row scratch.
+        Releases the GIL, so the workers of a threaded entity loop scatter side by side; see
+        :class:`~edelweissfe.numerics.systemmatrixassembly.DirectCSRSystemMatrixAssembly`.
         """
         with nogil:
             self.asm_.scatterBlock(tid, entity, &block[0])
-
-    def reduce(self):
-        """Sum the private buffers into the CSR matrix and return it."""
-        cdef double[:] out = self.data_view
-        with nogil:
-            self.asm_.reduce(&out[0])
-        return self.csrMatrix

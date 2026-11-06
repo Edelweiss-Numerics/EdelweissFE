@@ -29,12 +29,13 @@
 
 A checkpoint is an HDF5 file holding
 
-- the attribute ``stepNumber``, the step the run was in;
+- the attribute ``stepNumber``, the step the run was in, and ``numberOfIncrementsDone``, how many
+  increments of it were accepted;
 - the model's state, written by :meth:`~edelweissfe.models.femodel.FEModel.writeRestart`;
 - groups ``timestepper`` and ``solver`` with the time stepper's and the solver's state;
 - a group ``stepActions`` with the state of every step action, by type and name -- including what
   the steps before carried over, e.g. an accumulated load, and whether an action is still active;
-- a group ``outputManagers`` with the state of every output manager;
+- a group ``outputManagers`` with the state of every output manager of the step, by name;
 - a group ``fieldOutputs`` with the history of every field output, and how much of its export file
   belongs to the run.
 
@@ -54,7 +55,7 @@ from edelweissfe.utils.exceptions import RestartError
 
 #: The layout of a checkpoint. Raise it whenever a checkpoint gains or changes state: a run resumes
 #: only from checkpoints of its own layout.
-CHECKPOINT_FORMAT_VERSION = 8
+CHECKPOINT_FORMAT_VERSION = 13
 
 
 def writeRestartDataOf(group: h5py.Group, entities: dict):
@@ -97,7 +98,24 @@ def readRestartDataInto(group: h5py.Group, entities: dict, newEntitiesStartAfres
         entity.setRestartData({entryName: values[()] for entryName, values in group[name].items()})
 
 
-def writeCheckpoint(fileName: str, model, step, outputManagers: dict, serial: int):
+def _outputManagersOf(step) -> dict:
+    """The output managers of a step, by name: those whose state a checkpoint of the step holds.
+
+    Parameters
+    ----------
+    step
+        The step.
+
+    Returns
+    -------
+    dict
+        The output managers, by name.
+    """
+
+    return {outputManager.name: outputManager for outputManager in step.outputManagers}
+
+
+def writeCheckpoint(fileName: str, model, step, serial: int):
     """Write a restart checkpoint of the converged state.
 
     Written to a temporary file first, and renamed to ``fileName`` only once complete: a job killed
@@ -110,9 +128,8 @@ def writeCheckpoint(fileName: str, model, step, outputManagers: dict, serial: in
     model
         The model tree.
     step
-        The current step, whose time stepper and solver write their own state.
-    outputManagers
-        The output managers, by name.
+        The current step, whose time stepper, solver, step actions, output managers and field
+        outputs write their own state.
     serial
         The number of this checkpoint in the sequence its writer writes, stored in the file: it
         orders checkpoints independently of file times.
@@ -123,12 +140,13 @@ def writeCheckpoint(fileName: str, model, step, outputManagers: dict, serial: in
         f.attrs["formatVersion"] = CHECKPOINT_FORMAT_VERSION
         f.attrs["serial"] = serial
         f.attrs["stepNumber"] = step.number
+        f.attrs["numberOfIncrementsDone"] = step.timeStepper.numberOfIncrementsDone()
         model.writeRestart(f)
         writeRestartDataOf(f, {"timestepper": step.timeStepper, "solver": step.solver})
         stepActionsGroup = f.create_group("stepActions")
         for actionType, actions in step.actions.items():
             writeRestartDataOf(stepActionsGroup.create_group(actionType), actions)
-        writeRestartDataOf(f.create_group("outputManagers"), outputManagers)
+        writeRestartDataOf(f.create_group("outputManagers"), _outputManagersOf(step))
         writeRestartDataOf(f.create_group("fieldOutputs"), step.fieldOutputController.fieldOutputs)
     with open(temporaryFileName, "rb+") as written:
         os.fsync(written.fileno())
@@ -139,9 +157,10 @@ class ResumeCheckpoint:
     """A restart checkpoint opened for resuming a run, restored piece by piece as the run is set up.
 
     The pieces are restored at different moments, because the objects they belong to are created at
-    different moments: the model first (:meth:`restoreModel`), the output managers once they exist
-    (:meth:`restoreOutputManagers`), and the time stepper and solver when the resumed step begins
-    (:meth:`restoreStep`). Close the checkpoint right after that, see :meth:`close`.
+    different moments: the model first (:meth:`restoreModel`), the time stepper before the resumed
+    step begins (:meth:`restoreTimeStepper`), and the solver, the step actions, the output managers
+    and the field outputs of the step once it has begun (:meth:`restoreStep`). Close the checkpoint
+    right after that, see :meth:`close`.
 
     Parameters
     ----------
@@ -157,10 +176,16 @@ class ResumeCheckpoint:
             self._file.close()
             raise RestartError(
                 "checkpoint {:} has format version {:}, this version of EdelweissFE reads version {:} "
-                "only".format(fileName, formatVersion, CHECKPOINT_FORMAT_VERSION)
+                "only: resume it with the version of EdelweissFE that wrote it, or run the analysis "
+                "from its start".format(fileName, formatVersion, CHECKPOINT_FORMAT_VERSION)
             )
         #: The step the checkpointed run was in; the steps before it are not solved again.
         self.stepNumber = int(self._file.attrs["stepNumber"])
+        #: How many increments of that step were accepted when the checkpoint was written (see
+        #: :meth:`~edelweissfe.timesteppers.base.timestepperbase.TimeStepperBase.numberOfIncrementsDone`).
+        self.numberOfIncrementsDone = int(self._file.attrs["numberOfIncrementsDone"])
+        #: The model time the checkpoint was written at.
+        self.time = float(self._file.attrs["time"])
 
     def restoreModel(self, model, journal):
         """Restore the model's state, see :meth:`~edelweissfe.models.femodel.FEModel.readRestart`.
@@ -183,22 +208,20 @@ class ResumeCheckpoint:
 
         readRestartDataInto(self._file, {"timestepper": step.timeStepper})
 
-    def restoreStep(self, step, outputManagers: dict):
+    def restoreStep(self, step):
         """Restore everything else ``step`` continues from, after it began as if cold: the solver's
         state between increments, the state of the step actions -- which the skipped steps before it
-        never brought to their step end -- and the output managers' state (Ensight's file numbering,
-        for instance). An output manager added for the resumed run starts afresh.
+        never brought to their step end -- and the state of the step's output managers (Ensight's
+        file numbering, for instance). An output manager added for the resumed run starts afresh.
 
         Parameters
         ----------
         step
             The resumed step.
-        outputManagers
-            The output managers, by name.
         """
 
         readRestartDataInto(self._file, {"solver": step.solver})
-        readRestartDataInto(self._file["outputManagers"], outputManagers, newEntitiesStartAfresh=True)
+        readRestartDataInto(self._file["outputManagers"], _outputManagersOf(step), newEntitiesStartAfresh=True)
         readRestartDataInto(
             self._file["fieldOutputs"], step.fieldOutputController.fieldOutputs, newEntitiesStartAfresh=True
         )

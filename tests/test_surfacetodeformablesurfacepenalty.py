@@ -61,6 +61,10 @@ from edelweissfe.points.node import Node
 from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.sets.nodeset import NodeSet
 from edelweissfe.utils.meshtools import currentNodeCoordinates
+from edelweissfe.utils.residualtangentcheck import (
+    finiteDifferenceTangent,
+    residualContributionAndTangent,
+)
 
 
 class TestIntegratedSurfaceContact(unittest.TestCase):
@@ -116,29 +120,19 @@ class TestIntegratedSurfaceContact(unittest.TestCase):
         return constraint
 
     def _forces(self, constraint, U) -> np.ndarray:
-        PExt = np.zeros(constraint.nDof)
-        constraint.applyConstraint(U, np.zeros_like(U), PExt, None, None)
-        return PExt
+        """The contact forces on the nodes, the negative of the constraint's residual contribution."""
+
+        P = np.zeros(constraint.nDof)
+        constraint.computeKernels(U, np.zeros_like(U), P, None, None)
+        return -P
 
     def _assembledTangent(self, constraint, U) -> np.ndarray:
-        """The tangent as one dense ``nDof x nDof`` matrix, scattered from the per-point blocks."""
+        """The tangent as one dense ``nDof x nDof`` matrix, scattered with the constraint's VIJ pattern."""
 
-        flat = np.zeros(constraint.getVIJContributionSize())
-        view = constraint.shapeVIJContribution(flat)
-        PExt = np.zeros(constraint.nDof)
-        constraint.applyConstraint(U, np.zeros_like(U), PExt, view, None)
+        return residualContributionAndTangent(constraint, U, np.zeros_like(U))[1]
 
-        K = np.zeros((constraint.nDof, constraint.nDof))
-        localOffset = 0
-        for block in view.blocks:
-            m = block.shape[0]
-            idcs = np.arange(localOffset, localOffset + m)
-            K[np.ix_(idcs, idcs)] += block
-            localOffset += m
-        return K
-
-    def test_tangent_is_the_negative_force_jacobian(self):
-        """``K == -dPExt/dU``, by central differences, for both penalty laws.
+    def test_tangent_is_the_derivative_of_the_residual_contribution(self):
+        """``K == dP/dU``, by central differences, for both penalty laws.
 
         Every contact point stays well inside contact over the perturbation, so the gap-activation
         switch never fires and the comparison is against a smooth branch.
@@ -152,17 +146,17 @@ class TestIntegratedSurfaceContact(unittest.TestCase):
             U = 1e-3 * rng.standard_normal(constraint.nDof)
 
             K = self._assembledTangent(constraint, U)
-
-            h = 1e-8
-            KNumeric = np.zeros_like(K)
-            for i in range(constraint.nDof):
-                UPlus, UMinus = U.copy(), U.copy()
-                UPlus[i] += h
-                UMinus[i] -= h
-                KNumeric[:, i] = -(self._forces(constraint, UPlus) - self._forces(constraint, UMinus)) / (2.0 * h)
+            dP_dU = finiteDifferenceTangent(constraint, U, np.zeros_like(U), h=1e-8)
 
             scale = max(np.abs(K).max(), 1.0)
-            np.testing.assert_allclose(K, KNumeric, atol=1e-5 * scale, err_msg=f"type={contactType}")
+            np.testing.assert_allclose(K, dP_dU, atol=1e-5 * scale, err_msg=f"type={contactType}")
+
+            # The check above passes a P and a K negated together, so the direction is checked as well: the contact
+            # pushes the faces apart, the slave face (the lower block's, at y = 0.05) down and the master face up.
+            forces = self._forces(constraint, U).reshape((-1, 3))
+            onTheSlaveFace = np.array([node.coordinates[1] > 0.025 for node in constraint.nodes])
+            self.assertLess(forces[onTheSlaveFace, 1].sum(), 0.0, f"type={contactType}")
+            self.assertGreater(forces[~onTheSlaveFace, 1].sum(), 0.0, f"type={contactType}")
 
     def test_batched_and_per_point_paths_agree(self):
         """The batched evaluation must reproduce the per-point loop, which is the reference
@@ -213,7 +207,7 @@ class TestIntegratedSurfaceContact(unittest.TestCase):
         np.testing.assert_allclose(K, K.T, atol=1e-12 * max(np.abs(K).max(), 1.0))
 
     def test_explicit_path_matches_the_implicit_forces(self):
-        """``applyConstraintExplicit`` must deliver exactly the forces the implicit path does."""
+        """``computeKernelsExplicit`` must deliver exactly the forces the implicit path does."""
 
         model, slaveSurface, masterSurface = self._twoBlockModel(penetration=0.05)
         constraint = self._constraint(model, slaveSurface, masterSurface)
@@ -221,10 +215,10 @@ class TestIntegratedSurfaceContact(unittest.TestCase):
 
         PImplicit = np.zeros(constraint.nDof)
         flat = np.zeros(constraint.getVIJContributionSize())
-        constraint.applyConstraint(U, np.zeros_like(U), PImplicit, constraint.shapeVIJContribution(flat), None)
+        constraint.computeKernels(U, np.zeros_like(U), PImplicit, constraint.shapeVIJContribution(flat), None)
 
         PExplicit = np.zeros(constraint.nDof)
-        constraint.applyConstraintExplicit(U, np.zeros_like(U), PExplicit, None)
+        constraint.computeKernelsExplicit(U, np.zeros_like(U), PExplicit, None)
 
         np.testing.assert_array_equal(PImplicit, PExplicit)
 
@@ -334,7 +328,6 @@ class TestIntegratedSurfaceContact(unittest.TestCase):
         for node in model.nodes.values():
             node.fields["displacement"] = model.domainSize
         field = NodeField("displacement", model.domainSize, NodeSet("all", list(model.nodes.values())))
-        field.createFieldValueEntry("U")
         model.nodeFields["displacement"] = field
         return field
 
@@ -342,7 +335,7 @@ class TestIntegratedSurfaceContact(unittest.TestCase):
         """The gap of every assigned point at the model's *current* configuration, evaluated from
         whatever projection is frozen right now.
 
-        Deliberately independent of :meth:`applyConstraint`: it takes the frozen data directly, so
+        Deliberately independent of :meth:`computeKernels`: it takes the frozen data directly, so
         calling it either side of an ``updateConnectivity`` isolates the effect of the re-projection
         from everything else.
         """
@@ -474,8 +467,8 @@ class TestIntegratedSurfaceContact(unittest.TestCase):
 
         model, slaveSurface, masterSurface = self._twoBlockModel(penetration=-0.01)
         constraint = self._constraint(model, slaveSurface, masterSurface)
-        PExt = self._forces(constraint, np.zeros(constraint.nDof))
-        np.testing.assert_array_equal(PExt, 0.0)
+        forces = self._forces(constraint, np.zeros(constraint.nDof))
+        np.testing.assert_array_equal(forces, 0.0)
         self.assertEqual(constraint.totalNormalForce, 0.0)
 
     def test_quadrature_point_count_is_honoured(self):

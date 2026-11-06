@@ -111,7 +111,7 @@ class DiscreteRigidBody(RigidBody):
             the sum of the first and third entries.
         """
         disp_field = self.model.nodeFields.get("displacement")
-        if disp_field is None or "U" not in disp_field or self.rpNode not in disp_field.nodes:
+        if disp_field is None or self.rpNode not in disp_field.nodes:
             raise RuntimeError(
                 f"Discrete rigid body '{self.name}': reference point node is not part of the model's "
                 "'displacement' NodeField -- the model may not be fully initialized yet."
@@ -120,7 +120,7 @@ class DiscreteRigidBody(RigidBody):
 
         R = np.eye(3)
         rot_field = self.model.nodeFields.get("rotation")
-        if rot_field is not None and "U" in rot_field and self.rpNode in rot_field.nodes:
+        if rot_field is not None and self.rpNode in rot_field.nodes:
             theta = rot_field["U"][rot_field.indexOfNode(self.rpNode)]
             R = rotationMatrixFromPseudoVector(theta)
 
