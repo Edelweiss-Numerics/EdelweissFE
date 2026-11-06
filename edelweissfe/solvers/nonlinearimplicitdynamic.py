@@ -135,7 +135,9 @@ Where their inertia is integrated, the option ``meshfreeInertia`` selects:
   :meth:`NonlinearImplicitDynamic.newmarkParametersOfEntities`), and adds its inertial force
   :math:`\\rho_0 V_0 T_A \\ddot{\\boldsymbol{u}}` to its residual and :math:`\\rho_0 V_0 T_A N_B / (\\beta \\Delta t^2)` to
   its tangent. This solver integrates only the nodes of the finite elements; the inertia sits where the state lives,
-  and nothing is projected between particles and nodes. The particles start every analysis from the acceleration in
+  and nothing is projected between particles and nodes. A model of particles alone has no degree of freedom for this
+  solver to integrate: it assembles no mass and adds nothing to the residual and the tangent. The particles start
+  every analysis from the acceleration in
   their state, zero at first: unlike the nodes, they get no acceleration from equilibrium, so a load applied suddenly
   at the start enters their scheme at first order. Their mass :math:`\\sum_p \\rho_0 V_0 T_A N_B` is not symmetric
   when VCI corrects the test functions, so no exact energy statement holds; the kinetic energy and momentum this
@@ -351,7 +353,8 @@ class _NewmarkSystem:
         The names of those fields, in the model's field order.
     Mvij
         The consistent mass as a VIJ value vector, in the stiffness' layout, ready to be scaled
-        and added onto the tangent.
+        and added onto the tangent; None if no degree of freedom is integrated in time (see
+        :meth:`NonlinearImplicitDynamic._noMassAndDamping`).
     dampingVIJIndices, dampingVIJValues
         The diagonal damping, only where it is nonzero: each element's lumped damping at its own
         diagonal slots of the VIJ layout. Diagonal by construction, so a full VIJ value vector for
@@ -375,7 +378,7 @@ class _NewmarkSystem:
     dofManager: DofManager
     dynamicDofs: np.ndarray
     dynamicFields: list
-    Mvij: VIJSystemMatrix
+    Mvij: VIJSystemMatrix | None
     dampingVIJIndices: np.ndarray
     dampingVIJValues: np.ndarray
     M: csr_matrix
@@ -809,6 +812,11 @@ class NonlinearImplicitDynamic(NIST):
         increment = self._currentIncrement
         system = increment.system
 
+        if not system.dynamicDofs.size:
+            # No degree of freedom is integrated here: there is neither inertia nor damping to add, and the trial
+            # velocity and acceleration of the increment stay zero (see _noMassAndDamping).
+            return
+
         with performancetiming.timeit("newmark kinematics"):
             self._newmarkVelocityAndAcceleration(
                 dU,
@@ -1054,6 +1062,8 @@ class NonlinearImplicitDynamic(NIST):
         if (
             dofManagerChanged
             and system is not None
+            and system.dynamicDofs.size
+            and dynamicDofs.size
             and not topologyChanged
             and not stepActions["changematerialproperty"]
             and lumpedMassOfParticles is None
@@ -1061,7 +1071,9 @@ class NonlinearImplicitDynamic(NIST):
         ):
             reusedMassAndDamping = self._reuseMassAndDamping(system, model)
 
-        if reusedMassAndDamping is not None:
+        if not dynamicDofs.size:
+            Mvij, damping, M, C, massByField = self._noMassAndDamping()
+        elif reusedMassAndDamping is not None:
             Mvij, damping, M, C, massByField = reusedMassAndDamping
         else:
             Mvij, damping, M, C, massByField = self._assembleMassAndDamping(
@@ -1104,6 +1116,22 @@ class NonlinearImplicitDynamic(NIST):
             )
 
         return self._newmarkSystem
+
+    def _noMassAndDamping(self) -> tuple[None, tuple[np.ndarray, np.ndarray], csr_matrix, csr_matrix, dict]:
+        """The mass and the damping of an equation system none of whose degrees of freedom is integrated in time here --
+        a model whose only inertia is that of meshfree particles, which integrate it themselves
+        (``meshfreeInertia=particles``). Nothing is assembled: the matrices are empty, so that the products with them
+        cost nothing, and there is no VIJ value vector, so that the Newmark terms add nothing to the tangent (see
+        :meth:`assembleAdditionalTerms`).
+
+        Returns
+        -------
+        tuple[None, tuple[np.ndarray, np.ndarray], csr_matrix, csr_matrix, dict]
+            No VIJ mass, no damping entries, the empty mass and damping, and no mass by field.
+        """
+
+        nDof = self.theDofManager.nDof
+        return None, (np.zeros(0, dtype=np.int64), np.zeros(0)), csr_matrix((nDof, nDof)), csr_matrix((nDof, nDof)), {}
 
     @performancetiming.timeit("reuse mass and damping")
     def _reuseMassAndDamping(
