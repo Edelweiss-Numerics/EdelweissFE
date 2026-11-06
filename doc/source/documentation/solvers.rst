@@ -4,6 +4,72 @@ Solvers
 .. automodule:: edelweissfe.config.solvers
    :members:
 
+.. _residual-and-tangent-convention:
+
+The residual and the tangent
+----------------------------
+
+Every entity that enters the equation system -- an element, a load, a constraint -- contributes two things: a
+vector :math:`\boldsymbol{P}` to the residual, and its tangent
+:math:`\boldsymbol{K} = \partial \boldsymbol{P} / \partial \boldsymbol{U}`. The rule is the same for all of them:
+
+* An **element** adds its internal forces,
+  :math:`\boldsymbol{P} = \boldsymbol{f}_\mathrm{int} = \int_\Omega \boldsymbol{B}^T \boldsymbol{\sigma} \, \mathrm{d}V`,
+  and its stiffness matrix.
+* A **load** adds the *negative* of the external load it applies: a node force :math:`\boldsymbol{F}` adds
+  :math:`-\boldsymbol{F}`, a body force :math:`-\int_\Omega \boldsymbol{N}^T \boldsymbol{b} \, \mathrm{d}V`. A dead
+  load has no tangent; a load that follows the deformation, such as a pressure on the current surface, has one.
+* A **constraint** adds the negative of the force it exerts on its nodes -- just what an element of the same
+  mechanics would add as its internal force. A penalty spring of stiffness :math:`k` that pulls a degree of freedom
+  :math:`u` towards :math:`\bar{u}` adds :math:`P = k\,(u - \bar{u})` and :math:`K = k`; a Lagrange multiplier
+  :math:`\boldsymbol{\lambda}` enforcing :math:`\boldsymbol{g}(\boldsymbol{u}) = \boldsymbol{0}` adds
+  :math:`\boldsymbol{\lambda}^T \partial \boldsymbol{g} / \partial \boldsymbol{u}` to the rows of the nodes and
+  :math:`\boldsymbol{g}` to the rows of the multipliers. See :doc:`constraints` for writing one.
+
+A solver sums the contributions in three loops of every iteration: ``computeElements`` over the elements,
+``assembleLoads`` over the loads -- every load assembles its own contribution, wherever it acts (see
+:class:`~edelweissfe.stepactions.base.loadbase.LoadBase`) -- and ``assembleConstraints`` over the constraints that
+are not switched off (see :doc:`constraints`). Summed over all entities,
+
+.. math::
+
+    \boldsymbol{G}(\boldsymbol{U}) = \sum \boldsymbol{P} = \boldsymbol{f}_\mathrm{int} - \boldsymbol{f}_\mathrm{ext}
+
+is the out-of-balance force, which equilibrium makes zero, and the summed :math:`\boldsymbol{K}` is its derivative.
+Newton's method replaces :math:`\boldsymbol{G}(\boldsymbol{U} + \Delta \boldsymbol{U}) = \boldsymbol{0}` by its
+linearization :math:`\boldsymbol{G} + \boldsymbol{K}\, \Delta \boldsymbol{U} = \boldsymbol{0}`, so the implicit
+solvers solve
+
+.. math::
+
+    \boldsymbol{K}\, \Delta \boldsymbol{U} = \boldsymbol{R}, \qquad
+    \boldsymbol{R} = -\boldsymbol{G} = \boldsymbol{f}_\mathrm{ext} - \boldsymbol{f}_\mathrm{int}
+
+in every iteration. The right-hand side :math:`\boldsymbol{R}` is what the convergence criteria check, and what the
+multi-point-constraint condensation and the Dirichlet boundary conditions act on. The other solvers use the same
+sums:
+
+* ``NID`` subtracts the inertia and damping forces from :math:`\boldsymbol{R}`, and adds their tangents to
+  :math:`\boldsymbol{K}`.
+* ``NED`` accelerates the nodes with the net force :math:`\boldsymbol{R}`, and needs no tangent.
+* ``NISTPArcLength`` sums the loads twice, at the start of the step (the dead load, :math:`\boldsymbol{P}_0`) and
+  at its end; their difference is the reference load, :math:`\boldsymbol{P}_\mathrm{ref}`. Scaled by the load
+  parameter :math:`\lambda`, it enters
+  :math:`\boldsymbol{R} = -(\boldsymbol{P}_0 + \lambda \boldsymbol{P}_\mathrm{ref} + \boldsymbol{P}_\mathrm{elements}
+  + \boldsymbol{P}_\mathrm{constraints})`.
+
+Why one rule? Because then :math:`\boldsymbol{K}` is always the derivative of exactly what was added to
+:math:`\boldsymbol{P}`, for every entity alike. That can be checked by finite differences, entity by entity, and the
+same check catches a contribution whose sign alone is wrong: :math:`\boldsymbol{K}` then comes out as
+:math:`-\partial \boldsymbol{P} / \partial \boldsymbol{U}`. A contribution negated together with its tangent passes it,
+so ``tests/test_residual_tangent_convention.py`` checks every constraint this way and also checks the direction of the
+forces it exerts (see :doc:`constraints`); a dead load has no tangent, so there the sign of each element load is
+checked against the load integrated independently.
+
+The elements' sum alone, :math:`\boldsymbol{f}_\mathrm{int}`, is what the implicit solvers and ``NEST`` report as the
+nodal result ``P`` of a field output: at a degree of freedom with a Dirichlet boundary condition and no load, it is the
+reaction force. ``NED`` reports its net force :math:`\boldsymbol{R}` there.
+
 
 ``NIST`` - Nonlinear Implicit Static
 ------------------------------------
@@ -98,6 +164,68 @@ momentum and kinetic energy in that case.
 
 .. pprint:: solver:NIDParallel
 
+Prediction of an increment in the implicit solvers
+--------------------------------------------------
+
+Newton's method starts each increment from a prediction of its solution increment. The solver option
+``extrapolation`` chooses it:
+
+* ``off``: from zero, i.e., from the last converged state.
+* ``linear`` (default): the last accepted increment, scaled to the size of the new one. The path of the solution is
+  continued along its last secant.
+* ``quadratic``: the parabola through the last three accepted states, evaluated at the end of the new increment, which
+  continues the path along its curvature, too. For a solution that grows quadratically with the load, the prediction
+  is exact, and the increment converges without a correction. While only one increment of the step has been accepted,
+  the prediction is linear.
+
+Sizes are measured in step progress. The prescribed degrees of freedom take their prescribed increment, so the first
+iteration of a predicted increment already checks convergence. Not available yet under an arc length controller,
+which extrapolates its load parameter linearly.
+
+A prediction can lead Newton's method astray, e.g., when the path turns sharply. Two options decide what happens then
+and around rebuilds of the equation system, both off by default:
+
+* ``retryWithoutExtrapolation``: if an extrapolated increment fails, it is attempted once more from a zero prediction
+  before it is cut back. A failed increment then keeps the accepted history, and the smaller increment after the
+  cutback is extrapolated from it as well. Without this option, a failed increment drops the prediction, and the
+  increments up to the next accepted one start from zero.
+* ``extrapolateAcrossConnectivityChange``: a change of the connectivity, e.g., a contact search that couples other
+  nodes, rebuilds the equation system, and the increment starts from zero. With this option, it is extrapolated
+  nevertheless, as long as the rebuilt system numbers the degrees of freedom exactly as the last one
+  (:meth:`~edelweissfe.numerics.dofmanager.DofManager.dofNumbering`): the last accepted increments are vectors of the
+  same degrees of freedom then. A change of the topology, e.g., a mesh refinement, always starts from zero (see
+  ``extrapolateAfterModelChange`` for the increment that follows it).
+
+Line search and quasi-Newton fallback of the implicit solvers
+-------------------------------------------------------------
+
+Newton's method converges quadratically close to the solution, but far from it, or where the tangent changes abruptly
+(e.g., material points switching between loading and unloading), a full correction can overshoot, and the iterations
+oscillate or diverge. Two remedies, solver options of ``NIST``, ``NISTParallel``, ``NID`` and ``NIDParallel``, are off by
+default; neither is available yet under an arc length controller.
+
+**Line search** (``lineSearch``). The correction :math:`\Delta\Delta U` is scaled by a step length :math:`\alpha`:
+the largest residual :math:`\| R(\Delta U + \alpha \, \Delta\Delta U) \|_\infty` (without the Dirichlet degrees of
+freedom) is evaluated at the trial step lengths ``lineSearchStepLengths`` (default ``0.8, 1.0, 1.2``), a parabola is
+fitted to these values, and :math:`\alpha` minimizes the parabola on :math:`[0.1, 1.5]`: its vertex, limited to that
+range, or, for a parabola that does not open upwards, the end of the range where it is smaller. A trial at which the
+residual is not finite fits no parabola: :math:`\alpha` is then the trial step length of the smallest finite residual,
+and without one, the increment is cut back. Trial residuals that are equal to round-off do not tell the step lengths
+apart, and the correction is taken in full. Each trial costs one evaluation of the model, so the line search is done
+only after ``lineSearchAfterIterations`` iterations (default 5), and then in every iteration whose number is a multiple
+of ``lineSearchEveryIterations`` (default 2). Small trial step lengths, e.g.
+``lineSearchStepLengths='0.15, 0.4, 0.7, 1.0'``, damp an iteration that cycles between two states.
+
+**Quasi-Newton fallback** (``fallBackToQuasiNewton``). An increment whose residual grew more often than the step
+option ``maxGrowIter`` allows is cut back. With this option, it continues instead with the tangent of its first
+iteration, i.e., of the converged state at the start of the increment, or of the prediction if the increment is
+extrapolated. The convergence becomes linear, but a tangent that is not updated cannot switch abruptly either;
+``maxIter`` still ends an increment that does not converge.
+
+.. code-block:: edelweiss
+
+    >>options, name=theSolver, lineSearch=True, lineSearchAfterIterations=2, lineSearchEveryIterations=1, fallBackToQuasiNewton=True
+
 Convergence criteria of the implicit solvers
 --------------------------------------------
 
@@ -107,6 +235,42 @@ criterion of their Newton iterations with the solver option ``convergenceCriteri
 .. code-block:: edelweiss
 
     >>options, name=theSolver, convergenceCriterion=abaqus
+
+The ``legacy`` criterion is configured by tolerances per field and by solver options. EdelweissMeshfree's parameter
+set, for instance, reads for a model with a displacement field
+
+.. code-block:: edelweiss
+
+    *updateConfiguration, configuration=fluxResidualTolerance
+    displacement=1e-4
+    *updateConfiguration, configuration=fluxResidualToleranceAlternative
+    displacement=1e-3
+    *updateConfiguration, configuration=absoluteFluxResidualTolerance
+    displacement=1e-14
+    *updateConfiguration, configuration=fieldCorrectionTolerance
+    displacement=1e-14
+    *updateConfiguration, configuration=relativeFieldCorrectionTolerance
+    displacement=1e-3
+
+together with
+
+.. code-block:: edelweiss
+
+    >>options, name=theSolver, iterationsForAlternativeTolerance=5, zeroFluxThreshold=1e-9, zeroIncrementThreshold=1e-13, minimumIterations=1, countFirstResidualAsGrowth=False, countGrowthOfConvergedFields=False
+
+The last two options belong to the test for a diverging Newton iteration, which holds for either criterion: an
+increment is abandoned, and retried smaller, once the flux residual of a field has grown more than ``maxGrowIter`` (a
+step option) times in it. A growth is a flux residual larger than that of the previous checked iteration, and the two
+options decide what else counts:
+
+* ``countFirstResidualAsGrowth`` (default True): the residual history of a field starts at zero, so the first checked
+  residual of an increment is a growth already. This is EdelweissFE's original counting; with False, counting starts
+  with the second checked iteration.
+* ``countGrowthOfConvergedFields`` (default True): a growth counts even in an iteration in which the field is
+  converged, and only another field keeps the iterations going. With False, such growths are ignored: the residual of
+  a converged field fluctuates at the level of its round-off, which says nothing about divergence.
+
+Independent of the criterion, a residual that contains a NaN ends the increment at once.
 
 .. automodule:: edelweissfe.solvers.base.convergencecriteria
    :members:
