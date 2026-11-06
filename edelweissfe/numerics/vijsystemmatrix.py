@@ -46,15 +46,18 @@ class VIJSystemMatrix(np.ndarray):
         A dictionary mapping entities to the slice of `V` that holds the values of their block.
     """
 
+    #: The slice of the values of every entity; None for an array derived from one without it.
+    vijSliceOfEntity: dict | None = None
+
     def __new__(cls, nEntries: int, vijSliceOfEntity: dict):
         obj = np.zeros(nEntries, dtype=float).view(cls)
         obj.vijSliceOfEntity = vijSliceOfEntity
         return obj
 
     def __array_finalize__(self, obj):
-        if obj is None:
-            return
-        self.vijSliceOfEntity = getattr(obj, "vijSliceOfEntity", None)
+        # a view, a copy or the result of an operation keeps the layout of the value array it comes from
+        if isinstance(obj, VIJSystemMatrix):
+            self.vijSliceOfEntity = obj.vijSliceOfEntity
 
     def __getitem__(self, key):
         """
@@ -70,16 +73,13 @@ class VIJSystemMatrix(np.ndarray):
         ndarray or float
             Sub-array or shaped entity matrix view.
         """
-        if isinstance(key, (int, slice, np.ndarray, list, tuple)):
+        # An entity of the layout first, as the DOF vectors do; any other key is an index of the array. What the
+        # entity does with its values is not caught: an error in it is the entity's.
+        try:
+            vijSlice = self.vijSliceOfEntity[key]
+        except (KeyError, TypeError):
             return super().__getitem__(key)
-
-        if self.vijSliceOfEntity is not None:
-            try:
-                flat_view = super().__getitem__(self.vijSliceOfEntity[key])
-                return key.shapeBlock(flat_view)
-            except (KeyError, TypeError, AttributeError):
-                pass
-        return super().__getitem__(key)
+        return key.shapeBlock(super().__getitem__(vijSlice))
 
     def __setitem__(self, key, value):
         """
@@ -92,17 +92,12 @@ class VIJSystemMatrix(np.ndarray):
         value : array_like or float
             Value(s) to assign.
         """
-        if isinstance(key, (int, slice, np.ndarray, list, tuple)):
+        try:
+            vijSlice = self.vijSliceOfEntity[key]
+        except (KeyError, TypeError):
             super().__setitem__(key, value)
             return
-
-        if self.vijSliceOfEntity is not None:
-            try:
-                super().__setitem__(self.vijSliceOfEntity[key], value)
-                return
-            except (KeyError, TypeError, AttributeError):
-                pass
-        super().__setitem__(key, value)
+        super().__setitem__(vijSlice, value)
 
     def copy(self, order: str = "C") -> "VIJSystemMatrix":
         """
