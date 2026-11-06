@@ -282,9 +282,10 @@ class NISTPArcLength(NISTParallel):
         the step, so every correction of the load parameter moves them along, while the out-of-balance solve leaves
         them where they are -- they are no unknowns, and their rows are left out of the convergence check. The options
         of Newton's method apply to the pair :math:`(\\Delta U, \\Delta\\lambda)`: the prediction extrapolates both with
-        the same weights (:meth:`extrapolateLastIncrement`), a line search scales both corrections with the same step
-        length (:meth:`setTrialState`), and the quasi-Newton fallback keeps the tangent of the first iteration for both
-        right-hand sides.
+        the same weights (:meth:`extrapolateLastIncrement`), a line search scales the correction the out-of-balance
+        force causes, which the controller completes at every step length, so that every trial state satisfies its
+        equation (:meth:`setTrialState`), and the quasi-Newton fallback keeps the tangent of the first iteration for
+        both right-hand sides.
 
         Before the iterations, the step's stop condition is checked (see the option ``stopCondition``); once they have
         converged, the load parameter advances with the solution it belongs to.
@@ -522,9 +523,12 @@ class NISTPArcLength(NISTParallel):
 
     def correctionAtStepLength(self, dU: DofVector, ddU_0: DofVector, stepLength: float) -> tuple[DofVector, float]:
         """The correction of the pair of the solution and the load parameter at a step length :math:`\\alpha`: the
-        controller combines the two corrections of the linear solve, :math:`\\Delta\\Delta U = \\Delta\\Delta U_0 +
-        \\Delta\\Delta\\lambda \\, \\Delta\\Delta U_f`, with the correction of the load parameter
-        :math:`\\Delta\\Delta\\lambda` its equation asks for, and both are scaled by :math:`\\alpha`.
+        correction the out-of-balance force causes, scaled by :math:`\\alpha`, which the controller completes with the
+        correction the reference load causes, :math:`\\Delta\\Delta U = \\alpha \\, \\Delta\\Delta U_0 +
+        \\Delta\\Delta\\lambda \\, \\Delta\\Delta U_f`, by the correction of the load parameter
+        :math:`\\Delta\\Delta\\lambda` its equation asks for. So the controller's equation holds at every step length,
+        as for the full correction (:math:`\\alpha = 1`): a line search cannot leave it unsatisfied, also not from an
+        iterate that does not satisfy it yet.
 
         Parameters
         ----------
@@ -545,15 +549,16 @@ class NISTPArcLength(NISTParallel):
         increment = self.arcLengthIncrement
         ddU_f = increment.referenceCorrection
 
+        ddU_0 = stepLength * ddU_0
         ddLambda = self.arcLengthController.computeDDLambda(dU, ddU_0, ddU_f, increment.timeStep, self.theDofManager)
 
-        return stepLength * (ddU_0 + ddLambda * ddU_f), stepLength * ddLambda
+        return ddU_0 + ddLambda * ddU_f, ddLambda
 
     def setTrialState(self, dU: DofVector, ddU_0: DofVector, stepLength: float) -> DofVector:
         """Set the trial state of a line search at a step length along the correction of the pair: the solution
-        increment and the load parameter, both moved by their corrections at that step length (see
-        :meth:`correctionAtStepLength`); the iterate stays where it is. Without a controller, as
-        :meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.setTrialState`.
+        increment and the load parameter, both moved by their corrections at that step length, which satisfy the
+        controller's equation (see :meth:`correctionAtStepLength`); the iterate stays where it is. Without a
+        controller, as :meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.setTrialState`.
 
         Parameters
         ----------

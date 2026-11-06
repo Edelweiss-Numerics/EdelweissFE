@@ -30,7 +30,8 @@
 - The controller is the step action the solver option ``arcLengthController`` names, from an input file or from
   Python alone.
 - The line search and the quasi-Newton fallback act on the pair of the solution increment and the increment of the
-  load parameter.
+  load parameter: the line search scales the correction the out-of-balance force causes, and the controller completes
+  every trial state, so that none leaves its equation unsatisfied.
 - The prediction extrapolates both with the same weights, quadratically, too, and a failed extrapolated increment is
   retried without it.
 
@@ -57,7 +58,10 @@ from edelweissfe.sections.plane import PlaneSectionSchema, Section
 from edelweissfe.sets.elementset import ElementSet
 from edelweissfe.sets.nodeset import NodeSet
 from edelweissfe.solvers.nonlinearimplicitstatic import NIST
-from edelweissfe.solvers.nonlinearimplicitstaticparallelarclength import NISTPArcLength
+from edelweissfe.solvers.nonlinearimplicitstaticparallelarclength import (
+    ArcLengthIncrement,
+    NISTPArcLength,
+)
 from edelweissfe.stepactions.dirichlet import StepAction as DirichletStepAction
 from edelweissfe.stepactions.indirectcontrol import StepAction as IndirectControl
 from edelweissfe.stepactions.nodeforces import StepAction as NodeForcesStepAction
@@ -301,16 +305,27 @@ def test_a_redeclared_controller_counts_its_absolute_target_from_the_quantity_re
 
 
 def test_the_line_search_scales_the_load_parameter_with_the_solution(tmp_path, monkeypatch):
+    """The trial states of the line search move the load parameter with the solution, and every one of them satisfies
+    the controller's equation: the tip moves down by the target of the increment. So does the iterate the line search
+    chooses, which the next iteration evaluates."""
+
     reference = run(tmp_path, deck())
 
+    #: per evaluation of the model: the load parameter, and the residual of the controller's equation
     loadParameters = []
+    controllerResiduals = []
     lineSearches = []
     originalAssembleLoads = NISTPArcLength.assembleLoadsAtIncrementEnd
     originalLineSearch = NIST.quadraticLineSearch
 
-    def assembleLoadsAtIncrementEnd(self, *args):
+    def assembleLoadsAtIncrementEnd(self, stepActions, U_np, dU, P, K, timeStep):
+        controller = self.arcLengthController
+        controlled = np.hstack(
+            [self.theDofManager.idcsOfFieldVariablesInDofVector[dof] for dof in (controller.dof1, controller.dof2)]
+        )
         loadParameters.append(self.arcLengthIncrement.loadParameter)
-        return originalAssembleLoads(self, *args)
+        controllerResiduals.append(controller.c.dot(dU[controlled]) - timeStep.stepProgressIncrement * controller.L)
+        return originalAssembleLoads(self, stepActions, U_np, dU, P, K, timeStep)
 
     def quadraticLineSearch(self, largestResidualAt):
         before = len(loadParameters)
@@ -327,6 +342,7 @@ def test_the_line_search_scales_the_load_parameter_with_the_solution(tmp_path, m
     assertSameEndState(searched, reference)
     assert lineSearches
     trialStepLengths = searched.solvers["theSolver"].lineSearchStepLengths()
+    target = searched.solvers["theSolver"].arcLengthController.L
     for first, last, stepLength in lineSearches:
         # the trials move the load parameter along the correction of the pair: an affine function of the step length
         trials = loadParameters[first:last]
@@ -335,11 +351,73 @@ def test_the_line_search_scales_the_load_parameter_with_the_solution(tmp_path, m
         np.testing.assert_allclose(
             trials, trials[0] + slope * (np.array(trialStepLengths) - trialStepLengths[0]), rtol=1e-12, atol=1e-15
         )
-        # and the next iteration takes the load parameter at the chosen step length
+        # every trial state satisfies the controller's equation
+        np.testing.assert_allclose(controllerResiduals[first:last], 0.0, rtol=0.0, atol=1e-12 * abs(target))
+        # and the next iteration takes the load parameter at the chosen step length, which satisfies it too
         if last < len(loadParameters):
             np.testing.assert_allclose(
                 loadParameters[last], trials[0] + slope * (stepLength - trialStepLengths[0]), rtol=1e-12, atol=1e-15
             )
+            np.testing.assert_allclose(controllerResiduals[last], 0.0, rtol=0.0, atol=1e-12 * abs(target))
+
+
+def test_every_trial_state_of_the_line_search_satisfies_the_controllers_equation():
+    """The line search scales the correction the out-of-balance force causes, and the controller completes every trial
+    state with the correction of the load parameter its equation asks for, as it completes the full correction. So every
+    trial state satisfies the controller's equation, also from an iterate that does not satisfy it yet: here the start
+    of an increment, from which the controlled opening still has to grow by the target of the increment. (Scaling the
+    full correction of the pair instead would miss the target by the part of the step not taken.)"""
+
+    class FieldVariable:
+        """A stand-in for the two controlled field variables: the controller only locates them."""
+
+    dof1, dof2 = FieldVariable(), FieldVariable()
+    opening = IndirectControl("opening", dof1, dof2, [0.0, -1.0], [0.0, 1.0], 0.5, None, Journal(verbose=False))
+
+    class DofManager:
+        """The degrees of freedom of the two field variables."""
+
+        idcsOfFieldVariablesInDofVector = {dof1: np.array([0, 1]), dof2: np.array([2, 3])}
+
+    def openingOf(dU):
+        return opening.c.dot(dU)
+
+    timeStep = TimeStep(3, 0.2, 0.6, 0.2, 0.6, 0.6)
+    target = timeStep.stepProgressIncrement * opening.L
+    solver = NISTPArcLength(loadConfiguration({}), Journal(verbose=False), arcLengthController="opening")
+    solver.arcLengthController = opening
+    solver.theDofManager = DofManager()
+    solver.arcLengthIncrement = ArcLengthIncrement(
+        loadParameterAtStart=1.5,
+        timeStep=timeStep,
+        referenceTimeStep=TimeStep(3, 1.0, 1.0, 0.0, 0.0, 0.0),
+        deadLoad=None,
+        referenceLoad=None,
+        deadLoadTangent=None,
+        referenceLoadTangent=None,
+        rightHandSides=None,
+        referenceCorrection=np.array([0.0, -0.1, 0.05, 0.3]),
+    )
+    # the corrections the out-of-balance force and the reference load cause, from the start of the increment
+    ddU_0 = np.array([0.5, 0.2, -0.1, 0.05])
+    dU = np.zeros(4)
+    assert openingOf(dU) != target
+
+    for stepLength in (0.3, 0.8, 1.0, 1.2):
+        trial = solver.setTrialState(dU, ddU_0, stepLength)
+        np.testing.assert_allclose(openingOf(trial), target, rtol=1e-14)
+        # the trial state's load parameter: the one of the iterate, moved by the correction the controller asks for
+        ddLambda = (target - stepLength * openingOf(ddU_0)) / openingOf(solver.arcLengthIncrement.referenceCorrection)
+        np.testing.assert_allclose(solver.arcLengthIncrement.loadParameter, 1.5 + ddLambda, rtol=1e-14)
+        np.testing.assert_array_equal(dU, 0.0)
+
+    # the iterate the line search chooses satisfies it as well, with the load parameter that goes with it
+    ddU = solver.applyCorrection(dU, ddU_0, 0.8)
+    np.testing.assert_array_equal(dU, ddU)
+    np.testing.assert_allclose(openingOf(dU), target, rtol=1e-14)
+    ddLambda = (target - 0.8 * openingOf(ddU_0)) / openingOf(solver.arcLengthIncrement.referenceCorrection)
+    np.testing.assert_allclose(solver.arcLengthIncrement.loadParameterIncrement, ddLambda, rtol=1e-14)
+    np.testing.assert_allclose(solver.arcLengthIncrement.loadParameter, 1.5 + ddLambda, rtol=1e-14)
 
 
 def test_the_fallback_continues_with_the_tangent_of_the_first_iteration(tmp_path, attempts):

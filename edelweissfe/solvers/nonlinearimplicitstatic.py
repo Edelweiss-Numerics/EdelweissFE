@@ -1568,7 +1568,8 @@ class NIST(NonlinearSolverBase):
           taken in full, the step length is 1.
 
         The trial states are those :meth:`setTrialState` sets: the solution increment moved along the correction
-        :math:`\\Delta\\Delta U`, and, under arc length control, the load parameter moved with it (see
+        :math:`\\Delta\\Delta U`, and, under arc length control, the load parameter moved with it, such that every trial
+        state satisfies the controller's equation (see
         :meth:`~edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength.setTrialState`).
 
         Parameters
