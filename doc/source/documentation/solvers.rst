@@ -168,7 +168,10 @@ earlier step, so that a later step does not stop by the condition that ended the
     >>options, name=theSolver, arcLengthController=opening, stopCondition='fieldOutputs["UTop"] < -1.0'
 
 Every controller derives from :class:`~edelweissfe.stepactions.base.arclengthcontrollerbase.ArcLengthControllerBase`,
-which states what the solver asks of it.
+which states what the solver asks of it:
+
+.. automodule:: edelweissfe.stepactions.base.arclengthcontrollerbase
+   :members:
 
 The options of Newton's method act on the pair of the solution increment and the increment of the load parameter
 :math:`(\Delta U, \Delta\lambda)`:
