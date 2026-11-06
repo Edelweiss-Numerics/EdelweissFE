@@ -40,10 +40,10 @@ arrays a checkpoint stores, and back. An empty mapping declares that a component
 between increments. A component whose declaration is still None has not been declared at all, and
 cannot be checkpointed.
 
-An attribute that is None is simply left out, and read back as None. A ``dict`` maps strings to
-floats. An attribute whose type is none of the plain ones is a helper object that declares its own
-``checkpointedState``; its state is stored under the attribute's name as a prefix. A helper that
-declares an empty mapping stores nothing and keeps itself as it is.
+An attribute that is None is simply left out, and read back as None. A ``str`` is stored as bytes;
+a ``dict`` maps strings to floats. An attribute whose type is none of the plain ones is a helper
+object that declares its own ``checkpointedState``; its state is stored under the attribute's name
+as a prefix. A helper that declares an empty mapping stores nothing and keeps itself as it is.
 """
 
 import numpy as np
@@ -56,6 +56,7 @@ _TO_ARRAY = {
     float: lambda value: np.array(value, dtype=float),
     int: lambda value: np.array(value, dtype=np.int64),
     bool: lambda value: np.array(value, dtype=bool),
+    str: lambda value: np.array(value.encode()),
     np.ndarray: np.asarray,
     list: np.asarray,
     set: lambda value: np.array(sorted(value), dtype=bytes),
@@ -68,6 +69,7 @@ _FROM_ARRAY = {
     float: float,
     int: int,
     bool: bool,
+    str: lambda a: np.asarray(a).item().decode(),
     np.ndarray: np.array,
     list: list,
     set: lambda a: {entry.decode() for entry in a},

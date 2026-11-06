@@ -418,13 +418,15 @@ class NIST(NonlinearSolverBase):
     #: :meth:`~edelweissfe.models.femodel.FEModel.buildEquationSystem`), rebuilt with it; None until it is built.
     equationSystemLayout = None
 
-    #: The predictor's state between increments: the last accepted increment and its dU, and, for a quadratic
-    #: extrapolation, the accepted increment before it and its dU; and the state of the convergence criterion.
+    #: The predictor's state between increments: the last accepted increment and its dU, for a quadratic
+    #: extrapolation the accepted increment before it and its dU, and the digest of the numbering of the degrees of
+    #: freedom these dU are vectors of; and the state of the convergence criterion.
     checkpointedState = {
         "prevTimeStep": TimeStep,
         "dU": np.ndarray,
         "timeStepBeforePrev": TimeStep,
         "dUBeforePrev": np.ndarray,
+        "dofNumberingOfLastIncrement": str,
         "convergenceCriterion": ConvergenceCriterionBase,
     }
 
@@ -456,6 +458,11 @@ class NIST(NonlinearSolverBase):
         self.timeStepBeforePrev = None
         #: The solution increment of :attr:`timeStepBeforePrev`.
         self.dUBeforePrev = None
+        #: The digest of the numbering of the degrees of freedom of the equation system the last increment was accepted
+        #: in (:attr:`~edelweissfe.numerics.dofmanager.DofManager.dofNumberingDigest`): :attr:`dU` is a
+        #: vector of it, and so is :attr:`dUBeforePrev`, which is kept only as long as the prediction
+        #: survives the rebuilds of the equation system (see :meth:`predictionSurvivesRebuild`).
+        self.dofNumberingOfLastIncrement = None
         #: The convergence criterion of the current step, created when the step begins (None before).
         self.convergenceCriterion = None
 
@@ -601,6 +608,7 @@ class NIST(NonlinearSolverBase):
         self.dU = None
         self.timeStepBeforePrev = None
         self.dUBeforePrev = None
+        self.dofNumberingOfLastIncrement = None
 
         self.validateModelCapabilities(model)
 
@@ -682,16 +690,6 @@ class NIST(NonlinearSolverBase):
             )
 
         if modelHasChanged or connectivityHasChanged or self.theDofManager is None:
-            # The prediction may survive a rebuild caused by the connectivity alone, if the rebuilt system numbers the
-            # degrees of freedom as the last one: remember that numbering, before the last system is dropped.
-            numberingBeforeRebuild = (
-                self.theDofManager.dofNumbering()
-                if connectivityHasChanged
-                and not modelHasChanged
-                and self.theDofManager is not None
-                and self.options["extrapolateAcrossConnectivityChange"]
-                else None
-            )
             with performancetiming.timeit("equation system rebuild"):
                 self.forgetEquationSystem()
                 # The model says what its equation system is made of: the numbering of the degrees of freedom, the
@@ -757,11 +755,9 @@ class NIST(NonlinearSolverBase):
                 with performancetiming.timeit("system matrix assembly setup"):
                     K = self.createSystemMatrixAssembly(assemblyType)
 
-                # After a topology change, the last dU belongs to a different DOF layout: do not extrapolate this
-                # increment. After a change of the connectivity alone, it may still fit.
-                if modelHasChanged or (
-                    connectivityHasChanged and not self.predictionSurvivesRebuild(numberingBeforeRebuild)
-                ):
+                # The last accepted increments are vectors of the equation system they were solved in: this increment
+                # extrapolates them only if the rebuilt system numbers the degrees of freedom alike.
+                if not self.predictionSurvivesRebuild(modelHasChanged, connectivityHasChanged):
                     self.prevTimeStep = None
                 self._U, self._dU, self._P, self._K = U, dU, P, K
         # the equation system of this increment, just built or kept from the last one
@@ -916,29 +912,40 @@ class NIST(NonlinearSolverBase):
 
         return 1
 
-    def predictionSurvivesRebuild(self, numberingBeforeRebuild: tuple | None) -> bool:
-        """Whether the last accepted increment still fits the equation system rebuilt after a change of the
-        connectivity alone (e.g., a contact search), so that this increment may extrapolate it: only with
-        ``extrapolateAcrossConnectivityChange``, and only if the rebuilt system numbers the degrees of freedom as the
-        last one. At the first increment of a resumed step there is no last system, and the numbering of the checkpoint
-        is assumed, as for every resumed prediction.
+    def predictionSurvivesRebuild(self, modelHasChanged: bool, connectivityHasChanged: bool) -> bool:
+        """Whether this increment may extrapolate the last accepted increments after the equation system was rebuilt.
+        They are vectors of the equation system they were solved in, so they fit the rebuilt one only if it numbers the
+        degrees of freedom alike, which the digests of the two numberings tell
+        (:attr:`~edelweissfe.numerics.dofmanager.DofManager.dofNumberingDigest`; the one of the last accepted
+        increments is :attr:`dofNumberingOfLastIncrement`):
+
+        * after a change of the topology (e.g., a mesh refinement), never;
+        * after a change of the connectivity alone (e.g., a contact search), only with
+          ``extrapolateAcrossConnectivityChange``, and only if the numbering is unchanged;
+        * at the first increment of a step that continues from a restart checkpoint -- resumed, or fallen back to --
+          only if the rebuilt system numbers the degrees of freedom as the checkpoint's last accepted increments are
+          numbered: e.g., the active cells of a material point model may have changed since. A prediction without the
+          digest of its numbering has nothing to be compared with, and is dropped.
 
         Parameters
         ----------
-        numberingBeforeRebuild
-            The :meth:`~edelweissfe.numerics.dofmanager.DofManager.dofNumbering` of the last equation system, or None
-            if there was none.
+        modelHasChanged
+            Whether the topology update changed the model.
+        connectivityHasChanged
+            Whether it changed the connectivity alone.
 
         Returns
         -------
         bool
-            True if the prediction may extrapolate the last accepted increment.
+            True if the prediction may extrapolate the last accepted increments.
         """
 
-        if not self.options["extrapolateAcrossConnectivityChange"]:
+        if self.prevTimeStep is None or modelHasChanged:
+            return False
+        if connectivityHasChanged and not self.options["extrapolateAcrossConnectivityChange"]:
             return False
 
-        return numberingBeforeRebuild is None or self.theDofManager.dofNumbering() == numberingBeforeRebuild
+        return self.dofNumberingOfLastIncrement == self.theDofManager.dofNumberingDigest
 
     @performancetiming.timeit("accept increment")
     def acceptIncrement(self, step, model: FEModel, timeStep: TimeStep):
@@ -970,6 +977,7 @@ class NIST(NonlinearSolverBase):
             self.prevTimeStep = timeStep
         # A copy: the next increment iterates on dU in place, and may fail.
         self.dU = dU.copy()
+        self.dofNumberingOfLastIncrement = self.theDofManager.dofNumberingDigest
         self.convergenceCriterion.acceptIncrement()
 
         if iterationCounter >= step.criticalIter:
