@@ -1400,9 +1400,8 @@ class NIST(NonlinearSolverBase):
         iteration, and by its line search once per trial step length. The loads are those at the end of the increment,
         see :meth:`assembleLoadsAtIncrementEnd`. The Dirichlet boundary conditions are imposed by the caller.
 
-        Before the elements are computed, the model updates the material points that belong to no element (see
-        :meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.updateMaterialPoints`; nothing to do in
-        a finite element model).
+        The internal forces are those of :meth:`assembleInternalForces`, which lets the model update the material
+        points that belong to no element first.
 
         Parameters
         ----------
@@ -1450,8 +1449,7 @@ class NIST(NonlinearSolverBase):
 
         # Every element, load and constraint adds its residual contribution and the tangent of it.
         # The elements' sum P is kept apart: it is the reaction force this increment reports.
-        self.equationSystemLayout.updateMaterialPoints(dU, timeStep)
-        P, K, F = self.computeElements(self.equationSystemLayout.elements, U_np, dU, P, K, F, timeStep)
+        P, K, F = self.assembleInternalForces(U_np, dU, P, K, F, timeStep)
         PLoadsAndConstraints, K = self.assembleLoadsAtIncrementEnd(
             stepActions, U_np, dU, PLoadsAndConstraints, K, timeStep
         )
@@ -1846,6 +1844,45 @@ class NIST(NonlinearSolverBase):
             K.eliminate_zeros()
 
         return K
+
+    def assembleInternalForces(
+        self, U_np: DofVector, dU: DofVector, P: DofVector, K: VIJSystemMatrix, F: DofVector, timeStep: TimeStep
+    ) -> tuple[DofVector, VIJSystemMatrix, DofVector]:
+        """Assemble the internal forces of the model at a trial state, and their tangent: those of the elements of its
+        equation system, see :meth:`computeElements`. First, the model updates the material points that belong to no
+        element, whose state the elements integrate (see
+        :meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.updateMaterialPoints`; nothing to do in a
+        finite element model).
+
+        The one evaluation of the elements of the solvers that derive from NIST: in every Newton iteration and for every
+        trial state of a line search (:meth:`assembleResidualAndTangent`), in every Runge-Kutta stage of
+        :class:`~edelweissfe.solvers.nonlinearexplicitstatic.NEST`, and for the initial acceleration of
+        :class:`~edelweissfe.solvers.nonlinearimplicitdynamic.NonlinearImplicitDynamic`.
+
+        Parameters
+        ----------
+        U_np
+            The trial solution.
+        dU
+            The trial solution increment.
+        P
+            The internal forces, augmented.
+        K
+            The tangent being assembled.
+        F
+            The accumulated absolute element fluxes, the reference of the convergence test, augmented.
+        timeStep
+            The time step.
+
+        Returns
+        -------
+        tuple[DofVector,VIJSystemMatrix,DofVector]
+            The internal forces, the tangent and the accumulated element fluxes.
+        """
+
+        self.equationSystemLayout.updateMaterialPoints(dU, timeStep)
+
+        return self.computeElements(self.equationSystemLayout.elements, U_np, dU, P, K, F, timeStep)
 
     @performancetiming.timeit("elements")
     def computeElements(
