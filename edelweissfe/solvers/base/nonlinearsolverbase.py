@@ -581,7 +581,8 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
             The current iteration number.
         residualHistory
             The convergence state of every field in each iteration checked so far in this increment; the state of
-            this iteration is appended, for :meth:`checkDivergingSolution`.
+            this iteration is appended, for
+            :meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.checkDivergingSolution`.
 
         Returns
         -------
@@ -746,51 +747,6 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
             dU[:] = 0.0
 
         return dU, isExtrapolatedIncrement
-
-    def checkDivergingSolution(self, incrementResidualHistory: dict, maxGrowingIter: int) -> bool:
-        """Check if the iterative solution scheme is diverging: if the flux residual of a field grew, from one
-        checked iteration to the next, more than ``maxGrowingIter`` times in this increment.
-
-        Two solver options decide what counts as a growth:
-
-        * ``countFirstResidualAsGrowth``: the residual history of a field starts from zero, so the first checked
-          residual of an increment is a growth already (EdelweissFE's original counting); otherwise, counting starts
-          with the second checked iteration.
-        * ``countGrowthOfConvergedFields``: a field that is converged, while other fields keep the Newton iterations
-          going, may still grow at the level of its round-off; such growths count too (EdelweissFE's original
-          counting), or are ignored.
-
-        Parameters
-        ----------
-        incrementResidualHistory
-            The convergence state of every field in each checked iteration of the increment, see
-            :meth:`checkConvergence`.
-        maxGrowingIter
-            The maximum allowed number of growths of a residual during the iterative solution scheme.
-
-        Returns
-        -------
-        bool
-            True if solution is diverging.
-        """
-
-        countFirstResidualAsGrowth = self.options["countFirstResidualAsGrowth"]
-        countGrowthOfConvergedFields = self.options["countGrowthOfConvergedFields"]
-
-        for fieldHistory in incrementResidualHistory.values():
-            nGrew = 0
-            previousFluxResidual = 0.0 if countFirstResidualAsGrowth else None
-            for fieldConvergence in fieldHistory:
-                if previousFluxResidual is not None and fieldConvergence.fluxResidual > previousFluxResidual:
-                    fieldConverged = fieldConvergence.fluxResidualConverged and fieldConvergence.correctionConverged
-                    if countGrowthOfConvergedFields or not fieldConverged:
-                        nGrew += 1
-                previousFluxResidual = fieldConvergence.fluxResidual
-
-            if nGrew > maxGrowingIter:
-                return True
-
-        return False
 
     def printResidualOutlierNodes(self, residualOutliers: dict):
         """Print which nodes have the largest residuals.
