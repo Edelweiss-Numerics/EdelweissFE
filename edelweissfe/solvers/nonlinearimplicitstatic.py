@@ -181,8 +181,8 @@ class NISTSchema:
     zeroFluxThreshold: float | None = schemaField(
         description=(
             "legacy criterion: a field whose spatial average flux does not exceed this value carries no flux its "
-            "residual could be compared with, so its flux residual counts as converged; needs minimumIterations >= 1. "
-            "Off if not set."
+            "residual could be compared with, so its flux residual counts as converged; needs minimumIterations >= 1, "
+            "and refuses a smaller one. Off if not set."
         ),
         dtype=float,
         default=None,
