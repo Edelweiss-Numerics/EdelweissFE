@@ -109,8 +109,8 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
     #: above the table, not inside it.
     tableHeaderWritten: bool = False
 
-    #: The force buffer and the DOF indices of each constraint, by name, that :meth:`assembleConstraintForces` reuses
-    #: from increment to increment; None (or empty) whenever the DofManager they index has been rebuilt.
+    #: The force buffer of each constraint, by name, with the DOF indices it was made for, which
+    #: :meth:`assembleConstraintForces` reuses from increment to increment as long as the constraint has these indices.
     _constraintForcePlans: dict | None = None
 
     def __init__(self, jobInfo, journal, **kwargs):
@@ -309,8 +309,9 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
         refuses it in its ``validateModelCapabilities``.
 
         The force buffer and the DOF indices of each constraint are kept in :attr:`_constraintForcePlans` (by
-        constraint name) and reused in every increment. They are indexed by the DofManager, so a solver that calls
-        this empties them whenever it rebuilds or refreshes its DofManager.
+        constraint name) and reused in every increment. They hold for the indices of the constraint they were made
+        for: whenever the DofManager locates the constraint anew -- a rebuilt equation system, or one whose
+        constraints are re-located in place --, the constraint has indices of its own, and its plan is made anew.
 
         Parameters
         ----------
@@ -331,7 +332,7 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
             The augmented residual contribution vector.
         """
 
-        # Per-constraint buffers and index plans, built once per equation system.
+        # Per-constraint buffers and index plans, made once per equation system.
         if self._constraintForcePlans is None:
             self._constraintForcePlans = {}
         PPlain = P.asPlainArray()
@@ -341,15 +342,16 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
             if not constraint.active:
                 continue
 
+            # A plan holds for the DOF indices it was made for: a constraint that is located anew has new ones.
+            indices = P.entitiesInDofVector[constraint]
             plan = self._constraintForcePlans.get(name)
-            if plan is None:
-                indices = P.entitiesInDofVector[constraint]
+            if plan is None or plan[1] is not indices:
                 # np.add.at only if a DOF appears more than once (e.g. a slave node in its own master
                 # facet), since fancy-indexed += would drop repeated contributions.
                 plan = (np.zeros(constraint.nDof), indices, len(np.unique(indices)) != len(indices))
                 self._constraintForcePlans[name] = plan
 
-            Pc, indices, namesDofMoreThanOnce = plan
+            Pc, _, namesDofMoreThanOnce = plan
 
             # Reused, so it must be cleared: computeKernelsExplicit augments what it is handed.
             Pc[:] = 0.0
