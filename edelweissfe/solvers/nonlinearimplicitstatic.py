@@ -85,7 +85,30 @@ class NISTSchema:
         description="The default number of allowed residual growths.", dtype=int, default=10
     )
     extrapolation: str | None = schemaField(
-        description="The extrapolation strategy for new increments (off|linear).", dtype=str, default="linear"
+        description=(
+            "The prediction a new increment starts its Newton iterations from (off|linear|quadratic): none, the "
+            "last accepted increment scaled to the new size, or the parabola through the last three accepted states "
+            "(linear while only one accepted increment of the step is available)."
+        ),
+        dtype=str,
+        default="linear",
+    )
+    retryWithoutExtrapolation: bool | None = schemaField(
+        description=(
+            "If an extrapolated increment fails, attempt it once more from a zero prediction before cutting it back. "
+            "A failed increment then also keeps the accepted history the next attempt extrapolates from."
+        ),
+        dtype=bool,
+        default=False,
+    )
+    extrapolateAcrossConnectivityChange: bool | None = schemaField(
+        description=(
+            "Keep extrapolating across a rebuild of the equation system caused by a change of the connectivity alone "
+            "(e.g., a contact search), as long as the rebuilt system numbers the degrees of freedom as before. Off: "
+            "every rebuild starts the increment from a zero prediction."
+        ),
+        dtype=bool,
+        default=False,
     )
     extrapolateAfterModelChange: bool | None = schemaField(
         description=(
@@ -162,6 +185,40 @@ class NISTSchema:
         default=0,
         optionName="report-performance-frequency",
     )
+    lineSearch: bool | None = schemaField(
+        description=(
+            "Scale the Newton correction by the step length at which a parabola, fitted to the largest residual "
+            "evaluated at the trial step lengths lineSearchStepLengths, is smallest (a quadratic line search)."
+        ),
+        dtype=bool,
+        default=False,
+    )
+    lineSearchAfterIterations: int | None = schemaField(
+        description=(
+            "The line search starts after this many iterations of an increment, at least 0: the first correction of an "
+            "increment, which makes the prescribed increments, is never scaled."
+        ),
+        dtype=int,
+        default=5,
+    )
+    lineSearchEveryIterations: int | None = schemaField(
+        description="From then on, the line search is done in every iteration whose number is a multiple of this.",
+        dtype=int,
+        default=2,
+    )
+    lineSearchStepLengths: str | None = schemaField(
+        description="The trial step lengths of the line search, comma-separated, at least three.",
+        dtype=str,
+        default="0.8, 1.0, 1.2",
+    )
+    fallBackToQuasiNewton: bool | None = schemaField(
+        description=(
+            "Instead of cutting an increment back once the residual grew more often than maxGrowIter allows, "
+            "continue it with the tangent of its first iteration (a quasi-Newton method); maxIter still applies."
+        ),
+        dtype=bool,
+        default=False,
+    )
     convergenceCriterion: str | None = schemaField(
         description=(
             "The convergence criterion of the Newton iterations, legacy (the original EdelweissFE one) or abaqus "
@@ -169,6 +226,57 @@ class NISTSchema:
         ),
         dtype=str,
         default="legacy",
+    )
+    iterationsForAlternativeTolerance: int | None = schemaField(
+        description=(
+            "legacy criterion: I, the iteration from which on the flux residual is checked against "
+            "fluxResidualToleranceAlternative instead of fluxResidualTolerance."
+        ),
+        dtype=int,
+        default=15,
+    )
+    zeroFluxThreshold: float | None = schemaField(
+        description=(
+            "legacy criterion: a field whose spatial average flux does not exceed this value carries no flux its "
+            "residual could be compared with, so its flux residual counts as converged; needs minimumIterations >= 1, "
+            "and refuses a smaller one. Off if not set."
+        ),
+        dtype=float,
+        default=None,
+        documentedDefault="off",
+    )
+    zeroIncrementThreshold: float | None = schemaField(
+        description=(
+            "legacy criterion: a field whose largest increment does not exceed this value has not moved, so there is "
+            "no increment to relate its correction to, and its correction counts as converged. Off if not set."
+        ),
+        dtype=float,
+        default=None,
+        documentedDefault="off",
+    )
+    minimumIterations: int | None = schemaField(
+        description=(
+            "legacy criterion: no flux residual counts as converged before this iteration, so an increment takes at "
+            "least this many Newton iterations; 0 accepts a prediction that already satisfies the criterion."
+        ),
+        dtype=int,
+        default=0,
+    )
+    countFirstResidualAsGrowth: bool | None = schemaField(
+        description=(
+            "Residual growths (the step option maxGrowIter): the residual history of a field starts from zero, so the "
+            "first checked residual of an increment counts as a growth; if False, counting starts with the second."
+        ),
+        dtype=bool,
+        default=True,
+    )
+    countGrowthOfConvergedFields: bool | None = schemaField(
+        description=(
+            "Residual growths (the step option maxGrowIter): count a growth of the flux residual of a field also in "
+            "an iteration in which this field is converged and only other fields keep the iterations going."
+        ),
+        dtype=bool,
+        default=True,
     )
     abaqusResidualTolerance: float | None = schemaField(
         description="abaqus criterion: R_n, the flux residual tolerance relative to the time average flux.",
@@ -234,13 +342,26 @@ class NIST(NonlinearSolverBase):
         "defaultCriticalIter": 5,
         "defaultMaxGrowingIter": 10,
         "extrapolation": "linear",
+        "retryWithoutExtrapolation": False,
+        "extrapolateAcrossConnectivityChange": False,
         "extrapolateAfterModelChange": True,
         "equilibrateAfterModelChange": False,
         "linsolver": "",
         "pruneCondensedMatrixZeros": None,
         "useThreadedMPCCondensation": False,
         "report-performance-frequency": 0,
+        "lineSearch": False,
+        "lineSearchAfterIterations": 5,
+        "lineSearchEveryIterations": 2,
+        "lineSearchStepLengths": "0.8, 1.0, 1.2",
+        "fallBackToQuasiNewton": False,
         "convergenceCriterion": "legacy",
+        "iterationsForAlternativeTolerance": 15,
+        "zeroFluxThreshold": None,
+        "zeroIncrementThreshold": None,
+        "minimumIterations": 0,
+        "countFirstResidualAsGrowth": True,
+        "countGrowthOfConvergedFields": True,
         "abaqusResidualTolerance": 5e-3,
         "abaqusCorrectionTolerance": 1e-2,
         "abaqusResidualToleranceAlternative": 2e-2,
@@ -254,15 +375,24 @@ class NIST(NonlinearSolverBase):
     #: The convergence criterion of the current step.
     convergenceCriterion = None
 
-    #: The predictor's state between increments: the last accepted increment and its dU.
-    checkpointedState = {"prevTimeStep": TimeStep, "dU": np.ndarray}
+    #: The predictor's state between increments: the last accepted increment and its dU, and, for a quadratic
+    #: extrapolation, the accepted increment before it and its dU.
+    checkpointedState = {
+        "prevTimeStep": TimeStep,
+        "dU": np.ndarray,
+        "timeStepBeforePrev": TimeStep,
+        "dUBeforePrev": np.ndarray,
+    }
 
     def __init__(self, jobInfo, journal, **kwargs):
         self.journal = journal
 
-        self.fieldCorrectionTolerances = jobInfo["fieldCorrectionTolerance"]
+        # the tolerances of the legacy criterion per field, see edelweissfe.solvers.base.convergencecriteria
         self.fluxResidualTolerances = jobInfo["fluxResidualTolerance"]
-        self.fluxResidualTolerancesAlt = jobInfo["fluxResidualToleranceAlternative"]
+        self.fluxResidualTolerancesAlternative = jobInfo["fluxResidualToleranceAlternative"]
+        self.absoluteFluxResidualTolerances = jobInfo["absoluteFluxResidualTolerance"]
+        self.fieldCorrectionTolerances = jobInfo["fieldCorrectionTolerance"]
+        self.relativeFieldCorrectionTolerances = jobInfo["relativeFieldCorrectionTolerance"]
 
         self.options = self.SolverSpecificOptions.copy()
         # the *solver datalines belong only to this solver: unknown entries are typos
@@ -277,6 +407,10 @@ class NIST(NonlinearSolverBase):
         self.prevTimeStep = None
         #: The solution increment of the last accepted increment.
         self.dU = None
+        #: The accepted increment before :attr:`prevTimeStep`, kept for a quadratic extrapolation only (else None).
+        self.timeStepBeforePrev = None
+        #: The solution increment of :attr:`timeStepBeforePrev`.
+        self.dUBeforePrev = None
 
     def selectLinearSolverForStep(self) -> None:
         """Make :attr:`linSolver` the linear solver the step about to begin names (``linsolver``): the one of the
@@ -336,9 +470,29 @@ class NIST(NonlinearSolverBase):
         # and whenever the topology update reports a change of the mesh or of a constraint's DOF footprint.
         self.forgetEquationSystem()
 
+        if self.options["extrapolation"] not in ("off", "linear", "quadratic"):
+            raise ValueError(
+                "Unknown extrapolation '{:}', use off, linear or quadratic".format(self.options["extrapolation"])
+            )
+
+        if self.options["lineSearch"]:
+            stepLengths = self.lineSearchStepLengths()
+            if len(set(stepLengths)) < 3 or min(stepLengths) <= 0.0:
+                raise ValueError(
+                    "lineSearchStepLengths: a parabola needs at least three different positive step lengths, got "
+                    "{:}".format(stepLengths)
+                )
+            # The first correction of an increment makes the prescribed increments, which a line search would scale.
+            if self.options["lineSearchAfterIterations"] < 0:
+                raise ValueError("lineSearchAfterIterations must not be negative")
+            if self.options["lineSearchEveryIterations"] < 1:
+                raise ValueError("lineSearchEveryIterations must be at least 1")
+
         # A step starts without a predictor state; a resumed step takes over the checkpointed one.
         self.prevTimeStep = None
         self.dU = None
+        self.timeStepBeforePrev = None
+        self.dUBeforePrev = None
 
         self.validateModelCapabilities(model)
 
@@ -422,6 +576,16 @@ class NIST(NonlinearSolverBase):
             )
 
         if modelHasChanged or connectivityHasChanged or self.theDofManager is None:
+            # The prediction may survive a rebuild caused by the connectivity alone, if the rebuilt system numbers the
+            # degrees of freedom as the last one: remember that numbering, before the last system is dropped.
+            numberingBeforeRebuild = (
+                self.theDofManager.dofNumbering()
+                if connectivityHasChanged
+                and not modelHasChanged
+                and self.theDofManager is not None
+                and self.options["extrapolateAcrossConnectivityChange"]
+                else None
+            )
             with performancetiming.timeit("equation system rebuild"):
                 self.forgetEquationSystem()
                 with performancetiming.timeit("dof manager"):
@@ -491,12 +655,12 @@ class NIST(NonlinearSolverBase):
                             self.mpcTransformation.condensedPatternFillIn(self.csrGenerator.csrMatrix)
                         )
 
-                # After a topology change, the last dU belongs to a different DOF layout: do not
-                # extrapolate this increment.
-                if modelHasChanged or connectivityHasChanged:
+                # After a topology change, the last dU belongs to a different DOF layout: do not extrapolate this
+                # increment. After a change of the connectivity alone, it may still fit.
+                if modelHasChanged or (
+                    connectivityHasChanged and not self.predictionSurvivesRebuild(numberingBeforeRebuild)
+                ):
                     self.prevTimeStep = None
-                elif self.dU is not None:
-                    dU[:] = self.dU
                 self._U, self._dU, self._P, self._K = U, dU, P, K
         # the equation system of this increment, just built or kept from the last one
         U, dU, P, K = self._U, self._dU, self._P, self._K
@@ -565,35 +729,73 @@ class NIST(NonlinearSolverBase):
             model.advanceToTime(equilibrationTimeStep.totalTime)
             self._U, self._dU, self._P = U, dU, P
 
+        retryWithoutExtrapolation = self.options["retryWithoutExtrapolation"]
+
         try:
-            U, dU, P, iterationCounter, incrementResidualHistory = self.solveIncrement(
-                U,
-                dU,
-                P,
-                K,
-                step.actions,
-                model,
-                timeStep,
-                self.prevTimeStep,
-                extrapolation,
-                maxIter,
-                maxGrowingIter,
-            )
+            try:
+                U, dU, P, iterationCounter, incrementResidualHistory = self.solveIncrement(
+                    U,
+                    dU,
+                    P,
+                    K,
+                    step.actions,
+                    model,
+                    timeStep,
+                    self.prevTimeStep,
+                    extrapolation,
+                    maxIter,
+                    maxGrowingIter,
+                )
+            except (CutbackRequest, ReachedMaxIterations, DivergingSolution) as e:
+                if not (retryWithoutExtrapolation and self.extrapolates(extrapolation, self.prevTimeStep)):
+                    raise
+                # The prediction may have led Newton's method astray: the same increment, from a zero prediction.
+                self.journal.message(
+                    "{:}; retrying the increment without extrapolation".format(str(e)), self.identification, 1
+                )
+                U, dU, P, iterationCounter, incrementResidualHistory = self.solveIncrement(
+                    U, dU, P, K, step.actions, model, timeStep, None, extrapolation, maxIter, maxGrowingIter
+                )
+                self.incrementStatus["notes"] = "retried without extrapolation"
 
         except CutbackRequest as e:
-            self.prevTimeStep = None
+            self.forgetPredictionAfterFailure()
             self.incrementStatus["iters"] = np.inf
             self.incrementStatus["notes"] = str(e)
             raise IncrementFailed(str(e), max(e.cutbackSize, cutbackFactor)) from e
 
         except (ReachedMaxIterations, DivergingSolution) as e:
-            self.prevTimeStep = None
+            self.forgetPredictionAfterFailure()
             self.incrementStatus["iters"] = np.inf
             self.incrementStatus["notes"] = str(e)
             raise IncrementFailed(str(e), cutbackFactor) from e
 
         self._U, self._dU, self._P = U, dU, P
         self._iterationCounter = iterationCounter
+
+    def predictionSurvivesRebuild(self, numberingBeforeRebuild: tuple | None) -> bool:
+        """Whether the last accepted increment still fits the equation system rebuilt after a change of the
+        connectivity alone (e.g., a contact search), so that this increment may extrapolate it: only with
+        ``extrapolateAcrossConnectivityChange``, and only if the rebuilt system numbers the degrees of freedom as the
+        last one. At the first increment of a resumed step there is no last system, and the numbering of the checkpoint
+        is assumed, as for every resumed prediction.
+
+        Parameters
+        ----------
+        numberingBeforeRebuild
+            The :meth:`~edelweissfe.numerics.dofmanager.DofManager.dofNumbering` of the last equation system, or None
+            if there was none.
+
+        Returns
+        -------
+        bool
+            True if the prediction may extrapolate the last accepted increment.
+        """
+
+        if not self.options["extrapolateAcrossConnectivityChange"]:
+            return False
+
+        return numberingBeforeRebuild is None or self.theDofManager.dofNumbering() == numberingBeforeRebuild
 
     @performancetiming.timeit("accept increment")
     def acceptIncrement(self, step, model: FEModel, timeStep: TimeStep):
@@ -613,12 +815,18 @@ class NIST(NonlinearSolverBase):
         U, dU, P = self._U, self._dU, self._P
         iterationCounter = self._iterationCounter
 
+        # The predictor's history: a quadratic extrapolation needs the accepted increment before the last one, too.
+        if self.options["extrapolation"] == "quadratic" and self.prevTimeStep is not None:
+            self.timeStepBeforePrev, self.dUBeforePrev = self.prevTimeStep, self.dU
+        else:
+            self.timeStepBeforePrev, self.dUBeforePrev = None, None
         # After a model change, dU contains the remesh settling transient: optionally do not extrapolate it.
         if self._modelHasChanged and not self.options["extrapolateAfterModelChange"]:
             self.prevTimeStep = None
         else:
             self.prevTimeStep = timeStep
-        self.dU = dU
+        # A copy: the next increment iterates on dU in place, and may fail.
+        self.dU = dU.copy()
         self.convergenceCriterion.acceptIncrement()
 
         if iterationCounter >= step.criticalIter:
@@ -672,13 +880,24 @@ class NIST(NonlinearSolverBase):
         """
         criterion = self.options["convergenceCriterion"]
 
+        legacyCriterion = LegacyConvergenceCriterion(
+            fluxResidualTolerances=self.fluxResidualTolerances,
+            fluxResidualTolerancesAlternative=self.fluxResidualTolerancesAlternative,
+            absoluteFluxResidualTolerances=self.absoluteFluxResidualTolerances,
+            fieldCorrectionTolerances=self.fieldCorrectionTolerances,
+            relativeFieldCorrectionTolerances=self.relativeFieldCorrectionTolerances,
+            iterationsForAlternativeTolerance=self.options["iterationsForAlternativeTolerance"],
+            zeroFluxThreshold=self.options["zeroFluxThreshold"],
+            zeroIncrementThreshold=self.options["zeroIncrementThreshold"],
+            minimumIterations=self.options["minimumIterations"],
+        )
+
         if criterion == "legacy":
-            return LegacyConvergenceCriterion(
-                self.fluxResidualTolerances, self.fluxResidualTolerancesAlt, self.fieldCorrectionTolerances
-            )
+            return legacyCriterion
 
         if criterion == "abaqus":
             return AbaqusConvergenceCriterion(
+                scalarVariableCriterion=legacyCriterion,
                 residualTolerance=self.options["abaqusResidualTolerance"],
                 correctionTolerance=self.options["abaqusCorrectionTolerance"],
                 residualToleranceAlternative=self.options["abaqusResidualToleranceAlternative"],
@@ -690,6 +909,103 @@ class NIST(NonlinearSolverBase):
             )
 
         raise ValueError("Unknown convergence criterion '{:}', use 'legacy' or 'abaqus'".format(criterion))
+
+    def forgetPredictionAfterFailure(self):
+        """A failed increment drops the prediction, which may have caused the failure, unless
+        ``retryWithoutExtrapolation`` has answered that already: then the accepted history is kept, and the smaller
+        increment that follows the cutback extrapolates it."""
+
+        if not self.options["retryWithoutExtrapolation"]:
+            self.prevTimeStep = None
+
+    def extrapolates(self, extrapolation: str, prevTimeStep: TimeStep | None) -> bool:
+        """Whether an increment that follows the accepted increment ``prevTimeStep`` starts from an extrapolated
+        prediction.
+
+        Parameters
+        ----------
+        extrapolation
+            The type of extrapolation, ``off``, ``linear`` or ``quadratic``.
+        prevTimeStep
+            The last accepted increment, or None if there is none to extrapolate.
+
+        Returns
+        -------
+        bool
+            True if the increment is extrapolated.
+        """
+
+        return extrapolation != "off" and prevTimeStep is not None and bool(prevTimeStep.timeIncrement)
+
+    def extrapolateLastIncrement(
+        self,
+        extrapolation: str,
+        timeStep: TimeStep,
+        dU: DofVector,
+        dirichlets: list,
+        prevTimeStep: TimeStep,
+        model,
+    ) -> tuple[DofVector, bool]:
+        """Predict the solution increment, the point Newton's method starts from, by extrapolating the last
+        accepted increments of the step. With :math:`h` the size (step progress) of the new increment and
+        :math:`h_n, \\Delta U_n` the size and the solution increment of the last accepted one:
+
+        * ``off``: no prediction, :math:`\\Delta U = 0`.
+        * ``linear``: the last increment, scaled to the new size, :math:`\\Delta U = \\Delta U_n \\, h / h_n`.
+        * ``quadratic``: the parabola through the last three accepted states, evaluated at the end of the new
+          increment. With the increment before the last one, :math:`h_{n-1}, \\Delta U_{n-1}`,
+
+          .. math::
+
+              \\Delta U = \\Delta U_n \\frac{h}{h_n}
+              + \\left( \\frac{\\Delta U_n}{h_n} - \\frac{\\Delta U_{n-1}}{h_{n-1}} \\right)
+              \\frac{h \\, (h + h_n)}{h_{n-1} + h_n},
+
+          the linear prediction plus the change of the slope of the path. It reproduces a quadratic path exactly. While
+          only one accepted increment of the step is available, the prediction is linear.
+
+        The prescribed degrees of freedom take their prescribed increment.
+
+        Parameters
+        ----------
+        extrapolation
+            The type of extrapolation.
+        timeStep
+            The new increment.
+        dU
+            The solution increment to predict, overwritten.
+        dirichlets
+            The active dirichlet boundary conditions.
+        prevTimeStep
+            The last accepted increment, or None for no prediction.
+        model
+            The model tree.
+
+        Returns
+        -------
+        tuple[DofVector,bool]
+            - The predicted solution increment.
+            - True if an extrapolation was performed.
+        """
+
+        if not self.extrapolates(extrapolation, prevTimeStep):
+            dU[:] = 0.0
+            return dU, False
+
+        h = timeStep.stepProgressIncrement
+        h_n = prevTimeStep.stepProgressIncrement
+
+        if extrapolation == "quadratic" and self.extrapolates(extrapolation, self.timeStepBeforePrev):
+            h_nm1 = self.timeStepBeforePrev.stepProgressIncrement
+            curvatureFactor = h * (h + h_n) / (h_nm1 + h_n)
+            np.multiply(self.dU, h / h_n + curvatureFactor / h_n, out=dU)
+            dU -= (curvatureFactor / h_nm1) * self.dUBeforePrev
+        else:
+            np.multiply(self.dU, h / h_n, out=dU)
+
+        dU = self.applyDirichletToResidual(timeStep, dU, dirichlets)
+
+        return dU, True
 
     def solveIncrement(
         self,
@@ -746,22 +1062,16 @@ class NIST(NonlinearSolverBase):
         """
 
         iterationCounter = 0
-        incrementResidualHistory = dict.fromkeys(self.theDofManager.idcsOfFieldsInDofVector, (0.0, 0))
-
-        elements = model.elements
-        constraints = model.constraints
+        incrementResidualHistory = {field: [] for field in self.theDofManager.idcsOfFieldsInDofVector}
 
         R = self.theDofManager.constructDofVector()
         F = self.theDofManager.constructDofVector()
         FConstraints = self.theDofManager.constructDofVector()
-        PExt = self.theDofManager.constructDofVector()
+        PLoadsAndConstraints = self.theDofManager.constructDofVector()
         U_np = self.theDofManager.constructDofVector()
         ddU = None
 
         dirichlets = stepActions["dirichlet"].values()
-        nodeforces = stepActions["nodeforces"].values()
-        distributedLoads = stepActions["distributedload"].values()
-        bodyForces = stepActions["bodyforce"].values()
 
         with performancetiming.timeit("step actions at increment start"):
             # Find which global DOFs the Dirichlet BCs constrain, once up front.
@@ -776,31 +1086,16 @@ class NIST(NonlinearSolverBase):
                 extrapolation, timeStep, dU, dirichlets, prevTimeStep, model
             )
 
+        fallBackToQuasiNewton = self.options["fallBackToQuasiNewton"]
+        # Set once the residual grew too often, if fallBackToQuasiNewton: the increment continues with the tangent of
+        # its first iteration, tangentOfFirstIteration.
+        quasiNewton = False
+        tangentOfFirstIteration = None
+
         while True:
-            for geostatic in stepActions["geostatic"].values():
-                geostatic.applyAtIterationStart()
-
-            with performancetiming.timeit("reset residual and tangent"):
-                U_np[:] = U_n
-                U_np += dU
-
-                P[:] = F[:] = FConstraints[:] = PExt[:] = 0.0
-                # K holds the entries of all element matrices, far too many to zero on a single thread
-                forEachSliceInParallel(lambda s: K[s].fill(0.0), len(K))
-
-            P, K, F = self.computeElements(elements, U_np, dU, P, K, F, timeStep)
-            PExt, K = self.assembleLoads(nodeforces, distributedLoads, bodyForces, U_np, PExt, K, timeStep)
-            PExt, K = self.assembleConstraints(constraints, U_np, dU, PExt, K, timeStep, FConstraints)
-
-            R[:] = -P
-            R += PExt
-
-            self.assembleAdditionalTerms(dU, R, F, K, timeStep)
-
-            # Condense BEFORE the Dirichlet handling: T^T folds slave rows into master rows, which may
-            # carry a prescribed delta.
-            if self.mpcTransformation is not None:
-                R[:] = self.mpcTransformation.transformResidual(R, dU)
+            P, K, F = self.assembleResidualAndTangent(
+                U_n, dU, U_np, R, P, PLoadsAndConstraints, F, FConstraints, K, stepActions, model, timeStep
+            )
 
             # --- Impose the Dirichlet (prescribed-value) boundary conditions ---
             # For each constrained DOF i we overwrite its row of the linearized system
@@ -825,18 +1120,35 @@ class NIST(NonlinearSolverBase):
                 if converged:
                     break
 
-                if self.checkDivergingSolution(incrementResidualHistory, maxGrowingIter):
+                if not quasiNewton and self.checkDivergingSolution(incrementResidualHistory, maxGrowingIter):
                     self.printResidualOutlierNodes(nodesWithLargestResidual)
-                    raise DivergingSolution("Residual grew {:} times, cutting back".format(maxGrowingIter))
+                    if not fallBackToQuasiNewton:
+                        raise DivergingSolution("Residual grew {:} times, cutting back".format(maxGrowingIter))
+                    self.journal.message(
+                        "Residual grew {:} times, continuing with the tangent of the first iteration".format(
+                            maxGrowingIter
+                        ),
+                        self.identification,
+                        1,
+                    )
+                    quasiNewton = True
 
                 if iterationCounter == maxIter:
                     self.printResidualOutlierNodes(nodesWithLargestResidual)
                     raise ReachedMaxIterations("Reached max. iterations in current increment, cutting back")
 
-            K_ = self.assembleStiffnessCSR(K)
+            if quasiNewton and tangentOfFirstIteration is not None:
+                # Kept without the Dirichlet rows and columns: they are imposed anew, as they eliminate into this R.
+                K_ = tangentOfFirstIteration.copy()
+            else:
+                K_ = self.assembleStiffnessCSR(K)
 
-            if self.mpcTransformation is not None:
-                K_ = self.mpcTransformation.transformSystemMatrix(K_)
+                if self.mpcTransformation is not None:
+                    K_ = self.mpcTransformation.transformSystemMatrix(K_)
+
+                # the first tangent of the increment: the one of iteration 0
+                if fallBackToQuasiNewton and tangentOfFirstIteration is None:
+                    tangentOfFirstIteration = K_.copy()
 
             # identity rows, and the columns eliminated into R
             K_ = self.applyDirichletToStiffness(K_, dirichlets, R)
@@ -847,12 +1159,325 @@ class NIST(NonlinearSolverBase):
             if self.mpcTransformation is not None:
                 ddU = self.mpcTransformation.recoverSlaveSolution(ddU)
 
+            if self.lineSearchIsDue(iterationCounter):
+                ddU = self.quadraticLineSearch(
+                    ddU, U_n, dU, U_np, R, P, PLoadsAndConstraints, F, FConstraints, K, stepActions, model, timeStep
+                )
+
             dU += ddU
             iterationCounter += 1
 
         self.finalizeIncrement(model)
 
         return U_np, dU, P, iterationCounter, incrementResidualHistory
+
+    def assembleResidualAndTangent(
+        self,
+        U_n: DofVector,
+        dU: DofVector,
+        U_np: DofVector,
+        R: DofVector,
+        P: DofVector,
+        PLoadsAndConstraints: DofVector,
+        F: DofVector,
+        FConstraints: DofVector,
+        K: VIJSystemMatrix,
+        stepActions: dict,
+        model: FEModel,
+        timeStep: TimeStep,
+    ) -> tuple[DofVector, VIJSystemMatrix, DofVector]:
+        """Evaluate the model at the trial solution :math:`U_{n+1} = U_n + \\Delta U`: the right-hand side
+        :math:`R = f_\\mathrm{ext} - f_\\mathrm{int}` (see :ref:`residual-and-tangent-convention`) with the terms of
+        :meth:`assembleAdditionalTerms`, condensed by the multi-point constraints, and the tangent. Called by
+        :meth:`solveIncrement` once per Newton iteration, and by :meth:`quadraticLineSearch` once per trial step
+        length. The Dirichlet boundary conditions are imposed by the callers.
+
+        Parameters
+        ----------
+        U_n
+            The solution at the start of the increment.
+        dU
+            The trial solution increment.
+        U_np
+            The trial solution, overwritten.
+        R
+            The residual, overwritten.
+        P
+            The internal forces (the reaction), overwritten.
+        PLoadsAndConstraints
+            The residual contributions of the loads and the constraints, overwritten.
+        F
+            The accumulated absolute element fluxes, the reference of the convergence test, overwritten.
+        FConstraints
+            The accumulated absolute constraint fluxes, overwritten.
+        K
+            The tangent in VIJ layout, overwritten.
+        stepActions
+            The active step actions.
+        model
+            The model tree.
+        timeStep
+            The time step.
+
+        Returns
+        -------
+        tuple[DofVector,VIJSystemMatrix,DofVector]
+            The internal forces, the tangent and the accumulated element fluxes.
+        """
+
+        for geostatic in stepActions["geostatic"].values():
+            geostatic.applyAtIterationStart()
+
+        with performancetiming.timeit("reset residual and tangent"):
+            U_np[:] = U_n
+            U_np += dU
+
+            P[:] = F[:] = FConstraints[:] = PLoadsAndConstraints[:] = 0.0
+            # K holds the entries of all element matrices, far too many to zero on a single thread
+            forEachSliceInParallel(lambda s: K[s].fill(0.0), len(K))
+
+        # Every element, load and constraint adds its residual contribution and the tangent of it.
+        # The elements' sum P is kept apart: it is the reaction force this increment reports.
+        P, K, F = self.computeElements(model.elements, U_np, dU, P, K, F, timeStep)
+        PLoadsAndConstraints, K = self.assembleLoads(
+            stepActions["nodeforces"].values(),
+            stepActions["distributedload"].values(),
+            stepActions["bodyforce"].values(),
+            U_np,
+            PLoadsAndConstraints,
+            K,
+            timeStep,
+        )
+        PLoadsAndConstraints, K = self.assembleConstraints(
+            model.constraints, U_np, dU, PLoadsAndConstraints, K, timeStep, FConstraints
+        )
+
+        # The right-hand side of K ddU = R is the negative of the summed contributions: the out-of-balance
+        # force R = f_ext - f_int.
+        R[:] = -P
+        R -= PLoadsAndConstraints
+
+        self.assembleAdditionalTerms(dU, R, F, K, timeStep)
+
+        # Condense BEFORE the Dirichlet handling: T^T folds slave rows into master rows, which may
+        # carry a prescribed delta.
+        if self.mpcTransformation is not None:
+            R[:] = self.mpcTransformation.transformResidual(R, dU)
+
+        return P, K, F
+
+    #: The step lengths a line search may choose from: a shorter step would hardly move the iterate, a longer one would
+    #: trust the fitted parabola far beyond the trial step lengths.
+    lineSearchStepLengthRange = (0.1, 1.5)
+
+    def lineSearchIsDue(self, iterationCounter: int) -> bool:
+        """Whether the correction of this iteration is scaled by a line search (``lineSearch``): after
+        ``lineSearchAfterIterations`` iterations, in every iteration whose number is a multiple of
+        ``lineSearchEveryIterations``.
+
+        Parameters
+        ----------
+        iterationCounter
+            The current iteration number.
+
+        Returns
+        -------
+        bool
+            True if a line search is due.
+        """
+
+        return (
+            self.options["lineSearch"]
+            and iterationCounter > self.options["lineSearchAfterIterations"]
+            and iterationCounter % self.options["lineSearchEveryIterations"] == 0
+        )
+
+    def lineSearchStepLengths(self) -> list[float]:
+        """The trial step lengths of the line search, from the option ``lineSearchStepLengths``.
+
+        Returns
+        -------
+        list[float]
+            The trial step lengths.
+        """
+
+        return [float(stepLength) for stepLength in self.options["lineSearchStepLengths"].split(",")]
+
+    @performancetiming.timeit("line search")
+    def quadraticLineSearch(
+        self,
+        ddU: DofVector,
+        U_n: DofVector,
+        dU: DofVector,
+        U_np: DofVector,
+        R: DofVector,
+        P: DofVector,
+        PLoadsAndConstraints: DofVector,
+        F: DofVector,
+        FConstraints: DofVector,
+        K: VIJSystemMatrix,
+        stepActions: dict,
+        model: FEModel,
+        timeStep: TimeStep,
+    ) -> DofVector:
+        """Scale the Newton correction :math:`\\Delta\\Delta U` by a step length :math:`\\alpha`, for a Newton
+        iteration that overshoots or oscillates (e.g., materials switching between loading and unloading).
+
+        The largest residual :math:`\\| R(\\Delta U + \\alpha \\, \\Delta\\Delta U) \\|_\\infty`, with the
+        Dirichlet degrees of freedom left out, is evaluated at the trial step lengths ``lineSearchStepLengths``, and a
+        parabola is fitted to these values (least squares for more than three). The step length minimizes the parabola
+        on :attr:`lineSearchStepLengthRange`: it is the vertex of a parabola that opens upwards, limited to that range,
+        and otherwise the end of the range where the parabola is smaller. Each trial costs one evaluation of the model;
+        the next Newton iteration evaluates the chosen one.
+
+        Two kinds of trials fit no parabola:
+
+        * A trial state at which the residual is not finite, which the model could not evaluate: the trials decide
+          themselves, and the step length is the trial step length of the smallest finite residual (of equal ones, the
+          shortest), limited to the range. If no trial residual is finite, the increment is cut back.
+        * Trial residuals that are equal to round-off, which do not tell the step lengths apart: the correction is
+          taken in full, the step length is 1.
+
+        Parameters
+        ----------
+        ddU
+            The Newton correction.
+        U_n
+            The solution at the start of the increment.
+        dU
+            The current solution increment.
+        U_np
+            The trial solution, overwritten.
+        R
+            The residual, overwritten.
+        P
+            The internal forces, overwritten.
+        PLoadsAndConstraints
+            The residual contributions of the loads and the constraints, overwritten.
+        F
+            The accumulated absolute element fluxes, overwritten.
+        FConstraints
+            The accumulated absolute constraint fluxes, overwritten.
+        K
+            The tangent in VIJ layout, overwritten.
+        stepActions
+            The active step actions.
+        model
+            The model tree.
+        timeStep
+            The time step.
+
+        Returns
+        -------
+        DofVector
+            The scaled correction.
+
+        Raises
+        ------
+        DivergingSolution
+            If the residual is not finite at any trial step length.
+        """
+
+        stepLengths = self.lineSearchStepLengths()
+        largestResiduals = []
+
+        for stepLength in stepLengths:
+            self.assembleResidualAndTangent(
+                U_n,
+                dU + stepLength * ddU,
+                U_np,
+                R,
+                P,
+                PLoadsAndConstraints,
+                F,
+                FConstraints,
+                K,
+                stepActions,
+                model,
+                timeStep,
+            )
+            for dirichlet in stepActions["dirichlet"].values():
+                R[dirichlet.constrainedDofIndices] = 0.0
+
+            largestResiduals.append(np.linalg.norm(R, np.inf))
+            self.journal.message(
+                "line search: step length {:7.4f}, largest residual {:11.4e}".format(stepLength, largestResiduals[-1]),
+                self.identification,
+                2,
+            )
+
+        smallest, largest = self.lineSearchStepLengthRange
+
+        if not np.all(np.isfinite(largestResiduals)):
+            # no parabola fits through a residual that is not finite: the smallest finite one decides
+            finiteTrials = [
+                (largestResidual, stepLength)
+                for stepLength, largestResidual in zip(stepLengths, largestResiduals)
+                if np.isfinite(largestResidual)
+            ]
+            if not finiteTrials:
+                raise DivergingSolution("Residual not finite at any trial step length of the line search, cutting back")
+            stepLength = min(max(min(finiteTrials)[1], smallest), largest)
+        elif max(largestResiduals) - min(largestResiduals) <= 1e-12 * max(largestResiduals):
+            # a parabola fitted to round-off would choose any step length: the full correction
+            stepLength = 1.0
+        else:
+            # the minimum of the parabola on the allowed range: its vertex if it opens upwards, else an end of the range
+            parabola = np.polyfit(stepLengths, largestResiduals, 2)
+            curvature, slope, _ = parabola
+            if curvature > 0.0:
+                stepLength = min(max(-slope / (2.0 * curvature), smallest), largest)
+            else:
+                stepLength = smallest if np.polyval(parabola, smallest) <= np.polyval(parabola, largest) else largest
+
+        self.journal.message("line search: step length {:7.4f}".format(stepLength), self.identification, 2)
+
+        return stepLength * ddU
+
+    def checkDivergingSolution(self, incrementResidualHistory: dict, maxGrowingIter: int) -> bool:
+        """Check if the iterative solution scheme is diverging: if the flux residual of a field grew, from one
+        checked iteration to the next, more than ``maxGrowingIter`` times in this increment.
+
+        Two solver options decide what counts as a growth:
+
+        * ``countFirstResidualAsGrowth``: the residual history of a field starts from zero, so the first checked
+          residual of an increment is a growth already (EdelweissFE's original counting); otherwise, counting starts
+          with the second checked iteration.
+        * ``countGrowthOfConvergedFields``: a field that is converged, while other fields keep the Newton iterations
+          going, may still grow at the level of its round-off; such growths count too (EdelweissFE's original
+          counting), or are ignored.
+
+        Parameters
+        ----------
+        incrementResidualHistory
+            The convergence state of every field in each checked iteration of the increment, see
+            :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.checkConvergence`.
+        maxGrowingIter
+            The maximum allowed number of growths of a residual during the iterative solution scheme.
+
+        Returns
+        -------
+        bool
+            True if solution is diverging.
+        """
+
+        countFirstResidualAsGrowth = self.options["countFirstResidualAsGrowth"]
+        countGrowthOfConvergedFields = self.options["countGrowthOfConvergedFields"]
+
+        for fieldHistory in incrementResidualHistory.values():
+            nGrew = 0
+            previousFluxResidual = 0.0 if countFirstResidualAsGrowth else None
+            for fieldConvergence in fieldHistory:
+                if previousFluxResidual is not None and fieldConvergence.fluxResidual > previousFluxResidual:
+                    fieldConverged = fieldConvergence.fluxResidualConverged and fieldConvergence.correctionConverged
+                    if countGrowthOfConvergedFields or not fieldConverged:
+                        nGrew += 1
+                previousFluxResidual = fieldConvergence.fluxResidual
+
+            if nGrew > maxGrowingIter:
+                return True
+
+        return False
 
     def initializeIncrement(self, U_n: DofVector, stepActions: dict, model: FEModel, timeStep: TimeStep):
         """Prepare what :meth:`assembleAdditionalTerms` needs during this increment's Newton
@@ -880,10 +1505,11 @@ class NIST(NonlinearSolverBase):
     ):
         """Assemble terms of the equation system beyond the internal and external forces. Called
         by :meth:`solveIncrement` in every Newton iteration, next to :meth:`computeElements`,
-        :meth:`assembleLoads` and :meth:`assembleConstraints`: right after the residual
-        :math:`R = P_\\mathrm{ext} - P_\\mathrm{int}` is formed, and before the
-        multi-point-constraint condensation, the Dirichlet handling, the convergence test and the
-        linear solve -- which therefore all act on what is added here.
+        :meth:`assembleLoads` and :meth:`assembleConstraints`: right after the right-hand side
+        :math:`R = f_\\mathrm{ext} - f_\\mathrm{int}` is formed (see
+        :ref:`residual-and-tangent-convention`), and before the multi-point-constraint condensation,
+        the Dirichlet handling, the convergence test and the linear solve -- which therefore all act
+        on what is added here.
 
         A static analysis has no such terms. A dynamic one, for example, subtracts the inertia force
         :math:`M \\ddot{u}` from the residual and adds the corresponding mass term to the stiffness
@@ -1008,12 +1634,13 @@ class NIST(NonlinearSolverBase):
         constraints: list[ConstraintBase],
         U_np: DofVector,
         dU: DofVector,
-        PExt: DofVector,
+        P: DofVector,
         K: VIJSystemMatrix,
         timeStep: TimeStep,
         FConstraints: DofVector = None,
     ) -> tuple[DofVector, VIJSystemMatrix]:
-        """Loop over all constraints, and evaluate them.
+        """Loop over all constraints, and evaluate them: each adds its residual contribution and the
+        tangent of it, see :meth:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernels`.
         Is called by solveIncrement() in each iteration.
 
         Parameters
@@ -1024,8 +1651,8 @@ class NIST(NonlinearSolverBase):
             The current solution vector.
         dU
             The current solution increment vector.
-        PExt
-            The external load vector.
+        P
+            The residual contribution vector to assemble into.
         K
             The system matrix.
         timeStep
@@ -1036,7 +1663,7 @@ class NIST(NonlinearSolverBase):
         Returns
         -------
         tuple[DofVector,VIJSystemMatrix]
-            - The modified external load vector.
+            - The modified residual contribution vector.
             - The modified system matrix.
         """
 
@@ -1044,11 +1671,11 @@ class NIST(NonlinearSolverBase):
             Kc = K[constraint]
             Pc = np.zeros(constraint.nDof)
 
-            constraint.applyConstraint(U_np[constraint], dU[constraint], Pc, Kc, timeStep)
+            constraint.computeKernels(U_np[constraint], dU[constraint], Pc, Kc, timeStep)
 
-            # instead of PExt[constraint] += Pe, np.add.at allows for repeated indices
-            np.add.at(PExt, PExt.entitiesInDofVector[constraint], Pc)
+            # instead of P[constraint] += Pc, np.add.at allows for repeated indices
+            np.add.at(P, P.entitiesInDofVector[constraint], Pc)
             if FConstraints is not None:
                 np.add.at(FConstraints, FConstraints.entitiesInDofVector[constraint], np.abs(Pc))
 
-        return PExt, K
+        return P, K

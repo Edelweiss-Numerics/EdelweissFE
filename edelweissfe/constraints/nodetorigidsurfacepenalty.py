@@ -199,11 +199,11 @@ class Constraint(ConstraintBase, MeshDependent):
     def nDof(self) -> int:
         return self._nDof
 
-    def applyConstraint(
+    def computeKernels(
         self,
         U_np: np.ndarray,
         dU: np.ndarray,
-        PExt: np.ndarray,
+        P: np.ndarray,
         K: np.ndarray,
         timeStep: TimeStep,
     ):
@@ -226,5 +226,6 @@ class Constraint(ConstraintBase, MeshDependent):
         normalForce, stiffness = normalPenaltyForce(self.type, self.penalty, -active_gaps)
         force_magnitude = -normalForce
 
-        PExt[active_indices] -= force_magnitude * self.direction
+        # the boundary pushes the nodes back, against direction; P is the negative of that force
+        P[active_indices] += force_magnitude * self.direction
         K[active_indices, active_indices] += stiffness

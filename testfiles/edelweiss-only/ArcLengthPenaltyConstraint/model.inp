@@ -1,0 +1,24 @@
+** A cantilever under its self-weight, bent down onto a rigid floor (a quadratic penalty constraint).
+** Shared by test.inp (arc-length, the tip load scaled by a load factor that follows the tip displacement)
+** and the reference of tests/test_arclength_with_constraints.py (NIST, the tip displacement prescribed).
+
+*material, name=LinearElastic, id=linearelastic, provider=edelweiss
+100.0, 0.3
+
+*job, name=arcLengthPenaltyJob, domain=2d
+
+*modelGenerator, generator=planeRectQuad, name=gen
+x0=0, y0=0, l=4.0, h=1.0, nX=8, nY=2, elType=CPE4, elProvider=edelweiss
+
+*section, name=section1, thickness=1.0, material=linearelastic, type=plane
+gen_all
+
+** the floor at y = -0.1 pushes back every bottom node that sinks below it
+*constraint, type=nodeToRigidSurfacePenalty, name=floor
+nSet=gen_bottom
+field=displacement
+component=1
+penalty=20.0
+value=-0.1
+direction=-1.0
+type=quadratic
