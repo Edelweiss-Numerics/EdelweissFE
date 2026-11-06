@@ -832,12 +832,12 @@ def _plainValue(value, directory: str, depth: int = 0):
     return None
 
 
-def _components(model, step, outputManagers, directory: Path) -> dict:
+def _components(model, step, directory: Path) -> dict:
     """Every plain-valued attribute of every component a checkpoint concerns, by component."""
     components = {"solver": step.solver, "timeStepper": step.timeStepper}
     components |= {"constraint " + name: c for name, c in model.constraints.items()}
     components |= {"modifier " + name: m for name, m in model.modelModifiers.items()}
-    components |= {"output " + name: m for name, m in outputManagers.items()}
+    components |= {"output " + m.name: m for m in step.outputManagers}
     components |= {"fieldOutput " + name: o for name, o in step.fieldOutputController.fieldOutputs.items()}
     for actionType, actions in step.actions.items():
         components |= {"{:} {:}".format(actionType, name): a for name, a in actions.items()}
@@ -894,11 +894,9 @@ def _uninterrupted(scenario: str, solver: str, assembly: str | None, directory: 
         nCutbacks[0] += 1
         return reject(self, cutbackFactor)
 
-    def recordingWrite(fileName, model, step, outputManagers, **kwargs):
-        write(fileName, model, step, outputManagers, **kwargs)
-        componentsAtCheckpoint[_checkpointKey(Path(fileName))] = _components(
-            model, step, outputManagers, Path(fileName).parent
-        )
+    def recordingWrite(fileName, model, step, **kwargs):
+        write(fileName, model, step, **kwargs)
+        componentsAtCheckpoint[_checkpointKey(Path(fileName))] = _components(model, step, Path(fileName).parent)
         for key, magnitude in _magnitudes(model).items():
             magnitudes[key] = max(magnitudes.get(key, 0.0), magnitude)
 
@@ -1008,11 +1006,9 @@ def test_resume_from_every_checkpoint_is_exact(workDirectory, scenario, solver, 
     componentsAtCheckpoint = {}
     write = restartOutputManager.writeCheckpoint
 
-    def recordingWrite(fileName, model, step, outputManagers, **kwargs):
-        write(fileName, model, step, outputManagers, **kwargs)
-        componentsAtCheckpoint[_checkpointKey(Path(fileName))] = _components(
-            model, step, outputManagers, Path(fileName).parent
-        )
+    def recordingWrite(fileName, model, step, **kwargs):
+        write(fileName, model, step, **kwargs)
+        componentsAtCheckpoint[_checkpointKey(Path(fileName))] = _components(model, step, Path(fileName).parent)
 
     restartOutputManager.writeCheckpoint = recordingWrite
     try:

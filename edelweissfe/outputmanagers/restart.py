@@ -216,7 +216,7 @@ class OutputManager(OutputManagerBase):
 
         self._incrementsSinceLastWrite = 0
         fileName, serial = self._files.nextCheckpoint()
-        writeCheckpoint(fileName, self.model, self._currentStep, self.model.outputManagers, serial=serial)
+        writeCheckpoint(fileName, self.model, self._currentStep, serial=serial)
 
         self.journal.message("Wrote restart checkpoint {:}".format(fileName), self.identification, 1)
 
