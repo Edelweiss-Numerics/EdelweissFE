@@ -673,8 +673,6 @@ class NIST(NonlinearSolverBase):
                 with performancetiming.timeit("dof manager"):
                     self.equationSystemLayout = model.buildEquationSystem()
                 self.theDofManager = self.equationSystemLayout.dofManager
-                # the cache is keyed on the DofManager; drop it so the old manager can be freed
-                self._dirichletIndicesCache = None
                 self.journal.message(
                     "eq. system rebuilt: {:} dof".format(self.theDofManager.nDof),
                     self.identification,
