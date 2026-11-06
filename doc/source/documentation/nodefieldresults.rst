@@ -37,6 +37,14 @@ Every solver passes these entries through the model's layout of its equation sys
 system, :meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeResultsToModel` when it accepts
 an increment.
 
+A step hands the next one the model's state at its end time: the solution, and the velocity and the acceleration at
+that time. The explicit solvers integrate the velocity staggered half an increment behind the solution, and so write
+that staggered velocity at every accepted increment; at the end of their step, the model advances it by the half
+increment it lags behind, with the acceleration (:meth:`~edelweissfe.models.femodel.FEModel.advanceVelocity`, the one
+change of these entries that needs no equation system). A dynamic step starts from this state: the implicit dynamic
+solver from the velocity, completing the acceleration from equilibrium; the explicit solver ``NED`` from both, without
+evaluating anything (see :mod:`~edelweissfe.solvers.nonlinearexplicitdynamic`).
+
 The entries
 -----------
 
@@ -56,8 +64,8 @@ The entries
      - state
      - The rate and the second rate of the solution at the accepted time: velocity and acceleration of a field with
        inertia. Zero for a field without inertia, and after a quasi-static step, which leaves the model at rest. The
-       explicit solver integrates the velocity staggered by half an increment: its ``V`` is
-       :math:`\boldsymbol{v}_{n+1/2}`.
+       explicit solver integrates the velocity staggered by half an increment: within its step, its ``V`` is
+       :math:`\boldsymbol{v}_{n+1/2}`, and the end of the step advances it to the end time (see above).
      - at acceptance; the implicit dynamic solver completes ``A`` at the start of an increment
    * - ``dU``
      - result
@@ -76,8 +84,9 @@ net force the next velocity update divides by, so its ``P`` is the internal forc
 the loads and the constraints acting there. At a node with a prescribed motion, the acceleration at the end of an
 increment is set by the prescribed velocity of the next one, which is not known when the increment is accepted, so
 its ``P`` is the internal force alone: the support reaction, without the inertia of the support node's own lumped
-mass. The net force itself is the solver's state, not an entry (see
-:mod:`~edelweissfe.solvers.nonlinearexplicitdynamic`).
+mass. Its ``A`` is the acceleration at the end of the increment, the one with which the velocity at that time, half an
+increment after its ``V``, satisfies the equation of motion; zero at a prescribed motion. The net force itself is the
+solver's state, not an entry (see :mod:`~edelweissfe.solvers.nonlinearexplicitdynamic`).
 
 The Lagrange multipliers of constraints are scalar variables, not node field entries
 (:class:`~edelweissfe.variables.scalarvariable.ScalarVariable`). They are state as well: each holds its total

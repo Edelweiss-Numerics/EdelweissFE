@@ -504,6 +504,26 @@ class FEModel:
         for mpc in self.multiPointConstraints.values():
             mpc.acceptLastState()
 
+    def advanceVelocity(self, timeIncrement: float):
+        """Advance the velocity of the model by its acceleration over a time increment, :math:`\\boldsymbol{V}
+        \\leftarrow \\boldsymbol{V} + \\Delta t \\, \\boldsymbol{A}`, in every node field, on every node.
+
+        An explicit solver integrates the velocity staggered half an increment behind the solution within its step,
+        and publishes the acceleration at the end of every increment. At the end of its step, it advances the velocity
+        by the half increment it lags behind, so that the step leaves the velocity at its end time, as every solver
+        does (see the documentation page *Node field results*). Where the acceleration is zero, the velocity stays as
+        it is. The model does this itself, without an equation system: a step resumed at its very end has built none.
+
+        Parameters
+        ----------
+        timeIncrement
+            The time increment.
+        """
+
+        for nodeField in self.nodeFields.values():
+            velocity = nodeField["V"]
+            velocity += timeIncrement * nodeField["A"]
+
     def _acceptElementStates(self):
         """Let every element accept its computed state, across the available threads.
 
