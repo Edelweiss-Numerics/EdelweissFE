@@ -43,6 +43,10 @@ elType=CPE8R
 *nSet, nSet=loadedEnd
 100008
 
+** the free (unbonded) bar nodes outside the block carry no transverse stiffness: hold them laterally
+*nSet, nSet=freeLength
+100007
+
 *section, name=concreteSection, thickness=50.0, material=concrete, type=plane
 gen_all
 
@@ -79,3 +83,4 @@ splitBars=True
 maxInc=0.05, minInc=1e-8, maxNumInc=1000, maxIter=15, stepLength=1
 >>dirichlet, name=support, nSet=gen_left, field=displacement, 1=0, 2=0
 >>dirichlet, name=pull, nSet=loadedEnd, field=displacement, 1=3.0, 2=0
+>>dirichlet, name=freeLength, nSet=freeLength, field=displacement, 2=0
