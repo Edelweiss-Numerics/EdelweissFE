@@ -28,22 +28,50 @@
 """The constraint forces of an explicit solver
 (:meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.assembleConstraintForces`): the force buffer
 and the DOF indices of a constraint are made once per equation system and reused in every increment, and a plan made
-for indices the constraint no longer has is never used."""
+for indices the constraint no longer has is never used. The tangent that a constraint's default explicit evaluation
+throws away is sized once per equation system as well."""
 
 import numpy as np
 
+from edelweissfe.constraints.base.constraintbase import ConstraintBase
 from edelweissfe.numerics.dofvector import DofVector
 from edelweissfe.solvers.base.nonlinearsolverbase import NonlinearSolverBase
 
 
-class _UnitForceConstraint:
-    """A constraint that adds 1 at each of its two degrees of freedom."""
+class _UnitForceConstraint(ConstraintBase):
+    """A constraint that adds 1 at each of its two degrees of freedom, and a tangent; evaluated in an explicit
+    analysis by the default of :meth:`computeKernelsExplicit`."""
 
-    active = True
-    nDof = 2
+    def __init__(self):
+        super().__init__("spring", None)
 
-    def computeKernelsExplicit(self, U_np, dU, P, timeStep):
+    @property
+    def nodes(self):
+        return []
+
+    @property
+    def fieldsOnNodes(self):
+        return []
+
+    @property
+    def nDof(self):
+        return 2
+
+    def computeKernels(self, U_np, dU, P, K, timeStep):
         P += 1.0
+        K += 1.0
+
+
+class _ListedUnitForceConstraint(_UnitForceConstraint):
+    """The same constraint with a block of its own layout, its diagonal; it counts how often it builds the list."""
+
+    def __init__(self):
+        super().__init__()
+        self.listings = 0
+
+    def localEntriesOfBlock(self):
+        self.listings += 1
+        return np.arange(2, dtype=np.intc), np.arange(2, dtype=np.intc)
 
 
 class _Host:
@@ -94,3 +122,21 @@ def test_the_plan_is_reused_while_the_indices_stay():
     plan = host._constraintForcePlans["spring"]
     _forces(host, constraints, entitiesInDofVector)
     assert host._constraintForcePlans["spring"] is plan
+
+
+def test_the_discarded_tangent_is_sized_once_per_equation_system():
+    """A constraint that lists the entries of its block builds the list to size the tangent its explicit evaluation
+    throws away: once per equation system, not in every increment."""
+    host = _Host()
+    constraint = _ListedUnitForceConstraint()
+    constraints = {"spring": constraint}
+    entitiesInDofVector = {constraint: np.array([0, 1])}
+
+    for _ in range(3):
+        np.testing.assert_array_equal(_forces(host, constraints, entitiesInDofVector), [1, 1, 0, 0])
+    assert constraint.listings == 1
+
+    entitiesInDofVector[constraint] = np.array([2, 3])
+    for _ in range(3):
+        np.testing.assert_array_equal(_forces(host, constraints, entitiesInDofVector), [0, 0, 1, 1])
+    assert constraint.listings == 2

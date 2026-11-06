@@ -43,8 +43,9 @@ from edelweissfe.variables.scalarvariable import ScalarVariable
 
 
 class ConstraintBase(OptionSchemaProvider, ABC, SystemMatrixContributorBase):
-    #: Scratch buffer for the tangent that :meth:`computeKernelsExplicit` computes and discards;
-    #: re-allocated only when the DOF footprint changes.
+    #: Scratch buffer for the tangent that :meth:`computeKernelsExplicit` computes and discards, sized for the block
+    #: the constraint has in the equation system it is evaluated in; None until its first evaluation there (see
+    #: :meth:`prepareExplicitEvaluation`).
     _discardedTangentScratch = None
 
     #: The state this constraint carries from one increment to the next, by attribute name and type;
@@ -225,6 +226,20 @@ class ConstraintBase(OptionSchemaProvider, ABC, SystemMatrixContributorBase):
 
         self.scalarVariables = scalarVariables
 
+    def prepareExplicitEvaluation(self):
+        """Called by an explicit solver whenever the constraint is located anew in its equation system (a rebuilt
+        one, or one whose constraints are re-located), before it evaluates the constraint there with
+        :meth:`computeKernelsExplicit`.
+
+        This default forgets the tangent that :meth:`computeKernelsExplicit` throws away, so that the next evaluation
+        sizes it, once, for the block the constraint has now. The size is the number of entries of the block
+        (:func:`~edelweissfe.numerics.systemmatrixcontributor.countEntriesOfBlock`), which for a constraint that lists
+        its entries means building the list: once per equation system, not in every increment. A constraint that
+        evaluates its forces without a tangent needs nothing here.
+        """
+
+        self._discardedTangentScratch = None
+
     def computeKernelsExplicit(
         self,
         U_np: np.ndarray,
@@ -237,7 +252,8 @@ class ConstraintBase(OptionSchemaProvider, ABC, SystemMatrixContributorBase):
         The counterpart of :meth:`computeKernels` for an explicit solver, which solves no linear
         system and so has no use for a tangent. This default calls :meth:`computeKernels` with a
         scratch tangent that is thrown away, so that every constraint also works in an explicit
-        analysis. A constraint whose tangent is costly overrides it, e.g. through
+        analysis; the scratch is sized once per equation system (see :meth:`prepareExplicitEvaluation`).
+        A constraint whose tangent is costly overrides it, e.g. through
         :class:`~edelweissfe.constraints.base.forcesonlyexplicitevaluation.ForcesOnlyExplicitEvaluation`.
 
         Parameters
@@ -252,11 +268,10 @@ class ConstraintBase(OptionSchemaProvider, ABC, SystemMatrixContributorBase):
             The current time step.
         """
 
-        # The discarded tangent buffer is kept across increments and re-zeroed rather than reallocated.
-        size = countEntriesOfBlock(self)
+        # The discarded tangent buffer is sized once per equation system, and re-zeroed in every increment.
         scratch = self._discardedTangentScratch
-        if scratch is None or scratch.size != size:
-            scratch = self._discardedTangentScratch = np.zeros(size)
+        if scratch is None:
+            scratch = self._discardedTangentScratch = np.zeros(countEntriesOfBlock(self))
         else:
             scratch[:] = 0.0
 

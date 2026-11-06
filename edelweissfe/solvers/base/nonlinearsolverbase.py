@@ -311,7 +311,9 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
         The force buffer and the DOF indices of each constraint are kept in :attr:`_constraintForcePlans` (by
         constraint name) and reused in every increment. They hold for the indices of the constraint they were made
         for: whenever the DofManager locates the constraint anew -- a rebuilt equation system, or one whose
-        constraints are re-located in place --, the constraint has indices of its own, and its plan is made anew.
+        constraints are re-located in place --, the constraint has indices of its own, its plan is made anew, and the
+        constraint is told so
+        (:meth:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.prepareExplicitEvaluation`).
 
         Parameters
         ----------
@@ -350,6 +352,7 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
                 # facet), since fancy-indexed += would drop repeated contributions.
                 plan = (np.zeros(constraint.nDof), indices, len(np.unique(indices)) != len(indices))
                 self._constraintForcePlans[name] = plan
+                constraint.prepareExplicitEvaluation()
 
             Pc, _, namesDofMoreThanOnce = plan
 
