@@ -25,7 +25,7 @@ runs:
 
     # Marmot is installed into a prefix of its own (not the environment), so that it can be cached and
     # restored independently of the environment's cache.
-    - uses: actions/cache@v4
+    - uses: actions/cache@v6
       id: cache
       with:
         path: ${{ runner.temp }}/marmot
