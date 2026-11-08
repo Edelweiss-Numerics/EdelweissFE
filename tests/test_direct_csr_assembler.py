@@ -434,6 +434,18 @@ def test_the_generator_refuses_pairs_that_do_not_fit_the_matrix():
         generator.updateInPlace(np.ones(3))
 
 
+def test_the_generator_refuses_strided_values():
+    """The C++ core reads the values one after the other: a strided view, every second value of a longer array, would
+    be read as the first values of that array, silently."""
+    generator = CSRGenerator(np.array([0, 1]), np.array([0, 1]), 2)
+    values = np.array([1.0, -1.0, 2.0, -2.0])
+    with pytest.raises(ValueError, match="contiguous"):
+        generator.updateInPlace(values[::2])
+    with pytest.raises(ValueError, match="contiguous"):
+        generator.updateCSR(values[::2])
+    np.testing.assert_array_equal(generator.updateCSR(values[::2].copy()).toarray(), [[1.0, 0.0], [0.0, 2.0]])
+
+
 @pytest.mark.parametrize(
     "dofStart, couplesAllItsDofs, localEntryStart, message",
     [

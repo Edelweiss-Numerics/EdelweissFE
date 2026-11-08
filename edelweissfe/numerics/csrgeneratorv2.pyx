@@ -387,7 +387,7 @@ cdef class CSRGenerator:
     cdef CSRCore* core
     #: The CSR matrix the generator writes into; its pattern arrays are the core's.
     cdef readonly object csrMatrix
-    cdef double[:] data_view
+    cdef double[::1] data_view
     cdef int64_t nCooPairs
 
     def __dealloc__(self):
@@ -477,7 +477,7 @@ cdef class CSRGenerator:
         """Number of stored entries in the CSR pattern."""
         return self.core.nnz
 
-    def updateInPlace(self, double[:] V):
+    def updateInPlace(self, double[::1] V):
         """
         Update the values of the CSR matrix in-place based on the input vector V.
 
@@ -491,13 +491,19 @@ cdef class CSRGenerator:
 
         Parameters
         ----------
-        V : double[:]
-            Input vector used to update the CSR matrix values.
+        V : double[::1]
+            Input vector used to update the CSR matrix values, one per COO pair, contiguous: the core reads them one
+            after the other.
 
         Returns
         -------
         AliasedCSRMatrix
             A live view of the internal CSR matrix (not a copy).
+
+        Raises
+        ------
+        ValueError
+            If ``V`` is not contiguous (a strided view), or does not hold one value per COO pair.
         """
 
         if V.shape[0] != self.nCooPairs:
@@ -514,7 +520,7 @@ cdef class CSRGenerator:
 
         return self.csrMatrix
 
-    def updateCSR(self, double[:] V):
+    def updateCSR(self, double[::1] V):
         """
         Update the values of the CSR matrix and return an independent copy.
 
@@ -524,13 +530,18 @@ cdef class CSRGenerator:
 
         Parameters
         ----------
-        V : double[:]
-            Input vector used to update the CSR matrix values.
+        V : double[::1]
+            Input vector used to update the CSR matrix values, as in :meth:`updateInPlace`.
 
         Returns
         -------
         csr_matrix
             An independent copy of the updated CSR matrix.
+
+        Raises
+        ------
+        ValueError
+            As :meth:`updateInPlace`.
         """
 
         self.updateInPlace(V)
