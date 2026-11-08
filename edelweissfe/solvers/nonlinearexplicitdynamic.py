@@ -83,24 +83,30 @@ asks for forces and no tangent, since a tangent assembled here would enter nothi
 that can act *only* through its tangent contributes nothing to an explicit increment and is
 refused at validation rather than silently ignored.
 
-**Energy balance.** Every reporting increment prints the external work accumulated at prescribed
-degrees of freedom, the kinetic energy, the internal (strain) energy, and what remains unaccounted.
-Its purpose is one check that nothing else performs: kinetic energy cannot exceed external work,
-because the terms omitted from the balance are all non-negative, so a violation means energy is
-appearing from nowhere and the time step is above the true stability limit -- which the critical
-time step does not see in full, as it never sees contact penalty stiffness, and sees the nonlocal
-field only where that field carries a non-mechanical inertia. Such a field's own
-``0.5 m_k rate^2`` is reported on a separate line and kept out of the balance: with a coefficient in
-seconds squared it has the units of a volume, not of an energy.
+**Energy balance.** Every reporting increment prints the energy the model held at the start of the
+step, kinetic and internal (``E_0``), the external work accumulated at prescribed degrees of freedom
+since, the kinetic energy, the internal (strain) energy, and what remains unaccounted. Its purpose is
+one check that nothing else performs: the kinetic energy cannot exceed the energy at the start of the
+step plus the external work, because the terms omitted from the balance are all non-negative, so a
+violation means energy is appearing from nowhere and the time step is above the true stability limit
+-- which the critical time step does not see in full, as it never sees contact penalty stiffness,
+and sees the nonlocal field only where that field carries a non-mechanical inertia. Such a field's
+own ``0.5 m_k rate^2`` is reported on a separate line and kept out of the balance: with a
+coefficient in seconds squared it has the units of a volume, not of an energy. ``E_0`` is read off
+the model's state, nothing evaluated: zero for a step from rest in a model without strain energy,
+and, for a step that continues another one, the energy that one left, its kinetic energy included.
+The continued step's balance is therefore the one the two steps would report as one, less what the
+first of them dissipated.
 
 Two honest limits, both of which the solver states in the log rather than leaving to be
-discovered. The external work accumulates only at *prescribed* degrees of freedom, so a model
+discovered. The external work accumulates only at *prescribed* degrees of freedom, so a step
 driven by body forces, node forces, a distributed load or an initial velocity has none, and the
-check cannot fire; and the internal energy is whatever the materials publish as a strain energy,
-which not every material does. When either is identically zero -- or the external work is
-negative, a structure returning work at its boundary -- the balance is not usable as a
-quasi-static criterion, and the honest substitute is to integrate a reaction force against its
-prescribed displacement, both of which are available as ``saveHistory`` field outputs.
+check cannot fire, whatever energy the step starts with; and the internal energy is whatever the
+materials publish as a strain energy, which not every material does. When either is identically
+zero -- or the external work is negative, a structure returning work at its boundary -- the balance
+is not usable as a quasi-static criterion, and the honest substitute is to integrate a reaction
+force against its prescribed displacement, both of which are available as ``saveHistory`` field
+outputs.
 
 **Diagnostics across a topology change.** Because the lumped mass is the operator an increment
 divides by, a refinement's effect on it is reported: total mass, per-component linear momentum and
@@ -197,8 +203,8 @@ from edelweissfe.utils.exceptions import CutbackRequest, StepFailed
 from edelweissfe.utils.fieldoutput import FieldOutputController
 from edelweissfe.utils.schema import schemaField
 
-#: Fractional margin by which the kinetic energy may exceed the external work before it is
-#: reported as energy creation. KE <= W_ext holds in the continuum; mass lumping and the re-lumping
+#: Fractional margin by which the kinetic energy may exceed the energy at the step start plus the external work
+#: before it is reported as energy creation. KE <= E_0 + W_ext holds in the continuum; mass lumping and the re-lumping
 #: at a topology change (see reportTopologyChangeConservation) violate it slightly.
 _ENERGY_CREATION_TOLERANCE = 1e-2
 
@@ -419,12 +425,13 @@ class NED(NonlinearSolverBase):
 
     #: The last completed increment and the net force, both read by the central-difference velocity
     #: update of the next increment, and the external work, an accumulator that cannot be reconstructed
-    #: from the solution. The velocity and the acceleration are the model's (entries ``V`` and ``A`` of its
-    #: node fields).
+    #: from the solution, with the energy at the step start it adds to. The velocity and the acceleration
+    #: are the model's (entries ``V`` and ``A`` of its node fields).
     checkpointedState = {
         "prevTimeStep": TimeStep,
         "_netForce": np.ndarray,
         "_externalWork": float,
+        "_energyAtStepStart": float,
         # The energy-balance warnings are given once per step, not again after a resume.
         "_warnedAboutMissingInternalEnergy": bool,
         "_warnedAboutMissingExternalWork": bool,
@@ -462,9 +469,12 @@ class NED(NonlinearSolverBase):
         self._warnedAboutMissingExternalWork = False
         #: Conservation check of every field's lumped total across topology changes; reset per step.
         self._conservationCheck = ConservationCheck(journal, self.identification)
-        #: Work done by the prescribed DOFs, accumulated every increment; compared against the
-        #: kinetic energy to detect energy creation.
+        #: Work done by the prescribed DOFs in the step, accumulated every increment; with the energy at
+        #: the step start, compared against the kinetic energy to detect energy creation.
         self._externalWork = 0.0
+        #: The kinetic and internal energy the model held at the start of the step (see
+        #: :meth:`energyOfTheModelsState`), which the external work of the step adds to.
+        self._energyAtStepStart = 0.0
         #: The last completed increment; the velocity update reads 0.5 * (dT + dT_prev). None makes
         #: the first increment of a cold step the leapfrog's half step; a resumed step uses the
         #: checkpointed one, since the checkpointed velocity already carries the half-step offset.
@@ -520,6 +530,7 @@ class NED(NonlinearSolverBase):
         self._stepWallClockTic = perf_counter()
 
         self._externalWork = 0.0
+        self._energyAtStepStart = 0.0
         self.prevTimeStep = None
         self._netForce = None
         self._conservationCheck.reset()
@@ -584,6 +595,7 @@ class NED(NonlinearSolverBase):
                 self._netForce[:] = resumedNetForce
             else:
                 self.formNetForceOfTheModelsState(step.actions["dirichlet"].values())
+                self._energyAtStepStart = self.energyOfTheModelsState()
             # The time stepper carries (and checkpoints) the stable increment; a resumed step keeps its own.
             if step.timeStepper.enforcedTimeIncrement is None:
                 step.timeStepper.enforceTimeIncrement(self._system.criticalTimeStep)
@@ -603,9 +615,7 @@ class NED(NonlinearSolverBase):
         theSystem, V = self._system, self._V
         lumpedTotalsBefore = self._perFieldLumpedTotals()
         momentumBefore = self.secondOrderMomentum(self._rawLumpedMass, V, model)
-        kineticBefore = 0.5 * float(
-            np.sum(self._rawLumpedMass[self.ids_mechanicalEnergy] * V[self.ids_mechanicalEnergy] ** 2)
-        )
+        kineticBefore = self.kineticEnergy(V)
 
         topologyUpdate = self.updateTopologyAndConnectivity(model, step)
         meshChanged = topologyUpdate.topologyChanged or topologyUpdate.meshDependentsRefreshed
@@ -883,6 +893,42 @@ class NED(NonlinearSolverBase):
         for dirichlet in dirichlets:
             netForce[dirichlet.constrainedDofIndices] = 0.0
 
+    def energyOfTheModelsState(self) -> float:
+        """The energy the model holds at the start of a cold step, which its energy balance starts from (see the module
+        documentation, "Energy balance"): the kinetic energy of the model's velocity, read with the solution when the
+        equation system was built, and the internal (strain) energy the materials publish for the state the elements
+        hold. Nothing is evaluated.
+
+        Returns
+        -------
+        float
+            The kinetic and the internal energy.
+        """
+
+        internalEnergy = sum(element.computeInternalEnergy() for element in self._kernelElements.values())
+
+        return self.kineticEnergy(self._V) + internalEnergy
+
+    def kineticEnergy(self, V: DofVector) -> float:
+        """The kinetic energy :math:`\\tfrac{1}{2} \\sum m v^2` of a velocity, with the unfolded lumped mass, over the
+        degrees of freedom where it is an energy (:attr:`ids_mechanicalEnergy`): not on a first-order field, whose
+        coefficient is a viscosity, nor on a field whose inertia is not mechanical.
+
+        Parameters
+        ----------
+        V
+            The velocity vector.
+
+        Returns
+        -------
+        float
+            The kinetic energy.
+        """
+
+        ids = self.ids_mechanicalEnergy
+
+        return 0.5 * float(np.sum(self._rawLumpedMass[ids] * V[ids] ** 2))
+
     def internalInertialAndDampingForce(self, dirichlets) -> DofVector:
         """The force this solver publishes as the node field result ``P`` of the increment just completed: the internal
         force with the inertial and damping forces, :math:`\\boldsymbol{f}_\\mathrm{int} + \\boldsymbol{M}
@@ -1059,22 +1105,23 @@ class NED(NonlinearSolverBase):
         if timeStep.number % self.options["output-frequency"] == 0:
             Wint = psi
 
-            # Only over the DOFs where 0.5 * m * v**2 is an energy (not, e.g., first-order fields,
-            # whose "mass" is a viscosity).
-            Wkin = 0.5 * float(
-                np.sum(self._rawLumpedMass[self.ids_mechanicalEnergy] * V[self.ids_mechanicalEnergy] ** 2)
-            )
+            Wkin = self.kineticEnergy(V)
 
             Wext = self._externalWork
 
+            # What the step can draw on: the energy the model held at its start, and the work done on it since.
+            E0 = self._energyAtStepStart
+            suppliedEnergy = E0 + Wext
+
             # Unpublished strain energy, dissipation and damage; negative means energy is being created.
-            unaccounted = Wext - Wkin - Wint
+            unaccounted = suppliedEnergy - Wkin - Wint
 
             def _share(value):
-                return "{:7.2f} %".format(value / Wext * 100) if Wext > 0.0 else "      -- "
+                return "{:7.2f} %".format(value / suppliedEnergy * 100) if suppliedEnergy > 0.0 else "      -- "
 
             energyRows = [
-                ["energy", "value", "share of W_ext"],
+                ["energy", "value", "share of E_0 + W_ext"],
+                ["at the step start E_0", "{:+.6e}".format(E0), _share(E0)],
                 ["external work W_ext", "{:+.6e}".format(Wext), _share(Wext)],
                 ["kinetic", "{:+.6e}".format(Wkin), _share(Wkin)],
                 ["internal (strain)", "{:+.6e}".format(Wint), _share(Wint)],
@@ -1099,7 +1146,7 @@ class NED(NonlinearSolverBase):
                 2,
             )
 
-            # KE <= W_ext holds in the continuum; a violation means the time step is above the true
+            # KE <= E_0 + W_ext holds in the continuum; a violation means the time step is above the true
             # stability limit. NaN is checked first, since every comparison against NaN is False.
             if not (np.isfinite(Wext) and np.isfinite(Wkin)):
                 raise StepFailed(
@@ -1112,16 +1159,17 @@ class NED(NonlinearSolverBase):
                     "a smaller courant-number.".format(timeStep.number, Wext, Wkin)
                 )
 
-            if Wext > 0.0 and Wkin > Wext * (1.0 + _ENERGY_CREATION_TOLERANCE):
+            # Checked only while the prescribed degrees of freedom do work in this step: the work of the loads is not
+            # accumulated, so a step they drive has no bound to check against, whatever energy it started with.
+            if Wext > 0.0 and Wkin > suppliedEnergy * (1.0 + _ENERGY_CREATION_TOLERANCE):
                 self.journal.message(
-                    "ENERGY IS BEING CREATED: the kinetic energy {:e} exceeds the external work "
-                    "{:e} by {:.1f} %. That is impossible -- the unreported terms (strain energy, "
-                    "dissipation, damage) can only add to the balance. The time step is above the "
-                    "true stability limit, which dt_crit does not see in full: it ignores the "
-                    "nonlocal field entirely and never sees contact penalty stiffness. Reduce "
-                    "courant-number, or resume from a checkpoint with a smaller one.".format(
-                        Wkin, Wext, (Wkin / Wext - 1.0) * 100
-                    ),
+                    "ENERGY IS BEING CREATED: the kinetic energy {:e} exceeds the energy at the start of "
+                    "the step plus the external work, {:e}, by {:.1f} %. That is impossible -- the "
+                    "unreported terms (strain energy, dissipation, damage) can only add to the balance. "
+                    "The time step is above the true stability limit, which dt_crit does not see in "
+                    "full: it ignores the nonlocal field entirely and never sees contact penalty "
+                    "stiffness. Reduce courant-number, or resume from a checkpoint with a smaller "
+                    "one.".format(Wkin, suppliedEnergy, (Wkin / suppliedEnergy - 1.0) * 100),
                     self.identification,
                     0,
                 )
@@ -1995,9 +2043,7 @@ class NED(NonlinearSolverBase):
 
         lumpedTotalsAfter = self._perFieldLumpedTotals()
         momentumAfter = self.secondOrderMomentum(self._rawLumpedMass, V, model)
-        kineticAfter = 0.5 * float(
-            np.sum(self._rawLumpedMass[self.ids_mechanicalEnergy] * V[self.ids_mechanicalEnergy] ** 2)
-        )
+        kineticAfter = self.kineticEnergy(V)
 
         tolerance = self.options["lumped-quantity-conservation-tolerance"]
         relativeChangeByField = {

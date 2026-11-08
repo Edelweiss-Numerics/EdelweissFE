@@ -39,6 +39,9 @@ the velocity at its end time (see the module documentation of
   ``M A + C V`` is the net force of its last increment, so that one step continues from it exactly as the leapfrog
   would; the next step starts from the net force ``M A + C V`` of the model's state, and takes the damped half step
   from there. Pinned on the column with a mass-proportional damping reported by its elements.
+* The energy balance of a step starts from the energy the model holds, kinetic and internal: a column pulled up, then
+  pulled on by a second step, reports no energy creation there, though its kinetic energy exceeds the work of the
+  second step alone.
 
 The time increment is fixed (the critical one is replaced), so that the steps divide it exactly.
 """
@@ -50,6 +53,7 @@ import pytest
 
 from edelweissfe.drivers.inputfiledrivensimulation import finiteElementSimulation
 from edelweissfe.elements.displacementelement.element import DisplacementElement
+from edelweissfe.journal.journal import Journal
 from edelweissfe.solvers.nonlinearexplicitdynamic import NED
 from edelweissfe.utils.inputfileparser import parseInputFile
 
@@ -81,8 +85,15 @@ elProvider=edelweiss
 _SOLVER = """
 *solver, solver=NED, name={name}
 courant-number=1.0
-output-frequency=1
+output-frequency={outputFrequency}
 """
+
+
+def _solver(name: str, outputFrequency: int = 1) -> str:
+    """An explicit solver at the fixed time increment, reporting every ``outputFrequency``-th increment."""
+
+    return _SOLVER.format(name=name, outputFrequency=outputFrequency)
+
 
 _STEP = """
 *step, type=adaptiveForExplicitSimulations, solver={solver}
@@ -127,15 +138,12 @@ def _state(model) -> dict:
 @pytest.mark.parametrize("solversOfTheSteps", [("theSolver", "theSolver"), ("first", "second")])
 def test_two_explicit_steps_are_one(tmp_path, fixedTimeIncrement, solversOfTheSteps):
     oneStep = _run(
-        _MODEL
-        + _SOLVER.format(name="theSolver")
-        + _STEP.format(solver="theSolver", length=_DURATION)
-        + _RELEASED_UNDER_ITS_WEIGHT,
+        _MODEL + _solver("theSolver") + _STEP.format(solver="theSolver", length=_DURATION) + _RELEASED_UNDER_ITS_WEIGHT,
         tmp_path / "one",
     )
 
     first, second = solversOfTheSteps
-    solvers = "".join(_SOLVER.format(name=name) for name in sorted(set(solversOfTheSteps)))
+    solvers = "".join(_solver(name) for name in sorted(set(solversOfTheSteps)))
     twoSteps = _run(
         _MODEL
         + solvers
@@ -169,9 +177,7 @@ def test_a_step_starts_from_the_acceleration_the_model_holds(tmp_path, fixedTime
     # no support and no load: the body has no force, so after the first half increment it moves uniformly
     nIncrements = 25
     model = _run(
-        _MODEL
-        + _SOLVER.format(name="theSolver")
-        + _STEP.format(solver="theSolver", length=nIncrements * _TIME_INCREMENT),
+        _MODEL + _solver("theSolver") + _STEP.format(solver="theSolver", length=nIncrements * _TIME_INCREMENT),
         tmp_path,
     )
 
@@ -231,7 +237,7 @@ def test_the_damping_terms_of_the_step_start_rule(tmp_path, monkeypatch):
 
     _run(
         _MODEL
-        + _SOLVER.format(name="theSolver")
+        + _solver("theSolver")
         + _STEP.format(solver="theSolver", length=2 * nIncrements * dt)
         + _RELEASED_UNDER_ITS_WEIGHT,
         tmp_path / "one",
@@ -241,7 +247,7 @@ def test_the_damping_terms_of_the_step_start_rule(tmp_path, monkeypatch):
     statesAtTheStepStart.clear()
     twoSteps = _run(
         _MODEL
-        + _SOLVER.format(name="theSolver")
+        + _solver("theSolver")
         + _STEP.format(solver="theSolver", length=nIncrements * dt)
         + _RELEASED_UNDER_ITS_WEIGHT
         + _STEP.format(solver="theSolver", length=dt),
@@ -263,3 +269,63 @@ def test_the_damping_terms_of_the_step_start_rule(tmp_path, monkeypatch):
     np.testing.assert_allclose(_state(twoSteps)["U"], dampedHalfStep, rtol=0.0, atol=1e-10 * scale)
     # the second-order difference of the two is far above the tolerance: the relations tell the damping terms apart
     assert np.max(np.abs(leapfrogContinued - dampedHalfStep)) > 1e-6 * scale
+
+
+#: The pull of the column's top in the first step, with a velocity growing from zero, and the speed it ends at.
+_PULL, _PULL_DURATION = 1.0e-3, 0.1
+_PULL_SPEED = 2.0 * _PULL / _PULL_DURATION
+
+
+@pytest.mark.parametrize("continuedAt", [1.0, 0.1], ids=["the same speed", "a tenth of the speed"])
+def test_a_continued_step_reports_no_energy_creation(tmp_path, fixedTimeIncrement, monkeypatch, continuedAt):
+    """The second step continues the pull, at the speed the first one ended with, or slower. The column's kinetic
+    energy carries over; the work of the second step alone, a reaction times a few increments of the pull, is
+    smaller. Measured from zero, the balance would report energy creation; from the energy the model holds at the step
+    start, it is the balance of one step. The internal energy in that start energy is there for a step that turns
+    strain energy into motion; neither case here needs it, so this test does not pin it."""
+
+    balances, energyCreationReports = [], []
+    beginStep, printTable, message = NED.beginStep, Journal.printTable, Journal.message
+
+    def beginStepOpeningItsRecord(self, step, model, fieldOutputController, outputmanagers):
+        balances.append([])
+        energyCreationReports.append([])
+        beginStep(self, step, model, fieldOutputController, outputmanagers)
+
+    def printTableRecordingTheBalance(self, table, *args, **kwargs):
+        if table and table[0][0] == "energy":
+            balances[-1].append({row[0]: float(row[1]) for row in table[1:]})
+        return printTable(self, table, *args, **kwargs)
+
+    def messageRecordingEnergyCreation(self, text, *args, **kwargs):
+        if "ENERGY IS BEING CREATED" in text:
+            energyCreationReports[-1].append(text)
+        return message(self, text, *args, **kwargs)
+
+    monkeypatch.setattr(NED, "beginStep", beginStepOpeningItsRecord)
+    monkeypatch.setattr(Journal, "printTable", printTableRecordingTheBalance)
+    monkeypatch.setattr(Journal, "message", messageRecordingEnergyCreation)
+
+    continuedFor = 25 * _TIME_INCREMENT
+    _run(
+        _MODEL
+        + _solver("first", outputFrequency=25)
+        + _solver("second")
+        + _STEP.format(solver="first", length=_PULL_DURATION)
+        + ">>dirichlet, name=base, nSet=gen_bottom, field=displacement, 1=0.0, 2=0.0\n"
+        + f">>dirichlet, name=pull, nSet=gen_top, field=displacement, 2={_PULL!r}, f(t)='t**2'\n"
+        + _STEP.format(solver="second", length=continuedFor)
+        + f">>dirichlet, name=pull, nSet=gen_top, field=displacement, 2={continuedAt * _PULL_SPEED * continuedFor!r}\n",
+        tmp_path,
+    )
+
+    assert energyCreationReports == [[], []], balances
+
+    fromRest, continued = balances
+    assert fromRest and all(balance["at the step start E_0"] == 0.0 for balance in fromRest)
+    # the first balance of the continued step whose external work is positive, i.e. where the check acts
+    acting = next(balance for balance in continued if balance["external work W_ext"] > 0.0)
+    E0, Wext, Wkin = (acting[name] for name in ("at the step start E_0", "external work W_ext", "kinetic"))
+    # a balance from zero would report energy creation here
+    assert Wkin > 1.1 * Wext, acting
+    assert Wkin <= E0 + Wext, acting
