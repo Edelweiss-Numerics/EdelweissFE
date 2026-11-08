@@ -161,11 +161,15 @@ A step under arc length control may end before its time is up: the solver option
 the model and its field outputs, e.g. ``stopCondition='fieldOutputs["UTop"] < -1.0'``, is checked after every accepted
 increment of nonzero size, and the step ends once it is true. A stop condition belongs to the controller it is
 declared with: an ``>>options`` block that names ``arcLengthController`` (``off`` too) without a ``stopCondition``
-clears the one of an earlier step, so that a later step does not stop by the condition that ended the step before it:
+drops the one of an earlier step, so that a later step does not stop by the condition that ended the step before it:
 
 .. code-block:: edelweiss
 
     >>options, name=theSolver, arcLengthController=opening, stopCondition='fieldOutputs["UTop"] < -1.0'
+
+A stop condition in the ``*solver`` datalines belongs to the solver: every step whose ``>>options`` name a controller
+without a stop condition of their own returns to it. An ``>>options`` block that sets a ``stopCondition`` for a step
+without arc length control is refused, since the condition would never be checked.
 
 Every controller derives from :class:`~edelweissfe.stepactions.base.arclengthcontrollerbase.ArcLengthControllerBase`,
 which states what the solver asks of it:

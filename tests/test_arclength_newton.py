@@ -216,6 +216,47 @@ def test_a_stop_condition_belongs_to_the_controller_it_is_declared_with(tmp_path
     assert model.solvers["theSolver"].options["stopCondition"] is None
 
 
+def test_a_stop_condition_of_the_solver_definition_holds_for_every_step_that_names_a_controller(tmp_path):
+    """A stop condition in the ``*solver`` datalines belongs to the solver: a step whose ``>>options`` name the
+    controller without a stop condition of their own keeps it (here, one that holds from the start ends the step after
+    its first increment), and the solver returns to it after a step that declared its own."""
+
+    definition = "*include, input={:}\n*solver, solver=NISTPArcLength, name=theSolver\nstopCondition=True\n".format(
+        _MODEL
+    )
+    model = run(
+        tmp_path,
+        definition
+        + _STEP.format(
+            solver="theSolver", increment=INCREMENT, stepOptions="", controller="tipDisplacement", solverOptions=""
+        ),
+    )
+    np.testing.assert_allclose(tipDisplacement(model), INCREMENT * -0.25, rtol=1e-10)
+
+    solver = NISTPArcLength(loadConfiguration({}), Journal(verbose=False), stopCondition="True")
+    solver.applyOptionsOverride({"arcLengthController": "opening", "stopCondition": "False"})
+    assert solver.options["stopCondition"] == "False"
+    solver.applyOptionsOverride({"arcLengthController": "reopening"})
+    assert solver.options["stopCondition"] == "True"
+
+
+def test_a_stop_condition_without_arc_length_control_is_refused(tmp_path):
+    """A stop condition is checked under arc length control only: an ``>>options`` block that sets one for a step
+    without a controller is refused, and changes nothing."""
+
+    with pytest.raises(ValueError, match="arcLengthController=off"):
+        run(tmp_path, deck(controller="off", solverOptions=", stopCondition='True'"))
+
+    solver = NISTPArcLength(loadConfiguration({}), Journal(verbose=False))
+    with pytest.raises(ValueError, match="arcLengthController=off"):
+        solver.applyOptionsOverride({"stopCondition": "True"})
+    assert solver.options["stopCondition"] is None
+    solver.applyOptionsOverride({"arcLengthController": "opening", "stopCondition": "True"})
+    with pytest.raises(ValueError, match="arcLengthController=off"):
+        solver.applyOptionsOverride({"arcLengthController": "off", "stopCondition": "True"})
+    assert solver.options["arcLengthController"] == "opening"
+
+
 def test_the_stop_condition_is_checked_after_every_accepted_increment_of_nonzero_size(tmp_path):
     """A stop condition that holds from the start ends the step after its first increment of nonzero size: not after the
     zero increment, which leaves the step where it started."""

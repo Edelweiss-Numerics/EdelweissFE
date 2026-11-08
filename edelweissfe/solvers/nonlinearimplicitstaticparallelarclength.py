@@ -68,7 +68,8 @@ class NISTPArcLengthSchema(NISTParallel.schema):
         description=(
             "A model accessible expression; the step ends once it is true, checked after every accepted increment of "
             "nonzero size (under arc length control). It belongs to the controller it is declared with: an >>options "
-            "block that names arcLengthController without a stopCondition clears it."
+            "block that names arcLengthController without a stopCondition returns to the stop condition of the *solver "
+            "datalines (none by default), and one that sets a stopCondition without arc length control is refused."
         ),
         dtype=str,
         default=None,
@@ -171,25 +172,47 @@ class NISTPArcLength(NISTParallel):
         #: What the arc length method adds to the iterations of the increment being solved; None between increments.
         self.arcLengthIncrement = None
 
-        return super().__init__(jobInfo, journal, **kwargs)
+        super().__init__(jobInfo, journal, **kwargs)
+
+        #: The stop condition of the definition of the solver (its ``*solver`` datalines or constructor arguments), or
+        #: None: the one of every step whose ``>>options`` name the controller without a stop condition of their own.
+        self.stopConditionOfSolverDefinition = self.options["stopCondition"]
 
     def applyOptionsOverride(self, fieldValues: dict) -> None:
         """Apply an override of this solver's options, see
         :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.applyOptionsOverride`.
 
         A stop condition belongs to the arc length control it is declared with: an override that names the controller
-        (``arcLengthController``, ``off`` too) without a ``stopCondition`` clears the stop condition of an earlier step.
+        (``arcLengthController``, ``off`` too) without a ``stopCondition`` returns to the stop condition of the
+        definition of the solver (:attr:`stopConditionOfSolverDefinition`), and drops the one of an earlier step.
         Otherwise a step would stop by the condition that ended the step before it -- which typically holds already --
-        at its first check.
+        at its first check. An override that sets a ``stopCondition`` for a step without arc length control is refused
+        before anything of it applies: it would never be checked. (The stop condition of the definition of the solver
+        may stand without a controller: it applies to the steps that name one.)
 
         Parameters
         ----------
         fieldValues
             Maps schema field name to its new, already-coerced value.
+
+        Raises
+        ------
+        ValueError
+            If the override sets a stop condition for a step without arc length control.
         """
 
+        stopCondition = fieldValues.get("stopCondition")
+        if (
+            stopCondition is not None
+            and fieldValues.get("arcLengthController", self.options["arcLengthController"]) == "off"
+        ):
+            raise ValueError(
+                "stopCondition={:}: a stop condition is checked under arc length control only, and the step has none "
+                "(arcLengthController=off)".format(stopCondition)
+            )
+
         if "arcLengthController" in fieldValues and "stopCondition" not in fieldValues:
-            fieldValues = fieldValues | {"stopCondition": None}
+            fieldValues = fieldValues | {"stopCondition": self.stopConditionOfSolverDefinition}
 
         super().applyOptionsOverride(fieldValues)
 
