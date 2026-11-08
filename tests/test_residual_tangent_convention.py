@@ -214,8 +214,8 @@ def _forcesOnNodes(constraint, P, isWanted) -> np.ndarray:
     return -P[rows].reshape((-1, domainSize))
 
 
-def _assertTangentIsTheDerivative(constraint, U, dU, timeStep=None, rows=None, excluded=None, h=1e-7):
-    """Assert ``K == dP/dU``, on the given rows, with the given (row, column) blocks excluded."""
+def _assertTangentIsTheDerivative(constraint, U, dU, timeStep=None, excluded=None, h=1e-7):
+    """Assert ``K == dP/dU``, with the given (row, column) blocks excluded."""
 
     P, K = residualContributionAndTangent(constraint, U, dU, timeStep)
     dP_dU = finiteDifferenceTangent(constraint, U, dU, timeStep, h)
@@ -223,8 +223,6 @@ def _assertTangentIsTheDerivative(constraint, U, dU, timeStep=None, rows=None, e
     if excluded is not None:
         K[np.ix_(excluded, excluded)] = 0.0
         dP_dU[np.ix_(excluded, excluded)] = 0.0
-    if rows is not None:
-        K, dP_dU = K[rows], dP_dU[rows]
 
     scale = np.abs(K).max()
     assert scale > 0.0, "the check is vacuous: the tangent is zero"
@@ -365,9 +363,6 @@ penaltyStiffness=1e3
 
 @pytest.mark.parametrize("domainSize", [2, 3])
 def test_linearized_rigid_body(tmp_path, domainSize):
-    """Only the rows of the nodes are compared: the rows of the Lagrange multipliers receive no residual, since the
-    constraint relies on the linear constraint equation staying satisfied (see the constraint's ``computeKernels``)."""
-
     model = _buildModel(
         tmp_path,
         (_PLANE_BLOCK if domainSize == 2 else _SOLID_BLOCK)
@@ -387,7 +382,7 @@ referencePoint={:}
         scalarValues=np.linspace(-1.0, 1.0, constraint.nConstraints),
     )
 
-    P = _assertTangentIsTheDerivative(constraint, U, U, rows=slice(0, constraint.nDof - constraint.nConstraints))
+    P = _assertTangentIsTheDerivative(constraint, U, U)
 
     # g = u_s - u_RP - phi x (x_s - x_RP), with the slaves first and the reference point after them: each multiplier
     # adds itself to its slave, and the reference point takes the negative of their sum
@@ -397,6 +392,23 @@ referencePoint={:}
     np.testing.assert_allclose(
         P[nConstraints : nConstraints + domainSize], -multipliers.reshape((-1, domainSize)).sum(axis=0), rtol=1e-13
     )
+
+    # the rows of the multipliers hold g itself, computed here from the nodes' coordinates
+    slaves, referencePoint = constraint.nodes[:-1], constraint.nodes[-1]
+    uSlaves = U[:nConstraints].reshape((-1, domainSize))
+    uReferencePoint = U[nConstraints : nConstraints + domainSize]
+    rotation = U[nConstraints + domainSize : -nConstraints]
+    for s, slave in enumerate(slaves):
+        distance = slave.coordinates - referencePoint.coordinates
+        rotated = (
+            rotation[0] * np.array([-distance[1], distance[0]]) if domainSize == 2 else np.cross(rotation, distance)
+        )
+        np.testing.assert_allclose(
+            P[-nConstraints:][s * domainSize : (s + 1) * domainSize],
+            uSlaves[s] - uReferencePoint - rotated,
+            rtol=1e-12,
+            atol=1e-15,
+        )
 
 
 def test_rigid_body(tmp_path):
