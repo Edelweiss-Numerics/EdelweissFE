@@ -232,20 +232,18 @@ def _assertTangentIsTheDerivative(constraint, U, dU, timeStep=None, excluded=Non
 
 # --- constraints
 
-
-def test_directional_spring_penalty(tmp_path):
-    model = _buildModel(
-        tmp_path,
-        _PLANE_BLOCK
-        + """
+#: A spring on the vertical displacement of the plate's top edge.
+_DIRECTIONAL_SPRING = """
 *constraint, type=directionalSpringPenalty, name=theConstraint
 nSet=gen_top
 field=displacement
 component=1
 penalty=10.0
-""",
-        2,
-    )
+"""
+
+
+def test_directional_spring_penalty(tmp_path):
+    model = _buildModel(tmp_path, _PLANE_BLOCK + _DIRECTIONAL_SPRING, 2)
     constraint = model.constraints["theConstraint"]
     U = localVector(constraint, lambda node, field: _noise(node, field, 1e-2))
 
@@ -561,6 +559,17 @@ def test_node_to_deformable_surface_penalty_3d_finite_sliding(tmp_path):
     # the contact pushes the blocks apart: every slave node up, the master nodes down
     slaveForces, masterForce = _slaveAndMasterForces(constraint, P)
     assert np.all(slaveForces[:, 1] > 0.0) and masterForce[1] < 0.0
+
+
+# --- the check itself: it refuses input that does not fit the constraint with an exception, which ``python -O`` keeps
+
+
+def test_the_check_refuses_values_that_do_not_fill_the_layout_of_the_constraint(tmp_path):
+    model = _buildModel(tmp_path, _PLANE_BLOCK + _DIRECTIONAL_SPRING, 2)
+    constraint = model.constraints["theConstraint"]
+
+    with pytest.raises(ValueError, match="degrees of freedom"):
+        localVector(constraint, lambda node, field: _noise(node, field, 1e-2), scalarValues=[1.0])
 
 
 # --- element loads

@@ -56,6 +56,11 @@ def localVector(constraint, nodalValue, scalarValues=()) -> np.ndarray:
     -------
     np.ndarray
         The local vector of size ``constraint.nDof``.
+
+    Raises
+    ------
+    ValueError
+        If the values do not fill the constraint's layout: their number is not ``constraint.nDof``.
     """
 
     parts = [
@@ -65,7 +70,12 @@ def localVector(constraint, nodalValue, scalarValues=()) -> np.ndarray:
     ]
     parts.append(np.asarray(scalarValues, dtype=float))
     U = np.concatenate(parts).astype(float)
-    assert U.size == constraint.nDof, "the local vector does not match the constraint's layout"
+    if U.size != constraint.nDof:
+        raise ValueError(
+            "the local vector has {:} entries, but the constraint has {:} degrees of freedom".format(
+                U.size, constraint.nDof
+            )
+        )
     return U
 
 
