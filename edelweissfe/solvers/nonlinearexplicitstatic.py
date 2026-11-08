@@ -211,9 +211,6 @@ class NEST(NIST):
     supportsMPC = False
     supportsModelModifiers = False
 
-    #: The VIJ assembly of the system matrix; NEST has no option to choose.
-    systemMatrixAssemblies = {"vij": VIJSystemMatrixAssembly}
-
     #: Option schema for this solver, per OptionSchemaProvider.
     schema = NESTSchema
 
