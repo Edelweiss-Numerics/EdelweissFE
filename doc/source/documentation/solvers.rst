@@ -172,8 +172,8 @@ Newton's method starts each increment from a prediction of its solution incremen
   continued along its last secant.
 * ``quadratic``: the parabola through the last three accepted states, evaluated at the end of the new increment, which
   continues the path along its curvature, too. For a solution that grows quadratically with the load, the prediction
-  is exact, and the increment converges without a correction. While only one increment of the step has been accepted,
-  the prediction is linear.
+  is exact, and the increment converges without a correction. While only one increment of the step of nonzero size has
+  been accepted, the prediction is linear.
 
 Sizes are measured in step progress. The prescribed degrees of freedom take their prescribed increment, so the first
 iteration of a predicted increment already checks convergence. Not available yet under an arc length controller,

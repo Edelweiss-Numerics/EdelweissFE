@@ -88,7 +88,7 @@ class NISTSchema:
         description=(
             "The prediction a new increment starts its Newton iterations from (off|linear|quadratic): none, the "
             "last accepted increment scaled to the new size, or the parabola through the last three accepted states "
-            "(linear while only one accepted increment of the step is available)."
+            "(linear while only one accepted increment of the step of nonzero size is available)."
         ),
         dtype=str,
         default="linear",
@@ -963,7 +963,7 @@ class NIST(NonlinearSolverBase):
               \\frac{h \\, (h + h_n)}{h_{n-1} + h_n},
 
           the linear prediction plus the change of the slope of the path. It reproduces a quadratic path exactly. While
-          only one accepted increment of the step is available, the prediction is linear.
+          only one accepted increment of the step of nonzero size is available, the prediction is linear.
 
         The prescribed degrees of freedom take their prescribed increment.
 
