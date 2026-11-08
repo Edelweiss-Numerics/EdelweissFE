@@ -202,18 +202,20 @@ class EquationSystemLayout:
         quasi-static solver leaves at acceptance. It does not integrate in time, so the state it accepts is at rest
         (see the documentation page *Node field results*), and a dynamic step that follows starts from rest.
 
-        The model is at rest on every node, inside the equation system or not, so a layout covering a part of the
-        nodes writes the same zeros.
+        A zero velocity and a zero acceleration of the equation system, written as every velocity and acceleration
+        is, by :meth:`writeVelocityAndAccelerationToModel`. A layout covering a part of the nodes sets the entries to
+        zero on the others (see :meth:`writeEntryOfNodeField`), so the model is at rest on every node, inside the
+        equation system or not.
         """
 
-        for nodeField in self.model.nodeFields.values():
-            nodeField["V"][:] = 0.0
-            nodeField["A"][:] = 0.0
+        zero = self.dofManager.constructDofVector()
+        self.writeVelocityAndAccelerationToModel(zero, zero)
 
     def writeEntryOfNodeField(self, dofVector: DofVector, nodeField: "NodeField", entry: str):
         """Write a vector of the equation system to one entry of one node field of the model; every write of
-        :meth:`writeResultsToModel` and :meth:`writeVelocityAndAccelerationToModel` goes through here, as every read goes
-        through :meth:`readEntryOfNodeField`.
+        :meth:`writeResultsToModel`, :meth:`writeVelocityAndAccelerationToModel` and
+        :meth:`writeZeroVelocityAndAccelerationToModel` goes through here, as every read goes through
+        :meth:`readEntryOfNodeField`.
 
         In a finite element model, the equation system numbers every node of the field, so the whole entry is written.
         A model whose equation system covers a part of its nodes writes the entry on these nodes, and sets it to zero

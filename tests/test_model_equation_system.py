@@ -204,12 +204,24 @@ def test_the_layout_of_a_finite_element_model_writes_the_results_to_every_node()
         np.testing.assert_array_equal(nodeField["A"], 6 * rows)
 
 
+class _LayoutListingItsWrites(EquationSystemLayout):
+    """The layout of a finite element model that lists every entry written through its hook."""
+
+    def __init__(self, model, dofManager, elements):
+        super().__init__(model, dofManager, elements)
+        self.writes = []
+
+    def writeEntryOfNodeField(self, dofVector, nodeField, entry):
+        self.writes.append((nodeField.name, entry))
+        super().writeEntryOfNodeField(dofVector, nodeField, entry)
+
+
 def test_the_layout_writes_the_state_of_a_quasi_static_solver_at_rest():
     model, dofManager = _twoFieldModel()
     for nodeField in model.nodeFields.values():
         for entry in NodeField.ENTRIES:
             nodeField[entry][:] = -1.0
-    layout = EquationSystemLayout(model, dofManager, [])
+    layout = _LayoutListingItsWrites(model, dofManager, [])
 
     layout.writeZeroVelocityAndAccelerationToModel()
     for nodeField in model.nodeFields.values():
@@ -218,6 +230,8 @@ def test_the_layout_writes_the_state_of_a_quasi_static_solver_at_rest():
         # the state U and the results are not touched
         for entry in ("U", "dU", "P"):
             np.testing.assert_array_equal(nodeField[entry], -1.0)
+    # the zeros go the one way every entry is written, through the hook a layout covering a part of the nodes overrides
+    assert sorted(layout.writes) == sorted((name, entry) for name in model.nodeFields for entry in ("V", "A"))
 
 
 def test_the_layout_writes_the_results_in_two_parts():
