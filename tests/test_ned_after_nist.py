@@ -28,9 +28,10 @@
 """The explicit solver (``NED``) after a quasi-static step: ``testfiles/edelweiss-only/NEDAfterNISTGravity``, a column
 loaded by its own weight with ``NIST``, then continued by ``NED`` under the same weight and support.
 
-* The explicit step starts at rest in equilibrium and stays there. Its net force is solver state, zero at the start of
-  a step, which is the net force of a state in equilibrium. Read back from the model's ``P``, as it once was, it would
-  be NIST's internal force, and the column would swing about its static deflection by about a tenth of it.
+* The explicit step starts at rest in equilibrium and stays there. Its net force is solver state, at the start of a
+  step that of the model's state, ``M A + C V``: zero after the quasi-static step, which leaves the model at rest, and
+  so the net force of a state in equilibrium. Read back from the model's ``P``, as it once was, it would be NIST's
+  internal force, and the column would swing about its static deflection by about a tenth of it.
 * The published force ``P`` means the same in both steps (see the documentation page *Node field results*): the
   internal force at the base, which holds the column, and the internal plus the inertial force elsewhere -- in
   equilibrium, the weight there. The net force has the opposite sign at the base, and is zero elsewhere.
