@@ -45,8 +45,10 @@ The entries
    * - ``V``, ``A``
      - state
      - The rate and the second rate of the solution at the accepted time: velocity and acceleration of a field with
-       inertia. Zero for a field without inertia, and after a quasi-static step, which leaves the model at rest. The
-       explicit solver integrates the velocity staggered by half an increment: its ``V`` is
+       inertia. Zero after a quasi-static step, which leaves the model at rest, and on a field the implicit dynamic
+       solver treats quasi-statically, one without a mass. A field without inertia that the explicit solver integrates
+       by forward Euler, through its damping, has a rate as well: its ``V`` is the rate of the increment just taken.
+       The explicit solver integrates the velocity staggered by half an increment: its ``V`` is
        :math:`\boldsymbol{v}_{n+1/2}`.
      - at acceptance; the implicit dynamic solver completes ``A`` at the start of an increment
    * - ``dU``
