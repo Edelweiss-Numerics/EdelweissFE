@@ -112,10 +112,13 @@ struct CSRPattern {
    *
    * @tparam MergeObserver keeps a structure indexed by entry in step (see NoMergeObserver).
    * @param extraPtr nDof + 1: where the entries to add of each row begin in @p extraIdx.
-   * @param extraIdx the columns of the entries to add, sorted within each row, none already in the pattern.
+   * @param extraIdx the columns of the entries to add, in [0, nDof), sorted within each row, none already in the
+   * pattern.
    * @param retiredIndptr receives the old indptr.
    * @param retiredIndices receives the old indices.
    * @param observer is told about the merge.
+   * @throws std::out_of_range if a column lies outside the matrix, std::invalid_argument if an entry is already in the
+   * pattern; the pattern is then unchanged.
    */
   template < class MergeObserver = NoMergeObserver >
   void addEntries( const int64_t*      extraPtr,
@@ -136,14 +139,16 @@ struct CSRPattern {
 
     std::vector< int > newIndices( newNnz );
     observer.beginMerge( newNnz );
-    int alreadyThere = 0;
+    int alreadyThere = 0, outside = 0;
 
-#pragma omp parallel for schedule( dynamic, 1024 ) reduction( + : alreadyThere )
+#pragma omp parallel for schedule( dynamic, 1024 ) reduction( + : alreadyThere, outside )
     for ( int r = 0; r < nDof; ++r ) {
       int64_t k = indptr[r], e = extraPtr[r];
       int     w = newIndptr[r];
       while ( k < indptr[r + 1] || e < extraPtr[r + 1] ) {
         const bool takeOld = e == extraPtr[r + 1] || ( k < indptr[r + 1] && indices[k] < extraIdx[e] );
+        if ( !takeOld && ( extraIdx[e] < 0 || extraIdx[e] >= nDof ) )
+          ++outside;
         if ( !takeOld && k < indptr[r + 1] && indices[k] == extraIdx[e] )
           ++alreadyThere;
         newIndices[w] = takeOld ? indices[k] : extraIdx[e];
@@ -153,6 +158,9 @@ struct CSRPattern {
       }
     }
 
+    // a column outside the matrix would be merged in like any other, and read out of bounds by whoever uses the matrix
+    if ( outside )
+      throw std::out_of_range( "CSRPattern::addEntries: a column of an entry to add lies outside [0, nDof)." );
     if ( alreadyThere )
       throw std::invalid_argument( "CSRPattern::addEntries: an entry to add is already in the pattern." );
 
@@ -610,7 +618,8 @@ public:
    * writes 0.0 there.
    *
    * @param extraPtr nDof + 1: where the entries to add of each row begin in @p extraIdx.
-   * @param extraIdx the columns of the entries to add, sorted within each row, none already in the pattern.
+   * @param extraIdx the columns of the entries to add, in [0, nDof), sorted within each row, none already in the
+   * pattern.
    * @param retiredIndptr receives the old indptr.
    * @param retiredIndices receives the old indices.
    */

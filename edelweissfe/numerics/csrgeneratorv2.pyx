@@ -439,6 +439,14 @@ cdef class CSRGenerator:
         entries
             The entries to add (CSR, ``nDof x nDof``), with sorted rows and none of them already in the pattern; only
             the pattern is read.
+
+        Raises
+        ------
+        ValueError
+            If ``entries`` is not a CSR matrix of the shape of :attr:`csrMatrix`, if one of its rows is not sorted, or
+            if one of its entries is already in the pattern.
+        IndexError
+            If a column of an entry lies outside the matrix.
         """
         cdef int64_t[::1] extraPtr
         cdef int32_t[::1] extraIdx
@@ -552,8 +560,8 @@ cdef class DirectCSRAssembler:
         (``0 <= tid < numThreads`` in :meth:`scatterBlock`).
     patternFillIn
         Called with the pattern (as :attr:`csrMatrix`, zero values) before the map is built; returns the entries to add
-        to it (CSR, sorted rows, none already in the pattern), assembled as stored zeros -- e.g.
-        :meth:`~edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation.condensedPatternFillIn`.
+        to it (CSR, sorted rows, columns inside the matrix, none already in the pattern), assembled as stored zeros,
+        e.g. :meth:`~edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation.condensedPatternFillIn`.
     """
 
     cdef _DirectCSRAssemblerOwner owner

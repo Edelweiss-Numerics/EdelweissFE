@@ -474,6 +474,26 @@ def test_entries_to_add_are_sorted_csr_rows():
         generator.addToPattern(unsorted.tocoo())
 
 
+@pytest.mark.parametrize("column", [3, -1])
+def test_entries_to_add_lie_inside_the_matrix(column):
+    """scipy builds a CSR matrix with a column outside its shape without complaint, and reports its rows as sorted.
+    Merged into the pattern, such a column would be read out of bounds by every later use of the matrix (a product,
+    the linear solver). Both paths refuse it, and keep their pattern."""
+    outside = csr_matrix((np.zeros(1), np.array([column]), np.array([0, 0, 1, 1])), shape=(3, 3))
+
+    generator = CSRGenerator(np.array([0, 1]), np.array([0, 1]), 3)
+    matrix = generator.csrMatrix
+    with pytest.raises(IndexError, match="outside"):
+        generator.addToPattern(outside)
+    assert generator.csrMatrix is matrix
+    np.testing.assert_array_equal(matrix.indices, [0, 1])
+
+    dense = _DenseEntity(2)
+    entities = SystemMatrixEntities.ofEntities({dense: np.array([0, 1], dtype=np.intc)})
+    with pytest.raises(IndexError, match="outside"):
+        DirectCSRAssembler(entities, 3, 1, lambda pattern: outside)
+
+
 def test_the_scatter_refuses_a_block_that_is_not_the_entitys():
     dense = _DenseEntity(2)
     direct = DirectCSRAssembler(SystemMatrixEntities.ofEntities({dense: np.array([0, 1], dtype=np.intc)}), 2, 2)
