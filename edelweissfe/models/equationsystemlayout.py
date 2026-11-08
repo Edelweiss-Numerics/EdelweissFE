@@ -122,9 +122,11 @@ class EquationSystemLayout:
 
     def updateMaterialPoints(self, dU: DofVector, timeStep: TimeStep):
         """Bring the material points that belong to no element up to date with the trial solution increment, right
-        before the solver computes the elements. Called whenever a solver evaluates the elements (see
+        before the solver computes the elements. Called whenever ``NIST``, or a solver derived from it (``NEST``,
+        ``NID``), evaluates the elements (see
         :meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.assembleInternalForces`), e.g. in every Newton
-        iteration and for every trial state of a line search.
+        iteration and for every trial state of a line search. The explicit dynamic solver ``NED`` evaluates the
+        elements of a finite element model itself, and does not call it.
 
         A finite element model has no such material points: every element evaluates the material at its own quadrature
         points, in :meth:`~edelweissfe.elements.base.baseelement.BaseElement.computeKernels`, so there is nothing to do
