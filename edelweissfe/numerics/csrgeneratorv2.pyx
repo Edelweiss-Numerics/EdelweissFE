@@ -356,6 +356,27 @@ cdef tuple _entriesToAdd(entries, tuple shape):
     return np.ascontiguousarray(entries.indptr, dtype=np.int64), np.ascontiguousarray(entries.indices, dtype=np.int32)
 
 
+ctypedef fused _CoreWithPattern:
+    CSRCore
+    CSRDirectAssembler
+
+
+cdef tuple _matrixOnExtendedPattern(object coreOwner, _CoreWithPattern* core, _CSRPattern current, tuple toAdd):
+    """Add the entries ``toAdd`` (see :func:`_entriesToAdd`) to the pattern of ``core``, which ``coreOwner`` owns, and
+    return a matrix on the extended pattern, with zero values, and the :class:`_CSRPattern` that keeps it alive (see
+    :func:`_matrixOnPattern`).
+
+    The old pattern retires into ``current``, the owner its arrays already have: a matrix or an array obtained before
+    keeps it, but no longer the core. The generator's core adds the entries with an empty range of its gather map each
+    (``CSRCore::addEntries``); the direct assembler's builds its map only once the pattern is complete.
+    """
+    cdef int64_t[::1] extraPtr = toAdd[0]
+    cdef int32_t[::1] extraIdx = toAdd[1]
+    core.addEntries(&extraPtr[0], &extraIdx[0], current.retiredIndptr, current.retiredIndices)
+    current.coreOwner = None
+    return _matrixOnPattern(coreOwner, core)
+
+
 cdef class CSRGenerator:
     """
     CSRGenerator class to create and manage a CSR matrix from COO format.
@@ -387,7 +408,6 @@ cdef class CSRGenerator:
     cdef CSRCore* core
     #: The CSR matrix the generator writes into; its pattern arrays are the core's.
     cdef readonly object csrMatrix
-    cdef double[::1] data_view
     cdef int64_t nCooPairs
 
     def __dealloc__(self):
@@ -415,14 +435,8 @@ cdef class CSRGenerator:
         self.coreOwner = _CSRCoreOwner()
         self.coreOwner.core = core
         self.core = core
-
-        self._wrapPattern()
-
-    cdef _wrapPattern(self):
-        """(Re)create :attr:`csrMatrix` as a view of the core's pattern, with a zeroed data array."""
         # the pattern arrays point into the core and keep it alive (see _CSRPattern); the values are NumPy's own
-        self.pattern, self.csrMatrix = _matrixOnPattern(self.coreOwner, self.core)
-        self.data_view = self.csrMatrix.data
+        self.pattern, self.csrMatrix = _matrixOnPattern(self.coreOwner, core)
 
     def addToPattern(self, entries):
         """Add entries to the CSR pattern that no COO pair contributes to; they are assembled as stored zeros.
@@ -448,16 +462,9 @@ cdef class CSRGenerator:
         IndexError
             If a column of an entry lies outside the matrix.
         """
-        cdef int64_t[::1] extraPtr
-        cdef int32_t[::1] extraIdx
         toAdd = _entriesToAdd(entries, self.csrMatrix.shape)
-        if toAdd is None:
-            return
-        extraPtr, extraIdx = toAdd
-        # the old pattern moves to the owner its arrays already have, and no longer needs the core
-        self.core.addEntries(&extraPtr[0], &extraIdx[0], self.pattern.retiredIndptr, self.pattern.retiredIndices)
-        self.pattern.coreOwner = None
-        self._wrapPattern()
+        if toAdd is not None:
+            self.pattern, self.csrMatrix = _matrixOnExtendedPattern(self.coreOwner, self.core, self.pattern, toAdd)
 
     @property
     def memoryBytes(self):
@@ -512,7 +519,9 @@ cdef class CSRGenerator:
                     V.shape[0], self.nCooPairs
                 )
             )
-        cdef double* d_ptr = &self.data_view[0]
+        # the data array of csrMatrix, which cannot be replaced (see AliasedCSRMatrix), held during the gather
+        cdef double[::1] data = self.csrMatrix.data
+        cdef double* d_ptr = &data[0]
         cdef double* v_ptr = &V[0]
 
         with nogil:
@@ -609,14 +618,9 @@ cdef class DirectCSRAssembler:
         self.asm_ = assembler
         self.pattern, self.csrMatrix = _matrixOnPattern(self.owner, assembler)
 
-        cdef int64_t[::1] extraPtr
-        cdef int32_t[::1] extraIdx
         toAdd = None if patternFillIn is None else _entriesToAdd(patternFillIn(self.csrMatrix), self.csrMatrix.shape)
         if toAdd is not None:
-            extraPtr, extraIdx = toAdd
-            assembler.addEntries(&extraPtr[0], &extraIdx[0], self.pattern.retiredIndptr, self.pattern.retiredIndices)
-            self.pattern.coreOwner = None
-            self.pattern, self.csrMatrix = _matrixOnPattern(self.owner, assembler)
+            self.pattern, self.csrMatrix = _matrixOnExtendedPattern(self.owner, assembler, self.pattern, toAdd)
 
         self.scatteredData = self.csrMatrix.data
         cdef double* dataPointer = &self.scatteredData[0] if self.scatteredData.shape[0] > 0 else NULL
