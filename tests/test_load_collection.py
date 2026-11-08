@@ -31,6 +31,7 @@ registered as a step action module of its own, therefore needs no change to any 
 """
 
 import numpy as np
+import pytest
 
 from edelweissfe.config import registry
 from edelweissfe.config.configurator import loadConfiguration
@@ -153,7 +154,16 @@ def _solve(tmp_path, loadModule: str) -> np.ndarray:
     return np.array(model.nodeFields["displacement"]["U"])
 
 
-def test_a_load_kept_under_a_step_action_module_of_its_own_is_assembled(tmp_path):
+@pytest.fixture
+def registryRestoredAfterTheTest(monkeypatch):
+    """The registry of step actions and every other category as it was before the test, after it: what the test
+    registers does not outlive it, so that no other test finds it (the registry is one for the whole process)."""
+
+    monkeypatch.setattr(registry, "_registered", dict(registry._registered))
+    monkeypatch.setattr(registry, "_resolved", dict(registry._resolved))
+
+
+def test_a_load_kept_under_a_step_action_module_of_its_own_is_assembled(tmp_path, registryRestoredAfterTheTest):
     registry.register("stepaction", "concentratedforces", ConcentratedForces)
 
     U = _solve(tmp_path / "ownModule", "concentratedforces")
