@@ -24,12 +24,18 @@ what lives within one equation system.* An entry is therefore of one of two kind
 - **result** -- what a solver writes for output and for the user; no solver reads it back.
 
 Iterations work on the solver's vectors only. A cut back increment writes nothing. An accepted increment writes
-every entry, once (the explicit meshfree solver in two parts, see below). The zero-length increment before the first
-increment of a step is the one exception in the dynamic solvers: it integrates nothing and evaluates no force, so it
-leaves ``P`` as the last accepted increment wrote it, of this step or of the step before. A rebuilt equation system (a changed mesh,
-a changed active domain, a changed coupling) reads the state entries from the model. A refinement of the mesh
-interpolates the state entries onto the nodes it creates; the results there are zero until the next accepted
-increment.
+every entry, once (the explicit meshfree solver in two parts, see below). The exceptions are the increments of the
+dynamic solvers ``NED`` and ``NID`` that integrate nothing: they evaluate no force, so they leave ``P`` as the last
+accepted increment wrote it, of this step or of the step before. These are
+
+- the zero-length increment before the first increment of a step, in both; ``NED``'s leaves the acceleration ``A``
+  as well;
+- in ``NID``, also an increment of negligible length: the round-off remainder the time stepper may leave at the end
+  of a step (see :mod:`~edelweissfe.solvers.nonlinearimplicitdynamic`).
+
+A rebuilt equation system (a changed mesh, a changed active domain, a changed coupling) reads the state entries from
+the model. A refinement of the mesh interpolates the state entries onto the nodes it creates; the results there are
+zero until the next accepted increment.
 
 Every solver passes these entries through the model's layout of its equation system
 (:class:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout`), and in no other way:
@@ -87,8 +93,10 @@ the loads and the constraints acting there. At a node with a prescribed motion, 
 increment is set by the prescribed velocity of the next one, which is not known when the increment is accepted, so
 its ``P`` is the internal force alone: the support reaction, without the inertia of the support node's own lumped
 mass. Its ``A`` is the acceleration at the end of the increment, the one with which the velocity at that time, half an
-increment after its ``V``, satisfies the equation of motion; zero at a prescribed motion. The net force itself is the
-solver's state, not an entry (see :mod:`~edelweissfe.solvers.nonlinearexplicitdynamic`).
+increment after its ``V``, satisfies the equation of motion; zero at a prescribed motion. A multi-point-constraint
+slave integrates no equation of motion of its own: its inertia and its force are folded onto its masters, so its ``P``
+is its internal force, and it takes its ``V`` and ``A`` from its masters. The net force itself is the solver's state,
+not an entry (see :mod:`~edelweissfe.solvers.nonlinearexplicitdynamic`).
 
 The Lagrange multipliers of constraints are scalar variables, not node field entries
 (:class:`~edelweissfe.variables.scalarvariable.ScalarVariable`). They are state as well: each holds its total
