@@ -29,11 +29,19 @@
 checkpoint as it is.
 
 A component *declares* that state: a mapping of attribute name to type, for instance the implicit
-solver's
+solver's -- the last accepted increments and their dU, the digest of the numbering of the degrees of freedom these
+are vectors of, and the convergence criterion, a helper object (see below):
 
 .. code-block:: python
 
-    checkpointedState = {"prevTimeStep": TimeStep, "dU": np.ndarray}
+    checkpointedState = {
+        "prevTimeStep": TimeStep,
+        "dUOfLastIncrement": np.ndarray,
+        "timeStepBeforePrev": TimeStep,
+        "dUOfIncrementBeforeLast": np.ndarray,
+        "dofNumberingOfLastIncrement": str,
+        "convergenceCriterion": ConvergenceCriterionBase,
+    }
 
 and :func:`packState` / :func:`unpackState` turn the declared attributes into the flat mapping of
 arrays a checkpoint stores, and back. An empty mapping declares that a component carries nothing
