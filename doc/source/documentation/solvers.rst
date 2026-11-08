@@ -173,6 +173,15 @@ which states what the solver asks of it:
 .. automodule:: edelweissfe.stepactions.base.arclengthcontrollerbase
    :members:
 
+The controllers of EdelweissFE, ``indirectcontrol`` and ``indirectcontractioncontrol``, are indirect displacement
+controls: their controlled quantity is a linear combination of degrees of freedom, and their target ``L`` is, with
+``absolute`` (the default), the value it reaches at the end of the step, counted from its value in the model when the
+controller is declared -- whether for the first time, in any step, or anew in a later one. Without ``absolute``, ``L``
+is the change over the step:
+
+.. automodule:: edelweissfe.stepactions.base.indirectdisplacementcontrolbase
+   :members:
+
 The options of Newton's method act on the pair of the solution increment and the increment of the load parameter
 :math:`(\Delta U, \Delta\lambda)`:
 
@@ -189,7 +198,8 @@ The options of Newton's method act on the pair of the solution increment and the
 Every converged increment publishes the load parameter of its step as
 ``model.additionalParameters["arc length parameter"]``, e.g. for a load-displacement curve. The solver checkpoints the
 load parameter of the step and the increments of it its predictor extrapolates, the loads what they keep from step to
-step, and the controller its target, so an arc length controlled run resumes exactly where it stopped.
+step, and the controller the change of its controlled quantity over the step, so an arc length controlled run resumes
+exactly where it stopped.
 
 ``NID`` - Nonlinear Implicit Dynamic (Newmark-beta)
 ----------------------------------------------------

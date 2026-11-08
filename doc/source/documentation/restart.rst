@@ -125,8 +125,9 @@ by keeping the declaration None.
 
 Step actions declare their state too: a load ramped over several steps accumulates from step to
 step, most actions switch themselves off at the end of their step, and an arc length controller
-counts the target of its step from the quantity the steps before reached. A resumed run skips the
-steps before the checkpoint, so it restores that state rather than re-deriving it.
+derives the change of its controlled quantity over the step from the model it is declared on. A
+resumed run skips the steps before the checkpoint, and declares the step actions on the restored
+model, so it restores that state rather than re-deriving it.
 
 Field outputs carry their history the same way, and how much of their export file belongs to the
 run: before its first write, a resumed run cuts the file back to that size, so the rows an

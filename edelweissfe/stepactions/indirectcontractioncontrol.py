@@ -35,8 +35,11 @@ import numpy as np
 
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
+from edelweissfe.numerics.dofmanager import DofManager
 from edelweissfe.sets.nodeset import NodeSet
-from edelweissfe.stepactions.base.arclengthcontrollerbase import ArcLengthControllerBase
+from edelweissfe.stepactions.base.indirectdisplacementcontrolbase import (
+    IndirectDisplacementControlBase,
+)
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.caseinsensitivedict import CaseInsensitiveDict
 from edelweissfe.utils.misc import withoutParserBookkeepingKeys
@@ -82,13 +85,15 @@ class IndirectContractionControlSchema:
     absolute: bool | None = schemaField(description="Use absolute formulation", dtype=bool, default=True)
 
 
-class StepAction(ArcLengthControllerBase):
+class StepAction(IndirectDisplacementControlBase):
     """Indirect (displacement) controller for the NISTPArcLength solver, controlling the average
     radial contraction of a ring of nodes, e.g. for tunneling simulations.
 
     The controlled quantity is the mean of the inward radial displacements of the nodes in
     ``contractionNSet``; the ring's center is computed from the bounding coordinates of that set.
-    Currently 2D only.
+    Currently 2D only. The target ``L`` and ``absolute`` mean what they mean for every indirect
+    displacement control, see
+    :class:`~edelweissfe.stepactions.base.indirectdisplacementcontrolbase.IndirectDisplacementControlBase`.
 
     The constructor is typed: it takes the node set itself rather than its name, so the c vector is
     derived from real coordinates. Nothing here parses an input file -- resolving
@@ -103,27 +108,22 @@ class StepAction(ArcLengthControllerBase):
     contractionNSet
         The node set defining the contraction ring.
     L
-        The final value of the mean contraction to be reached at the end of the step. Interpreted as
-        an increment on top of the contraction already reached in previous steps unless ``absolute``
-        is set.
+        The target of the step: with ``absolute``, the mean contraction at the end of the step,
+        counted from the contraction of the model now; else its change over the step.
     model
         The model tree.
     journal
         The journal object for logging.
     absolute
-        If True, ``L`` is the absolute target contraction, i.e. the contraction reached in previous
-        steps is subtracted from it. Fixed at construction time: a later step re-declaring this
-        action cannot change the formulation.
+        Whether ``L`` is the mean contraction at the end of the step, or its change over the step.
+        Fixed at construction time: a later step re-declaring this action cannot change the
+        formulation.
     """
 
     identification = "IndirectControl"
 
     #: Option schema for this step action, consumed by OptionSchemaProvider's registry.
     schema = IndirectContractionControlSchema
-
-    #: The controlled quantity at the end of the previous step, its current value, and the target of this step, which
-    #: the absolute formulation derives from it when the action is declared.
-    checkpointedState = {"currentL0": float, "_currentL": float, "L": float}
 
     def __init__(
         self,
@@ -134,18 +134,11 @@ class StepAction(ArcLengthControllerBase):
         journal: Journal,
         absolute: bool = True,
     ):
-        self.name = name
+        super().__init__(name, absolute)
         self.journal = journal
         self.model = model
 
-        self.currentL0 = 0.0
-        self._currentL = 0.0
-
-        self.L = L
-
-        self.generateCVector(contractionNSet)
-
-        self.absolute = absolute
+        self.updateStepAction(contractionNSet, L)
 
     @classmethod
     def fromStepActionDefinition(cls, name, definition, jobInfo, model, fieldOutputController, journal):
@@ -199,55 +192,37 @@ class StepAction(ArcLengthControllerBase):
 
         self.updateStepAction(model.nodeSets[contractionNSetName], configuration.L)
 
-    def _getIdcsInDofVector(self, dofManager) -> np.ndarray:
-        """Determine the indices of the contraction ring displacements in the dof vector.
+    def controlledDofIndices(self, dofManager: DofManager) -> np.ndarray:
+        """The indices of the in-plane displacements of the ring's nodes in the dof vector.
 
         Parameters
         ----------
         dofManager
-            The dof manager of the current equation system.
+            The dof manager of the equation system.
 
         Returns
         -------
         np.ndarray
-            The indices in the dof vector.
+            The indices, node by node.
         """
 
         return np.hstack(
             [dofManager.idcsOfFieldVariablesInDofVector[n.fields["displacement"]][:2] for n in self.contractionNSet]
         )
 
-    def computeDDLambda(self, dU, ddU_0, ddU_f, timeStep: TimeStep, dofManager):
-        """Compute the increment of the arc length load parameter for the current iteration.
-
-        Parameters
-        ----------
-        dU
-            The current increment of the solution vector.
-        ddU_0
-            The correction of the solution vector due to the dead and the current reference load.
-        ddU_f
-            The correction of the solution vector due to the unit reference load.
-        timeStep
-            The current time step.
-        dofManager
-            The dof manager of the current equation system.
+    def controlledValuesOfModel(self) -> np.ndarray:
+        """The in-plane displacements of the ring's nodes in the model.
 
         Returns
         -------
-        float
-            The increment of the load parameter.
+        np.ndarray
+            The displacements, node by node.
         """
 
-        idcs = self._getIdcsInDofVector(dofManager)
-
-        dL = timeStep.stepProgressIncrement * self.L
-
-        ddLambda = (dL - self.cVector.dot(dU[idcs] + ddU_0[idcs])) / self.cVector.dot(ddU_f[idcs])
-        return ddLambda
+        return np.hstack([n.fields["displacement"].values[:2] for n in self.contractionNSet])
 
     def finishIncrement(self, U, dU, dLambda, timeStep: TimeStep, dofManager):
-        """Store the contraction reached at the end of a converged increment.
+        """Called once an increment has converged; this controller keeps nothing from one increment to the next.
 
         Parameters
         ----------
@@ -263,21 +238,6 @@ class StepAction(ArcLengthControllerBase):
             The dof manager of the current equation system.
         """
 
-        idcs = self._getIdcsInDofVector(dofManager)
-        self._currentL = self.cVector.dot(U[idcs] + dU[idcs])
-
-    def applyAtStepEnd(self, model):
-        """Remember the contraction reached in this step, so that the absolute formulation of a
-        subsequent step accounts for it.
-
-        Parameters
-        ----------
-        model
-            The current state of the model.
-        """
-
-        self.currentL0 = self._currentL
-
     def updateStepAction(self, contractionNSet: NodeSet, L: float):
         """Control a new contraction ring and target contraction.
 
@@ -286,15 +246,12 @@ class StepAction(ArcLengthControllerBase):
         contractionNSet
             The node set defining the contraction ring.
         L
-            The target contraction for this step.
+            The target of the step, see the class docstring.
         """
 
-        if self.absolute:
-            self.L = L - self.currentL0
-        else:
-            self.L = L
-
         self.generateCVector(contractionNSet)
+
+        self.declareTarget(L)
 
     def generateCVector(self, contractionNSet: NodeSet):
         """Derive the c vector of the inward radial unit vectors of the ring's nodes, scaled such

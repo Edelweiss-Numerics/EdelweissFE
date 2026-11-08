@@ -63,6 +63,9 @@ from edelweissfe.solvers.nonlinearimplicitstaticparallelarclength import (
     NISTPArcLength,
 )
 from edelweissfe.stepactions.dirichlet import StepAction as DirichletStepAction
+from edelweissfe.stepactions.indirectcontractioncontrol import (
+    StepAction as IndirectContractionControl,
+)
 from edelweissfe.stepactions.indirectcontrol import StepAction as IndirectControl
 from edelweissfe.stepactions.nodeforces import StepAction as NodeForcesStepAction
 from edelweissfe.steps.adaptivestep import AdaptiveStep
@@ -71,6 +74,7 @@ from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.exceptions import ReachedMaxIterations
 from edelweissfe.utils.fieldoutput import FieldOutputController
 from edelweissfe.utils.inputfileparser import parseInputFile
+from edelweissfe.variables.fieldvariable import FieldVariable
 
 _MODEL = (
     Path(__file__).resolve().parent.parent / "testfiles" / "edelweiss-only" / "ArcLengthPenaltyConstraint" / "model.inp"
@@ -311,8 +315,8 @@ def test_an_arc_length_step_built_from_python_objects_alone():
 
 def test_a_redeclared_controller_counts_its_absolute_target_from_the_quantity_reached():
     """indirectcontrol, absolute formulation: re-declared under its name in a later step, the controller aims at the
-    absolute value of the controlled quantity, so the target of the step counts from the value the steps before
-    reached -- which a restart checkpoint therefore holds, with the target."""
+    absolute value of the controlled quantity, so the change of the step counts from the value the steps before
+    reached -- which a restart checkpoint therefore holds."""
 
     class FieldVariableValues:
         def __init__(self):
@@ -321,20 +325,87 @@ def test_a_redeclared_controller_counts_its_absolute_target_from_the_quantity_re
     dof1, dof2 = FieldVariableValues(), FieldVariableValues()
     opening = (np.array([0.0, -1.0]), np.array([0.0, 1.0]))
     controller = IndirectControl("opening", dof1, dof2, *opening, 0.1, None, Journal(verbose=False))
-    assert controller.L == 0.1
+    assert controller.changeOverStep == 0.1
 
     # the first step ended at an opening of 0.08, e.g. by a stop condition
     dof1.values[:], dof2.values[:] = [0.0, -0.04], [0.0, 0.04]
     controller.applyAtStepEnd(None)
     controller.updateStepAction(dof1, dof2, *opening, 0.3)
-    assert controller.L == pytest.approx(0.22)
+    assert controller.changeOverStep == pytest.approx(0.22)
 
     dof1.values[:], dof2.values[:] = [0.0, -0.15], [0.0, 0.15]
     controller.applyAtStepEnd(None)
     controller.updateStepAction(dof1, dof2, *opening, 0.5)
-    assert controller.L == pytest.approx(0.2)
+    assert controller.changeOverStep == pytest.approx(0.2)
 
-    assert set(controller.getRestartData()) == {"currentL0", "L"}
+    assert set(controller.getRestartData()) == {"changeOverStep"}
+
+
+#: A step without arc length control that bends the cantilever down by a fraction of the target, and an arc length step
+#: in which the controller is declared for the first time, with the absolute target of the tip.
+_DEFORM_THEN_CONTROL = """
+*step, solver=theSolver
+startInc=0.5, maxInc=0.5, minInc=1e-6, maxNumInc=100, maxIter=25, stepLength=1
+>>options, name=theSolver, arcLengthController=off
+>>dirichlet, name=clamp, nSet=gen_left, field=displacement, 1=0.0, 2=0.0
+>>nodeforces, name=tipLoad, nSet=gen_rightTop, field=displacement, 2=-0.05
+>>bodyforce, name=selfWeight, elSet=gen_all, forceVector='0.0, -0.005', f(t)='1'
+
+*step, solver=theSolver
+startInc={increment}, maxInc={increment}, minInc=1e-6, maxNumInc=100, maxIter=25, stepLength=1
+>>options, name=theSolver, arcLengthController=tipDisplacement
+>>indirectcontrol, name=tipDisplacement, dof1='model.nodeSets["gen_rightTop"][0].fields["displacement"]', cVector1='0, 1', dof2='model.nodeSets["gen_leftBottom"][0].fields["displacement"]', cVector2='0, 0', L=-0.25
+>>nodeforces, name=tipLoad, 2=-1.0
+""".format(
+    increment=INCREMENT
+)
+
+
+def test_a_controller_first_declared_on_a_deformed_model_reaches_its_absolute_target(tmp_path, monkeypatch):
+    """The absolute target of a controller first declared in a later step is the value of the controlled quantity at the
+    end of that step, as for a controller re-declared: the change of the step counts from the quantity of the deformed
+    model the step starts from, not from zero."""
+
+    tipAtStepEnds = []
+    originalStepEnd = NISTPArcLength.applyStepActionsAtStepEnd
+
+    def applyStepActionsAtStepEnd(self, model, stepActions):
+        tipAtStepEnds.append(tipDisplacement(model))
+        return originalStepEnd(self, model, stepActions)
+
+    monkeypatch.setattr(NISTPArcLength, "applyStepActionsAtStepEnd", applyStepActionsAtStepEnd)
+    run(
+        tmp_path,
+        "*include, input={:}\n*solver, solver=NISTPArcLength, name=theSolver\n".format(_MODEL) + _DEFORM_THEN_CONTROL,
+    )
+
+    deformed, controlled = tipAtStepEnds
+    assert deformed < -0.01
+    np.testing.assert_allclose(controlled, -0.25, rtol=1e-10)
+
+
+def test_a_contraction_control_redeclared_after_a_step_without_arc_length_counts_from_the_model():
+    """indirectcontractioncontrol, absolute formulation: the change of a step counts from the contraction of the model
+    when the controller is re-declared, also after a step that it did not control, in which the ring contracted."""
+
+    ring = NodeSet(
+        "ring", [Node(label, np.array(xy)) for label, xy in enumerate([[1.0, 0.0], [0.0, 1.0], [-1.0, 0.0]])]
+    )
+    for node in ring:
+        node.fields["displacement"] = FieldVariable(node, "displacement")
+        node.fields["displacement"].values = np.zeros(2)
+    controller = IndirectContractionControl("contraction", ring, 0.1, None, Journal(verbose=False))
+    assert controller.changeOverStep == 0.1
+
+    # a step without arc length control contracts the ring by 0.04: every node moves towards the center (0, 0.5)
+    for node in ring:
+        towardsCenter = np.array([0.0, 0.5]) - node.coordinates
+        node.fields["displacement"].values[:] = 0.04 * towardsCenter / np.linalg.norm(towardsCenter)
+    controller.applyAtStepEnd(None)
+    controller.updateStepAction(ring, 0.1)
+    assert controller.changeOverStep == pytest.approx(0.06)
+
+    assert set(controller.getRestartData()) == {"changeOverStep"}
 
 
 # --- line search and quasi-Newton fallback -----------------------------------------------------------------------------
@@ -356,11 +427,11 @@ def test_the_line_search_scales_the_load_parameter_with_the_solution(tmp_path, m
 
     def assembleLoadsAtIncrementEnd(self, stepActions, U_np, dU, P, K, timeStep):
         controller = self.arcLengthController
-        controlled = np.hstack(
-            [self.theDofManager.idcsOfFieldVariablesInDofVector[dof] for dof in (controller.dof1, controller.dof2)]
-        )
+        controlled = controller.controlledDofIndices(self.theDofManager)
         loadParameters.append(self.arcLengthIncrement.loadParameter)
-        controllerResiduals.append(controller.c.dot(dU[controlled]) - timeStep.stepProgressIncrement * controller.L)
+        controllerResiduals.append(
+            controller.cVector.dot(dU[controlled]) - timeStep.stepProgressIncrement * controller.changeOverStep
+        )
         return originalAssembleLoads(self, stepActions, U_np, dU, P, K, timeStep)
 
     def quadraticLineSearch(self, largestResidualAt):
@@ -378,7 +449,7 @@ def test_the_line_search_scales_the_load_parameter_with_the_solution(tmp_path, m
     assertSameEndState(searched, reference)
     assert lineSearches
     trialStepLengths = searched.solvers["theSolver"].lineSearchStepLengths()
-    target = searched.solvers["theSolver"].arcLengthController.L
+    target = searched.solvers["theSolver"].arcLengthController.changeOverStep
     for first, last, stepLength in lineSearches:
         # the trials move the load parameter along the correction of the pair: an affine function of the step length
         trials = loadParameters[first:last]
@@ -404,10 +475,13 @@ def test_every_trial_state_of_the_line_search_satisfies_the_controllers_equation
     of an increment, from which the controlled opening still has to grow by the target of the increment. (Scaling the
     full correction of the pair instead would miss the target by the part of the step not taken.)"""
 
-    class FieldVariable:
-        """A stand-in for the two controlled field variables: the controller only locates them."""
+    class FieldVariableAtRest:
+        """A stand-in for the two controlled field variables, at rest."""
 
-    dof1, dof2 = FieldVariable(), FieldVariable()
+        def __init__(self):
+            self.values = np.zeros(2)
+
+    dof1, dof2 = FieldVariableAtRest(), FieldVariableAtRest()
     opening = IndirectControl("opening", dof1, dof2, [0.0, -1.0], [0.0, 1.0], 0.5, None, Journal(verbose=False))
 
     class DofManager:
@@ -416,10 +490,10 @@ def test_every_trial_state_of_the_line_search_satisfies_the_controllers_equation
         idcsOfFieldVariablesInDofVector = {dof1: np.array([0, 1]), dof2: np.array([2, 3])}
 
     def openingOf(dU):
-        return opening.c.dot(dU)
+        return opening.cVector.dot(dU)
 
     timeStep = TimeStep(3, 0.2, 0.6, 0.2, 0.6, 0.6)
-    target = timeStep.stepProgressIncrement * opening.L
+    target = timeStep.stepProgressIncrement * opening.changeOverStep
     solver = NISTPArcLength(loadConfiguration({}), Journal(verbose=False), arcLengthController="opening")
     solver.arcLengthController = opening
     solver.theDofManager = DofManager()
