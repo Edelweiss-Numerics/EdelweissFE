@@ -46,7 +46,7 @@ import numpy as np
 import pytest
 
 from edelweissfe.config import phenomena
-from edelweissfe.config.configurator import loadConfiguration
+from edelweissfe.config.configurator import loadConfiguration, updateConfiguration
 from edelweissfe.journal.journal import Journal
 from edelweissfe.solvers.base.convergencecriteria import (
     AbaqusConvergenceCriterion,
@@ -509,6 +509,36 @@ def test_options_make_the_criterion():
     abaqusCriterion = nist(convergenceCriterion="abaqus", minimumIterations=1).createConvergenceCriterion()
     assert isinstance(abaqusCriterion.scalarVariableCriterion, LegacyConvergenceCriterion)
     assert not abaqusCriterion.checkScalarVariables(np.zeros(1), None, np.zeros(1), 0).fluxResidualConverged
+
+
+def test_every_job_changes_its_own_tolerances():
+    """``*updateConfiguration`` changes the tolerances of its own job and of the solvers made for it, never the defaults
+    in :mod:`edelweissfe.config.phenomena`, from which the jobs that follow in the same process start (e.g. the decks of
+    a test run)."""
+
+    phenomenaDefaults = {
+        "fieldCorrectionTolerance": phenomena.fieldCorrectionTolerance,
+        "relativeFieldCorrectionTolerance": phenomena.relativeFieldCorrectionTolerance,
+        "fluxResidualTolerance": phenomena.fluxResidualTolerance,
+        "fluxResidualToleranceAlternative": phenomena.fluxResidualToleranceAlternative,
+        "absoluteFluxResidualTolerance": phenomena.absoluteFluxResidualTolerance,
+    }
+    defaults = {name: dict(tolerances) for name, tolerances in phenomenaDefaults.items()}
+    try:
+        job = loadConfiguration({})
+        solver = NIST(job, Journal(verbose=False))
+        for name in defaults:
+            updateConfiguration({"configuration": name, "datalines": ["displacement=0.5"]}, job, Journal(verbose=False))
+        assert solver.fluxResidualTolerances["displacement"] == 0.5
+
+        followingJob = loadConfiguration({})
+        for name, tolerances in defaults.items():
+            assert phenomenaDefaults[name] == tolerances
+            assert followingJob[name] == tolerances
+    finally:
+        # without separate tolerances per job, the updates above would reach every test that follows
+        for name, tolerances in defaults.items():
+            phenomenaDefaults[name].update(tolerances)
 
 
 def test_a_nan_in_the_residual_is_a_diverging_solution():
