@@ -546,14 +546,22 @@ as well:
 .. automodule:: edelweissfe.utils.residualtangentcheck
     :members:
 
-A constraint can be **switched off** through its ``active`` attribute. A constraint that is switched off is not
-part of the equation system: it gets no degrees of freedom, the solvers do not evaluate it, and its scalar variables
--- the Lagrange multipliers of ``equalvaluelagrangian``, say -- leave the equation system with it, so that they leave
-no unknowns without an equation behind. A ``modelupdate`` step action switches a constraint off for a step, as in
-``testfiles/marmot/PenaltyBasedIndirectControl``; a constraint may also switch itself off in its
-``updateConnectivity``, e.g. a contact constraint whose partner is out of reach, and then reports a change of its
-connectivity, so that the solver rebuilds its equation system. A switch-off from outside lasts until the constraint is
-switched on again from outside: a constraint that switches itself on does not undo it.
+A constraint takes part in the equation system while it is ``active``. A constraint that is not active gets no
+degrees of freedom, the solvers do not evaluate it, and its scalar variables -- the Lagrange multipliers of
+``equalvaluelagrangian``, say -- leave the equation system with it, so that they leave no unknowns without an equation
+behind. Two states decide it, and ``active`` is true while both are:
+
+* ``switchedOn``: the constraint is **switched on from outside**. Setting ``active`` switches it, e.g. a
+  ``modelupdate`` step action that switches a constraint off for a step, as in
+  ``testfiles/marmot/PenaltyBasedIndirectControl``. A switch-off from outside lasts until the constraint is switched
+  on again from outside.
+* ``withinReach``: the constraint finds itself within reach of what it constrains, in its ``updateConnectivity``.
+  A contact constraint whose partner is out of reach sets it to false, and reports the change of ``active`` as a
+  change of its connectivity, so that the solver rebuilds its equation system. A constraint that does not check stays
+  within reach.
+
+So a constraint switched off from outside stays off, whatever it finds in reach; switched on again, it takes part
+while it is within reach.
 
 .. automodule:: edelweissfe.constraints.base.constraintbase
     :members:

@@ -29,7 +29,7 @@ vector :math:`\boldsymbol{P}` to the residual, and its tangent
 A solver sums the contributions in three loops of every iteration: ``computeElements`` over the elements,
 ``assembleLoads`` over the loads -- every load assembles its own contribution, wherever it acts (see
 :class:`~edelweissfe.stepactions.base.loadbase.LoadBase`) -- and ``assembleConstraints`` over the constraints that
-are not switched off (see :doc:`constraints`). Summed over all entities,
+are active (see :doc:`constraints`). Summed over all entities,
 
 .. math::
 

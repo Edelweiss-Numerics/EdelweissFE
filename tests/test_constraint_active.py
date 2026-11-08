@@ -25,8 +25,10 @@
 #  The full text of the license can be found in the file LICENSE.md at
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
-"""A constraint that is switched off (``ConstraintBase.active``) is not part of the equation system: it gets no degrees
-of freedom, the solver does not evaluate it, and its Lagrange multipliers leave the equation system with it.
+"""A constraint that is not active (``ConstraintBase.active``) is not part of the equation system: it gets no degrees
+of freedom, the solver does not evaluate it, and its Lagrange multipliers leave the equation system with it. It is
+active while it is switched on from outside (``switchedOn``, set through ``active``) and within reach of what it
+constrains (``withinReach``, which the constraint finds itself).
 
 A Lagrange multiplier constraint is the sharp case: if its multipliers stayed in the equation system without the
 constraint that gives them an equation, the system matrix would be singular. Switched off by a ``modelupdate``, the
@@ -38,8 +40,10 @@ refuse one that is switched off.
 import numpy as np
 import pytest
 
+from edelweissfe.constraints.base.constraintbase import ConstraintBase
 from edelweissfe.drivers.inputfiledrivensimulation import finiteElementSimulation
 from edelweissfe.journal.journal import Journal
+from edelweissfe.models.femodel import FEModel
 from edelweissfe.solvers.nonlinearexplicitdynamic import NED
 from edelweissfe.utils.inputfileparser import parseInputFile
 
@@ -124,3 +128,70 @@ def test_the_explicit_solver_refuses_a_lagrange_constraint_only_while_it_is_swit
     model.constraints["topEqual"].active = True
     with pytest.raises(NotImplementedError, match="topEqual"):
         explicitSolver.validateModelCapabilities(model)
+
+
+class _ConstraintWithAPartner(ConstraintBase):
+    """A constraint that finds itself within reach of its partner or not, as the test places the partner
+    (``partnerInReach``), and reports a change of :attr:`active` as a change of its connectivity."""
+
+    def __init__(self):
+        super().__init__("withAPartner", None)
+        self.name = "withAPartner"
+        self.partnerInReach = True
+
+    @property
+    def nodes(self):
+        return []
+
+    @property
+    def fieldsOnNodes(self):
+        return []
+
+    @property
+    def nDof(self):
+        return 0
+
+    def updateConnectivity(self, model):
+        wasActive = self.active
+        self.withinReach = self.partnerInReach
+        return self.active != wasActive
+
+    def computeKernels(self, U_np, dU, P, K, timeStep):
+        pass
+
+
+def _modelWithAPartnerConstraint() -> tuple[FEModel, _ConstraintWithAPartner]:
+    model = FEModel(2)
+    constraint = _ConstraintWithAPartner()
+    model.constraints[constraint.name] = constraint
+    return model, constraint
+
+
+def test_a_constraint_out_of_reach_is_not_active():
+    model, constraint = _modelWithAPartnerConstraint()
+    assert constraint.active and model.activeConstraints() == [constraint]
+
+    constraint.partnerInReach = False
+    assert constraint.updateConnectivity(model), "switching itself off is a change of the connectivity"
+    assert constraint.switchedOn and not constraint.active
+    assert model.activeConstraints() == []
+
+    constraint.partnerInReach = True
+    assert constraint.updateConnectivity(model), "switching itself on is a change of the connectivity"
+    assert constraint.active and model.activeConstraints() == [constraint]
+
+
+def test_a_constraint_switched_off_from_outside_stays_off_whatever_it_finds_in_reach():
+    model, constraint = _modelWithAPartnerConstraint()
+
+    constraint.active = False
+    constraint.updateConnectivity(model)
+    assert constraint.withinReach and not constraint.switchedOn and not constraint.active
+    assert model.activeConstraints() == []
+
+    constraint.active = True
+    assert constraint.switchedOn and constraint.active
+
+    constraint.partnerInReach = False
+    constraint.updateConnectivity(model)
+    assert constraint.switchedOn and not constraint.active, "switched on again, it follows the reach of its partner"

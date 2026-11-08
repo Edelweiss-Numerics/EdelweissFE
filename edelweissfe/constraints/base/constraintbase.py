@@ -49,16 +49,51 @@ class ConstraintBase(OptionSchemaProvider, ABC, VIJEntityBase):
     #: none) or overrides :meth:`getRestartData` and :meth:`setRestartData`.
     checkpointedState: dict | None = None
 
-    #: Whether this constraint takes part in the equation system. A constraint that is switched off gets no
-    #: degrees of freedom and adds nothing to the residual or the tangent; its scalar variables (e.g. Lagrange
-    #: multipliers) leave the equation system with it, so that they leave no empty rows behind. It is switched
-    #: off either from outside, e.g. by a ``modelupdate`` step action at the start of a step, or by the
-    #: constraint itself in :meth:`updateConnectivity`, e.g. a contact constraint whose partner is out of reach.
-    #: A switch-off from outside lasts until the constraint is switched on again from outside: a constraint that
-    #: switches itself on does not undo it.
-    #: A constraint that switches itself on or off reports that as a change of its connectivity, so that the
-    #: solver rebuilds its equation system.
-    active: bool = True
+    #: Whether this constraint is within reach of what it constrains, as it finds itself in :meth:`updateConnectivity`:
+    #: e.g. a contact constraint whose partner is far away is not, and takes no part in the equation system then (see
+    #: :attr:`active`). A constraint sets it there, and reports a change of :attr:`active` as a change of its
+    #: connectivity, so that the solver rebuilds its equation system. A constraint that does not check stays within
+    #: reach.
+    withinReach: bool = True
+
+    #: Whether this constraint is switched on from outside; see :attr:`switchedOn`.
+    _switchedOn: bool = True
+
+    @property
+    def switchedOn(self) -> bool:
+        """Whether this constraint is switched on from outside, e.g. by a ``modelupdate`` step action, which switches it
+        through :attr:`active`.
+
+        Returns
+        -------
+        bool
+            Whether the constraint is switched on.
+        """
+
+        return self._switchedOn
+
+    @property
+    def active(self) -> bool:
+        """Whether this constraint takes part in the equation system: while it is :attr:`switchedOn` and
+        :attr:`withinReach`. A constraint that does not take part gets no degrees of freedom and adds nothing to the
+        residual or the tangent; its scalar variables (e.g. Lagrange multipliers) leave the equation system with it, so
+        that they leave no empty rows behind.
+
+        Setting it switches the constraint on or off from outside, e.g. by a ``modelupdate`` step action at the start
+        of a step. A switch-off from outside lasts until the constraint is switched on again from outside, whatever the
+        constraint finds in reach; switched on again, it takes part while it is within reach.
+
+        Returns
+        -------
+        bool
+            Whether the constraint takes part in the equation system.
+        """
+
+        return self._switchedOn and self.withinReach
+
+    @active.setter
+    def active(self, switchedOn: bool):
+        self._switchedOn = switchedOn
 
     @classmethod
     def fromConstraintDefinition(

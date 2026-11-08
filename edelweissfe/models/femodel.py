@@ -405,8 +405,9 @@ class FEModel:
         self.topology.recordSetupFingerprint()
 
     def activeConstraints(self) -> list:
-        """The constraints that take part in the equation system: all constraints, in their order, except those
-        switched off (see :attr:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.active`).
+        """The constraints that take part in the equation system: all constraints, in their order, that are active,
+        i.e. switched on and within reach (see
+        :attr:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.active`).
 
         Returns
         -------
