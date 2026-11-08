@@ -136,17 +136,19 @@ and the Newmark update would divide by its square.
 - \\boldsymbol{C} \\dot{\\boldsymbol{u}}_0`, with the loads evaluated at the step's own start (an
 ``f(t)`` amplitude at :math:`t = 0`). Without it, a load applied suddenly at the start of a step
 would enter the trapezoidal rule as though it were zero at :math:`t_0`, which costs one first-order
-error in the momentum, and the scheme's second order is lost. A resumed run skips this: the
-checkpoint carries the acceleration, and recomputing it would replace a consistent state with one
-that agrees only to solver tolerance. Switch it off with ``computeInitialAcceleration=False`` to
-continue a step from whatever acceleration was carried over.
+error in the momentum, and the scheme's second order is lost. It is computed in the first real
+increment of the step. A step that continues from a restart checkpoint -- a resumed run, or a step
+that falls back to one -- therefore computes it only if the checkpoint was written before that,
+after the zero increment: every later checkpoint carries the acceleration, and recomputing it would
+replace a consistent state with one that agrees only to solver tolerance. Switch it off with
+``computeInitialAcceleration=False`` to continue a step from whatever acceleration was carried over.
 
 **State and restart.** Velocity and acceleration are ordinary node-field entries, ``V`` and ``A``,
 written after every converged increment alongside the parent's ``U``/``P``/``dU`` -- the same
 mechanism the explicit solver uses for its velocity. That makes them part of every checkpoint the
 ``*output, type=restart`` manager writes and of every ``*fieldOutput`` (``result=V``,
-``result=A``), with no solver-specific restart code beyond a marker that tells a resumed run not to
-recompute the initial acceleration.
+``result=A``), with no solver-specific restart code beyond the marker of whether the initial
+acceleration is still to be computed.
 
 **Live h-adaptivity.** A ``*modelModifier, type=hAdaptivity`` refining the mesh mid-step is
 supported. Three things make that work, and only the third is this solver's own:
@@ -424,11 +426,14 @@ class NonlinearImplicitDynamic(NIST):
     systemMatrixAssemblies = {"vij": VIJSystemMatrixAssembly}
 
     #: The predictor's state, as in the parent, the drift the conservation checks accumulate over the
-    #: step, and the conserved totals after the last accepted increment, which a topology change is
-    #: compared against. The velocity and acceleration are node-field entries, restored with the model.
+    #: step, the conserved totals after the last accepted increment, which a topology change is
+    #: compared against, and whether the next increment computes the acceleration from equilibrium
+    #: first, which a checkpoint written after the zero increment of a step still has to do. The
+    #: velocity and acceleration are node-field entries, restored with the model.
     checkpointedState = NIST.checkpointedState | {
         "_conservationCheck": ConservationCheck,
         "_conservedAtLastAccept": _ConservedQuantities,
+        "_initialAccelerationPending": bool,
     }
 
     SolverSpecificOptions = NIST.SolverSpecificOptions | {
@@ -499,9 +504,12 @@ class NonlinearImplicitDynamic(NIST):
     ):
         """Start a step; see the parent.
 
-        Arms the initial-acceleration computation for a step starting cold and drops the operators
-        of the previous step -- the parent rebuilds its equation system at the start of every step,
-        and the operators follow that system. The velocity and acceleration are not dropped: they
+        Arms the initial-acceleration computation and drops the operators of the previous step -- the
+        parent rebuilds its equation system at the start of every step, and the operators follow that
+        system. A step that continues from a restart checkpoint takes over, with the checkpointed state
+        restored after this, whether the initial acceleration is still to be computed: the first real
+        increment of the step computes it, and a checkpoint written after the zero increment comes
+        before that. The velocity and acceleration are not dropped: they
         are re-read from the ``V``/``A`` node-field entries the previous step (or the checkpoint)
         left, which is what carries the kinematic state across steps.
 
@@ -528,14 +536,15 @@ class NonlinearImplicitDynamic(NIST):
         self._topologyRecordsAtLastBuild = len(model.topology.history)
 
         resumed = not step.timeStepper.isAtStepStart()
-        self._initialAccelerationPending = bool(self.options["computeInitialAcceleration"]) and not resumed
+        # A resumed step overwrites it with the checkpointed one.
+        self._initialAccelerationPending = bool(self.options["computeInitialAcceleration"])
 
         self.journal.message(
             "Newmark-beta time integration, beta={:}, gamma={:}; consistent mass{:}".format(
                 self.options["newmarkBeta"],
                 self.options["newmarkGamma"],
                 (
-                    "; acceleration from the restart checkpoint"
+                    "; continuing from the restart checkpoint"
                     if resumed
                     else (
                         "; initial acceleration from equilibrium"

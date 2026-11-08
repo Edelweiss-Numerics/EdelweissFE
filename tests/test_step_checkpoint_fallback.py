@@ -40,6 +40,9 @@ import h5py
 import numpy as np
 import pytest
 
+# tests/ carries no __init__.py: sibling test modules import by their bare module name.
+import test_nid_newmark
+
 from edelweissfe.drivers.inputfiledrivensimulation import finiteElementSimulation
 from edelweissfe.journal.journal import Journal
 from edelweissfe.solvers.nonlinearimplicitstatic import NIST
@@ -234,6 +237,57 @@ def test_a_step_falls_back_to_checkpoints_of_its_own_only(tmp_path, obstacle):
 
     assert fallenBackTo == []
     assert model.time == pytest.approx(1.0)
+
+
+def test_a_dynamic_step_that_falls_back_to_the_checkpoint_after_its_zero_increment_computes_its_initial_acceleration(
+    tmp_path, obstacle
+):
+    """A suddenly loaded NID step (the oscillator of ``test_nid_newmark.py``), whose first real increment computes the
+    acceleration from equilibrium, a_0 = F / M. Its second real increment fails at every size: the checkpoint after the
+    first holds the state that increment started from, so the step goes back to the one after the zero increment, at
+    t = 0, where a_0 is still to be computed. From there, the step cut back is the step of an uninterrupted run that
+    starts with the cut back increment: a_0 first, then the same increments, to the same end state. Starting from the
+    acceleration the checkpoint holds, zero, it would lose dt / 2 a_0 of the velocity for good."""
+
+    dt = 0.02
+    increment = dt / test_nid_newmark.STEP_LENGTH
+
+    def deck(startInc: float, maxCheckpointFallbacks: int, extra: str = "") -> str:
+        text = test_nid_newmark._deck(dt, extra=extra)
+        incrementation = (
+            "minInc={!r}, cutbackFactor=0.5, increaseFactor=2, goodIncrementsBeforeIncrease=1, "
+            "maxCheckpointFallbacks={:}".format(increment / 4, maxCheckpointFallbacks)
+        )
+        for old, new in [
+            ("startInc={!r}".format(increment), "startInc={!r}".format(startInc)),
+            ("minInc=1e-6", incrementation),
+        ]:
+            assert text.count(old) == 1
+            text = text.replace(old, new)
+        return text
+
+    # Cut back by 1/2 from the restored increment dt, the step continues with dt / 2, then dt.
+    reference, _ = test_nid_newmark._run(tmp_path, "reference", deck(startInc=increment / 2, maxCheckpointFallbacks=0))
+
+    # The increment starting at t = dt fails while the step has accepted fewer than 3 increments (the zero increment
+    # included): every size from dt down to the minimum dt / 4 fails after the first real increment, and the path from
+    # t = 0 with dt / 2 passes it.
+    fallenBackTo = obstacle(
+        failsIf=lambda step, model, startTime: startTime >= dt - 1e-12 and step.timeStepper.incrementCounter < 3
+    )
+    writer = "\n*output, type=restart, name=restart\nwriteInterval=1, baseName={:}, numberOfFilesToKeep=3\n".format(
+        tmp_path / "ckpt"
+    )
+    model, _ = test_nid_newmark._run(
+        tmp_path, "fallback", deck(startInc=increment, maxCheckpointFallbacks=1, extra=writer)
+    )
+
+    assert fallenBackTo == [0.0]
+    assert model.time == pytest.approx(reference.time, abs=1e-12)
+    for entry, atol in [("U", 1e-12), ("V", 1e-11), ("A", 1e-10)]:
+        np.testing.assert_allclose(
+            model.nodeFields["displacement"][entry], reference.nodeFields["displacement"][entry], rtol=0.0, atol=atol
+        )
 
 
 def test_falling_back_needs_restart_checkpoints(tmp_path):
