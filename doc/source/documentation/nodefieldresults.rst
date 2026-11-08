@@ -125,7 +125,9 @@ Every solver writes ``U`` and ``dU`` of every node field at acceptance, and thes
        prescribed motion and on a multi-point-constraint slave
      - :math:`\boldsymbol{v}_{n+1/2}` (on a field integrated by forward Euler, the rate of the increment just taken);
        at the end of the step, the velocity at its end time
-     - :math:`\boldsymbol{a}_{n+1}`; zero at a prescribed motion
+     - :math:`\boldsymbol{a}_{n+1}` (on a field integrated by forward Euler, the one with which
+       :math:`\boldsymbol{v}_{n+1/2} + \tfrac{1}{2} \Delta t \, \boldsymbol{a}_{n+1}` is the rate at the end of the
+       increment); zero at a prescribed motion; on a multi-point-constraint slave, from its masters
    * - ``MeshfreeExplicitDynamic`` (EdelweissMeshfree)
      - :math:`\boldsymbol{f}_\mathrm{int} + \boldsymbol{M} \boldsymbol{a}`
      - as ``NED``, on the nodes of the kernel functions
@@ -158,7 +160,10 @@ node keeps its velocity when the active domain changes around it; a node that be
 increment ends on other kernel functions than it started on -- the particles move, and reach other nodes -- so it
 writes the results in two parts, each through the layout of the equation system that holds them: ``dU`` on the nodes
 the increment was taken on, ``P``, ``V`` and ``A`` on the nodes of the configuration it ends in. A node that left the
-active domain in that increment therefore keeps its ``dU``, and holds zero in ``P``, ``V`` and ``A``.
+active domain in that increment therefore keeps its ``dU``, and holds zero in ``P``, ``V`` and ``A``. Its zero-length
+increment evaluates the forces of the configuration the step starts from, and writes them, when the model's nodes
+are at rest; a step that continues the motion the model holds at its nodes evaluates no force there, and leaves ``P``
+as it is.
 
 Using the entries in code
 -------------------------
