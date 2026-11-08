@@ -17,6 +17,12 @@ def get_include() -> str:
     extension ``include_dirs``, so that the scatter has exactly one implementation, rather than each consumer
     reimplementing the addressing against raw memoryviews.
 
+    Such an extension is compiled and linked with OpenMP, as the extensions of this package are
+    (``edelweissfe.utils.extensionbuild.compile_flags(openmp=True)`` and ``link_flags(openmp=True)``): ``scatterBlock``
+    adds atomically through ``#pragma omp atomic``, which a compiler without OpenMP drops, and threads that scatter at
+    the same time -- an OpenMP loop, or the worker threads of the element loop -- would then lose additions.
+    ``_csrcore.h`` refuses to compile without OpenMP.
+
     Mirrors the convention of ``numpy.get_include()``.
     """
     return dirname(abspath(__file__))

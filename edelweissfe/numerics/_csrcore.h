@@ -1,5 +1,12 @@
 #pragma once
 
+// The additions of CSRDirectAssembler::scatterBlock are atomic through `#pragma omp atomic`. A compiler without OpenMP
+// drops the pragma, as any unknown one, and threads that scatter at the same time would then lose additions: an
+// extension that includes this header is compiled with OpenMP, or not at all.
+#ifndef _OPENMP
+#  error "_csrcore.h needs OpenMP (-fopenmp, /openmp with MSVC): the scatter adds atomically through OpenMP."
+#endif
+
 #include <algorithm>
 #include <cstdint>
 #include <cstring>
@@ -747,7 +754,8 @@ public:
 // are not bit-reproducible from run to run; they agree to round-off.
 //
 // IMPORTANT: a compiled entity loop in another extension may include this header and call scatterBlock,
-// which inlines this code into that extension. Any change here needs such an extension rebuilt as well.
+// which inlines this code into that extension. Any change here needs such an extension rebuilt as well, and the
+// extension is compiled with OpenMP (see the check at the top of this header).
 
 /**
  * @brief Scatters the blocks of the entities straight into the data array of its own CSR pattern.

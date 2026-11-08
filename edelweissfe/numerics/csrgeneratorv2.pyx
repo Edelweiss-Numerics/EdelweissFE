@@ -648,7 +648,9 @@ cdef class DirectCSRAssembler:
 
         A compiled entity loop that scatters from inside its own ``prange`` cannot go through Python. It re-declares
         the C++ class (from ``edelweissfe.numerics.get_include()``) and casts this address back, so the scatter --
-        including the column-major traversal and its loop order -- exists in exactly one place.
+        including the column-major traversal and its loop order -- exists in exactly one place. That extension is
+        compiled with OpenMP, which the atomic additions of the scatter need (see
+        :func:`edelweissfe.numerics.get_include`).
 
         The assembler must outlive any caller holding this.
         """
