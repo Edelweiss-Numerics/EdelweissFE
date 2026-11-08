@@ -463,6 +463,22 @@ def test_scalar_variables_are_checked_like_a_field_with_their_own_tolerances():
     assert not criterion.checkScalarVariables(np.zeros(2), np.array([11e-3, 0.0]), dU, 1).correctionConverged
 
 
+def test_the_zero_flux_rule_does_not_apply_to_the_scalar_variables():
+    """No element flux acts on the scalar variables, so the zero flux rule cannot tell whether they carry any: their
+    residual is compared with their tolerances directly, whatever the threshold. (Applied to them with the spatial
+    average flux of one they are compared with, a threshold of one or more would accept any residual.)"""
+
+    R = np.array([1.0])
+    for zeroFluxThreshold in (1.0, 2.0):
+        criterion = legacy(zeroFluxThreshold=zeroFluxThreshold, minimumIterations=1)
+        assert not criterion.checkScalarVariables(R, None, R, 1).fluxResidualConverged
+        # Abaqus' criterion leaves the scalar variables to the legacy one
+        abaqusCriterion = AbaqusConvergenceCriterion(scalarVariableCriterion=criterion)
+        assert not abaqusCriterion.checkScalarVariables(R, None, R, 1).fluxResidualConverged
+        # a residual within the tolerance converges as without the rule
+        assert criterion.checkScalarVariables(np.zeros(1), None, R, 1).fluxResidualConverged
+
+
 def test_largest_residual_index():
     for criterion in (legacy(), abaqus()):
         assert (

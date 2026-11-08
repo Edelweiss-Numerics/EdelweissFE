@@ -74,7 +74,8 @@ Two criteria are available, selected by the solver option ``convergenceCriterion
 
     The scalar variables (e.g., Lagrange multipliers) are checked like a field, with the tolerances of the entry
     ``scalar variables``. No element flux acts on them, so their flux residual is compared with the tolerances
-    directly, as if their spatial average flux were one.
+    directly, as if their spatial average flux were one, and the zero flux rule does not apply to them: it would
+    accept any residual of theirs for a threshold of one or more.
 
     Two parameter sets of this criterion are in use: EdelweissFE's defaults, which are those of the original
     criterion, and the settings of EdelweissMeshfree's solvers (for every field):
@@ -334,8 +335,9 @@ class LegacyConvergenceCriterion(ConvergenceCriterionBase):
         )
 
     def checkScalarVariables(self, R, ddU, dU, iterationCounter):
-        # No element flux acts on the scalar variables: their residual is compared with the tolerances directly.
-        return self.checkField("scalar variables", R, ddU, dU, 1.0, iterationCounter)
+        # No element flux acts on the scalar variables: their residual is compared with the tolerances directly, and the
+        # zero flux rule does not apply to them (see fluxResidualConverged).
+        return self.checkField("scalar variables", R, ddU, dU, None, iterationCounter)
 
     def fluxResidualConverged(
         self, field: str, fluxResidual: float, spatialAveragedFlux: float, iterationCounter: int
@@ -349,7 +351,9 @@ class LegacyConvergenceCriterion(ConvergenceCriterionBase):
         fluxResidual
             The largest absolute flux residual :math:`r_{\\max}` of the field.
         spatialAveragedFlux
-            The spatial average flux :math:`\\bar{q}` of the field.
+            The spatial average flux :math:`\\bar{q}` of the field; None for the scalar variables, on which no element
+            flux acts: their flux residual is compared with the tolerances directly, as if :math:`\\bar{q}` were one,
+            and the zero flux rule, which tells a field that carries no element flux, does not apply to them.
         iterationCounter
             The current iteration number.
 
@@ -365,15 +369,18 @@ class LegacyConvergenceCriterion(ConvergenceCriterionBase):
         if fluxResidual <= self.absoluteFluxResidualTolerances[field]:
             return True
 
-        # 'not above' rather than 'at most': a field without any element flux (a NaN average) carries no flux either
-        if self.zeroFluxThreshold is not None and not spatialAveragedFlux > self.zeroFluxThreshold:
-            return True
-
         relativeTolerances = (
             self.fluxResidualTolerances
             if iterationCounter < self.iterationsForAlternativeTolerance
             else self.fluxResidualTolerancesAlternative
         )
+
+        if spatialAveragedFlux is None:
+            return fluxResidual <= relativeTolerances[field]
+
+        # 'not above' rather than 'at most': a field without any element flux (a NaN average) carries no flux either
+        if self.zeroFluxThreshold is not None and not spatialAveragedFlux > self.zeroFluxThreshold:
+            return True
 
         return fluxResidual <= relativeTolerances[field] * spatialAveragedFlux
 
