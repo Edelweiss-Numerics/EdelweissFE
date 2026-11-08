@@ -34,6 +34,7 @@ softening problem whose state depends on the increments that led to it. Cutting 
 increment does not help; going back to a checkpoint and taking a finer path does.
 """
 
+import shutil
 from pathlib import Path
 
 import h5py
@@ -42,7 +43,16 @@ import pytest
 
 # tests/ carries no __init__.py: sibling test modules import by their bare module name.
 import test_nid_newmark
+from test_restart_exhaustive import (
+    _PLASTIC_BEAM,
+    _checkpointKey,
+    _components,
+    _differingComponents,
+    _isPlastic,
+    _state,
+)
 
+import edelweissfe.outputmanagers.restart as restartOutputManager
 from edelweissfe.drivers.inputfiledrivensimulation import finiteElementSimulation
 from edelweissfe.journal.journal import Journal
 from edelweissfe.solvers.nonlinearimplicitstatic import NIST
@@ -288,6 +298,117 @@ def test_a_dynamic_step_that_falls_back_to_the_checkpoint_after_its_zero_increme
         np.testing.assert_allclose(
             model.nodeFields["displacement"][entry], reference.nodeFields["displacement"][entry], rtol=0.0, atol=atol
         )
+
+
+def _withoutTheRecordOfFallbacks(components: dict) -> dict:
+    """The components of :func:`test_restart_exhaustive._components`, without the restart output's record of the
+    checkpoints the step may still fall back to: a fallback uses up the checkpoint it goes back to, a resume does
+    not."""
+
+    restartOutput = dict(components["output restart"])
+    name, attributes = restartOutput["_files"]
+    restartOutput["_files"] = (name, tuple(a for a in attributes if a[0] != "_heldCheckpoints"))
+    return components | {"output restart": restartOutput}
+
+
+def test_a_step_that_falls_back_past_an_accepted_increment_continues_as_a_resume_from_its_checkpoint(
+    tmp_path, obstacle, monkeypatch
+):
+    """A beam bent far into the plastic range, whose state depends on its path, under the Abaqus convergence criterion,
+    which averages the fluxes of the increments it accepts, with a checkpoint after every second accepted increment
+    (``writeInterval=2``; the zero increment counts). The increment after the fifth fails at every size. The latest
+    checkpoint, after the fourth, is not the state that increment started from: the step falls back to it, and discards
+    the fifth increment, which it had accepted.
+
+    A run resumed from that checkpoint, whose first increment fails once and is cut back as the fallback cut back its
+    retry, must then go on exactly as the step that fell back: every component holds the same state at every checkpoint
+    written after the one fallen back to, and both runs end in the same state, with the same export file. Whatever the
+    fallback kept of the discarded increment -- state a component carries, but neither checkpoints nor begins the step
+    with -- shows here."""
+
+    #: The checkpoints restored, the fallback's and then the resume's: the increments accepted when each was written,
+    #: and a copy of its file.
+    restored = []
+    failuresOfTheResume = []
+
+    def fails(step, model, startTime):
+        if not restored:
+            # the step before the fallback
+            return step.timeStepper.incrementCounter >= 5
+        if len(restored) == 2 and not failuresOfTheResume:
+            # the resumed run, at its first increment
+            failuresOfTheResume.append(startTime)
+            return True
+        return False
+
+    fallenBackTo = obstacle(failsIf=fails)
+
+    restoreStep = ResumeCheckpoint.restoreStep
+
+    def recordingRestoreStep(self, step):
+        restoreStep(self, step)
+        copy = tmp_path / "restored{:}.h5".format(len(restored))
+        shutil.copy(self.fileName, copy)
+        restored.append((self.numberOfIncrementsDone, copy))
+
+    monkeypatch.setattr(ResumeCheckpoint, "restoreStep", recordingRestoreStep)
+
+    #: Per run, the components at every checkpoint it writes, by (step, time).
+    componentsAtCheckpoint = []
+    writeCheckpoint = restartOutputManager.writeCheckpoint
+
+    def recordingWriteCheckpoint(fileName, model, step, **kwargs):
+        writeCheckpoint(fileName, model, step, **kwargs)
+        components = _components(model, step, Path(fileName).parent)
+        componentsAtCheckpoint[-1][_checkpointKey(Path(fileName))] = _withoutTheRecordOfFallbacks(components)
+
+    monkeypatch.setattr(restartOutputManager, "writeCheckpoint", recordingWriteCheckpoint)
+
+    def deck(directory: Path, resume: str = "") -> str:
+        output = _OUTPUT.format(directory=directory, numberOfFilesToKeep=3)
+        assert output.count("writeInterval=1") == 1
+        return (
+            _PLASTIC_BEAM
+            + output.replace("writeInterval=1", "writeInterval=2")
+            + resume
+            + _JOB
+            + "convergenceCriterion=abaqus\n"
+            + _STEP.format(maxCheckpointFallbacks=1)
+        )
+
+    fallbackDirectory = tmp_path / "fallback"
+    fallbackDirectory.mkdir()
+    componentsAtCheckpoint.append({})
+    fellBack = _run(fallbackDirectory, deck(fallbackDirectory))
+
+    assert [increments for increments, _ in restored] == [4]
+    assert fellBack.time == pytest.approx(1.0)
+    assert not _isPlastic(fellBack, None)
+
+    resumeDirectory = tmp_path / "resume"
+    resumeDirectory.mkdir()
+    # The export file as the run that wrote the checkpoint left it: written past the checkpoint.
+    shutil.copy(fallbackDirectory / "exportU.csv", resumeDirectory / "exportU.csv")
+    componentsAtCheckpoint.append({})
+    resumed = _run(resumeDirectory, deck(resumeDirectory, "\n*restart, readFrom={:}\n".format(restored[0][1])))
+
+    assert [increments for increments, _ in restored] == [4, 4]
+    assert len(failuresOfTheResume) == 1
+    assert fallenBackTo[1] == fallenBackTo[0]
+
+    afterTheCheckpoint = sorted(key for key in componentsAtCheckpoint[0] if key[1] > fallenBackTo[0])
+    assert afterTheCheckpoint, "the step must write a checkpoint after the one it fell back to"
+    assert sorted(componentsAtCheckpoint[1]) == afterTheCheckpoint
+    differing = [
+        "at {:}: {:}".format(key, difference)
+        for key in afterTheCheckpoint
+        for difference in _differingComponents(componentsAtCheckpoint[1][key], componentsAtCheckpoint[0][key])
+    ]
+    endState, endStateOfTheResume = _state(fellBack), _state(resumed)
+    differing += [key for key in endState if not np.array_equal(endState[key], endStateOfTheResume.get(key))]
+    if (resumeDirectory / "exportU.csv").read_bytes() != (fallbackDirectory / "exportU.csv").read_bytes():
+        differing.append("the export file")
+    assert not differing, differing[:8]
 
 
 def test_falling_back_needs_restart_checkpoints(tmp_path):
