@@ -66,9 +66,9 @@ class NISTPArcLengthSchema(NISTParallel.schema):
     )
     stopCondition: str | None = schemaField(
         description=(
-            "A model accessible expression; the step ends once it is true, checked before every increment after the "
-            "first (under arc length control). It belongs to the controller it is declared with: an >>options block "
-            "that names arcLengthController without a stopCondition clears it."
+            "A model accessible expression; the step ends once it is true, checked after every accepted increment of "
+            "nonzero size (under arc length control). It belongs to the controller it is declared with: an >>options "
+            "block that names arcLengthController without a stopCondition clears it."
         ),
         dtype=str,
         default=None,
@@ -311,8 +311,9 @@ class NISTPArcLength(NISTParallel):
         equation (:meth:`setTrialState`), and the quasi-Newton fallback keeps the tangent of the first iteration for
         both right-hand sides.
 
-        Before the iterations, the step's stop condition is checked (see the option ``stopCondition``); once they have
-        converged, the load parameter advances with the solution it belongs to.
+        Before the iterations, the step's stop condition is checked, if an increment of nonzero size has been accepted
+        before (see the option ``stopCondition``); once they have converged, the load parameter advances with the
+        solution it belongs to.
 
         Parameters
         ----------
@@ -365,7 +366,10 @@ class NISTPArcLength(NISTParallel):
                 maxGrowingIter,
             )
 
-        if timeStep.number > 1 and self.checkConditionalStop():
+        # The stop condition is checked after every accepted increment of nonzero size, i.e. before every increment once
+        # the step has progressed: not after the zero increment, which leaves the step where it started.
+        stepProgressAtIncrementStart = timeStep.stepProgress - timeStep.stepProgressIncrement
+        if stepProgressAtIncrementStart > 0.0 and self.checkConditionalStop():
             raise ConditionalStop
 
         self.arcLengthIncrement = ArcLengthIncrement(

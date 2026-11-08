@@ -216,6 +216,14 @@ def test_a_stop_condition_belongs_to_the_controller_it_is_declared_with(tmp_path
     assert model.solvers["theSolver"].options["stopCondition"] is None
 
 
+def test_the_stop_condition_is_checked_after_every_accepted_increment_of_nonzero_size(tmp_path):
+    """A stop condition that holds from the start ends the step after its first increment of nonzero size: not after the
+    zero increment, which leaves the step where it started."""
+
+    model = run(tmp_path, deck(solverOptions=", stopCondition='True'"))
+    np.testing.assert_allclose(tipDisplacement(model), INCREMENT * -0.25, rtol=1e-10)
+
+
 def test_without_a_controller_the_loads_follow_the_time(tmp_path):
     model = run(tmp_path, deck(controller="off"))
 
