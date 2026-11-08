@@ -103,12 +103,20 @@ def residualContributionAndTangent(
     -------
     tuple[np.ndarray, np.ndarray]
         ``P`` and the dense ``nDof x nDof`` tangent.
+
+    Raises
+    ------
+    ValueError
+        If a local entry of the constraint's block lies outside its degrees of freedom.
     """
 
     nDof = constraint.nDof
     localRows, localColumns = constraint.localEntriesOfBlock()
     for localIndices in (localRows, localColumns):
-        assert np.all((localIndices >= 0) & (localIndices < nDof)), "a local entry lies outside the constraint's DOFs"
+        if not np.all((localIndices >= 0) & (localIndices < nDof)):
+            raise ValueError(
+                "a local entry of the constraint's block lies outside its {:} degrees of freedom".format(nDof)
+            )
 
     flat = np.zeros(len(localRows))
     P = np.zeros(nDof)

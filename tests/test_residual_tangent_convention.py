@@ -602,6 +602,20 @@ def test_the_check_refuses_values_that_do_not_fill_the_layout_of_the_constraint(
         localVector(constraint, lambda node, field: _noise(node, field, 1e-2), scalarValues=[1.0])
 
 
+def test_the_check_refuses_an_entry_of_the_block_outside_the_constraint(tmp_path, monkeypatch):
+    model = _buildModel(tmp_path, _PLANE_BLOCK + _DIRECTIONAL_SPRING, 2)
+    constraint = model.constraints["theConstraint"]
+    U = localVector(constraint, lambda node, field: _noise(node, field, 1e-2))
+
+    localRows, localColumns = constraint.localEntriesOfBlock()
+    localColumns = localColumns.copy()
+    localColumns[-1] = constraint.nDof
+    monkeypatch.setattr(constraint, "localEntriesOfBlock", lambda: (localRows, localColumns))
+
+    with pytest.raises(ValueError, match="outside"):
+        residualContributionAndTangent(constraint, U, U)
+
+
 # --- element loads
 
 
