@@ -259,7 +259,7 @@ class EquationSystemLayout:
 
     def dofsWithNodalInertia(self, fieldNames: list) -> np.ndarray:
         """The degrees of freedom of the given fields whose inertia is that of the nodes, i.e. the mass the elements
-        assemble: those a dynamic solver integrates in time with its own Newmark (or central difference) scheme.
+        assemble: those the implicit dynamic solver integrates in time with its own Newmark scheme.
 
         In a finite element model, every node carries its total solution and every element its mass, so these are all
         degrees of freedom of the fields. A meshfree model leaves out the nodes of its kernel functions: their values

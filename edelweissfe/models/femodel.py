@@ -456,8 +456,9 @@ class FEModel:
 
     def setNewmarkParametersOfEntities(self, beta: float, gamma: float):
         """Give the entities that integrate their own inertia in time the Newmark parameters of the solver: called by
-        the implicit solvers at the start of every step, so that the solver is the one source of the parameters. With
-        :math:`\\beta = \\gamma = 0`, which every quasi-static solver passes, such an entity carries no inertia.
+        ``NIST`` and every solver derived from it -- the implicit solvers and ``NEST`` -- at the start of every step,
+        so that the solver is the one source of the parameters. With :math:`\\beta = \\gamma = 0`, which every
+        quasi-static solver passes, such an entity carries no inertia.
 
         In a finite element model, no entity integrates its own inertia: the elements report their mass, and a
         dynamic solver integrates the nodes. The particles of a meshfree model of EdelweissMeshfree carry their state,
