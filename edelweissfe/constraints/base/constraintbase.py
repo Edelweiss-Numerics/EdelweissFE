@@ -276,6 +276,11 @@ class ConstraintBase(OptionSchemaProvider, ABC, SystemMatrixContributorBase):
         (:func:`~edelweissfe.numerics.systemmatrixcontributor.countEntriesOfBlock`), which for a constraint that lists
         its entries means building the list: once per equation system, not in every increment. A constraint that
         evaluates its forces without a tangent needs nothing here.
+
+        A solver that evaluates constraints itself, rather than through
+        :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.assembleConstraintForces`, calls this
+        whenever the constraint is located anew: the default :meth:`computeKernelsExplicit` does not size its tangent
+        again on its own, and a block whose size has changed (a contact with other slave nodes) would not fit it.
         """
 
         self._discardedTangentScratch = None
@@ -292,7 +297,8 @@ class ConstraintBase(OptionSchemaProvider, ABC, SystemMatrixContributorBase):
         The counterpart of :meth:`computeKernels` for an explicit solver, which solves no linear
         system and so has no use for a tangent. This default calls :meth:`computeKernels` with a
         scratch tangent that is thrown away, so that every constraint also works in an explicit
-        analysis; the scratch is sized once per equation system (see :meth:`prepareExplicitEvaluation`).
+        analysis; the scratch is sized once per equation system: a solver that evaluates constraints itself calls
+        :meth:`prepareExplicitEvaluation` whenever the constraint is located anew.
         A constraint whose tangent is costly overrides it, e.g. through
         :class:`~edelweissfe.constraints.base.forcesonlyexplicitevaluation.ForcesOnlyExplicitEvaluation`.
 
