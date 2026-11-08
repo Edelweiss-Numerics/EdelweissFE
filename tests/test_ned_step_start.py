@@ -35,6 +35,10 @@ the velocity at its end time (see the module documentation of
   state, and the half increment the velocity lags behind at the end of the first step is completed by the model.
 * The acceleration a step starts from is the model's, whoever wrote it: a body given a velocity and an acceleration,
   and no force, takes the half increment of the leapfrog's start with that acceleration and then moves uniformly.
+* With damping, both halves of the rule carry the damping terms: the step leaves the acceleration with which
+  ``M A + C V`` is the net force of its last increment, so that one step continues from it exactly as the leapfrog
+  would; the next step starts from the net force ``M A + C V`` of the model's state, and takes the damped half step
+  from there. Pinned on the column with a mass-proportional damping reported by its elements.
 
 The time increment is fixed (the critical one is replaced), so that the steps divide it exactly.
 """
@@ -45,6 +49,7 @@ import numpy as np
 import pytest
 
 from edelweissfe.drivers.inputfiledrivensimulation import finiteElementSimulation
+from edelweissfe.elements.displacementelement.element import DisplacementElement
 from edelweissfe.solvers.nonlinearexplicitdynamic import NED
 from edelweissfe.utils.inputfileparser import parseInputFile
 
@@ -179,3 +184,82 @@ def test_a_step_starts_from_the_acceleration_the_model_holds(tmp_path, fixedTime
         rtol=1e-10,
     )
     np.testing.assert_allclose(state["A"], 0.0, atol=1e-9 * np.max(np.abs(acceleration)))
+
+
+#: The time increment of the damped column: a power of two, so that the step lengths below are multiples of it exactly.
+_BINARY_TIME_INCREMENT = 2.0**-9
+
+#: The damping rate of the damped column, C = alpha M: about a third of the critical damping of its first mode.
+_DAMPING_RATE = 25.0
+
+
+def test_the_damping_terms_of_the_step_start_rule(tmp_path, monkeypatch):
+    """Two exact relations, each of which fails without a damping term of the rule.
+
+    * A step of N increments leaves (U_N, v_N, a_N). One step of 2N increments takes the increment N+1 from
+      the same state with the leapfrog's own damped update; it moves by dt (v_N + dt/2 a_N) exactly if the
+      acceleration the step left is the one with which ``M a_N + C v_N`` is the net force of increment N.
+    * A second step of one increment starts from the net force ``M a_N + C v_N`` and takes the damped half step,
+      v_1/2 = ((1 - h) v_N + M^-1 f dt/2) / (1 + h) with h = alpha dt/4: it moves by
+      dt (v_N + dt/2 a_N / (1 + alpha dt/4)). The two differ in the second order of dt only.
+    """
+    dt = _BINARY_TIME_INCREMENT
+    nIncrements = 32
+    monkeypatch.setattr(NED, "getCriticalTimeStepForExplicitDynamics", lambda self, model, U: dt)
+
+    def massProportionalDamping(self, C):
+        M = np.zeros_like(C)
+        self.computeLumpedInertia(M)
+        C += _DAMPING_RATE * M
+
+    monkeypatch.setattr(DisplacementElement, "computeLumpedDamping", massProportionalDamping)
+
+    # the model's state at the start of every step, and its solution after every increment of the last step
+    statesAtTheStepStart, solutionAfterIncrement = [], {}
+    beginStep, acceptIncrement = NED.beginStep, NED.acceptIncrement
+
+    def beginStepRecordingTheModelsState(self, step, model, fieldOutputController, outputmanagers):
+        statesAtTheStepStart.append(_state(model))
+        beginStep(self, step, model, fieldOutputController, outputmanagers)
+
+    def acceptIncrementRecordingTheSolution(self, step, model, timeStep):
+        acceptIncrement(self, step, model, timeStep)
+        solutionAfterIncrement[timeStep.number] = _state(model)["U"]
+
+    monkeypatch.setattr(NED, "beginStep", beginStepRecordingTheModelsState)
+    monkeypatch.setattr(NED, "acceptIncrement", acceptIncrementRecordingTheSolution)
+
+    _run(
+        _MODEL
+        + _SOLVER.format(name="theSolver")
+        + _STEP.format(solver="theSolver", length=2 * nIncrements * dt)
+        + _RELEASED_UNDER_ITS_WEIGHT,
+        tmp_path / "one",
+    )
+    oneStep = dict(solutionAfterIncrement)
+
+    statesAtTheStepStart.clear()
+    twoSteps = _run(
+        _MODEL
+        + _SOLVER.format(name="theSolver")
+        + _STEP.format(solver="theSolver", length=nIncrements * dt)
+        + _RELEASED_UNDER_ITS_WEIGHT
+        + _STEP.format(solver="theSolver", length=dt),
+        tmp_path / "two",
+    )
+
+    endOfTheFirstStep = statesAtTheStepStart[1]
+    U, v, a = (endOfTheFirstStep[entry] for entry in ("U", "V", "A"))
+    scale = np.max(np.abs(U))
+    np.testing.assert_allclose(oneStep[nIncrements], U, rtol=0.0, atol=1e-12 * scale)
+    # the column moves and accelerates at the step boundary
+    assert np.max(np.abs(v)) * dt > 1e-3 * scale and np.max(np.abs(a)) * dt**2 > 1e-5 * scale
+
+    leapfrogContinued = U + dt * (v + 0.5 * dt * a)
+    np.testing.assert_allclose(oneStep[nIncrements + 1], leapfrogContinued, rtol=0.0, atol=1e-10 * scale)
+
+    halfStepRate = 0.25 * _DAMPING_RATE * dt
+    dampedHalfStep = U + dt * (v + 0.5 * dt * a / (1.0 + halfStepRate))
+    np.testing.assert_allclose(_state(twoSteps)["U"], dampedHalfStep, rtol=0.0, atol=1e-10 * scale)
+    # the second-order difference of the two is far above the tolerance: the relations tell the damping terms apart
+    assert np.max(np.abs(leapfrogContinued - dampedHalfStep)) > 1e-6 * scale
