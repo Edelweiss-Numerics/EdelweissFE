@@ -129,9 +129,9 @@ one restart output of the job; a step that may fall back refuses to start with n
 Adding something that carries state between increments
 -------------------------------------------------------
 
-Declare it. Every solver, time stepper, constraint and output manager states which of its attributes
-it carries from one increment to the next, by name and type, and the checkpoint writes and reads
-exactly those, as they are (:mod:`~edelweissfe.utils.checkpointedstate`):
+Declare it. Every solver, convergence criterion, time stepper, constraint and output manager states
+which of its attributes it carries from one increment to the next, by name and type, and the
+checkpoint writes and reads exactly those, as they are (:mod:`~edelweissfe.utils.checkpointedstate`):
 
 .. code-block:: python
 

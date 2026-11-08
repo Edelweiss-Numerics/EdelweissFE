@@ -44,6 +44,7 @@ import edelweissfe.timesteppers
 from edelweissfe.constraints.base.constraintbase import ConstraintBase
 from edelweissfe.modelmodifiers.base.modelmodifierbase import ModelModifierBase
 from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
+from edelweissfe.solvers.base.convergencecriteria import ConvergenceCriterionBase
 from edelweissfe.solvers.base.nonlinearsolverbase import NonlinearSolverBase
 from edelweissfe.stepactions.base.stepactionbase import StepActionBase
 from edelweissfe.timesteppers.base.timestepperbase import TimeStepperBase
@@ -67,35 +68,27 @@ def _concreteSubclasses(package, base) -> list[type]:
     return sorted(classes, key=lambda cls: cls.__module__ + "." + cls.__qualname__)
 
 
-_COMPONENTS = [
-    cls
-    for package, base in [
-        (edelweissfe.constraints, ConstraintBase),
-        (edelweissfe.modelmodifiers, ModelModifierBase),
-        (edelweissfe.outputmanagers, OutputManagerBase),
-        (edelweissfe.solvers, NonlinearSolverBase),
-        (edelweissfe.stepactions, StepActionBase),
-        (edelweissfe.timesteppers, TimeStepperBase),
-    ]
-    for cls in _concreteSubclasses(package, base)
+#: Every kind of component, with the package its classes live in. A convergence criterion is checkpointed with the
+#: solver that uses it.
+_KINDS = [
+    (edelweissfe.constraints, ConstraintBase),
+    (edelweissfe.modelmodifiers, ModelModifierBase),
+    (edelweissfe.outputmanagers, OutputManagerBase),
+    (edelweissfe.solvers, NonlinearSolverBase),
+    (edelweissfe.solvers, ConvergenceCriterionBase),
+    (edelweissfe.stepactions, StepActionBase),
+    (edelweissfe.timesteppers, TimeStepperBase),
 ]
+_BASES = tuple(base for _, base in _KINDS)
+
+_COMPONENTS = [cls for package, base in _KINDS for cls in _concreteSubclasses(package, base)]
 
 
 @pytest.mark.parametrize("cls", _COMPONENTS, ids=lambda cls: cls.__module__ + "." + cls.__qualname__)
 def test_every_component_declares_its_checkpointed_state(cls):
     declares = cls.checkpointedState is not None
     overrides = any(
-        "getRestartData" in vars(klass)
-        for klass in cls.__mro__[: cls.__mro__.index(object)]
-        if klass
-        not in (
-            ConstraintBase,
-            ModelModifierBase,
-            OutputManagerBase,
-            NonlinearSolverBase,
-            StepActionBase,
-            TimeStepperBase,
-        )
+        "getRestartData" in vars(klass) for klass in cls.__mro__[: cls.__mro__.index(object)] if klass not in _BASES
     )
     if cls.__name__ in _NOT_RESTARTABLE:
         assert not declares and not overrides, "{:} is listed as not restartable".format(cls.__name__)
@@ -108,12 +101,12 @@ def test_every_component_declares_its_checkpointed_state(cls):
 
 def test_every_kind_of_component_was_found():
     """Guards the discovery above: an empty list would pass every check."""
-    for base in (
-        ConstraintBase,
-        ModelModifierBase,
-        OutputManagerBase,
-        NonlinearSolverBase,
-        StepActionBase,
-        TimeStepperBase,
-    ):
+    for base in _BASES:
         assert any(issubclass(cls, base) for cls in _COMPONENTS), base.__name__
+
+
+@pytest.mark.parametrize("base", _BASES, ids=lambda base: base.__qualname__)
+def test_no_base_declares_the_state_of_its_subclasses(base):
+    """A declaration inherited from a base would let a component that carries state pass the check above without
+    saying what it carries: it would be checkpointed as carrying nothing."""
+    assert base.checkpointedState is None
