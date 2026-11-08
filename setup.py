@@ -162,7 +162,7 @@ extensions += [
     )
 ]
 
-print("Gather the extension for the even faster CSR matrix v2 generator")
+print("Gather the extension for the CSR assembly (the VIJ generator and the direct assembler)")
 extensions += [
     Extension(
         "*",
