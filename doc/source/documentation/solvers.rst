@@ -171,6 +171,10 @@ criterion of their Newton iterations with the solver option ``convergenceCriteri
 
     >>options, name=theSolver, convergenceCriterion=abaqus
 
+The options of the ``abaqus`` criterion are named ``abaqus...``; a declaration of options -- the ``*solver`` datalines,
+or an ``>>options`` block -- that sets one of them with ``convergenceCriterion=legacy`` is refused, since it would mean
+nothing.
+
 The ``legacy`` criterion is configured by tolerances per field and by solver options. EdelweissMeshfree's parameter
 set, for instance, reads for a model with a displacement field
 

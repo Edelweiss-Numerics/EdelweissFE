@@ -511,6 +511,25 @@ def test_options_make_the_criterion():
     assert not abaqusCriterion.checkScalarVariables(np.zeros(1), None, np.zeros(1), 0).fluxResidualConverged
 
 
+def test_an_option_of_the_abaqus_criterion_is_refused_with_the_legacy_one():
+    """An option of the abaqus criterion means nothing with the legacy one: a declaration that sets one with
+    ``convergenceCriterion=legacy`` is refused, the definition of the solver as a step's ``>>options`` block, which
+    then changes nothing. An option set for earlier steps rests in a step that switches to the legacy criterion."""
+
+    with pytest.raises(ValueError, match="abaqusResidualTolerance"):
+        nist(abaqusResidualTolerance=1e-3)
+    assert nist(convergenceCriterion="abaqus", abaqusResidualTolerance=1e-3).options["abaqusResidualTolerance"] == 1e-3
+
+    solver = nist()
+    with pytest.raises(ValueError, match="abaqusZeroFluxThreshold"):
+        solver.applyOptionsOverride({"abaqusZeroFluxThreshold": 1e-4})
+    assert solver.options["abaqusZeroFluxThreshold"] == NIST.SolverSpecificOptions["abaqusZeroFluxThreshold"]
+
+    solver.applyOptionsOverride({"convergenceCriterion": "abaqus", "abaqusZeroFluxThreshold": 1e-4})
+    solver.applyOptionsOverride({"convergenceCriterion": "legacy"})
+    assert solver.options["abaqusZeroFluxThreshold"] == 1e-4
+
+
 def test_every_job_changes_its_own_tolerances():
     """``*updateConfiguration`` changes the tolerances of its own job and of the solvers made for it, never the defaults
     in :mod:`edelweissfe.config.phenomena`, from which the jobs that follow in the same process start (e.g. the decks of

@@ -326,7 +326,8 @@ class NIST(NonlinearSolverBase):
 
         self.options = self.SolverSpecificOptions.copy()
         # the *solver datalines belong only to this solver: unknown entries are typos
-        self._updateOptions(kwargs, journal, strict=True)
+        declaredOptions = self._updateOptions(kwargs, journal, strict=True)
+        self.refuseOptionsThatMeanNothing(self.options, declaredOptions)
         #: The ``*linearSolver`` blocks of the input file by name, which linsolver= may name (none without an input file).
         self.linearSolverDefinitions = jobInfo.get("linearSolvers", {})
         #: The linear solver, and the ``linsolver`` it was made for (see :meth:`selectLinearSolverForStep`).
@@ -337,6 +338,52 @@ class NIST(NonlinearSolverBase):
         self.prevTimeStep = None
         #: The solution increment of the last accepted increment.
         self.dU = None
+
+    def applyOptionsOverride(self, fieldValues: dict) -> None:
+        """Apply an override of this solver's options, see
+        :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.applyOptionsOverride`; an override that
+        sets an option where it means nothing is refused before anything of it applies (see
+        :meth:`refuseOptionsThatMeanNothing`).
+
+        Parameters
+        ----------
+        fieldValues
+            Maps schema field name to its new, already-coerced value.
+        """
+
+        # the options this solver checks have the same schema field and option name
+        self.refuseOptionsThatMeanNothing(self.options | fieldValues, fieldValues.keys())
+        super().applyOptionsOverride(fieldValues)
+
+    def refuseOptionsThatMeanNothing(self, options: dict, declaredOptions) -> None:
+        """Refuse an option that a declaration of options sets where it means nothing, with the options in force after
+        the declaration. A declaration is the definition of the solver (its ``*solver`` datalines, or the arguments of
+        its constructor), or an ``>>options`` block of a step. Refused are:
+
+        * an option of the abaqus criterion (``abaqus...``) with ``convergenceCriterion=legacy``.
+
+        An option the declaration does not set is not refused: an option set for some steps keeps its value in a step
+        that switches off what it acts on, and rests there.
+
+        Parameters
+        ----------
+        options
+            The options in force after the declaration.
+        declaredOptions
+            The names of the options the declaration sets.
+
+        Raises
+        ------
+        ValueError
+            If the declaration sets an option where it means nothing.
+        """
+
+        abaqusCriterionOptions = sorted(name for name in declaredOptions if name.startswith("abaqus"))
+        if abaqusCriterionOptions and options["convergenceCriterion"] == "legacy":
+            raise ValueError(
+                "{:}: an option of the abaqus convergence criterion means nothing with "
+                "convergenceCriterion=legacy".format(", ".join(abaqusCriterionOptions))
+            )
 
     def selectLinearSolverForStep(self) -> None:
         """Make :attr:`linSolver` the linear solver the step about to begin names (``linsolver``): the one of the

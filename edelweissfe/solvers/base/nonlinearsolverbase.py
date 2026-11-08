@@ -141,17 +141,24 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
             If True, an unrecognised option raises an AttributeError instead of being ignored. Use it
             for option sources which are exclusively owned by this solver (i.e. the datalines of the
             *solver keyword), such that typos are not silently swallowed.
+
+        Returns
+        -------
+        set[str]
+            The names of the options updated.
         """
 
         # Option keys arrive lowercased: match them case-insensitively against the camelCase names. A >>options
         # block carries every solver's options plus meta keys, so keys of other solvers are skipped.
         canonicalByLower = {key.lower(): key for key in self.SolverSpecificOptions}
+        updatedNames = set()
         for k, v in updatedOptions.items():
             canonicalKey = canonicalByLower.get(k.lower())
             if canonicalKey is None:
                 if strict:
                     raise AttributeError("Invalid option {:} for {:}".format(k, self.identification))
                 continue
+            updatedNames.add(canonicalKey)
             journal.message("Updating option {:}={:}".format(canonicalKey, v), self.identification)
             defaultValue = self.SolverSpecificOptions[canonicalKey]
             if isinstance(defaultValue, bool):
@@ -166,6 +173,8 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
                 self.options[canonicalKey] = coerceValue(v, dtype)
             else:
                 self.options[canonicalKey] = type(defaultValue)(v)
+
+        return updatedNames
 
     @performancetiming.timeit("topology update")
     def updateTopologyAndConnectivity(self, model: FEModel, step, offerModelModifiers: bool = True) -> TopologyUpdate:
