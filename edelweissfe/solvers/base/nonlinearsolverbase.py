@@ -187,6 +187,11 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
         up, once, on the net change. They may not create or delete elements: the topology window
         is closed by then, so an attempt raises.
 
+        Only the constraints that are switched on are located anew
+        (:attr:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.switchedOn`), those out of reach included,
+        so that they can find themselves within reach again. A constraint switched off from outside rests until it is
+        switched on again, and is located anew at the start of the next increment then.
+
         Both sweeps of the second phase are materialized lists rather than ``any()`` over a
         generator, which would stop at the first consumer reporting a change and skip the rest.
 
@@ -209,7 +214,7 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
         topologyChanged = model.topology.update(step) if offerModelModifiers else False
         meshDependentsRefreshed = model.topology.refreshMeshDependents()
         constraintConnectivityChanged = any(
-            [constraint.updateConnectivity(model) for constraint in model.constraints.values()]
+            [constraint.updateConnectivity(model) for constraint in model.constraints.values() if constraint.switchedOn]
         )
         return TopologyUpdate(topologyChanged, meshDependentsRefreshed, constraintConnectivityChanged)
 

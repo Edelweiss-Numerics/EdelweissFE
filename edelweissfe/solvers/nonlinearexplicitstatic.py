@@ -233,6 +233,29 @@ class NEST(NIST):
         self.linSolver = None
         self.linSolverName = None
 
+    def validateModelCapabilities(self, model: FEModel):
+        """Refuse, on top of the base checks, a constraint that is switched on and needs its connectivity updated in
+        every increment, i.e. a contact, which searches for what it touches: this solver never performs the update. A
+        constraint switched off from outside
+        (:attr:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.switchedOn`) is not refused: it rests,
+        and takes no part in the step.
+
+        Parameters
+        ----------
+        model
+            The model tree.
+        """
+
+        super().validateModelCapabilities(model)
+
+        for constraintName, constraint in model.constraints.items():
+            if constraint.switchedOn and type(constraint).updateConnectivity is not ConstraintBase.updateConnectivity:
+                raise Exception(
+                    f"Constraint '{constraintName}' requires a dynamic connectivity update "
+                    f"(contact) every increment, which {self.identification} never performs -- "
+                    "contact is not currently supported with this solver."
+                )
+
     def beginStep(
         self,
         step,
@@ -258,14 +281,6 @@ class NEST(NIST):
         performancetiming.reset()
 
         self.validateModelCapabilities(model)
-
-        for constraintName, constraint in model.constraints.items():
-            if type(constraint).updateConnectivity is not ConstraintBase.updateConnectivity:
-                raise Exception(
-                    f"Constraint '{constraintName}' requires a dynamic connectivity update "
-                    f"(contact) every increment, which {self.identification} never performs -- "
-                    "contact is not currently supported with this solver."
-                )
 
         self.journal.message("Creating monolithic equation system", self.identification, 0)
         self.forgetEquationSystem()

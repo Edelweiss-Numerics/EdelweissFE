@@ -561,7 +561,10 @@ behind. Two states decide it, and ``active`` is true while both are:
   within reach.
 
 So a constraint switched off from outside stays off, whatever it finds in reach; switched on again, it takes part
-while it is within reach.
+while it is within reach. Switched off from outside, a constraint rests: the solvers do not locate it anew
+(``updateConnectivity``), which they do for every constraint that is switched on, those out of reach included, so that
+they can find themselves within reach again. A solver that cannot handle a constraint, e.g. ``NEST`` a contact,
+refuses it only while it is switched on.
 
 .. automodule:: edelweissfe.constraints.base.constraintbase
     :members:

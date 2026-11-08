@@ -1012,9 +1012,10 @@ class NED(NonlinearSolverBase):
         and the explicit update leaves them untouched forever -- the constraint would appear active
         and enforce nothing. Penalty-type constraints, which act through nodal forces alone, are
         supported: see :meth:`assembleConstraintForces`.
-        A constraint that is switched off
-        (:attr:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.active`) is not refused: it takes no
-        part in the equation system, and its scalar variables leave it with it.
+        A constraint switched off from outside
+        (:attr:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.switchedOn`) is not refused: it takes no
+        part in the step, and its scalar variables leave the equation system with it. One that is switched on is
+        refused even while it is out of reach: it may come within reach during the step.
 
         Parameters
         ----------
@@ -1080,8 +1081,8 @@ class NED(NonlinearSolverBase):
                 )
 
         for constraintName, constraint in model.constraints.items():
-            # a constraint that is switched off has no place in the equation system, nor have its scalar variables
-            if not constraint.active:
+            # a constraint switched off from outside takes no part in the step, nor do its scalar variables
+            if not constraint.switchedOn:
                 continue
             nScalarVariables = constraint.getNumberOfAdditionalNeededScalarVariables()
             if nScalarVariables:
@@ -1124,8 +1125,9 @@ class NED(NonlinearSolverBase):
     def updateConstraintConnectivity(self, model: FEModel) -> bool:
         """Let the constraints whose connectivity is the outcome of a search re-run that search.
 
-        Only the constraints in :attr:`_dynamicConnectivityConstraints` are ticked, and the caller
-        ticks them only every ``contact-update-frequency`` increments. Both matter: a node-to-surface
+        Only the constraints in :attr:`_dynamicConnectivityConstraints` that are switched on are ticked (see
+        :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.updateTopologyAndConnectivity`), and
+        the caller ticks them only every ``contact-update-frequency`` increments. Both matter: a node-to-surface
         search is O(slaves x facets) in Python, which is affordable once per increment of an implicit
         analysis -- where it is amortised over a Newton loop and a linear solve -- and not affordable
         tens of thousands of times. What makes throttling defensible rather than merely cheap is that
@@ -1145,7 +1147,14 @@ class NED(NonlinearSolverBase):
             be rebuilt.
         """
 
-        return any([constraint.updateConnectivity(model) for constraint in self._dynamicConnectivityConstraints])
+        # as the model does: a constraint switched off from outside rests, and is not located anew
+        return any(
+            [
+                constraint.updateConnectivity(model)
+                for constraint in self._dynamicConnectivityConstraints
+                if constraint.switchedOn
+            ]
+        )
 
     def _operatorsReusable(self, model: FEModel, stepActions: dict) -> bool:
         """Whether the kept lumped operators still describe this model, so that a rebuild may keep

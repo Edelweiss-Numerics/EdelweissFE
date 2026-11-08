@@ -34,17 +34,21 @@ A Lagrange multiplier constraint is the sharp case: if its multipliers stayed in
 constraint that gives them an equation, the system matrix would be singular. Switched off by a ``modelupdate``, the
 constraint below lets the loaded corner of a plate move freely; switched on in the next step, it pulls the top edge
 back to one common displacement. The explicit solver ``NED``, which refuses a constraint with multipliers, does not
-refuse one that is switched off.
+refuse one that is switched off, nor does ``NEST`` refuse a contact switched off from outside. A constraint switched
+off from outside rests: the solvers do not locate it anew.
 """
 
 import numpy as np
 import pytest
 
+from edelweissfe.config.configurator import loadConfiguration
 from edelweissfe.constraints.base.constraintbase import ConstraintBase
 from edelweissfe.drivers.inputfiledrivensimulation import finiteElementSimulation
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.solvers.nonlinearexplicitdynamic import NED
+from edelweissfe.solvers.nonlinearexplicitstatic import NEST
+from edelweissfe.solvers.nonlinearimplicitstatic import NIST
 from edelweissfe.utils.inputfileparser import parseInputFile
 
 DECK = """
@@ -80,11 +84,15 @@ maxInc=1e0, minInc=1e0, maxNumInc=1, maxIter=5, stepLength=1
 """
 
 
-def _run(tmp_path, secondStep: str):
+def _runDeck(tmp_path, deck: str):
     path = tmp_path / "deck.inp"
-    path.write_text(DECK.format(secondStep=secondStep))
+    path.write_text(deck)
     model, _ = finiteElementSimulation(parseInputFile(str(path)), verbose=False, suppressPlots=True)
     return model
+
+
+def _run(tmp_path, secondStep: str):
+    return _runDeck(tmp_path, DECK.format(secondStep=secondStep))
 
 
 def _verticalDisplacementOfTopEdge(model) -> np.ndarray:
@@ -129,15 +137,22 @@ def test_the_explicit_solver_refuses_a_lagrange_constraint_only_while_it_is_swit
     with pytest.raises(NotImplementedError, match="topEqual"):
         explicitSolver.validateModelCapabilities(model)
 
+    # switched on, but out of reach at the start of the step: it may come within reach during the step
+    model.constraints["topEqual"].withinReach = False
+    with pytest.raises(NotImplementedError, match="topEqual"):
+        explicitSolver.validateModelCapabilities(model)
+
 
 class _ConstraintWithAPartner(ConstraintBase):
     """A constraint that finds itself within reach of its partner or not, as the test places the partner
-    (``partnerInReach``), and reports a change of :attr:`active` as a change of its connectivity."""
+    (``partnerInReach``), and reports a change of :attr:`active` as a change of its connectivity. It counts how often
+    it is located (``timesLocated``)."""
 
     def __init__(self):
         super().__init__("withAPartner", None)
         self.name = "withAPartner"
         self.partnerInReach = True
+        self.timesLocated = 0
 
     @property
     def nodes(self):
@@ -152,6 +167,7 @@ class _ConstraintWithAPartner(ConstraintBase):
         return 0
 
     def updateConnectivity(self, model):
+        self.timesLocated += 1
         wasActive = self.active
         self.withinReach = self.partnerInReach
         return self.active != wasActive
@@ -195,3 +211,104 @@ def test_a_constraint_switched_off_from_outside_stays_off_whatever_it_finds_in_r
     constraint.partnerInReach = False
     constraint.updateConnectivity(model)
     assert constraint.switchedOn and not constraint.active, "switched on again, it follows the reach of its partner"
+
+
+def test_the_solvers_locate_a_constraint_out_of_reach_but_not_one_switched_off_from_outside():
+    model, constraint = _modelWithAPartnerConstraint()
+    solver = NIST(loadConfiguration({}), Journal(verbose=False))
+
+    def updateConnectivity() -> bool:
+        """The connectivity part of the solvers' topology update at the start of an increment."""
+        topologyUpdate = solver.updateTopologyAndConnectivity(model, None, offerModelModifiers=False)
+        return topologyUpdate.constraintConnectivityChanged
+
+    constraint.active = False
+    assert not updateConnectivity()
+    assert constraint.timesLocated == 0, "switched off from outside, the constraint rests"
+
+    constraint.active = True
+    constraint.partnerInReach = False
+    assert updateConnectivity()
+    assert constraint.timesLocated == 1 and not constraint.active
+
+    constraint.partnerInReach = True
+    assert updateConnectivity(), "out of reach, it is located, so that it finds itself within reach again"
+    assert constraint.timesLocated == 2 and constraint.active
+
+
+def test_the_explicit_dynamic_solver_does_not_locate_a_constraint_switched_off_from_outside():
+    model, constraint = _modelWithAPartnerConstraint()
+    explicitSolver = NED({}, Journal(verbose=False))
+    explicitSolver._dynamicConnectivityConstraints = [constraint]
+
+    constraint.active = False
+    assert not explicitSolver.updateConstraintConnectivity(model)
+    assert constraint.timesLocated == 0
+
+    constraint.active = True
+    explicitSolver.updateConstraintConnectivity(model)
+    assert constraint.timesLocated == 1
+
+
+#: Two plane-strain blocks, the upper one 0.05 above the lower one, and a frictional contact with augmented Lagrange
+#: multipliers between them: the model of ``testfiles/edelweiss-only/NodeToDeformableSurfaceContact2D``.
+CONTACT_MODEL = """
+*material, name=LinearElastic, id=linearelastic, provider=edelweiss
+1.8e4, 0.3
+
+*job, name=job, domain=2d
+*solver, solver=NIST, name=theSolver
+
+*modelGenerator, generator=planeRectQuad, name=lower
+x0=0, y0=0, l=2.0, h=1.0, nX=3, nY=2, elType=CPE8, elProvider=edelweiss
+
+*modelGenerator, generator=planeRectQuad, name=upper
+x0=0.7, y0=1.05, l=0.6, h=1.0, nX=2, nY=2, elType=CPE8, elProvider=edelweiss
+
+*modelGenerator, generator=surfaceElementGenerator, name=slaveFacets
+surface=upper_bottom
+name=slaveSurf
+triangulation=midside
+
+*modelGenerator, generator=surfaceElementGenerator, name=masterFacets
+surface=lower_top
+name=masterSurf
+triangulation=midside
+
+*section, name=section1, thickness=1.0, material=linearelastic, type=plane
+lower_all
+upper_all
+
+*constraint, name=contact, type=nodeToDeformableSurfacePenalty
+slaveSurface=slaveSurf_facets, masterSurface=masterSurf_facets, penalty=3e6, type=quadratic,
+searchDistance=2.0, sliding=small, mu=0.3, tangentPenalty=1e6, augmentedLagrange=True
+"""
+
+#: A step of three increments with the contact switched off, the bottom of the lower block fixed and the top of the
+#: upper block held.
+SWITCHED_OFF = """
+*step, solver=theSolver
+maxInc=0.34, minInc=1e-6, maxNumInc=100, maxIter=25, stepLength=1
+>>modelupdate, update='model.constraints["contact"].active=False'
+>>dirichlet, name=fixLower, nSet=lower_bottom, field=displacement, 1=0.0, 2=0.0
+>>dirichlet, name=holdUpper, nSet=upper_top, field=displacement, 1=0.0, 2=0.0
+"""
+
+
+def test_the_explicit_static_solver_refuses_a_contact_only_while_it_is_switched_on(tmp_path):
+    """NEST never updates the connectivity, so it refuses a contact, which searches for what it touches in every
+    increment. A contact switched off from outside rests, and takes no part in the step."""
+
+    model = _runDeck(tmp_path, CONTACT_MODEL + SWITCHED_OFF)
+    explicitSolver = NEST({}, Journal(verbose=False))
+
+    explicitSolver.validateModelCapabilities(model)
+
+    model.constraints["contact"].active = True
+    with pytest.raises(Exception, match="dynamic connectivity update"):
+        explicitSolver.validateModelCapabilities(model)
+
+    # switched on, but out of reach: it would have to be located to find itself within reach again
+    model.constraints["contact"].withinReach = False
+    with pytest.raises(Exception, match="dynamic connectivity update"):
+        explicitSolver.validateModelCapabilities(model)
