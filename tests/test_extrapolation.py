@@ -233,6 +233,27 @@ def test_an_unknown_extrapolation_is_refused(tmp_path):
         run(tmp_path, deck(options="extrapolation=quadratik"))
 
 
+@pytest.mark.parametrize("option", ["retryWithoutExtrapolation", "extrapolateAcrossConnectivityChange"])
+def test_an_option_of_the_prediction_is_refused_without_one(tmp_path, option):
+    """Both options act on a prediction: a declaration that switches one on with ``extrapolation=off`` is refused, the
+    definition of the solver as a step's ``>>options`` block, which then changes nothing. Switched on for earlier
+    steps, the option rests in a step that switches the prediction off."""
+
+    with pytest.raises(ValueError, match=option):
+        NIST(loadConfiguration({}), Journal(verbose=False), extrapolation="off", **{option: "True"})
+    with pytest.raises(ValueError, match=option):
+        run(tmp_path, deck(options=f"extrapolation=off, {option}=True"))
+
+    solver = NIST(loadConfiguration({}), Journal(verbose=False), extrapolation="off")
+    with pytest.raises(ValueError, match=option):
+        solver.applyOptionsOverride({option: True})
+    assert not solver.options[option]
+
+    solver.applyOptionsOverride({"extrapolation": "linear", option: True})
+    solver.applyOptionsOverride({"extrapolation": "off"})
+    assert solver.options[option]
+
+
 @pytest.mark.parametrize("retry", [False, True])
 def test_a_failed_extrapolated_increment_is_retried_without_extrapolation(tmp_path, increments, retry):
     reference = displacements(run(tmp_path, deck(options="extrapolation=quadratic")))

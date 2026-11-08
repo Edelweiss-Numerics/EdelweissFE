@@ -193,6 +193,9 @@ and around rebuilds of the equation system, both off by default:
   same degrees of freedom then. A change of the topology, e.g., a mesh refinement, always starts from zero (see
   ``extrapolateAfterModelChange`` for the increment that follows it).
 
+Both act on a prediction: a declaration of options -- the ``*solver`` datalines, or an ``>>options`` block -- that
+switches either on with ``extrapolation=off`` is refused.
+
 Convergence criteria of the implicit solvers
 --------------------------------------------
 

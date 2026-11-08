@@ -395,6 +395,8 @@ class NIST(NonlinearSolverBase):
         the declaration. A declaration is the definition of the solver (its ``*solver`` datalines, or the arguments of
         its constructor), or an ``>>options`` block of a step. Refused are:
 
+        * ``retryWithoutExtrapolation`` and ``extrapolateAcrossConnectivityChange`` switched on with
+          ``extrapolation=off``: there is no prediction to retry without, nor one to keep across a rebuild;
         * an option of the abaqus criterion (``abaqus...``) with ``convergenceCriterion=legacy``.
 
         An option the declaration does not set is not refused: an option set for some steps keeps its value in a step
@@ -412,6 +414,10 @@ class NIST(NonlinearSolverBase):
         ValueError
             If the declaration sets an option where it means nothing.
         """
+
+        for name in ("retryWithoutExtrapolation", "extrapolateAcrossConnectivityChange"):
+            if name in declaredOptions and options[name] and options["extrapolation"] == "off":
+                raise ValueError("{:} means nothing with extrapolation=off: no increment is predicted".format(name))
 
         abaqusCriterionOptions = sorted(name for name in declaredOptions if name.startswith("abaqus"))
         if abaqusCriterionOptions and options["convergenceCriterion"] == "legacy":
