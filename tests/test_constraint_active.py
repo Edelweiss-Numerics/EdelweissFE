@@ -284,6 +284,22 @@ slaveSurface=slaveSurf_facets, masterSurface=masterSurf_facets, penalty=3e6, typ
 searchDistance=2.0, sliding=small, mu=0.3, tangentPenalty=1e6, augmentedLagrange=True
 """
 
+#: Press the upper block onto the lower one, then drag it sideways, so that the contact holds normal multipliers and a
+#: frictional history: the steps of ``testfiles/edelweiss-only/NodeToDeformableSurfaceContact2D``.
+PRESS_AND_DRAG = """
+*step, solver=theSolver
+maxInc=0.34, minInc=1e-6, maxNumInc=100, maxIter=25, stepLength=1
+>>options, name=theSolver, extrapolation=off
+>>dirichlet, name=fixLower, nSet=lower_bottom, field=displacement, 1=0.0, 2=0.0
+>>dirichlet, name=holdUpper, nSet=upper_top, field=displacement, 1=0.0, 2=-0.15
+
+*step, solver=theSolver
+maxInc=0.1, minInc=1e-6, maxNumInc=100, maxIter=25, stepLength=1
+>>options, name=theSolver, extrapolation=off
+>>dirichlet, name=fixLower, nSet=lower_bottom, field=displacement, 1=0.0, 2=0.0
+>>dirichlet, name=holdUpper, nSet=upper_top, field=displacement, 1=0.4, 2=0.0
+"""
+
 #: A step of three increments with the contact switched off, the bottom of the lower block fixed and the top of the
 #: upper block held.
 SWITCHED_OFF = """
@@ -312,3 +328,24 @@ def test_the_explicit_static_solver_refuses_a_contact_only_while_it_is_switched_
     model.constraints["contact"].withinReach = False
     with pytest.raises(Exception, match="dynamic connectivity update"):
         explicitSolver.validateModelCapabilities(model)
+
+
+def test_a_contact_switched_off_for_a_step_keeps_its_multipliers_and_its_frictional_history(tmp_path):
+    """The blocks are pressed together and dragged, then held for a step with the contact switched off. The contact,
+    which is not part of that step, accepts no state: its augmented Lagrange multipliers would otherwise grow by the
+    penalty force of its last gap in every increment, and act across the gap once it is switched on again."""
+
+    (tmp_path / "pressedAndDragged").mkdir()
+    (tmp_path / "switchedOff").mkdir()
+    pressedAndDragged = _runDeck(tmp_path / "pressedAndDragged", CONTACT_MODEL + PRESS_AND_DRAG)
+    switchedOff = _runDeck(tmp_path / "switchedOff", CONTACT_MODEL + PRESS_AND_DRAG + SWITCHED_OFF)
+    assert pressedAndDragged.time == pytest.approx(2.0) and switchedOff.time == pytest.approx(3.0)
+
+    history = pressedAndDragged.constraints["contact"].getRestartData()
+    assert np.any(history["lambdaN"] < 0.0), "the check is vacuous without multipliers"
+    assert np.any(history["tangentialForceConverged"] != 0.0), "the check is vacuous without a frictional history"
+
+    historyAfterTheSwitchedOffStep = switchedOff.constraints["contact"].getRestartData()
+    assert not switchedOff.constraints["contact"].active
+    for name in ("lambdaN", "tangentialForceConverged"):
+        np.testing.assert_allclose(historyAfterTheSwitchedOffStep[name], history[name], rtol=1e-12, atol=0.0)

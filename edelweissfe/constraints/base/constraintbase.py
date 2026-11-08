@@ -63,9 +63,10 @@ class ConstraintBase(OptionSchemaProvider, ABC, VIJEntityBase):
     def switchedOn(self) -> bool:
         """Whether this constraint is switched on from outside, e.g. by a ``modelupdate`` step action, which switches it
         through :attr:`active`. A constraint switched off from outside rests: the solvers do not locate it anew
-        (:meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.updateTopologyAndConnectivity`), and
-        they neither evaluate it nor refuse it. A solver that cannot handle a constraint refuses it while it is switched
-        on, even out of reach: it may come within reach during the step.
+        (:meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.updateTopologyAndConnectivity`), it
+        accepts no state (:meth:`acceptLastState`), so that its history stays as it was, and the solvers neither
+        evaluate it nor refuse it. A solver that cannot handle a constraint refuses it while it is switched on, even out
+        of reach: it may come within reach during the step.
 
         Returns
         -------
@@ -205,7 +206,8 @@ class ConstraintBase(OptionSchemaProvider, ABC, VIJEntityBase):
     def acceptLastState(self):
         """Called by :meth:`~edelweissfe.models.femodel.FEModel.advanceToTime` when an increment
         is accepted, so a stateful constraint (e.g. frictional contact) can promote the state of
-        the last (converged) Newton iterate to its history.
+        the last (converged) Newton iterate to its history. Only an :attr:`active` constraint is called: one that took
+        no part in the increment keeps its history.
 
         The default implementation does nothing, which is correct for every stateless constraint
         (i.e. every constraint that does not override this method)."""

@@ -421,6 +421,10 @@ class FEModel:
         """Accept the current state of the model and sub instances, and
         set the new time.
 
+        Of the constraints, only the active ones accept their state (see :meth:`activeConstraints`): a constraint that
+        took no part in the increment has no new state, and keeps its history as it was, e.g. the multipliers and the
+        frictional history of a contact switched off for a step.
+
         Parameters
         ----------
         time
@@ -432,7 +436,7 @@ class FEModel:
         self._acceptElementStates()
 
         # Serial: negligible next to the element loop.
-        for constraint in self.constraints.values():
+        for constraint in self.activeConstraints():
             constraint.acceptLastState()
 
         for mpc in self.multiPointConstraints.values():
