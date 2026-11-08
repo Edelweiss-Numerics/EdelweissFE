@@ -65,7 +65,7 @@ The entries
 
 The Lagrange multipliers of constraints are scalar variables, not node field entries
 (:class:`~edelweissfe.variables.scalarvariable.ScalarVariable`). They are state as well: each holds its total
-value, written at acceptance and read back at every rebuild. A constraint that is switched off keeps the value it
+value, written at acceptance and read back at every rebuild. A constraint that is not active keeps the value it
 had.
 
 Models whose equation system covers a part of their nodes
