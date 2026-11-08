@@ -37,7 +37,7 @@ are vectors of, and the convergence criterion, a helper object (see below):
     checkpointedState = {
         "prevTimeStep": TimeStep,
         "dUOfLastIncrement": np.ndarray,
-        "timeStepBeforePrev": TimeStep,
+        "timeStepOfIncrementBeforeLast": TimeStep,
         "dUOfIncrementBeforeLast": np.ndarray,
         "dofNumberingOfLastIncrement": str,
         "convergenceCriterion": ConvergenceCriterionBase,
