@@ -127,7 +127,8 @@ class TimeStepperBase(ABC):
         Raises
         ------
         ReachedMinIncrementSize
-            If the increment cannot be reduced any further.
+            If the increment cannot be reduced any further: it is at or below the minimum size. The last
+            increment of a step, the remainder of the step, may be below it.
         """
 
     @abstractmethod

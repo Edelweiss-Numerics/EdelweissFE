@@ -33,7 +33,8 @@ solver builds its initial state, and refuses ``makeZeroIncrementFirst=False``.
 Falling back to a restart checkpoint
 ------------------------------------
 
-An increment that fails at the minimum increment size ``minInc`` fails the step. With ``maxCheckpointFallbacks=n``, the
+An increment that fails at the minimum increment size ``minInc`` fails the step, and so does a failing last increment
+of the step that is smaller than ``minInc`` already, the remainder of the step. With ``maxCheckpointFallbacks=n``, the
 step instead goes back to its latest restart checkpoint and continues from there with an increment cut back by
 ``cutbackFactor``, at most ``n`` times:
 

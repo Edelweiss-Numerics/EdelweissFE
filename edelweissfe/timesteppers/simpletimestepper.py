@@ -152,7 +152,8 @@ class SimpleTimeStepper(TimeStepperBase):
             self.journal.errorMessage("Failed zero increment", self.identification)
             raise ReachedMinIncrementSize()
 
-        if self.increment == self.minIncrement:
+        # The last increment of a step, the remainder, may be below the minimum size already.
+        if self.increment <= self.minIncrement:
             self.journal.errorMessage("Cannot reduce increment size", self.identification)
             raise ReachedMinIncrementSize()
 
