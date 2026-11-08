@@ -262,7 +262,7 @@ class FEModel:
         if name in self.scalarVariables:
             raise Exception("ScalarVariable with name {:} already exists!".format(name))
 
-        self.scalarVariables[name] = ScalarVariable()
+        self.scalarVariables[name] = ScalarVariable(name)
         return self.scalarVariables[name]
 
     def _createAndAssignScalarVariableForConstraints(self, journal: Journal):

@@ -258,11 +258,12 @@ class DofManager:
     def dofNumberingDigest(self) -> str:
         """A digest, a hexadecimal string, of what decides the index of every degree of freedom: for every field, its
         name, its dimension, its slice in the DofVector and the labels of its nodes in the order they are numbered; and
-        the number of the scalar variables, which follow. Two equation systems of a step with the same digest give
-        every degree of freedom the same index, so a DofVector of one is a DofVector of the other -- e.g., before and
-        after a rebuild caused by a contact search, which changes the coupling of the degrees of freedom but not their
-        numbering. Their number stands for the scalar variables: within a step, these are always those of the
-        constraints switched on, in their order, and only a step switches constraints on or off.
+        the names of the scalar variables, which follow, in the order they are numbered. Two equation systems with the
+        same digest give every degree of freedom the same index, so a DofVector of one is a DofVector of the other --
+        e.g., before and after a rebuild caused by a contact search, which changes the coupling of the degrees of
+        freedom but not their numbering. The scalar variables are named, not counted: they are those of the
+        constraints switched on, which a constraint may change within a step (switched from outside, or by itself), so
+        that two systems with as many scalar variables may number different ones.
 
         The digest names the nodes by their labels, so it is the same in every run of a model: a restart checkpoint
         holds it together with the vectors it numbers. Computed at the first request; the numbering of a DofManager
@@ -274,7 +275,7 @@ class DofManager:
             digest.update(repr((fieldName, nodeField.dimension, fieldIndices.start, fieldIndices.stop)).encode())
             labels = np.fromiter((node.label for node in nodeField.nodes), dtype=np.int64, count=len(nodeField.nodes))
             digest.update(labels.tobytes())
-        digest.update(repr(len(self.idcsOfScalarVariablesInDofVector)).encode())
+        digest.update(repr([scalarVariable.name for scalarVariable in self.idcsOfScalarVariablesInDofVector]).encode())
 
         return digest.hexdigest()
 

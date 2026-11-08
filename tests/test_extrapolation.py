@@ -48,6 +48,7 @@ from edelweissfe.stepactions.base.dirichletbase import DirichletBase
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.exceptions import ReachedMaxIterations
 from edelweissfe.utils.inputfileparser import parseInputFile
+from edelweissfe.variables.scalarvariable import ScalarVariable
 
 INCREMENT = 0.125
 
@@ -346,6 +347,29 @@ def test_a_rebuild_that_renumbers_the_degrees_of_freedom_drops_the_prediction(tm
     solver.options["extrapolateAcrossConnectivityChange"] = False
     assert not solver.predictionSurvivesRebuild(False, True)
     assert solver.predictionSurvivesRebuild(False, False)
+
+
+def test_a_rebuild_that_numbers_other_scalar_variables_drops_the_prediction():
+    """Two constraints with one Lagrange multiplier each, one switched on and the other off, then the other way round
+    (a constraint may switch within a step): the two equation systems have as many degrees of freedom, but the last one
+    numbers another multiplier. The digest names the scalar variables, by the names the model holds them under, so the
+    prediction does not survive the switch."""
+
+    numbering = DofManager([], [ScalarVariable("tieA_0")]).dofNumberingDigest
+
+    # the same names in another run, with other objects: the same numbering
+    assert DofManager([], [ScalarVariable("tieA_0")]).dofNumberingDigest == numbering
+    assert DofManager([], [ScalarVariable("tieB_0")]).dofNumberingDigest != numbering
+    assert (
+        DofManager([], [ScalarVariable("tieA_0"), ScalarVariable("tieB_0")]).dofNumberingDigest
+        != DofManager([], [ScalarVariable("tieB_0"), ScalarVariable("tieA_0")]).dofNumberingDigest
+    )
+
+    solver = solverWithHistory("linear", [0.1], [[0.5]], numbering, extrapolateAcrossConnectivityChange=True)
+    solver.theDofManager = DofManager([], [ScalarVariable("tieB_0")])
+    assert not solver.predictionSurvivesRebuild(False, True)
+    solver.theDofManager = DofManager([], [ScalarVariable("tieA_0")])
+    assert solver.predictionSurvivesRebuild(False, True)
 
 
 def test_the_history_of_a_quadratic_extrapolation_is_checkpointed():
