@@ -457,7 +457,7 @@ class FEModel:
         reported a change of the mesh or of the coupling (:meth:`updateConnectivity`).
 
         The equation system of a finite element model holds the node fields, the elements, and the active constraints
-        with their scalar variables (e.g. Lagrange multipliers). A constraint that is switched off (see
+        with their scalar variables (e.g. Lagrange multipliers). A constraint that is not active (see
         :attr:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.active`) is left out together with its
         scalar variables, which would otherwise be unknowns without an equation.
 
