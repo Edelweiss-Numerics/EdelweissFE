@@ -45,7 +45,7 @@ from edelweissfe.utils.schema import buildSchemaFromOptions, schemaField
 from edelweissfe.variables.fieldvariable import FieldVariable
 
 """
-Indirect (displacement) controller for the NISTArcLength solver
+Indirect (displacement) controller for the NISTPArcLength solver
 """
 
 

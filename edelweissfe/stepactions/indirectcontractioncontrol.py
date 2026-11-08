@@ -43,7 +43,7 @@ from edelweissfe.utils.misc import withoutParserBookkeepingKeys
 from edelweissfe.utils.schema import buildSchemaFromOptions, schemaField
 
 """
-Indirect (displacement) controller for the NISTArcLength solver
+Indirect (displacement) controller for the NISTPArcLength solver
 uses a ring to control the contraction, e.g., for tunneling simulations.
 
 Currently 2D only!
