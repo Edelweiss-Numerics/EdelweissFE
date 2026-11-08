@@ -161,17 +161,21 @@ class NISTPArcLength(NISTParallel):
 
     #: The state between increments: the load parameter the step has reached, and the predictor's state, NIST's plus
     #: the increments of the load parameter that belong to its accepted increments.
-    checkpointedState = NISTParallel.checkpointedState | {"Lambda": float, "dLambda": float, "dLambdaBeforePrev": float}
+    checkpointedState = NISTParallel.checkpointedState | {
+        "Lambda": float,
+        "dLambdaOfLastIncrement": float,
+        "dLambdaOfIncrementBeforeLast": float,
+    }
 
     def __init__(self, jobInfo, journal, **kwargs):
         #: The load parameter of the current step, reached by its last converged increment.
         self.Lambda = 0.0
         #: The increment of the load parameter in the last accepted increment, from which the predictor extrapolates.
-        self.dLambda = None
+        self.dLambdaOfLastIncrement = None
         #: The increment of the load parameter in the accepted increment before, for a quadratic extrapolation.
-        self.dLambdaBeforePrev = None
+        self.dLambdaOfIncrementBeforeLast = None
         #: The increment of the load parameter of the converged attempt, until the increment is accepted.
-        self._dLambda = None
+        self._dLambdaOfConvergedAttempt = None
         #: The controller of the current step, or None.
         self.arcLengthController = None
         #: What the arc length method adds to the iterations of the increment being solved; None between increments.
@@ -263,8 +267,8 @@ class NISTPArcLength(NISTParallel):
         # A step starts from the load parameter zero and without a predictor state; a resumed step takes over the
         # checkpointed ones.
         self.Lambda = 0.0
-        self.dLambda = None
-        self.dLambdaBeforePrev = None
+        self.dLambdaOfLastIncrement = None
+        self.dLambdaOfIncrementBeforeLast = None
 
         return super().beginStep(step, model, fieldOutputController, outputmanagers)
 
@@ -427,7 +431,7 @@ class NISTPArcLength(NISTParallel):
             self.arcLengthIncrement = None
 
         self.Lambda += dLambda
-        self._dLambda = dLambda
+        self._dLambdaOfConvergedAttempt = dLambda
 
         self.arcLengthController.finishIncrement(U_n, dU, dLambda, timeStep, self.theDofManager)
 
@@ -767,9 +771,9 @@ class NISTPArcLength(NISTParallel):
             return 0.0
 
         weightOfLast, weightOfBeforeLast = self.extrapolationWeights(extrapolation, timeStep, prevTimeStep)
-        dLambda = self.dLambda * weightOfLast
+        dLambda = self.dLambdaOfLastIncrement * weightOfLast
         if weightOfBeforeLast is not None:
-            dLambda += weightOfBeforeLast * self.dLambdaBeforePrev
+            dLambda += weightOfBeforeLast * self.dLambdaOfIncrementBeforeLast
 
         return dLambda
 
@@ -793,11 +797,13 @@ class NISTPArcLength(NISTParallel):
 
         # for the outputs: the external load is the dead load plus the reference load times this
         model.additionalParameters["arc length parameter"] = self.Lambda
-        dLambdaOfLastIncrement = self.dLambda
+        dLambdaOfIncrementBeforeLast = self.dLambdaOfLastIncrement
         super().acceptIncrement(step, model, timeStep)
         # the increment before the last one is kept just as long as the solution's is
-        self.dLambdaBeforePrev = dLambdaOfLastIncrement if self.timeStepBeforePrev is not None else None
-        self.dLambda, self._dLambda = self._dLambda, None
+        self.dLambdaOfIncrementBeforeLast = (
+            dLambdaOfIncrementBeforeLast if self.timeStepOfIncrementBeforeLast is not None else None
+        )
+        self.dLambdaOfLastIncrement, self._dLambdaOfConvergedAttempt = self._dLambdaOfConvergedAttempt, None
 
     def applyStepActionsAtStepEnd(self, model, stepActions: dict[str, StepActionBase]):
         """Finish the step actions at the end of a step. Under arc length control, every load keeps the value the step

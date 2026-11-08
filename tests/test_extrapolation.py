@@ -142,7 +142,9 @@ def solverWithHistory(extrapolation, sizes, dUs, dofNumbering="the numbering", *
     timeSteps = [TimeStep(i + 1, size, 0.0, size, 0.0, 0.0) for i, size in enumerate(sizes)]
     solver.prevTimeStep, solver.dUOfLastIncrement = timeSteps[-1], np.array(dUs[-1], dtype=float)
     if len(sizes) > 1:
-        solver.timeStepBeforePrev, solver.dUOfIncrementBeforeLast = timeSteps[-2], np.array(dUs[-2], dtype=float)
+        solver.timeStepOfIncrementBeforeLast, solver.dUOfIncrementBeforeLast = timeSteps[-2], np.array(
+            dUs[-2], dtype=float
+        )
     solver.dofNumberingOfLastIncrement = dofNumbering
     return solver
 
@@ -378,7 +380,7 @@ def test_the_history_of_a_quadratic_extrapolation_is_checkpointed():
     restored.setRestartData(solver.getRestartData())
 
     np.testing.assert_array_equal(restored.dUOfIncrementBeforeLast, [1.0, 2.0])
-    assert restored.timeStepBeforePrev.stepProgressIncrement == 0.2
+    assert restored.timeStepOfIncrementBeforeLast.stepProgressIncrement == 0.2
     np.testing.assert_array_equal(predict(restored, 0.1)[0], predict(solver, 0.1)[0])
     # with the digest of the numbering the history is a vector of
     assert restored.dofNumberingOfLastIncrement == "the numbering"

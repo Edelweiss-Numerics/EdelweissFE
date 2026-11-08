@@ -424,7 +424,7 @@ class NIST(NonlinearSolverBase):
     checkpointedState = {
         "prevTimeStep": TimeStep,
         "dUOfLastIncrement": np.ndarray,
-        "timeStepBeforePrev": TimeStep,
+        "timeStepOfIncrementBeforeLast": TimeStep,
         "dUOfIncrementBeforeLast": np.ndarray,
         "dofNumberingOfLastIncrement": str,
         "convergenceCriterion": ConvergenceCriterionBase,
@@ -457,8 +457,8 @@ class NIST(NonlinearSolverBase):
         #: which no solver reads back.
         self.dUOfLastIncrement = None
         #: The accepted increment before :attr:`prevTimeStep`, kept for a quadratic extrapolation only (else None).
-        self.timeStepBeforePrev = None
-        #: The solution increment of :attr:`timeStepBeforePrev`.
+        self.timeStepOfIncrementBeforeLast = None
+        #: The solution increment of :attr:`timeStepOfIncrementBeforeLast`.
         self.dUOfIncrementBeforeLast = None
         #: The digest of the numbering of the degrees of freedom of the equation system the last increment was accepted
         #: in (:attr:`~edelweissfe.numerics.dofmanager.DofManager.dofNumberingDigest`): :attr:`dUOfLastIncrement` is a
@@ -608,7 +608,7 @@ class NIST(NonlinearSolverBase):
         # A step starts without a predictor state; a resumed step takes over the checkpointed one.
         self.prevTimeStep = None
         self.dUOfLastIncrement = None
-        self.timeStepBeforePrev = None
+        self.timeStepOfIncrementBeforeLast = None
         self.dUOfIncrementBeforeLast = None
         self.dofNumberingOfLastIncrement = None
 
@@ -1018,9 +1018,9 @@ class NIST(NonlinearSolverBase):
 
         # The predictor's history: a quadratic extrapolation needs the accepted increment before the last one, too.
         if self.options["extrapolation"] == "quadratic" and self.prevTimeStep is not None:
-            self.timeStepBeforePrev, self.dUOfIncrementBeforeLast = self.prevTimeStep, self.dUOfLastIncrement
+            self.timeStepOfIncrementBeforeLast, self.dUOfIncrementBeforeLast = self.prevTimeStep, self.dUOfLastIncrement
         else:
-            self.timeStepBeforePrev, self.dUOfIncrementBeforeLast = None, None
+            self.timeStepOfIncrementBeforeLast, self.dUOfIncrementBeforeLast = None, None
         # After a model change, dU contains the remesh settling transient: optionally do not extrapolate it.
         if self._modelHasChanged and not self.options["extrapolateAfterModelChange"]:
             self.prevTimeStep = None
@@ -1231,8 +1231,8 @@ class NIST(NonlinearSolverBase):
         h = timeStep.stepProgressIncrement
         h_n = prevTimeStep.stepProgressIncrement
 
-        if extrapolation == "quadratic" and self.extrapolates(extrapolation, self.timeStepBeforePrev):
-            h_nm1 = self.timeStepBeforePrev.stepProgressIncrement
+        if extrapolation == "quadratic" and self.extrapolates(extrapolation, self.timeStepOfIncrementBeforeLast):
+            h_nm1 = self.timeStepOfIncrementBeforeLast.stepProgressIncrement
             curvatureFactor = h * (h + h_n) / (h_nm1 + h_n)
             return h / h_n + curvatureFactor / h_n, -(curvatureFactor / h_nm1)
 

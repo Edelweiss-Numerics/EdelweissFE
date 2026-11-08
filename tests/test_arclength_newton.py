@@ -604,9 +604,9 @@ def solverWithHistory(extrapolation: str, sizes: list, dLambdas: list) -> NISTPA
     """An arc length solver whose accepted history are increments of the given sizes and load parameter increments."""
     solver = NISTPArcLength(loadConfiguration({}), Journal(verbose=False), extrapolation=extrapolation)
     timeSteps = [TimeStep(i + 1, size, 0.0, size, 0.0, 0.0) for i, size in enumerate(sizes)]
-    solver.prevTimeStep, solver.dLambda = timeSteps[-1], dLambdas[-1]
+    solver.prevTimeStep, solver.dLambdaOfLastIncrement = timeSteps[-1], dLambdas[-1]
     if len(sizes) > 1:
-        solver.timeStepBeforePrev, solver.dLambdaBeforePrev = timeSteps[-2], dLambdas[-2]
+        solver.timeStepOfIncrementBeforeLast, solver.dLambdaOfIncrementBeforeLast = timeSteps[-2], dLambdas[-2]
     return solver
 
 
