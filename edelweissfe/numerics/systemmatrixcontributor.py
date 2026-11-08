@@ -216,7 +216,8 @@ class SystemMatrixEntities:
     is described by that list alone; the block of any other entity is the list of entries it gives in
     :meth:`SystemMatrixContributorBase.localEntriesOfBlock`, stored in ``localRows`` and ``localColumns`` from
     ``localEntryStart[e]`` to ``localEntryStart[e + 1]``. A dense entity lists no entries: its ``nDof**2`` pairs are
-    never materialised.
+    never materialised. The lists of the entities lie one after the other: ``dofStart`` and ``localEntryStart`` begin
+    at 0 and never decrease, and the direct assembly refuses a table whose starts do not.
     """
 
     #: where the DOF list of each entity begins in :attr:`dofs` (int64, one more than there are entities)

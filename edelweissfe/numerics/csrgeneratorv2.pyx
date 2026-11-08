@@ -165,8 +165,13 @@ cdef SystemMatrixEntities _borrowedTable(
     const int32_t[::1] localColumns,
 ):
     """The C++ view of a :class:`~edelweissfe.numerics.systemmatrixcontributor.SystemMatrixEntities` table; the arrays
-    must outlive it."""
+    must outlive it.
+
+    The DOF lists of the entities, and their listed entries, lie one after the other: their starts begin at 0 and never
+    decrease. The C++ passes size their arrays by the last start and fill them entity by entity: a first start other
+    than 0, or one that decreases, would let them read or write outside their arrays."""
     cdef int64_t nEntities = dofStart.shape[0] - 1
+    cdef int64_t e
     if (
         nEntities < 0
         or couplesAllItsDofs.shape[0] != nEntities
@@ -176,6 +181,14 @@ cdef SystemMatrixEntities _borrowedTable(
         or localRows.shape[0] != localColumns.shape[0]
     ):
         raise ValueError("SystemMatrixEntities: the arrays of the table do not fit together.")
+    if dofStart[0] != 0 or localEntryStart[0] != 0:
+        raise ValueError("SystemMatrixEntities: dofStart and localEntryStart must begin at 0.")
+    for e in range(nEntities):
+        if dofStart[e + 1] < dofStart[e] or localEntryStart[e + 1] < localEntryStart[e]:
+            raise ValueError(
+                "SystemMatrixEntities: the DOF list or the listed entries of entity {:} end before they begin "
+                "(dofStart or localEntryStart decreases).".format(e)
+            )
     cdef SystemMatrixEntities entities
     entities.nEntities = nEntities
     entities.dofStart = &dofStart[0]

@@ -434,6 +434,37 @@ def test_the_generator_refuses_pairs_that_do_not_fit_the_matrix():
         generator.updateInPlace(np.ones(3))
 
 
+@pytest.mark.parametrize(
+    "dofStart, couplesAllItsDofs, localEntryStart, message",
+    [
+        pytest.param([0, 2, 1, 3], [1, 1, 1], [0, 0, 0, 0], "entity 1 end before they begin", id="dofStart-decreases"),
+        pytest.param([1, 2, 3], [1, 1], [0, 0, 0], "begin at 0", id="dofStart-begins-at-1"),
+        pytest.param([0, 1, 2, 3], [0, 0, 0], [0, 2, 1, 3], "entity 1 end before they begin", id="entries-decrease"),
+        pytest.param([0, 1, 2, 3], [0, 0, 0], [1, 1, 2, 3], "begin at 0", id="entries-begin-at-1"),
+    ],
+)
+def test_a_table_whose_lists_do_not_lie_one_after_the_other_is_refused(
+    dofStart, couplesAllItsDofs, localEntryStart, message
+):
+    """The DOF lists of the entities, and their listed entries, lie one after the other in the table: the starts begin
+    at 0 and never decrease. The C++ passes size their arrays by the last start and fill them entity by entity; a
+    start that decreases gives an entity a negative length, and with it they can write past the end of an array (these
+    tables only give a wrong pattern, so that the test fails cleanly without the check)."""
+    nListed = localEntryStart[-1]
+    table = SystemMatrixEntities(
+        dofStart=np.array(dofStart, dtype=np.int64),
+        dofs=np.arange(dofStart[-1], dtype=np.intc),
+        couplesAllItsDofs=np.array(couplesAllItsDofs, dtype=np.uint8),
+        localEntryStart=np.array(localEntryStart, dtype=np.int64),
+        localRows=np.zeros(nListed, dtype=np.intc),
+        localColumns=np.zeros(nListed, dtype=np.intc),
+    )
+    with pytest.raises(ValueError, match=message):
+        csrPatternOfEntities(table, 3)
+    with pytest.raises(ValueError, match=message):
+        DirectCSRAssembler(table, 3)
+
+
 def test_entries_to_add_are_sorted_csr_rows():
     generator = CSRGenerator(np.array([0, 1]), np.array([0, 1]), 3)
     unsorted = csr_matrix((np.zeros(2), np.array([2, 1]), np.array([0, 2, 2, 2])), shape=(3, 3))
