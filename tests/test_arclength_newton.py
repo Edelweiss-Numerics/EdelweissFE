@@ -690,3 +690,59 @@ def test_a_failed_extrapolated_increment_is_retried_without_extrapolation(tmp_pa
         # cut back, and the prediction is dropped
         assert attemptsOfThird[:2] == [(3, INCREMENT, True), (3, 0.25 * INCREMENT, False)]
     assertSameEndState(result, reference)
+
+
+# --- re-equilibration after a model change -----------------------------------------------------------------------------
+
+
+def test_the_re_equilibration_after_a_model_change_holds_the_controlled_quantity(tmp_path, monkeypatch):
+    """``equilibrateAfterModelChange`` under arc length control: the re-equilibration of a changed model is an arc
+    length increment of size zero. Here the floor stiffens while the cantilever presses on it, a change of the model:
+    the re-equilibration holds the controlled tip displacement where the last increment left it, and solves for the load
+    parameter, which rises -- the stiffer floor takes more load to hold the tip down -- until the changed model is in
+    equilibrium. The increments that follow start from there, and the step reaches its target."""
+
+    changeBeforeIncrement = 8
+    reEquilibrations = []
+    acceptedLoadParameters = {}
+    originalPrepareIncrement = NISTPArcLength.prepareIncrement
+    originalSolveIncrement = NISTPArcLength.solveIncrement
+    originalAcceptIncrement = NISTPArcLength.acceptIncrement
+
+    def prepareIncrement(self, step, model, isRetry):
+        originalPrepareIncrement(self, step, model, isRetry)
+        if step.timeStepper.numberOfIncrementsDone() == changeBeforeIncrement and not isRetry:
+            # the cantilever presses on the floor at y = -0.1
+            assert tipDisplacement(model) < -0.1
+            model.constraints["floor"].penalty *= 4.0
+            self._modelHasChanged = True
+
+    def solveIncrement(self, U_n, dU, P, K, stepActions, model, timeStep, *args):
+        controller = self.arcLengthController
+        controlled = controller.controlledDofIndices(self.theDofManager)
+        controlledQuantityAtStart = controller.cVector.dot(U_n[controlled])
+        result = originalSolveIncrement(self, U_n, dU, P, K, stepActions, model, timeStep, *args)
+        if timeStep.number == changeBeforeIncrement and timeStep.stepProgressIncrement == 0.0:
+            U_np, _, _, _, residualHistory = result
+            controlledQuantityAtEnd = controller.cVector.dot(U_np[controlled])
+            reEquilibrations.append((controlledQuantityAtStart, controlledQuantityAtEnd, self.Lambda, residualHistory))
+        return result
+
+    def acceptIncrement(self, step, model, timeStep):
+        originalAcceptIncrement(self, step, model, timeStep)
+        acceptedLoadParameters[timeStep.number] = self.Lambda
+
+    monkeypatch.setattr(NISTPArcLength, "prepareIncrement", prepareIncrement)
+    monkeypatch.setattr(NISTPArcLength, "solveIncrement", solveIncrement)
+    monkeypatch.setattr(NISTPArcLength, "acceptIncrement", acceptIncrement)
+    model = run(tmp_path, deck(solverOptions=", equilibrateAfterModelChange=True"))
+
+    ((controlledQuantityAtStart, controlledQuantityAtEnd, loadParameter, residualHistory),) = reEquilibrations
+    # the controlled quantity is held, the load parameter rises
+    np.testing.assert_allclose(controlledQuantityAtEnd, controlledQuantityAtStart, rtol=0.0, atol=1e-12)
+    assert loadParameter > 1.001 * acceptedLoadParameters[changeBeforeIncrement - 1]
+    # the changed model is in equilibrium: the last iteration of the re-equilibration converged in every field
+    assert all(
+        history[-1].fluxResidualConverged and history[-1].correctionConverged for history in residualHistory.values()
+    )
+    np.testing.assert_allclose(tipDisplacement(model), -0.25, rtol=1e-10)

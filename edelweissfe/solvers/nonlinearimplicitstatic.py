@@ -147,7 +147,10 @@ class NISTSchema:
             "first settled to equilibrium at the last converged load level (no load advance, no Dirichlet "
             "increment, zero time increment) so the subsequent load-advancing increment starts from an "
             "equilibrated state. Intended for softening problems where remeshing near the process zone "
-            "otherwise couples the load advance with the warm-start settling transient in one solve. Note: "
+            "otherwise couples the load advance with the warm-start settling transient in one solve. Under arc "
+            "length control (NISTPArcLength with a controller), the re-equilibration is an arc length increment of "
+            "size zero: the controlled quantity is held where the last accepted increment left it, and the load "
+            "parameter is solved for, and with it the loads and the prescribed displacements it scales. Note: "
             "the equilibration solve integrates materials with dT=0, which suits rate-independent models; "
             "rate-dependent materials see no time advance during it (by design)."
         ),

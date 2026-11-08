@@ -137,6 +137,14 @@ class NISTPArcLength(NISTParallel):
     load keeps the value the step applied (see :meth:`applyStepActionsAtStepEnd`). The load parameter of the step being
     solved is published as ``model.additionalParameters["arc length parameter"]``, e.g. for a load-displacement curve.
 
+    The re-equilibration after a model change (option ``equilibrateAfterModelChange``) is an arc length increment of
+    size zero, solved by :meth:`solveIncrement` like any other: the controller's equation asks for a change of zero, so
+    the controlled quantity stays where the last accepted increment left it, and the load parameter is solved for, and
+    with it the loads and the prescribed degrees of freedom it scales. This is what a zero-time re-equilibration holds
+    under displacement control, and, unlike a constant load, it has a solution past a limit point. As for any increment,
+    the stop condition is checked before it, and the controller's ``finishIncrement`` is called once it has converged;
+    the load parameter it reaches, committed with its state, is the one the next increment starts from.
+
     Parameters
     ----------
     jobInfo

@@ -205,6 +205,14 @@ load parameter of the step and the increments of it its predictor extrapolates, 
 step, and the controller the change of its controlled quantity over the step, so an arc length controlled run resumes
 exactly where it stopped.
 
+The re-equilibration after a model change (``equilibrateAfterModelChange``, see :doc:`modelmodifiers`) is, under arc
+length control, an arc length increment of size zero: the controller asks for a change of zero, so the controlled
+quantity stays where the last accepted increment left it, and the load parameter is solved for, and with it the loads
+and the prescribed displacements it scales -- the counterpart of a zero-time increment under displacement control,
+which, unlike a constant load, has a solution past a limit point. As for any increment, the stop condition is checked
+before it, and the controller's ``finishIncrement`` is called once it has converged. The load parameter it reaches is
+committed with its state, and the next increment starts from it.
+
 ``NID`` - Nonlinear Implicit Dynamic (Newmark-beta)
 ----------------------------------------------------
 
