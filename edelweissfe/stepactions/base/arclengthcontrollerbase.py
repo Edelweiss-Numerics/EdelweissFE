@@ -71,7 +71,8 @@ class ArcLengthControllerBase(StepActionBase):
         ddU_f
             The correction of the solution caused by the reference load alone.
         timeStep
-            The current time step.
+            The increment being solved: ``timeStep.stepProgress`` is the progress of the step at its end, and
+            ``timeStep.stepProgressIncrement`` its size, so it starts at their difference.
         dofManager
             The dof manager of the current equation system.
 
