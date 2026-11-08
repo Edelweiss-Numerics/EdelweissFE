@@ -297,8 +297,8 @@ stepLength={quarterPeriod!r}, startInc={dt / quarterPeriod!r}, maxInc={dt / quar
     endOfFirstStep = np.flatnonzero(np.isclose(t, quarterPeriod, rtol=0.0, atol=1e-9))[0]
     assert abs(v[endOfFirstStep]) > 0.5 * U_STATIC * OMEGA
 
-    # both increments of the quasi-static step (the following zero-length increment of NID, at the same time, completes
-    # the acceleration from equilibrium: zero up to round-off)
+    # both increments of the quasi-static step (the zero-length increment of NID that follows, at the same time, keeps
+    # this state; NID computes the acceleration from equilibrium at the start of its first increment of motion)
     quasiStatic = np.flatnonzero((t > quarterPeriod + 1e-9) & (t < endOfQuasiStaticStep - 1e-9))
     quasiStatic = np.r_[quasiStatic, np.flatnonzero(np.isclose(t, endOfQuasiStaticStep, rtol=0.0, atol=1e-9))[0]]
     assert len(quasiStatic) == 2
