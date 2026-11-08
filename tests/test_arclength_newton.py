@@ -259,10 +259,12 @@ def test_a_stop_condition_without_arc_length_control_is_refused(tmp_path):
 
 def test_the_stop_condition_is_checked_after_every_accepted_increment_of_nonzero_size(tmp_path):
     """A stop condition that holds from the start ends the step after its first increment of nonzero size: not after the
-    zero increment, which leaves the step where it started."""
+    zero increment, which leaves the step where it started, and, in a step without it, right after its first
+    increment."""
 
-    model = run(tmp_path, deck(solverOptions=", stopCondition='True'"))
-    np.testing.assert_allclose(tipDisplacement(model), INCREMENT * -0.25, rtol=1e-10)
+    for stepOptions in ("", ", makeZeroIncrementFirst=False"):
+        model = run(tmp_path, deck(solverOptions=", stopCondition='True'", stepOptions=stepOptions))
+        np.testing.assert_allclose(tipDisplacement(model), INCREMENT * -0.25, rtol=1e-10)
 
 
 def test_without_a_controller_the_loads_follow_the_time(tmp_path):
