@@ -369,15 +369,19 @@ def _scatterTable(direct, table, values, numThreads):
 
 
 @pytest.mark.parametrize("numThreads", [1, 4])
-def test_a_row_longer_than_16_bit_offsets_reach_is_assembled(numThreads):
+@pytest.mark.parametrize("nSprings", [65_535, 65_536])
+def test_the_rows_on_both_sides_of_the_reach_of_16_bit_offsets_are_assembled(nSprings, numThreads):
     """The row of a hub -- a reference point coupled with every one of its slave nodes -- grows with the model, not
-    with the stencil: here it has 70,001 entries, past what a 16-bit offset within the row reaches. The blocks with a
-    DOF in it, dense or listed, are scattered value by value to their positions; the others row by row. The integer
-    trick checks the result exactly against the gather of the same entities."""
-    table, nDof, I, J = _hubTable(70_000)  # noqa: E741
+    with the stencil. A 16-bit offset within a row reaches its positions 0 to 65,535, so a row of 65,536 entries is
+    the longest whose dense blocks are scattered row by row. The hub row has one entry more than there are springs:
+    with 65,535 springs it is that longest row, and its last entry lies at the offset 65,535; with 65,536 springs it is
+    one entry too long, and the blocks with a DOF in it, dense or listed, are scattered value by value to their
+    positions, the others row by row. Were such a row scattered row by row, the offset of its last entry would wrap
+    around to 0. The integer trick checks the result exactly against the gather of the same entities."""
+    table, nDof, I, J = _hubTable(nSprings)  # noqa: E741
     generator = CSRGenerator(I, J, nDof)
     direct = DirectCSRAssembler(table, nDof, numThreads)
-    assert generator.csrMatrix.indptr[1] - generator.csrMatrix.indptr[0] == 70_001
+    assert generator.csrMatrix.indptr[1] - generator.csrMatrix.indptr[0] == nSprings + 1
 
     np.testing.assert_array_equal(direct.entryStart[-1], len(I))
     for values in (np.ones(len(I)), np.arange(len(I), dtype=float)):
