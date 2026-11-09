@@ -487,9 +487,6 @@
         <span class="c1">#: the first increment of a cold step the leapfrog's half step; a resumed step uses the</span>
         <span class="c1">#: checkpointed one, since the checkpointed velocity already carries the half-step offset.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">prevTimeStep</span> <span class="o">=</span> <span class="kc">None</span>
-        <span class="c1">#: Per-constraint force buffer and scatter plan, by constraint name; cleared on every</span>
-        <span class="c1">#: DofManager rebuild.</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_constraintForcePlans</span> <span class="o">=</span> <span class="p">{}</span>
         <span class="c1">#: The elements the increment loop evaluates (those with kernels, i.e. without contact</span>
         <span class="c1">#: facets); filled by :meth:`buildEquationSystem`. None, not {}, so an unbuilt system fails.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_kernelElements</span> <span class="o">=</span> <span class="kc">None</span>
@@ -1122,7 +1119,8 @@
 <span class="sd">        indirect-control unknown). Those DOFs carry no inertia, so their inverse lumped mass is zero</span>
 <span class="sd">        and the explicit update leaves them untouched forever -- the constraint would appear active</span>
 <span class="sd">        and enforce nothing. Penalty-type constraints, which act through nodal forces alone, are</span>
-<span class="sd">        supported: see :meth:`assembleConstraintForces`.</span>
+<span class="sd">        supported: see</span>
+<span class="sd">        :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.assembleConstraintForces`.</span>
 <span class="sd">        A constraint switched off from outside</span>
 <span class="sd">        (:attr:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.switchedOn`) is not refused: it takes no</span>
 <span class="sd">        part in the step, and its scalar variables leave the equation system with it. One that is switched on is</span>
@@ -1384,9 +1382,6 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">mpcTransformation</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">buildMPCTransformation</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">step</span><span class="o">.</span><span class="n">actions</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">checkMPCDirichletConflicts</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">mpcTransformation</span><span class="p">,</span> <span class="n">step</span><span class="o">.</span><span class="n">actions</span><span class="p">)</span>
 
-        <span class="c1"># The force plans are indexed by the old DofManager; stale ones would scatter to wrong DOFs.</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_constraintForcePlans</span> <span class="o">=</span> <span class="p">{}</span>
-
         <span class="c1"># Elements without kernels (contact facets) are left out of the per-increment loop. The loop's</span>
         <span class="c1"># gather plan is keyed on this dict's identity.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_kernelElements</span> <span class="o">=</span> <span class="p">{</span><span class="n">number</span><span class="p">:</span> <span class="n">element</span> <span class="k">for</span> <span class="n">number</span><span class="p">,</span> <span class="n">element</span> <span class="ow">in</span> <span class="n">model</span><span class="o">.</span><span class="n">elements</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">element</span><span class="o">.</span><span class="n">hasKernels</span><span class="p">}</span>
@@ -1563,9 +1558,6 @@
         <span class="k">if</span> <span class="ow">not</span> <span class="n">isRebuild</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">journal</span><span class="o">.</span><span class="n">printSeperationLine</span><span class="p">()</span>
 
-        <span class="c1"># The force plans are indexed by the old constraint indices; stale ones would scatter to wrong DOFs.</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_constraintForcePlans</span> <span class="o">=</span> <span class="p">{}</span>
-
         <span class="k">if</span> <span class="n">reuseOperators</span><span class="p">:</span>
             <span class="n">M</span><span class="p">,</span> <span class="n">Minv</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_restoreLumpedOperators</span><span class="p">()</span>
         <span class="k">else</span><span class="p">:</span>
@@ -1638,83 +1630,6 @@
             <span class="n">P</span><span class="o">=</span><span class="n">P</span><span class="p">,</span>
             <span class="n">criticalTimeStep</span><span class="o">=</span><span class="n">criticalTimeStep</span><span class="p">,</span>
         <span class="p">)</span></div>
-
-
-<div class="viewcode-block" id="NED.assembleConstraintForces">
-<a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearexplicitdynamic.NED.assembleConstraintForces">[docs]</a>
-    <span class="nd">@performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"assemble constraints"</span><span class="p">)</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">assembleConstraintForces</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span>
-        <span class="n">constraints</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span>
-        <span class="n">U_np</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
-        <span class="n">dU</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
-        <span class="n">P</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
-        <span class="n">timeStep</span><span class="p">:</span> <span class="n">TimeStep</span><span class="p">,</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DofVector</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""Evaluate every active constraint and add its residual contribution to the given vector; a constraint</span>
-<span class="sd">        that is switched off (see :attr:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.active`) is</span>
-<span class="sd">        skipped.</span>
-
-<span class="sd">        The explicit counterpart of</span>
-<span class="sd">        :meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.assembleConstraints`, with the same</span>
-<span class="sd">        sign: a constraint adds the negative of the force it exerts on the nodes, like an element its</span>
-<span class="sd">        internal force, see :ref:`residual-and-tangent-convention`.</span>
-
-<span class="sd">        No tangent is requested. An explicit increment solves no linear system, so a constraint's</span>
-<span class="sd">        stiffness enters nothing, and</span>
-<span class="sd">        :meth:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernelsExplicit`</span>
-<span class="sd">        is the entry point that evaluates the constraint forces directly without assembling a tangent.</span>
-<span class="sd">        A constraint that could act *only* through its tangent would contribute nothing here; that is</span>
-<span class="sd">        precisely the class :meth:`validateModelCapabilities` refuses.</span>
-
-<span class="sd">        Parameters</span>
-<span class="sd">        ----------</span>
-<span class="sd">        constraints</span>
-<span class="sd">            The constraints of the model, by name.</span>
-<span class="sd">        U_np</span>
-<span class="sd">            The current solution vector.</span>
-<span class="sd">        dU</span>
-<span class="sd">            The current solution increment.</span>
-<span class="sd">        P</span>
-<span class="sd">            The residual contribution vector to be augmented.</span>
-<span class="sd">        timeStep</span>
-<span class="sd">            The current time step.</span>
-
-<span class="sd">        Returns</span>
-<span class="sd">        -------</span>
-<span class="sd">        DofVector</span>
-<span class="sd">            The augmented residual contribution vector.</span>
-<span class="sd">        """</span>
-
-        <span class="c1"># Per-constraint buffers and index plans, built once per equation system.</span>
-        <span class="n">PPlain</span> <span class="o">=</span> <span class="n">P</span><span class="o">.</span><span class="n">asPlainArray</span><span class="p">()</span>
-
-        <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">constraint</span> <span class="ow">in</span> <span class="n">constraints</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
-            <span class="c1"># a constraint that is switched off has no place in the equation system</span>
-            <span class="k">if</span> <span class="ow">not</span> <span class="n">constraint</span><span class="o">.</span><span class="n">active</span><span class="p">:</span>
-                <span class="k">continue</span>
-
-            <span class="n">plan</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_constraintForcePlans</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">name</span><span class="p">)</span>
-            <span class="k">if</span> <span class="n">plan</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="n">indices</span> <span class="o">=</span> <span class="n">P</span><span class="o">.</span><span class="n">entitiesInDofVector</span><span class="p">[</span><span class="n">constraint</span><span class="p">]</span>
-                <span class="c1"># np.add.at only if a DOF appears more than once (e.g. a slave node in its own master</span>
-                <span class="c1"># facet), since fancy-indexed += would drop repeated contributions.</span>
-                <span class="n">plan</span> <span class="o">=</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">constraint</span><span class="o">.</span><span class="n">nDof</span><span class="p">),</span> <span class="n">indices</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">indices</span><span class="p">))</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="n">indices</span><span class="p">))</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_constraintForcePlans</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">plan</span>
-
-            <span class="n">Pc</span><span class="p">,</span> <span class="n">indices</span><span class="p">,</span> <span class="n">namesDofMoreThanOnce</span> <span class="o">=</span> <span class="n">plan</span>
-
-            <span class="c1"># Reused, so it must be cleared: computeKernelsExplicit augments what it is handed.</span>
-            <span class="n">Pc</span><span class="p">[:]</span> <span class="o">=</span> <span class="mf">0.0</span>
-
-            <span class="n">constraint</span><span class="o">.</span><span class="n">computeKernelsExplicit</span><span class="p">(</span><span class="n">U_np</span><span class="p">[</span><span class="n">constraint</span><span class="p">],</span> <span class="n">dU</span><span class="p">[</span><span class="n">constraint</span><span class="p">],</span> <span class="n">Pc</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">)</span>
-
-            <span class="k">if</span> <span class="n">namesDofMoreThanOnce</span><span class="p">:</span>
-                <span class="n">np</span><span class="o">.</span><span class="n">add</span><span class="o">.</span><span class="n">at</span><span class="p">(</span><span class="n">PPlain</span><span class="p">,</span> <span class="n">indices</span><span class="p">,</span> <span class="n">Pc</span><span class="p">)</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="n">PPlain</span><span class="p">[</span><span class="n">indices</span><span class="p">]</span> <span class="o">+=</span> <span class="n">Pc</span>
-
-        <span class="k">return</span> <span class="n">P</span></div>
 
 
 <div class="viewcode-block" id="NED.secondOrderMomentum">
