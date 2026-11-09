@@ -62,11 +62,11 @@ class ConstraintBase(OptionSchemaProvider, ABC, VIJEntityBase):
     @property
     def switchedOn(self) -> bool:
         """Whether this constraint is switched on from outside, e.g. by a ``modelupdate`` step action, which switches it
-        through :attr:`active`. A constraint switched off from outside rests: the solvers do not locate it anew
-        (:meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.updateTopologyAndConnectivity`), it
-        accepts no state (:meth:`acceptLastState`), so that its history stays as it was, and the solvers neither
-        evaluate it nor refuse it. A solver that cannot handle a constraint refuses it while it is switched on, even out
-        of reach: it may come within reach during the step.
+        through :attr:`active`. A constraint switched off from outside rests: the model does not locate it anew
+        (:meth:`~edelweissfe.models.femodel.FEModel.updateConnectivity`), it accepts no state (:meth:`acceptLastState`),
+        so that its history stays as it was, and the solvers neither evaluate it nor refuse it. A solver that cannot
+        handle a constraint refuses it while it is switched on, even out of reach: it may come within reach during the
+        step.
 
         Returns
         -------

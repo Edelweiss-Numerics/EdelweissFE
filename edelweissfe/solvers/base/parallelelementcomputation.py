@@ -41,15 +41,22 @@ from edelweissfe.timesteppers.timestep import TimeStep
 
 
 def computeElementsInParallel(
-    elements: dict, Un1: DofVector, dU: DofVector, P: DofVector, K: VIJSystemMatrix, F: DofVector, timeStep: TimeStep
+    elements: list, Un1: DofVector, dU: DofVector, P: DofVector, K: VIJSystemMatrix, F: DofVector, timeStep: TimeStep
 ) -> tuple[DofVector, VIJSystemMatrix, DofVector]:
     """
     Compute the elements in parallel for quasi-static anlysis.
 
+    The elements are anything that contributes like an element (a block of the system matrix and a part of the
+    internal forces, see :meth:`~edelweissfe.elements.base.baseelement.BaseElement.computeKernels`) and is located in
+    the DofVector: the finite elements, and the cells and particles of a meshfree model alike (see
+    :attr:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.elements`). Every element writes its forces
+    into its own part of a scatter vector and its tangent into its own block of the system matrix, so the threads never
+    write to the same memory.
+
     Parameters
     ----------
-    elements : dict
-        The elements to compute.
+    elements : list
+        The elements to compute; the threads take consecutive slices of the list.
     Un1 : DofVector
         The displacement vector.
     dU : DofVector
@@ -89,7 +96,7 @@ def computeElementsInParallel(
             Ke = K[element]
             element.computeKernels(Ke, Pe, Ue, dUe, time, dT)
 
-    mapChunksInParallel(elements.values(), computeElementsWorker)
+    mapChunksInParallel(elements, computeElementsWorker)
 
     scatter_P.assembleInto(P)
     scatter_P.assembleInto(F, absolute=True)

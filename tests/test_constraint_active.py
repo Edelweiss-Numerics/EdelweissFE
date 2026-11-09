@@ -35,20 +35,18 @@ constraint that gives them an equation, the system matrix would be singular. Swi
 constraint below lets the loaded corner of a plate move freely; switched on in the next step, it pulls the top edge
 back to one common displacement. The explicit solver ``NED``, which refuses a constraint with multipliers, does not
 refuse one that is switched off, nor does ``NEST`` refuse a contact switched off from outside. A constraint switched
-off from outside rests: the solvers do not locate it anew.
+off from outside rests: the model does not locate it anew.
 """
 
 import numpy as np
 import pytest
 
-from edelweissfe.config.configurator import loadConfiguration
 from edelweissfe.constraints.base.constraintbase import ConstraintBase
 from edelweissfe.drivers.inputfiledrivensimulation import finiteElementSimulation
 from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.solvers.nonlinearexplicitdynamic import NED
 from edelweissfe.solvers.nonlinearexplicitstatic import NEST
-from edelweissfe.solvers.nonlinearimplicitstatic import NIST
 from edelweissfe.utils.inputfileparser import parseInputFile
 
 DECK = """
@@ -213,26 +211,20 @@ def test_a_constraint_switched_off_from_outside_stays_off_whatever_it_finds_in_r
     assert constraint.switchedOn and not constraint.active, "switched on again, it follows the reach of its partner"
 
 
-def test_the_solvers_locate_a_constraint_out_of_reach_but_not_one_switched_off_from_outside():
+def test_the_model_locates_a_constraint_out_of_reach_but_not_one_switched_off_from_outside():
     model, constraint = _modelWithAPartnerConstraint()
-    solver = NIST(loadConfiguration({}), Journal(verbose=False))
-
-    def updateConnectivity() -> bool:
-        """The connectivity part of the solvers' topology update at the start of an increment."""
-        topologyUpdate = solver.updateTopologyAndConnectivity(model, None, offerModelModifiers=False)
-        return topologyUpdate.constraintConnectivityChanged
 
     constraint.active = False
-    assert not updateConnectivity()
+    assert not model.updateConnectivity()
     assert constraint.timesLocated == 0, "switched off from outside, the constraint rests"
 
     constraint.active = True
     constraint.partnerInReach = False
-    assert updateConnectivity()
+    assert model.updateConnectivity()
     assert constraint.timesLocated == 1 and not constraint.active
 
     constraint.partnerInReach = True
-    assert updateConnectivity(), "out of reach, it is located, so that it finds itself within reach again"
+    assert model.updateConnectivity(), "out of reach, it is located, so that it finds itself within reach again"
     assert constraint.timesLocated == 2 and constraint.active
 
 

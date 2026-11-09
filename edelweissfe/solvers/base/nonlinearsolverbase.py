@@ -36,7 +36,7 @@ from scipy.sparse import csr_matrix
 
 import edelweissfe.utils.performancetiming as performancetiming
 from edelweissfe.models.femodel import FEModel
-from edelweissfe.numerics.dofmanager import DofManager, DofVector, VIJSystemMatrix
+from edelweissfe.numerics.dofmanager import DofVector, VIJSystemMatrix
 from edelweissfe.numerics.mpctransformation import (
     MultiPointConstraintTransformation,
     _flattenChainedRecords,
@@ -62,8 +62,9 @@ class TopologyUpdate(NamedTuple):
     """A model modifier (e.g. AMR) changed the mesh."""
     meshDependentsRefreshed: bool
     """A mesh-dependent consumer (e.g. a tie or contact surface) was rebuilt on the changed mesh."""
-    constraintConnectivityChanged: bool
-    """A constraint changed the degrees of freedom it couples, e.g. after a contact search."""
+    connectivityChanged: bool
+    """The coupling of the degrees of freedom changed, e.g. a constraint after a contact search; see
+    :meth:`~edelweissfe.models.femodel.FEModel.updateConnectivity`."""
 
 
 class NonlinearSolverBase(OptionSchemaProvider, ABC):
@@ -183,17 +184,11 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
 
         Two phases. First, the model modifiers plan and apply to a fixed point inside one topology
         window (:meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.update`). Second, the pure
-        readers of the settled model -- tie and contact surfaces, constraint connectivity -- catch
-        up, once, on the net change. They may not create or delete elements: the topology window
-        is closed by then, so an attempt raises.
-
-        Only the constraints that are switched on are located anew
-        (:attr:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.switchedOn`), those out of reach included,
-        so that they can find themselves within reach again. A constraint switched off from outside rests until it is
-        switched on again, and is located anew at the start of the next increment then.
-
-        Both sweeps of the second phase are materialized lists rather than ``any()`` over a
-        generator, which would stop at the first consumer reporting a change and skip the rest.
+        readers of the settled model catch up, once, on the net change: the tie and contact surfaces,
+        then the coupling of the degrees of freedom, which the model brings up to date itself
+        (:meth:`~edelweissfe.models.femodel.FEModel.updateConnectivity`; the constraints of a finite
+        element model, e.g. a contact search). They may not create or delete elements: the topology
+        window is closed by then, so an attempt raises.
 
         Parameters
         ----------
@@ -213,50 +208,8 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
 
         topologyChanged = model.topology.update(step) if offerModelModifiers else False
         meshDependentsRefreshed = model.topology.refreshMeshDependents()
-        constraintConnectivityChanged = any(
-            [constraint.updateConnectivity(model) for constraint in model.constraints.values() if constraint.switchedOn]
-        )
-        return TopologyUpdate(topologyChanged, meshDependentsRefreshed, constraintConnectivityChanged)
-
-    def createDofManager(
-        self,
-        model: FEModel,
-        initializeVIJPattern: bool = True,
-        determiningIndexToHostObjectMapping: bool = True,
-    ) -> DofManager:
-        """Number the degrees of freedom of the model's equation system.
-
-        The equation system holds the node fields, the elements, and the active constraints with their scalar
-        variables (e.g. Lagrange multipliers). A constraint that is switched off (see
-        :attr:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.active`) is left out together with its
-        scalar variables, which would otherwise be unknowns without an equation.
-
-        Parameters
-        ----------
-        model
-            The model tree.
-        initializeVIJPattern
-            Whether to build the pattern of the system matrix; a solver without one does not need it.
-        determiningIndexToHostObjectMapping
-            Whether to map each degree of freedom back to its node; only needed to report nodes by index.
-
-        Returns
-        -------
-        DofManager
-            The DOF manager of the equation system.
-        """
-
-        constraints = model.activeConstraints()
-
-        return DofManager(
-            model.nodeFields.values(),
-            [scalarVariable for constraint in constraints for scalarVariable in constraint.scalarVariables],
-            model.elements.values(),
-            constraints,
-            model.nodeSets.values(),
-            initializeVIJPattern=initializeVIJPattern,
-            determiningIndexToHostObjectMapping=determiningIndexToHostObjectMapping,
-        )
+        connectivityChanged = model.updateConnectivity()
+        return TopologyUpdate(topologyChanged, meshDependentsRefreshed, connectivityChanged)
 
     @staticmethod
     def collectLoads(stepActions: dict) -> list[LoadBase]:
@@ -526,7 +479,7 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
             The modified residual vector.
         """
         for dirichlet in dirichlets:
-            R[dirichlet.constrainedDofIndices] = dirichlet.getPrescribedIncrement(timeStep).flatten()
+            R[dirichlet.constrainedDofIndices] = dirichlet.getPrescribedIncrementOfConstrainedDofs(timeStep)
 
         return R
 
@@ -789,9 +742,12 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
     def locateConstrainedDofs(self, dirichlets: list[StepActionBase]):
         """Determine, up front, which global DOFs each Dirichlet BC constrains.
 
-        Called once when a step's boundary conditions are established. The result
-        is cached on each BC as :attr:`~DirichletBase.constrainedDofIndices`, so
-        that the Newton loop can address the constrained DOFs directly, instead
+        Called at the start of every increment, before its iterations: the numbering of the degrees of freedom may
+        have changed since the last increment -- a rebuild of the equation system after a change of the mesh or of the
+        coupling, or a new active domain of a meshfree model, which locates a node set anew. The result
+        is cached on each BC as :attr:`~DirichletBase.constrainedDofIndices`, together with the
+        positions of their nodes in the BC's node set (:attr:`~DirichletBase.constrainedNodePositions`),
+        so that the Newton loop can address the constrained DOFs directly, instead
         of recomputing the mapping on every residual update and every stiffness
         modification.
 
@@ -801,10 +757,11 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
             The list of dirichlet boundary conditions active in this step.
         """
         for dirichlet in dirichlets:
-            dirichlet.constrainedDofIndices = self._constrainedDofsOf(dirichlet)
+            dirichlet.constrainedDofIndices, dirichlet.constrainedNodePositions = self._constrainedDofsOf(dirichlet)
 
-    def _constrainedDofsOf(self, dirichlet: StepActionBase) -> np.ndarray:
-        """Return the global DOF indices prescribed by a single Dirichlet BC.
+    def _constrainedDofsOf(self, dirichlet: StepActionBase) -> tuple[np.ndarray, np.ndarray]:
+        """Return the global DOF indices prescribed by a single Dirichlet BC, and the positions of their nodes in its
+        node set.
 
         The DofManager knows every DOF of ``field`` on ``nSet``, laid out node
         by node in a single flat array::
@@ -815,12 +772,17 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
         ``dirichlet.components``, e.g. just u_x and u_z). So we view the flat
         array as one row per node, keep only the prescribed component columns,
         and flatten it back into a plain list of global DOF indices. The order
-        stays node-major, matching ``getPrescribedIncrement().flatten()``.
+        stays node-major, matching the prescribed values of these nodes
+        (:meth:`~DirichletBase.getPrescribedIncrementOfConstrainedDofs`).
+
+        Only the nodes of the set that are part of the equation system count, see
+        :meth:`~edelweissfe.numerics.dofmanager.DofManager.locateFieldOnNodeSet`: all nodes of the set in a
+        finite element model, those in the active domain in a meshfree one.
         """
-        dofsOfFieldOnNodeSet = self.theDofManager.idcsOfFieldsOnNodeSetsInDofVector[dirichlet.field][dirichlet.nSet]
+        dofsOfFieldOnNodeSet, nodePositions = self.theDofManager.locateFieldOnNodeSet(dirichlet.field, dirichlet.nSet)
         perNodeDofs = dofsOfFieldOnNodeSet.reshape((-1, dirichlet.fieldSize))
 
-        return perNodeDofs[:, dirichlet.components].flatten()
+        return perNodeDofs[:, dirichlet.components].flatten(), nodePositions
 
     def buildMPCTransformation(self, model: FEModel, stepActions: dict = None):
         """Collect the linear dependency records from all multi-point constraints of the model
@@ -889,8 +851,9 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
                 continue
             # the node set may have grown in place (adaptive refinement): let the BC catch up first
             dirichlet.reconcileIfSetChanged()
-            indices = np.asarray(self._constrainedDofsOf(dirichlet)).flatten()
-            values = np.asarray(dirichlet.delta).flatten()
+            indices, nodePositions = self._constrainedDofsOf(dirichlet)
+            # the prescribed values of the nodes that are part of the equation system, one row per node of the set
+            values = np.asarray(dirichlet.delta)[nodePositions].flatten()
             if indices.shape != values.shape:
                 raise ValueError(
                     "Dirichlet '{:}': {:} constrained DOF(s) but {:} prescribed value(s) -- the DOF "
@@ -1061,4 +1024,5 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
 
         # A post-condition: _reconcileMPCDirichletConflicts has already removed every conflicting record.
         for dirichlet in stepActions["dirichlet"].values():
-            transformation.checkDirichletConflicts(self._constrainedDofsOf(dirichlet))
+            constrainedDofIndices, _ = self._constrainedDofsOf(dirichlet)
+            transformation.checkDirichletConflicts(constrainedDofIndices)

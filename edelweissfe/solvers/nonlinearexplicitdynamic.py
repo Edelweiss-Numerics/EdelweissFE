@@ -520,7 +520,7 @@ class NED(NonlinearSolverBase):
 
         topologyUpdate = self.updateTopologyAndConnectivity(model, step)
         meshChanged = topologyUpdate.topologyChanged or topologyUpdate.meshDependentsRefreshed
-        connectivityChanged = topologyUpdate.constraintConnectivityChanged
+        connectivityChanged = topologyUpdate.connectivityChanged
 
         if meshChanged or connectivityChanged:
             # A connectivity-only change carries solution, velocity and force over to the new system.
@@ -789,7 +789,7 @@ class NED(NonlinearSolverBase):
             # and their velocity is prescribed as (prescribed increment) / (time step).
             prescribedVelocities = []
             for dirichlet in dirichlets:
-                prescribedIncrement = dirichlet.getPrescribedIncrement(timeStep).flatten()
+                prescribedIncrement = dirichlet.getPrescribedIncrementOfConstrainedDofs(timeStep)
 
                 # External work = reaction (-P, the carried-over net force) times the prescribed
                 # increment. Must be accumulated before P is zeroed below. Only for fields where this
@@ -1125,9 +1125,9 @@ class NED(NonlinearSolverBase):
     def updateConstraintConnectivity(self, model: FEModel) -> bool:
         """Let the constraints whose connectivity is the outcome of a search re-run that search.
 
-        Only the constraints in :attr:`_dynamicConnectivityConstraints` that are switched on are ticked (see
-        :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.updateTopologyAndConnectivity`), and
-        the caller ticks them only every ``contact-update-frequency`` increments. Both matter: a node-to-surface
+        Only the constraints in :attr:`_dynamicConnectivityConstraints` that are switched on are ticked
+        (see :meth:`~edelweissfe.models.femodel.FEModel.updateConnectivity`), and the caller ticks them only every
+        ``contact-update-frequency`` increments. Both matter: a node-to-surface
         search is O(slaves x facets) in Python, which is affordable once per increment of an implicit
         analysis -- where it is amortised over a Newton loop and a linear solve -- and not affordable
         tens of thousands of times. What makes throttling defensible rather than merely cheap is that
@@ -1431,10 +1431,9 @@ class NED(NonlinearSolverBase):
             self.theDofManager.refreshConstraintIndices(model.activeConstraints())
         else:
             self.journal.message("Creating monolithic equation system", self.identification, verbosity)
-            # No system matrix, so neither the VIJ pattern nor the index-to-host-object map is needed.
-            self.theDofManager = self.createDofManager(
-                model, initializeVIJPattern=False, determiningIndexToHostObjectMapping=False
-            )
+            # The numbering of the model's degrees of freedom; this solver evaluates the model's elements itself, and
+            # assembles no system matrix.
+            self.theDofManager = model.buildEquationSystem(withSystemMatrix=False).dofManager
         self.journal.message(
             "total size of eq. system: {:}".format(self.theDofManager.nDof),
             self.identification,
