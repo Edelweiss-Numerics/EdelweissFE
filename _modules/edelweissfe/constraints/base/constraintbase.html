@@ -141,11 +141,11 @@
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">switchedOn</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">"""Whether this constraint is switched on from outside, e.g. by a ``modelupdate`` step action, which switches it</span>
-<span class="sd">        through :attr:`active`. A constraint switched off from outside rests: the solvers do not locate it anew</span>
-<span class="sd">        (:meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.updateTopologyAndConnectivity`), it</span>
-<span class="sd">        accepts no state (:meth:`acceptLastState`), so that its history stays as it was, and the solvers neither</span>
-<span class="sd">        evaluate it nor refuse it. A solver that cannot handle a constraint refuses it while it is switched on, even out</span>
-<span class="sd">        of reach: it may come within reach during the step.</span>
+<span class="sd">        through :attr:`active`. A constraint switched off from outside rests: the model does not locate it anew</span>
+<span class="sd">        (:meth:`~edelweissfe.models.femodel.FEModel.updateConnectivity`), it accepts no state (:meth:`acceptLastState`),</span>
+<span class="sd">        so that its history stays as it was, and the solvers neither evaluate it nor refuse it. A solver that cannot</span>
+<span class="sd">        handle a constraint refuses it while it is switched on, even out of reach: it may come within reach during the</span>
+<span class="sd">        step.</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>

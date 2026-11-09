@@ -2518,8 +2518,8 @@ change of its connectivity, so that the solver rebuilds its equation system. A c
 within reach.</p></li>
 </ul>
 <p>So a constraint switched off from outside stays off, whatever it finds in reach; switched on again, it takes part
-while it is within reach. Switched off from outside, a constraint rests: the solvers do not locate it anew
-(<code class="docutils literal notranslate"><span class="pre">updateConnectivity</span></code>), which they do for every constraint that is switched on, those out of reach included, so that
+while it is within reach. Switched off from outside, a constraint rests: the model does not locate it anew in
+<code class="docutils literal notranslate"><span class="pre">updateConnectivity</span></code>, which it does for every constraint that is switched on, those out of reach included, so that
 they can find themselves within reach again. A constraint that is not active accepts no state either
 (<code class="docutils literal notranslate"><span class="pre">acceptLastState</span></code>): a contact switched off for a step keeps its multipliers and its frictional history as they
 were. A solver that cannot handle a constraint, e.g. <code class="docutils literal notranslate"><span class="pre">NEST</span></code> a contact, refuses it only while it is switched on.</p>
@@ -2838,11 +2838,11 @@ none) or overrides <a class="reference internal" href="#edelweissfe.constraints.
 <dt class="sig sig-object py" id="edelweissfe.constraints.base.constraintbase.ConstraintBase.switchedOn">
 <span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">switchedOn</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></span><a class="headerlink" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.switchedOn" title="Link to this definition"></a></dt>
 <dd><p>Whether this constraint is switched on from outside, e.g. by a <code class="docutils literal notranslate"><span class="pre">modelupdate</span></code> step action, which switches it
-through <a class="reference internal" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.active" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.active"><code class="xref py py-attr docutils literal notranslate"><span class="pre">active</span></code></a>. A constraint switched off from outside rests: the solvers do not locate it anew
-(<code class="xref py py-meth docutils literal notranslate"><span class="pre">updateTopologyAndConnectivity()</span></code>), it
-accepts no state (<a class="reference internal" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.acceptLastState" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.acceptLastState"><code class="xref py py-meth docutils literal notranslate"><span class="pre">acceptLastState()</span></code></a>), so that its history stays as it was, and the solvers neither
-evaluate it nor refuse it. A solver that cannot handle a constraint refuses it while it is switched on, even out
-of reach: it may come within reach during the step.</p>
+through <a class="reference internal" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.active" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.active"><code class="xref py py-attr docutils literal notranslate"><span class="pre">active</span></code></a>. A constraint switched off from outside rests: the model does not locate it anew
+(<a class="reference internal" href="models.html#edelweissfe.models.femodel.FEModel.updateConnectivity" title="edelweissfe.models.femodel.FEModel.updateConnectivity"><code class="xref py py-meth docutils literal notranslate"><span class="pre">updateConnectivity()</span></code></a>), it accepts no state (<a class="reference internal" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.acceptLastState" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.acceptLastState"><code class="xref py py-meth docutils literal notranslate"><span class="pre">acceptLastState()</span></code></a>),
+so that its history stays as it was, and the solvers neither evaluate it nor refuse it. A solver that cannot
+handle a constraint refuses it while it is switched on, even out of reach: it may come within reach during the
+step.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Returns<span class="colon">:</span></dt>
 <dd class="field-odd"><p>Whether the constraint is switched on.</p>

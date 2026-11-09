@@ -484,6 +484,10 @@
     <span class="c1">#: The convergence criterion of the current step.</span>
     <span class="n">convergenceCriterion</span> <span class="o">=</span> <span class="kc">None</span>
 
+    <span class="c1">#: What the model's current equation system is made of (see</span>
+    <span class="c1">#: :meth:`~edelweissfe.models.femodel.FEModel.buildEquationSystem`), rebuilt with it; None until it is built.</span>
+    <span class="n">equationSystemLayout</span> <span class="o">=</span> <span class="kc">None</span>
+
     <span class="c1">#: The predictor's state between increments: the last accepted increment and its dU, and, for a quadratic</span>
     <span class="c1">#: extrapolation, the accepted increment before it and its dU.</span>
     <span class="n">checkpointedState</span> <span class="o">=</span> <span class="p">{</span>
@@ -602,9 +606,10 @@
 <div class="viewcode-block" id="NIST.forgetEquationSystem">
 <a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.forgetEquationSystem">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">forgetEquationSystem</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""Drop the equation system of the last build -- the DOF manager, the system matrix and its CSR generator,</span>
-<span class="sd">        the multi-point-constraint condensation, the DOF vectors -- so that it is gone before the next one is built,</span>
-<span class="sd">        never both at once."""</span>
+<span class="w">        </span><span class="sd">"""Drop the equation system of the last build -- the model's layout of it with the DOF manager, the system</span>
+<span class="sd">        matrix and its CSR generator, the multi-point-constraint condensation, the DOF vectors -- so that it is gone</span>
+<span class="sd">        before the next one is built, never both at once."""</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">equationSystemLayout</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">csrGenerator</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">mpcTransformation</span> <span class="o">=</span> <span class="kc">None</span>
@@ -701,9 +706,7 @@
 
         <span class="n">topologyUpdate</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">updateTopologyAndConnectivity</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">step</span><span class="p">,</span> <span class="n">offerModelModifiers</span><span class="o">=</span><span class="ow">not</span> <span class="n">isRetry</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_modelHasChanged</span> <span class="o">=</span> <span class="n">topologyUpdate</span><span class="o">.</span><span class="n">topologyChanged</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_connectivityHasChanged</span> <span class="o">=</span> <span class="p">(</span>
-            <span class="n">topologyUpdate</span><span class="o">.</span><span class="n">meshDependentsRefreshed</span> <span class="ow">or</span> <span class="n">topologyUpdate</span><span class="o">.</span><span class="n">constraintConnectivityChanged</span>
-        <span class="p">)</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_connectivityHasChanged</span> <span class="o">=</span> <span class="n">topologyUpdate</span><span class="o">.</span><span class="n">meshDependentsRefreshed</span> <span class="ow">or</span> <span class="n">topologyUpdate</span><span class="o">.</span><span class="n">connectivityChanged</span></div>
 
 
 <div class="viewcode-block" id="NIST.attemptIncrement">
@@ -770,10 +773,11 @@
             <span class="p">)</span>
             <span class="k">with</span> <span class="n">performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"equation system rebuild"</span><span class="p">):</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">forgetEquationSystem</span><span class="p">()</span>
+                <span class="c1"># The model says what its equation system is made of: the numbering of the degrees of freedom, the</span>
+                <span class="c1"># elements to compute, how the solution passes between the model and the vectors below.</span>
                 <span class="k">with</span> <span class="n">performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"dof manager"</span><span class="p">):</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">createDofManager</span><span class="p">(</span><span class="n">model</span><span class="p">)</span>
-                <span class="c1"># the cache is keyed on the DofManager; drop it so the old manager can be freed</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_dirichletIndicesCache</span> <span class="o">=</span> <span class="kc">None</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">equationSystemLayout</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">buildEquationSystem</span><span class="p">()</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">equationSystemLayout</span><span class="o">.</span><span class="n">dofManager</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">journal</span><span class="o">.</span><span class="n">message</span><span class="p">(</span>
                     <span class="s2">"eq. system rebuilt: </span><span class="si">{:}</span><span class="s2"> dof"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">nDof</span><span class="p">),</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">identification</span><span class="p">,</span>
@@ -795,7 +799,7 @@
 
                 <span class="c1"># Re-pushed on every (re)build so the linear solver tracks the mesh across AMR.</span>
                 <span class="k">with</span> <span class="n">performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"linear solver setup"</span><span class="p">):</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">linSolver</span><span class="o">.</span><span class="n">setModel</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="p">)</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">linSolver</span><span class="o">.</span><span class="n">setModel</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">equationSystemLayout</span><span class="o">.</span><span class="n">modelForLinearSolver</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="p">)</span>
 
                 <span class="n">presentVariableNames</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">idcsOfFieldsInDofVector</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
 
@@ -814,10 +818,7 @@
                 <span class="n">P</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
                 <span class="n">dU</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
 
-                <span class="k">for</span> <span class="n">fieldName</span><span class="p">,</span> <span class="n">field</span> <span class="ow">in</span> <span class="n">model</span><span class="o">.</span><span class="n">nodeFields</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
-                    <span class="n">U</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">writeNodeFieldToDofVector</span><span class="p">(</span><span class="n">U</span><span class="p">,</span> <span class="n">field</span><span class="p">,</span> <span class="s2">"U"</span><span class="p">)</span>
-
-                <span class="n">U</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">writeScalarVariablesToDofVector</span><span class="p">(</span><span class="n">U</span><span class="p">)</span>
+                <span class="n">U</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">equationSystemLayout</span><span class="o">.</span><span class="n">writeSolutionToDofVector</span><span class="p">(</span><span class="n">U</span><span class="p">)</span>
 
                 <span class="k">with</span> <span class="n">performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"mpc transformation build"</span><span class="p">):</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">mpcTransformation</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">buildMPCTransformation</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">step</span><span class="o">.</span><span class="n">actions</span><span class="p">)</span>
@@ -895,11 +896,7 @@
 
             <span class="c1"># Commit the settled state as a converged sub-increment (no output): elements integrate</span>
             <span class="c1"># incrementally from the committed state, so otherwise U and the internal state disagree.</span>
-            <span class="k">for</span> <span class="n">fieldName</span><span class="p">,</span> <span class="n">field</span> <span class="ow">in</span> <span class="n">model</span><span class="o">.</span><span class="n">nodeFields</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">writeDofVectorToNodeField</span><span class="p">(</span><span class="n">U</span><span class="p">,</span> <span class="n">field</span><span class="p">,</span> <span class="s2">"U"</span><span class="p">)</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">writeDofVectorToNodeField</span><span class="p">(</span><span class="n">P</span><span class="p">,</span> <span class="n">field</span><span class="p">,</span> <span class="s2">"P"</span><span class="p">)</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">writeDofVectorToNodeField</span><span class="p">(</span><span class="n">dU</span><span class="p">,</span> <span class="n">field</span><span class="p">,</span> <span class="s2">"dU"</span><span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">writeDofVectorToScalarVariables</span><span class="p">(</span><span class="n">U</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">equationSystemLayout</span><span class="o">.</span><span class="n">writeResultsToModel</span><span class="p">(</span><span class="n">U</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">P</span><span class="p">)</span>
             <span class="n">model</span><span class="o">.</span><span class="n">advanceToTime</span><span class="p">(</span><span class="n">equilibrationTimeStep</span><span class="o">.</span><span class="n">totalTime</span><span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_U</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dU</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_P</span> <span class="o">=</span> <span class="n">U</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">P</span>
 
@@ -1013,12 +1010,7 @@
             <span class="n">step</span><span class="o">.</span><span class="n">timeStepper</span><span class="o">.</span><span class="n">preventIncrementIncrease</span><span class="p">()</span>
 
         <span class="k">with</span> <span class="n">performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"write results to nodes"</span><span class="p">):</span>
-            <span class="k">for</span> <span class="n">fieldName</span><span class="p">,</span> <span class="n">field</span> <span class="ow">in</span> <span class="n">model</span><span class="o">.</span><span class="n">nodeFields</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">writeDofVectorToNodeField</span><span class="p">(</span><span class="n">U</span><span class="p">,</span> <span class="n">field</span><span class="p">,</span> <span class="s2">"U"</span><span class="p">)</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">writeDofVectorToNodeField</span><span class="p">(</span><span class="n">P</span><span class="p">,</span> <span class="n">field</span><span class="p">,</span> <span class="s2">"P"</span><span class="p">)</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">writeDofVectorToNodeField</span><span class="p">(</span><span class="n">dU</span><span class="p">,</span> <span class="n">field</span><span class="p">,</span> <span class="s2">"dU"</span><span class="p">)</span>
-
-            <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">writeDofVectorToScalarVariables</span><span class="p">(</span><span class="n">U</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">equationSystemLayout</span><span class="o">.</span><span class="n">writeResultsToModel</span><span class="p">(</span><span class="n">U</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">P</span><span class="p">)</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">updateRigidBodies</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">)</span>
 
@@ -1322,7 +1314,7 @@
         <span class="n">dirichlets</span> <span class="o">=</span> <span class="n">stepActions</span><span class="p">[</span><span class="s2">"dirichlet"</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">()</span>
 
         <span class="k">with</span> <span class="n">performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"step actions at increment start"</span><span class="p">):</span>
-            <span class="c1"># Find which global DOFs the Dirichlet BCs constrain, once up front.</span>
+            <span class="c1"># Find which global DOFs the Dirichlet BCs constrain, in every increment: the numbering may have changed.</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">locateConstrainedDofs</span><span class="p">(</span><span class="n">dirichlets</span><span class="p">)</span>
 
             <span class="bp">self</span><span class="o">.</span><span class="n">applyStepActionsAtIncrementStart</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">,</span> <span class="n">stepActions</span><span class="p">)</span>
@@ -1553,6 +1545,9 @@
 <span class="sd">        iteration, and by its line search once per trial step length. The loads are those at the end of the increment,</span>
 <span class="sd">        see :meth:`assembleLoadsAtIncrementEnd`. The Dirichlet boundary conditions are imposed by the caller.</span>
 
+<span class="sd">        The internal forces are those of :meth:`assembleInternalForces`, which lets the model update the material</span>
+<span class="sd">        points that belong to no element first.</span>
+
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
 <span class="sd">        U_n</span>
@@ -1599,7 +1594,7 @@
 
         <span class="c1"># Every element, load and constraint adds its residual contribution and the tangent of it.</span>
         <span class="c1"># The elements' sum P is kept apart: it is the reaction force this increment reports.</span>
-        <span class="n">P</span><span class="p">,</span> <span class="n">K</span><span class="p">,</span> <span class="n">F</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">computeElements</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">elements</span><span class="p">,</span> <span class="n">U_np</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">P</span><span class="p">,</span> <span class="n">K</span><span class="p">,</span> <span class="n">F</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">)</span>
+        <span class="n">P</span><span class="p">,</span> <span class="n">K</span><span class="p">,</span> <span class="n">F</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">assembleInternalForces</span><span class="p">(</span><span class="n">U_np</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">P</span><span class="p">,</span> <span class="n">K</span><span class="p">,</span> <span class="n">F</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">)</span>
         <span class="n">PLoadsAndConstraints</span><span class="p">,</span> <span class="n">K</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">assembleLoadsAtIncrementEnd</span><span class="p">(</span>
             <span class="n">stepActions</span><span class="p">,</span> <span class="n">U_np</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">PLoadsAndConstraints</span><span class="p">,</span> <span class="n">K</span><span class="p">,</span> <span class="n">timeStep</span>
         <span class="p">)</span>
@@ -2029,6 +2024,48 @@
         <span class="k">return</span> <span class="n">K</span></div>
 
 
+<div class="viewcode-block" id="NIST.assembleInternalForces">
+<a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.assembleInternalForces">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">assembleInternalForces</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">U_np</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">dU</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">P</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">K</span><span class="p">:</span> <span class="n">VIJSystemMatrix</span><span class="p">,</span> <span class="n">F</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">:</span> <span class="n">TimeStep</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">DofVector</span><span class="p">,</span> <span class="n">VIJSystemMatrix</span><span class="p">,</span> <span class="n">DofVector</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""Assemble the internal forces of the model at a trial state, and their tangent: those of the elements of its</span>
+<span class="sd">        equation system, see :meth:`computeElements`. First, the model updates the material points that belong to no</span>
+<span class="sd">        element, whose state the elements integrate (see</span>
+<span class="sd">        :meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.updateMaterialPoints`; nothing to do in a</span>
+<span class="sd">        finite element model).</span>
+
+<span class="sd">        The one evaluation of the elements of the solvers that derive from NIST: in every Newton iteration and for every</span>
+<span class="sd">        trial state of a line search (:meth:`assembleResidualAndTangent`), in every Runge-Kutta stage of</span>
+<span class="sd">        :class:`~edelweissfe.solvers.nonlinearexplicitstatic.NEST`, and for the initial acceleration of</span>
+<span class="sd">        :class:`~edelweissfe.solvers.nonlinearimplicitdynamic.NonlinearImplicitDynamic`.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        U_np</span>
+<span class="sd">            The trial solution.</span>
+<span class="sd">        dU</span>
+<span class="sd">            The trial solution increment.</span>
+<span class="sd">        P</span>
+<span class="sd">            The internal forces, augmented.</span>
+<span class="sd">        K</span>
+<span class="sd">            The tangent being assembled.</span>
+<span class="sd">        F</span>
+<span class="sd">            The accumulated absolute element fluxes, the reference of the convergence test, augmented.</span>
+<span class="sd">        timeStep</span>
+<span class="sd">            The time step.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        tuple[DofVector,VIJSystemMatrix,DofVector]</span>
+<span class="sd">            The internal forces, the tangent and the accumulated element fluxes.</span>
+<span class="sd">        """</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">equationSystemLayout</span><span class="o">.</span><span class="n">updateMaterialPoints</span><span class="p">(</span><span class="n">dU</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">computeElements</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">equationSystemLayout</span><span class="o">.</span><span class="n">elements</span><span class="p">,</span> <span class="n">U_np</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">P</span><span class="p">,</span> <span class="n">K</span><span class="p">,</span> <span class="n">F</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">)</span></div>
+
+
 <div class="viewcode-block" id="NIST.computeElements">
 <a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.computeElements">[docs]</a>
     <span class="nd">@performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"elements"</span><span class="p">)</span>
@@ -2042,13 +2079,18 @@
         <span class="n">F</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
         <span class="n">timeStep</span><span class="p">:</span> <span class="n">TimeStep</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">DofVector</span><span class="p">,</span> <span class="n">VIJSystemMatrix</span><span class="p">,</span> <span class="n">DofVector</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">"""Loop over all elements, and evalute them.</span>
-<span class="sd">        Is called by solveIncrement() in each iteration.</span>
+<span class="w">        </span><span class="sd">"""Loop over all elements, and evalute them: each adds its internal forces and their tangent, see</span>
+<span class="sd">        :meth:`~edelweissfe.elements.base.baseelement.BaseElement.computeKernels`. Is called by</span>
+<span class="sd">        :meth:`assembleResidualAndTangent` in each iteration.</span>
+
+<span class="sd">        The elements are those of the model's equation system</span>
+<span class="sd">        (:attr:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.elements`): the finite elements, and</span>
+<span class="sd">        whatever else contributes like an element -- in a meshfree model, its cells and particles.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
 <span class="sd">        elements</span>
-<span class="sd">            The list of finite elements.</span>
+<span class="sd">            The list of elements.</span>
 <span class="sd">        U_np</span>
 <span class="sd">            The current solution vector.</span>
 <span class="sd">        dU</span>
@@ -2073,7 +2115,7 @@
         <span class="n">time</span> <span class="o">=</span> <span class="n">timeStep</span><span class="o">.</span><span class="n">totalTime</span>
         <span class="n">dT</span> <span class="o">=</span> <span class="n">timeStep</span><span class="o">.</span><span class="n">timeIncrement</span>
 
-        <span class="k">for</span> <span class="n">el</span> <span class="ow">in</span> <span class="n">elements</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+        <span class="k">for</span> <span class="n">el</span> <span class="ow">in</span> <span class="n">elements</span><span class="p">:</span>
             <span class="n">Ke</span> <span class="o">=</span> <span class="n">K</span><span class="p">[</span><span class="n">el</span><span class="p">]</span>
             <span class="n">Pe</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">el</span><span class="o">.</span><span class="n">nDof</span><span class="p">)</span>
 

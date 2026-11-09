@@ -207,9 +207,9 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">accumulatedConstraintNDof</span> <span class="o">=</span> <span class="mi">0</span>  <span class="c1">#: Accumulated number of constraint DOFs (= sum of constraint vector sizes)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">largestNumberOfConstraintNDof</span> <span class="o">=</span> <span class="mi">0</span>  <span class="c1">#: Size of the largest constraint DOF vector</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">idcsOfFieldsOnNodeSetsInDofVector</span> <span class="o">=</span> <span class="p">(</span>
-            <span class="nb">dict</span><span class="p">()</span>
-        <span class="p">)</span>  <span class="c1">#: Dictionary mapping for each field a NodeSet to its respective indices in the DofVector</span>
+        <span class="c1">#: For each field, the node sets located so far, each with the indices of the field's degrees of freedom on its</span>
+        <span class="c1">#: nodes and the positions of these nodes in the set; see :meth:`locateFieldOnNodeSet`.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_fieldsOnNodeSets</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">idcsOfElementsInDofVector</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>  <span class="c1">#: Dictionary mapping an element to its indices in the DofVector</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">idcsOfConstraintsInDofVector</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>  <span class="c1">#: Dictionary mapping a constraint to its indices in the DofVector</span>
 
@@ -278,7 +278,10 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">largestNumberOfConstraintNDof</span><span class="p">,</span>
         <span class="p">)</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_gatherConstraintsInformation</span><span class="p">(</span><span class="n">constraints</span><span class="p">)</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">idcsOfFieldsOnNodeSetsInDofVector</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_locateFieldsOnNodeSetsInDofVector</span><span class="p">(</span><span class="n">nodeSets</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_fieldsOnNodeSets</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="n">field</span><span class="p">:</span> <span class="p">{</span><span class="n">nodeSet</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_locateFieldOnNodeSet</span><span class="p">(</span><span class="n">field</span><span class="p">,</span> <span class="n">nodeSet</span><span class="p">)</span> <span class="k">for</span> <span class="n">nodeSet</span> <span class="ow">in</span> <span class="n">nodeSets</span><span class="p">}</span>
+            <span class="k">for</span> <span class="n">field</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">idcsOfNodeFieldsInDofVector</span>
+        <span class="p">}</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">idcsOfElementsInDofVector</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_locateNodeCouplingEntitiesInDofVector</span><span class="p">(</span><span class="n">elements</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">idcsOfConstraintsInDofVector</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_locateConstraintsInDofVector</span><span class="p">(</span><span class="n">constraints</span><span class="p">)</span>
 
@@ -678,34 +681,82 @@
 
         <span class="k">return</span> <span class="n">idcsOfConstraintsInDofVector</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_locateFieldsOnNodeSetsInDofVector</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">nodeSets</span><span class="p">:</span> <span class="nb">list</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""Creates a dictionary containing the location (indices) of each entity (elements, constraints)</span>
-<span class="sd">        within the DofVector structure.</span>
+<div class="viewcode-block" id="DofManager.locateFieldOnNodeSet">
+<a class="viewcode-back" href="../../../documentation/dofmanager.html#edelweissfe.numerics.dofmanager.DofManager.locateFieldOnNodeSet">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">locateFieldOnNodeSet</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">field</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">nodeSet</span><span class="p">:</span> <span class="n">NodeSet</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""Where the degrees of freedom of a field on the nodes of a node set lie in the DofVector, e.g. those a</span>
+<span class="sd">        Dirichlet boundary condition prescribes, or those a node force acts on.</span>
+
+<span class="sd">        Only the nodes whose field is part of this equation system count. In a finite element model, these are all</span>
+<span class="sd">        nodes of the set that carry the field. A model whose equation system covers a part of its nodes only -- the</span>
+<span class="sd">        active domain of a material point method model, the nodes in the support of an RKPM model's particles --</span>
+<span class="sd">        leaves the other nodes of a set out. Values given per node of the set (the prescribed values of a boundary</span>
+<span class="sd">        condition, the forces of a node force) are then selected by the positions of the remaining nodes in the set,</span>
+<span class="sd">        which this method returns along with the indices.</span>
+
+<span class="sd">        The node sets given at construction are located up front, any other one at its first request.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
-<span class="sd">        nodeSets</span>
-<span class="sd">                The list of NodeSets to consider.</span>
+<span class="sd">        field</span>
+<span class="sd">            The name of the field, one of this equation system.</span>
+<span class="sd">        nodeSet</span>
+<span class="sd">            The node set.</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
-<span class="sd">        dict</span>
-<span class="sd">            A dictionary containing the location mapping.</span>
+<span class="sd">        tuple[np.ndarray, np.ndarray]</span>
+<span class="sd">            - The indices of the degrees of freedom in the DofVector, node after node in the order of the set, on each</span>
+<span class="sd">              node the components of the field.</span>
+<span class="sd">            - The positions of these nodes in the set: the rows of an array that holds one row per node of the set.</span>
 <span class="sd">        """</span>
 
-        <span class="n">nodeSetFieldsInDofVector</span> <span class="o">=</span> <span class="p">{}</span>
-        <span class="n">field_var_map</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">idcsOfFieldVariablesInDofVector</span>
+        <span class="n">locatedNodeSets</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_fieldsOnNodeSets</span><span class="p">[</span><span class="n">field</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">nodeSet</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">locatedNodeSets</span><span class="p">:</span>
+            <span class="n">locatedNodeSets</span><span class="p">[</span><span class="n">nodeSet</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_locateFieldOnNodeSet</span><span class="p">(</span><span class="n">field</span><span class="p">,</span> <span class="n">nodeSet</span><span class="p">)</span>
 
-        <span class="k">for</span> <span class="n">field</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">idcsOfNodeFieldsInDofVector</span><span class="p">:</span>
-            <span class="n">nodeSetFieldsInDofVector</span><span class="p">[</span><span class="n">field</span><span class="p">]</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>
-            <span class="k">for</span> <span class="n">nSet</span> <span class="ow">in</span> <span class="n">nodeSets</span><span class="p">:</span>
-                <span class="c1"># Concatenate the per-node index arrays as whole arrays, not element by element.</span>
-                <span class="n">indicesPerNode</span> <span class="o">=</span> <span class="p">[</span><span class="n">field_var_map</span><span class="p">[</span><span class="n">node</span><span class="o">.</span><span class="n">fields</span><span class="p">[</span><span class="n">field</span><span class="p">]]</span> <span class="k">for</span> <span class="n">node</span> <span class="ow">in</span> <span class="n">nSet</span> <span class="k">if</span> <span class="n">field</span> <span class="ow">in</span> <span class="n">node</span><span class="o">.</span><span class="n">fields</span><span class="p">]</span>
-                <span class="n">nodeSetFieldsInDofVector</span><span class="p">[</span><span class="n">field</span><span class="p">][</span><span class="n">nSet</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
-                    <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">(</span><span class="n">indicesPerNode</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">int</span><span class="p">,</span> <span class="n">copy</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span> <span class="k">if</span> <span class="n">indicesPerNode</span> <span class="k">else</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">int</span><span class="p">)</span>
-                <span class="p">)</span>
+        <span class="k">return</span> <span class="n">locatedNodeSets</span><span class="p">[</span><span class="n">nodeSet</span><span class="p">]</span></div>
 
-        <span class="k">return</span> <span class="n">nodeSetFieldsInDofVector</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_locateFieldOnNodeSet</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">field</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">nodeSet</span><span class="p">:</span> <span class="n">NodeSet</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""Locate the degrees of freedom of a field on the nodes of a node set; see :meth:`locateFieldOnNodeSet`.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        field</span>
+<span class="sd">            The name of the field.</span>
+<span class="sd">        nodeSet</span>
+<span class="sd">            The node set.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        tuple[np.ndarray, np.ndarray]</span>
+<span class="sd">            The indices of the degrees of freedom, and the positions of their nodes in the set.</span>
+<span class="sd">        """</span>
+
+        <span class="n">idcsOfFieldVariables</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">idcsOfFieldVariablesInDofVector</span>
+
+        <span class="c1"># The indices of the field on the nodes of the set, skipping a node without the field or with a field variable</span>
+        <span class="c1"># that is not part of this equation system (whose lookup gives None).</span>
+        <span class="n">indicesPerNode</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="n">indices</span> <span class="k">for</span> <span class="n">node</span> <span class="ow">in</span> <span class="n">nodeSet</span> <span class="k">if</span> <span class="p">(</span><span class="n">indices</span> <span class="o">:=</span> <span class="n">idcsOfFieldVariables</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">node</span><span class="o">.</span><span class="n">fields</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">field</span><span class="p">)))</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+        <span class="p">]</span>
+
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">indicesPerNode</span><span class="p">)</span> <span class="o">==</span> <span class="nb">len</span><span class="p">(</span><span class="n">nodeSet</span><span class="p">):</span>
+            <span class="c1"># every node of the set, as in a finite element model</span>
+            <span class="n">nodePositions</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">nodeSet</span><span class="p">))</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">nodePositions</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span>
+                <span class="p">[</span><span class="n">position</span> <span class="k">for</span> <span class="n">position</span><span class="p">,</span> <span class="n">node</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">nodeSet</span><span class="p">)</span> <span class="k">if</span> <span class="n">node</span><span class="o">.</span><span class="n">fields</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">field</span><span class="p">)</span> <span class="ow">in</span> <span class="n">idcsOfFieldVariables</span><span class="p">],</span>
+                <span class="n">dtype</span><span class="o">=</span><span class="nb">int</span><span class="p">,</span>
+            <span class="p">)</span>
+
+        <span class="c1"># Concatenate the per-node index arrays as whole arrays, not element by element.</span>
+        <span class="n">dofIndices</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">(</span><span class="n">indicesPerNode</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">int</span><span class="p">,</span> <span class="n">copy</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span> <span class="k">if</span> <span class="n">indicesPerNode</span> <span class="k">else</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">int</span><span class="p">)</span>
+        <span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">dofIndices</span><span class="p">,</span> <span class="n">nodePositions</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_initializeVIJPattern</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
@@ -847,7 +898,8 @@
 <span class="sd">        resultname</span>
 <span class="sd">            The name of the value entries held by the NodeField.</span>
 <span class="sd">        NodeSet</span>
-<span class="sd">            The NodeSet to consider. If None, all nodes of the NodeField are considered.</span>
+<span class="sd">            The NodeSet to consider: its nodes whose field is part of this equation system (see</span>
+<span class="sd">            :meth:`locateFieldOnNodeSet`). If None, all nodes of the NodeField are considered.</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
@@ -856,14 +908,10 @@
 <span class="sd">        """</span>
 
         <span class="k">if</span> <span class="n">nodeSet</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">if</span> <span class="n">nodeSet</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">idcsOfFieldsOnNodeSetsInDofVector</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">nodeField</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="p">{}):</span>
-                <span class="n">new_map</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_locateFieldsOnNodeSetsInDofVector</span><span class="p">([</span><span class="n">nodeSet</span><span class="p">])</span>
-                <span class="k">if</span> <span class="n">nodeField</span><span class="o">.</span><span class="n">name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">idcsOfFieldsOnNodeSetsInDofVector</span><span class="p">:</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">idcsOfFieldsOnNodeSetsInDofVector</span><span class="p">[</span><span class="n">nodeField</span><span class="o">.</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">idcsOfFieldsOnNodeSetsInDofVector</span><span class="p">[</span><span class="n">nodeField</span><span class="o">.</span><span class="n">name</span><span class="p">]</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">new_map</span><span class="p">[</span><span class="n">nodeField</span><span class="o">.</span><span class="n">name</span><span class="p">])</span>
-
-            <span class="n">indices</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">idcsOfFieldsOnNodeSetsInDofVector</span><span class="p">[</span><span class="n">nodeField</span><span class="o">.</span><span class="n">name</span><span class="p">][</span><span class="n">nodeSet</span><span class="p">]</span>
-            <span class="n">dofVector</span><span class="p">[</span><span class="n">indices</span><span class="p">]</span> <span class="o">=</span> <span class="n">nodeField</span><span class="o">.</span><span class="n">subset</span><span class="p">(</span><span class="n">nodeSet</span><span class="p">)[</span><span class="n">resultName</span><span class="p">]</span><span class="o">.</span><span class="n">flatten</span><span class="p">()</span>
+            <span class="n">indices</span><span class="p">,</span> <span class="n">nodePositions</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">locateFieldOnNodeSet</span><span class="p">(</span><span class="n">nodeField</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">nodeSet</span><span class="p">)</span>
+            <span class="n">nodes</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">nodeSet</span><span class="p">)</span>
+            <span class="n">rowsInNodeField</span> <span class="o">=</span> <span class="p">[</span><span class="n">nodeField</span><span class="o">.</span><span class="n">indexOfNode</span><span class="p">(</span><span class="n">nodes</span><span class="p">[</span><span class="n">position</span><span class="p">])</span> <span class="k">for</span> <span class="n">position</span> <span class="ow">in</span> <span class="n">nodePositions</span><span class="p">]</span>
+            <span class="n">dofVector</span><span class="p">[</span><span class="n">indices</span><span class="p">]</span> <span class="o">=</span> <span class="n">nodeField</span><span class="p">[</span><span class="n">resultName</span><span class="p">][</span><span class="n">rowsInNodeField</span><span class="p">]</span><span class="o">.</span><span class="n">flatten</span><span class="p">()</span>
 
         <span class="k">else</span><span class="p">:</span>
             <span class="n">indices</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">idcsOfNodeFieldsInDofVector</span><span class="p">[</span><span class="n">nodeField</span><span class="o">.</span><span class="n">name</span><span class="p">]</span>

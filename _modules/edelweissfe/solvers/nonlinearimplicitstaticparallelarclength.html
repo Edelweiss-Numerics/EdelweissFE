@@ -596,8 +596,8 @@
         <span class="p">)</span>
         <span class="n">dLambda</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">extrapolateLoadParameterIncrement</span><span class="p">(</span><span class="n">extrapolation</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">,</span> <span class="n">prevTimeStep</span><span class="p">)</span>
         <span class="k">for</span> <span class="n">dirichlet</span> <span class="ow">in</span> <span class="n">dirichlets</span><span class="p">:</span>
-            <span class="n">dU</span><span class="p">[</span><span class="n">dirichlet</span><span class="o">.</span><span class="n">constrainedDofIndices</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
-                <span class="n">dLambda</span> <span class="o">*</span> <span class="n">dirichlet</span><span class="o">.</span><span class="n">getPrescribedIncrement</span><span class="p">(</span><span class="n">increment</span><span class="o">.</span><span class="n">referenceTimeStep</span><span class="p">)</span><span class="o">.</span><span class="n">flatten</span><span class="p">()</span>
+            <span class="n">dU</span><span class="p">[</span><span class="n">dirichlet</span><span class="o">.</span><span class="n">constrainedDofIndices</span><span class="p">]</span> <span class="o">=</span> <span class="n">dLambda</span> <span class="o">*</span> <span class="n">dirichlet</span><span class="o">.</span><span class="n">getPrescribedIncrementOfConstrainedDofs</span><span class="p">(</span>
+                <span class="n">increment</span><span class="o">.</span><span class="n">referenceTimeStep</span>
             <span class="p">)</span>
 
         <span class="n">increment</span><span class="o">.</span><span class="n">loadParameterIncrement</span> <span class="o">=</span> <span class="n">dLambda</span>

@@ -610,7 +610,7 @@
 
         <span class="n">topologyUpdate</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">updateTopologyAndConnectivity</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">step</span><span class="p">)</span>
         <span class="n">meshChanged</span> <span class="o">=</span> <span class="n">topologyUpdate</span><span class="o">.</span><span class="n">topologyChanged</span> <span class="ow">or</span> <span class="n">topologyUpdate</span><span class="o">.</span><span class="n">meshDependentsRefreshed</span>
-        <span class="n">connectivityChanged</span> <span class="o">=</span> <span class="n">topologyUpdate</span><span class="o">.</span><span class="n">constraintConnectivityChanged</span>
+        <span class="n">connectivityChanged</span> <span class="o">=</span> <span class="n">topologyUpdate</span><span class="o">.</span><span class="n">connectivityChanged</span>
 
         <span class="k">if</span> <span class="n">meshChanged</span> <span class="ow">or</span> <span class="n">connectivityChanged</span><span class="p">:</span>
             <span class="c1"># A connectivity-only change carries solution, velocity and force over to the new system.</span>
@@ -894,7 +894,7 @@
             <span class="c1"># and their velocity is prescribed as (prescribed increment) / (time step).</span>
             <span class="n">prescribedVelocities</span> <span class="o">=</span> <span class="p">[]</span>
             <span class="k">for</span> <span class="n">dirichlet</span> <span class="ow">in</span> <span class="n">dirichlets</span><span class="p">:</span>
-                <span class="n">prescribedIncrement</span> <span class="o">=</span> <span class="n">dirichlet</span><span class="o">.</span><span class="n">getPrescribedIncrement</span><span class="p">(</span><span class="n">timeStep</span><span class="p">)</span><span class="o">.</span><span class="n">flatten</span><span class="p">()</span>
+                <span class="n">prescribedIncrement</span> <span class="o">=</span> <span class="n">dirichlet</span><span class="o">.</span><span class="n">getPrescribedIncrementOfConstrainedDofs</span><span class="p">(</span><span class="n">timeStep</span><span class="p">)</span>
 
                 <span class="c1"># External work = reaction (-P, the carried-over net force) times the prescribed</span>
                 <span class="c1"># increment. Must be accumulated before P is zeroed below. Only for fields where this</span>
@@ -1242,9 +1242,9 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">updateConstraintConnectivity</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">:</span> <span class="n">FEModel</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">"""Let the constraints whose connectivity is the outcome of a search re-run that search.</span>
 
-<span class="sd">        Only the constraints in :attr:`_dynamicConnectivityConstraints` that are switched on are ticked (see</span>
-<span class="sd">        :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.updateTopologyAndConnectivity`), and</span>
-<span class="sd">        the caller ticks them only every ``contact-update-frequency`` increments. Both matter: a node-to-surface</span>
+<span class="sd">        Only the constraints in :attr:`_dynamicConnectivityConstraints` that are switched on are ticked</span>
+<span class="sd">        (see :meth:`~edelweissfe.models.femodel.FEModel.updateConnectivity`), and the caller ticks them only every</span>
+<span class="sd">        ``contact-update-frequency`` increments. Both matter: a node-to-surface</span>
 <span class="sd">        search is O(slaves x facets) in Python, which is affordable once per increment of an implicit</span>
 <span class="sd">        analysis -- where it is amortised over a Newton loop and a linear solve -- and not affordable</span>
 <span class="sd">        tens of thousands of times. What makes throttling defensible rather than merely cheap is that</span>
@@ -1551,10 +1551,9 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">refreshConstraintIndices</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">activeConstraints</span><span class="p">())</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">journal</span><span class="o">.</span><span class="n">message</span><span class="p">(</span><span class="s2">"Creating monolithic equation system"</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">identification</span><span class="p">,</span> <span class="n">verbosity</span><span class="p">)</span>
-            <span class="c1"># No system matrix, so neither the VIJ pattern nor the index-to-host-object map is needed.</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">createDofManager</span><span class="p">(</span>
-                <span class="n">model</span><span class="p">,</span> <span class="n">initializeVIJPattern</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">determiningIndexToHostObjectMapping</span><span class="o">=</span><span class="kc">False</span>
-            <span class="p">)</span>
+            <span class="c1"># The numbering of the model's degrees of freedom; this solver evaluates the model's elements itself, and</span>
+            <span class="c1"># assembles no system matrix.</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">buildEquationSystem</span><span class="p">(</span><span class="n">withSystemMatrix</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span><span class="o">.</span><span class="n">dofManager</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">journal</span><span class="o">.</span><span class="n">message</span><span class="p">(</span>
             <span class="s2">"total size of eq. system: </span><span class="si">{:}</span><span class="s2">"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">nDof</span><span class="p">),</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">identification</span><span class="p">,</span>

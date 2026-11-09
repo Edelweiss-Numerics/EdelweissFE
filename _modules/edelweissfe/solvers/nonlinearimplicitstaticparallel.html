@@ -121,6 +121,16 @@
 <div class="viewcode-block" id="NISTParallel">
 <a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitstaticparallel.NISTParallel">[docs]</a>
 <span class="k">class</span><span class="w"> </span><span class="nc">NISTParallel</span><span class="p">(</span><span class="n">NIST</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">""":class:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST`, with the elements computed on the available threads</span>
+<span class="sd">    (:meth:`computeElements`).</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    jobInfo</span>
+<span class="sd">        A dictionary containing the job information.</span>
+<span class="sd">    journal</span>
+<span class="sd">        The journal instance for logging.</span>
+<span class="sd">    """</span>
 
     <span class="n">identification</span> <span class="o">=</span> <span class="s2">"NISTPSolver"</span>
 
@@ -136,6 +146,9 @@
 <a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitstaticparallel.NISTParallel.computeElements">[docs]</a>
     <span class="nd">@performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"elements"</span><span class="p">)</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">computeElements</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">elements</span><span class="p">,</span> <span class="n">Un1</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">P</span><span class="p">,</span> <span class="n">K</span><span class="p">,</span> <span class="n">F</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Compute the elements on the available threads, see</span>
+<span class="sd">        :func:`~edelweissfe.solvers.base.parallelelementcomputation.computeElementsInParallel`; otherwise as</span>
+<span class="sd">        :meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.computeElements`."""</span>
         <span class="k">return</span> <span class="n">computeElementsInParallel</span><span class="p">(</span><span class="n">elements</span><span class="p">,</span> <span class="n">Un1</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">P</span><span class="p">,</span> <span class="n">K</span><span class="p">,</span> <span class="n">F</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">)</span></div>
 </div>
 

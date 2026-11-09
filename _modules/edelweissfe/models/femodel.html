@@ -116,8 +116,10 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.config.phenomena</span><span class="w"> </span><span class="kn">import</span> <span class="n">getFieldSize</span><span class="p">,</span> <span class="n">phenomena</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.fields.nodefield</span><span class="w"> </span><span class="kn">import</span> <span class="n">NodeField</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.journal.journal</span><span class="w"> </span><span class="kn">import</span> <span class="n">Journal</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.models.equationsystemlayout</span><span class="w"> </span><span class="kn">import</span> <span class="n">EquationSystemLayout</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.models.modelchange</span><span class="w"> </span><span class="kn">import</span> <span class="n">TopologyRecord</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.models.topologypipeline</span><span class="w"> </span><span class="kn">import</span> <span class="n">TopologyPipeline</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.dofmanager</span><span class="w"> </span><span class="kn">import</span> <span class="n">DofManager</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.parallelizationutilities</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">getNumberOfWorkerThreads</span><span class="p">,</span>
     <span class="n">mapChunksInParallel</span><span class="p">,</span>
@@ -509,6 +511,81 @@
 <span class="sd">        """</span>
 
         <span class="k">return</span> <span class="p">[</span><span class="n">constraint</span> <span class="k">for</span> <span class="n">constraint</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">constraints</span><span class="o">.</span><span class="n">values</span><span class="p">()</span> <span class="k">if</span> <span class="n">constraint</span><span class="o">.</span><span class="n">active</span><span class="p">]</span></div>
+
+
+<div class="viewcode-block" id="FEModel.updateConnectivity">
+<a class="viewcode-back" href="../../../documentation/models.html#edelweissfe.models.femodel.FEModel.updateConnectivity">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">updateConnectivity</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Bring the coupling of the degrees of freedom up to date with the converged state, before an increment: which</span>
+<span class="sd">        nodes the entities of the equation system couple. Called by the solvers' topology update at the start of every</span>
+<span class="sd">        increment and of every retry after a cutback, before the increment is proposed (see</span>
+<span class="sd">        :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.updateTopologyAndConnectivity`). If it</span>
+<span class="sd">        reports a change, an implicit solver rebuilds its equation system (:meth:`buildEquationSystem`).</span>
+
+<span class="sd">        In a finite element model, the elements keep their nodes, and only a constraint may change the nodes it</span>
+<span class="sd">        couples: a contact constraint searches for the surface it touches. A meshfree model of EdelweissMeshfree moves</span>
+<span class="sd">        its material points through a background grid, and its particles carry their kernel functions along: it</span>
+<span class="sd">        reassigns them here first, then lets its constraints follow.</span>
+
+<span class="sd">        Only the constraints that are switched on are located anew</span>
+<span class="sd">        (:attr:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.switchedOn`), those out of reach included,</span>
+<span class="sd">        so that they can find themselves within reach again. A constraint switched off from outside rests until it is</span>
+<span class="sd">        switched on again, and is located anew at the start of the next increment then.</span>
+
+<span class="sd">        A change of the coupling is not a change of the mesh: it neither moves nodes nor creates them, so a solver</span>
+<span class="sd">        rebuilds its equation system, but does not re-equilibrate (``equilibrateAfterModelChange``).</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        bool</span>
+<span class="sd">            True if a coupling changed, so that the equation system has to be rebuilt.</span>
+<span class="sd">        """</span>
+
+        <span class="c1"># A list, not a generator in any(): every constraint must update, not just those up to the first change.</span>
+        <span class="k">return</span> <span class="nb">any</span><span class="p">(</span>
+            <span class="p">[</span><span class="n">constraint</span><span class="o">.</span><span class="n">updateConnectivity</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="k">for</span> <span class="n">constraint</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">constraints</span><span class="o">.</span><span class="n">values</span><span class="p">()</span> <span class="k">if</span> <span class="n">constraint</span><span class="o">.</span><span class="n">switchedOn</span><span class="p">]</span>
+        <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="FEModel.buildEquationSystem">
+<a class="viewcode-back" href="../../../documentation/models.html#edelweissfe.models.femodel.FEModel.buildEquationSystem">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">buildEquationSystem</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">withSystemMatrix</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">EquationSystemLayout</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Lay out the global equation system of the model as it is now: number its degrees of freedom, and say which</span>
+<span class="sd">        elements contribute to it, see :class:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout`. Called</span>
+<span class="sd">        by a solver whenever it (re)builds its equation system: at the start of a step, and after the topology update</span>
+<span class="sd">        reported a change of the mesh or of the coupling (:meth:`updateConnectivity`).</span>
+
+<span class="sd">        The equation system of a finite element model holds the node fields, the elements, and the active constraints</span>
+<span class="sd">        with their scalar variables (e.g. Lagrange multipliers). A constraint that is not active (see</span>
+<span class="sd">        :attr:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.active`) is left out together with its</span>
+<span class="sd">        scalar variables, which would otherwise be unknowns without an equation.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        withSystemMatrix</span>
+<span class="sd">            False for an explicit solver, which assembles no system matrix: then neither the pattern of the system</span>
+<span class="sd">            matrix is built, nor the map from the degrees of freedom back to their nodes, by which the Newton iterations</span>
+<span class="sd">            report the nodes with the largest residuals.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        EquationSystemLayout</span>
+<span class="sd">            The layout of the equation system.</span>
+<span class="sd">        """</span>
+
+        <span class="n">constraints</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">activeConstraints</span><span class="p">()</span>
+
+        <span class="n">dofManager</span> <span class="o">=</span> <span class="n">DofManager</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">nodeFields</span><span class="o">.</span><span class="n">values</span><span class="p">(),</span>
+            <span class="p">[</span><span class="n">scalarVariable</span> <span class="k">for</span> <span class="n">constraint</span> <span class="ow">in</span> <span class="n">constraints</span> <span class="k">for</span> <span class="n">scalarVariable</span> <span class="ow">in</span> <span class="n">constraint</span><span class="o">.</span><span class="n">scalarVariables</span><span class="p">],</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">elements</span><span class="o">.</span><span class="n">values</span><span class="p">(),</span>
+            <span class="n">constraints</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">nodeSets</span><span class="o">.</span><span class="n">values</span><span class="p">(),</span>
+            <span class="n">initializeVIJPattern</span><span class="o">=</span><span class="n">withSystemMatrix</span><span class="p">,</span>
+            <span class="n">determiningIndexToHostObjectMapping</span><span class="o">=</span><span class="n">withSystemMatrix</span><span class="p">,</span>
+        <span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">EquationSystemLayout</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dofManager</span><span class="p">,</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">elements</span><span class="o">.</span><span class="n">values</span><span class="p">()))</span></div>
 
 
 <div class="viewcode-block" id="FEModel.advanceToTime">
