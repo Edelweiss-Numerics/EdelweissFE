@@ -1,0 +1,302 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>edelweissfe.stepactions.base.indirectdisplacementcontrolbase &mdash; EdelweissFE v22.07 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=cfdaff8d" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css?v=37fbe429" />
+
+  
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=17e2f33f"></script>
+      <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            EdelweissFE
+              <img src="../../../../_static/edelweiss_fe_logo.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../features.html">Features</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../prerequisites.html">Prerequisites</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../documentation/index.html">Documentation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../contributors.html">Contributors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../publications.html">Publications</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">EdelweissFE</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">edelweissfe.stepactions.base.indirectdisplacementcontrolbase</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for edelweissfe.stepactions.base.indirectdisplacementcontrolbase</h1><div class="highlight"><pre>
+<span></span><span class="ch">#!/usr/bin/env python3</span>
+<span class="c1"># -*- coding: utf-8 -*-</span>
+<span class="c1">#  ---------------------------------------------------------------------</span>
+<span class="c1">#</span>
+<span class="c1">#  _____    _      _              _         _____ _____</span>
+<span class="c1"># | ____|__| | ___| |_      _____(_)___ ___|  ___| ____|</span>
+<span class="c1"># |  _| / _` |/ _ \ \ \ /\ / / _ \ / __/ __| |_  |  _|</span>
+<span class="c1"># | |__| (_| |  __/ |\ V  V /  __/ \__ \__ \  _| | |___</span>
+<span class="c1"># |_____\__,_|\___|_| \_/\_/ \___|_|___/___/_|   |_____|</span>
+<span class="c1">#</span>
+<span class="c1">#</span>
+<span class="c1">#  Unit of Strength of Materials and Structural Analysis</span>
+<span class="c1">#  University of Innsbruck,</span>
+<span class="c1">#  2017 - today</span>
+<span class="c1">#</span>
+<span class="c1">#  Matthias Neuner matthias.neuner@uibk.ac.at</span>
+<span class="c1">#</span>
+<span class="c1">#  This file is part of EdelweissFE.</span>
+<span class="c1">#</span>
+<span class="c1">#  This library is free software; you can redistribute it and/or</span>
+<span class="c1">#  modify it under the terms of the GNU Lesser General Public</span>
+<span class="c1">#  License as published by the Free Software Foundation; either</span>
+<span class="c1">#  version 2.1 of the License, or (at your option) any later version.</span>
+<span class="c1">#</span>
+<span class="c1">#  The full text of the license can be found in the file LICENSE.md at</span>
+<span class="c1">#  the top level directory of EdelweissFE.</span>
+<span class="c1">#  ---------------------------------------------------------------------</span>
+<span class="sd">"""The base of the arc length controllers of the indirect displacement control, whose controlled quantity is a linear</span>
+<span class="sd">combination of degrees of freedom."""</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">abstractmethod</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.dofmanager</span><span class="w"> </span><span class="kn">import</span> <span class="n">DofManager</span><span class="p">,</span> <span class="n">DofVector</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.stepactions.base.arclengthcontrollerbase</span><span class="w"> </span><span class="kn">import</span> <span class="n">ArcLengthControllerBase</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.timesteppers.timestep</span><span class="w"> </span><span class="kn">import</span> <span class="n">TimeStep</span>
+
+
+<div class="viewcode-block" id="IndirectDisplacementControlBase">
+<a class="viewcode-back" href="../../../../documentation/solvers.html#edelweissfe.stepactions.base.indirectdisplacementcontrolbase.IndirectDisplacementControlBase">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">IndirectDisplacementControlBase</span><span class="p">(</span><span class="n">ArcLengthControllerBase</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""The base of the arc length controllers of the indirect displacement control (Jirásek and Bažant): the controlled</span>
+<span class="sd">    quantity is a linear combination of degrees of freedom,</span>
+
+<span class="sd">    .. math::</span>
+
+<span class="sd">        q = \\boldsymbol{c} \\cdot \\boldsymbol{U},</span>
+
+<span class="sd">    with the weights :math:`\\boldsymbol{c}` of the controlled degrees of freedom (:attr:`cVector`), e.g. the opening of</span>
+<span class="sd">    a crack between two nodes, or the mean contraction of a ring of nodes. Over its step, :math:`q` changes by</span>
+<span class="sd">    :math:`\\Delta L`, and every increment by its share, :math:`\\Delta p \\, \\Delta L` for an increment of the step</span>
+<span class="sd">    progress :math:`\\Delta p`. The controller's equation for the corrected increment of the solution,</span>
+
+<span class="sd">    .. math::</span>
+
+<span class="sd">        \\boldsymbol{c} \\cdot (\\Delta \\boldsymbol{U} + \\Delta\\Delta \\boldsymbol{U}_0</span>
+<span class="sd">        + \\Delta\\Delta\\lambda \\, \\Delta\\Delta \\boldsymbol{U}_f) = \\Delta p \\, \\Delta L,</span>
+
+<span class="sd">    is linear in the correction of the load parameter :math:`\\Delta\\Delta\\lambda`, which :meth:`computeDDLambda`</span>
+<span class="sd">    solves it for.</span>
+
+<span class="sd">    The target ``L`` of a declaration -- the construction of the controller, or its re-declaration in a later step,</span>
+<span class="sd">    which updates it -- is, with ``absolute``, the value of :math:`q` at the end of the step: the change of the step is</span>
+<span class="sd">    :math:`\\Delta L = L - q`, with :math:`q` of the model when the controller is declared, i.e. of the state the step</span>
+<span class="sd">    starts from (:meth:`declareTarget`). A controller first declared in a later step aims at ``L`` as well, and so does</span>
+<span class="sd">    one whose quantity changed over steps it did not control. Without ``absolute``, ``L`` is the change</span>
+<span class="sd">    :math:`\\Delta L` itself. A step that does not re-declare the controller changes :math:`q` by the :math:`\\Delta L`</span>
+<span class="sd">    of its last declaration once more.</span>
+
+<span class="sd">    A controller of this kind names its controlled degrees of freedom and their weights: :attr:`cVector`,</span>
+<span class="sd">    :meth:`controlledDofIndices` and :meth:`controlledValuesOfModel`.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    name</span>
+<span class="sd">        The name of this step action.</span>
+<span class="sd">    absolute</span>
+<span class="sd">        Whether the target ``L`` of a declaration is the value of the controlled quantity at the end of the step, or its</span>
+<span class="sd">        change over the step. Fixed at construction: a re-declaration cannot change it.</span>
+<span class="sd">    """</span>
+
+    <span class="c1">#: The change of the controlled quantity over the step, :math:`\\Delta L`, which a declaration derives from its</span>
+    <span class="c1">#: target and the model; a resumed run declares the controller anew on the restored model, so a checkpoint holds it.</span>
+    <span class="n">checkpointedState</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"changeOverStep"</span><span class="p">:</span> <span class="nb">float</span><span class="p">}</span>
+
+    <span class="c1">#: The weights :math:`\\boldsymbol{c}` of the controlled degrees of freedom, in the order of</span>
+    <span class="c1">#: :meth:`controlledDofIndices` and :meth:`controlledValuesOfModel`.</span>
+    <span class="n">cVector</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">absolute</span><span class="p">:</span> <span class="nb">bool</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">name</span> <span class="o">=</span> <span class="n">name</span>
+        <span class="c1">#: Whether the target ``L`` of a declaration is the value of the controlled quantity at the end of the step.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">absolute</span> <span class="o">=</span> <span class="n">absolute</span>
+        <span class="c1">#: The change of the controlled quantity over the step, :math:`\\Delta L`; see :meth:`declareTarget`.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">changeOverStep</span> <span class="o">=</span> <span class="mf">0.0</span>
+
+<div class="viewcode-block" id="IndirectDisplacementControlBase.controlledDofIndices">
+<a class="viewcode-back" href="../../../../documentation/solvers.html#edelweissfe.stepactions.base.indirectdisplacementcontrolbase.IndirectDisplacementControlBase.controlledDofIndices">[docs]</a>
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">controlledDofIndices</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dofManager</span><span class="p">:</span> <span class="n">DofManager</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The indices of the controlled degrees of freedom in the dof vector of an equation system.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        dofManager</span>
+<span class="sd">            The dof manager of the equation system.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        np.ndarray</span>
+<span class="sd">            The indices, in the order of :attr:`cVector`.</span>
+<span class="sd">        """</span></div>
+
+
+<div class="viewcode-block" id="IndirectDisplacementControlBase.controlledValuesOfModel">
+<a class="viewcode-back" href="../../../../documentation/solvers.html#edelweissfe.stepactions.base.indirectdisplacementcontrolbase.IndirectDisplacementControlBase.controlledValuesOfModel">[docs]</a>
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">controlledValuesOfModel</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The values of the controlled degrees of freedom in the model, as its node fields hold them.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        np.ndarray</span>
+<span class="sd">            The values, in the order of :attr:`cVector`.</span>
+<span class="sd">        """</span></div>
+
+
+<div class="viewcode-block" id="IndirectDisplacementControlBase.controlledQuantity">
+<a class="viewcode-back" href="../../../../documentation/solvers.html#edelweissfe.stepactions.base.indirectdisplacementcontrolbase.IndirectDisplacementControlBase.controlledQuantity">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">controlledQuantity</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The controlled quantity of the model, :math:`q = \\boldsymbol{c} \\cdot \\boldsymbol{U}`.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        float</span>
+<span class="sd">            The controlled quantity.</span>
+<span class="sd">        """</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">cVector</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">controlledValuesOfModel</span><span class="p">())</span></div>
+
+
+<div class="viewcode-block" id="IndirectDisplacementControlBase.declareTarget">
+<a class="viewcode-back" href="../../../../documentation/solvers.html#edelweissfe.stepactions.base.indirectdisplacementcontrolbase.IndirectDisplacementControlBase.declareTarget">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">declareTarget</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">L</span><span class="p">:</span> <span class="nb">float</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Declare the target of the step, from which the change of the controlled quantity over the step,</span>
+<span class="sd">        :attr:`changeOverStep`, follows: :math:`\\Delta L = L - q`, with the controlled quantity :math:`q` of the model</span>
+<span class="sd">        now, if ``absolute`` is set, else :math:`\\Delta L = L`. Called with the controlled degrees of freedom and their</span>
+<span class="sd">        weights in place.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        L</span>
+<span class="sd">            The target: the value of the controlled quantity at the end of the step with ``absolute``, else its change</span>
+<span class="sd">            over the step.</span>
+<span class="sd">        """</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">changeOverStep</span> <span class="o">=</span> <span class="n">L</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">controlledQuantity</span><span class="p">()</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">absolute</span> <span class="k">else</span> <span class="n">L</span></div>
+
+
+<div class="viewcode-block" id="IndirectDisplacementControlBase.computeDDLambda">
+<a class="viewcode-back" href="../../../../documentation/solvers.html#edelweissfe.stepactions.base.indirectdisplacementcontrolbase.IndirectDisplacementControlBase.computeDDLambda">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">computeDDLambda</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">dU</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">ddU_0</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">ddU_f</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">:</span> <span class="n">TimeStep</span><span class="p">,</span> <span class="n">dofManager</span><span class="p">:</span> <span class="n">DofManager</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The correction of the load parameter that makes the corrected increment change the controlled quantity by the</span>
+<span class="sd">        share of the increment, :math:`\\Delta p \\, \\Delta L`; see</span>
+<span class="sd">        :meth:`~edelweissfe.stepactions.base.arclengthcontrollerbase.ArcLengthControllerBase.computeDDLambda`.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        dU</span>
+<span class="sd">            The current increment of the solution.</span>
+<span class="sd">        ddU_0</span>
+<span class="sd">            The correction of the solution caused by the out-of-balance force.</span>
+<span class="sd">        ddU_f</span>
+<span class="sd">            The correction of the solution caused by the reference load alone.</span>
+<span class="sd">        timeStep</span>
+<span class="sd">            The increment being solved, whose size :math:`\\Delta p` is ``timeStep.stepProgressIncrement``.</span>
+<span class="sd">        dofManager</span>
+<span class="sd">            The dof manager of the current equation system.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        float</span>
+<span class="sd">            The correction of the load parameter.</span>
+<span class="sd">        """</span>
+
+        <span class="n">idcs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">controlledDofIndices</span><span class="p">(</span><span class="n">dofManager</span><span class="p">)</span>
+
+        <span class="n">dL</span> <span class="o">=</span> <span class="n">timeStep</span><span class="o">.</span><span class="n">stepProgressIncrement</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">changeOverStep</span>
+
+        <span class="k">return</span> <span class="p">(</span><span class="n">dL</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">cVector</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">dU</span><span class="p">[</span><span class="n">idcs</span><span class="p">]</span> <span class="o">+</span> <span class="n">ddU_0</span><span class="p">[</span><span class="n">idcs</span><span class="p">]))</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">cVector</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">ddU_f</span><span class="p">[</span><span class="n">idcs</span><span class="p">])</span></div>
+</div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Matthias Neuner.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

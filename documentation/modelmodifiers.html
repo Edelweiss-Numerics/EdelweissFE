@@ -1006,7 +1006,9 @@ converged load <em>before</em> the load is advanced:</p>
 <p>On a path-independent material this is non-destructive (it changes only the increment sequence, not
 the converged root); for a history-dependent material it yields a physically distinct, relaxed path,
 which is the intended effect. The equilibration solve integrates materials with <code class="docutils literal notranslate"><span class="pre">dT</span> <span class="pre">=</span> <span class="pre">0</span></code>, so it
-suits rate-independent models; rate-dependent materials see no time advance during it by design.</p>
+suits rate-independent models; rate-dependent materials see no time advance during it by design.
+Under arc length control (<code class="docutils literal notranslate"><span class="pre">NISTPArcLength</span></code>), the re-equilibration holds the controlled quantity
+instead of the load, and solves for the load parameter (see <a class="reference internal" href="solvers.html#arc-length-control"><span class="std std-ref">Arc length control</span></a>).</p>
 </section>
 <section id="refinement-under-a-dynamic-solver">
 <h2>Refinement under a dynamic solver<a class="headerlink" href="#refinement-under-a-dynamic-solver" title="Link to this heading"></a></h2>

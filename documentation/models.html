@@ -268,8 +268,9 @@ and <a class="reference internal" href="#edelweissfe.models.femodel.FEModel.prep
 <dd><p>Write the current (converged) state of the model to a restart checkpoint.</p>
 <p>Does not serialize model topology (nodes/elements/sets/sections/materials) – only state
 that a rebuild from the original <code class="docutils literal notranslate"><span class="pre">.inp</span></code> file cannot reproduce: node field values, element
-quadrature-point history, scalar variables (e.g. Lagrange multipliers), and stateful
-constraints’ internal history (e.g. frictional contact).</p>
+quadrature-point history, scalar variables (e.g. Lagrange multipliers), stateful
+constraints’ internal history (e.g. frictional contact), and the additional parameters
+(e.g. the load parameter of the arc length method).</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>restartFile</strong> (<em>File</em>) – An open, writable <code class="xref py py-class docutils literal notranslate"><span class="pre">h5py.File</span></code> (or group) to write the checkpoint into.</p>

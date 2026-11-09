@@ -207,7 +207,8 @@ performance table of its own, before the resumed step’s table</p></td>
 <tr class="row-even"><td><p>ties, contact surfaces</p></td>
 <td><p>catch up with the replayed mesh, as they had in the uninterrupted run</p></td>
 </tr>
-<tr class="row-odd"><td><p>node fields, scalar variables, element state</p></td>
+<tr class="row-odd"><td><p>node fields, scalar variables, element state, additional parameters (e.g. the load parameter the arc length
+method publishes)</p></td>
 <td><p>read</p></td>
 </tr>
 <tr class="row-even"><td><p>rigid bodies</p></td>
@@ -224,8 +225,9 @@ performance table of its own, before the resumed step’s table</p></td>
 of the next increment, the enforced time increment, and whether the zero increment was done</p></td>
 </tr>
 <tr class="row-even"><td><p>solver</p></td>
-<td><p>its state between increments: the implicit solver’s predictor (last accepted increment and
-its <code class="docutils literal notranslate"><span class="pre">dU</span></code>), the explicit solver’s last increment and accumulated external work</p></td>
+<td><p>its state between increments: the implicit solver’s predictor (the last accepted increments
+and their <code class="docutils literal notranslate"><span class="pre">dU</span></code>, under arc length control also their increments of the load parameter, and the
+load parameter of the step), the explicit solver’s last increment and accumulated external work</p></td>
 </tr>
 </tbody>
 </table>
@@ -247,8 +249,10 @@ exactly those, as they are (<a class="reference internal" href="output.html#modu
 declaration fails there, and writing a checkpoint refuses. A solver that is not restartable says so
 by keeping the declaration None.</p>
 <p>Step actions declare their state too: a load ramped over several steps accumulates from step to
-step, and most actions switch themselves off at the end of their step. A resumed run skips the
-steps before the checkpoint, so it restores that state rather than re-deriving it.</p>
+step, most actions switch themselves off at the end of their step, and an arc length controller
+derives the change of its controlled quantity over the step from the model it is declared on. A
+resumed run skips the steps before the checkpoint, and declares the step actions on the restored
+model, so it restores that state rather than re-deriving it.</p>
 <p>Field outputs carry their history the same way, and how much of their export file belongs to the
 run: before its first write, a resumed run cuts the file back to that size, so the rows an
 interrupted run wrote after its last checkpoint are replaced, not duplicated.</p>

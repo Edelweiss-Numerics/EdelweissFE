@@ -106,6 +106,7 @@
 
 <span class="c1"># @author: Matthias Neuner</span>
 
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Callable</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">time</span><span class="w"> </span><span class="kn">import</span> <span class="n">perf_counter</span>
 
@@ -138,6 +139,29 @@
 <span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.utils.fieldoutput</span><span class="w"> </span><span class="kn">import</span> <span class="n">FieldOutputController</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.utils.schema</span><span class="w"> </span><span class="kn">import</span> <span class="n">schemaField</span>
+
+
+<div class="viewcode-block" id="QuasiNewtonFallback">
+<a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.QuasiNewtonFallback">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">QuasiNewtonFallback</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""The quasi-Newton fallback of one attempt of an increment (solver option ``fallBackToQuasiNewton``): once the</span>
+<span class="sd">    residual has grown more often than the step option ``maxGrowIter`` allows, the increment continues with the tangent</span>
+<span class="sd">    of its first iteration instead of being cut back. A tangent that is not updated converges only linearly, but it</span>
+<span class="sd">    cannot switch abruptly either, as a tangent of materials switching between loading and unloading does.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    isEnabled</span>
+<span class="sd">        Whether the option is on; only then is the tangent of the first iteration kept.</span>
+<span class="sd">    """</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">isEnabled</span><span class="p">:</span> <span class="nb">bool</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">isEnabled</span> <span class="o">=</span> <span class="n">isEnabled</span>
+        <span class="c1">#: True once the increment continues with the tangent of its first iteration.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">isEngaged</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="c1">#: The tangent of the first iteration, in CSR layout and condensed, without the Dirichlet rows and columns.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">tangentOfFirstIteration</span> <span class="o">=</span> <span class="kc">None</span></div>
+
 
 
 <div class="viewcode-block" id="NISTSchema">
@@ -205,7 +229,10 @@
             <span class="s2">"first settled to equilibrium at the last converged load level (no load advance, no Dirichlet "</span>
             <span class="s2">"increment, zero time increment) so the subsequent load-advancing increment starts from an "</span>
             <span class="s2">"equilibrated state. Intended for softening problems where remeshing near the process zone "</span>
-            <span class="s2">"otherwise couples the load advance with the warm-start settling transient in one solve. Note: "</span>
+            <span class="s2">"otherwise couples the load advance with the warm-start settling transient in one solve. Under arc "</span>
+            <span class="s2">"length control (NISTPArcLength with a controller), the re-equilibration is an arc length increment of "</span>
+            <span class="s2">"size zero: the controlled quantity is held where the last accepted increment left it, and the load "</span>
+            <span class="s2">"parameter is solved for, and with it the loads and the prescribed displacements it scales. Note: "</span>
             <span class="s2">"the equilibration solve integrates materials with dT=0, which suits rate-independent models; "</span>
             <span class="s2">"rate-dependent materials see no time advance during it (by design)."</span>
         <span class="p">),</span>
@@ -1159,20 +1186,58 @@
             <span class="n">dU</span><span class="p">[:]</span> <span class="o">=</span> <span class="mf">0.0</span>
             <span class="k">return</span> <span class="n">dU</span><span class="p">,</span> <span class="kc">False</span>
 
+        <span class="n">weightOfLast</span><span class="p">,</span> <span class="n">weightOfBeforeLast</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">extrapolationWeights</span><span class="p">(</span><span class="n">extrapolation</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">,</span> <span class="n">prevTimeStep</span><span class="p">)</span>
+        <span class="n">np</span><span class="o">.</span><span class="n">multiply</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dU</span><span class="p">,</span> <span class="n">weightOfLast</span><span class="p">,</span> <span class="n">out</span><span class="o">=</span><span class="n">dU</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">weightOfBeforeLast</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">dU</span> <span class="o">+=</span> <span class="n">weightOfBeforeLast</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">dUBeforePrev</span>
+
+        <span class="n">dU</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">applyDirichletToResidual</span><span class="p">(</span><span class="n">timeStep</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">dirichlets</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">dU</span><span class="p">,</span> <span class="kc">True</span></div>
+
+
+<div class="viewcode-block" id="NIST.extrapolationWeights">
+<a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.extrapolationWeights">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">extrapolationWeights</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">extrapolation</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">:</span> <span class="n">TimeStep</span><span class="p">,</span> <span class="n">prevTimeStep</span><span class="p">:</span> <span class="n">TimeStep</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""The weights of the last accepted increment and of the one before it in the prediction of</span>
+<span class="sd">        :meth:`extrapolateLastIncrement`: :math:`\\Delta U = w_n \\, \\Delta U_n + w_{n-1} \\, \\Delta U_{n-1}`, with</span>
+
+<span class="sd">        .. math::</span>
+
+<span class="sd">            w_n = \\frac{h}{h_n} + \\frac{c}{h_n}, \\qquad w_{n-1} = -\\frac{c}{h_{n-1}}, \\qquad</span>
+<span class="sd">            c = \\frac{h \\, (h + h_n)}{h_{n-1} + h_n}</span>
+
+<span class="sd">        for a quadratic extrapolation, and :math:`w_n = h / h_n` alone for a linear one. Every quantity that follows</span>
+<span class="sd">        the path of the solution is predicted with these weights, e.g. the load parameter of the arc length method,</span>
+<span class="sd">        too.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        extrapolation</span>
+<span class="sd">            The type of extrapolation, ``linear`` or ``quadratic``.</span>
+<span class="sd">        timeStep</span>
+<span class="sd">            The new increment.</span>
+<span class="sd">        prevTimeStep</span>
+<span class="sd">            The last accepted increment, which the prediction extrapolates.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        tuple[float,float|None]</span>
+<span class="sd">            - The weight of the last accepted increment.</span>
+<span class="sd">            - The weight of the accepted increment before it, None for a linear prediction.</span>
+<span class="sd">        """</span>
+
         <span class="n">h</span> <span class="o">=</span> <span class="n">timeStep</span><span class="o">.</span><span class="n">stepProgressIncrement</span>
         <span class="n">h_n</span> <span class="o">=</span> <span class="n">prevTimeStep</span><span class="o">.</span><span class="n">stepProgressIncrement</span>
 
         <span class="k">if</span> <span class="n">extrapolation</span> <span class="o">==</span> <span class="s2">"quadratic"</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">extrapolates</span><span class="p">(</span><span class="n">extrapolation</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">timeStepBeforePrev</span><span class="p">):</span>
             <span class="n">h_nm1</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">timeStepBeforePrev</span><span class="o">.</span><span class="n">stepProgressIncrement</span>
             <span class="n">curvatureFactor</span> <span class="o">=</span> <span class="n">h</span> <span class="o">*</span> <span class="p">(</span><span class="n">h</span> <span class="o">+</span> <span class="n">h_n</span><span class="p">)</span> <span class="o">/</span> <span class="p">(</span><span class="n">h_nm1</span> <span class="o">+</span> <span class="n">h_n</span><span class="p">)</span>
-            <span class="n">np</span><span class="o">.</span><span class="n">multiply</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dU</span><span class="p">,</span> <span class="n">h</span> <span class="o">/</span> <span class="n">h_n</span> <span class="o">+</span> <span class="n">curvatureFactor</span> <span class="o">/</span> <span class="n">h_n</span><span class="p">,</span> <span class="n">out</span><span class="o">=</span><span class="n">dU</span><span class="p">)</span>
-            <span class="n">dU</span> <span class="o">-=</span> <span class="p">(</span><span class="n">curvatureFactor</span> <span class="o">/</span> <span class="n">h_nm1</span><span class="p">)</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">dUBeforePrev</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="n">np</span><span class="o">.</span><span class="n">multiply</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dU</span><span class="p">,</span> <span class="n">h</span> <span class="o">/</span> <span class="n">h_n</span><span class="p">,</span> <span class="n">out</span><span class="o">=</span><span class="n">dU</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">h</span> <span class="o">/</span> <span class="n">h_n</span> <span class="o">+</span> <span class="n">curvatureFactor</span> <span class="o">/</span> <span class="n">h_n</span><span class="p">,</span> <span class="o">-</span><span class="p">(</span><span class="n">curvatureFactor</span> <span class="o">/</span> <span class="n">h_nm1</span><span class="p">)</span>
 
-        <span class="n">dU</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">applyDirichletToResidual</span><span class="p">(</span><span class="n">timeStep</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">dirichlets</span><span class="p">)</span>
-
-        <span class="k">return</span> <span class="n">dU</span><span class="p">,</span> <span class="kc">True</span></div>
+        <span class="k">return</span> <span class="n">h</span> <span class="o">/</span> <span class="n">h_n</span><span class="p">,</span> <span class="kc">None</span></div>
 
 
 <div class="viewcode-block" id="NIST.solveIncrement">
@@ -1183,7 +1248,7 @@
         <span class="n">dU</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
         <span class="n">P</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
         <span class="n">K</span><span class="p">:</span> <span class="n">VIJSystemMatrix</span><span class="p">,</span>
-        <span class="n">stepActions</span><span class="p">:</span> <span class="nb">list</span><span class="p">,</span>
+        <span class="n">stepActions</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span>
         <span class="n">model</span><span class="p">:</span> <span class="n">FEModel</span><span class="p">,</span>
         <span class="n">timeStep</span><span class="p">:</span> <span class="n">TimeStep</span><span class="p">,</span>
         <span class="n">prevTimeStep</span><span class="p">:</span> <span class="n">TimeStep</span><span class="p">,</span>
@@ -1191,34 +1256,47 @@
         <span class="n">maxIter</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
         <span class="n">maxGrowingIter</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">DofVector</span><span class="p">,</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">DofVector</span><span class="p">,</span> <span class="nb">int</span><span class="p">,</span> <span class="nb">dict</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">"""Standard Newton-Raphson scheme to solve for an increment.</span>
+<span class="w">        </span><span class="sd">"""Newton's method for the solution increment of an increment. It starts from the prediction</span>
+<span class="sd">        (:meth:`extrapolateLastIncrement`), and every iteration</span>
+
+<span class="sd">        1. evaluates the model at the iterate (:meth:`assembleResidualAndTangent`) and imposes the Dirichlet boundary</span>
+<span class="sd">           conditions on the residual,</span>
+<span class="sd">        2. checks the iterate for convergence -- except the first iterate of an increment without a prediction, if it</span>
+<span class="sd">           needs a correction first (:meth:`firstIterateNeedsCorrection`),</span>
+<span class="sd">        3. solves the linearized system for the correction (:meth:`solveForCorrection`),</span>
+<span class="sd">        4. and moves the iterate by the correction (:meth:`applyCorrection`), scaled by the step length of a line</span>
+<span class="sd">           search, if one is due, which evaluates the trial states :meth:`setTrialState` sets.</span>
+
+<span class="sd">        This is the Newton loop of every implicit solver. The dynamics enter it through :meth:`initializeIncrement`,</span>
+<span class="sd">        :meth:`assembleAdditionalTerms` and :meth:`finalizeIncrement`</span>
+<span class="sd">        (:class:`~edelweissfe.solvers.nonlinearimplicitdynamic.NonlinearImplicitDynamic`). The arc length method makes</span>
+<span class="sd">        the load parameter an unknown of the iterations, through the predictor and the methods of steps 2 to 4</span>
+<span class="sd">        (:meth:`~edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength.solveIncrement`).</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
-<span class="sd">        Un</span>
-<span class="sd">            The old solution vector.</span>
+<span class="sd">        U_n</span>
+<span class="sd">            The solution at the start of the increment.</span>
 <span class="sd">        dU</span>
-<span class="sd">            The old solution increment.</span>
+<span class="sd">            The solution increment, overwritten.</span>
 <span class="sd">        P</span>
-<span class="sd">            The old reaction vector.</span>
+<span class="sd">            The internal forces (the reaction), overwritten.</span>
 <span class="sd">        K</span>
-<span class="sd">            The system matrix to be used.</span>
-<span class="sd">        elements</span>
-<span class="sd">            The dictionary containing all elements.</span>
+<span class="sd">            The tangent being assembled, assembled anew.</span>
 <span class="sd">        stepActions</span>
-<span class="sd">            The list of active step actions.</span>
+<span class="sd">            The active step actions.</span>
 <span class="sd">        model</span>
 <span class="sd">            The model tree.</span>
-<span class="sd">        increment</span>
-<span class="sd">            The increment.</span>
-<span class="sd">        lastIncrementSize</span>
-<span class="sd">            The size of the previous increment.</span>
+<span class="sd">        timeStep</span>
+<span class="sd">            The time step.</span>
+<span class="sd">        prevTimeStep</span>
+<span class="sd">            The last accepted increment, from which the prediction extrapolates, or None.</span>
 <span class="sd">        extrapolation</span>
-<span class="sd">            The type of extrapolation to be used.</span>
+<span class="sd">            The type of extrapolation.</span>
 <span class="sd">        maxIter</span>
-<span class="sd">            The maximum number of iterations to be used.</span>
+<span class="sd">            The maximum number of iterations.</span>
 <span class="sd">        maxGrowingIter</span>
-<span class="sd">            The maximum number of growing residuals until the Newton-Raphson is terminated.</span>
+<span class="sd">            The maximum number of residual growths before the increment is cut back.</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
@@ -1256,11 +1334,7 @@
                 <span class="n">extrapolation</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">dirichlets</span><span class="p">,</span> <span class="n">prevTimeStep</span><span class="p">,</span> <span class="n">model</span>
             <span class="p">)</span>
 
-        <span class="n">fallBackToQuasiNewton</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s2">"fallBackToQuasiNewton"</span><span class="p">]</span>
-        <span class="c1"># Set once the residual grew too often, if fallBackToQuasiNewton: the increment continues with the tangent of</span>
-        <span class="c1"># its first iteration, tangentOfFirstIteration.</span>
-        <span class="n">quasiNewton</span> <span class="o">=</span> <span class="kc">False</span>
-        <span class="n">tangentOfFirstIteration</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="n">quasiNewton</span> <span class="o">=</span> <span class="n">QuasiNewtonFallback</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s2">"fallBackToQuasiNewton"</span><span class="p">])</span>
 
         <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
             <span class="n">P</span><span class="p">,</span> <span class="n">K</span><span class="p">,</span> <span class="n">F</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">assembleResidualAndTangent</span><span class="p">(</span>
@@ -1275,7 +1349,7 @@
             <span class="c1">#     K: zero row i, set K[i, i] = 1, and eliminate column i: R[r] -= K[r, i] R[i]</span>
             <span class="c1">#        for every other row r, then K[r, i] = 0   (see applyDirichletToStiffness)</span>
             <span class="c1"># Together these give  ddU[i] = R[i]  exactly, and keep a symmetric K symmetric.</span>
-            <span class="k">if</span> <span class="n">iterationCounter</span> <span class="o">==</span> <span class="mi">0</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">isExtrapolatedIncrement</span> <span class="ow">and</span> <span class="n">dirichlets</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">iterationCounter</span> <span class="o">==</span> <span class="mi">0</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">isExtrapolatedIncrement</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">firstIterateNeedsCorrection</span><span class="p">(</span><span class="n">dirichlets</span><span class="p">):</span>
                 <span class="c1"># First iteration: the constrained DOFs still move by their prescribed increment.</span>
                 <span class="n">R</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">applyDirichletToResidual</span><span class="p">(</span><span class="n">timeStep</span><span class="p">,</span> <span class="n">R</span><span class="p">,</span> <span class="n">dirichlets</span><span class="p">)</span>
             <span class="k">else</span><span class="p">:</span>
@@ -1290,56 +1364,169 @@
                 <span class="k">if</span> <span class="n">converged</span><span class="p">:</span>
                     <span class="k">break</span>
 
-                <span class="k">if</span> <span class="ow">not</span> <span class="n">quasiNewton</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">checkDivergingSolution</span><span class="p">(</span><span class="n">incrementResidualHistory</span><span class="p">,</span> <span class="n">maxGrowingIter</span><span class="p">):</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">printResidualOutlierNodes</span><span class="p">(</span><span class="n">nodesWithLargestResidual</span><span class="p">)</span>
-                    <span class="k">if</span> <span class="ow">not</span> <span class="n">fallBackToQuasiNewton</span><span class="p">:</span>
-                        <span class="k">raise</span> <span class="n">DivergingSolution</span><span class="p">(</span><span class="s2">"Residual grew </span><span class="si">{:}</span><span class="s2"> times, cutting back"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">maxGrowingIter</span><span class="p">))</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">journal</span><span class="o">.</span><span class="n">message</span><span class="p">(</span>
-                        <span class="s2">"Residual grew </span><span class="si">{:}</span><span class="s2"> times, continuing with the tangent of the first iteration"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
-                            <span class="n">maxGrowingIter</span>
-                        <span class="p">),</span>
-                        <span class="bp">self</span><span class="o">.</span><span class="n">identification</span><span class="p">,</span>
-                        <span class="mi">1</span><span class="p">,</span>
-                    <span class="p">)</span>
-                    <span class="n">quasiNewton</span> <span class="o">=</span> <span class="kc">True</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">checkDivergingSolutionOrFallBack</span><span class="p">(</span>
+                    <span class="n">quasiNewton</span><span class="p">,</span> <span class="n">incrementResidualHistory</span><span class="p">,</span> <span class="n">maxGrowingIter</span><span class="p">,</span> <span class="n">nodesWithLargestResidual</span>
+                <span class="p">)</span>
 
                 <span class="k">if</span> <span class="n">iterationCounter</span> <span class="o">==</span> <span class="n">maxIter</span><span class="p">:</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">printResidualOutlierNodes</span><span class="p">(</span><span class="n">nodesWithLargestResidual</span><span class="p">)</span>
                     <span class="k">raise</span> <span class="n">ReachedMaxIterations</span><span class="p">(</span><span class="s2">"Reached max. iterations in current increment, cutting back"</span><span class="p">)</span>
 
-            <span class="k">if</span> <span class="n">quasiNewton</span> <span class="ow">and</span> <span class="n">tangentOfFirstIteration</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="c1"># Kept without the Dirichlet rows and columns: they are imposed anew, as they eliminate into this R.</span>
-                <span class="n">K_</span> <span class="o">=</span> <span class="n">tangentOfFirstIteration</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="n">K_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">assembleStiffnessCSR</span><span class="p">(</span><span class="n">K</span><span class="p">)</span>
+            <span class="n">K_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">assembleSystemMatrix</span><span class="p">(</span><span class="n">K</span><span class="p">,</span> <span class="n">quasiNewton</span><span class="p">)</span>
 
-                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">mpcTransformation</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                    <span class="n">K_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">mpcTransformation</span><span class="o">.</span><span class="n">transformSystemMatrix</span><span class="p">(</span><span class="n">K_</span><span class="p">)</span>
-
-                <span class="c1"># the first tangent of the increment: the one of iteration 0</span>
-                <span class="k">if</span> <span class="n">fallBackToQuasiNewton</span> <span class="ow">and</span> <span class="n">tangentOfFirstIteration</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-                    <span class="n">tangentOfFirstIteration</span> <span class="o">=</span> <span class="n">K_</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
-
-            <span class="c1"># identity rows, and the columns eliminated into R</span>
-            <span class="n">K_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">applyDirichletToStiffness</span><span class="p">(</span><span class="n">K_</span><span class="p">,</span> <span class="n">dirichlets</span><span class="p">,</span> <span class="n">R</span><span class="p">)</span>
-
-            <span class="n">ddU</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">linearSolve</span><span class="p">(</span><span class="n">K_</span><span class="p">,</span> <span class="n">R</span><span class="p">)</span>
-
-            <span class="c1"># add the master-interpolated part at the slave DOFs</span>
-            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">mpcTransformation</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="n">ddU</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">mpcTransformation</span><span class="o">.</span><span class="n">recoverSlaveSolution</span><span class="p">(</span><span class="n">ddU</span><span class="p">)</span>
+            <span class="n">ddU</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">solveForCorrection</span><span class="p">(</span><span class="n">K_</span><span class="p">,</span> <span class="n">R</span><span class="p">,</span> <span class="n">dirichlets</span><span class="p">)</span>
 
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">lineSearchIsDue</span><span class="p">(</span><span class="n">iterationCounter</span><span class="p">):</span>
-                <span class="n">ddU</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">quadraticLineSearch</span><span class="p">(</span>
-                    <span class="n">ddU</span><span class="p">,</span> <span class="n">U_n</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">U_np</span><span class="p">,</span> <span class="n">R</span><span class="p">,</span> <span class="n">P</span><span class="p">,</span> <span class="n">PLoadsAndConstraints</span><span class="p">,</span> <span class="n">F</span><span class="p">,</span> <span class="n">FConstraints</span><span class="p">,</span> <span class="n">K</span><span class="p">,</span> <span class="n">stepActions</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">timeStep</span>
-                <span class="p">)</span>
 
-            <span class="n">dU</span> <span class="o">+=</span> <span class="n">ddU</span>
+                <span class="k">def</span><span class="w"> </span><span class="nf">largestResidualAt</span><span class="p">(</span><span class="n">stepLength</span><span class="p">):</span>
+                    <span class="c1"># the trial state at this step length along the correction, without the Dirichlet degrees of</span>
+                    <span class="c1"># freedom</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">assembleResidualAndTangent</span><span class="p">(</span>
+                        <span class="n">U_n</span><span class="p">,</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">setTrialState</span><span class="p">(</span><span class="n">dU</span><span class="p">,</span> <span class="n">ddU</span><span class="p">,</span> <span class="n">stepLength</span><span class="p">),</span>
+                        <span class="n">U_np</span><span class="p">,</span>
+                        <span class="n">R</span><span class="p">,</span>
+                        <span class="n">P</span><span class="p">,</span>
+                        <span class="n">PLoadsAndConstraints</span><span class="p">,</span>
+                        <span class="n">F</span><span class="p">,</span>
+                        <span class="n">FConstraints</span><span class="p">,</span>
+                        <span class="n">K</span><span class="p">,</span>
+                        <span class="n">stepActions</span><span class="p">,</span>
+                        <span class="n">model</span><span class="p">,</span>
+                        <span class="n">timeStep</span><span class="p">,</span>
+                    <span class="p">)</span>
+                    <span class="k">for</span> <span class="n">dirichlet</span> <span class="ow">in</span> <span class="n">dirichlets</span><span class="p">:</span>
+                        <span class="n">R</span><span class="p">[</span><span class="n">dirichlet</span><span class="o">.</span><span class="n">constrainedDofIndices</span><span class="p">]</span> <span class="o">=</span> <span class="mf">0.0</span>
+                    <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">R</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">inf</span><span class="p">)</span>
+
+                <span class="n">stepLength</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">quadraticLineSearch</span><span class="p">(</span><span class="n">largestResidualAt</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">stepLength</span> <span class="o">=</span> <span class="mf">1.0</span>
+
+            <span class="n">ddU</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">applyCorrection</span><span class="p">(</span><span class="n">dU</span><span class="p">,</span> <span class="n">ddU</span><span class="p">,</span> <span class="n">stepLength</span><span class="p">)</span>
             <span class="n">iterationCounter</span> <span class="o">+=</span> <span class="mi">1</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">finalizeIncrement</span><span class="p">(</span><span class="n">model</span><span class="p">)</span>
 
         <span class="k">return</span> <span class="n">U_np</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">P</span><span class="p">,</span> <span class="n">iterationCounter</span><span class="p">,</span> <span class="n">incrementResidualHistory</span></div>
+
+
+<div class="viewcode-block" id="NIST.firstIterateNeedsCorrection">
+<a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.firstIterateNeedsCorrection">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">firstIterateNeedsCorrection</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dirichlets</span><span class="p">:</span> <span class="nb">list</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Whether the first iterate of an increment without a prediction -- the converged state of the last increment</span>
+<span class="sd">        -- needs a correction before it can be checked for convergence (see :meth:`solveIncrement`): if Dirichlet</span>
+<span class="sd">        boundary conditions act, whose prescribed increment the first correction makes. Without them, the first iterate</span>
+<span class="sd">        is checked like every later one, and is converged already if the loads have not changed. The arc length method</span>
+<span class="sd">        always corrects it first, see</span>
+<span class="sd">        :meth:`~edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength.firstIterateNeedsCorrection`.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        dirichlets</span>
+<span class="sd">            The Dirichlet boundary conditions of the step.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        bool</span>
+<span class="sd">            True if the first iterate is corrected before the first convergence check.</span>
+<span class="sd">        """</span>
+
+        <span class="k">return</span> <span class="nb">bool</span><span class="p">(</span><span class="n">dirichlets</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="NIST.solveForCorrection">
+<a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.solveForCorrection">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">solveForCorrection</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">K_</span><span class="p">:</span> <span class="n">csr_matrix</span><span class="p">,</span> <span class="n">R</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">dirichlets</span><span class="p">:</span> <span class="nb">list</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DofVector</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Solve the linearized system of a Newton iteration, :math:`\\boldsymbol{K} \\, \\Delta\\Delta \\boldsymbol{U} =</span>
+<span class="sd">        \\boldsymbol{R}`, for the correction :math:`\\Delta\\Delta \\boldsymbol{U}`. The Dirichlet boundary conditions</span>
+<span class="sd">        replace the rows of their degrees of freedom by identity rows, and eliminate their columns into</span>
+<span class="sd">        :math:`\\boldsymbol{R}` (see :meth:`applyDirichletToStiffness`); with multi-point constraints, the slave degrees</span>
+<span class="sd">        of freedom take the part their masters interpolate. The arc length method solves for two right-hand sides here,</span>
+<span class="sd">        see :meth:`~edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength.solveForCorrection`.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        K_</span>
+<span class="sd">            The system matrix of the iteration, see :meth:`assembleSystemMatrix`.</span>
+<span class="sd">        R</span>
+<span class="sd">            The right-hand side, the out-of-balance force with the Dirichlet boundary conditions imposed; the columns</span>
+<span class="sd">            of the Dirichlet degrees of freedom are eliminated into it.</span>
+<span class="sd">        dirichlets</span>
+<span class="sd">            The Dirichlet boundary conditions of the step.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        DofVector</span>
+<span class="sd">            The correction.</span>
+<span class="sd">        """</span>
+
+        <span class="c1"># identity rows, and the columns eliminated into R</span>
+        <span class="n">K_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">applyDirichletToStiffness</span><span class="p">(</span><span class="n">K_</span><span class="p">,</span> <span class="n">dirichlets</span><span class="p">,</span> <span class="n">R</span><span class="p">)</span>
+
+        <span class="n">ddU</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">linearSolve</span><span class="p">(</span><span class="n">K_</span><span class="p">,</span> <span class="n">R</span><span class="p">)</span>
+
+        <span class="c1"># add the master-interpolated part at the slave DOFs</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">mpcTransformation</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">ddU</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">mpcTransformation</span><span class="o">.</span><span class="n">recoverSlaveSolution</span><span class="p">(</span><span class="n">ddU</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">ddU</span></div>
+
+
+<div class="viewcode-block" id="NIST.setTrialState">
+<a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.setTrialState">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">setTrialState</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dU</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">ddU</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">stepLength</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DofVector</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Set the trial state of a line search at a step length :math:`\\alpha` along the correction, and return its</span>
+<span class="sd">        solution increment, :math:`\\Delta \\boldsymbol{U} + \\alpha \\, \\Delta\\Delta \\boldsymbol{U}`, at which the</span>
+<span class="sd">        model is evaluated next; the iterate stays where it is. The arc length method sets the load parameter of the</span>
+<span class="sd">        trial state, too, see</span>
+<span class="sd">        :meth:`~edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength.setTrialState`.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        dU</span>
+<span class="sd">            The solution increment of the iterate.</span>
+<span class="sd">        ddU</span>
+<span class="sd">            The correction of the iterate, see :meth:`solveForCorrection`.</span>
+<span class="sd">        stepLength</span>
+<span class="sd">            The step length.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        DofVector</span>
+<span class="sd">            The solution increment of the trial state.</span>
+<span class="sd">        """</span>
+
+        <span class="k">return</span> <span class="n">dU</span> <span class="o">+</span> <span class="n">stepLength</span> <span class="o">*</span> <span class="n">ddU</span></div>
+
+
+<div class="viewcode-block" id="NIST.applyCorrection">
+<a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.applyCorrection">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">applyCorrection</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dU</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">ddU</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">stepLength</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DofVector</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Move the iterate by the correction, scaled by the step length :math:`\\alpha` a line search chose (1 without a</span>
+<span class="sd">        line search): :math:`\\Delta \\boldsymbol{U} \\leftarrow \\Delta \\boldsymbol{U} + \\alpha \\, \\Delta\\Delta</span>
+<span class="sd">        \\boldsymbol{U}`. The arc length method moves the load parameter, too, see</span>
+<span class="sd">        :meth:`~edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength.applyCorrection`.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        dU</span>
+<span class="sd">            The solution increment of the iterate, moved in place.</span>
+<span class="sd">        ddU</span>
+<span class="sd">            The correction of the iterate, see :meth:`solveForCorrection`.</span>
+<span class="sd">        stepLength</span>
+<span class="sd">            The step length.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        DofVector</span>
+<span class="sd">            The correction the iterate was moved by, which the convergence check of the next iteration measures.</span>
+<span class="sd">        """</span>
+
+        <span class="n">ddU</span> <span class="o">=</span> <span class="n">stepLength</span> <span class="o">*</span> <span class="n">ddU</span>
+        <span class="n">dU</span> <span class="o">+=</span> <span class="n">ddU</span>
+
+        <span class="k">return</span> <span class="n">ddU</span></div>
 
 
 <div class="viewcode-block" id="NIST.assembleResidualAndTangent">
@@ -1361,9 +1548,10 @@
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">DofVector</span><span class="p">,</span> <span class="n">VIJSystemMatrix</span><span class="p">,</span> <span class="n">DofVector</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">"""Evaluate the model at the trial solution :math:`U_{n+1} = U_n + \\Delta U`: the right-hand side</span>
 <span class="sd">        :math:`R = f_\\mathrm{ext} - f_\\mathrm{int}` (see :ref:`residual-and-tangent-convention`) with the terms of</span>
-<span class="sd">        :meth:`assembleAdditionalTerms`, condensed by the multi-point constraints, and the tangent. Called by</span>
-<span class="sd">        :meth:`solveIncrement` once per Newton iteration, and by :meth:`quadraticLineSearch` once per trial step</span>
-<span class="sd">        length. The Dirichlet boundary conditions are imposed by the callers.</span>
+<span class="sd">        :meth:`assembleAdditionalTerms`, condensed by the multi-point constraints, and the tangent. The one place</span>
+<span class="sd">        where the model is evaluated during the Newton iterations: called by :meth:`solveIncrement` once per</span>
+<span class="sd">        iteration, and by its line search once per trial step length. The loads are those at the end of the increment,</span>
+<span class="sd">        see :meth:`assembleLoadsAtIncrementEnd`. The Dirichlet boundary conditions are imposed by the caller.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
@@ -1412,8 +1600,8 @@
         <span class="c1"># Every element, load and constraint adds its residual contribution and the tangent of it.</span>
         <span class="c1"># The elements' sum P is kept apart: it is the reaction force this increment reports.</span>
         <span class="n">P</span><span class="p">,</span> <span class="n">K</span><span class="p">,</span> <span class="n">F</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">computeElements</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">elements</span><span class="p">,</span> <span class="n">U_np</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">P</span><span class="p">,</span> <span class="n">K</span><span class="p">,</span> <span class="n">F</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">)</span>
-        <span class="n">PLoadsAndConstraints</span><span class="p">,</span> <span class="n">K</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">assembleLoads</span><span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">collectLoads</span><span class="p">(</span><span class="n">stepActions</span><span class="p">),</span> <span class="n">U_np</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">PLoadsAndConstraints</span><span class="p">,</span> <span class="n">K</span><span class="p">,</span> <span class="n">timeStep</span>
+        <span class="n">PLoadsAndConstraints</span><span class="p">,</span> <span class="n">K</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">assembleLoadsAtIncrementEnd</span><span class="p">(</span>
+            <span class="n">stepActions</span><span class="p">,</span> <span class="n">U_np</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">PLoadsAndConstraints</span><span class="p">,</span> <span class="n">K</span><span class="p">,</span> <span class="n">timeStep</span>
         <span class="p">)</span>
         <span class="n">PLoadsAndConstraints</span><span class="p">,</span> <span class="n">K</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">assembleConstraints</span><span class="p">(</span>
             <span class="n">model</span><span class="o">.</span><span class="n">constraints</span><span class="p">,</span> <span class="n">U_np</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">PLoadsAndConstraints</span><span class="p">,</span> <span class="n">K</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">,</span> <span class="n">FConstraints</span>
@@ -1432,6 +1620,48 @@
             <span class="n">R</span><span class="p">[:]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">mpcTransformation</span><span class="o">.</span><span class="n">transformResidual</span><span class="p">(</span><span class="n">R</span><span class="p">,</span> <span class="n">dU</span><span class="p">)</span>
 
         <span class="k">return</span> <span class="n">P</span><span class="p">,</span> <span class="n">K</span><span class="p">,</span> <span class="n">F</span></div>
+
+
+<div class="viewcode-block" id="NIST.assembleLoadsAtIncrementEnd">
+<a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.assembleLoadsAtIncrementEnd">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">assembleLoadsAtIncrementEnd</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">stepActions</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span>
+        <span class="n">U_np</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
+        <span class="n">dU</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
+        <span class="n">P</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
+        <span class="n">K</span><span class="p">:</span> <span class="n">VIJSystemMatrix</span><span class="p">,</span>
+        <span class="n">timeStep</span><span class="p">:</span> <span class="n">TimeStep</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">DofVector</span><span class="p">,</span> <span class="n">VIJSystemMatrix</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""Assemble the residual contributions of the loads acting at the end of the increment, and their tangents;</span>
+<span class="sd">        called by :meth:`assembleResidualAndTangent`. Here, these are the loads of the step at the time of the end of</span>
+<span class="sd">        the increment (see</span>
+<span class="sd">        :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.assembleLoads`). The arc length method</span>
+<span class="sd">        replaces them by the dead load plus the reference load scaled by its load parameter, see</span>
+<span class="sd">        :class:`~edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength`.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        stepActions</span>
+<span class="sd">            The active step actions.</span>
+<span class="sd">        U_np</span>
+<span class="sd">            The trial solution.</span>
+<span class="sd">        dU</span>
+<span class="sd">            The trial solution increment.</span>
+<span class="sd">        P</span>
+<span class="sd">            The residual contribution vector to assemble into.</span>
+<span class="sd">        K</span>
+<span class="sd">            The tangent in VIJ layout to assemble into.</span>
+<span class="sd">        timeStep</span>
+<span class="sd">            The time step.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        tuple[DofVector,VIJSystemMatrix]</span>
+<span class="sd">            The updated residual contribution vector and tangent.</span>
+<span class="sd">        """</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">assembleLoads</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">collectLoads</span><span class="p">(</span><span class="n">stepActions</span><span class="p">),</span> <span class="n">U_np</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">P</span><span class="p">,</span> <span class="n">K</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">)</span></div>
 
 
     <span class="c1">#: The step lengths a line search may choose from: a shorter step would hardly move the iterate, a longer one would</span>
@@ -1480,29 +1710,14 @@
 <div class="viewcode-block" id="NIST.quadraticLineSearch">
 <a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.quadraticLineSearch">[docs]</a>
     <span class="nd">@performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"line search"</span><span class="p">)</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">quadraticLineSearch</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span>
-        <span class="n">ddU</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
-        <span class="n">U_n</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
-        <span class="n">dU</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
-        <span class="n">U_np</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
-        <span class="n">R</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
-        <span class="n">P</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
-        <span class="n">PLoadsAndConstraints</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
-        <span class="n">F</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
-        <span class="n">FConstraints</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
-        <span class="n">K</span><span class="p">:</span> <span class="n">VIJSystemMatrix</span><span class="p">,</span>
-        <span class="n">stepActions</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span>
-        <span class="n">model</span><span class="p">:</span> <span class="n">FEModel</span><span class="p">,</span>
-        <span class="n">timeStep</span><span class="p">:</span> <span class="n">TimeStep</span><span class="p">,</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DofVector</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""Scale the Newton correction :math:`\\Delta\\Delta U` by a step length :math:`\\alpha`, for a Newton</span>
-<span class="sd">        iteration that overshoots or oscillates (e.g., materials switching between loading and unloading).</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">quadraticLineSearch</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">largestResidualAt</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="nb">float</span><span class="p">],</span> <span class="nb">float</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The step length :math:`\\alpha` by which a Newton correction is scaled, for a Newton iteration that</span>
+<span class="sd">        overshoots or oscillates (e.g., materials switching between loading and unloading).</span>
 
-<span class="sd">        The largest residual :math:`\\| R(\\Delta U + \\alpha \\, \\Delta\\Delta U) \\|_\\infty`, with the</span>
-<span class="sd">        Dirichlet degrees of freedom left out, is evaluated at the trial step lengths ``lineSearchStepLengths``, and a</span>
-<span class="sd">        parabola is fitted to these values (least squares for more than three). The step length minimizes the parabola</span>
-<span class="sd">        on :attr:`lineSearchStepLengthRange`: it is the vertex of a parabola that opens upwards, limited to that range,</span>
+<span class="sd">        The largest residual along the correction, :math:`\\| R(\\alpha) \\|_\\infty` with the Dirichlet degrees of</span>
+<span class="sd">        freedom left out, is evaluated at the trial step lengths ``lineSearchStepLengths``, and a parabola is fitted to</span>
+<span class="sd">        these values (least squares for more than three). The step length minimizes the parabola on</span>
+<span class="sd">        :attr:`lineSearchStepLengthRange`: it is the vertex of a parabola that opens upwards, limited to that range,</span>
 <span class="sd">        and otherwise the end of the range where the parabola is smaller. Each trial costs one evaluation of the model;</span>
 <span class="sd">        the next Newton iteration evaluates the chosen one.</span>
 
@@ -1514,39 +1729,21 @@
 <span class="sd">        * Trial residuals that are equal to round-off, which do not tell the step lengths apart: the correction is</span>
 <span class="sd">          taken in full, the step length is 1.</span>
 
+<span class="sd">        The trial states are those :meth:`setTrialState` sets: the solution increment moved along the correction</span>
+<span class="sd">        :math:`\\Delta\\Delta U`, and, under arc length control, the load parameter moved with it, such that every trial</span>
+<span class="sd">        state satisfies the controller's equation (see</span>
+<span class="sd">        :meth:`~edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength.setTrialState`).</span>
+
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
-<span class="sd">        ddU</span>
-<span class="sd">            The Newton correction.</span>
-<span class="sd">        U_n</span>
-<span class="sd">            The solution at the start of the increment.</span>
-<span class="sd">        dU</span>
-<span class="sd">            The current solution increment.</span>
-<span class="sd">        U_np</span>
-<span class="sd">            The trial solution, overwritten.</span>
-<span class="sd">        R</span>
-<span class="sd">            The residual, overwritten.</span>
-<span class="sd">        P</span>
-<span class="sd">            The internal forces, overwritten.</span>
-<span class="sd">        PLoadsAndConstraints</span>
-<span class="sd">            The residual contributions of the loads and the constraints, overwritten.</span>
-<span class="sd">        F</span>
-<span class="sd">            The accumulated absolute element fluxes, overwritten.</span>
-<span class="sd">        FConstraints</span>
-<span class="sd">            The accumulated absolute constraint fluxes, overwritten.</span>
-<span class="sd">        K</span>
-<span class="sd">            The tangent in VIJ layout, overwritten.</span>
-<span class="sd">        stepActions</span>
-<span class="sd">            The active step actions.</span>
-<span class="sd">        model</span>
-<span class="sd">            The model tree.</span>
-<span class="sd">        timeStep</span>
-<span class="sd">            The time step.</span>
+<span class="sd">        largestResidualAt</span>
+<span class="sd">            Evaluates the model at the trial state of a step length, and returns its largest residual, without the</span>
+<span class="sd">            Dirichlet degrees of freedom.</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
-<span class="sd">        DofVector</span>
-<span class="sd">            The scaled correction.</span>
+<span class="sd">        float</span>
+<span class="sd">            The step length.</span>
 
 <span class="sd">        Raises</span>
 <span class="sd">        ------</span>
@@ -1558,24 +1755,7 @@
         <span class="n">largestResiduals</span> <span class="o">=</span> <span class="p">[]</span>
 
         <span class="k">for</span> <span class="n">stepLength</span> <span class="ow">in</span> <span class="n">stepLengths</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">assembleResidualAndTangent</span><span class="p">(</span>
-                <span class="n">U_n</span><span class="p">,</span>
-                <span class="n">dU</span> <span class="o">+</span> <span class="n">stepLength</span> <span class="o">*</span> <span class="n">ddU</span><span class="p">,</span>
-                <span class="n">U_np</span><span class="p">,</span>
-                <span class="n">R</span><span class="p">,</span>
-                <span class="n">P</span><span class="p">,</span>
-                <span class="n">PLoadsAndConstraints</span><span class="p">,</span>
-                <span class="n">F</span><span class="p">,</span>
-                <span class="n">FConstraints</span><span class="p">,</span>
-                <span class="n">K</span><span class="p">,</span>
-                <span class="n">stepActions</span><span class="p">,</span>
-                <span class="n">model</span><span class="p">,</span>
-                <span class="n">timeStep</span><span class="p">,</span>
-            <span class="p">)</span>
-            <span class="k">for</span> <span class="n">dirichlet</span> <span class="ow">in</span> <span class="n">stepActions</span><span class="p">[</span><span class="s2">"dirichlet"</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
-                <span class="n">R</span><span class="p">[</span><span class="n">dirichlet</span><span class="o">.</span><span class="n">constrainedDofIndices</span><span class="p">]</span> <span class="o">=</span> <span class="mf">0.0</span>
-
-            <span class="n">largestResiduals</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">R</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">inf</span><span class="p">))</span>
+            <span class="n">largestResiduals</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">largestResidualAt</span><span class="p">(</span><span class="n">stepLength</span><span class="p">))</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">journal</span><span class="o">.</span><span class="n">message</span><span class="p">(</span>
                 <span class="s2">"line search: step length </span><span class="si">{:7.4f}</span><span class="s2">, largest residual </span><span class="si">{:11.4e}</span><span class="s2">"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">stepLength</span><span class="p">,</span> <span class="n">largestResiduals</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]),</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">identification</span><span class="p">,</span>
@@ -1608,7 +1788,7 @@
 
         <span class="bp">self</span><span class="o">.</span><span class="n">journal</span><span class="o">.</span><span class="n">message</span><span class="p">(</span><span class="s2">"line search: step length </span><span class="si">{:7.4f}</span><span class="s2">"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">stepLength</span><span class="p">),</span> <span class="bp">self</span><span class="o">.</span><span class="n">identification</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
 
-        <span class="k">return</span> <span class="n">stepLength</span> <span class="o">*</span> <span class="n">ddU</span></div>
+        <span class="k">return</span> <span class="n">stepLength</span></div>
 
 
 <div class="viewcode-block" id="NIST.checkDivergingSolution">
@@ -1659,6 +1839,88 @@
         <span class="k">return</span> <span class="kc">False</span></div>
 
 
+<div class="viewcode-block" id="NIST.checkDivergingSolutionOrFallBack">
+<a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.checkDivergingSolutionOrFallBack">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">checkDivergingSolutionOrFallBack</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">quasiNewton</span><span class="p">:</span> <span class="n">QuasiNewtonFallback</span><span class="p">,</span>
+        <span class="n">incrementResidualHistory</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span>
+        <span class="n">maxGrowingIter</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">nodesWithLargestResidual</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span>
+    <span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Cut an increment back whose residual grew more often than ``maxGrowingIter`` allows (see</span>
+<span class="sd">        :meth:`checkDivergingSolution`) -- or, with the option ``fallBackToQuasiNewton``, let it continue with the tangent</span>
+<span class="sd">        of its first iteration (a quasi-Newton method), see :meth:`assembleSystemMatrix`. Called by the Newton loop after</span>
+<span class="sd">        every check that does not converge.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        quasiNewton</span>
+<span class="sd">            The quasi-Newton fallback of this attempt of the increment.</span>
+<span class="sd">        incrementResidualHistory</span>
+<span class="sd">            The convergence state of every field in each checked iteration of the increment.</span>
+<span class="sd">        maxGrowingIter</span>
+<span class="sd">            The maximum allowed number of growths of a residual.</span>
+<span class="sd">        nodesWithLargestResidual</span>
+<span class="sd">            The nodes with the largest residual, per field, reported if the increment diverges.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        DivergingSolution</span>
+<span class="sd">            If the residual grew too often, and the increment does not fall back to the quasi-Newton method.</span>
+<span class="sd">        """</span>
+
+        <span class="k">if</span> <span class="n">quasiNewton</span><span class="o">.</span><span class="n">isEngaged</span> <span class="ow">or</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">checkDivergingSolution</span><span class="p">(</span><span class="n">incrementResidualHistory</span><span class="p">,</span> <span class="n">maxGrowingIter</span><span class="p">):</span>
+            <span class="k">return</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">printResidualOutlierNodes</span><span class="p">(</span><span class="n">nodesWithLargestResidual</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">quasiNewton</span><span class="o">.</span><span class="n">isEnabled</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">DivergingSolution</span><span class="p">(</span><span class="s2">"Residual grew </span><span class="si">{:}</span><span class="s2"> times, cutting back"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">maxGrowingIter</span><span class="p">))</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">journal</span><span class="o">.</span><span class="n">message</span><span class="p">(</span>
+            <span class="s2">"Residual grew </span><span class="si">{:}</span><span class="s2"> times, continuing with the tangent of the first iteration"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">maxGrowingIter</span><span class="p">),</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">identification</span><span class="p">,</span>
+            <span class="mi">1</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">quasiNewton</span><span class="o">.</span><span class="n">isEngaged</span> <span class="o">=</span> <span class="kc">True</span></div>
+
+
+<div class="viewcode-block" id="NIST.assembleSystemMatrix">
+<a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.assembleSystemMatrix">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">assembleSystemMatrix</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">K</span><span class="p">:</span> <span class="n">VIJSystemMatrix</span><span class="p">,</span> <span class="n">quasiNewton</span><span class="p">:</span> <span class="n">QuasiNewtonFallback</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">csr_matrix</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The system matrix of this Newton iteration, before the Dirichlet boundary conditions are imposed: the</span>
+<span class="sd">        tangent in CSR layout, condensed by the multi-point constraints -- or, once the increment has fallen back to the</span>
+<span class="sd">        quasi-Newton method, the tangent of its first iteration.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        K</span>
+<span class="sd">            The tangent of this iteration in VIJ layout.</span>
+<span class="sd">        quasiNewton</span>
+<span class="sd">            The quasi-Newton fallback of this attempt of the increment, which keeps the tangent of the first iteration.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        csr_matrix</span>
+<span class="sd">            The system matrix.</span>
+<span class="sd">        """</span>
+
+        <span class="k">if</span> <span class="n">quasiNewton</span><span class="o">.</span><span class="n">isEngaged</span> <span class="ow">and</span> <span class="n">quasiNewton</span><span class="o">.</span><span class="n">tangentOfFirstIteration</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># Kept without the Dirichlet rows and columns: they are imposed anew, as they eliminate into this R.</span>
+            <span class="k">return</span> <span class="n">quasiNewton</span><span class="o">.</span><span class="n">tangentOfFirstIteration</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+
+        <span class="n">K_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">assembleStiffnessCSR</span><span class="p">(</span><span class="n">K</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">mpcTransformation</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">K_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">mpcTransformation</span><span class="o">.</span><span class="n">transformSystemMatrix</span><span class="p">(</span><span class="n">K_</span><span class="p">)</span>
+
+        <span class="c1"># the first tangent of the increment: the one of iteration 0</span>
+        <span class="k">if</span> <span class="n">quasiNewton</span><span class="o">.</span><span class="n">isEnabled</span> <span class="ow">and</span> <span class="n">quasiNewton</span><span class="o">.</span><span class="n">tangentOfFirstIteration</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">quasiNewton</span><span class="o">.</span><span class="n">tangentOfFirstIteration</span> <span class="o">=</span> <span class="n">K_</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+
+        <span class="k">return</span> <span class="n">K_</span></div>
+
+
 <div class="viewcode-block" id="NIST.initializeIncrement">
 <a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.initializeIncrement">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">initializeIncrement</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">U_n</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">stepActions</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span> <span class="n">model</span><span class="p">:</span> <span class="n">FEModel</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">:</span> <span class="n">TimeStep</span><span class="p">):</span>
@@ -1689,8 +1951,8 @@
         <span class="bp">self</span><span class="p">,</span> <span class="n">dU</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">R</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">F</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">K</span><span class="p">:</span> <span class="n">VIJSystemMatrix</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">:</span> <span class="n">TimeStep</span>
     <span class="p">):</span>
 <span class="w">        </span><span class="sd">"""Assemble terms of the equation system beyond the internal and external forces. Called</span>
-<span class="sd">        by :meth:`solveIncrement` in every Newton iteration, next to :meth:`computeElements`,</span>
-<span class="sd">        :meth:`assembleLoads` and :meth:`assembleConstraints`: right after the right-hand side</span>
+<span class="sd">        by :meth:`assembleResidualAndTangent` in every evaluation of the model, next to :meth:`computeElements`,</span>
+<span class="sd">        :meth:`assembleLoadsAtIncrementEnd` and :meth:`assembleConstraints`: right after the right-hand side</span>
 <span class="sd">        :math:`R = f_\\mathrm{ext} - f_\\mathrm{int}` is formed (see</span>
 <span class="sd">        :ref:`residual-and-tangent-convention`), and before the multi-point-constraint condensation,</span>
 <span class="sd">        the Dirichlet handling, the convergence test and the linear solve -- which therefore all act</span>

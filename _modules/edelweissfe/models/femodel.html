@@ -572,8 +572,9 @@
 
 <span class="sd">        Does not serialize model topology (nodes/elements/sets/sections/materials) -- only state</span>
 <span class="sd">        that a rebuild from the original ``.inp`` file cannot reproduce: node field values, element</span>
-<span class="sd">        quadrature-point history, scalar variables (e.g. Lagrange multipliers), and stateful</span>
-<span class="sd">        constraints' internal history (e.g. frictional contact).</span>
+<span class="sd">        quadrature-point history, scalar variables (e.g. Lagrange multipliers), stateful</span>
+<span class="sd">        constraints' internal history (e.g. frictional contact), and the additional parameters</span>
+<span class="sd">        (e.g. the load parameter of the arc length method).</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
@@ -594,6 +595,10 @@
         <span class="n">scalarVariablesGroup</span> <span class="o">=</span> <span class="n">f</span><span class="o">.</span><span class="n">create_group</span><span class="p">(</span><span class="s2">"scalarVariables"</span><span class="p">)</span>
         <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">scalarVariable</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">scalarVariables</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
             <span class="n">scalarVariablesGroup</span><span class="o">.</span><span class="n">attrs</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">scalarVariable</span><span class="o">.</span><span class="n">value</span>
+
+        <span class="n">additionalParametersGroup</span> <span class="o">=</span> <span class="n">f</span><span class="o">.</span><span class="n">create_group</span><span class="p">(</span><span class="s2">"additionalParameters"</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">additionalParameters</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="n">additionalParametersGroup</span><span class="o">.</span><span class="n">attrs</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
 
         <span class="n">writeRestartDataOf</span><span class="p">(</span><span class="n">f</span><span class="o">.</span><span class="n">create_group</span><span class="p">(</span><span class="s2">"modelModifiers"</span><span class="p">),</span> <span class="bp">self</span><span class="o">.</span><span class="n">modelModifiers</span><span class="p">)</span>
 
@@ -678,6 +683,8 @@
 
         <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">scalarVariable</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">scalarVariables</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
             <span class="n">scalarVariable</span><span class="o">.</span><span class="n">value</span> <span class="o">=</span> <span class="n">f</span><span class="p">[</span><span class="s2">"scalarVariables"</span><span class="p">]</span><span class="o">.</span><span class="n">attrs</span><span class="p">[</span><span class="n">name</span><span class="p">]</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">additionalParameters</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">f</span><span class="p">[</span><span class="s2">"additionalParameters"</span><span class="p">]</span><span class="o">.</span><span class="n">attrs</span><span class="p">)</span>
 
         <span class="c1"># Sound only because the replay reproduces the original numbering exactly (verified by fingerprint):</span>
         <span class="c1"># a missing element means a mismatched model and must be reported.</span>
