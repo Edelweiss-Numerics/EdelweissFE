@@ -477,7 +477,7 @@ class NEST(NIST):
 
         R = self.theDofManager.constructDofVector()
         F = self.theDofManager.constructDofVector()
-        PExt = self.theDofManager.constructDofVector()
+        PLoadsAndConstraints = self.theDofManager.constructDofVector()
         U_np = self.theDofManager.constructDofVector()
         dU_ = [self.theDofManager.constructDofVector() for i in range(self.rkStages)]
         err = self.theDofManager.constructDofVector()
@@ -510,14 +510,19 @@ class NEST(NIST):
 
             U_np += dU_[k]
 
-            P[:] = K[:] = F[:] = PExt[:] = 0.0
+            P[:] = K[:] = F[:] = PLoadsAndConstraints[:] = 0.0
 
             P, K, F = self.computeElements(elements, U_np, dU_[k], P, K, F, timeStep)
-            PExt, K = self.assembleLoads(nodeforces, distributedLoads, bodyForces, U_np, PExt, K, timeStep)
-            PExt, K = self.assembleConstraints(constraints, U_np, dU_[k], PExt, K, timeStep)
+            PLoadsAndConstraints, K = self.assembleLoads(
+                nodeforces, distributedLoads, bodyForces, U_np, PLoadsAndConstraints, K, timeStep
+            )
+            PLoadsAndConstraints, K = self.assembleConstraints(
+                constraints, U_np, dU_[k], PLoadsAndConstraints, K, timeStep
+            )
 
+            # the right-hand side is the negative of all residual contributions, R = f_ext - f_int
             R[:] = -P
-            R += PExt
+            R -= PLoadsAndConstraints
 
             R = self.applyDirichletToResidual(timeStep, R, dirichlets)
 
@@ -545,7 +550,7 @@ class NEST(NIST):
             raise CutbackRequest("Estimated error too high!", np.sqrt(self.tol / normErr) * 0.9)
 
         # compute elements once more to get the final reaction
-        P[:] = K[:] = F[:] = PExt[:] = 0.0
+        P[:] = K[:] = F[:] = 0.0
         P, K, F = self.computeElements(elements, U_np, dU, P, K, F, timeStep)
 
         # compute new increment size scale factor

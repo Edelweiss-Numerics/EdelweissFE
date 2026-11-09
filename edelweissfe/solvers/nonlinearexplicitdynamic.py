@@ -78,7 +78,7 @@ the latter two, and what they cost in accuracy, is documented under
 **Constraints.** Multi-point constraints are enforced by folding a slave's mass and force onto its
 masters (row-sum, mass-conserving) and slaving it kinematically, which leaves the critical time step
 untouched. Other constraints -- contact above all -- are evaluated through
-:meth:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.applyConstraintExplicit`, which
+:meth:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernelsExplicit`, which
 asks for forces and no tangent, since a tangent assembled here would enter nothing. A constraint
 that can act *only* through its tangent contributes nothing to an explicit increment and is
 refused at validation rather than silently ignored.
@@ -838,11 +838,13 @@ class NED(NonlinearSolverBase):
             for geostatic in stepActions["geostatic"].values():
                 geostatic.applyAtIterationStart()
 
+        # Every element, load and constraint adds its residual contribution; the net force that
+        # accelerates the nodes is the negative of their sum, f_ext - f_int.
         P[:] = 0.0
         P, psi = self.computeElements(elements, U_n, dU, P, timeStep)
-        P[:] = -P[:]
         P, _ = self.assembleLoads(nodeforces, distributedLoads, bodyForces, U_n, P, None, timeStep)
         P = self.assembleConstraintForces(model.constraints, U_n, dU, P, timeStep)
+        P[:] = -P[:]
 
         # Fold slave forces onto their masters here, so the next increment's Dirichlet handling sees
         # the folded vector.
@@ -1522,17 +1524,16 @@ class NED(NonlinearSolverBase):
         P: DofVector,
         timeStep: TimeStep,
     ) -> DofVector:
-        """Evaluate every constraint and add its nodal forces to the net force vector.
+        """Evaluate every constraint and add its residual contribution to the given vector.
 
         The explicit counterpart of
-        :meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.assembleConstraints`, and it shares
-        that method's sign convention: a constraint writes what the implicit solver calls ``PExt``,
-        which is why this is called after :meth:`assembleLoads`, on a ``P`` that already holds
-        ``-P_internal``.
+        :meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.assembleConstraints`, with the same
+        sign: a constraint adds the negative of the force it exerts on the nodes, like an element its
+        internal force, see :ref:`residual-and-tangent-convention`.
 
         No tangent is requested. An explicit increment solves no linear system, so a constraint's
         stiffness enters nothing, and
-        :meth:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.applyConstraintExplicit`
+        :meth:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernelsExplicit`
         is the entry point that evaluates the constraint forces directly without assembling a tangent.
         A constraint that could act *only* through its tangent would contribute nothing here; that is
         precisely the class :meth:`validateModelCapabilities` refuses.
@@ -1546,14 +1547,14 @@ class NED(NonlinearSolverBase):
         dU
             The current solution increment.
         P
-            The net force vector to be augmented.
+            The residual contribution vector to be augmented.
         timeStep
             The current time step.
 
         Returns
         -------
         DofVector
-            The augmented net force vector.
+            The augmented residual contribution vector.
         """
 
         # Per-constraint buffers and index plans, built once per equation system.
@@ -1570,10 +1571,10 @@ class NED(NonlinearSolverBase):
 
             Pc, indices, namesDofMoreThanOnce = plan
 
-            # Reused, so it must be cleared: applyConstraintExplicit augments what it is handed.
+            # Reused, so it must be cleared: computeKernelsExplicit augments what it is handed.
             Pc[:] = 0.0
 
-            constraint.applyConstraintExplicit(U_np[constraint], dU[constraint], Pc, timeStep)
+            constraint.computeKernelsExplicit(U_np[constraint], dU[constraint], Pc, timeStep)
 
             if namesDofMoreThanOnce:
                 np.add.at(PPlain, indices, Pc)

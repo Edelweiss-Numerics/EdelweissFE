@@ -145,6 +145,16 @@ class Constraint(ConstraintBase):
     ...     |.........................................................................................|
 
 
+    Residual contribution
+    =====================
+
+    P =     | dg_du.T lambda |
+            | g = dg_du u    |
+
+    The multipliers' rows hold g itself, so that the solver drives g back to zero wherever it starts, e.g. after
+    the constraint was switched off for a step.
+
+
     Create K matrix
     ===============
 
@@ -260,9 +270,12 @@ class Constraint(ConstraintBase):
     def getNumberOfAdditionalNeededScalarVariables(self):
         return self.nConstraints
 
-    def applyConstraint(self, U_np, dU, PExt, K, timeStep):
+    def computeKernels(self, U_np, dU, P, K, timeStep):
+        nodalU = U_np[: -self.nConstraints]
         LambdaN1 = U_np[-self.nConstraints :]
 
-        PExt[: -self.nConstraints] -= LambdaN1.dot(self.dG_dU)
+        # lambda^T dg/du on the nodes, and g = dG_dU u on the multipliers: the tangent is the derivative of both
+        P[: -self.nConstraints] += LambdaN1.dot(self.dG_dU)
+        P[-self.nConstraints :] += self.dG_dU.dot(nodalU)
 
         K += self.K

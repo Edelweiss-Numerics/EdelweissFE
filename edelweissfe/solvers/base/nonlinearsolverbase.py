@@ -209,12 +209,14 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
         self,
         distributedLoads: list[StepActionBase],
         U_np: DofVector,
-        PExt: DofVector,
+        P: DofVector,
         K: VIJSystemMatrix | None,
         timeStep: TimeStep,
     ) -> tuple[DofVector, VIJSystemMatrix]:
         """Loop over all distributed loads acting on elements, and evaluate them.
-        Assembles into the global external load vector and, if given, the system matrix.
+        Assembles their residual contributions, the negative of the external loads, into the given
+        vector and, if given, their tangents into the system matrix; see
+        :ref:`residual-and-tangent-convention`.
 
         Parameters
         ----------
@@ -222,8 +224,8 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
             The list of distributed loads.
         U_np
             The current solution vector.
-        PExt
-            The external load vector to assemble into.
+        P
+            The residual contribution vector to assemble into.
         K
             The system matrix to assemble into; None for an explicit solver, which needs no tangent.
         timeStep
@@ -232,7 +234,7 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
         Returns
         -------
         tuple[DofVector,VIJSystemMatrix]
-            The updated load vector and system matrix.
+            The updated residual contribution vector and system matrix.
         """
 
         time = timeStep.totalTime
@@ -247,39 +249,41 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
 
                     el.computeDistributedLoad(dLoad.loadType, Pe, Ke, faceID, load, U_np[el], time, dT)
 
-                    PExt[el] += Pe
+                    P[el] += Pe
 
-        return PExt, K
+        return P, K
 
     @performancetiming.timeit("body forces")
     def computeBodyForces(
         self,
         bodyForces: list[StepActionBase],
         U_np: DofVector,
-        PExt: DofVector,
+        P: DofVector,
         K: VIJSystemMatrix | None,
         timeStep: TimeStep,
     ) -> tuple[DofVector, VIJSystemMatrix]:
         """Loop over all body forces loads acting on elements, and evaluate them.
-        Assembles into the global external load vector and, if given, the system matrix.
+        Assembles their residual contributions, the negative of the external loads, into the given
+        vector and, if given, their tangents into the system matrix; see
+        :ref:`residual-and-tangent-convention`.
 
         Parameters
         ----------
-        distributedLoads
-            The list of distributed loads.
+        bodyForces
+            The list of body forces.
         U_np
             The current solution vector.
-        PExt
-            The external load vector to assemble into.
+        P
+            The residual contribution vector to assemble into.
         K
             The system matrix to assemble into; None for an explicit solver, which needs no tangent.
-        increment
-            The increment.
+        timeStep
+            The current time step.
 
         Returns
         -------
         tuple[DofVector,VIJSystemMatrix]
-            The updated load vector and system matrix.
+            The updated residual contribution vector and system matrix.
         """
 
         time = timeStep.totalTime
@@ -293,9 +297,9 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
 
                 el.computeBodyForce(Pe, Ke, force, U_np[el], time, dT)
 
-                PExt[el] += Pe
+                P[el] += Pe
 
-        return PExt, K
+        return P, K
 
     @performancetiming.timeit("assemble loads")
     def assembleLoads(
@@ -304,11 +308,13 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
         distributedLoads: list[StepActionBase],
         bodyForces: list[StepActionBase],
         U_np: DofVector,
-        PExt: DofVector,
+        P: DofVector,
         K: VIJSystemMatrix | None,
         timeStep: TimeStep,
     ) -> tuple[DofVector, VIJSystemMatrix]:
-        """Assemble all loads into a right hand side vector.
+        """Assemble the residual contributions of all loads: each adds the negative of the external
+        load it applies, and the tangent of that contribution, which is nonzero only for a load that
+        follows the deformation; see :ref:`residual-and-tangent-convention`.
 
         Parameters
         ----------
@@ -320,8 +326,8 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
             The list of body (volumetric) loads.
         U_np
             The current solution vector.
-        PExt
-            The external load vector.
+        P
+            The residual contribution vector to assemble into.
         K
             The system matrix to assemble into; None for an explicit solver, which needs no tangent.
         timeStep
@@ -330,17 +336,16 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
         Returns
         -------
         tuple[DofVector,VIJSystemMatrix]
-            - The updated external load vector.
+            - The updated residual contribution vector.
             - The updated system matrix.
         """
         for cLoad in nodeForces:
-            PExt[
-                self.theDofManager.idcsOfFieldsOnNodeSetsInDofVector[cLoad.field][cLoad.nodeSet]
-            ] += cLoad.getCurrentLoad(timeStep).flatten()
-        PExt, K = self.computeDistributedLoads(distributedLoads, U_np, PExt, K, timeStep)
-        PExt, K = self.computeBodyForces(bodyForces, U_np, PExt, K, timeStep)
+            dofIndices = self.theDofManager.idcsOfFieldsOnNodeSetsInDofVector[cLoad.field][cLoad.nodeSet]
+            P[dofIndices] -= cLoad.getCurrentLoad(timeStep).flatten()
+        P, K = self.computeDistributedLoads(distributedLoads, U_np, P, K, timeStep)
+        P, K = self.computeBodyForces(bodyForces, U_np, P, K, timeStep)
 
-        return PExt, K
+        return P, K
 
     def getRestartData(self) -> dict[str, np.ndarray]:
         """The state this solver carries from one increment to the next, as it is; see

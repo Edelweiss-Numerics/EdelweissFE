@@ -590,7 +590,7 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
             "blockDof": blockDof,
         }
 
-    def _applyConstraintBatched(self, U_np: np.ndarray, PExt: np.ndarray, K) -> None:
+    def _computeKernelsBatched(self, U_np: np.ndarray, P: np.ndarray, K) -> None:
         """The batched force evaluation. Physics identical to the per-point loop, expressed over all
         active points at once; see :meth:`_prepareActiveArrays`."""
 
@@ -622,8 +622,9 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
         c = np.concatenate((b["Ns"][closed], -b["Nm"][closed]), axis=1)
         w = (c[:, :, None] * b["nBar"][closed][:, None, :]).reshape((len(g), -1))
 
+        # the residual contribution is the negative of the contact force on the nodes, -f_n * w
         rows = np.flatnonzero(closed)
-        PExt.reshape((-1, b["blockDof"]))[rows] += -f_n[:, None] * w
+        P.reshape((-1, b["blockDof"]))[rows] += f_n[:, None] * w
 
         self._normalForceCurrent[active[closed]] = f_n
         self.totalNormalForce = float(f_n.sum())
@@ -675,15 +676,15 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
     def shapeVIJContribution(self, flat_view: np.ndarray) -> IntegratedSurfaceContactStiffnessView:
         return IntegratedSurfaceContactStiffnessView(flat_view, self._activeBlockSizes())
 
-    def applyConstraint(
+    def computeKernels(
         self,
         U_np: np.ndarray,
         dU: np.ndarray,
-        PExt: np.ndarray,
+        P: np.ndarray,
         K: IntegratedSurfaceContactStiffnessView | None,
         timeStep: TimeStep,
     ):
-        """Evaluate the contact forces, and the tangent unless ``K`` is None.
+        """Add the residual contribution of the contact forces, and the tangent unless ``K`` is None.
 
         The local DOF walk must mirror :meth:`updateConnectivity`'s node declaration exactly: an
         unassigned point contributes no nodes there, so it must not advance ``localOffset`` here.
@@ -693,7 +694,7 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
         self._normalForceCurrent[:] = 0.0
 
         if self._batched is not None:
-            self._applyConstraintBatched(U_np, PExt, K)
+            self._computeKernelsBatched(U_np, P, K)
             return
 
         localOffset = 0
@@ -735,14 +736,15 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
             w = np.kron(c, nBar)
 
             # The integration weight plays the role of the node-based formulation's tributary area, with the same
-            # force laws: f_n carries the sign of g (negative in contact), so that PExt -= f_n * w pushes the
-            # surfaces apart, and stiffness = df_n/dg is positive for g < 0.
+            # force laws: f_n carries the sign of g (negative in contact), so that the contact force on the nodes,
+            # -f_n * w, pushes the surfaces apart, and stiffness = df_n/dg is positive for g < 0.
             penaltyTimesArea = self.penalty * self.slave.integrationWeights[f][self.slave.pointQuadraturePoint[p]]
 
             f_n, stiffness = normalPenaltyForce(self.type, penaltyTimesArea, g)
 
+            # the residual contribution is the negative of that contact force
             globalIdcs = slaveIdcs + masterIdcs
-            PExt[globalIdcs] += -f_n * w
+            P[globalIdcs] += f_n * w
 
             # K is None in explicit runs -- see ForcesOnlyExplicitEvaluation.
             if K is not None:

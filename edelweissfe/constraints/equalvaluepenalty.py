@@ -161,11 +161,11 @@ class Constraint(ConstraintBase, MeshDependent):
         self._rebuildDerivedState()
         return True
 
-    def applyConstraint(
+    def computeKernels(
         self,
         U_np: np.ndarray,
         dU: np.ndarray,
-        PExt: np.ndarray,
+        P: np.ndarray,
         K: np.ndarray,
         timeStep: TimeStep,
     ):
@@ -176,7 +176,7 @@ class Constraint(ConstraintBase, MeshDependent):
 
         mean = np.sum(values) / self._nNodes
 
-        PExt[self.indices_component] -= self.penalty * (values - mean)
+        P[self.indices_component] += self.penalty * (values - mean)
 
         diag = np.diag(K)
         diag.setflags(write=True)  # bug in numpy
