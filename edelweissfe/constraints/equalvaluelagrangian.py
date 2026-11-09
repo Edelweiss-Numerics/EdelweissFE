@@ -140,8 +140,6 @@ class Constraint(ConstraintBase, MeshDependent):
             ]
         ] * self.nNodes
 
-        self.active = True
-
     @classmethod
     def fromConstraintDefinition(
         cls, name: str, definition: dict, model: FEModel, journal: "Journal" = None
@@ -200,9 +198,6 @@ class Constraint(ConstraintBase, MeshDependent):
         K: np.ndarray,
         timeStep: TimeStep,
     ):
-        if not self.active:
-            return
-
         val_master = U_np[self.index_master]
         vals_slaves = U_np[self.indices_slaves]
         multipliers = U_np[self.indices_multipliers]

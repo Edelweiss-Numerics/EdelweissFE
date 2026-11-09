@@ -233,8 +233,8 @@ class BaseElement(BaseNodeCouplingEntity, VIJEntityBase):
     @abstractmethod
     def computeKernels(
         self,
-        P: np.ndarray,
         K: np.ndarray,
+        P: np.ndarray,
         U: np.ndarray,
         dU: np.ndarray,
         time: float,
@@ -245,10 +245,10 @@ class BaseElement(BaseNodeCouplingEntity, VIJEntityBase):
 
         Parameters
         ----------
-        P
-            The residual contribution to augment, the internal forces :math:`\\boldsymbol{f}_\\mathrm{int}`.
         K
             The tangent ``dP/dU`` to augment, the stiffness matrix.
+        P
+            The residual contribution to augment, the internal forces :math:`\\boldsymbol{f}_\\mathrm{int}`.
         U
             The current solution vector.
         dU

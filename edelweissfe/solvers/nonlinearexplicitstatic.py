@@ -35,7 +35,7 @@ from edelweissfe.config.timing import createTimingDict
 from edelweissfe.constraints.base.constraintbase import ConstraintBase
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.numerics.csrgeneratorv2 import CSRGenerator
-from edelweissfe.numerics.dofmanager import DofManager, DofVector, VIJSystemMatrix
+from edelweissfe.numerics.dofmanager import DofVector, VIJSystemMatrix
 from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
 from edelweissfe.solvers.nonlinearimplicitstatic import NIST
 from edelweissfe.timesteppers.timestep import TimeStep
@@ -233,6 +233,29 @@ class NEST(NIST):
         self.linSolver = None
         self.linSolverName = None
 
+    def validateModelCapabilities(self, model: FEModel):
+        """Refuse, on top of the base checks, a constraint that is switched on and needs its connectivity updated in
+        every increment, i.e. a contact, which searches for what it touches: this solver never performs the update. A
+        constraint switched off from outside
+        (:attr:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.switchedOn`) is not refused: it rests,
+        and takes no part in the step.
+
+        Parameters
+        ----------
+        model
+            The model tree.
+        """
+
+        super().validateModelCapabilities(model)
+
+        for constraintName, constraint in model.constraints.items():
+            if constraint.switchedOn and type(constraint).updateConnectivity is not ConstraintBase.updateConnectivity:
+                raise Exception(
+                    f"Constraint '{constraintName}' requires a dynamic connectivity update "
+                    f"(contact) every increment, which {self.identification} never performs -- "
+                    "contact is not currently supported with this solver."
+                )
+
     def beginStep(
         self,
         step,
@@ -259,23 +282,9 @@ class NEST(NIST):
 
         self.validateModelCapabilities(model)
 
-        for constraintName, constraint in model.constraints.items():
-            if type(constraint).updateConnectivity is not ConstraintBase.updateConnectivity:
-                raise Exception(
-                    f"Constraint '{constraintName}' requires a dynamic connectivity update "
-                    f"(contact) every increment, which {self.identification} never performs -- "
-                    "contact is not currently supported with this solver."
-                )
-
         self.journal.message("Creating monolithic equation system", self.identification, 0)
         self.forgetEquationSystem()
-        self.theDofManager = DofManager(
-            model.nodeFields.values(),
-            model.scalarVariables.values(),
-            model.elements.values(),
-            model.constraints.values(),
-            model.nodeSets.values(),
-        )
+        self.theDofManager = self.createDofManager(model)
         self.journal.message(
             "total size of eq. system: {:}".format(self.theDofManager.nDof),
             self.identification,
@@ -309,8 +318,7 @@ class NEST(NIST):
         for fieldName, field in model.nodeFields.items():
             U = self.theDofManager.writeNodeFieldToDofVector(U, field, "U")
 
-        for variable in model.scalarVariables.values():
-            U[self.theDofManager.idcsOfScalarVariablesInDofVector[variable]] = variable.value
+        U = self.theDofManager.writeScalarVariablesToDofVector(U)
 
         self._U, self._dU, self._P, self._K = U, dU, P, K
 
@@ -406,8 +414,7 @@ class NEST(NIST):
             self.theDofManager.writeDofVectorToNodeField(P, field, "P")
             self.theDofManager.writeDofVectorToNodeField(dU, field, "dU")
 
-        for variable in model.scalarVariables.values():
-            variable.value = U[self.theDofManager.idcsOfScalarVariablesInDofVector[variable]]
+        self.theDofManager.writeDofVectorToScalarVariables(U)
 
         self.updateRigidBodies(model, timeStep)
 
@@ -484,9 +491,7 @@ class NEST(NIST):
         err[:] = 0.0
 
         dirichlets = stepActions["dirichlet"].values()
-        nodeforces = stepActions["nodeforces"].values()
-        distributedLoads = stepActions["distributedload"].values()
-        bodyForces = stepActions["bodyforce"].values()
+        loads = self.collectLoads(stepActions)
 
         # Find which global DOFs the Dirichlet BCs constrain, once up front.
         self.locateConstrainedDofs(dirichlets)
@@ -513,9 +518,7 @@ class NEST(NIST):
             P[:] = K[:] = F[:] = PLoadsAndConstraints[:] = 0.0
 
             P, K, F = self.computeElements(elements, U_np, dU_[k], P, K, F, timeStep)
-            PLoadsAndConstraints, K = self.assembleLoads(
-                nodeforces, distributedLoads, bodyForces, U_np, PLoadsAndConstraints, K, timeStep
-            )
+            PLoadsAndConstraints, K = self.assembleLoads(loads, U_np, dU_[k], PLoadsAndConstraints, K, timeStep)
             PLoadsAndConstraints, K = self.assembleConstraints(
                 constraints, U_np, dU_[k], PLoadsAndConstraints, K, timeStep
             )

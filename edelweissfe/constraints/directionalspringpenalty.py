@@ -110,8 +110,6 @@ class Constraint(ConstraintBase, MeshDependent):
         self.penalty = configuration.penalty
         self._nodes = nSet
 
-        self.active = True
-
         self._lastSeenTopologyVersion = model.topology.version
         model.topology.registerMeshDependent(self)
         self._rebuildDerivedState()
@@ -173,9 +171,6 @@ class Constraint(ConstraintBase, MeshDependent):
         K: np.ndarray,
         timeStep: TimeStep,
     ):
-        if not self.active:
-            return
-
         values = U_np[self.indices_component]
 
         P[self.indices_component] += self.penalty * values

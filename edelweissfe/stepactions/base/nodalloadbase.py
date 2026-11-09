@@ -30,12 +30,15 @@ from abc import abstractmethod
 
 import numpy as np
 
+from edelweissfe.numerics.dofmanager import DofManager, DofVector, VIJSystemMatrix
 from edelweissfe.sets.nodeset import NodeSet
-from edelweissfe.stepactions.base.stepactionbase import StepActionBase
+from edelweissfe.stepactions.base.loadbase import LoadBase
 from edelweissfe.timesteppers.timestep import TimeStep
 
 
-class NodalLoadBase(StepActionBase):
+class NodalLoadBase(LoadBase):
+    """Concentrated loads on the degrees of freedom of a field on a node set, such as node forces."""
+
     @property
     @abstractmethod
     def field(self) -> str:
@@ -55,3 +58,35 @@ class NodalLoadBase(StepActionBase):
         np.ndarray
             The magnitude.
         """
+
+    def assembleLoad(
+        self,
+        P: DofVector,
+        K: VIJSystemMatrix | None,
+        U_np: DofVector,
+        dU: DofVector,
+        timeStep: TimeStep,
+        dofManager: DofManager,
+    ):
+        """Subtract the current node loads from the residual contribution at the degrees of freedom of the field
+        on the node set; a dead load, so without a tangent. See
+        :meth:`~edelweissfe.stepactions.base.loadbase.LoadBase.assembleLoad`.
+
+        Parameters
+        ----------
+        P
+            The global residual contribution vector to augment.
+        K
+            The global system matrix; untouched.
+        U_np
+            The current global solution.
+        dU
+            The global solution increment.
+        timeStep
+            The current time step.
+        dofManager
+            The DOF manager of the equation system, which locates the degrees of freedom of the node set.
+        """
+
+        dofIndices = dofManager.idcsOfFieldsOnNodeSetsInDofVector[self.field][self.nodeSet]
+        P[dofIndices] -= self.getCurrentLoad(timeStep).flatten()

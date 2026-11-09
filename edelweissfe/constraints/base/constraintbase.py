@@ -49,6 +49,56 @@ class ConstraintBase(OptionSchemaProvider, ABC, VIJEntityBase):
     #: none) or overrides :meth:`getRestartData` and :meth:`setRestartData`.
     checkpointedState: dict | None = None
 
+    #: Whether this constraint is within reach of what it constrains, as it finds itself in :meth:`updateConnectivity`:
+    #: e.g. a contact constraint whose partner is far away is not, and takes no part in the equation system then (see
+    #: :attr:`active`). A constraint sets it there, and reports a change of :attr:`active` as a change of its
+    #: connectivity, so that the solver rebuilds its equation system. A constraint that does not check stays within
+    #: reach.
+    withinReach: bool = True
+
+    #: Whether this constraint is switched on from outside; see :attr:`switchedOn`.
+    _switchedOn: bool = True
+
+    @property
+    def switchedOn(self) -> bool:
+        """Whether this constraint is switched on from outside, e.g. by a ``modelupdate`` step action, which switches it
+        through :attr:`active`. A constraint switched off from outside rests: the solvers do not locate it anew
+        (:meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.updateTopologyAndConnectivity`), it
+        accepts no state (:meth:`acceptLastState`), so that its history stays as it was, and the solvers neither
+        evaluate it nor refuse it. A solver that cannot handle a constraint refuses it while it is switched on, even out
+        of reach: it may come within reach during the step.
+
+        Returns
+        -------
+        bool
+            Whether the constraint is switched on.
+        """
+
+        return self._switchedOn
+
+    @property
+    def active(self) -> bool:
+        """Whether this constraint takes part in the equation system: while it is :attr:`switchedOn` and
+        :attr:`withinReach`. A constraint that does not take part gets no degrees of freedom and adds nothing to the
+        residual or the tangent; its scalar variables (e.g. Lagrange multipliers) leave the equation system with it, so
+        that they leave no empty rows behind.
+
+        Setting it switches the constraint on or off from outside, e.g. by a ``modelupdate`` step action at the start
+        of a step. A switch-off from outside lasts until the constraint is switched on again from outside, whatever the
+        constraint finds in reach; switched on again, it takes part while it is within reach.
+
+        Returns
+        -------
+        bool
+            Whether the constraint takes part in the equation system.
+        """
+
+        return self._switchedOn and self.withinReach
+
+    @active.setter
+    def active(self, switchedOn: bool):
+        self._switchedOn = switchedOn
+
     @classmethod
     def fromConstraintDefinition(
         cls, name: str, definition: dict, model: FEModel, journal: "Journal" = None
@@ -156,7 +206,8 @@ class ConstraintBase(OptionSchemaProvider, ABC, VIJEntityBase):
     def acceptLastState(self):
         """Called by :meth:`~edelweissfe.models.femodel.FEModel.advanceToTime` when an increment
         is accepted, so a stateful constraint (e.g. frictional contact) can promote the state of
-        the last (converged) Newton iterate to its history.
+        the last (converged) Newton iterate to its history. Only an :attr:`active` constraint is called: one that took
+        no part in the increment keeps its history.
 
         The default implementation does nothing, which is correct for every stateless constraint
         (i.e. every constraint that does not override this method)."""

@@ -771,3 +771,38 @@ class DofManager:
             dofVector[indices] = nodeField[resultName].flatten()
 
         return dofVector
+
+    def writeScalarVariablesToDofVector(self, dofVector: DofVector) -> DofVector:
+        """Write the values of the scalar variables of this equation system to their locations in a given
+        DofVector. Only the scalar variables this DofManager numbers are written: those of a constraint that is
+        switched off are not part of the equation system.
+
+        Parameters
+        ----------
+        dofVector
+            The result DofVector.
+
+        Returns
+        -------
+        DofVector
+            The DofVector.
+        """
+
+        for scalarVariable, index in self.idcsOfScalarVariablesInDofVector.items():
+            dofVector[index] = scalarVariable.value
+
+        return dofVector
+
+    def writeDofVectorToScalarVariables(self, dofVector: DofVector):
+        """Set the values of the scalar variables of this equation system from their locations in a given
+        DofVector; the counterpart of :meth:`writeScalarVariablesToDofVector`. A scalar variable this DofManager
+        does not number keeps its value.
+
+        Parameters
+        ----------
+        dofVector
+            The source DofVector.
+        """
+
+        for scalarVariable, index in self.idcsOfScalarVariablesInDofVector.items():
+            scalarVariable.value = dofVector[index]

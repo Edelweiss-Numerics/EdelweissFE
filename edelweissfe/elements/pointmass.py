@@ -189,7 +189,7 @@ class PointMass(BaseElement):
         return 0.0
 
     def computeKernels(
-        self, P: np.ndarray, K: np.ndarray, U: np.ndarray, dU: np.ndarray, time: float, dT: float, *args, **kwargs
+        self, K: np.ndarray, P: np.ndarray, U: np.ndarray, dU: np.ndarray, time: float, dT: float, *args, **kwargs
     ):
         pass
 

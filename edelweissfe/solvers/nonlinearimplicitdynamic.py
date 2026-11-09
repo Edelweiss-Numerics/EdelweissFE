@@ -1434,9 +1434,7 @@ class NonlinearImplicitDynamic(NIST):
         )
 
         dirichlets = stepActions["dirichlet"].values()
-        nodeforces = stepActions["nodeforces"].values()
-        distributedLoads = stepActions["distributedload"].values()
-        bodyForces = stepActions["bodyforce"].values()
+        loads = self.collectLoads(stepActions)
 
         P = self.theDofManager.constructDofVector()
         F = self.theDofManager.constructDofVector()
@@ -1445,9 +1443,7 @@ class NonlinearImplicitDynamic(NIST):
         K = self.theDofManager.constructVIJSystemMatrix()
 
         P, K, F = self.computeElements(model.elements, U_n, dU0, P, K, F, startTimeStep)
-        PLoadsAndConstraints, K = self.assembleLoads(
-            nodeforces, distributedLoads, bodyForces, U_n, PLoadsAndConstraints, K, startTimeStep
-        )
+        PLoadsAndConstraints, K = self.assembleLoads(loads, U_n, dU0, PLoadsAndConstraints, K, startTimeStep)
         PLoadsAndConstraints, K = self.assembleConstraints(
             model.constraints, U_n, dU0, PLoadsAndConstraints, K, startTimeStep
         )

@@ -404,9 +404,26 @@ class FEModel:
         self._prepareElements(journal)
         self.topology.recordSetupFingerprint()
 
+    def activeConstraints(self) -> list:
+        """The constraints that take part in the equation system: all constraints, in their order, that are active,
+        i.e. switched on and within reach (see
+        :attr:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.active`).
+
+        Returns
+        -------
+        list[ConstraintBase]
+            The active constraints.
+        """
+
+        return [constraint for constraint in self.constraints.values() if constraint.active]
+
     def advanceToTime(self, time: float):
         """Accept the current state of the model and sub instances, and
         set the new time.
+
+        Of the constraints, only the active ones accept their state (see :meth:`activeConstraints`): a constraint that
+        took no part in the increment has no new state, and keeps its history as it was, e.g. the multipliers and the
+        frictional history of a contact switched off for a step.
 
         Parameters
         ----------
@@ -419,7 +436,7 @@ class FEModel:
         self._acceptElementStates()
 
         # Serial: negligible next to the element loop.
-        for constraint in self.constraints.values():
+        for constraint in self.activeConstraints():
             constraint.acceptLastState()
 
         for mpc in self.multiPointConstraints.values():
