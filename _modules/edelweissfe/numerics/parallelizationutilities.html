@@ -363,6 +363,71 @@
 
 
 
+<div class="viewcode-block" id="mapChunksOnWorkers">
+<a class="viewcode-back" href="../../../documentation/dofmanager.html#edelweissfe.numerics.parallelizationutilities.mapChunksOnWorkers">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">mapChunksOnWorkers</span><span class="p">(</span><span class="n">items</span><span class="p">,</span> <span class="n">work</span><span class="p">,</span> <span class="n">numberOfWorkers</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">chunksPerWorker</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">4</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Call ``work(worker, chunk)`` for consecutive chunks of ``items``, each chunk on a fixed worker thread, and return</span>
+<span class="sd">    what the calls returned, in the order of the chunks.</span>
+
+<span class="sd">    For an entity loop whose workers write through memory of their own, which no other call may use at the same</span>
+<span class="sd">    time -- each worker its own scratch array for the blocks of the system matrix (see</span>
+<span class="sd">    :meth:`~edelweissfe.numerics.systemmatrixassembly.SystemMatrixAssembly.blocksOfWorker`). Unlike</span>
+<span class="sd">    :func:`mapChunksInParallel`, which hands each chunk to whichever thread is free, the chunks are dealt out to the</span>
+<span class="sd">    workers in turn: worker ``w`` handles chunks ``w``, ``w + numberOfWorkers``, ..., in this order, so every worker</span>
+<span class="sd">    meets the same entities in every run. Several chunks per worker, interleaved, spread a region of expensive</span>
+<span class="sd">    entities (e.g., at a damage front, adjacent in the element order) over all workers.</span>
+
+<span class="sd">    Runs serially in the calling thread, as worker 0 with one chunk holding all ``items``, for one worker.</span>
+
+<span class="sd">    When it returns or raises, no call is running. If a call raises, the exception is that of the first failing chunk in</span>
+<span class="sd">    the order of the chunks, the one a serial loop meets first: a worker stops at its first failing chunk, so every</span>
+<span class="sd">    chunk before the first failing one has run, and none of them failed.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    items</span>
+<span class="sd">        The entities, a sized iterable (a list, a dictionary view).</span>
+<span class="sd">    work</span>
+<span class="sd">        Called once per chunk, with the number of the worker (``0 &lt;= worker &lt; numberOfWorkers``) and a tuple of</span>
+<span class="sd">        consecutive items; a worker must write only to what belongs to its items, or to what belongs to the worker.</span>
+<span class="sd">    numberOfWorkers</span>
+<span class="sd">        The number of worker threads.</span>
+<span class="sd">    chunksPerWorker</span>
+<span class="sd">        How many chunks each worker is handed.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    list</span>
+<span class="sd">        What ``work`` returned for each chunk, in order.</span>
+<span class="sd">    """</span>
+
+    <span class="k">if</span> <span class="n">numberOfWorkers</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">[</span><span class="n">work</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">items</span><span class="p">)]</span>
+
+    <span class="n">chunkSize</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">items</span><span class="p">)</span> <span class="o">//</span> <span class="p">(</span><span class="n">numberOfWorkers</span> <span class="o">*</span> <span class="n">chunksPerWorker</span><span class="p">))</span>
+    <span class="n">chunks</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">chunked_iterable</span><span class="p">(</span><span class="n">items</span><span class="p">,</span> <span class="n">chunkSize</span><span class="p">))</span>
+    <span class="n">results</span> <span class="o">=</span> <span class="p">[</span><span class="kc">None</span><span class="p">]</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">chunks</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">workOfWorker</span><span class="p">(</span><span class="n">worker</span><span class="p">):</span>
+        <span class="k">for</span> <span class="n">chunkNumber</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">worker</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">chunks</span><span class="p">),</span> <span class="n">numberOfWorkers</span><span class="p">):</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">results</span><span class="p">[</span><span class="n">chunkNumber</span><span class="p">]</span> <span class="o">=</span> <span class="n">work</span><span class="p">(</span><span class="n">worker</span><span class="p">,</span> <span class="n">chunks</span><span class="p">[</span><span class="n">chunkNumber</span><span class="p">])</span>
+            <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="k">return</span> <span class="n">chunkNumber</span><span class="p">,</span> <span class="n">e</span>
+        <span class="k">return</span> <span class="kc">None</span>
+
+    <span class="n">failures</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="n">failure</span>
+        <span class="k">for</span> <span class="n">failure</span> <span class="ow">in</span> <span class="n">_mapOnPoolAndWaitForRunningCalls</span><span class="p">(</span><span class="n">workOfWorker</span><span class="p">,</span> <span class="nb">range</span><span class="p">(</span><span class="n">numberOfWorkers</span><span class="p">),</span> <span class="n">numberOfWorkers</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">failure</span>
+    <span class="p">]</span>
+    <span class="k">if</span> <span class="n">failures</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="nb">min</span><span class="p">(</span><span class="n">failures</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">failure</span><span class="p">:</span> <span class="n">failure</span><span class="p">[</span><span class="mi">0</span><span class="p">])[</span><span class="mi">1</span><span class="p">]</span>
+
+    <span class="k">return</span> <span class="n">results</span></div>
+
+
+
 <div class="viewcode-block" id="forEachSliceInParallel">
 <a class="viewcode-back" href="../../../documentation/dofmanager.html#edelweissfe.numerics.parallelizationutilities.forEachSliceInParallel">[docs]</a>
 <span class="k">def</span><span class="w"> </span><span class="nf">forEachSliceInParallel</span><span class="p">(</span><span class="n">work</span><span class="p">,</span> <span class="n">length</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">sliceLength</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">&lt;&lt;</span> <span class="mi">20</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>

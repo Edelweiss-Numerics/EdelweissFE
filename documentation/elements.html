@@ -201,6 +201,8 @@ element type, which lets a third party contribute an element type through an ent
 </dd>
 <dt class="field-even">Attributes<span class="colon">:</span></dt>
 <dd class="field-even"><dl class="simple">
+<dt><a class="reference internal" href="#edelweissfe.elements.marmotelement.element.MarmotElementWrapper.couplesAllItsDofs" title="edelweissfe.elements.marmotelement.element.MarmotElementWrapper.couplesAllItsDofs"><code class="xref py py-obj docutils literal notranslate"><span class="pre">couplesAllItsDofs</span></code></a></dt><dd><p><code class="docutils literal notranslate"><span class="pre">True</span></code>: the block is the dense <code class="docutils literal notranslate"><span class="pre">nDof</span> <span class="pre">x</span> <span class="pre">nDof</span></code> matrix, column-major.</p>
+</dd>
 <dt><strong>dofIndicesPermutation</strong></dt><dd></dd>
 <dt><strong>elNumber</strong></dt><dd></dd>
 <dt><strong>elType</strong></dt><dd></dd>
@@ -544,6 +546,17 @@ persistent result views remain valid.</p>
 </dd></dl>
 
 <dl class="py attribute">
+<dt class="sig sig-object py" id="edelweissfe.elements.marmotelement.element.MarmotElementWrapper.couplesAllItsDofs">
+<span class="sig-name descname"><span class="pre">couplesAllItsDofs</span></span><a class="headerlink" href="#edelweissfe.elements.marmotelement.element.MarmotElementWrapper.couplesAllItsDofs" title="Link to this definition"></a></dt>
+<dd><p>the block is the dense <code class="docutils literal notranslate"><span class="pre">nDof</span> <span class="pre">x</span> <span class="pre">nDof</span></code> matrix, column-major.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><code class="docutils literal notranslate"><span class="pre">True</span></code></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
 <dt class="sig sig-object py" id="edelweissfe.elements.marmotelement.element.MarmotElementWrapper.hasKernels">
 <span class="sig-name descname"><span class="pre">hasKernels</span></span><a class="headerlink" href="#edelweissfe.elements.marmotelement.element.MarmotElementWrapper.hasKernels" title="Link to this definition"></a></dt>
 <dd><p>a Marmot element carries a material and a state; see BaseElement.hasKernels.</p>
@@ -586,6 +599,8 @@ MarmotMaterialHypoElastic.</p></li>
 </dd>
 <dt class="field-even">Attributes<span class="colon">:</span></dt>
 <dd class="field-even"><dl class="simple">
+<dt><a class="reference internal" href="dofmanager.html#edelweissfe.numerics.vijentitybase.VIJEntityBase.couplesAllItsDofs" title="edelweissfe.numerics.vijentitybase.VIJEntityBase.couplesAllItsDofs"><code class="xref py py-obj docutils literal notranslate"><span class="pre">couplesAllItsDofs</span></code></a></dt><dd><p>Whether the entity’s block couples every one of its degrees of freedom with every other one.</p>
+</dd>
 <dt><a class="reference internal" href="#edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.dofIndicesPermutation" title="edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.dofIndicesPermutation"><code class="xref py py-obj docutils literal notranslate"><span class="pre">dofIndicesPermutation</span></code></a></dt><dd><p>If the provides computes residual vectors and stiffness matrices not nodewise, but e.g., fieldwise, this permutation pattern is used to aggregate all entries in order to resemble the defined fields nodewise.</p>
 </dd>
 <dt><a class="reference internal" href="#edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.elNumber" title="edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.elNumber"><code class="xref py py-obj docutils literal notranslate"><span class="pre">elNumber</span></code></a></dt><dd><p>The unique number of this element</p>
@@ -1200,6 +1215,8 @@ layout of <code class="docutils literal notranslate"><span class="pre">P</span><
 </dd>
 <dt class="field-even">Attributes<span class="colon">:</span></dt>
 <dd class="field-even"><dl class="simple">
+<dt><a class="reference internal" href="dofmanager.html#edelweissfe.numerics.vijentitybase.VIJEntityBase.couplesAllItsDofs" title="edelweissfe.numerics.vijentitybase.VIJEntityBase.couplesAllItsDofs"><code class="xref py py-obj docutils literal notranslate"><span class="pre">couplesAllItsDofs</span></code></a></dt><dd><p>Whether the entity’s block couples every one of its degrees of freedom with every other one.</p>
+</dd>
 <dt><a class="reference internal" href="#edelweissfe.elements.base.displacementelementbase.DisplacementElementBase.dofIndicesPermutation" title="edelweissfe.elements.base.displacementelementbase.DisplacementElementBase.dofIndicesPermutation"><code class="xref py py-obj docutils literal notranslate"><span class="pre">dofIndicesPermutation</span></code></a></dt><dd><p>The permutation pattern for the residual vector and the stiffness matrix to aggregate all entries in order to resemble the defined fields nodewise.</p>
 </dd>
 <dt><a class="reference internal" href="#edelweissfe.elements.base.displacementelementbase.DisplacementElementBase.elNumber" title="edelweissfe.elements.base.displacementelementbase.DisplacementElementBase.elNumber"><code class="xref py py-obj docutils literal notranslate"><span class="pre">elNumber</span></code></a></dt><dd><p>The unique number of this element</p>
@@ -1705,6 +1722,8 @@ layout of <code class="docutils literal notranslate"><span class="pre">P</span><
 </dd>
 <dt class="field-even">Attributes<span class="colon">:</span></dt>
 <dd class="field-even"><dl class="simple">
+<dt><a class="reference internal" href="dofmanager.html#edelweissfe.numerics.vijentitybase.VIJEntityBase.couplesAllItsDofs" title="edelweissfe.numerics.vijentitybase.VIJEntityBase.couplesAllItsDofs"><code class="xref py py-obj docutils literal notranslate"><span class="pre">couplesAllItsDofs</span></code></a></dt><dd><p>Whether the entity’s block couples every one of its degrees of freedom with every other one.</p>
+</dd>
 <dt><a class="reference internal" href="#edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.dofIndicesPermutation" title="edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.dofIndicesPermutation"><code class="xref py py-obj docutils literal notranslate"><span class="pre">dofIndicesPermutation</span></code></a></dt><dd><p>The permutation pattern for the residual vector and the stiffness matrix to aggregate all entries in order to resemble the defined fields nodewise.</p>
 </dd>
 <dt><a class="reference internal" href="#edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.elNumber" title="edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.elNumber"><code class="xref py py-obj docutils literal notranslate"><span class="pre">elNumber</span></code></a></dt><dd><p>The unique number of this element</p>
@@ -2118,6 +2137,8 @@ layout of <code class="docutils literal notranslate"><span class="pre">P</span><
 </dd>
 <dt class="field-even">Attributes<span class="colon">:</span></dt>
 <dd class="field-even"><dl class="simple">
+<dt><a class="reference internal" href="dofmanager.html#edelweissfe.numerics.vijentitybase.VIJEntityBase.couplesAllItsDofs" title="edelweissfe.numerics.vijentitybase.VIJEntityBase.couplesAllItsDofs"><code class="xref py py-obj docutils literal notranslate"><span class="pre">couplesAllItsDofs</span></code></a></dt><dd><p>Whether the entity’s block couples every one of its degrees of freedom with every other one.</p>
+</dd>
 <dt><a class="reference internal" href="#edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.dofIndicesPermutation" title="edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.dofIndicesPermutation"><code class="xref py py-obj docutils literal notranslate"><span class="pre">dofIndicesPermutation</span></code></a></dt><dd><p>The permutation pattern for the residual vector and the stiffness matrix to aggregate all entries in order to resemble the defined fields nodewise.</p>
 </dd>
 <dt><a class="reference internal" href="#edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.elNumber" title="edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.elNumber"><code class="xref py py-obj docutils literal notranslate"><span class="pre">elNumber</span></code></a></dt><dd><p>The unique number of this element</p>
@@ -2440,6 +2461,8 @@ layout of <code class="docutils literal notranslate"><span class="pre">P</span><
 </dd>
 <dt class="field-even">Attributes<span class="colon">:</span></dt>
 <dd class="field-even"><dl class="simple">
+<dt><a class="reference internal" href="dofmanager.html#edelweissfe.numerics.vijentitybase.VIJEntityBase.couplesAllItsDofs" title="edelweissfe.numerics.vijentitybase.VIJEntityBase.couplesAllItsDofs"><code class="xref py py-obj docutils literal notranslate"><span class="pre">couplesAllItsDofs</span></code></a></dt><dd><p>Whether the entity’s block couples every one of its degrees of freedom with every other one.</p>
+</dd>
 <dt><a class="reference internal" href="#edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.dofIndicesPermutation" title="edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.dofIndicesPermutation"><code class="xref py py-obj docutils literal notranslate"><span class="pre">dofIndicesPermutation</span></code></a></dt><dd><p>If the provides computes residual vectors and stiffness matrices not nodewise, but e.g., fieldwise, this permutation pattern is used to aggregate all entries in order to resemble the defined fields nodewise.</p>
 </dd>
 <dt><a class="reference internal" href="#edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.elNumber" title="edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.elNumber"><code class="xref py py-obj docutils literal notranslate"><span class="pre">elNumber</span></code></a></dt><dd><p>The unique number of this element</p>
@@ -2614,6 +2637,8 @@ layout of <code class="docutils literal notranslate"><span class="pre">P</span><
 </dd>
 <dt class="field-even">Attributes<span class="colon">:</span></dt>
 <dd class="field-even"><dl class="simple">
+<dt><a class="reference internal" href="dofmanager.html#edelweissfe.numerics.vijentitybase.VIJEntityBase.couplesAllItsDofs" title="edelweissfe.numerics.vijentitybase.VIJEntityBase.couplesAllItsDofs"><code class="xref py py-obj docutils literal notranslate"><span class="pre">couplesAllItsDofs</span></code></a></dt><dd><p>Whether the entity’s block couples every one of its degrees of freedom with every other one.</p>
+</dd>
 <dt><a class="reference internal" href="#edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.dofIndicesPermutation" title="edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.dofIndicesPermutation"><code class="xref py py-obj docutils literal notranslate"><span class="pre">dofIndicesPermutation</span></code></a></dt><dd><p>If the provides computes residual vectors and stiffness matrices not nodewise, but e.g., fieldwise, this permutation pattern is used to aggregate all entries in order to resemble the defined fields nodewise.</p>
 </dd>
 <dt><a class="reference internal" href="#edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.elNumber" title="edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.elNumber"><code class="xref py py-obj docutils literal notranslate"><span class="pre">elNumber</span></code></a></dt><dd><p>The unique number of this element</p>
@@ -2804,6 +2829,8 @@ layout of <code class="docutils literal notranslate"><span class="pre">P</span><
 </dd>
 <dt class="field-even">Attributes<span class="colon">:</span></dt>
 <dd class="field-even"><dl class="simple">
+<dt><a class="reference internal" href="dofmanager.html#edelweissfe.numerics.vijentitybase.VIJEntityBase.couplesAllItsDofs" title="edelweissfe.numerics.vijentitybase.VIJEntityBase.couplesAllItsDofs"><code class="xref py py-obj docutils literal notranslate"><span class="pre">couplesAllItsDofs</span></code></a></dt><dd><p>Whether the entity’s block couples every one of its degrees of freedom with every other one.</p>
+</dd>
 <dt><a class="reference internal" href="#edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.dofIndicesPermutation" title="edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.dofIndicesPermutation"><code class="xref py py-obj docutils literal notranslate"><span class="pre">dofIndicesPermutation</span></code></a></dt><dd><p>If the provides computes residual vectors and stiffness matrices not nodewise, but e.g., fieldwise, this permutation pattern is used to aggregate all entries in order to resemble the defined fields nodewise.</p>
 </dd>
 <dt><a class="reference internal" href="#edelweissfe.elements.base.baseelement.BaseElement.elNumber" title="edelweissfe.elements.base.baseelement.BaseElement.elNumber"><code class="xref py py-obj docutils literal notranslate"><span class="pre">elNumber</span></code></a></dt><dd><p>The unique number of this element</p>

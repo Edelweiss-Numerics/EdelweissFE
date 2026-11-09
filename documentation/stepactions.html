@@ -1302,8 +1302,10 @@ applies <span class="math notranslate nohighlight">\(f(0) + \lambda \, (f(1) - f
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>P</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The global residual contribution vector to augment.</p></li>
-<li><p><strong>K</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.vijsystemmatrix.VIJSystemMatrix" title="edelweissfe.numerics.vijsystemmatrix.VIJSystemMatrix"><em>VIJSystemMatrix</em></a><em> | </em><em>None</em>) – The global system matrix to augment, which hands out the block of an entity (an element, a cell, a
-particle) by <code class="docutils literal notranslate"><span class="pre">K[entity]</span></code>; None for an explicit solver, which needs no tangent.</p></li>
+<li><p><strong>K</strong> (<a class="reference internal" href="assembly.html#edelweissfe.numerics.systemmatrixassembly.SystemMatrixBlocks" title="edelweissfe.numerics.systemmatrixassembly.SystemMatrixBlocks"><em>SystemMatrixBlocks</em></a><em> | </em><em>None</em>) – The blocks of the global system matrix to augment: <code class="docutils literal notranslate"><span class="pre">K[entity]</span></code> hands out the block of an entity (an
+element, a cell, a particle) to add to, see
+<a class="reference internal" href="assembly.html#edelweissfe.numerics.systemmatrixassembly.SystemMatrixBlocks" title="edelweissfe.numerics.systemmatrixassembly.SystemMatrixBlocks"><code class="xref py py-class docutils literal notranslate"><span class="pre">SystemMatrixBlocks</span></code></a>; the solver commits the last one.
+None for an explicit solver, which needs no tangent.</p></li>
 <li><p><strong>U_np</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The current global solution.</p></li>
 <li><p><strong>dU</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The global solution increment since the last converged state.</p></li>
 <li><p><strong>timeStep</strong> (<em>TimeStep</em>) – The current time step.</p></li>
@@ -1390,7 +1392,7 @@ element model, those in the active domain in a meshfree one.</p>
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>P</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The global residual contribution vector to augment.</p></li>
-<li><p><strong>K</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.vijsystemmatrix.VIJSystemMatrix" title="edelweissfe.numerics.vijsystemmatrix.VIJSystemMatrix"><em>VIJSystemMatrix</em></a><em> | </em><em>None</em>) – The global system matrix; untouched.</p></li>
+<li><p><strong>K</strong> (<a class="reference internal" href="assembly.html#edelweissfe.numerics.systemmatrixassembly.SystemMatrixBlocks" title="edelweissfe.numerics.systemmatrixassembly.SystemMatrixBlocks"><em>SystemMatrixBlocks</em></a><em> | </em><em>None</em>) – The global system matrix; untouched.</p></li>
 <li><p><strong>U_np</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The current global solution.</p></li>
 <li><p><strong>dU</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The global solution increment.</p></li>
 <li><p><strong>timeStep</strong> (<em>TimeStep</em>) – The current time step.</p></li>
@@ -1493,7 +1495,7 @@ the external load, and its tangent; see <a class="reference internal" href="#ede
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>P</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The global residual contribution vector to augment.</p></li>
-<li><p><strong>K</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.vijsystemmatrix.VIJSystemMatrix" title="edelweissfe.numerics.vijsystemmatrix.VIJSystemMatrix"><em>VIJSystemMatrix</em></a><em> | </em><em>None</em>) – The global system matrix to augment; None for an explicit solver, which needs no tangent.</p></li>
+<li><p><strong>K</strong> (<a class="reference internal" href="assembly.html#edelweissfe.numerics.systemmatrixassembly.SystemMatrixBlocks" title="edelweissfe.numerics.systemmatrixassembly.SystemMatrixBlocks"><em>SystemMatrixBlocks</em></a><em> | </em><em>None</em>) – The global system matrix to augment; None for an explicit solver, which needs no tangent.</p></li>
 <li><p><strong>U_np</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The current global solution.</p></li>
 <li><p><strong>dU</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The global solution increment.</p></li>
 <li><p><strong>timeStep</strong> (<em>TimeStep</em>) – The current time step.</p></li>
@@ -1622,7 +1624,7 @@ the external load, and its tangent; see <a class="reference internal" href="#ede
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>P</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The global residual contribution vector to augment.</p></li>
-<li><p><strong>K</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.vijsystemmatrix.VIJSystemMatrix" title="edelweissfe.numerics.vijsystemmatrix.VIJSystemMatrix"><em>VIJSystemMatrix</em></a><em> | </em><em>None</em>) – The global system matrix to augment; None for an explicit solver, which needs no tangent.</p></li>
+<li><p><strong>K</strong> (<a class="reference internal" href="assembly.html#edelweissfe.numerics.systemmatrixassembly.SystemMatrixBlocks" title="edelweissfe.numerics.systemmatrixassembly.SystemMatrixBlocks"><em>SystemMatrixBlocks</em></a><em> | </em><em>None</em>) – The global system matrix to augment; None for an explicit solver, which needs no tangent.</p></li>
 <li><p><strong>U_np</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The current global solution.</p></li>
 <li><p><strong>dU</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The global solution increment.</p></li>
 <li><p><strong>timeStep</strong> (<em>TimeStep</em>) – The current time step.</p></li>

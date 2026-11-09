@@ -118,8 +118,12 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.constraints.base.constraintbase</span><span class="w"> </span><span class="kn">import</span> <span class="n">ConstraintBase</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.models.femodel</span><span class="w"> </span><span class="kn">import</span> <span class="n">FEModel</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.csrgeneratorv2</span><span class="w"> </span><span class="kn">import</span> <span class="n">CSRGenerator</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.dofmanager</span><span class="w"> </span><span class="kn">import</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">VIJSystemMatrix</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.parallelizationutilities</span><span class="w"> </span><span class="kn">import</span> <span class="n">forEachSliceInParallel</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.dofmanager</span><span class="w"> </span><span class="kn">import</span> <span class="n">DofVector</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.systemmatrixassembly</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">DirectCSRSystemMatrixAssembly</span><span class="p">,</span>
+    <span class="n">SystemMatrixAssembly</span><span class="p">,</span>
+    <span class="n">VIJSystemMatrixAssembly</span><span class="p">,</span>
+<span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.outputmanagers.base.outputmanagerbase</span><span class="w"> </span><span class="kn">import</span> <span class="n">OutputManagerBase</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.solvers.base.convergencecriteria</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">AbaqusConvergenceCriterion</span><span class="p">,</span>
@@ -268,6 +272,15 @@
         <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">,</span>
         <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="n">documentedDefault</span><span class="o">=</span><span class="s2">"auto"</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">systemMatrixAssembly</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">schemaField</span><span class="p">(</span>
+        <span class="n">description</span><span class="o">=</span><span class="p">(</span>
+            <span class="s2">"How the blocks of the elements, constraints and loads are summed into the system matrix (vij|direct): "</span>
+            <span class="s2">"staged in a value array of the VIJ pattern's length and gathered into CSR, or scattered into CSR right "</span>
+            <span class="s2">"away, without that array. See the documentation page on the system matrix assembly."</span>
+        <span class="p">),</span>
+        <span class="n">dtype</span><span class="o">=</span><span class="nb">str</span><span class="p">,</span>
+        <span class="n">default</span><span class="o">=</span><span class="s2">"vij"</span><span class="p">,</span>
     <span class="p">)</span>
     <span class="n">useThreadedMPCCondensation</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">schemaField</span><span class="p">(</span>
         <span class="n">description</span><span class="o">=</span><span class="p">(</span>
@@ -443,6 +456,10 @@
     <span class="n">supportsMPC</span> <span class="o">=</span> <span class="kc">True</span>
     <span class="n">supportsModelModifiers</span> <span class="o">=</span> <span class="kc">True</span>
 
+    <span class="c1">#: The ways of summing the system matrix (option ``systemMatrixAssembly``) this solver supports, see</span>
+    <span class="c1">#: :meth:`createSystemMatrixAssembly`.</span>
+    <span class="n">systemMatrixAssemblies</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"vij"</span><span class="p">:</span> <span class="n">VIJSystemMatrixAssembly</span><span class="p">,</span> <span class="s2">"direct"</span><span class="p">:</span> <span class="n">DirectCSRSystemMatrixAssembly</span><span class="p">}</span>
+
     <span class="c1">#: Option schema for this solver, per OptionSchemaProvider.</span>
     <span class="n">schema</span> <span class="o">=</span> <span class="n">NISTSchema</span>
 
@@ -457,6 +474,7 @@
         <span class="s2">"equilibrateAfterModelChange"</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
         <span class="s2">"linsolver"</span><span class="p">:</span> <span class="s2">""</span><span class="p">,</span>
         <span class="s2">"pruneCondensedMatrixZeros"</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="s2">"systemMatrixAssembly"</span><span class="p">:</span> <span class="s2">"vij"</span><span class="p">,</span>
         <span class="s2">"useThreadedMPCCondensation"</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
         <span class="s2">"report-performance-frequency"</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span>
         <span class="s2">"lineSearch"</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
@@ -607,7 +625,7 @@
 <a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.forgetEquationSystem">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">forgetEquationSystem</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">"""Drop the equation system of the last build -- the model's layout of it with the DOF manager, the system</span>
-<span class="sd">        matrix and its CSR generator, the multi-point-constraint condensation, the DOF vectors -- so that it is gone</span>
+<span class="sd">        matrix assembly and its CSR pattern, the multi-point-constraint condensation, the DOF vectors -- so that it is gone</span>
 <span class="sd">        before the next one is built, never both at once."""</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">equationSystemLayout</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span> <span class="o">=</span> <span class="kc">None</span>
@@ -647,9 +665,17 @@
         <span class="n">convergenceCriterion</span><span class="o">.</span><span class="n">startStep</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">convergenceCriterion</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">convergenceCriterion</span> <span class="o">=</span> <span class="n">convergenceCriterion</span>
 
-        <span class="c1"># The equation system (DofManager, VIJ pattern, CSR structure) is (re)built lazily in the first increment,</span>
-        <span class="c1"># and whenever the topology update reports a change of the mesh or of a constraint's DOF footprint.</span>
+        <span class="c1"># The equation system (DofManager, VIJ pattern, CSR pattern, system matrix assembly) is (re)built lazily in the</span>
+        <span class="c1"># first increment, and whenever the topology update reports a change of the mesh or of a constraint's DOF</span>
+        <span class="c1"># footprint.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">forgetEquationSystem</span><span class="p">()</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s2">"systemMatrixAssembly"</span><span class="p">]</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">systemMatrixAssemblies</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">"</span><span class="si">{:}</span><span class="s2"> supports systemMatrixAssembly=</span><span class="si">{:}</span><span class="s2">, not '</span><span class="si">{:}</span><span class="s2">'"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">identification</span><span class="p">,</span> <span class="s2">"|"</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">systemMatrixAssemblies</span><span class="p">),</span> <span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s2">"systemMatrixAssembly"</span><span class="p">]</span>
+                <span class="p">)</span>
+            <span class="p">)</span>
 
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s2">"extrapolation"</span><span class="p">]</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"off"</span><span class="p">,</span> <span class="s2">"linear"</span><span class="p">,</span> <span class="s2">"quadratic"</span><span class="p">):</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
@@ -810,9 +836,9 @@
 
                 <span class="bp">self</span><span class="o">.</span><span class="n">convergenceTable</span> <span class="o">=</span> <span class="n">ConvergenceTable</span><span class="p">(</span><span class="n">presentVariableNames</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">linSolver</span><span class="o">.</span><span class="n">reportsSolveSummary</span><span class="p">)</span>
 
+                <span class="n">assemblyType</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">systemMatrixAssemblies</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s2">"systemMatrixAssembly"</span><span class="p">]]</span>
                 <span class="k">with</span> <span class="n">performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"system matrix pattern"</span><span class="p">):</span>
-                    <span class="n">K</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">constructVIJSystemMatrix</span><span class="p">()</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">csrGenerator</span> <span class="o">=</span> <span class="n">CSRGenerator</span><span class="p">(</span><span class="n">K</span><span class="p">)</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">csrGenerator</span> <span class="o">=</span> <span class="n">CSRGenerator</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="p">,</span> <span class="n">patternOnly</span><span class="o">=</span><span class="ow">not</span> <span class="n">assemblyType</span><span class="o">.</span><span class="n">needsGatherMap</span><span class="p">)</span>
 
                 <span class="n">U</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
                 <span class="n">P</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
@@ -830,6 +856,11 @@
                         <span class="bp">self</span><span class="o">.</span><span class="n">csrGenerator</span><span class="o">.</span><span class="n">addToPattern</span><span class="p">(</span>
                             <span class="bp">self</span><span class="o">.</span><span class="n">mpcTransformation</span><span class="o">.</span><span class="n">condensedPatternFillIn</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">csrGenerator</span><span class="o">.</span><span class="n">csrMatrix</span><span class="p">)</span>
                         <span class="p">)</span>
+
+                <span class="c1"># Built on the complete pattern, the entries the condensation adds included: the assembly writes the</span>
+                <span class="c1"># matrix of the pattern it is built on.</span>
+                <span class="k">with</span> <span class="n">performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"system matrix assembly setup"</span><span class="p">):</span>
+                    <span class="n">K</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">createSystemMatrixAssembly</span><span class="p">(</span><span class="n">assemblyType</span><span class="p">)</span>
 
                 <span class="c1"># After a topology change, the last dU belongs to a different DOF layout: do not extrapolate this</span>
                 <span class="c1"># increment. After a change of the connectivity alone, it may still fit.</span>
@@ -943,6 +974,61 @@
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_U</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dU</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_P</span> <span class="o">=</span> <span class="n">U</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">P</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_iterationCounter</span> <span class="o">=</span> <span class="n">iterationCounter</span></div>
+
+
+<div class="viewcode-block" id="NIST.createSystemMatrixAssembly">
+<a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.createSystemMatrixAssembly">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">createSystemMatrixAssembly</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">assemblyType</span><span class="p">:</span> <span class="nb">type</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">SystemMatrixAssembly</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The assembly of the system matrix of the equation system just built (option ``systemMatrixAssembly``), on</span>
+<span class="sd">        the complete CSR pattern of :attr:`csrGenerator`, with :meth:`numberOfAssemblyWorkers` workers.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        assemblyType</span>
+<span class="sd">            The type of the assembly, one of :attr:`systemMatrixAssemblies`.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        SystemMatrixAssembly</span>
+<span class="sd">            The assembly.</span>
+<span class="sd">        """</span>
+
+        <span class="k">return</span> <span class="n">assemblyType</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">csrGenerator</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">numberOfAssemblyWorkers</span><span class="p">())</span></div>
+
+
+<div class="viewcode-block" id="NIST.forEachChunk">
+<a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.forEachChunk">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">forEachChunk</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">entities</span><span class="p">:</span> <span class="nb">list</span><span class="p">,</span> <span class="n">work</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="nb">list</span><span class="p">],</span> <span class="kc">None</span><span class="p">]):</span>
+<span class="w">        </span><span class="sd">"""Call ``work(chunk)`` for chunks that together hold all ``entities``: the solver's loop over independent</span>
+<span class="sd">        entities, other than the elements, that the model's equation system layout evaluates, e.g. the material points</span>
+<span class="sd">        of a meshfree model (see</span>
+<span class="sd">        :meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.updateMaterialPoints`). Here, one chunk of</span>
+<span class="sd">        all entities, in the calling thread, as the elements are computed.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        entities</span>
+<span class="sd">            The entities, a list.</span>
+<span class="sd">        work</span>
+<span class="sd">            Called for each chunk; it must write only to what belongs to the entities of its chunk.</span>
+<span class="sd">        """</span>
+
+        <span class="n">work</span><span class="p">(</span><span class="n">entities</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="NIST.numberOfAssemblyWorkers">
+<a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.numberOfAssemblyWorkers">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">numberOfAssemblyWorkers</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""How many threads write blocks of the system matrix at the same time: one, the elements are computed in the</span>
+<span class="sd">        calling thread.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        int</span>
+<span class="sd">            The number of workers.</span>
+<span class="sd">        """</span>
+
+        <span class="k">return</span> <span class="mi">1</span></div>
 
 
 <div class="viewcode-block" id="NIST.predictionSurvivesRebuild">
@@ -1239,7 +1325,7 @@
         <span class="n">U_n</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
         <span class="n">dU</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
         <span class="n">P</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
-        <span class="n">K</span><span class="p">:</span> <span class="n">VIJSystemMatrix</span><span class="p">,</span>
+        <span class="n">K</span><span class="p">:</span> <span class="n">SystemMatrixAssembly</span><span class="p">,</span>
         <span class="n">stepActions</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span>
         <span class="n">model</span><span class="p">:</span> <span class="n">FEModel</span><span class="p">,</span>
         <span class="n">timeStep</span><span class="p">:</span> <span class="n">TimeStep</span><span class="p">,</span>
@@ -1533,11 +1619,11 @@
         <span class="n">PLoadsAndConstraints</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
         <span class="n">F</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
         <span class="n">FConstraints</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
-        <span class="n">K</span><span class="p">:</span> <span class="n">VIJSystemMatrix</span><span class="p">,</span>
+        <span class="n">K</span><span class="p">:</span> <span class="n">SystemMatrixAssembly</span><span class="p">,</span>
         <span class="n">stepActions</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span>
         <span class="n">model</span><span class="p">:</span> <span class="n">FEModel</span><span class="p">,</span>
         <span class="n">timeStep</span><span class="p">:</span> <span class="n">TimeStep</span><span class="p">,</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">DofVector</span><span class="p">,</span> <span class="n">VIJSystemMatrix</span><span class="p">,</span> <span class="n">DofVector</span><span class="p">]:</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">DofVector</span><span class="p">,</span> <span class="n">SystemMatrixAssembly</span><span class="p">,</span> <span class="n">DofVector</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">"""Evaluate the model at the trial solution :math:`U_{n+1} = U_n + \\Delta U`: the right-hand side</span>
 <span class="sd">        :math:`R = f_\\mathrm{ext} - f_\\mathrm{int}` (see :ref:`residual-and-tangent-convention`) with the terms of</span>
 <span class="sd">        :meth:`assembleAdditionalTerms`, condensed by the multi-point constraints, and the tangent. The one place</span>
@@ -1567,7 +1653,7 @@
 <span class="sd">        FConstraints</span>
 <span class="sd">            The accumulated absolute constraint fluxes, overwritten.</span>
 <span class="sd">        K</span>
-<span class="sd">            The tangent in VIJ layout, overwritten.</span>
+<span class="sd">            The tangent being assembled, assembled anew.</span>
 <span class="sd">        stepActions</span>
 <span class="sd">            The active step actions.</span>
 <span class="sd">        model</span>
@@ -1577,7 +1663,7 @@
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
-<span class="sd">        tuple[DofVector,VIJSystemMatrix,DofVector]</span>
+<span class="sd">        tuple[DofVector,SystemMatrixAssembly,DofVector]</span>
 <span class="sd">            The internal forces, the tangent and the accumulated element fluxes.</span>
 <span class="sd">        """</span>
 
@@ -1589,8 +1675,7 @@
             <span class="n">U_np</span> <span class="o">+=</span> <span class="n">dU</span>
 
             <span class="n">P</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">F</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">FConstraints</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">PLoadsAndConstraints</span><span class="p">[:]</span> <span class="o">=</span> <span class="mf">0.0</span>
-            <span class="c1"># K holds the entries of all element matrices, far too many to zero on a single thread</span>
-            <span class="n">forEachSliceInParallel</span><span class="p">(</span><span class="k">lambda</span> <span class="n">s</span><span class="p">:</span> <span class="n">K</span><span class="p">[</span><span class="n">s</span><span class="p">]</span><span class="o">.</span><span class="n">fill</span><span class="p">(</span><span class="mf">0.0</span><span class="p">),</span> <span class="nb">len</span><span class="p">(</span><span class="n">K</span><span class="p">))</span>
+            <span class="n">K</span><span class="o">.</span><span class="n">beginAssembly</span><span class="p">()</span>
 
         <span class="c1"># Every element, load and constraint adds its residual contribution and the tangent of it.</span>
         <span class="c1"># The elements' sum P is kept apart: it is the reaction force this increment reports.</span>
@@ -1625,9 +1710,9 @@
         <span class="n">U_np</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
         <span class="n">dU</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
         <span class="n">P</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
-        <span class="n">K</span><span class="p">:</span> <span class="n">VIJSystemMatrix</span><span class="p">,</span>
+        <span class="n">K</span><span class="p">:</span> <span class="n">SystemMatrixAssembly</span><span class="p">,</span>
         <span class="n">timeStep</span><span class="p">:</span> <span class="n">TimeStep</span><span class="p">,</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">DofVector</span><span class="p">,</span> <span class="n">VIJSystemMatrix</span><span class="p">]:</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">DofVector</span><span class="p">,</span> <span class="n">SystemMatrixAssembly</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">"""Assemble the residual contributions of the loads acting at the end of the increment, and their tangents;</span>
 <span class="sd">        called by :meth:`assembleResidualAndTangent`. Here, these are the loads of the step at the time of the end of</span>
 <span class="sd">        the increment (see</span>
@@ -1646,13 +1731,13 @@
 <span class="sd">        P</span>
 <span class="sd">            The residual contribution vector to assemble into.</span>
 <span class="sd">        K</span>
-<span class="sd">            The tangent in VIJ layout to assemble into.</span>
+<span class="sd">            The tangent being assembled.</span>
 <span class="sd">        timeStep</span>
 <span class="sd">            The time step.</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
-<span class="sd">        tuple[DofVector,VIJSystemMatrix]</span>
+<span class="sd">        tuple[DofVector,SystemMatrixAssembly]</span>
 <span class="sd">            The updated residual contribution vector and tangent.</span>
 <span class="sd">        """</span>
 
@@ -1882,7 +1967,7 @@
 
 <div class="viewcode-block" id="NIST.assembleSystemMatrix">
 <a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.assembleSystemMatrix">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">assembleSystemMatrix</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">K</span><span class="p">:</span> <span class="n">VIJSystemMatrix</span><span class="p">,</span> <span class="n">quasiNewton</span><span class="p">:</span> <span class="n">QuasiNewtonFallback</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">csr_matrix</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">assembleSystemMatrix</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">K</span><span class="p">:</span> <span class="n">SystemMatrixAssembly</span><span class="p">,</span> <span class="n">quasiNewton</span><span class="p">:</span> <span class="n">QuasiNewtonFallback</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">csr_matrix</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">"""The system matrix of this Newton iteration, before the Dirichlet boundary conditions are imposed: the</span>
 <span class="sd">        tangent in CSR layout, condensed by the multi-point constraints -- or, once the increment has fallen back to the</span>
 <span class="sd">        quasi-Newton method, the tangent of its first iteration.</span>
@@ -1890,7 +1975,7 @@
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
 <span class="sd">        K</span>
-<span class="sd">            The tangent of this iteration in VIJ layout.</span>
+<span class="sd">            The tangent of this iteration, assembled.</span>
 <span class="sd">        quasiNewton</span>
 <span class="sd">            The quasi-Newton fallback of this attempt of the increment, which keeps the tangent of the first iteration.</span>
 
@@ -1943,7 +2028,7 @@
 <div class="viewcode-block" id="NIST.assembleAdditionalTerms">
 <a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.assembleAdditionalTerms">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">assembleAdditionalTerms</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span> <span class="n">dU</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">R</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">F</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">K</span><span class="p">:</span> <span class="n">VIJSystemMatrix</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">:</span> <span class="n">TimeStep</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">dU</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">R</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">F</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">K</span><span class="p">:</span> <span class="n">SystemMatrixAssembly</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">:</span> <span class="n">TimeStep</span>
     <span class="p">):</span>
 <span class="w">        </span><span class="sd">"""Assemble terms of the equation system beyond the internal and external forces. Called</span>
 <span class="sd">        by :meth:`assembleResidualAndTangent` in every evaluation of the model, next to :meth:`computeElements`,</span>
@@ -1966,7 +2051,7 @@
 <span class="sd">        F</span>
 <span class="sd">            The reference flux scale of the convergence test, to be augmented in place.</span>
 <span class="sd">        K</span>
-<span class="sd">            The tangent in VIJ layout, to be augmented in place.</span>
+<span class="sd">            The tangent being assembled, to be augmented.</span>
 <span class="sd">        timeStep</span>
 <span class="sd">            The time step.</span>
 <span class="sd">        """</span></div>
@@ -2027,8 +2112,8 @@
 <div class="viewcode-block" id="NIST.assembleInternalForces">
 <a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.assembleInternalForces">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">assembleInternalForces</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span> <span class="n">U_np</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">dU</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">P</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">K</span><span class="p">:</span> <span class="n">VIJSystemMatrix</span><span class="p">,</span> <span class="n">F</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">:</span> <span class="n">TimeStep</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">DofVector</span><span class="p">,</span> <span class="n">VIJSystemMatrix</span><span class="p">,</span> <span class="n">DofVector</span><span class="p">]:</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">U_np</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">dU</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">P</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">K</span><span class="p">:</span> <span class="n">SystemMatrixAssembly</span><span class="p">,</span> <span class="n">F</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">:</span> <span class="n">TimeStep</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">DofVector</span><span class="p">,</span> <span class="n">SystemMatrixAssembly</span><span class="p">,</span> <span class="n">DofVector</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">"""Assemble the internal forces of the model at a trial state, and their tangent: those of the elements of its</span>
 <span class="sd">        equation system, see :meth:`computeElements`. First, the model updates the material points that belong to no</span>
 <span class="sd">        element, whose state the elements integrate (see</span>
@@ -2057,11 +2142,12 @@
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
-<span class="sd">        tuple[DofVector,VIJSystemMatrix,DofVector]</span>
+<span class="sd">        tuple[DofVector,SystemMatrixAssembly,DofVector]</span>
 <span class="sd">            The internal forces, the tangent and the accumulated element fluxes.</span>
 <span class="sd">        """</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">equationSystemLayout</span><span class="o">.</span><span class="n">updateMaterialPoints</span><span class="p">(</span><span class="n">dU</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">)</span>
+        <span class="k">with</span> <span class="n">performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"material points"</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">equationSystemLayout</span><span class="o">.</span><span class="n">updateMaterialPoints</span><span class="p">(</span><span class="n">dU</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">forEachChunk</span><span class="p">)</span>
 
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">computeElements</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">equationSystemLayout</span><span class="o">.</span><span class="n">elements</span><span class="p">,</span> <span class="n">U_np</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">P</span><span class="p">,</span> <span class="n">K</span><span class="p">,</span> <span class="n">F</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">)</span></div>
 
@@ -2075,10 +2161,10 @@
         <span class="n">U_np</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
         <span class="n">dU</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
         <span class="n">P</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
-        <span class="n">K</span><span class="p">:</span> <span class="n">VIJSystemMatrix</span><span class="p">,</span>
+        <span class="n">K</span><span class="p">:</span> <span class="n">SystemMatrixAssembly</span><span class="p">,</span>
         <span class="n">F</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
         <span class="n">timeStep</span><span class="p">:</span> <span class="n">TimeStep</span><span class="p">,</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">DofVector</span><span class="p">,</span> <span class="n">VIJSystemMatrix</span><span class="p">,</span> <span class="n">DofVector</span><span class="p">]:</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">DofVector</span><span class="p">,</span> <span class="n">SystemMatrixAssembly</span><span class="p">,</span> <span class="n">DofVector</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">"""Loop over all elements, and evalute them: each adds its internal forces and their tangent, see</span>
 <span class="sd">        :meth:`~edelweissfe.elements.base.baseelement.BaseElement.computeKernels`. Is called by</span>
 <span class="sd">        :meth:`assembleResidualAndTangent` in each iteration.</span>
@@ -2106,7 +2192,7 @@
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
-<span class="sd">        tuple[DofVector,VIJSystemMatrix,DofVector]</span>
+<span class="sd">        tuple[DofVector,SystemMatrixAssembly,DofVector]</span>
 <span class="sd">            - The modified reaction vector.</span>
 <span class="sd">            - The modified system matrix.</span>
 <span class="sd">            - The modified accumulated flux vector.</span>
@@ -2124,6 +2210,9 @@
             <span class="n">P</span><span class="p">[</span><span class="n">el</span><span class="p">]</span> <span class="o">+=</span> <span class="n">Pe</span>
             <span class="n">F</span><span class="p">[</span><span class="n">el</span><span class="p">]</span> <span class="o">+=</span> <span class="nb">abs</span><span class="p">(</span><span class="n">Pe</span><span class="p">)</span>
 
+        <span class="c1"># the block of the last element</span>
+        <span class="n">K</span><span class="o">.</span><span class="n">flush</span><span class="p">()</span>
+
         <span class="k">return</span> <span class="n">P</span><span class="p">,</span> <span class="n">K</span><span class="p">,</span> <span class="n">F</span></div>
 
 
@@ -2136,10 +2225,10 @@
         <span class="n">U_np</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
         <span class="n">dU</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
         <span class="n">P</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
-        <span class="n">K</span><span class="p">:</span> <span class="n">VIJSystemMatrix</span><span class="p">,</span>
+        <span class="n">K</span><span class="p">:</span> <span class="n">SystemMatrixAssembly</span><span class="p">,</span>
         <span class="n">timeStep</span><span class="p">:</span> <span class="n">TimeStep</span><span class="p">,</span>
         <span class="n">FConstraints</span><span class="p">:</span> <span class="n">DofVector</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">DofVector</span><span class="p">,</span> <span class="n">VIJSystemMatrix</span><span class="p">]:</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">DofVector</span><span class="p">,</span> <span class="n">SystemMatrixAssembly</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">"""Loop over all constraints, and evaluate the active ones: each adds its residual contribution and the</span>
 <span class="sd">        tangent of it, see :meth:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernels`.</span>
 <span class="sd">        A constraint that is switched off (see</span>
@@ -2165,7 +2254,7 @@
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
-<span class="sd">        tuple[DofVector,VIJSystemMatrix]</span>
+<span class="sd">        tuple[DofVector,SystemMatrixAssembly]</span>
 <span class="sd">            - The modified residual contribution vector.</span>
 <span class="sd">            - The modified system matrix.</span>
 <span class="sd">        """</span>
@@ -2184,6 +2273,9 @@
             <span class="n">np</span><span class="o">.</span><span class="n">add</span><span class="o">.</span><span class="n">at</span><span class="p">(</span><span class="n">P</span><span class="p">,</span> <span class="n">P</span><span class="o">.</span><span class="n">entitiesInDofVector</span><span class="p">[</span><span class="n">constraint</span><span class="p">],</span> <span class="n">Pc</span><span class="p">)</span>
             <span class="k">if</span> <span class="n">FConstraints</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="n">np</span><span class="o">.</span><span class="n">add</span><span class="o">.</span><span class="n">at</span><span class="p">(</span><span class="n">FConstraints</span><span class="p">,</span> <span class="n">FConstraints</span><span class="o">.</span><span class="n">entitiesInDofVector</span><span class="p">[</span><span class="n">constraint</span><span class="p">],</span> <span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">Pc</span><span class="p">))</span>
+
+        <span class="c1"># the block of the last constraint</span>
+        <span class="n">K</span><span class="o">.</span><span class="n">flush</span><span class="p">()</span>
 
         <span class="k">return</span> <span class="n">P</span><span class="p">,</span> <span class="n">K</span></div>
 </div>

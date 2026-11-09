@@ -509,7 +509,7 @@ what its methods do; the solver calls them the same way.</p>
 <p class="rubric">Methods</p>
 <table class="autosummary longtable docutils align-default">
 <tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.models.equationsystemlayout.EquationSystemLayout.updateMaterialPoints" title="edelweissfe.models.equationsystemlayout.EquationSystemLayout.updateMaterialPoints"><code class="xref py py-obj docutils literal notranslate"><span class="pre">updateMaterialPoints</span></code></a>(dU, timeStep)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.models.equationsystemlayout.EquationSystemLayout.updateMaterialPoints" title="edelweissfe.models.equationsystemlayout.EquationSystemLayout.updateMaterialPoints"><code class="xref py py-obj docutils literal notranslate"><span class="pre">updateMaterialPoints</span></code></a>(dU, timeStep, forEachChunk)</p></td>
 <td><p>Bring the material points that belong to no element up to date with the trial solution increment, right before the solver computes the elements.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeResultsToModel" title="edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeResultsToModel"><code class="xref py py-obj docutils literal notranslate"><span class="pre">writeResultsToModel</span></code></a>(U, dU, P)</p></td>
@@ -522,13 +522,17 @@ what its methods do; the solver calls them the same way.</p>
 </table>
 <dl class="py method">
 <dt class="sig sig-object py" id="edelweissfe.models.equationsystemlayout.EquationSystemLayout.updateMaterialPoints">
-<span class="sig-name descname"><span class="pre">updateMaterialPoints</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dU</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">timeStep</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/models/equationsystemlayout.html#EquationSystemLayout.updateMaterialPoints"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.models.equationsystemlayout.EquationSystemLayout.updateMaterialPoints" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">updateMaterialPoints</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dU</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">timeStep</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">forEachChunk</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/models/equationsystemlayout.html#EquationSystemLayout.updateMaterialPoints"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.models.equationsystemlayout.EquationSystemLayout.updateMaterialPoints" title="Link to this definition"></a></dt>
 <dd><p>Bring the material points that belong to no element up to date with the trial solution increment, right
 before the solver computes the elements. Called whenever <code class="docutils literal notranslate"><span class="pre">NIST</span></code>, or a solver derived from it (<code class="docutils literal notranslate"><span class="pre">NEST</span></code>,
 <code class="docutils literal notranslate"><span class="pre">NID</span></code>), evaluates the elements (see
 <a class="reference internal" href="solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.assembleInternalForces" title="edelweissfe.solvers.nonlinearimplicitstatic.NIST.assembleInternalForces"><code class="xref py py-meth docutils literal notranslate"><span class="pre">assembleInternalForces()</span></code></a>), e.g. in every Newton
 iteration and for every trial state of a line search. The explicit dynamic solver <code class="docutils literal notranslate"><span class="pre">NED</span></code> evaluates the
 elements of a finite element model itself, and does not call it.</p>
+<p>The loops over the entities belong to the solver, as the loop over the elements does: <code class="docutils literal notranslate"><span class="pre">forEachChunk(entities,</span>
+<span class="pre">work)</span></code> calls <code class="docutils literal notranslate"><span class="pre">work(chunk)</span></code> for chunks that together hold all <code class="docutils literal notranslate"><span class="pre">entities</span></code>, in the calling thread or on the
+threads of a parallel solver (see <a class="reference internal" href="solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.forEachChunk" title="edelweissfe.solvers.nonlinearimplicitstatic.NIST.forEachChunk"><code class="xref py py-meth docutils literal notranslate"><span class="pre">forEachChunk()</span></code></a>). A
+layout loops through it over entities that are independent of each other.</p>
 <p>A finite element model has no such material points: every element evaluates the material at its own quadrature
 points, in <a class="reference internal" href="elements.html#edelweissfe.elements.base.baseelement.BaseElement.computeKernels" title="edelweissfe.elements.base.baseelement.BaseElement.computeKernels"><code class="xref py py-meth docutils literal notranslate"><span class="pre">computeKernels()</span></code></a>, so there is nothing to do
 here. In the material point method, the material points move through a fixed background grid, and belong to the
@@ -539,6 +543,7 @@ material points evaluate their material, before the solver computes the cells, w
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>dU</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The trial solution increment.</p></li>
 <li><p><strong>timeStep</strong> (<em>TimeStep</em>) – The time step.</p></li>
+<li><p><strong>forEachChunk</strong> (<em>Callable</em><em>[</em><em>[</em><em>list</em><em>, </em><em>Callable</em><em>]</em><em>, </em><em>None</em><em>]</em>) – The solver’s loop over chunks of independent entities.</p></li>
 </ul>
 </dd>
 </dl>

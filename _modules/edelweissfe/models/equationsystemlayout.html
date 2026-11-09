@@ -107,6 +107,7 @@
 <span class="sd">equation system, see :meth:`~edelweissfe.models.femodel.FEModel.buildEquationSystem` and</span>
 <span class="sd">:ref:`model-equation-system`."""</span>
 
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Callable</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">TYPE_CHECKING</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.dofmanager</span><span class="w"> </span><span class="kn">import</span> <span class="n">DofManager</span><span class="p">,</span> <span class="n">DofVector</span>
@@ -207,13 +208,18 @@
 
 <div class="viewcode-block" id="EquationSystemLayout.updateMaterialPoints">
 <a class="viewcode-back" href="../../../documentation/models.html#edelweissfe.models.equationsystemlayout.EquationSystemLayout.updateMaterialPoints">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">updateMaterialPoints</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dU</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">:</span> <span class="n">TimeStep</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">updateMaterialPoints</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dU</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">:</span> <span class="n">TimeStep</span><span class="p">,</span> <span class="n">forEachChunk</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="nb">list</span><span class="p">,</span> <span class="n">Callable</span><span class="p">],</span> <span class="kc">None</span><span class="p">]):</span>
 <span class="w">        </span><span class="sd">"""Bring the material points that belong to no element up to date with the trial solution increment, right</span>
 <span class="sd">        before the solver computes the elements. Called whenever ``NIST``, or a solver derived from it (``NEST``,</span>
 <span class="sd">        ``NID``), evaluates the elements (see</span>
 <span class="sd">        :meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.assembleInternalForces`), e.g. in every Newton</span>
 <span class="sd">        iteration and for every trial state of a line search. The explicit dynamic solver ``NED`` evaluates the</span>
 <span class="sd">        elements of a finite element model itself, and does not call it.</span>
+
+<span class="sd">        The loops over the entities belong to the solver, as the loop over the elements does: ``forEachChunk(entities,</span>
+<span class="sd">        work)`` calls ``work(chunk)`` for chunks that together hold all ``entities``, in the calling thread or on the</span>
+<span class="sd">        threads of a parallel solver (see :meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.forEachChunk`). A</span>
+<span class="sd">        layout loops through it over entities that are independent of each other.</span>
 
 <span class="sd">        A finite element model has no such material points: every element evaluates the material at its own quadrature</span>
 <span class="sd">        points, in :meth:`~edelweissfe.elements.base.baseelement.BaseElement.computeKernels`, so there is nothing to do</span>
@@ -227,6 +233,8 @@
 <span class="sd">            The trial solution increment.</span>
 <span class="sd">        timeStep</span>
 <span class="sd">            The time step.</span>
+<span class="sd">        forEachChunk</span>
+<span class="sd">            The solver's loop over chunks of independent entities.</span>
 <span class="sd">        """</span></div>
 </div>
 

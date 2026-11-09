@@ -91,6 +91,7 @@
 <li class="toctree-l4"><a class="reference internal" href="#edelweissfe.numerics.parallelizationutilities.getThreadPool"><code class="docutils literal notranslate"><span class="pre">getThreadPool()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#edelweissfe.numerics.parallelizationutilities.isFreeThreadingSupported"><code class="docutils literal notranslate"><span class="pre">isFreeThreadingSupported()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#edelweissfe.numerics.parallelizationutilities.mapChunksInParallel"><code class="docutils literal notranslate"><span class="pre">mapChunksInParallel()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.numerics.parallelizationutilities.mapChunksOnWorkers"><code class="docutils literal notranslate"><span class="pre">mapChunksOnWorkers()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#edelweissfe.numerics.parallelizationutilities.reportThreadAvailability"><code class="docutils literal notranslate"><span class="pre">reportThreadAvailability()</span></code></a></li>
 </ul>
 </li>
@@ -1352,6 +1353,17 @@ It supports entity-aware indexing to slice, reshape, and assign local entity mat
 <span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">edelweissfe.numerics.vijentitybase.</span></span><span class="sig-name descname"><span class="pre">VIJEntityBase</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">nDof</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/numerics/vijentitybase.html#VIJEntityBase"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.numerics.vijentitybase.VIJEntityBase" title="Link to this definition"></a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
 <p>Initialize the VIJEntityBase.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Attributes<span class="colon">:</span></dt>
+<dd class="field-odd"><dl class="simple">
+<dt><a class="reference internal" href="#edelweissfe.numerics.vijentitybase.VIJEntityBase.couplesAllItsDofs" title="edelweissfe.numerics.vijentitybase.VIJEntityBase.couplesAllItsDofs"><code class="xref py py-obj docutils literal notranslate"><span class="pre">couplesAllItsDofs</span></code></a></dt><dd><p>Whether the entity’s block couples every one of its degrees of freedom with every other one.</p>
+</dd>
+</dl>
+</dd>
+<dt class="field-even">Parameters<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>nDof</strong> (<em>int</em>)</p>
+</dd>
+</dl>
 <p class="rubric">Methods</p>
 <table class="autosummary longtable docutils align-default">
 <tbody>
@@ -1366,11 +1378,6 @@ It supports entity-aware indexing to slice, reshape, and assign local entity mat
 </tr>
 </tbody>
 </table>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>nDof</strong> (<em>int</em>)</p>
-</dd>
-</dl>
 <dl class="py method">
 <dt class="sig sig-object py" id="edelweissfe.numerics.vijentitybase.VIJEntityBase.getVIJContributionSize">
 <span class="sig-name descname"><span class="pre">getVIJContributionSize</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/numerics/vijentitybase.html#VIJEntityBase.getVIJContributionSize"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.numerics.vijentitybase.VIJEntityBase.getVIJContributionSize" title="Link to this definition"></a></dt>
@@ -1416,7 +1423,7 @@ written starting at <code class="docutils literal notranslate"><span class="pre"
 <dt class="sig sig-object py" id="edelweissfe.numerics.vijentitybase.VIJEntityBase.shapeVIJContribution">
 <span class="sig-name descname"><span class="pre">shapeVIJContribution</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">flat_view</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/numerics/vijentitybase.html#VIJEntityBase.shapeVIJContribution"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.numerics.vijentitybase.VIJEntityBase.shapeVIJContribution" title="Link to this definition"></a></dt>
 <dd><p>Shape the flat VIJ values slice for this entity.</p>
-<p>By default, if the contribution is dense (size = nDof**2),
+<p>By default, if the contribution is dense (<a class="reference internal" href="#edelweissfe.numerics.vijentitybase.VIJEntityBase.couplesAllItsDofs" title="edelweissfe.numerics.vijentitybase.VIJEntityBase.couplesAllItsDofs"><code class="xref py py-attr docutils literal notranslate"><span class="pre">couplesAllItsDofs</span></code></a>),
 it reshapes the flat view to a 2-D array of shape (nDof, nDof)
 using column-major (Fortran) order.</p>
 <dl class="field-list simple">
@@ -1425,6 +1432,29 @@ using column-major (Fortran) order.</p>
 </dd>
 <dt class="field-even">Return type<span class="colon">:</span></dt>
 <dd class="field-even"><p><em>ndarray</em></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="edelweissfe.numerics.vijentitybase.VIJEntityBase.couplesAllItsDofs">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">couplesAllItsDofs</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></span><a class="headerlink" href="#edelweissfe.numerics.vijentitybase.VIJEntityBase.couplesAllItsDofs" title="Link to this definition"></a></dt>
+<dd><p>Whether the entity’s block couples every one of its degrees of freedom with every other one.</p>
+<p><code class="docutils literal notranslate"><span class="pre">True</span></code> (the default, every element) means the block is the dense <code class="docutils literal notranslate"><span class="pre">nDof</span> <span class="pre">×</span> <span class="pre">nDof</span></code> matrix, stored
+column-major, with the entity’s global DOF indices as its rows and its columns. <code class="docutils literal notranslate"><span class="pre">False</span></code> means the entity
+declared a sparse pattern of its own in <a class="reference internal" href="#edelweissfe.numerics.vijentitybase.VIJEntityBase.initializeVIJContribution" title="edelweissfe.numerics.vijentitybase.VIJEntityBase.initializeVIJContribution"><code class="xref py py-meth docutils literal notranslate"><span class="pre">initializeVIJContribution()</span></code></a> (a constraint that couples only
+some of its degrees of freedom), and its block is the list of the values of these <code class="docutils literal notranslate"><span class="pre">(I,</span> <span class="pre">J)</span></code> pairs, in the
+order it declared them.</p>
+<p>The entity says which, because the number of entries cannot tell: a sparse pattern can happen to have
+exactly <code class="docutils literal notranslate"><span class="pre">nDof**2</span></code> entries. A rigid body contact with a single slave node in 3D couples the six degrees of
+freedom of the reference point with each other, the three of the node with each other, and the two groups
+both ways: 36 + 9 + 18 + 18 = 81 = 9², yet its entries are ordered block by block, not column by column.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p><code class="docutils literal notranslate"><span class="pre">True</span></code> for a dense block, <code class="docutils literal notranslate"><span class="pre">False</span></code> for a pattern of the entity’s own.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>bool</p>
 </dd>
 </dl>
 </dd></dl>
@@ -1580,6 +1610,41 @@ the running ones are waited for.</p>
 <li><p><strong>items</strong> – The entities, a sized iterable (a list, a dictionary view).</p></li>
 <li><p><strong>work</strong> – Called once per chunk, with a tuple of consecutive items; a worker must write only to what belongs to its items.</p></li>
 <li><p><strong>chunksPerThread</strong> (<em>int</em>) – How many chunks each thread is handed.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>What <code class="docutils literal notranslate"><span class="pre">work</span></code> returned for each chunk, in order.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>list</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="edelweissfe.numerics.parallelizationutilities.mapChunksOnWorkers">
+<span class="sig-prename descclassname"><span class="pre">edelweissfe.numerics.parallelizationutilities.</span></span><span class="sig-name descname"><span class="pre">mapChunksOnWorkers</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">items</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">work</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">numberOfWorkers</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">chunksPerWorker</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">4</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/numerics/parallelizationutilities.html#mapChunksOnWorkers"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.numerics.parallelizationutilities.mapChunksOnWorkers" title="Link to this definition"></a></dt>
+<dd><p>Call <code class="docutils literal notranslate"><span class="pre">work(worker,</span> <span class="pre">chunk)</span></code> for consecutive chunks of <code class="docutils literal notranslate"><span class="pre">items</span></code>, each chunk on a fixed worker thread, and return
+what the calls returned, in the order of the chunks.</p>
+<p>For an entity loop whose workers write through memory of their own, which no other call may use at the same
+time – each worker its own scratch array for the blocks of the system matrix (see
+<a class="reference internal" href="assembly.html#edelweissfe.numerics.systemmatrixassembly.SystemMatrixAssembly.blocksOfWorker" title="edelweissfe.numerics.systemmatrixassembly.SystemMatrixAssembly.blocksOfWorker"><code class="xref py py-meth docutils literal notranslate"><span class="pre">blocksOfWorker()</span></code></a>). Unlike
+<a class="reference internal" href="#edelweissfe.numerics.parallelizationutilities.mapChunksInParallel" title="edelweissfe.numerics.parallelizationutilities.mapChunksInParallel"><code class="xref py py-func docutils literal notranslate"><span class="pre">mapChunksInParallel()</span></code></a>, which hands each chunk to whichever thread is free, the chunks are dealt out to the
+workers in turn: worker <code class="docutils literal notranslate"><span class="pre">w</span></code> handles chunks <code class="docutils literal notranslate"><span class="pre">w</span></code>, <code class="docutils literal notranslate"><span class="pre">w</span> <span class="pre">+</span> <span class="pre">numberOfWorkers</span></code>, …, in this order, so every worker
+meets the same entities in every run. Several chunks per worker, interleaved, spread a region of expensive
+entities (e.g., at a damage front, adjacent in the element order) over all workers.</p>
+<p>Runs serially in the calling thread, as worker 0 with one chunk holding all <code class="docutils literal notranslate"><span class="pre">items</span></code>, for one worker.</p>
+<p>When it returns or raises, no call is running. If a call raises, the exception is that of the first failing chunk in
+the order of the chunks, the one a serial loop meets first: a worker stops at its first failing chunk, so every
+chunk before the first failing one has run, and none of them failed.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>items</strong> – The entities, a sized iterable (a list, a dictionary view).</p></li>
+<li><p><strong>work</strong> – Called once per chunk, with the number of the worker (<code class="docutils literal notranslate"><span class="pre">0</span> <span class="pre">&lt;=</span> <span class="pre">worker</span> <span class="pre">&lt;</span> <span class="pre">numberOfWorkers</span></code>) and a tuple of
+consecutive items; a worker must write only to what belongs to its items, or to what belongs to the worker.</p></li>
+<li><p><strong>numberOfWorkers</strong> (<em>int</em>) – The number of worker threads.</p></li>
+<li><p><strong>chunksPerWorker</strong> (<em>int</em>) – How many chunks each worker is handed.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>

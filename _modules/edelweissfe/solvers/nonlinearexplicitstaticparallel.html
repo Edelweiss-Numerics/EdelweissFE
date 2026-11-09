@@ -110,6 +110,8 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">edelweissfe.utils.performancetiming</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">performancetiming</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.parallelizationutilities</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">getNumberOfThreads</span><span class="p">,</span>
+    <span class="n">getNumberOfWorkerThreads</span><span class="p">,</span>
+    <span class="n">mapChunksInParallel</span><span class="p">,</span>
     <span class="n">reportThreadAvailability</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.solvers.base.parallelelementcomputation</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
@@ -129,6 +131,30 @@
 
         <span class="n">reportThreadAvailability</span><span class="p">(</span><span class="n">getNumberOfThreads</span><span class="p">(),</span> <span class="bp">self</span><span class="o">.</span><span class="n">journal</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">identification</span><span class="p">)</span>
         <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">beginStep</span><span class="p">(</span><span class="n">step</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">fieldOutputController</span><span class="p">,</span> <span class="n">outputmanagers</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="NESTParallel.forEachChunk">
+<a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearexplicitstaticparallel.NESTParallel.forEachChunk">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">forEachChunk</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">entities</span><span class="p">:</span> <span class="nb">list</span><span class="p">,</span> <span class="n">work</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Call ``work(chunk)`` for chunks of ``entities`` on the available threads, as the elements are computed (see</span>
+<span class="sd">        :func:`~edelweissfe.numerics.parallelizationutilities.mapChunksInParallel`); otherwise as</span>
+<span class="sd">        :meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.forEachChunk`."""</span>
+
+        <span class="n">mapChunksInParallel</span><span class="p">(</span><span class="n">entities</span><span class="p">,</span> <span class="n">work</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="NESTParallel.numberOfAssemblyWorkers">
+<a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearexplicitstaticparallel.NESTParallel.numberOfAssemblyWorkers">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">numberOfAssemblyWorkers</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""How many threads write blocks of the system matrix at the same time: those that compute the elements.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        int</span>
+<span class="sd">            The number of workers.</span>
+<span class="sd">        """</span>
+
+        <span class="k">return</span> <span class="n">getNumberOfWorkerThreads</span><span class="p">()</span></div>
 
 
 <div class="viewcode-block" id="NESTParallel.computeElements">

@@ -282,6 +282,10 @@
     <span class="n">forEachSliceInParallel</span><span class="p">,</span>
     <span class="n">mapChunksInParallel</span><span class="p">,</span>
 <span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.systemmatrixassembly</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">SystemMatrixAssembly</span><span class="p">,</span>
+    <span class="n">VIJSystemMatrixAssembly</span><span class="p">,</span>
+<span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.outputmanagers.base.outputmanagerbase</span><span class="w"> </span><span class="kn">import</span> <span class="n">OutputManagerBase</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.solvers.base.conservationchecks</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">CONSERVATION_TOLERANCE</span><span class="p">,</span>
@@ -497,6 +501,10 @@
     <span class="c1">#: Option schema for this solver, per OptionSchemaProvider.</span>
     <span class="n">schema</span> <span class="o">=</span> <span class="n">NIDSchema</span>
 
+    <span class="c1">#: Only the VIJ assembly: the effective tangent adds the mass and the damping entry by entry to the VIJ value array</span>
+    <span class="c1">#: (see :meth:`assembleAdditionalTerms`), and the mass is gathered into CSR by the generator's gather map.</span>
+    <span class="n">systemMatrixAssemblies</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"vij"</span><span class="p">:</span> <span class="n">VIJSystemMatrixAssembly</span><span class="p">}</span>
+
     <span class="c1">#: The predictor's state, as in the parent, the drift the conservation checks accumulate over the</span>
     <span class="c1">#: step, and the conserved totals after the last accepted increment, which a topology change is</span>
     <span class="c1">#: compared against. The velocity and acceleration are node-field entries, restored with the model.</span>
@@ -634,7 +642,7 @@
         <span class="n">U_n</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
         <span class="n">dU</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
         <span class="n">P</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
-        <span class="n">K</span><span class="p">:</span> <span class="n">VIJSystemMatrix</span><span class="p">,</span>
+        <span class="n">K</span><span class="p">:</span> <span class="n">SystemMatrixAssembly</span><span class="p">,</span>
         <span class="n">stepActions</span><span class="p">:</span> <span class="nb">list</span><span class="p">,</span>
         <span class="n">model</span><span class="p">:</span> <span class="n">FEModel</span><span class="p">,</span>
         <span class="n">timeStep</span><span class="p">:</span> <span class="n">TimeStep</span><span class="p">,</span>
@@ -760,7 +768,7 @@
 <a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitdynamic.NonlinearImplicitDynamic.assembleAdditionalTerms">[docs]</a>
     <span class="nd">@performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"inertia and damping terms"</span><span class="p">)</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">assembleAdditionalTerms</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span> <span class="n">dU</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">R</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">F</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">K</span><span class="p">:</span> <span class="n">VIJSystemMatrix</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">:</span> <span class="n">TimeStep</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">dU</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">R</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">F</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">K</span><span class="p">:</span> <span class="n">SystemMatrixAssembly</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">:</span> <span class="n">TimeStep</span>
     <span class="p">):</span>
 <span class="w">        </span><span class="sd">"""Add the inertia and damping forces to the residual and their derivatives to the</span>
 <span class="sd">        tangent; see the parent's hook. The trial displacement increment fixes the trial kinematics.</span>
@@ -774,7 +782,7 @@
 <span class="sd">        F</span>
 <span class="sd">            The reference flux scale of the convergence test, augmented in place.</span>
 <span class="sd">        K</span>
-<span class="sd">            The tangent in VIJ layout, augmented in place.</span>
+<span class="sd">            The tangent being assembled; its VIJ value array is augmented in place.</span>
 <span class="sd">        timeStep</span>
 <span class="sd">            The time step.</span>
 <span class="sd">        """</span>
@@ -812,19 +820,20 @@
         <span class="c1"># is an entry-wise sum, before the parent's CSR conversion, MPC condensation and Dirichlet row</span>
         <span class="c1"># replacement. The mass is added slice by slice on the thread pool; the damping is diagonal.</span>
         <span class="k">with</span> <span class="n">performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"effective tangent"</span><span class="p">):</span>
+            <span class="n">Kvij</span> <span class="o">=</span> <span class="n">K</span><span class="o">.</span><span class="n">vijArray</span>
             <span class="c1"># A slice-wise sum would silently add only a prefix of a longer mass vector.</span>
-            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">system</span><span class="o">.</span><span class="n">Mvij</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="n">K</span><span class="p">):</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">system</span><span class="o">.</span><span class="n">Mvij</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="n">Kvij</span><span class="p">):</span>
                 <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
                     <span class="s2">"The mass (</span><span class="si">{:}</span><span class="s2"> entries) and the tangent (</span><span class="si">{:}</span><span class="s2"> entries) differ in their VIJ layout."</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
-                        <span class="nb">len</span><span class="p">(</span><span class="n">system</span><span class="o">.</span><span class="n">Mvij</span><span class="p">),</span> <span class="nb">len</span><span class="p">(</span><span class="n">K</span><span class="p">)</span>
+                        <span class="nb">len</span><span class="p">(</span><span class="n">system</span><span class="o">.</span><span class="n">Mvij</span><span class="p">),</span> <span class="nb">len</span><span class="p">(</span><span class="n">Kvij</span><span class="p">)</span>
                     <span class="p">)</span>
                 <span class="p">)</span>
 
             <span class="k">def</span><span class="w"> </span><span class="nf">addScaledMass</span><span class="p">(</span><span class="n">s</span><span class="p">:</span> <span class="nb">slice</span><span class="p">):</span>
-                <span class="n">K</span><span class="p">[</span><span class="n">s</span><span class="p">]</span> <span class="o">+=</span> <span class="n">increment</span><span class="o">.</span><span class="n">massFactor</span> <span class="o">*</span> <span class="n">system</span><span class="o">.</span><span class="n">Mvij</span><span class="p">[</span><span class="n">s</span><span class="p">]</span>
+                <span class="n">Kvij</span><span class="p">[</span><span class="n">s</span><span class="p">]</span> <span class="o">+=</span> <span class="n">increment</span><span class="o">.</span><span class="n">massFactor</span> <span class="o">*</span> <span class="n">system</span><span class="o">.</span><span class="n">Mvij</span><span class="p">[</span><span class="n">s</span><span class="p">]</span>
 
-            <span class="n">forEachSliceInParallel</span><span class="p">(</span><span class="n">addScaledMass</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">K</span><span class="p">))</span>
-            <span class="n">K</span><span class="p">[</span><span class="n">system</span><span class="o">.</span><span class="n">dampingVIJIndices</span><span class="p">]</span> <span class="o">+=</span> <span class="n">increment</span><span class="o">.</span><span class="n">dampingFactor</span> <span class="o">*</span> <span class="n">system</span><span class="o">.</span><span class="n">dampingVIJValues</span></div>
+            <span class="n">forEachSliceInParallel</span><span class="p">(</span><span class="n">addScaledMass</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">Kvij</span><span class="p">))</span>
+            <span class="n">Kvij</span><span class="p">[</span><span class="n">system</span><span class="o">.</span><span class="n">dampingVIJIndices</span><span class="p">]</span> <span class="o">+=</span> <span class="n">increment</span><span class="o">.</span><span class="n">dampingFactor</span> <span class="o">*</span> <span class="n">system</span><span class="o">.</span><span class="n">dampingVIJValues</span></div>
 
 
 <div class="viewcode-block" id="NonlinearImplicitDynamic.finalizeIncrement">
@@ -1540,7 +1549,10 @@
         <span class="n">F</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
         <span class="n">PLoadsAndConstraints</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
         <span class="n">dU0</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
-        <span class="n">K</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">constructVIJSystemMatrix</span><span class="p">()</span>
+        <span class="c1"># the tangent is not needed: assembled into the increment's own system matrix, which the Newton iterations</span>
+        <span class="c1"># assemble anew</span>
+        <span class="n">K</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_K</span>
+        <span class="n">K</span><span class="o">.</span><span class="n">beginAssembly</span><span class="p">()</span>
 
         <span class="n">P</span><span class="p">,</span> <span class="n">K</span><span class="p">,</span> <span class="n">F</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">assembleInternalForces</span><span class="p">(</span><span class="n">U_n</span><span class="p">,</span> <span class="n">dU0</span><span class="p">,</span> <span class="n">P</span><span class="p">,</span> <span class="n">K</span><span class="p">,</span> <span class="n">F</span><span class="p">,</span> <span class="n">startTimeStep</span><span class="p">)</span>
         <span class="n">PLoadsAndConstraints</span><span class="p">,</span> <span class="n">K</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">assembleLoads</span><span class="p">(</span><span class="n">loads</span><span class="p">,</span> <span class="n">U_n</span><span class="p">,</span> <span class="n">dU0</span><span class="p">,</span> <span class="n">PLoadsAndConstraints</span><span class="p">,</span> <span class="n">K</span><span class="p">,</span> <span class="n">startTimeStep</span><span class="p">)</span>

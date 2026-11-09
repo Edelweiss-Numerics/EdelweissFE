@@ -114,12 +114,37 @@
 <span class="sd">    By default, the base implementation assumes that the entity contributes a full dense block of size</span>
 <span class="sd">    ``nDof × nDof``.  If the nonzero pattern of the contribution is sparser, the entity should override</span>
 <span class="sd">    :meth:`getVIJContributionSize` to return the actual number of nonzero entries, and override</span>
-<span class="sd">    :meth:`initializeVIJContribution` to fill the corresponding ``I`` and ``J`` index arrays.</span>
+<span class="sd">    :meth:`initializeVIJContribution` to fill the corresponding ``I`` and ``J`` index arrays.  Such an entity also</span>
+<span class="sd">    overrides :attr:`couplesAllItsDofs` to return ``False``: that is how an assembly learns that the block is a list</span>
+<span class="sd">    of the values of the entity's own ``(I, J)`` pairs rather than a dense matrix.</span>
 <span class="sd">    """</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">nDof</span><span class="p">:</span> <span class="nb">int</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">"""Initialize the VIJEntityBase."""</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">nDof</span> <span class="o">=</span> <span class="n">nDof</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">couplesAllItsDofs</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Whether the entity's block couples every one of its degrees of freedom with every other one.</span>
+
+<span class="sd">        ``True`` (the default, every element) means the block is the dense ``nDof × nDof`` matrix, stored</span>
+<span class="sd">        column-major, with the entity's global DOF indices as its rows and its columns. ``False`` means the entity</span>
+<span class="sd">        declared a sparse pattern of its own in :meth:`initializeVIJContribution` (a constraint that couples only</span>
+<span class="sd">        some of its degrees of freedom), and its block is the list of the values of these ``(I, J)`` pairs, in the</span>
+<span class="sd">        order it declared them.</span>
+
+<span class="sd">        The entity says which, because the number of entries cannot tell: a sparse pattern can happen to have</span>
+<span class="sd">        exactly ``nDof**2`` entries. A rigid body contact with a single slave node in 3D couples the six degrees of</span>
+<span class="sd">        freedom of the reference point with each other, the three of the node with each other, and the two groups</span>
+<span class="sd">        both ways: 36 + 9 + 18 + 18 = 81 = 9², yet its entries are ordered block by block, not column by column.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        bool</span>
+<span class="sd">            ``True`` for a dense block, ``False`` for a pattern of the entity's own.</span>
+<span class="sd">        """</span>
+
+        <span class="k">return</span> <span class="kc">True</span>
 
 <div class="viewcode-block" id="VIJEntityBase.getVIJContributionSize">
 <a class="viewcode-back" href="../../../documentation/dofmanager.html#edelweissfe.numerics.vijentitybase.VIJEntityBase.getVIJContributionSize">[docs]</a>
@@ -171,11 +196,11 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">shapeVIJContribution</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">flat_view</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">"""Shape the flat VIJ values slice for this entity.</span>
 
-<span class="sd">        By default, if the contribution is dense (size = nDof**2),</span>
+<span class="sd">        By default, if the contribution is dense (:attr:`couplesAllItsDofs`),</span>
 <span class="sd">        it reshapes the flat view to a 2-D array of shape (nDof, nDof)</span>
 <span class="sd">        using column-major (Fortran) order.</span>
 <span class="sd">        """</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">getVIJContributionSize</span><span class="p">()</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">nDof</span><span class="o">**</span><span class="mi">2</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">couplesAllItsDofs</span><span class="p">:</span>
             <span class="k">return</span> <span class="n">flat_view</span><span class="o">.</span><span class="n">reshape</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">nDof</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">nDof</span><span class="p">),</span> <span class="n">order</span><span class="o">=</span><span class="s2">"F"</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">flat_view</span></div>
 </div>

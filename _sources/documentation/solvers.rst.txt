@@ -103,8 +103,10 @@ A solver solves; what the equation system is made of, the model says. ``NIST``, 
    :meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.updateMaterialPoints`, right before it computes
    the elements.
 
-The loop over the elements stays with the solver: ``NIST`` computes them one after the other, ``NISTParallel`` on all
-threads, each element into its own part of the residual and its own block of the system matrix.
+The loops over the entities stay with the solver: ``NIST`` computes the elements one after the other,
+``NISTParallel`` on all threads, each element into its own part of the residual and its own block of the system matrix
+(see :ref:`system-matrix-assembly`). A layout that updates material points loops over them through the solver's
+:meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.forEachChunk`, so that they are evaluated on the same threads.
 
 The other solvers ask a part of these questions. ``NID`` and ``NEST`` derive from ``NIST``, and build, fill and write
 back their equation systems through the layout; ``NEST`` builds its system once per step and has no topology update,
