@@ -85,7 +85,30 @@ class NISTSchema:
         description="The default number of allowed residual growths.", dtype=int, default=10
     )
     extrapolation: str | None = schemaField(
-        description="The extrapolation strategy for new increments (off|linear).", dtype=str, default="linear"
+        description=(
+            "The prediction a new increment starts its Newton iterations from (off|linear|quadratic): none, the "
+            "last accepted increment scaled to the new size, or the parabola through the last three accepted states "
+            "(linear while only one accepted increment of the step of nonzero size is available)."
+        ),
+        dtype=str,
+        default="linear",
+    )
+    retryWithoutExtrapolation: bool | None = schemaField(
+        description=(
+            "If an extrapolated increment fails, attempt it once more from a zero prediction before cutting it back. "
+            "A failed increment then also keeps the accepted history the next attempt extrapolates from."
+        ),
+        dtype=bool,
+        default=False,
+    )
+    extrapolateAcrossConnectivityChange: bool | None = schemaField(
+        description=(
+            "Keep extrapolating across a rebuild of the equation system caused by a change of the connectivity alone "
+            "(e.g., a contact search), as long as the rebuilt system numbers the degrees of freedom as before. Off: "
+            "every rebuild starts the increment from a zero prediction."
+        ),
+        dtype=bool,
+        default=False,
     )
     extrapolateAfterModelChange: bool | None = schemaField(
         description=(
@@ -285,6 +308,8 @@ class NIST(NonlinearSolverBase):
         "defaultCriticalIter": 5,
         "defaultMaxGrowingIter": 10,
         "extrapolation": "linear",
+        "retryWithoutExtrapolation": False,
+        "extrapolateAcrossConnectivityChange": False,
         "extrapolateAfterModelChange": True,
         "equilibrateAfterModelChange": False,
         "linsolver": "",
@@ -311,8 +336,14 @@ class NIST(NonlinearSolverBase):
     #: The convergence criterion of the current step.
     convergenceCriterion = None
 
-    #: The predictor's state between increments: the last accepted increment and its dU.
-    checkpointedState = {"prevTimeStep": TimeStep, "dU": np.ndarray}
+    #: The predictor's state between increments: the last accepted increment and its dU, and, for a quadratic
+    #: extrapolation, the accepted increment before it and its dU.
+    checkpointedState = {
+        "prevTimeStep": TimeStep,
+        "dU": np.ndarray,
+        "timeStepBeforePrev": TimeStep,
+        "dUBeforePrev": np.ndarray,
+    }
 
     def __init__(self, jobInfo, journal, **kwargs):
         self.journal = journal
@@ -338,6 +369,10 @@ class NIST(NonlinearSolverBase):
         self.prevTimeStep = None
         #: The solution increment of the last accepted increment.
         self.dU = None
+        #: The accepted increment before :attr:`prevTimeStep`, kept for a quadratic extrapolation only (else None).
+        self.timeStepBeforePrev = None
+        #: The solution increment of :attr:`timeStepBeforePrev`.
+        self.dUBeforePrev = None
 
     def applyOptionsOverride(self, fieldValues: dict) -> None:
         """Apply an override of this solver's options, see
@@ -360,6 +395,8 @@ class NIST(NonlinearSolverBase):
         the declaration. A declaration is the definition of the solver (its ``*solver`` datalines, or the arguments of
         its constructor), or an ``>>options`` block of a step. Refused are:
 
+        * ``retryWithoutExtrapolation`` and ``extrapolateAcrossConnectivityChange`` switched on with
+          ``extrapolation=off``: there is no prediction to retry without, nor one to keep across a rebuild;
         * an option of the abaqus criterion (``abaqus...``) with ``convergenceCriterion=legacy``.
 
         An option the declaration does not set is not refused: an option set for some steps keeps its value in a step
@@ -377,6 +414,10 @@ class NIST(NonlinearSolverBase):
         ValueError
             If the declaration sets an option where it means nothing.
         """
+
+        for name in ("retryWithoutExtrapolation", "extrapolateAcrossConnectivityChange"):
+            if name in declaredOptions and options[name] and options["extrapolation"] == "off":
+                raise ValueError("{:} means nothing with extrapolation=off: no increment is predicted".format(name))
 
         abaqusCriterionOptions = sorted(name for name in declaredOptions if name.startswith("abaqus"))
         if abaqusCriterionOptions and options["convergenceCriterion"] == "legacy":
@@ -443,9 +484,16 @@ class NIST(NonlinearSolverBase):
         # and whenever the topology update reports a change of the mesh or of a constraint's DOF footprint.
         self.forgetEquationSystem()
 
+        if self.options["extrapolation"] not in ("off", "linear", "quadratic"):
+            raise ValueError(
+                "Unknown extrapolation '{:}', use off, linear or quadratic".format(self.options["extrapolation"])
+            )
+
         # A step starts without a predictor state; a resumed step takes over the checkpointed one.
         self.prevTimeStep = None
         self.dU = None
+        self.timeStepBeforePrev = None
+        self.dUBeforePrev = None
 
         self.validateModelCapabilities(model)
 
@@ -529,6 +577,16 @@ class NIST(NonlinearSolverBase):
             )
 
         if modelHasChanged or connectivityHasChanged or self.theDofManager is None:
+            # The prediction may survive a rebuild caused by the connectivity alone, if the rebuilt system numbers the
+            # degrees of freedom as the last one: remember that numbering, before the last system is dropped.
+            numberingBeforeRebuild = (
+                self.theDofManager.dofNumbering()
+                if connectivityHasChanged
+                and not modelHasChanged
+                and self.theDofManager is not None
+                and self.options["extrapolateAcrossConnectivityChange"]
+                else None
+            )
             with performancetiming.timeit("equation system rebuild"):
                 self.forgetEquationSystem()
                 with performancetiming.timeit("dof manager"):
@@ -598,12 +656,12 @@ class NIST(NonlinearSolverBase):
                             self.mpcTransformation.condensedPatternFillIn(self.csrGenerator.csrMatrix)
                         )
 
-                # After a topology change, the last dU belongs to a different DOF layout: do not
-                # extrapolate this increment.
-                if modelHasChanged or connectivityHasChanged:
+                # After a topology change, the last dU belongs to a different DOF layout: do not extrapolate this
+                # increment. After a change of the connectivity alone, it may still fit.
+                if modelHasChanged or (
+                    connectivityHasChanged and not self.predictionSurvivesRebuild(numberingBeforeRebuild)
+                ):
                     self.prevTimeStep = None
-                elif self.dU is not None:
-                    dU[:] = self.dU
                 self._U, self._dU, self._P, self._K = U, dU, P, K
         # the equation system of this increment, just built or kept from the last one
         U, dU, P, K = self._U, self._dU, self._P, self._K
@@ -672,35 +730,73 @@ class NIST(NonlinearSolverBase):
             model.advanceToTime(equilibrationTimeStep.totalTime)
             self._U, self._dU, self._P = U, dU, P
 
+        retryWithoutExtrapolation = self.options["retryWithoutExtrapolation"]
+
         try:
-            U, dU, P, iterationCounter, incrementResidualHistory = self.solveIncrement(
-                U,
-                dU,
-                P,
-                K,
-                step.actions,
-                model,
-                timeStep,
-                self.prevTimeStep,
-                extrapolation,
-                maxIter,
-                maxGrowingIter,
-            )
+            try:
+                U, dU, P, iterationCounter, incrementResidualHistory = self.solveIncrement(
+                    U,
+                    dU,
+                    P,
+                    K,
+                    step.actions,
+                    model,
+                    timeStep,
+                    self.prevTimeStep,
+                    extrapolation,
+                    maxIter,
+                    maxGrowingIter,
+                )
+            except (CutbackRequest, ReachedMaxIterations, DivergingSolution) as e:
+                if not (retryWithoutExtrapolation and self.extrapolates(extrapolation, self.prevTimeStep)):
+                    raise
+                # The prediction may have led Newton's method astray: the same increment, from a zero prediction.
+                self.journal.message(
+                    "{:}; retrying the increment without extrapolation".format(str(e)), self.identification, 1
+                )
+                U, dU, P, iterationCounter, incrementResidualHistory = self.solveIncrement(
+                    U, dU, P, K, step.actions, model, timeStep, None, extrapolation, maxIter, maxGrowingIter
+                )
+                self.incrementStatus["notes"] = "retried without extrapolation"
 
         except CutbackRequest as e:
-            self.prevTimeStep = None
+            self.forgetPredictionAfterFailure()
             self.incrementStatus["iters"] = np.inf
             self.incrementStatus["notes"] = str(e)
             raise IncrementFailed(str(e), max(e.cutbackSize, cutbackFactor)) from e
 
         except (ReachedMaxIterations, DivergingSolution) as e:
-            self.prevTimeStep = None
+            self.forgetPredictionAfterFailure()
             self.incrementStatus["iters"] = np.inf
             self.incrementStatus["notes"] = str(e)
             raise IncrementFailed(str(e), cutbackFactor) from e
 
         self._U, self._dU, self._P = U, dU, P
         self._iterationCounter = iterationCounter
+
+    def predictionSurvivesRebuild(self, numberingBeforeRebuild: tuple | None) -> bool:
+        """Whether the last accepted increment still fits the equation system rebuilt after a change of the
+        connectivity alone (e.g., a contact search), so that this increment may extrapolate it: only with
+        ``extrapolateAcrossConnectivityChange``, and only if the rebuilt system numbers the degrees of freedom as the
+        last one. At the first increment of a resumed step there is no last system, and the numbering of the checkpoint
+        is assumed, as for every resumed prediction.
+
+        Parameters
+        ----------
+        numberingBeforeRebuild
+            The :meth:`~edelweissfe.numerics.dofmanager.DofManager.dofNumbering` of the last equation system, or None
+            if there was none.
+
+        Returns
+        -------
+        bool
+            True if the prediction may extrapolate the last accepted increment.
+        """
+
+        if not self.options["extrapolateAcrossConnectivityChange"]:
+            return False
+
+        return numberingBeforeRebuild is None or self.theDofManager.dofNumbering() == numberingBeforeRebuild
 
     @performancetiming.timeit("accept increment")
     def acceptIncrement(self, step, model: FEModel, timeStep: TimeStep):
@@ -720,12 +816,18 @@ class NIST(NonlinearSolverBase):
         U, dU, P = self._U, self._dU, self._P
         iterationCounter = self._iterationCounter
 
+        # The predictor's history: a quadratic extrapolation needs the accepted increment before the last one, too.
+        if self.options["extrapolation"] == "quadratic" and self.prevTimeStep is not None:
+            self.timeStepBeforePrev, self.dUBeforePrev = self.prevTimeStep, self.dU
+        else:
+            self.timeStepBeforePrev, self.dUBeforePrev = None, None
         # After a model change, dU contains the remesh settling transient: optionally do not extrapolate it.
         if self._modelHasChanged and not self.options["extrapolateAfterModelChange"]:
             self.prevTimeStep = None
         else:
             self.prevTimeStep = timeStep
-        self.dU = dU
+        # A copy: the next increment iterates on dU in place, and may fail.
+        self.dU = dU.copy()
         self.convergenceCriterion.acceptIncrement()
 
         if iterationCounter >= step.criticalIter:
@@ -808,6 +910,103 @@ class NIST(NonlinearSolverBase):
             )
 
         raise ValueError("Unknown convergence criterion '{:}', use 'legacy' or 'abaqus'".format(criterion))
+
+    def forgetPredictionAfterFailure(self):
+        """A failed increment drops the prediction, which may have caused the failure, unless
+        ``retryWithoutExtrapolation`` has answered that already: then the accepted history is kept, and the smaller
+        increment that follows the cutback extrapolates it."""
+
+        if not self.options["retryWithoutExtrapolation"]:
+            self.prevTimeStep = None
+
+    def extrapolates(self, extrapolation: str, prevTimeStep: TimeStep | None) -> bool:
+        """Whether an increment that follows the accepted increment ``prevTimeStep`` starts from an extrapolated
+        prediction.
+
+        Parameters
+        ----------
+        extrapolation
+            The type of extrapolation, ``off``, ``linear`` or ``quadratic``.
+        prevTimeStep
+            The last accepted increment, or None if there is none to extrapolate.
+
+        Returns
+        -------
+        bool
+            True if the increment is extrapolated.
+        """
+
+        return extrapolation != "off" and prevTimeStep is not None and bool(prevTimeStep.timeIncrement)
+
+    def extrapolateLastIncrement(
+        self,
+        extrapolation: str,
+        timeStep: TimeStep,
+        dU: DofVector,
+        dirichlets: list,
+        prevTimeStep: TimeStep,
+        model,
+    ) -> tuple[DofVector, bool]:
+        """Predict the solution increment, the point Newton's method starts from, by extrapolating the last
+        accepted increments of the step. With :math:`h` the size (step progress) of the new increment and
+        :math:`h_n, \\Delta U_n` the size and the solution increment of the last accepted one:
+
+        * ``off``: no prediction, :math:`\\Delta U = 0`.
+        * ``linear``: the last increment, scaled to the new size, :math:`\\Delta U = \\Delta U_n \\, h / h_n`.
+        * ``quadratic``: the parabola through the last three accepted states, evaluated at the end of the new
+          increment. With the increment before the last one, :math:`h_{n-1}, \\Delta U_{n-1}`,
+
+          .. math::
+
+              \\Delta U = \\Delta U_n \\frac{h}{h_n}
+              + \\left( \\frac{\\Delta U_n}{h_n} - \\frac{\\Delta U_{n-1}}{h_{n-1}} \\right)
+              \\frac{h \\, (h + h_n)}{h_{n-1} + h_n},
+
+          the linear prediction plus the change of the slope of the path. It reproduces a quadratic path exactly. While
+          only one accepted increment of the step of nonzero size is available, the prediction is linear.
+
+        The prescribed degrees of freedom take their prescribed increment.
+
+        Parameters
+        ----------
+        extrapolation
+            The type of extrapolation.
+        timeStep
+            The new increment.
+        dU
+            The solution increment to predict, overwritten.
+        dirichlets
+            The active dirichlet boundary conditions.
+        prevTimeStep
+            The last accepted increment, or None for no prediction.
+        model
+            The model tree.
+
+        Returns
+        -------
+        tuple[DofVector,bool]
+            - The predicted solution increment.
+            - True if an extrapolation was performed.
+        """
+
+        if not self.extrapolates(extrapolation, prevTimeStep):
+            dU[:] = 0.0
+            return dU, False
+
+        h = timeStep.stepProgressIncrement
+        h_n = prevTimeStep.stepProgressIncrement
+
+        if extrapolation == "quadratic" and self.extrapolates(extrapolation, self.timeStepBeforePrev):
+            h_nm1 = self.timeStepBeforePrev.stepProgressIncrement
+            curvatureFactor = h * (h + h_n) / (h_nm1 + h_n)
+            np.multiply(self.dU, h / h_n + curvatureFactor / h_n, out=dU)
+            dU -= (curvatureFactor / h_nm1) * self.dUBeforePrev
+        else:
+            np.multiply(self.dU, h / h_n, out=dU)
+
+        dU = self.applyDirichletToResidual(timeStep, dU, dirichlets)
+
+        return dU, True
 
     def solveIncrement(
         self,
