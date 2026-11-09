@@ -86,7 +86,8 @@ The model is first rebuilt from the same input file, then restored in this order
        performance table of its own, before the resumed step's table
    * - ties, contact surfaces
      - catch up with the replayed mesh, as they had in the uninterrupted run
-   * - node fields, scalar variables, element state
+   * - node fields, scalar variables, element state, additional parameters (e.g. the load parameter the arc length
+       method publishes)
      - read
    * - rigid bodies
      - their surface nodes are moved to the restored configuration
@@ -98,8 +99,9 @@ The model is first rebuilt from the same input file, then restored in this order
      - its state after the last accepted increment, as it is: progress, increment counter, the size
        of the next increment, the enforced time increment, and whether the zero increment was done
    * - solver
-     - its state between increments: the implicit solver's predictor (last accepted increment and
-       its ``dU``), the explicit solver's last increment and accumulated external work
+     - its state between increments: the implicit solver's predictor (the last accepted increments
+       and their ``dU``, under arc length control also their increments of the load parameter, and the
+       load parameter of the step), the explicit solver's last increment and accumulated external work
 
 Adding something that carries state between increments
 -------------------------------------------------------
@@ -122,8 +124,10 @@ declaration fails there, and writing a checkpoint refuses. A solver that is not 
 by keeping the declaration None.
 
 Step actions declare their state too: a load ramped over several steps accumulates from step to
-step, and most actions switch themselves off at the end of their step. A resumed run skips the
-steps before the checkpoint, so it restores that state rather than re-deriving it.
+step, most actions switch themselves off at the end of their step, and an arc length controller
+derives the change of its controlled quantity over the step from the model it is declared on. A
+resumed run skips the steps before the checkpoint, and declares the step actions on the restored
+model, so it restores that state rather than re-deriving it.
 
 Field outputs carry their history the same way, and how much of their export file belongs to the
 run: before its first write, a resumed run cuts the file back to that size, so the rows an

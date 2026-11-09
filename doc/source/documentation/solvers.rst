@@ -96,6 +96,123 @@ reaction force. ``NED`` reports its net force :math:`\boldsymbol{R}` there.
 
 .. pprint:: solver:NISTPArcLength
 
+.. _arc-length-control:
+
+Arc length control
+~~~~~~~~~~~~~~~~~~
+
+A load-controlled analysis cannot pass a limit point: beyond the peak of the load, no larger load is in equilibrium.
+A displacement-controlled one cannot follow a path that snaps back, where the controlled displacement decreases
+again. The arc length method (here the indirect displacement control of Jirásek and Bažant) controls neither the load
+nor a displacement directly. The external load of a step becomes
+
+.. math::
+
+    \boldsymbol{f}_\mathrm{ext} = \boldsymbol{f}_0 + \lambda \, \boldsymbol{f}_\mathrm{ref},
+
+the loads at the start of the step (the dead load :math:`\boldsymbol{f}_0`) plus the change of the loads over the
+step (the reference load :math:`\boldsymbol{f}_\mathrm{ref}`) scaled by a load parameter :math:`\lambda`, which is an
+unknown of every increment besides the solution. A controller adds the equation that determines it, typically that a
+combination of displacements -- a crack opening, the mean contraction of a tunnel ring -- grows steadily over the
+step. Every Newton iteration solves the linearized system for two right-hand sides at once, the out-of-balance force
+and the reference load, and the controller combines the two corrections into the correction of the solution and of
+the load parameter. The Newton iterations are those of ``NIST``, into which the load parameter enters through the
+hooks of the solver (see its class documentation above). Every arc length step scales its own reference load: its load
+parameter starts from zero, where the external load is the dead load -- the loads the steps before it ended with. An
+analysis that continues under arc length control in a later step declares there the change of the loads it applies on
+top of them.
+
+Prescribed displacements belong to the reference loading of the step, like the loads: a Dirichlet boundary condition
+that prescribes a change :math:`\Delta\bar{\boldsymbol{u}}` over the step moves its degrees of freedom by
+:math:`\lambda \, \Delta\bar{\boldsymbol{u}}`. They move with the load parameter, and only with it. The reference solve
+carries :math:`\Delta\bar{\boldsymbol{u}}` in their rows, so a correction :math:`\Delta\Delta\lambda` moves them by
+:math:`\Delta\Delta\lambda \, \Delta\bar{\boldsymbol{u}}`; eliminating their columns turns
+:math:`\Delta\bar{\boldsymbol{u}}` into the forces it takes to impose it, which join the reference load. The
+out-of-balance solve leaves them where they are. So the prescribed degrees of freedom are no unknowns of Newton's
+method, and their rows, which hold no equation, are left out of the convergence check, as in ``NIST``. A predicted
+increment places them where the predicted load parameter puts them.
+
+At the end of an arc length step, every load keeps the value the step applied, :math:`f(0) + \lambda \, (f(1) - f(0))`,
+from which the next step starts. With its amplitude :math:`a(t)`, a load keeps the change it declared for the step
+scaled by :math:`a(0) + \lambda \, (a(1) - a(0))` (see :class:`~edelweissfe.stepactions.base.loadbase.LoadBase`): a
+load ramped linearly over the step keeps :math:`\lambda` times its change, and a load the step holds at a constant
+amplitude, such as a self-weight declared with ``f(t)='1'``, is part of the dead load and keeps its full value,
+whatever the load parameter.
+
+The controller is a step action of the step, e.g. an ``indirectcontrol``, and the solver option
+``arcLengthController`` names it (``off``, the default, solves the step without arc length control):
+
+.. code-block:: edelweiss
+
+    *step, solver=theSolver
+    maxInc=1e-2, startInc=1e-2, minInc=1e-6, maxNumInc=1000, maxIter=25
+    >>options, name=theSolver, arcLengthController=opening
+    >>indirectcontrol, name=opening, dof1='model.nodeSets["IDC1"][0].fields["displacement"]', cVector1='-1, 0', dof2='model.nodeSets["IDC2"][0].fields["displacement"]', cVector2='1, 0', L=0.01
+
+From Python, without an input file, the controller is a step action built through its typed constructor, and the
+option is a constructor argument of the solver:
+
+.. code-block:: python
+
+    stepActions["indirectcontrol"]["opening"] = IndirectControl("opening", dof1, dof2, [-1.0, 0.0], [1.0, 0.0], 0.01, model, journal)
+    solver = NISTPArcLength(jobInfo, journal, arcLengthController="opening")
+
+A step under arc length control may end before its time is up: the solver option ``stopCondition``, an expression of
+the model and its field outputs, e.g. ``stopCondition='fieldOutputs["UTop"] < -1.0'``, is checked after every accepted
+increment of nonzero size, and the step ends once it is true. A stop condition belongs to the controller it is
+declared with: an ``>>options`` block that names ``arcLengthController`` (``off`` too) without a ``stopCondition``
+drops the one of an earlier step, so that a later step does not stop by the condition that ended the step before it:
+
+.. code-block:: edelweiss
+
+    >>options, name=theSolver, arcLengthController=opening, stopCondition='fieldOutputs["UTop"] < -1.0'
+
+A stop condition in the ``*solver`` datalines belongs to the solver: every step whose ``>>options`` name a controller
+without a stop condition of their own returns to it. An ``>>options`` block that sets a ``stopCondition`` for a step
+without arc length control is refused, since the condition would never be checked.
+
+Every controller derives from :class:`~edelweissfe.stepactions.base.arclengthcontrollerbase.ArcLengthControllerBase`,
+which states what the solver asks of it:
+
+.. automodule:: edelweissfe.stepactions.base.arclengthcontrollerbase
+   :members:
+
+The controllers of EdelweissFE, ``indirectcontrol`` and ``indirectcontractioncontrol``, are indirect displacement
+controls: their controlled quantity is a linear combination of degrees of freedom, and their target ``L`` is, with
+``absolute`` (the default), the value it reaches at the end of the step, counted from its value in the model when the
+controller is declared -- whether for the first time, in any step, or anew in a later one. Without ``absolute``, ``L``
+is the change over the step:
+
+.. automodule:: edelweissfe.stepactions.base.indirectdisplacementcontrolbase
+   :members:
+
+The options of Newton's method act on the pair of the solution increment and the increment of the load parameter
+:math:`(\Delta U, \Delta\lambda)`:
+
+* ``extrapolation``: both are predicted from the same accepted increments with the same weights, linearly or
+  quadratically, so that the prediction stays on one extrapolated path; ``retryWithoutExtrapolation`` retries a failed
+  increment from a zero prediction of both.
+* ``lineSearch``: a line search scales the correction that the out-of-balance force causes, and the controller
+  completes every trial state with the correction of the load parameter its equation asks for at that step length, as
+  it completes the full correction. So every trial state satisfies the controller's equation, and so does the iterate
+  the line search chooses: the line search cannot leave the equation unsatisfied, also not from an iterate that does
+  not satisfy it yet.
+* ``fallBackToQuasiNewton``: the tangent of the first iteration serves both right-hand sides.
+
+Every converged increment publishes the load parameter of its step as
+``model.additionalParameters["arc length parameter"]``, e.g. for a load-displacement curve. The solver checkpoints the
+load parameter of the step and the increments of it its predictor extrapolates, the loads what they keep from step to
+step, and the controller the change of its controlled quantity over the step, so an arc length controlled run resumes
+exactly where it stopped.
+
+The re-equilibration after a model change (``equilibrateAfterModelChange``, see :doc:`modelmodifiers`) is, under arc
+length control, an arc length increment of size zero: the controller asks for a change of zero, so the controlled
+quantity stays where the last accepted increment left it, and the load parameter is solved for, and with it the loads
+and the prescribed displacements it scales -- the counterpart of a zero-time increment under displacement control,
+which, unlike a constant load, has a solution past a limit point. As for any increment, the stop condition is checked
+before it, and the controller's ``finishIncrement`` is called once it has converged. The load parameter it reaches is
+committed with its state, and the next increment starts from it.
+
 ``NID`` - Nonlinear Implicit Dynamic (Newmark-beta)
 ----------------------------------------------------
 
@@ -179,8 +296,8 @@ Newton's method starts each increment from a prediction of its solution incremen
   been accepted, the prediction is linear.
 
 Sizes are measured in step progress. The prescribed degrees of freedom take their prescribed increment, so the first
-iteration of a predicted increment already checks convergence. Not available yet under an arc length controller,
-which extrapolates its load parameter linearly.
+iteration of a predicted increment already checks convergence. Under arc length control, the increment of the load
+parameter is predicted from the same accepted increments with the same weights, see :ref:`arc-length-control`.
 
 A prediction can lead Newton's method astray, e.g., when the path turns sharply. Two options decide what happens then
 and around rebuilds of the equation system, both off by default:
@@ -204,8 +321,8 @@ Line search and quasi-Newton fallback of the implicit solvers
 
 Newton's method converges quadratically close to the solution, but far from it, or where the tangent changes abruptly
 (e.g., material points switching between loading and unloading), a full correction can overshoot, and the iterations
-oscillate or diverge. Two remedies, solver options of ``NIST``, ``NISTParallel``, ``NID`` and ``NIDParallel``, are off by
-default; neither is available yet under an arc length controller.
+oscillate or diverge. Two remedies, solver options of the implicit solvers, are off by default. Under arc length
+control, both act on the pair of the solution and the load parameter, see :ref:`arc-length-control`.
 
 **Line search** (``lineSearch``). The correction :math:`\Delta\Delta U` is scaled by a step length :math:`\alpha`:
 the largest residual :math:`\| R(\Delta U + \alpha \, \Delta\Delta U) \|_\infty` (without the Dirichlet degrees of

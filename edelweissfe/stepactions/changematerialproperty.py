@@ -226,15 +226,13 @@ class StepAction(StepActionBase):
         if f_t is not None:
             self.f_t = f_t
 
-    def applyAtStepEnd(self, model, stepMagnitude=None):
+    def applyAtStepEnd(self, model):
         """Deactivate this step action at the end of the step it was declared in.
 
         Parameters
         ----------
         model
             The current state of the model.
-        stepMagnitude
-            Unused; present for signature compatibility with the other step actions.
         """
 
         self.active = False

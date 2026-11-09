@@ -269,6 +269,8 @@ On a path-independent material this is non-destructive (it changes only the incr
 the converged root); for a history-dependent material it yields a physically distinct, relaxed path,
 which is the intended effect. The equilibration solve integrates materials with ``dT = 0``, so it
 suits rate-independent models; rate-dependent materials see no time advance during it by design.
+Under arc length control (``NISTPArcLength``), the re-equilibration holds the controlled quantity
+instead of the load, and solves for the load parameter (see :ref:`arc-length-control`).
 
 Refinement under a dynamic solver
 ---------------------------------

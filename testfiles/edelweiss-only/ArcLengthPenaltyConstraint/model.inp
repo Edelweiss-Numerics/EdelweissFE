@@ -1,6 +1,7 @@
 ** A cantilever under its self-weight, bent down onto a rigid floor (a quadratic penalty constraint).
-** Shared by test.inp (arc-length, the tip load scaled by a load factor that follows the tip displacement)
-** and the reference of tests/test_arclength_with_constraints.py (NIST, the tip displacement prescribed).
+** Shared by test.inp (arc-length, the tip load scaled by a load factor that follows the tip displacement), by the
+** arc-length decks ../ArcLengthPrescribedDisplacement and ../ArcLengthTwoSteps, and by tests/test_arclength_*.py,
+** whose references solve it with NIST, the end state prescribed.
 
 *material, name=LinearElastic, id=linearelastic, provider=edelweiss
 100.0, 0.3
