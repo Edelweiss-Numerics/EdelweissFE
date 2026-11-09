@@ -314,16 +314,17 @@
         <span class="n">time</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
         <span class="n">dTime</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
     <span class="p">):</span>
-<span class="w">        </span><span class="sd">"""Evaluate residual and stiffness for given time, field, and field increment due to a surface load.</span>
+<span class="w">        </span><span class="sd">"""Add the residual contribution of a surface load, the negative of the external load, and its</span>
+<span class="sd">        tangent.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
 <span class="sd">        loadType</span>
 <span class="sd">            The type of load.</span>
 <span class="sd">        P</span>
-<span class="sd">            The external load vector to be defined.</span>
+<span class="sd">            The residual contribution to augment, :math:`-\\boldsymbol{f}_\\mathrm{ext}`.</span>
 <span class="sd">        K</span>
-<span class="sd">            The stiffness matrix to be defined.</span>
+<span class="sd">            The tangent ``dP/dU`` to augment.</span>
 <span class="sd">        faceID</span>
 <span class="sd">            The number of the elements face this load acts on.</span>
 <span class="sd">        load</span>
@@ -344,14 +345,15 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">computeBodyForce</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span> <span class="n">P</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">K</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">load</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">U</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">time</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">dTime</span><span class="p">:</span> <span class="nb">float</span>
     <span class="p">):</span>
-<span class="w">        </span><span class="sd">"""Evaluate residual and stiffness for given time, field, and field increment due to a body force load.</span>
+<span class="w">        </span><span class="sd">"""Add the residual contribution of a body force, the negative of the external load</span>
+<span class="sd">        :math:`-\\int \\boldsymbol{N}^T \\boldsymbol{b} \\, \\mathrm{d}V`; a dead load, so its tangent is zero.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
 <span class="sd">        P</span>
-<span class="sd">            The external load vector to be defined.</span>
+<span class="sd">            The residual contribution to augment, :math:`-\\boldsymbol{f}_\\mathrm{ext}`.</span>
 <span class="sd">        K</span>
-<span class="sd">            The stiffness matrix to be defined.</span>
+<span class="sd">            The tangent ``dP/dU`` to augment.</span>
 <span class="sd">        load</span>
 <span class="sd">            The magnitude (or vector) describing the load.</span>
 <span class="sd">        U</span>
@@ -364,7 +366,7 @@
 
         <span class="n">N</span> <span class="o">=</span> <span class="n">computeNOperator</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_xi</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_eta</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_zeta</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_nInt</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">nNodes</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">nSpatialDimensions</span><span class="p">)</span>
         <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_nInt</span><span class="p">):</span>
-            <span class="n">P</span> <span class="o">+=</span> <span class="n">np</span><span class="o">.</span><span class="n">outer</span><span class="p">(</span><span class="n">N</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">load</span><span class="p">)</span><span class="o">.</span><span class="n">flatten</span><span class="p">()</span> <span class="o">*</span> <span class="n">lin</span><span class="o">.</span><span class="n">det</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">J</span><span class="p">[</span><span class="n">i</span><span class="p">])</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">_t</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">_weight</span><span class="p">[</span><span class="n">i</span><span class="p">]</span></div>
+            <span class="n">P</span> <span class="o">-=</span> <span class="n">np</span><span class="o">.</span><span class="n">outer</span><span class="p">(</span><span class="n">N</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">load</span><span class="p">)</span><span class="o">.</span><span class="n">flatten</span><span class="p">()</span> <span class="o">*</span> <span class="n">lin</span><span class="o">.</span><span class="n">det</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">J</span><span class="p">[</span><span class="n">i</span><span class="p">])</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">_t</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">_weight</span><span class="p">[</span><span class="n">i</span><span class="p">]</span></div>
 
 
 <div class="viewcode-block" id="DisplacementElementBase.computeConsistentMassMatrix">

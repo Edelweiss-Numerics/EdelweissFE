@@ -260,7 +260,9 @@ matrix</p>
 <p>Contact is active for <span class="math notranslate nohighlight">\(g &lt; 0\)</span>. With <span class="math notranslate nohighlight">\(\kappa = p\, A_s\)</span> (<code class="docutils literal notranslate"><span class="pre">penalty</span></code> <span class="math notranslate nohighlight">\(p\)</span>, an
 interface stiffness modulus per unit area, times the tributary area), two force laws are
 available; <span class="math notranslate nohighlight">\(f_n \leq 0\)</span> denotes the normal force carried by the slave node (compression
-negative), assembled as <span class="math notranslate nohighlight">\(\boldsymbol{P}^{ext} \mathrel{-}= f_n\, \boldsymbol{w}\)</span>:</p>
+negative). The contact force on the nodes is <span class="math notranslate nohighlight">\(-f_n\, \boldsymbol{w}\)</span>, so the residual
+contribution is <span class="math notranslate nohighlight">\(\boldsymbol{P} \mathrel{+}= f_n\, \boldsymbol{w}\)</span> (see
+<a class="reference internal" href="solvers.html#residual-and-tangent-convention"><span class="std std-ref">The residual and the tangent</span></a>):</p>
 <table class="docutils align-default">
 <colgroup>
 <col style="width: 14.0%" />
@@ -377,8 +379,9 @@ cutbacks automatically state-safe):</p>
 \end{cases}\end{split}\]</div>
 <p>with <span class="math notranslate nohighlight">\(N = -f_n \geq 0\)</span> the current normal force (multiplier-augmented if AL is active).
 The force on the slave node is <span class="math notranslate nohighlight">\(\boldsymbol{t}_T\)</span> and the facet nodes receive the reaction
-<span class="math notranslate nohighlight">\(-\bar{N}_a \boldsymbol{t}_T\)</span>, i.e. the assembly is <span class="math notranslate nohighlight">\(\boldsymbol{P}^{ext}
-\mathrel{+}= \boldsymbol{G}^T \boldsymbol{t}_T = \boldsymbol{c} \otimes \boldsymbol{t}_T\)</span>.</p>
+<span class="math notranslate nohighlight">\(-\bar{N}_a \boldsymbol{t}_T\)</span>, i.e. the force on the nodes is <span class="math notranslate nohighlight">\(\boldsymbol{G}^T
+\boldsymbol{t}_T = \boldsymbol{c} \otimes \boldsymbol{t}_T\)</span>, and the residual contribution is its
+negative, <span class="math notranslate nohighlight">\(\boldsymbol{P} \mathrel{-}= \boldsymbol{c} \otimes \boldsymbol{t}_T\)</span>.</p>
 <p>Note the continuity at liftoff: as <span class="math notranslate nohighlight">\(N \to 0\)</span> the slip branch caps the force at <span class="math notranslate nohighlight">\(\mu N
 \to 0\)</span>, so the frictional force is continuous through gap activation. The <em>tangent</em>, however, is
 only continuous there if the normal stiffness vanishes at activation – the quadratic-law
@@ -390,7 +393,8 @@ the tangential force of the converged iterate is promoted to the history:
 </section>
 <section id="consistent-tangent">
 <span id="friction-tangent"></span><h4>Consistent tangent<a class="headerlink" href="#consistent-tangent" title="Link to this heading"></a></h4>
-<p>With <span class="math notranslate nohighlight">\(\boldsymbol{K} = -\partial \boldsymbol{P}^{ext} / \partial \boldsymbol{U}\)</span> and the
+<p>With <span class="math notranslate nohighlight">\(\boldsymbol{K} = \partial \boldsymbol{P} / \partial \boldsymbol{U}\)</span>, the derivative of the
+residual contribution <span class="math notranslate nohighlight">\(\boldsymbol{P} = -\boldsymbol{c} \otimes \boldsymbol{t}_T\)</span>, and the
 Kronecker identities above:</p>
 <p><strong>Stick</strong> (symmetric, positive semi-definite):</p>
 <div class="math notranslate nohighlight">
@@ -891,7 +895,7 @@ reassignment forces a rebuild.</p></li>
 it backs the public <code class="docutils literal notranslate"><span class="pre">getGaps()</span></code>, whose callers cannot mask unassigned entries because they do
 not know the assignment.</p></li>
 </ol>
-<p><strong>Every evaluation</strong>, in <code class="docutils literal notranslate"><span class="pre">applyConstraint</span></code> (implicit) or <code class="docutils literal notranslate"><span class="pre">applyConstraintExplicit</span></code>:</p>
+<p><strong>Every evaluation</strong>, in <code class="docutils literal notranslate"><span class="pre">computeKernels</span></code> (implicit) or <code class="docutils literal notranslate"><span class="pre">computeKernelsExplicit</span></code>:</p>
 <ol class="arabic simple">
 <li><p>The gap of each assigned point follows from the frozen data by the expression above; the point
 is closed where <span class="math notranslate nohighlight">\(g &lt; 0\)</span>.</p></li>
@@ -1023,9 +1027,10 @@ footprint changed. The solver rebuilds the <code class="docutils literal notrans
 constraint reports a change. (All constraints are always polled – the poll must not
 short-circuit, since every dynamic constraint relies on the call to refresh its state.)</p>
 </dd>
-<dt><code class="docutils literal notranslate"><span class="pre">applyConstraint(U,</span> <span class="pre">dU,</span> <span class="pre">PExt,</span> <span class="pre">K,</span> <span class="pre">timeStep)</span></code> (every Newton iteration)</dt><dd><p>Assembles forces and consistent tangent from the current iterate, as derived above. All
-quantities derive from (converged state, <span class="math notranslate nohighlight">\(d\boldsymbol{U}\)</span>); nothing accumulates
-across iterations, so failed increments and cutbacks need no state rollback.</p>
+<dt><code class="docutils literal notranslate"><span class="pre">computeKernels(U,</span> <span class="pre">dU,</span> <span class="pre">P,</span> <span class="pre">K,</span> <span class="pre">timeStep)</span></code> (every Newton iteration)</dt><dd><p>Assembles the residual contribution of the contact forces and its consistent tangent from the
+current iterate, as derived above. All quantities derive from (converged state,
+<span class="math notranslate nohighlight">\(d\boldsymbol{U}\)</span>); nothing accumulates across iterations, so failed increments and
+cutbacks need no state rollback.</p>
 </dd>
 <dt><code class="docutils literal notranslate"><span class="pre">acceptLastState()</span></code> (on increment acceptance)</dt><dd><p>Promotes the tangential forces of the converged iterate to the frictional history and
 performs the incremental Uzawa update of the normal multipliers.</p>
@@ -1036,7 +1041,7 @@ gaps – are exposed via <code class="docutils literal notranslate"><span class=
 ordered like the generator’s <code class="docutils literal notranslate"><span class="pre">&lt;prefix&gt;_nodes</span></code> node set, and are typically requested as
 <code class="docutils literal notranslate"><span class="pre">fromExpression</span></code> field outputs.</p>
 <p>The integrated constraint (<a class="reference internal" href="#integrated-contact-algorithm"><span class="std std-ref">The integrated formulation, step by step</span></a>) presents the same
-<code class="docutils literal notranslate"><span class="pre">updateConnectivity</span></code> / <code class="docutils literal notranslate"><span class="pre">applyConstraint</span></code> pair, with three differences worth knowing at the
+<code class="docutils literal notranslate"><span class="pre">updateConnectivity</span></code> / <code class="docutils literal notranslate"><span class="pre">computeKernels</span></code> pair, with three differences worth knowing at the
 solver boundary. It carries no history, so it has no <code class="docutils literal notranslate"><span class="pre">acceptLastState</span></code> to promote – every
 quantity derives from the converged state and <span class="math notranslate nohighlight">\(d\boldsymbol{U}\)</span>. Its DOF footprint is the set
 of <em>assigned</em> contact points and does not respond to gap activation, so the sparsity pattern
@@ -1051,9 +1056,9 @@ which is node-ordered like the accessors above.</p>
 what an explicit increment is.</p>
 <p><strong>No tangent is assembled.</strong> An explicit increment solves no linear system, so a constraint
 stiffness enters nothing. The solver calls
-<a class="reference internal" href="constraints.html#edelweissfe.constraints.base.constraintbase.ConstraintBase.applyConstraintExplicit" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.applyConstraintExplicit"><code class="xref py py-meth docutils literal notranslate"><span class="pre">applyConstraintExplicit()</span></code></a>
-instead of <code class="docutils literal notranslate"><span class="pre">applyConstraint</span></code>, and this constraint overrides it to evaluate the contact forces
-without building a tangent at all. The base-class default forwards to <code class="docutils literal notranslate"><span class="pre">applyConstraint</span></code> with a
+<a class="reference internal" href="constraints.html#edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernelsExplicit" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernelsExplicit"><code class="xref py py-meth docutils literal notranslate"><span class="pre">computeKernelsExplicit()</span></code></a>
+instead of <code class="docutils literal notranslate"><span class="pre">computeKernels</span></code>, and this constraint overrides it to evaluate the contact forces
+without building a tangent at all. The base-class default forwards to <code class="docutils literal notranslate"><span class="pre">computeKernels</span></code> with a
 discarded tangent contribution, so a constraint that has not been ported still works – correctly,
 but paying for a stiffness nobody reads. Constraints for which the tangent is a material part of
 the cost should override the method; for this one it is, at a per-slave outer product and four

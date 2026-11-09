@@ -137,7 +137,7 @@
 
 <span class="sd">.. math::</span>
 
-<span class="sd">    \\boldsymbol{R} &amp;= \\boldsymbol{P}_\\mathrm{ext} - \\boldsymbol{P}_\\mathrm{int}</span>
+<span class="sd">    \\boldsymbol{R} &amp;= \\boldsymbol{f}_\\mathrm{ext} - \\boldsymbol{f}_\\mathrm{int}</span>
 <span class="sd">        - \\boldsymbol{M} \\ddot{\\boldsymbol{u}}_{n+1} - \\boldsymbol{C} \\dot{\\boldsymbol{u}}_{n+1}, \\\\</span>
 <span class="sd">    \\boldsymbol{K}_\\mathrm{eff} &amp;= \\boldsymbol{K} + \\frac{1}{\\beta \\, \\Delta t^2} \\boldsymbol{M}</span>
 <span class="sd">        + \\frac{\\gamma}{\\beta \\, \\Delta t} \\boldsymbol{C}.</span>
@@ -147,7 +147,7 @@
 <span class="sd">solver runs :meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.solveIncrement` itself and</span>
 <span class="sd">enters it only through its three hooks -- :meth:`NonlinearImplicitDynamic.initializeIncrement`</span>
 <span class="sd">(mass, damping, dynamic stiffness, initial acceleration), :meth:`NonlinearImplicitDynamic.assembleAdditionalTerms`</span>
-<span class="sd">(two terms in the residual and two in the tangent, where the parent forms ``R = P_ext - P_int``</span>
+<span class="sd">(two terms in the residual and two in the tangent, where the parent forms ``R = f_ext - f_int``</span>
 <span class="sd">and before the tangent is converted to CSR) and :meth:`NonlinearImplicitDynamic.finalizeIncrement`</span>
 <span class="sd">(the converged velocity and acceleration become the state).</span>
 
@@ -1497,7 +1497,7 @@
     <span class="p">):</span>
 <span class="w">        </span><span class="sd">"""Compute the acceleration from equilibrium at the start of an increment, and commit it.</span>
 
-<span class="sd">        Solves :math:`M a_0 = P_\\mathrm{ext}(t_0) - P_\\mathrm{int}(u_0) - C v_0` on the dynamic,</span>
+<span class="sd">        Solves :math:`M a_0 = f_\\mathrm{ext}(t_0) - f_\\mathrm{int}(u_0) - C v_0` on the dynamic,</span>
 <span class="sd">        free degrees of freedom. The loads are evaluated with a synthetic time step at the start of</span>
 <span class="sd">        the increment passed in (zero step-progress increment and zero time increment -- an ``f(t)``</span>
 <span class="sd">        amplitude at that instant), the elements with a zero displacement increment, which leaves</span>
@@ -1540,17 +1540,22 @@
 
         <span class="n">P</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
         <span class="n">F</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
-        <span class="n">PExt</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
+        <span class="n">PLoadsAndConstraints</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
         <span class="n">dU0</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
         <span class="n">K</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">constructVIJSystemMatrix</span><span class="p">()</span>
 
         <span class="n">P</span><span class="p">,</span> <span class="n">K</span><span class="p">,</span> <span class="n">F</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">computeElements</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">elements</span><span class="p">,</span> <span class="n">U_n</span><span class="p">,</span> <span class="n">dU0</span><span class="p">,</span> <span class="n">P</span><span class="p">,</span> <span class="n">K</span><span class="p">,</span> <span class="n">F</span><span class="p">,</span> <span class="n">startTimeStep</span><span class="p">)</span>
-        <span class="n">PExt</span><span class="p">,</span> <span class="n">K</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">assembleLoads</span><span class="p">(</span><span class="n">nodeforces</span><span class="p">,</span> <span class="n">distributedLoads</span><span class="p">,</span> <span class="n">bodyForces</span><span class="p">,</span> <span class="n">U_n</span><span class="p">,</span> <span class="n">PExt</span><span class="p">,</span> <span class="n">K</span><span class="p">,</span> <span class="n">startTimeStep</span><span class="p">)</span>
-        <span class="n">PExt</span><span class="p">,</span> <span class="n">K</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">assembleConstraints</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">constraints</span><span class="p">,</span> <span class="n">U_n</span><span class="p">,</span> <span class="n">dU0</span><span class="p">,</span> <span class="n">PExt</span><span class="p">,</span> <span class="n">K</span><span class="p">,</span> <span class="n">startTimeStep</span><span class="p">)</span>
+        <span class="n">PLoadsAndConstraints</span><span class="p">,</span> <span class="n">K</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">assembleLoads</span><span class="p">(</span>
+            <span class="n">nodeforces</span><span class="p">,</span> <span class="n">distributedLoads</span><span class="p">,</span> <span class="n">bodyForces</span><span class="p">,</span> <span class="n">U_n</span><span class="p">,</span> <span class="n">PLoadsAndConstraints</span><span class="p">,</span> <span class="n">K</span><span class="p">,</span> <span class="n">startTimeStep</span>
+        <span class="p">)</span>
+        <span class="n">PLoadsAndConstraints</span><span class="p">,</span> <span class="n">K</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">assembleConstraints</span><span class="p">(</span>
+            <span class="n">model</span><span class="o">.</span><span class="n">constraints</span><span class="p">,</span> <span class="n">U_n</span><span class="p">,</span> <span class="n">dU0</span><span class="p">,</span> <span class="n">PLoadsAndConstraints</span><span class="p">,</span> <span class="n">K</span><span class="p">,</span> <span class="n">startTimeStep</span>
+        <span class="p">)</span>
 
+        <span class="c1"># f_ext - f_int is the negative of the summed residual contributions, as in solveIncrement</span>
         <span class="n">R</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
-        <span class="n">R</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">PExt</span>
-        <span class="n">R</span> <span class="o">-=</span> <span class="n">P</span>
+        <span class="n">R</span><span class="p">[:]</span> <span class="o">=</span> <span class="o">-</span><span class="n">P</span>
+        <span class="n">R</span> <span class="o">-=</span> <span class="n">PLoadsAndConstraints</span>
         <span class="n">R</span> <span class="o">-=</span> <span class="n">system</span><span class="o">.</span><span class="n">C</span> <span class="o">@</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">system</span><span class="o">.</span><span class="n">V</span><span class="p">)</span>
 
         <span class="n">nDof</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">nDof</span>

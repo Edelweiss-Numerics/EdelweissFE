@@ -363,6 +363,7 @@
         <span class="n">F</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>  <span class="c1"># accumulated Flux vector</span>
         <span class="n">FConstraints</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>  <span class="c1"># accumulated constraint Flux vector</span>
 
+        <span class="n">PConstraints</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
         <span class="n">P_0</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
         <span class="n">P_f</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
         <span class="n">K_f</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">constructVIJSystemMatrix</span><span class="p">()</span>
@@ -392,7 +393,7 @@
                 <span class="n">U_np</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">U_n</span>
                 <span class="n">U_np</span> <span class="o">+=</span> <span class="n">dU</span>
 
-                <span class="n">P</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">F</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">FConstraints</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">P_0</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">P_f</span><span class="p">[:]</span> <span class="o">=</span> <span class="mf">0.0</span>
+                <span class="n">P</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">F</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">FConstraints</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">PConstraints</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">P_0</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">P_f</span><span class="p">[:]</span> <span class="o">=</span> <span class="mf">0.0</span>
 
                 <span class="c1"># the tangents hold the entries of all element matrices, far too many to zero on a single thread</span>
                 <span class="k">def</span><span class="w"> </span><span class="nf">zeroTangents</span><span class="p">(</span><span class="n">s</span><span class="p">):</span>
@@ -400,12 +401,14 @@
 
                 <span class="n">forEachSliceInParallel</span><span class="p">(</span><span class="n">zeroTangents</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">K</span><span class="p">))</span>
 
+            <span class="c1"># Every element, load and constraint adds its residual contribution and the tangent of it; the loads</span>
+            <span class="c1"># twice: once at the start of the step (the dead load P_0) and once at its end (the reference load).</span>
             <span class="n">P</span><span class="p">,</span> <span class="n">K</span><span class="p">,</span> <span class="n">F</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">computeElements</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">elements</span><span class="p">,</span> <span class="n">U_np</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">P</span><span class="p">,</span> <span class="n">K</span><span class="p">,</span> <span class="n">F</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">)</span>
-            <span class="n">P</span><span class="p">,</span> <span class="n">K</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">assembleConstraints</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">constraints</span><span class="p">,</span> <span class="n">U_np</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">P</span><span class="p">,</span> <span class="n">K</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">,</span> <span class="n">FConstraints</span><span class="p">)</span>
+            <span class="n">PConstraints</span><span class="p">,</span> <span class="n">K</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">assembleConstraints</span><span class="p">(</span>
+                <span class="n">model</span><span class="o">.</span><span class="n">constraints</span><span class="p">,</span> <span class="n">U_np</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">PConstraints</span><span class="p">,</span> <span class="n">K</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">,</span> <span class="n">FConstraints</span>
+            <span class="p">)</span>
 
-            <span class="n">P_0</span><span class="p">,</span> <span class="n">K_0</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">assembleLoads</span><span class="p">(</span>
-                <span class="n">nodeForces</span><span class="p">,</span> <span class="n">distributedLoads</span><span class="p">,</span> <span class="n">bodyForces</span><span class="p">,</span> <span class="n">U_np</span><span class="p">,</span> <span class="n">P_0</span><span class="p">,</span> <span class="n">K_0</span><span class="p">,</span> <span class="n">zeroTimeStep</span>
-            <span class="p">)</span>  <span class="c1"># compute 'dead' deadloads, like gravity</span>
+            <span class="n">P_0</span><span class="p">,</span> <span class="n">K_0</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">assembleLoads</span><span class="p">(</span><span class="n">nodeForces</span><span class="p">,</span> <span class="n">distributedLoads</span><span class="p">,</span> <span class="n">bodyForces</span><span class="p">,</span> <span class="n">U_np</span><span class="p">,</span> <span class="n">P_0</span><span class="p">,</span> <span class="n">K_0</span><span class="p">,</span> <span class="n">zeroTimeStep</span><span class="p">)</span>
             <span class="n">P_f</span><span class="p">,</span> <span class="n">K_f</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">assembleLoads</span><span class="p">(</span>
                 <span class="n">nodeForces</span><span class="p">,</span>
                 <span class="n">distributedLoads</span><span class="p">,</span>
@@ -414,14 +417,16 @@
                 <span class="n">P_f</span><span class="p">,</span>
                 <span class="n">K_f</span><span class="p">,</span>
                 <span class="n">referenceTimeStep</span><span class="p">,</span>
-            <span class="p">)</span>  <span class="c1"># compute 'dead' deadloads, like gravity</span>
+            <span class="p">)</span>
 
             <span class="n">P_f</span> <span class="o">-=</span> <span class="n">P_0</span>  <span class="c1"># and subtract the dead part, since we are only interested in the homogeneous linear part</span>
             <span class="n">K_f</span> <span class="o">-=</span> <span class="n">K_0</span>
 
-            <span class="c1"># Dead and Reference load ..</span>
-            <span class="n">R_0</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">P_0</span> <span class="o">+</span> <span class="p">(</span><span class="n">Lambda</span> <span class="o">+</span> <span class="n">dLambda</span><span class="p">)</span> <span class="o">*</span> <span class="n">P_f</span> <span class="o">-</span> <span class="n">P</span>
-            <span class="n">R_f</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">P_f</span>
+            <span class="c1"># The right-hand sides are the negative of the summed contributions: for the dead load and the reference</span>
+            <span class="c1"># load scaled by the load parameter, R_0 = f_ext,0 + (Lambda + dLambda) f_ref - f_int, and for the</span>
+            <span class="c1"># reference load alone, R_f = f_ref.</span>
+            <span class="n">R_0</span><span class="p">[:]</span> <span class="o">=</span> <span class="o">-</span><span class="p">(</span><span class="n">P_0</span> <span class="o">+</span> <span class="p">(</span><span class="n">Lambda</span> <span class="o">+</span> <span class="n">dLambda</span><span class="p">)</span> <span class="o">*</span> <span class="n">P_f</span> <span class="o">+</span> <span class="n">P</span> <span class="o">+</span> <span class="n">PConstraints</span><span class="p">)</span>
+            <span class="n">R_f</span><span class="p">[:]</span> <span class="o">=</span> <span class="o">-</span><span class="n">P_f</span>
 
             <span class="c1"># add stiffness contribution</span>
             <span class="n">K</span><span class="p">[:]</span> <span class="o">+=</span> <span class="n">K_0</span>
@@ -456,10 +461,8 @@
             <span class="c1"># identity rows, and the columns eliminated into both right-hand sides R_0 and R_f</span>
             <span class="n">K_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">applyDirichletToStiffness</span><span class="p">(</span><span class="n">K_</span><span class="p">,</span> <span class="n">dirichlets</span><span class="p">,</span> <span class="n">R_</span><span class="p">)</span>
 
-            <span class="c1"># solve 2 eq. systems at once:</span>
+            <span class="c1"># solve 2 eq. systems at once: ddU_0 = K⁻¹ R_0 and ddU_f = K⁻¹ R_f</span>
             <span class="n">ddU_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">linearSolve</span><span class="p">(</span><span class="n">K_</span><span class="p">,</span> <span class="n">R_</span><span class="p">)</span>
-            <span class="c1"># q_0 = K⁻¹ * (  Pext_0  + dLambda * Pext_Ref - PInt  )</span>
-            <span class="c1"># q_f = K⁻¹ * (  Pext_Ref  )</span>
             <span class="n">ddU_0</span><span class="p">,</span> <span class="n">ddU_f</span> <span class="o">=</span> <span class="n">ddU_</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">],</span> <span class="n">ddU_</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">]</span>
 
             <span class="c1"># compute the increment of the load parameter. Method depends on the employed arc length controller</span>

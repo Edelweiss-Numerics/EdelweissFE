@@ -862,7 +862,7 @@
         <span class="n">R</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
         <span class="n">F</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
         <span class="n">FConstraints</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
-        <span class="n">PExt</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
+        <span class="n">PLoadsAndConstraints</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
         <span class="n">U_np</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
         <span class="n">ddU</span> <span class="o">=</span> <span class="kc">None</span>
 
@@ -892,16 +892,24 @@
                 <span class="n">U_np</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">U_n</span>
                 <span class="n">U_np</span> <span class="o">+=</span> <span class="n">dU</span>
 
-                <span class="n">P</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">F</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">FConstraints</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">PExt</span><span class="p">[:]</span> <span class="o">=</span> <span class="mf">0.0</span>
+                <span class="n">P</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">F</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">FConstraints</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">PLoadsAndConstraints</span><span class="p">[:]</span> <span class="o">=</span> <span class="mf">0.0</span>
                 <span class="c1"># K holds the entries of all element matrices, far too many to zero on a single thread</span>
                 <span class="n">forEachSliceInParallel</span><span class="p">(</span><span class="k">lambda</span> <span class="n">s</span><span class="p">:</span> <span class="n">K</span><span class="p">[</span><span class="n">s</span><span class="p">]</span><span class="o">.</span><span class="n">fill</span><span class="p">(</span><span class="mf">0.0</span><span class="p">),</span> <span class="nb">len</span><span class="p">(</span><span class="n">K</span><span class="p">))</span>
 
+            <span class="c1"># Every element, load and constraint adds its residual contribution and the tangent of it.</span>
+            <span class="c1"># The elements' sum P is kept apart: it is the reaction force this increment reports.</span>
             <span class="n">P</span><span class="p">,</span> <span class="n">K</span><span class="p">,</span> <span class="n">F</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">computeElements</span><span class="p">(</span><span class="n">elements</span><span class="p">,</span> <span class="n">U_np</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">P</span><span class="p">,</span> <span class="n">K</span><span class="p">,</span> <span class="n">F</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">)</span>
-            <span class="n">PExt</span><span class="p">,</span> <span class="n">K</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">assembleLoads</span><span class="p">(</span><span class="n">nodeforces</span><span class="p">,</span> <span class="n">distributedLoads</span><span class="p">,</span> <span class="n">bodyForces</span><span class="p">,</span> <span class="n">U_np</span><span class="p">,</span> <span class="n">PExt</span><span class="p">,</span> <span class="n">K</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">)</span>
-            <span class="n">PExt</span><span class="p">,</span> <span class="n">K</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">assembleConstraints</span><span class="p">(</span><span class="n">constraints</span><span class="p">,</span> <span class="n">U_np</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">PExt</span><span class="p">,</span> <span class="n">K</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">,</span> <span class="n">FConstraints</span><span class="p">)</span>
+            <span class="n">PLoadsAndConstraints</span><span class="p">,</span> <span class="n">K</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">assembleLoads</span><span class="p">(</span>
+                <span class="n">nodeforces</span><span class="p">,</span> <span class="n">distributedLoads</span><span class="p">,</span> <span class="n">bodyForces</span><span class="p">,</span> <span class="n">U_np</span><span class="p">,</span> <span class="n">PLoadsAndConstraints</span><span class="p">,</span> <span class="n">K</span><span class="p">,</span> <span class="n">timeStep</span>
+            <span class="p">)</span>
+            <span class="n">PLoadsAndConstraints</span><span class="p">,</span> <span class="n">K</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">assembleConstraints</span><span class="p">(</span>
+                <span class="n">constraints</span><span class="p">,</span> <span class="n">U_np</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">PLoadsAndConstraints</span><span class="p">,</span> <span class="n">K</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">,</span> <span class="n">FConstraints</span>
+            <span class="p">)</span>
 
+            <span class="c1"># The right-hand side of K ddU = R is the negative of the summed contributions: the out-of-balance</span>
+            <span class="c1"># force R = f_ext - f_int.</span>
             <span class="n">R</span><span class="p">[:]</span> <span class="o">=</span> <span class="o">-</span><span class="n">P</span>
-            <span class="n">R</span> <span class="o">+=</span> <span class="n">PExt</span>
+            <span class="n">R</span> <span class="o">-=</span> <span class="n">PLoadsAndConstraints</span>
 
             <span class="bp">self</span><span class="o">.</span><span class="n">assembleAdditionalTerms</span><span class="p">(</span><span class="n">dU</span><span class="p">,</span> <span class="n">R</span><span class="p">,</span> <span class="n">F</span><span class="p">,</span> <span class="n">K</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">)</span>
 
@@ -994,10 +1002,11 @@
     <span class="p">):</span>
 <span class="w">        </span><span class="sd">"""Assemble terms of the equation system beyond the internal and external forces. Called</span>
 <span class="sd">        by :meth:`solveIncrement` in every Newton iteration, next to :meth:`computeElements`,</span>
-<span class="sd">        :meth:`assembleLoads` and :meth:`assembleConstraints`: right after the residual</span>
-<span class="sd">        :math:`R = P_\\mathrm{ext} - P_\\mathrm{int}` is formed, and before the</span>
-<span class="sd">        multi-point-constraint condensation, the Dirichlet handling, the convergence test and the</span>
-<span class="sd">        linear solve -- which therefore all act on what is added here.</span>
+<span class="sd">        :meth:`assembleLoads` and :meth:`assembleConstraints`: right after the right-hand side</span>
+<span class="sd">        :math:`R = f_\\mathrm{ext} - f_\\mathrm{int}` is formed (see</span>
+<span class="sd">        :ref:`residual-and-tangent-convention`), and before the multi-point-constraint condensation,</span>
+<span class="sd">        the Dirichlet handling, the convergence test and the linear solve -- which therefore all act</span>
+<span class="sd">        on what is added here.</span>
 
 <span class="sd">        A static analysis has no such terms. A dynamic one, for example, subtracts the inertia force</span>
 <span class="sd">        :math:`M \\ddot{u}` from the residual and adds the corresponding mass term to the stiffness</span>
@@ -1134,12 +1143,13 @@
         <span class="n">constraints</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">ConstraintBase</span><span class="p">],</span>
         <span class="n">U_np</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
         <span class="n">dU</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
-        <span class="n">PExt</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
+        <span class="n">P</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
         <span class="n">K</span><span class="p">:</span> <span class="n">VIJSystemMatrix</span><span class="p">,</span>
         <span class="n">timeStep</span><span class="p">:</span> <span class="n">TimeStep</span><span class="p">,</span>
         <span class="n">FConstraints</span><span class="p">:</span> <span class="n">DofVector</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">DofVector</span><span class="p">,</span> <span class="n">VIJSystemMatrix</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">"""Loop over all constraints, and evaluate them.</span>
+<span class="w">        </span><span class="sd">"""Loop over all constraints, and evaluate them: each adds its residual contribution and the</span>
+<span class="sd">        tangent of it, see :meth:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernels`.</span>
 <span class="sd">        Is called by solveIncrement() in each iteration.</span>
 
 <span class="sd">        Parameters</span>
@@ -1150,8 +1160,8 @@
 <span class="sd">            The current solution vector.</span>
 <span class="sd">        dU</span>
 <span class="sd">            The current solution increment vector.</span>
-<span class="sd">        PExt</span>
-<span class="sd">            The external load vector.</span>
+<span class="sd">        P</span>
+<span class="sd">            The residual contribution vector to assemble into.</span>
 <span class="sd">        K</span>
 <span class="sd">            The system matrix.</span>
 <span class="sd">        timeStep</span>
@@ -1162,7 +1172,7 @@
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
 <span class="sd">        tuple[DofVector,VIJSystemMatrix]</span>
-<span class="sd">            - The modified external load vector.</span>
+<span class="sd">            - The modified residual contribution vector.</span>
 <span class="sd">            - The modified system matrix.</span>
 <span class="sd">        """</span>
 
@@ -1170,14 +1180,14 @@
             <span class="n">Kc</span> <span class="o">=</span> <span class="n">K</span><span class="p">[</span><span class="n">constraint</span><span class="p">]</span>
             <span class="n">Pc</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">constraint</span><span class="o">.</span><span class="n">nDof</span><span class="p">)</span>
 
-            <span class="n">constraint</span><span class="o">.</span><span class="n">applyConstraint</span><span class="p">(</span><span class="n">U_np</span><span class="p">[</span><span class="n">constraint</span><span class="p">],</span> <span class="n">dU</span><span class="p">[</span><span class="n">constraint</span><span class="p">],</span> <span class="n">Pc</span><span class="p">,</span> <span class="n">Kc</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">)</span>
+            <span class="n">constraint</span><span class="o">.</span><span class="n">computeKernels</span><span class="p">(</span><span class="n">U_np</span><span class="p">[</span><span class="n">constraint</span><span class="p">],</span> <span class="n">dU</span><span class="p">[</span><span class="n">constraint</span><span class="p">],</span> <span class="n">Pc</span><span class="p">,</span> <span class="n">Kc</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">)</span>
 
-            <span class="c1"># instead of PExt[constraint] += Pe, np.add.at allows for repeated indices</span>
-            <span class="n">np</span><span class="o">.</span><span class="n">add</span><span class="o">.</span><span class="n">at</span><span class="p">(</span><span class="n">PExt</span><span class="p">,</span> <span class="n">PExt</span><span class="o">.</span><span class="n">entitiesInDofVector</span><span class="p">[</span><span class="n">constraint</span><span class="p">],</span> <span class="n">Pc</span><span class="p">)</span>
+            <span class="c1"># instead of P[constraint] += Pc, np.add.at allows for repeated indices</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">add</span><span class="o">.</span><span class="n">at</span><span class="p">(</span><span class="n">P</span><span class="p">,</span> <span class="n">P</span><span class="o">.</span><span class="n">entitiesInDofVector</span><span class="p">[</span><span class="n">constraint</span><span class="p">],</span> <span class="n">Pc</span><span class="p">)</span>
             <span class="k">if</span> <span class="n">FConstraints</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="n">np</span><span class="o">.</span><span class="n">add</span><span class="o">.</span><span class="n">at</span><span class="p">(</span><span class="n">FConstraints</span><span class="p">,</span> <span class="n">FConstraints</span><span class="o">.</span><span class="n">entitiesInDofVector</span><span class="p">[</span><span class="n">constraint</span><span class="p">],</span> <span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">Pc</span><span class="p">))</span>
 
-        <span class="k">return</span> <span class="n">PExt</span><span class="p">,</span> <span class="n">K</span></div>
+        <span class="k">return</span> <span class="n">P</span><span class="p">,</span> <span class="n">K</span></div>
 </div>
 
 </pre></div>

@@ -145,8 +145,11 @@
 <span class="w">        </span><span class="sd">"""Finite elements in EdelweissFE should be derived from this</span>
 <span class="sd">        base class in order to follow the general interface.</span>
 
-<span class="sd">        EdelweissFE expects the layout of the internal and external load vectors, P, PExt, (and the stiffness)</span>
-<span class="sd">        to be of the form</span>
+<span class="sd">        Every method that computes a residual contribution ``P`` with its tangent ``K = dP/dU``</span>
+<span class="sd">        follows one rule (see :ref:`residual-and-tangent-convention`): :meth:`computeKernels` adds</span>
+<span class="sd">        the internal forces, the load methods :meth:`computeDistributedLoad` and</span>
+<span class="sd">        :meth:`computeBodyForce` add the *negative* of the external load. EdelweissFE expects the</span>
+<span class="sd">        layout of ``P`` (and of ``K``) to be of the form</span>
 
 <span class="sd">        .. code-block:: console</span>
 
@@ -308,16 +311,18 @@
         <span class="n">time</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
         <span class="n">dT</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
     <span class="p">):</span>
-<span class="w">        </span><span class="sd">"""Evaluate residual and stiffness for given time, field, and field increment due to a surface load.</span>
+<span class="w">        </span><span class="sd">"""Add the residual contribution of a surface load, the negative of the external load</span>
+<span class="sd">        :math:`-\\boldsymbol{f}_\\mathrm{ext}`, and its tangent, which is nonzero only for a load that</span>
+<span class="sd">        follows the deformation (e.g. a pressure on the current surface).</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
 <span class="sd">        loadType</span>
 <span class="sd">            The type of load.</span>
 <span class="sd">        P</span>
-<span class="sd">            The external load vector to be defined.</span>
+<span class="sd">            The residual contribution to augment, :math:`-\\boldsymbol{f}_\\mathrm{ext}`.</span>
 <span class="sd">        K</span>
-<span class="sd">            The stiffness matrix to be defined.</span>
+<span class="sd">            The tangent ``dP/dU`` to augment.</span>
 <span class="sd">        faceID</span>
 <span class="sd">            The number of the elements face this load acts on.</span>
 <span class="sd">        load</span>
@@ -343,14 +348,15 @@
         <span class="n">time</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
         <span class="n">dT</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
     <span class="p">):</span>
-<span class="w">        </span><span class="sd">"""Evaluate the internal forces and stiffness for given time, field, and field increment.</span>
+<span class="w">        </span><span class="sd">"""Add the internal forces to the residual, and their tangent, for given time, field, and field</span>
+<span class="sd">        increment.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
 <span class="sd">        P</span>
-<span class="sd">            The internal load vector to be defined.</span>
+<span class="sd">            The residual contribution to augment, the internal forces :math:`\\boldsymbol{f}_\\mathrm{int}`.</span>
 <span class="sd">        K</span>
-<span class="sd">            The stiffness matrix to be defined.</span>
+<span class="sd">            The tangent ``dP/dU`` to augment, the stiffness matrix.</span>
 <span class="sd">        U</span>
 <span class="sd">            The current solution vector.</span>
 <span class="sd">        dU</span>
@@ -373,12 +379,13 @@
         <span class="n">time</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
         <span class="n">dT</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
     <span class="p">):</span>
-<span class="w">        </span><span class="sd">"""Evaluate the internal forces for given time, field, and field increment.</span>
+<span class="w">        </span><span class="sd">"""Add the internal forces to the residual for given time, field, and field increment, without a</span>
+<span class="sd">        tangent.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
 <span class="sd">        P</span>
-<span class="sd">            The internal load vector to be defined.</span>
+<span class="sd">            The residual contribution to augment, the internal forces :math:`\\boldsymbol{f}_\\mathrm{int}`.</span>
 <span class="sd">        U</span>
 <span class="sd">            The current solution vector.</span>
 <span class="sd">        dU</span>
@@ -549,14 +556,15 @@
         <span class="n">time</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
         <span class="n">dTime</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
     <span class="p">):</span>
-<span class="w">        </span><span class="sd">"""Evaluate residual and stiffness for given time, field, and field increment due to a body force load.</span>
+<span class="w">        </span><span class="sd">"""Add the residual contribution of a body force, the negative of the external load</span>
+<span class="sd">        :math:`-\\boldsymbol{f}_\\mathrm{ext}`, and its tangent, which is zero for a dead load.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
 <span class="sd">        P</span>
-<span class="sd">            The external load vector to be defined.</span>
+<span class="sd">            The residual contribution to augment, :math:`-\\boldsymbol{f}_\\mathrm{ext}`.</span>
 <span class="sd">        K</span>
-<span class="sd">            The stiffness matrix to be defined.</span>
+<span class="sd">            The tangent ``dP/dU`` to augment.</span>
 <span class="sd">        load</span>
 <span class="sd">            The magnitude (or vector) describing the load.</span>
 <span class="sd">        U</span>

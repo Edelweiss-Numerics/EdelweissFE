@@ -76,6 +76,10 @@
 <li class="toctree-l3"><a class="reference internal" href="#multi-point-constraints-and-dirichlet-boundary-conditions">Multi-point constraints and Dirichlet boundary conditions</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#hangingnode-hanging-node-coupling-for-adaptive-mesh-refinement"><code class="docutils literal notranslate"><span class="pre">hangingnode</span></code> - Hanging-node coupling for adaptive mesh refinement</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#implementing-your-own-constraints">Implementing your own constraints</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.utils.residualtangentcheck.centralDifferences"><code class="docutils literal notranslate"><span class="pre">centralDifferences()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.utils.residualtangentcheck.finiteDifferenceTangent"><code class="docutils literal notranslate"><span class="pre">finiteDifferenceTangent()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.utils.residualtangentcheck.localVector"><code class="docutils literal notranslate"><span class="pre">localVector()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.utils.residualtangentcheck.residualContributionAndTangent"><code class="docutils literal notranslate"><span class="pre">residualContributionAndTangent()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase"><code class="docutils literal notranslate"><span class="pre">ConstraintBase</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#edelweissfe.constraints.base.multipointconstraintbase.MultiPointConstraintBase"><code class="docutils literal notranslate"><span class="pre">MultiPointConstraintBase</span></code></a></li>
 </ul>
@@ -1012,10 +1016,11 @@ direction vectors</p>
     \left(\mathbf{R}\, \mathbf{J}_r(\boldsymbol{\theta}_{RP})\right)^{\!\top}
     (\mathbf{r}_s \times \mathbf{n}_s)
 \end{bmatrix},\end{split}\]</div>
-<p>and the residual (external force) and stiffness contributions are assembled exactly as in the
-node-to-rigid-surface penalty constraint,</p>
+<p>and, since the contact force on the nodes is <span class="math notranslate nohighlight">\(-f_n\, \mathbf{w}\)</span>, the residual contribution
+– its negative, see <a class="reference internal" href="solvers.html#residual-and-tangent-convention"><span class="std std-ref">The residual and the tangent</span></a> – and its tangent are assembled exactly
+as in the node-to-rigid-surface penalty constraint,</p>
 <div class="math notranslate nohighlight">
-\[\mathbf{P}_{ext} \mathrel{-{=}} f_n\, \mathbf{w} , \qquad
+\[\mathbf{P} \mathrel{+{=}} f_n\, \mathbf{w} , \qquad
 \mathbf{K} \mathrel{+{=}} k\, (\mathbf{w} \otimes \mathbf{w}) + f_n\, \nabla \mathbf{w} ,\]</div>
 <p>per slave node, where <span class="math notranslate nohighlight">\(\mathbf{w}\)</span> collects the slave and RP blocks.</p>
 <p>The factor <span class="math notranslate nohighlight">\(\mathbf{J}_r(\boldsymbol{\theta}_{RP})\)</span> is the <strong>right Jacobian of the SO(3)
@@ -1046,7 +1051,7 @@ implemented blocks (verified against finite differences for arbitrary accumulate
 <span class="math notranslate nohighlight">\(\boldsymbol{\theta}_{RP}\boldsymbol{\theta}_{RP}\)</span> self-block, which would require the second
 derivative of the exponential map, is omitted; this affects only the convergence rate, not the
 correctness of the converged solution. The per-block breakdown of the tangent is given in the inline
-comments of the <code class="docutils literal notranslate"><span class="pre">applyConstraint</span></code> method in the module source.</p>
+comments of the <code class="docutils literal notranslate"><span class="pre">computeKernels</span></code> method in the module source.</p>
 <table class="docutils align-default" id="id19">
 <caption><span class="caption-text">Options:</span><a class="headerlink" href="#id19" title="Link to this table"></a></caption>
 <thead>
@@ -2369,7 +2374,135 @@ all
 </section>
 <section id="implementing-your-own-constraints">
 <h2>Implementing your own constraints<a class="headerlink" href="#implementing-your-own-constraints" title="Link to this heading"></a></h2>
-<p>Subclass from the constraint base class in module <code class="docutils literal notranslate"><span class="pre">edelweissfe.constraints.base.constraintbase</span></code></p>
+<p>Subclass from the constraint base class in module <code class="docutils literal notranslate"><span class="pre">edelweissfe.constraints.base.constraintbase</span></code>
+and implement its <code class="docutils literal notranslate"><span class="pre">computeKernels</span></code>. A constraint enters the equation system like an element does
+(see <a class="reference internal" href="solvers.html#residual-and-tangent-convention"><span class="std std-ref">The residual and the tangent</span></a>): it adds its residual contribution <span class="math notranslate nohighlight">\(\mathbf{P}\)</span>
+– the negative of the force it exerts on its nodes – and the tangent
+<span class="math notranslate nohighlight">\(\mathbf{K} = \partial \mathbf{P} / \partial \mathbf{U}\)</span>. Two examples:</p>
+<ul class="simple">
+<li><p>A <strong>penalty</strong> spring of stiffness <span class="math notranslate nohighlight">\(k\)</span> that pulls a degree of freedom <span class="math notranslate nohighlight">\(u\)</span> towards
+<span class="math notranslate nohighlight">\(\bar{u}\)</span> exerts the force <span class="math notranslate nohighlight">\(-k\,(u - \bar{u})\)</span> on its node, so it adds
+<span class="math notranslate nohighlight">\(P \mathrel{+}= k\,(u - \bar{u})\)</span> and <span class="math notranslate nohighlight">\(K \mathrel{+}= k\)</span>, exactly as a spring element
+would. <code class="docutils literal notranslate"><span class="pre">directionalspringpenalty</span></code> is this constraint.</p></li>
+<li><p>A <strong>Lagrange multiplier</strong> <span class="math notranslate nohighlight">\(\boldsymbol{\lambda}\)</span> enforcing <span class="math notranslate nohighlight">\(\mathbf{g}(\mathbf{u}) =
+\mathbf{0}\)</span> adds <span class="math notranslate nohighlight">\(\boldsymbol{\lambda}^T \partial \mathbf{g} / \partial \mathbf{u}\)</span> to the rows
+of the nodes and <span class="math notranslate nohighlight">\(\mathbf{g}\)</span> to the rows of the multipliers, with the tangent
+<span class="math notranslate nohighlight">\(\begin{bmatrix} \boldsymbol{\lambda}^T \partial^2 \mathbf{g} / \partial \mathbf{u}^2 &amp;
+(\partial \mathbf{g} / \partial \mathbf{u})^T \\ \partial \mathbf{g} / \partial \mathbf{u} &amp;
+\mathbf{0} \end{bmatrix}\)</span>. <code class="docutils literal notranslate"><span class="pre">equalvaluelagrangian</span></code> and <code class="docutils literal notranslate"><span class="pre">rigidbody</span></code> are such constraints.</p></li>
+</ul>
+<p>Because <span class="math notranslate nohighlight">\(\mathbf{K}\)</span> is the derivative of exactly what is added to <span class="math notranslate nohighlight">\(\mathbf{P}\)</span>, a
+constraint can be checked by finite differences of its own <code class="docutils literal notranslate"><span class="pre">computeKernels</span></code>: a wrong tangent, or a
+wrong sign of <span class="math notranslate nohighlight">\(\mathbf{P}\)</span> alone, shows up as a mismatch. <span class="math notranslate nohighlight">\(\mathbf{P}\)</span> and <span class="math notranslate nohighlight">\(\mathbf{K}\)</span> negated
+together pass this check, so the test of a constraint also checks the direction of the forces it exerts on its nodes:
+a penalty pulls them back towards what it prescribes, a contact pushes the bodies apart, a Lagrange multiplier acts on
+them as <span class="math notranslate nohighlight">\(\boldsymbol{\lambda}^T \partial \mathbf{g} / \partial \mathbf{u}\)</span> with the constraint’s own
+<span class="math notranslate nohighlight">\(\mathbf{g}\)</span>. <code class="docutils literal notranslate"><span class="pre">tests/test_residual_tangent_convention.py</span></code> does both for the constraints shipped with
+EdelweissFE (the two integrated surface contact constraints in their own test modules); add a case there for a new
+one. The helpers it uses are part of the package, so that the tests of a package with constraints of its own use them
+as well:</p>
+<p id="module-edelweissfe.utils.residualtangentcheck">Helpers for checking the rule every constraint follows: it adds a residual contribution <code class="docutils literal notranslate"><span class="pre">P</span></code> and the tangent
+<code class="docutils literal notranslate"><span class="pre">K</span> <span class="pre">=</span> <span class="pre">dP/dU</span></code> (see the solver documentation, “The residual and the tangent”).</p>
+<p>Because <code class="docutils literal notranslate"><span class="pre">K</span></code> must be the derivative of what is added to <code class="docutils literal notranslate"><span class="pre">P</span></code>, comparing it with central differences of <code class="docutils literal notranslate"><span class="pre">P</span></code> checks
+both at once: a wrong tangent, or a <code class="docutils literal notranslate"><span class="pre">P</span></code> whose sign alone is wrong, shows up as a mismatch. A <code class="docutils literal notranslate"><span class="pre">P</span></code> and a <code class="docutils literal notranslate"><span class="pre">K</span></code> negated
+together pass, so a test checks the direction of the forces the constraint exerts as well, which only the mechanics of
+the constraint can say: that a penalty pulls its nodes back, that a contact pushes the bodies apart.</p>
+<p>They are part of the package, so that the tests of a package that adds constraints of its own can check them the same
+way as the tests of EdelweissFE check its constraints.</p>
+<dl class="py function">
+<dt class="sig sig-object py" id="edelweissfe.utils.residualtangentcheck.centralDifferences">
+<span class="sig-prename descclassname"><span class="pre">edelweissfe.utils.residualtangentcheck.</span></span><span class="sig-name descname"><span class="pre">centralDifferences</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">function</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">x</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">h</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1e-07</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/utils/residualtangentcheck.html#centralDifferences"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.utils.residualtangentcheck.centralDifferences" title="Link to this definition"></a></dt>
+<dd><p>The Jacobian of <code class="docutils literal notranslate"><span class="pre">function</span></code> at <code class="docutils literal notranslate"><span class="pre">x</span></code> by central differences.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>function</strong> – Maps a vector to a vector.</p></li>
+<li><p><strong>x</strong> (<em>ndarray</em>) – Where to differentiate.</p></li>
+<li><p><strong>h</strong> (<em>float</em>) – The perturbation.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The matrix <code class="docutils literal notranslate"><span class="pre">d</span> <span class="pre">function</span> <span class="pre">/</span> <span class="pre">d</span> <span class="pre">x</span></code>.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>np.ndarray</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="edelweissfe.utils.residualtangentcheck.finiteDifferenceTangent">
+<span class="sig-prename descclassname"><span class="pre">edelweissfe.utils.residualtangentcheck.</span></span><span class="sig-name descname"><span class="pre">finiteDifferenceTangent</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">constraint</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">U</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dU</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">timeStep</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">h</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1e-07</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/utils/residualtangentcheck.html#finiteDifferenceTangent"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.utils.residualtangentcheck.finiteDifferenceTangent" title="Link to this definition"></a></dt>
+<dd><p>The derivative of a constraint’s residual contribution by central differences.</p>
+<p><code class="docutils literal notranslate"><span class="pre">U</span></code> and <code class="docutils literal notranslate"><span class="pre">dU</span></code> are perturbed together: within an increment the unknown is the increment, <code class="docutils literal notranslate"><span class="pre">U</span> <span class="pre">=</span> <span class="pre">U_n</span> <span class="pre">+</span> <span class="pre">dU</span></code>, and a
+constraint with a history (friction) reads both.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>constraint</strong> – The constraint.</p></li>
+<li><p><strong>U</strong> (<em>ndarray</em>) – The local solution.</p></li>
+<li><p><strong>dU</strong> (<em>ndarray</em>) – The local solution increment.</p></li>
+<li><p><strong>timeStep</strong> – The time step handed to the constraint.</p></li>
+<li><p><strong>h</strong> (<em>float</em>) – The perturbation.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The dense <code class="docutils literal notranslate"><span class="pre">nDof</span> <span class="pre">x</span> <span class="pre">nDof</span></code> matrix <code class="docutils literal notranslate"><span class="pre">dP/dU</span></code>.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>np.ndarray</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="edelweissfe.utils.residualtangentcheck.localVector">
+<span class="sig-prename descclassname"><span class="pre">edelweissfe.utils.residualtangentcheck.</span></span><span class="sig-name descname"><span class="pre">localVector</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">constraint</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nodalValue</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scalarValues</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">()</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/utils/residualtangentcheck.html#localVector"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.utils.residualtangentcheck.localVector" title="Link to this definition"></a></dt>
+<dd><p>A constraint’s local degree-of-freedom vector, in the constraint’s own layout.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>constraint</strong> – The constraint.</p></li>
+<li><p><strong>nodalValue</strong> – <code class="docutils literal notranslate"><span class="pre">nodalValue(node,</span> <span class="pre">field)</span></code> returns the values of <code class="docutils literal notranslate"><span class="pre">field</span></code> at <code class="docutils literal notranslate"><span class="pre">node</span></code>.</p></li>
+<li><p><strong>scalarValues</strong> – The values of the constraint’s own scalar variables (e.g. Lagrange multipliers), which come last.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The local vector of size <code class="docutils literal notranslate"><span class="pre">constraint.nDof</span></code>.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>np.ndarray</p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>ValueError</strong> – If the values do not fill the constraint’s layout: their number is not <code class="docutils literal notranslate"><span class="pre">constraint.nDof</span></code>.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="edelweissfe.utils.residualtangentcheck.residualContributionAndTangent">
+<span class="sig-prename descclassname"><span class="pre">edelweissfe.utils.residualtangentcheck.</span></span><span class="sig-name descname"><span class="pre">residualContributionAndTangent</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">constraint</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">U</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dU</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">timeStep</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/utils/residualtangentcheck.html#residualContributionAndTangent"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.utils.residualtangentcheck.residualContributionAndTangent" title="Link to this definition"></a></dt>
+<dd><p>The residual contribution of a constraint and its tangent, the latter as one dense matrix.</p>
+<p>The tangent is scattered from the flat VIJ values with the constraint’s own <code class="docutils literal notranslate"><span class="pre">(I,</span> <span class="pre">J)</span></code> pattern – the one the
+global assembly uses – so that the check covers the pattern together with the values.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>constraint</strong> – The constraint.</p></li>
+<li><p><strong>U</strong> (<em>ndarray</em>) – The local solution.</p></li>
+<li><p><strong>dU</strong> (<em>ndarray</em>) – The local solution increment.</p></li>
+<li><p><strong>timeStep</strong> – The time step handed to the constraint.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><code class="docutils literal notranslate"><span class="pre">P</span></code> and the dense <code class="docutils literal notranslate"><span class="pre">nDof</span> <span class="pre">x</span> <span class="pre">nDof</span></code> tangent.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>tuple[np.ndarray, np.ndarray]</p>
+</dd>
+</dl>
+</dd></dl>
+
 <span class="target" id="module-edelweissfe.constraints.base.constraintbase"></span><dl class="py class">
 <dt class="sig sig-object py" id="edelweissfe.constraints.base.constraintbase.ConstraintBase">
 <span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">edelweissfe.constraints.base.constraintbase.</span></span><span class="sig-name descname"><span class="pre">ConstraintBase</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/constraints/base/constraintbase.html#ConstraintBase"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase" title="Link to this definition"></a></dt>
@@ -2379,8 +2512,8 @@ If scalar variables are required, the can be created on demand by
 defining
 <a class="reference internal" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.getNumberOfAdditionalNeededScalarVariables" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.getNumberOfAdditionalNeededScalarVariables"><code class="xref py py-func docutils literal notranslate"><span class="pre">getNumberOfAdditionalNeededScalarVariables()</span></code></a> and
 <a class="reference internal" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.assignAdditionalScalarVariables" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.assignAdditionalScalarVariables"><code class="xref py py-func docutils literal notranslate"><span class="pre">assignAdditionalScalarVariables()</span></code></a>, which are called at the beginning of an analysis.</p>
-<p>If scalar variables are used, EdelweissFE expects the layout of the external load vector PExt
-(and the stiffness) to be of the form</p>
+<p>If scalar variables are used, EdelweissFE expects the layout of the residual contribution <code class="docutils literal notranslate"><span class="pre">P</span></code>
+(and of the tangent) to be of the form</p>
 <div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="go">[ node 1 - dofs field 1,</span>
 <span class="go">  node 1 - dofs field 2,</span>
 <span class="go">  node 1 - ... ,</span>
@@ -2421,14 +2554,14 @@ defining
 <tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.acceptLastState" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.acceptLastState"><code class="xref py py-obj docutils literal notranslate"><span class="pre">acceptLastState</span></code></a>()</p></td>
 <td><p>Called by <a class="reference internal" href="models.html#edelweissfe.models.femodel.FEModel.advanceToTime" title="edelweissfe.models.femodel.FEModel.advanceToTime"><code class="xref py py-meth docutils literal notranslate"><span class="pre">advanceToTime()</span></code></a> when an increment is accepted, so a stateful constraint (e.g. frictional contact) can promote the state of the last (converged) Newton iterate to its history.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.applyConstraint" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.applyConstraint"><code class="xref py py-obj docutils literal notranslate"><span class="pre">applyConstraint</span></code></a>(U_np, dU, PExt, V, timeStep)</p></td>
-<td><p>Apply the constraint.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.applyConstraintExplicit" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.applyConstraintExplicit"><code class="xref py py-obj docutils literal notranslate"><span class="pre">applyConstraintExplicit</span></code></a>(U_np, dU, PExt, timeStep)</p></td>
-<td><p>Evaluate this constraint without producing a tangent matrix.</p></td>
-</tr>
 <tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.assignAdditionalScalarVariables" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.assignAdditionalScalarVariables"><code class="xref py py-obj docutils literal notranslate"><span class="pre">assignAdditionalScalarVariables</span></code></a>(scalarVariables)</p></td>
 <td><p>Assign a list of scalar variables associated with this constraint.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernels" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernels"><code class="xref py py-obj docutils literal notranslate"><span class="pre">computeKernels</span></code></a>(U_np, dU, P, K, timeStep)</p></td>
+<td><p>Add this constraint's contribution <code class="docutils literal notranslate"><span class="pre">P</span></code> to the residual, and its tangent <code class="docutils literal notranslate"><span class="pre">K</span> <span class="pre">=</span> <span class="pre">dP/dU</span></code>.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernelsExplicit" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernelsExplicit"><code class="xref py py-obj docutils literal notranslate"><span class="pre">computeKernelsExplicit</span></code></a>(U_np, dU, P, timeStep)</p></td>
+<td><p>Add this constraint's contribution to the residual, without a tangent.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.fromConstraintDefinition" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.fromConstraintDefinition"><code class="xref py py-obj docutils literal notranslate"><span class="pre">fromConstraintDefinition</span></code></a>(name, definition, model)</p></td>
 <td><p>Create this constraint from a parsed <code class="docutils literal notranslate"><span class="pre">.inp</span></code> constraint definition.</p></td>
@@ -2492,47 +2625,6 @@ the last (converged) Newton iterate to its history.</p>
 </dd></dl>
 
 <dl class="py method">
-<dt class="sig sig-object py" id="edelweissfe.constraints.base.constraintbase.ConstraintBase.applyConstraint">
-<span class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">applyConstraint</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">U_np</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dU</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">PExt</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">V</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">timeStep</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/constraints/base/constraintbase.html#ConstraintBase.applyConstraint"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.applyConstraint" title="Link to this definition"></a></dt>
-<dd><p>Apply the constraint.  Add the contributions to the external load vector and the system matrix.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>U_np</strong> (<em>ndarray</em>) – The current total solution vector.</p></li>
-<li><p><strong>dU</strong> (<em>ndarray</em>) – The current increment since the last time the constraint was applied.</p></li>
-<li><p><strong>PExt</strong> (<em>ndarray</em>) – The external load vector.</p></li>
-<li><p><strong>K</strong> – The system (stiffness) matrix.</p></li>
-<li><p><strong>dT</strong> – The time increment.</p></li>
-<li><p><strong>time</strong> – The current step and total time.</p></li>
-<li><p><strong>V</strong> (<em>ndarray</em>)</p></li>
-<li><p><strong>timeStep</strong> (<em>TimeStep</em>)</p></li>
-</ul>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="edelweissfe.constraints.base.constraintbase.ConstraintBase.applyConstraintExplicit">
-<span class="sig-name descname"><span class="pre">applyConstraintExplicit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">U_np</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dU</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">PExt</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">timeStep</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/constraints/base/constraintbase.html#ConstraintBase.applyConstraintExplicit"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.applyConstraintExplicit" title="Link to this definition"></a></dt>
-<dd><p>Evaluate this constraint without producing a tangent matrix.</p>
-<p>Used by explicit solvers where no system tangent matrix is assembled. The default
-implementation forwards to <a class="reference internal" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.applyConstraint" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.applyConstraint"><code class="xref py py-meth docutils literal notranslate"><span class="pre">applyConstraint()</span></code></a> with a dummy tangent contribution
-so existing constraints remain functional without modification.</p>
-<p>Constraints where tangent computation is costly should override this method to evaluate
-only the residual / force vector directly.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>U_np</strong> (<em>ndarray</em>) – The current solution, restricted to this constraint’s degrees of freedom.</p></li>
-<li><p><strong>dU</strong> (<em>ndarray</em>) – The current solution increment, likewise restricted.</p></li>
-<li><p><strong>PExt</strong> (<em>ndarray</em>) – The local residual / force vector to augment.</p></li>
-<li><p><strong>timeStep</strong> (<em>TimeStep</em>) – The current time step.</p></li>
-</ul>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
 <dt class="sig sig-object py" id="edelweissfe.constraints.base.constraintbase.ConstraintBase.assignAdditionalScalarVariables">
 <span class="sig-name descname"><span class="pre">assignAdditionalScalarVariables</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">scalarVariables</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/constraints/base/constraintbase.html#ConstraintBase.assignAdditionalScalarVariables"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.assignAdditionalScalarVariables" title="Link to this definition"></a></dt>
 <dd><p>Assign a list of scalar variables associated with this constraint.</p>
@@ -2541,6 +2633,63 @@ only the residual / force vector directly.</p>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>list</strong> – The list of ScalarVariables associated with this constraint.</p></li>
 <li><p><strong>scalarVariables</strong> (<em>list</em><em>[</em><a class="reference internal" href="variables.html#edelweissfe.variables.scalarvariable.ScalarVariable" title="edelweissfe.variables.scalarvariable.ScalarVariable"><em>ScalarVariable</em></a><em>]</em>)</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernels">
+<span class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">computeKernels</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">U_np</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dU</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">P</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">K</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">timeStep</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/constraints/base/constraintbase.html#ConstraintBase.computeKernels"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernels" title="Link to this definition"></a></dt>
+<dd><p>Add this constraint’s contribution <code class="docutils literal notranslate"><span class="pre">P</span></code> to the residual, and its tangent <code class="docutils literal notranslate"><span class="pre">K</span> <span class="pre">=</span> <span class="pre">dP/dU</span></code>.</p>
+<p>A constraint follows the rule every element and every load follows (see
+<a class="reference internal" href="solvers.html#residual-and-tangent-convention"><span class="std std-ref">The residual and the tangent</span></a>): <code class="docutils literal notranslate"><span class="pre">P</span></code> is the force the constraint needs at its
+degrees of freedom, i.e. the <em>negative</em> of the force it exerts on the nodes, exactly as an
+element of the same mechanics would add its internal force. A penalty spring of stiffness
+<span class="math notranslate nohighlight">\(k\)</span> that pulls a degree of freedom <span class="math notranslate nohighlight">\(u\)</span> towards <span class="math notranslate nohighlight">\(\bar{u}\)</span>, for example, adds</p>
+<div class="math notranslate nohighlight">
+\[P \mathrel{+}= k\,(u - \bar{u}), \qquad K \mathrel{+}= k .\]</div>
+<p>A Lagrange multiplier constraint <span class="math notranslate nohighlight">\(g(\boldsymbol{u}) = 0\)</span> adds
+<span class="math notranslate nohighlight">\(\boldsymbol{\lambda}^T \partial g / \partial \boldsymbol{u}\)</span> to the rows of its nodes
+and <span class="math notranslate nohighlight">\(g\)</span> to the rows of its multipliers.</p>
+<p>Both <code class="docutils literal notranslate"><span class="pre">P</span></code> and <code class="docutils literal notranslate"><span class="pre">K</span></code> are augmented, never overwritten. <code class="docutils literal notranslate"><span class="pre">K</span></code> must be the derivative of what is
+added to <code class="docutils literal notranslate"><span class="pre">P</span></code>: a test can then check it by finite differences, which also catches a <code class="docutils literal notranslate"><span class="pre">P</span></code>
+whose sign alone is wrong. A <code class="docutils literal notranslate"><span class="pre">P</span></code> and a <code class="docutils literal notranslate"><span class="pre">K</span></code> negated together pass that check, so a test
+checks the direction of the forces the constraint exerts as well.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>U_np</strong> (<em>ndarray</em>) – The current solution, restricted to this constraint’s degrees of freedom; its own scalar
+variables (e.g. Lagrange multipliers) come last.</p></li>
+<li><p><strong>dU</strong> (<em>ndarray</em>) – The solution increment since the last converged state, likewise restricted.</p></li>
+<li><p><strong>P</strong> (<em>ndarray</em>) – The residual contribution to augment.</p></li>
+<li><p><strong>K</strong> (<em>ndarray</em>) – The tangent <code class="docutils literal notranslate"><span class="pre">dP/dU</span></code> to augment, in the shape <code class="xref py py-meth docutils literal notranslate"><span class="pre">shapeVIJContribution()</span></code> gives it (a
+dense <code class="docutils literal notranslate"><span class="pre">nDof</span> <span class="pre">x</span> <span class="pre">nDof</span></code> view unless the constraint declares a sparser pattern). A
+constraint that inherits
+<code class="xref py py-class docutils literal notranslate"><span class="pre">ForcesOnlyExplicitEvaluation</span></code>
+is also called with <code class="docutils literal notranslate"><span class="pre">K=None</span></code> and must then skip the tangent.</p></li>
+<li><p><strong>timeStep</strong> (<em>TimeStep</em>) – The current time step.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernelsExplicit">
+<span class="sig-name descname"><span class="pre">computeKernelsExplicit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">U_np</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dU</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">P</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">timeStep</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/constraints/base/constraintbase.html#ConstraintBase.computeKernelsExplicit"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernelsExplicit" title="Link to this definition"></a></dt>
+<dd><p>Add this constraint’s contribution to the residual, without a tangent.</p>
+<p>The counterpart of <a class="reference internal" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernels" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernels"><code class="xref py py-meth docutils literal notranslate"><span class="pre">computeKernels()</span></code></a> for an explicit solver, which solves no linear
+system and so has no use for a tangent. This default calls <a class="reference internal" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernels" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernels"><code class="xref py py-meth docutils literal notranslate"><span class="pre">computeKernels()</span></code></a> with a
+scratch tangent that is thrown away, so that every constraint also works in an explicit
+analysis. A constraint whose tangent is costly overrides it, e.g. through
+<code class="xref py py-class docutils literal notranslate"><span class="pre">ForcesOnlyExplicitEvaluation</span></code>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>U_np</strong> (<em>ndarray</em>) – The current solution, restricted to this constraint’s degrees of freedom.</p></li>
+<li><p><strong>dU</strong> (<em>ndarray</em>) – The current solution increment, likewise restricted.</p></li>
+<li><p><strong>P</strong> (<em>ndarray</em>) – The residual contribution to augment, with the sign described in <a class="reference internal" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernels" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernels"><code class="xref py py-meth docutils literal notranslate"><span class="pre">computeKernels()</span></code></a>.</p></li>
+<li><p><strong>timeStep</strong> (<em>TimeStep</em>) – The current time step.</p></li>
 </ul>
 </dd>
 </dl>

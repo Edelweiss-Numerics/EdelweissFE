@@ -56,6 +56,7 @@
 <li class="toctree-l2"><a class="reference internal" href="models.html">Models</a></li>
 <li class="toctree-l2 current"><a class="current reference internal" href="#">Solvers</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="#edelweissfe.config.solvers.getSolverByName"><code class="docutils literal notranslate"><span class="pre">getSolverByName()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#the-residual-and-the-tangent">The residual and the tangent</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#module-edelweissfe.solvers.nonlinearimplicitstatic"><code class="docutils literal notranslate"><span class="pre">NIST</span></code> - Nonlinear Implicit Static</a><ul>
 <li class="toctree-l4"><a class="reference internal" href="#edelweissfe.solvers.nonlinearimplicitstatic.NIST"><code class="docutils literal notranslate"><span class="pre">NIST</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#edelweissfe.solvers.nonlinearimplicitstatic.NISTSchema"><code class="docutils literal notranslate"><span class="pre">NISTSchema</span></code></a></li>
@@ -227,6 +228,59 @@ more permissive, so no existing input file changes meaning.</p>
 </dl>
 </dd></dl>
 
+<section id="the-residual-and-the-tangent">
+<span id="residual-and-tangent-convention"></span><h2>The residual and the tangent<a class="headerlink" href="#the-residual-and-the-tangent" title="Link to this heading"></a></h2>
+<p>Every entity that enters the equation system – an element, a load, a constraint – contributes two things: a
+vector <span class="math notranslate nohighlight">\(\boldsymbol{P}\)</span> to the residual, and its tangent
+<span class="math notranslate nohighlight">\(\boldsymbol{K} = \partial \boldsymbol{P} / \partial \boldsymbol{U}\)</span>. The rule is the same for all of them:</p>
+<ul class="simple">
+<li><p>An <strong>element</strong> adds its internal forces,
+<span class="math notranslate nohighlight">\(\boldsymbol{P} = \boldsymbol{f}_\mathrm{int} = \int_\Omega \boldsymbol{B}^T \boldsymbol{\sigma} \, \mathrm{d}V\)</span>,
+and its stiffness matrix.</p></li>
+<li><p>A <strong>load</strong> adds the <em>negative</em> of the external load it applies: a node force <span class="math notranslate nohighlight">\(\boldsymbol{F}\)</span> adds
+<span class="math notranslate nohighlight">\(-\boldsymbol{F}\)</span>, a body force <span class="math notranslate nohighlight">\(-\int_\Omega \boldsymbol{N}^T \boldsymbol{b} \, \mathrm{d}V\)</span>. A dead
+load has no tangent; a load that follows the deformation, such as a pressure on the current surface, has one.</p></li>
+<li><p>A <strong>constraint</strong> adds the negative of the force it exerts on its nodes – just what an element of the same
+mechanics would add as its internal force. A penalty spring of stiffness <span class="math notranslate nohighlight">\(k\)</span> that pulls a degree of freedom
+<span class="math notranslate nohighlight">\(u\)</span> towards <span class="math notranslate nohighlight">\(\bar{u}\)</span> adds <span class="math notranslate nohighlight">\(P = k\,(u - \bar{u})\)</span> and <span class="math notranslate nohighlight">\(K = k\)</span>; a Lagrange multiplier
+<span class="math notranslate nohighlight">\(\boldsymbol{\lambda}\)</span> enforcing <span class="math notranslate nohighlight">\(\boldsymbol{g}(\boldsymbol{u}) = \boldsymbol{0}\)</span> adds
+<span class="math notranslate nohighlight">\(\boldsymbol{\lambda}^T \partial \boldsymbol{g} / \partial \boldsymbol{u}\)</span> to the rows of the nodes and
+<span class="math notranslate nohighlight">\(\boldsymbol{g}\)</span> to the rows of the multipliers. See <a class="reference internal" href="constraints.html"><span class="doc">Constraints</span></a> for writing one.</p></li>
+</ul>
+<p>Summed over all entities,</p>
+<div class="math notranslate nohighlight">
+\[\boldsymbol{G}(\boldsymbol{U}) = \sum \boldsymbol{P} = \boldsymbol{f}_\mathrm{int} - \boldsymbol{f}_\mathrm{ext}\]</div>
+<p>is the out-of-balance force, which equilibrium makes zero, and the summed <span class="math notranslate nohighlight">\(\boldsymbol{K}\)</span> is its derivative.
+Newton’s method replaces <span class="math notranslate nohighlight">\(\boldsymbol{G}(\boldsymbol{U} + \Delta \boldsymbol{U}) = \boldsymbol{0}\)</span> by its
+linearization <span class="math notranslate nohighlight">\(\boldsymbol{G} + \boldsymbol{K}\, \Delta \boldsymbol{U} = \boldsymbol{0}\)</span>, so the implicit
+solvers solve</p>
+<div class="math notranslate nohighlight">
+\[\boldsymbol{K}\, \Delta \boldsymbol{U} = \boldsymbol{R}, \qquad
+\boldsymbol{R} = -\boldsymbol{G} = \boldsymbol{f}_\mathrm{ext} - \boldsymbol{f}_\mathrm{int}\]</div>
+<p>in every iteration. The right-hand side <span class="math notranslate nohighlight">\(\boldsymbol{R}\)</span> is what the convergence criteria check, and what the
+multi-point-constraint condensation and the Dirichlet boundary conditions act on. The other solvers use the same
+sums:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">NID</span></code> subtracts the inertia and damping forces from <span class="math notranslate nohighlight">\(\boldsymbol{R}\)</span>, and adds their tangents to
+<span class="math notranslate nohighlight">\(\boldsymbol{K}\)</span>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">NED</span></code> accelerates the nodes with the net force <span class="math notranslate nohighlight">\(\boldsymbol{R}\)</span>, and needs no tangent.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">NISTPArcLength</span></code> sums the loads twice, at the start of the step (the dead load, <span class="math notranslate nohighlight">\(\boldsymbol{P}_0\)</span>) and
+at its end; their difference is the reference load, <span class="math notranslate nohighlight">\(\boldsymbol{P}_\mathrm{ref}\)</span>. Scaled by the load
+parameter <span class="math notranslate nohighlight">\(\lambda\)</span>, it enters
+<span class="math notranslate nohighlight">\(\boldsymbol{R} = -(\boldsymbol{P}_0 + \lambda \boldsymbol{P}_\mathrm{ref} + \boldsymbol{P}_\mathrm{elements}
++ \boldsymbol{P}_\mathrm{constraints})\)</span>.</p></li>
+</ul>
+<p>Why one rule? Because then <span class="math notranslate nohighlight">\(\boldsymbol{K}\)</span> is always the derivative of exactly what was added to
+<span class="math notranslate nohighlight">\(\boldsymbol{P}\)</span>, for every entity alike. That can be checked by finite differences, entity by entity, and the
+same check catches a contribution whose sign alone is wrong: <span class="math notranslate nohighlight">\(\boldsymbol{K}\)</span> then comes out as
+<span class="math notranslate nohighlight">\(-\partial \boldsymbol{P} / \partial \boldsymbol{U}\)</span>. A contribution negated together with its tangent passes it,
+so <code class="docutils literal notranslate"><span class="pre">tests/test_residual_tangent_convention.py</span></code> checks every constraint this way and also checks the direction of the
+forces it exerts (see <a class="reference internal" href="constraints.html"><span class="doc">Constraints</span></a>); a dead load has no tangent, so there the sign of each element load is
+checked against the load integrated independently.</p>
+<p>The elements’ sum alone, <span class="math notranslate nohighlight">\(\boldsymbol{f}_\mathrm{int}\)</span>, is what the implicit solvers and <code class="docutils literal notranslate"><span class="pre">NEST</span></code> report as the
+nodal result <code class="docutils literal notranslate"><span class="pre">P</span></code> of a field output: at a degree of freedom with a Dirichlet boundary condition and no load, it is the
+reaction force. <code class="docutils literal notranslate"><span class="pre">NED</span></code> reports its net force <span class="math notranslate nohighlight">\(\boldsymbol{R}\)</span> there.</p>
+</section>
 <section id="module-edelweissfe.solvers.nonlinearimplicitstatic">
 <span id="nist-nonlinear-implicit-static"></span><h2><code class="docutils literal notranslate"><span class="pre">NIST</span></code> - Nonlinear Implicit Static<a class="headerlink" href="#module-edelweissfe.solvers.nonlinearimplicitstatic" title="Link to this heading"></a></h2>
 <dl class="py class">
@@ -277,10 +331,10 @@ more permissive, so no existing input file changes meaning.</p>
 <td><p>Assemble terms of the equation system beyond the internal and external forces.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.solvers.nonlinearimplicitstatic.NIST.assembleConstraints" title="edelweissfe.solvers.nonlinearimplicitstatic.NIST.assembleConstraints"><code class="xref py py-obj docutils literal notranslate"><span class="pre">assembleConstraints</span></code></a>(constraints, U_np, dU, ...)</p></td>
-<td><p>Loop over all constraints, and evaluate them.</p></td>
+<td><p>Loop over all constraints, and evaluate them: each adds its residual contribution and the tangent of it, see <a class="reference internal" href="constraints.html#edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernels" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernels"><code class="xref py py-meth docutils literal notranslate"><span class="pre">computeKernels()</span></code></a>.</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">assembleLoads</span></code>(nodeForces, distributedLoads, ...)</p></td>
-<td><p>Assemble all loads into a right hand side vector.</p></td>
+<td><p>Assemble the residual contributions of all loads: each adds the negative of the external load it applies, and the tangent of that contribution, which is nonzero only for a load that follows the deformation; see <a class="reference internal" href="#residual-and-tangent-convention"><span class="std std-ref">The residual and the tangent</span></a>.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">assembleStiffnessCSR</span></code>(K)</p></td>
 <td><p>Construct a CSR matrix from VIJ format.</p></td>
@@ -303,7 +357,7 @@ more permissive, so no existing input file changes meaning.</p>
 <tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">checkMPCDirichletConflicts</span></code>(transformation, ...)</p></td>
 <td><p>Raise if any Dirichlet boundary condition of the step prescribes a DOF that is a slave DOF of a multi-point constraint.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">computeBodyForces</span></code>(bodyForces, U_np, PExt, K, ...)</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">computeBodyForces</span></code>(bodyForces, U_np, P, K, ...)</p></td>
 <td><p>Loop over all body forces loads acting on elements, and evaluate them.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">computeDistributedLoads</span></code>(distributedLoads, ...)</p></td>
@@ -425,10 +479,11 @@ more permissive, so no existing input file changes meaning.</p>
 <span class="sig-name descname"><span class="pre">assembleAdditionalTerms</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dU</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">R</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">F</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">K</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">timeStep</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/solvers/nonlinearimplicitstatic.html#NIST.assembleAdditionalTerms"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.solvers.nonlinearimplicitstatic.NIST.assembleAdditionalTerms" title="Link to this definition"></a></dt>
 <dd><p>Assemble terms of the equation system beyond the internal and external forces. Called
 by <a class="reference internal" href="#edelweissfe.solvers.nonlinearimplicitstatic.NIST.solveIncrement" title="edelweissfe.solvers.nonlinearimplicitstatic.NIST.solveIncrement"><code class="xref py py-meth docutils literal notranslate"><span class="pre">solveIncrement()</span></code></a> in every Newton iteration, next to <a class="reference internal" href="#edelweissfe.solvers.nonlinearimplicitstatic.NIST.computeElements" title="edelweissfe.solvers.nonlinearimplicitstatic.NIST.computeElements"><code class="xref py py-meth docutils literal notranslate"><span class="pre">computeElements()</span></code></a>,
-<code class="xref py py-meth docutils literal notranslate"><span class="pre">assembleLoads()</span></code> and <a class="reference internal" href="#edelweissfe.solvers.nonlinearimplicitstatic.NIST.assembleConstraints" title="edelweissfe.solvers.nonlinearimplicitstatic.NIST.assembleConstraints"><code class="xref py py-meth docutils literal notranslate"><span class="pre">assembleConstraints()</span></code></a>: right after the residual
-<span class="math notranslate nohighlight">\(R = P_\mathrm{ext} - P_\mathrm{int}\)</span> is formed, and before the
-multi-point-constraint condensation, the Dirichlet handling, the convergence test and the
-linear solve – which therefore all act on what is added here.</p>
+<code class="xref py py-meth docutils literal notranslate"><span class="pre">assembleLoads()</span></code> and <a class="reference internal" href="#edelweissfe.solvers.nonlinearimplicitstatic.NIST.assembleConstraints" title="edelweissfe.solvers.nonlinearimplicitstatic.NIST.assembleConstraints"><code class="xref py py-meth docutils literal notranslate"><span class="pre">assembleConstraints()</span></code></a>: right after the right-hand side
+<span class="math notranslate nohighlight">\(R = f_\mathrm{ext} - f_\mathrm{int}\)</span> is formed (see
+<a class="reference internal" href="#residual-and-tangent-convention"><span class="std std-ref">The residual and the tangent</span></a>), and before the multi-point-constraint condensation,
+the Dirichlet handling, the convergence test and the linear solve – which therefore all act
+on what is added here.</p>
 <p>A static analysis has no such terms. A dynamic one, for example, subtracts the inertia force
 <span class="math notranslate nohighlight">\(M \ddot{u}\)</span> from the residual and adds the corresponding mass term to the stiffness
 – see <a class="reference internal" href="#edelweissfe.solvers.nonlinearimplicitdynamic.NonlinearImplicitDynamic" title="edelweissfe.solvers.nonlinearimplicitdynamic.NonlinearImplicitDynamic"><code class="xref py py-class docutils literal notranslate"><span class="pre">NonlinearImplicitDynamic</span></code></a>.</p>
@@ -447,8 +502,9 @@ linear solve – which therefore all act on what is added here.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="edelweissfe.solvers.nonlinearimplicitstatic.NIST.assembleConstraints">
-<span class="sig-name descname"><span class="pre">assembleConstraints</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">constraints</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">U_np</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dU</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">PExt</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">K</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">timeStep</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">FConstraints</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/solvers/nonlinearimplicitstatic.html#NIST.assembleConstraints"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.solvers.nonlinearimplicitstatic.NIST.assembleConstraints" title="Link to this definition"></a></dt>
-<dd><p>Loop over all constraints, and evaluate them.
+<span class="sig-name descname"><span class="pre">assembleConstraints</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">constraints</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">U_np</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dU</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">P</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">K</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">timeStep</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">FConstraints</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/solvers/nonlinearimplicitstatic.html#NIST.assembleConstraints"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.solvers.nonlinearimplicitstatic.NIST.assembleConstraints" title="Link to this definition"></a></dt>
+<dd><p>Loop over all constraints, and evaluate them: each adds its residual contribution and the
+tangent of it, see <a class="reference internal" href="constraints.html#edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernels" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernels"><code class="xref py py-meth docutils literal notranslate"><span class="pre">computeKernels()</span></code></a>.
 Is called by solveIncrement() in each iteration.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -456,7 +512,7 @@ Is called by solveIncrement() in each iteration.</p>
 <li><p><strong>constraints</strong> (<em>list</em><em>[</em><a class="reference internal" href="constraints.html#edelweissfe.constraints.base.constraintbase.ConstraintBase" title="edelweissfe.constraints.base.constraintbase.ConstraintBase"><em>ConstraintBase</em></a><em>]</em>) – The list of constraints.</p></li>
 <li><p><strong>U_np</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The current solution vector.</p></li>
 <li><p><strong>dU</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The current solution increment vector.</p></li>
-<li><p><strong>PExt</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The external load vector.</p></li>
+<li><p><strong>P</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The residual contribution vector to assemble into.</p></li>
 <li><p><strong>K</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.vijsystemmatrix.VIJSystemMatrix" title="edelweissfe.numerics.vijsystemmatrix.VIJSystemMatrix"><em>VIJSystemMatrix</em></a>) – The system matrix.</p></li>
 <li><p><strong>timeStep</strong> (<em>TimeStep</em>) – The time step.</p></li>
 <li><p><strong>FConstraints</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The vector of accumulated absolute constraint fluxes for convergence checks, if given.</p></li>
@@ -464,7 +520,7 @@ Is called by solveIncrement() in each iteration.</p>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p><ul class="simple">
-<li><p>The modified external load vector.</p></li>
+<li><p>The modified residual contribution vector.</p></li>
 <li><p>The modified system matrix.</p></li>
 </ul>
 </p>
@@ -933,10 +989,10 @@ dataclass attribute access.</p>
 <td><p>Assemble terms of the equation system beyond the internal and external forces.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">assembleConstraints</span></code>(constraints, U_np, dU, ...)</p></td>
-<td><p>Loop over all constraints, and evaluate them.</p></td>
+<td><p>Loop over all constraints, and evaluate them: each adds its residual contribution and the tangent of it, see <a class="reference internal" href="constraints.html#edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernels" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernels"><code class="xref py py-meth docutils literal notranslate"><span class="pre">computeKernels()</span></code></a>.</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">assembleLoads</span></code>(nodeForces, distributedLoads, ...)</p></td>
-<td><p>Assemble all loads into a right hand side vector.</p></td>
+<td><p>Assemble the residual contributions of all loads: each adds the negative of the external load it applies, and the tangent of that contribution, which is nonzero only for a load that follows the deformation; see <a class="reference internal" href="#residual-and-tangent-convention"><span class="std std-ref">The residual and the tangent</span></a>.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">assembleStiffnessCSR</span></code>(K)</p></td>
 <td><p>Construct a CSR matrix from VIJ format.</p></td>
@@ -959,7 +1015,7 @@ dataclass attribute access.</p>
 <tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">checkMPCDirichletConflicts</span></code>(transformation, ...)</p></td>
 <td><p>Raise if any Dirichlet boundary condition of the step prescribes a DOF that is a slave DOF of a multi-point constraint.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">computeBodyForces</span></code>(bodyForces, U_np, PExt, K, ...)</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">computeBodyForces</span></code>(bodyForces, U_np, P, K, ...)</p></td>
 <td><p>Loop over all body forces loads acting on elements, and evaluate them.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">computeDistributedLoads</span></code>(distributedLoads, ...)</p></td>
@@ -1215,10 +1271,10 @@ Replaces the NewtonRaphson scheme of the NISTParallel Solver.</p>
 <td><p>Assemble terms of the equation system beyond the internal and external forces.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">assembleConstraints</span></code>(constraints, U_np, dU, ...)</p></td>
-<td><p>Loop over all constraints, and evaluate them.</p></td>
+<td><p>Loop over all constraints, and evaluate them: each adds its residual contribution and the tangent of it, see <a class="reference internal" href="constraints.html#edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernels" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernels"><code class="xref py py-meth docutils literal notranslate"><span class="pre">computeKernels()</span></code></a>.</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">assembleLoads</span></code>(nodeForces, distributedLoads, ...)</p></td>
-<td><p>Assemble all loads into a right hand side vector.</p></td>
+<td><p>Assemble the residual contributions of all loads: each adds the negative of the external load it applies, and the tangent of that contribution, which is nonzero only for a load that follows the deformation; see <a class="reference internal" href="#residual-and-tangent-convention"><span class="std std-ref">The residual and the tangent</span></a>.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">assembleStiffnessCSR</span></code>(K)</p></td>
 <td><p>Construct a CSR matrix from VIJ format.</p></td>
@@ -1241,7 +1297,7 @@ Replaces the NewtonRaphson scheme of the NISTParallel Solver.</p>
 <tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">checkMPCDirichletConflicts</span></code>(transformation, ...)</p></td>
 <td><p>Raise if any Dirichlet boundary condition of the step prescribes a DOF that is a slave DOF of a multi-point constraint.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">computeBodyForces</span></code>(bodyForces, U_np, PExt, K, ...)</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">computeBodyForces</span></code>(bodyForces, U_np, P, K, ...)</p></td>
 <td><p>Loop over all body forces loads acting on elements, and evaluate them.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">computeDistributedLoads</span></code>(distributedLoads, ...)</p></td>
@@ -1649,7 +1705,7 @@ by the two Newmark relations (Newmark 1959; Hughes, <em>The Finite Element Metho
     + \Delta t \left[ (1 - \gamma) \, \ddot{\boldsymbol{u}}_n + \gamma \, \ddot{\boldsymbol{u}}_{n+1} \right],\end{split}\]</div>
 <p>so that the effective residual and tangent handed to the Newton loop are</p>
 <div class="math notranslate nohighlight">
-\[\begin{split}\boldsymbol{R} &amp;= \boldsymbol{P}_\mathrm{ext} - \boldsymbol{P}_\mathrm{int}
+\[\begin{split}\boldsymbol{R} &amp;= \boldsymbol{f}_\mathrm{ext} - \boldsymbol{f}_\mathrm{int}
     - \boldsymbol{M} \ddot{\boldsymbol{u}}_{n+1} - \boldsymbol{C} \dot{\boldsymbol{u}}_{n+1}, \\
 \boldsymbol{K}_\mathrm{eff} &amp;= \boldsymbol{K} + \frac{1}{\beta \, \Delta t^2} \boldsymbol{M}
     + \frac{\gamma}{\beta \, \Delta t} \boldsymbol{C}.\end{split}\]</div>
@@ -1658,7 +1714,7 @@ Dirichlet handling, the convergence test, cutbacks and the linear solver – is 
 solver runs <a class="reference internal" href="#edelweissfe.solvers.nonlinearimplicitstatic.NIST.solveIncrement" title="edelweissfe.solvers.nonlinearimplicitstatic.NIST.solveIncrement"><code class="xref py py-meth docutils literal notranslate"><span class="pre">solveIncrement()</span></code></a> itself and
 enters it only through its three hooks – <a class="reference internal" href="#edelweissfe.solvers.nonlinearimplicitdynamic.NonlinearImplicitDynamic.initializeIncrement" title="edelweissfe.solvers.nonlinearimplicitdynamic.NonlinearImplicitDynamic.initializeIncrement"><code class="xref py py-meth docutils literal notranslate"><span class="pre">NonlinearImplicitDynamic.initializeIncrement()</span></code></a>
 (mass, damping, dynamic stiffness, initial acceleration), <a class="reference internal" href="#edelweissfe.solvers.nonlinearimplicitdynamic.NonlinearImplicitDynamic.assembleAdditionalTerms" title="edelweissfe.solvers.nonlinearimplicitdynamic.NonlinearImplicitDynamic.assembleAdditionalTerms"><code class="xref py py-meth docutils literal notranslate"><span class="pre">NonlinearImplicitDynamic.assembleAdditionalTerms()</span></code></a>
-(two terms in the residual and two in the tangent, where the parent forms <code class="docutils literal notranslate"><span class="pre">R</span> <span class="pre">=</span> <span class="pre">P_ext</span> <span class="pre">-</span> <span class="pre">P_int</span></code>
+(two terms in the residual and two in the tangent, where the parent forms <code class="docutils literal notranslate"><span class="pre">R</span> <span class="pre">=</span> <span class="pre">f_ext</span> <span class="pre">-</span> <span class="pre">f_int</span></code>
 and before the tangent is converted to CSR) and <a class="reference internal" href="#edelweissfe.solvers.nonlinearimplicitdynamic.NonlinearImplicitDynamic.finalizeIncrement" title="edelweissfe.solvers.nonlinearimplicitdynamic.NonlinearImplicitDynamic.finalizeIncrement"><code class="xref py py-meth docutils literal notranslate"><span class="pre">NonlinearImplicitDynamic.finalizeIncrement()</span></code></a>
 (the converged velocity and acceleration become the state).</p>
 <p><strong>Parameters.</strong> The default <span class="math notranslate nohighlight">\(\beta = 1/4\)</span>, <span class="math notranslate nohighlight">\(\gamma = 1/2\)</span> is the average-acceleration
@@ -1860,10 +1916,10 @@ top of the Newton loop of <a class="reference internal" href="#edelweissfe.solve
 <td><p>Add the inertia and damping forces to the residual and their derivatives to the tangent; see the parent's hook.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">assembleConstraints</span></code>(constraints, U_np, dU, ...)</p></td>
-<td><p>Loop over all constraints, and evaluate them.</p></td>
+<td><p>Loop over all constraints, and evaluate them: each adds its residual contribution and the tangent of it, see <a class="reference internal" href="constraints.html#edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernels" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernels"><code class="xref py py-meth docutils literal notranslate"><span class="pre">computeKernels()</span></code></a>.</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">assembleLoads</span></code>(nodeForces, distributedLoads, ...)</p></td>
-<td><p>Assemble all loads into a right hand side vector.</p></td>
+<td><p>Assemble the residual contributions of all loads: each adds the negative of the external load it applies, and the tangent of that contribution, which is nonzero only for a load that follows the deformation; see <a class="reference internal" href="#residual-and-tangent-convention"><span class="std std-ref">The residual and the tangent</span></a>.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">assembleStiffnessCSR</span></code>(K)</p></td>
 <td><p>Construct a CSR matrix from VIJ format.</p></td>
@@ -1886,7 +1942,7 @@ top of the Newton loop of <a class="reference internal" href="#edelweissfe.solve
 <tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">checkMPCDirichletConflicts</span></code>(transformation, ...)</p></td>
 <td><p>Raise if any Dirichlet boundary condition of the step prescribes a DOF that is a slave DOF of a multi-point constraint.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">computeBodyForces</span></code>(bodyForces, U_np, PExt, K, ...)</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">computeBodyForces</span></code>(bodyForces, U_np, P, K, ...)</p></td>
 <td><p>Loop over all body forces loads acting on elements, and evaluate them.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">computeDistributedLoads</span></code>(distributedLoads, ...)</p></td>
@@ -2331,10 +2387,10 @@ initial-acceleration solve evaluate the elements in parallel.</p>
 <td><p>Add the inertia and damping forces to the residual and their derivatives to the tangent; see the parent's hook.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">assembleConstraints</span></code>(constraints, U_np, dU, ...)</p></td>
-<td><p>Loop over all constraints, and evaluate them.</p></td>
+<td><p>Loop over all constraints, and evaluate them: each adds its residual contribution and the tangent of it, see <a class="reference internal" href="constraints.html#edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernels" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernels"><code class="xref py py-meth docutils literal notranslate"><span class="pre">computeKernels()</span></code></a>.</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">assembleLoads</span></code>(nodeForces, distributedLoads, ...)</p></td>
-<td><p>Assemble all loads into a right hand side vector.</p></td>
+<td><p>Assemble the residual contributions of all loads: each adds the negative of the external load it applies, and the tangent of that contribution, which is nonzero only for a load that follows the deformation; see <a class="reference internal" href="#residual-and-tangent-convention"><span class="std std-ref">The residual and the tangent</span></a>.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">assembleStiffnessCSR</span></code>(K)</p></td>
 <td><p>Construct a CSR matrix from VIJ format.</p></td>
@@ -2357,7 +2413,7 @@ initial-acceleration solve evaluate the elements in parallel.</p>
 <tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">checkMPCDirichletConflicts</span></code>(transformation, ...)</p></td>
 <td><p>Raise if any Dirichlet boundary condition of the step prescribes a DOF that is a slave DOF of a multi-point constraint.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">computeBodyForces</span></code>(bodyForces, U_np, PExt, K, ...)</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">computeBodyForces</span></code>(bodyForces, U_np, P, K, ...)</p></td>
 <td><p>Loop over all body forces loads acting on elements, and evaluate them.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">computeDistributedLoads</span></code>(distributedLoads, ...)</p></td>
@@ -3128,10 +3184,10 @@ topology history prints that replay in a table of its own (top-level <code class
 <td><p>Assemble terms of the equation system beyond the internal and external forces.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">assembleConstraints</span></code>(constraints, U_np, dU, ...)</p></td>
-<td><p>Loop over all constraints, and evaluate them.</p></td>
+<td><p>Loop over all constraints, and evaluate them: each adds its residual contribution and the tangent of it, see <a class="reference internal" href="constraints.html#edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernels" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernels"><code class="xref py py-meth docutils literal notranslate"><span class="pre">computeKernels()</span></code></a>.</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">assembleLoads</span></code>(nodeForces, distributedLoads, ...)</p></td>
-<td><p>Assemble all loads into a right hand side vector.</p></td>
+<td><p>Assemble the residual contributions of all loads: each adds the negative of the external load it applies, and the tangent of that contribution, which is nonzero only for a load that follows the deformation; see <a class="reference internal" href="#residual-and-tangent-convention"><span class="std std-ref">The residual and the tangent</span></a>.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">assembleStiffnessCSR</span></code>(K)</p></td>
 <td><p>Construct a CSR matrix from VIJ format.</p></td>
@@ -3154,7 +3210,7 @@ topology history prints that replay in a table of its own (top-level <code class
 <tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">checkMPCDirichletConflicts</span></code>(transformation, ...)</p></td>
 <td><p>Raise if any Dirichlet boundary condition of the step prescribes a DOF that is a slave DOF of a multi-point constraint.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">computeBodyForces</span></code>(bodyForces, U_np, PExt, K, ...)</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">computeBodyForces</span></code>(bodyForces, U_np, P, K, ...)</p></td>
 <td><p>Loop over all body forces loads acting on elements, and evaluate them.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">computeDistributedLoads</span></code>(distributedLoads, ...)</p></td>
@@ -3497,10 +3553,10 @@ indirection.</p>
 <td><p>Assemble terms of the equation system beyond the internal and external forces.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">assembleConstraints</span></code>(constraints, U_np, dU, ...)</p></td>
-<td><p>Loop over all constraints, and evaluate them.</p></td>
+<td><p>Loop over all constraints, and evaluate them: each adds its residual contribution and the tangent of it, see <a class="reference internal" href="constraints.html#edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernels" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernels"><code class="xref py py-meth docutils literal notranslate"><span class="pre">computeKernels()</span></code></a>.</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">assembleLoads</span></code>(nodeForces, distributedLoads, ...)</p></td>
-<td><p>Assemble all loads into a right hand side vector.</p></td>
+<td><p>Assemble the residual contributions of all loads: each adds the negative of the external load it applies, and the tangent of that contribution, which is nonzero only for a load that follows the deformation; see <a class="reference internal" href="#residual-and-tangent-convention"><span class="std std-ref">The residual and the tangent</span></a>.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">assembleStiffnessCSR</span></code>(K)</p></td>
 <td><p>Construct a CSR matrix from VIJ format.</p></td>
@@ -3523,7 +3579,7 @@ indirection.</p>
 <tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">checkMPCDirichletConflicts</span></code>(transformation, ...)</p></td>
 <td><p>Raise if any Dirichlet boundary condition of the step prescribes a DOF that is a slave DOF of a multi-point constraint.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">computeBodyForces</span></code>(bodyForces, U_np, PExt, K, ...)</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">computeBodyForces</span></code>(bodyForces, U_np, P, K, ...)</p></td>
 <td><p>Loop over all body forces loads acting on elements, and evaluate them.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">computeDistributedLoads</span></code>(distributedLoads, ...)</p></td>
@@ -3723,7 +3779,7 @@ the latter two, and what they cost in accuracy, is documented under
 <p><strong>Constraints.</strong> Multi-point constraints are enforced by folding a slave’s mass and force onto its
 masters (row-sum, mass-conserving) and slaving it kinematically, which leaves the critical time step
 untouched. Other constraints – contact above all – are evaluated through
-<a class="reference internal" href="constraints.html#edelweissfe.constraints.base.constraintbase.ConstraintBase.applyConstraintExplicit" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.applyConstraintExplicit"><code class="xref py py-meth docutils literal notranslate"><span class="pre">applyConstraintExplicit()</span></code></a>, which
+<a class="reference internal" href="constraints.html#edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernelsExplicit" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernelsExplicit"><code class="xref py py-meth docutils literal notranslate"><span class="pre">computeKernelsExplicit()</span></code></a>, which
 asks for forces and no tangent, since a tangent assembled here would enter nothing. A constraint
 that can act <em>only</em> through its tangent contributes nothing to an explicit increment and is
 refused at validation rather than silently ignored.</p>
@@ -3827,10 +3883,10 @@ one.</p></li>
 <td><p>Apply every step action's step-start part (initial conditions, material initialization, prescribed fields, ...).</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.solvers.nonlinearexplicitdynamic.NED.assembleConstraintForces" title="edelweissfe.solvers.nonlinearexplicitdynamic.NED.assembleConstraintForces"><code class="xref py py-obj docutils literal notranslate"><span class="pre">assembleConstraintForces</span></code></a>(constraints, U_np, ...)</p></td>
-<td><p>Evaluate every constraint and add its nodal forces to the net force vector.</p></td>
+<td><p>Evaluate every constraint and add its residual contribution to the given vector.</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">assembleLoads</span></code>(nodeForces, distributedLoads, ...)</p></td>
-<td><p>Assemble all loads into a right hand side vector.</p></td>
+<td><p>Assemble the residual contributions of all loads: each adds the negative of the external load it applies, and the tangent of that contribution, which is nonzero only for a load that follows the deformation; see <a class="reference internal" href="#residual-and-tangent-convention"><span class="std std-ref">The residual and the tangent</span></a>.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">assembleStiffnessCSR</span></code>(K)</p></td>
 <td><p>Construct a CSR matrix from VIJ format.</p></td>
@@ -3856,7 +3912,7 @@ one.</p></li>
 <tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">checkMPCDirichletConflicts</span></code>(transformation, ...)</p></td>
 <td><p>Raise if any Dirichlet boundary condition of the step prescribes a DOF that is a slave DOF of a multi-point constraint.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">computeBodyForces</span></code>(bodyForces, U_np, PExt, K, ...)</p></td>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">computeBodyForces</span></code>(bodyForces, U_np, P, K, ...)</p></td>
 <td><p>Loop over all body forces loads acting on elements, and evaluate them.</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">computeDistributedLoads</span></code>(distributedLoads, ...)</p></td>
@@ -3958,15 +4014,14 @@ one.</p></li>
 <dl class="py method">
 <dt class="sig sig-object py" id="edelweissfe.solvers.nonlinearexplicitdynamic.NED.assembleConstraintForces">
 <span class="sig-name descname"><span class="pre">assembleConstraintForces</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">constraints</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">U_np</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dU</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">P</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">timeStep</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/solvers/nonlinearexplicitdynamic.html#NED.assembleConstraintForces"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.solvers.nonlinearexplicitdynamic.NED.assembleConstraintForces" title="Link to this definition"></a></dt>
-<dd><p>Evaluate every constraint and add its nodal forces to the net force vector.</p>
+<dd><p>Evaluate every constraint and add its residual contribution to the given vector.</p>
 <p>The explicit counterpart of
-<a class="reference internal" href="#edelweissfe.solvers.nonlinearimplicitstatic.NIST.assembleConstraints" title="edelweissfe.solvers.nonlinearimplicitstatic.NIST.assembleConstraints"><code class="xref py py-meth docutils literal notranslate"><span class="pre">assembleConstraints()</span></code></a>, and it shares
-that method’s sign convention: a constraint writes what the implicit solver calls <code class="docutils literal notranslate"><span class="pre">PExt</span></code>,
-which is why this is called after <code class="xref py py-meth docutils literal notranslate"><span class="pre">assembleLoads()</span></code>, on a <code class="docutils literal notranslate"><span class="pre">P</span></code> that already holds
-<code class="docutils literal notranslate"><span class="pre">-P_internal</span></code>.</p>
+<a class="reference internal" href="#edelweissfe.solvers.nonlinearimplicitstatic.NIST.assembleConstraints" title="edelweissfe.solvers.nonlinearimplicitstatic.NIST.assembleConstraints"><code class="xref py py-meth docutils literal notranslate"><span class="pre">assembleConstraints()</span></code></a>, with the same
+sign: a constraint adds the negative of the force it exerts on the nodes, like an element its
+internal force, see <a class="reference internal" href="#residual-and-tangent-convention"><span class="std std-ref">The residual and the tangent</span></a>.</p>
 <p>No tangent is requested. An explicit increment solves no linear system, so a constraint’s
 stiffness enters nothing, and
-<a class="reference internal" href="constraints.html#edelweissfe.constraints.base.constraintbase.ConstraintBase.applyConstraintExplicit" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.applyConstraintExplicit"><code class="xref py py-meth docutils literal notranslate"><span class="pre">applyConstraintExplicit()</span></code></a>
+<a class="reference internal" href="constraints.html#edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernelsExplicit" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernelsExplicit"><code class="xref py py-meth docutils literal notranslate"><span class="pre">computeKernelsExplicit()</span></code></a>
 is the entry point that evaluates the constraint forces directly without assembling a tangent.
 A constraint that could act <em>only</em> through its tangent would contribute nothing here; that is
 precisely the class <a class="reference internal" href="#edelweissfe.solvers.nonlinearexplicitdynamic.NED.validateModelCapabilities" title="edelweissfe.solvers.nonlinearexplicitdynamic.NED.validateModelCapabilities"><code class="xref py py-meth docutils literal notranslate"><span class="pre">validateModelCapabilities()</span></code></a> refuses.</p>
@@ -3976,12 +4031,12 @@ precisely the class <a class="reference internal" href="#edelweissfe.solvers.non
 <li><p><strong>constraints</strong> (<em>dict</em>) – The constraints of the model, by name.</p></li>
 <li><p><strong>U_np</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The current solution vector.</p></li>
 <li><p><strong>dU</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The current solution increment.</p></li>
-<li><p><strong>P</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The net force vector to be augmented.</p></li>
+<li><p><strong>P</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The residual contribution vector to be augmented.</p></li>
 <li><p><strong>timeStep</strong> (<em>TimeStep</em>) – The current time step.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>The augmented net force vector.</p>
+<dd class="field-even"><p>The augmented residual contribution vector.</p>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p><a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector">DofVector</a></p>
@@ -4542,10 +4597,10 @@ the update runs on whole vectors instead of indexed subsets, and gives the same 
 <td><p>Apply every step action's step-start part (initial conditions, material initialization, prescribed fields, ...).</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">assembleConstraintForces</span></code>(constraints, U_np, ...)</p></td>
-<td><p>Evaluate every constraint and add its nodal forces to the net force vector.</p></td>
+<td><p>Evaluate every constraint and add its residual contribution to the given vector.</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">assembleLoads</span></code>(nodeForces, distributedLoads, ...)</p></td>
-<td><p>Assemble all loads into a right hand side vector.</p></td>
+<td><p>Assemble the residual contributions of all loads: each adds the negative of the external load it applies, and the tangent of that contribution, which is nonzero only for a load that follows the deformation; see <a class="reference internal" href="#residual-and-tangent-convention"><span class="std std-ref">The residual and the tangent</span></a>.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">assembleStiffnessCSR</span></code>(K)</p></td>
 <td><p>Construct a CSR matrix from VIJ format.</p></td>
@@ -4571,7 +4626,7 @@ the update runs on whole vectors instead of indexed subsets, and gives the same 
 <tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">checkMPCDirichletConflicts</span></code>(transformation, ...)</p></td>
 <td><p>Raise if any Dirichlet boundary condition of the step prescribes a DOF that is a slave DOF of a multi-point constraint.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">computeBodyForces</span></code>(bodyForces, U_np, PExt, K, ...)</p></td>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">computeBodyForces</span></code>(bodyForces, U_np, P, K, ...)</p></td>
 <td><p>Loop over all body forces loads acting on elements, and evaluate them.</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">computeDistributedLoads</span></code>(distributedLoads, ...)</p></td>

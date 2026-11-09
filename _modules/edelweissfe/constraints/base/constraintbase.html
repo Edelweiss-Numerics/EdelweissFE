@@ -119,7 +119,7 @@
 <div class="viewcode-block" id="ConstraintBase">
 <a class="viewcode-back" href="../../../../documentation/constraints.html#edelweissfe.constraints.base.constraintbase.ConstraintBase">[docs]</a>
 <span class="k">class</span><span class="w"> </span><span class="nc">ConstraintBase</span><span class="p">(</span><span class="n">OptionSchemaProvider</span><span class="p">,</span> <span class="n">ABC</span><span class="p">,</span> <span class="n">VIJEntityBase</span><span class="p">):</span>
-    <span class="c1">#: Scratch buffer for the tangent that :meth:`applyConstraintExplicit` computes and discards;</span>
+    <span class="c1">#: Scratch buffer for the tangent that :meth:`computeKernelsExplicit` computes and discards;</span>
     <span class="c1">#: re-allocated only when the DOF footprint changes.</span>
     <span class="n">_discardedTangentScratch</span> <span class="o">=</span> <span class="kc">None</span>
 
@@ -167,8 +167,8 @@
 <span class="sd">        :func:`~ConstraintBase.getNumberOfAdditionalNeededScalarVariables` and</span>
 <span class="sd">        :func:`~ConstraintBase.assignAdditionalScalarVariables`, which are called at the beginning of an analysis.</span>
 
-<span class="sd">        If scalar variables are used, EdelweissFE expects the layout of the external load vector PExt</span>
-<span class="sd">        (and the stiffness) to be of the form</span>
+<span class="sd">        If scalar variables are used, EdelweissFE expects the layout of the residual contribution ``P``</span>
+<span class="sd">        (and of the tangent) to be of the form</span>
 
 <span class="sd">        .. code-block:: console</span>
 
@@ -311,23 +311,22 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">scalarVariables</span> <span class="o">=</span> <span class="n">scalarVariables</span></div>
 
 
-<div class="viewcode-block" id="ConstraintBase.applyConstraintExplicit">
-<a class="viewcode-back" href="../../../../documentation/constraints.html#edelweissfe.constraints.base.constraintbase.ConstraintBase.applyConstraintExplicit">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">applyConstraintExplicit</span><span class="p">(</span>
+<div class="viewcode-block" id="ConstraintBase.computeKernelsExplicit">
+<a class="viewcode-back" href="../../../../documentation/constraints.html#edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernelsExplicit">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">computeKernelsExplicit</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">U_np</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
         <span class="n">dU</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
-        <span class="n">PExt</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+        <span class="n">P</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
         <span class="n">timeStep</span><span class="p">:</span> <span class="n">TimeStep</span><span class="p">,</span>
     <span class="p">):</span>
-<span class="w">        </span><span class="sd">"""Evaluate this constraint without producing a tangent matrix.</span>
+<span class="w">        </span><span class="sd">"""Add this constraint's contribution to the residual, without a tangent.</span>
 
-<span class="sd">        Used by explicit solvers where no system tangent matrix is assembled. The default</span>
-<span class="sd">        implementation forwards to :meth:`applyConstraint` with a dummy tangent contribution</span>
-<span class="sd">        so existing constraints remain functional without modification.</span>
-
-<span class="sd">        Constraints where tangent computation is costly should override this method to evaluate</span>
-<span class="sd">        only the residual / force vector directly.</span>
+<span class="sd">        The counterpart of :meth:`computeKernels` for an explicit solver, which solves no linear</span>
+<span class="sd">        system and so has no use for a tangent. This default calls :meth:`computeKernels` with a</span>
+<span class="sd">        scratch tangent that is thrown away, so that every constraint also works in an explicit</span>
+<span class="sd">        analysis. A constraint whose tangent is costly overrides it, e.g. through</span>
+<span class="sd">        :class:`~edelweissfe.constraints.base.forcesonlyexplicitevaluation.ForcesOnlyExplicitEvaluation`.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
@@ -335,8 +334,8 @@
 <span class="sd">            The current solution, restricted to this constraint's degrees of freedom.</span>
 <span class="sd">        dU</span>
 <span class="sd">            The current solution increment, likewise restricted.</span>
-<span class="sd">        PExt</span>
-<span class="sd">            The local residual / force vector to augment.</span>
+<span class="sd">        P</span>
+<span class="sd">            The residual contribution to augment, with the sign described in :meth:`computeKernels`.</span>
 <span class="sd">        timeStep</span>
 <span class="sd">            The current time step.</span>
 <span class="sd">        """</span>
@@ -350,36 +349,58 @@
             <span class="n">scratch</span><span class="p">[:]</span> <span class="o">=</span> <span class="mf">0.0</span>
 
         <span class="n">K</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">shapeVIJContribution</span><span class="p">(</span><span class="n">scratch</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">applyConstraint</span><span class="p">(</span><span class="n">U_np</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">PExt</span><span class="p">,</span> <span class="n">K</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">)</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">computeKernels</span><span class="p">(</span><span class="n">U_np</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">P</span><span class="p">,</span> <span class="n">K</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">)</span></div>
 
 
-<div class="viewcode-block" id="ConstraintBase.applyConstraint">
-<a class="viewcode-back" href="../../../../documentation/constraints.html#edelweissfe.constraints.base.constraintbase.ConstraintBase.applyConstraint">[docs]</a>
+<div class="viewcode-block" id="ConstraintBase.computeKernels">
+<a class="viewcode-back" href="../../../../documentation/constraints.html#edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernels">[docs]</a>
     <span class="nd">@abstractmethod</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">applyConstraint</span><span class="p">(</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">computeKernels</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">U_np</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
         <span class="n">dU</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
-        <span class="n">PExt</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
-        <span class="n">V</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+        <span class="n">P</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+        <span class="n">K</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
         <span class="n">timeStep</span><span class="p">:</span> <span class="n">TimeStep</span><span class="p">,</span>
     <span class="p">):</span>
-<span class="w">        </span><span class="sd">"""Apply the constraint.  Add the contributions to the external load vector and the system matrix.</span>
+<span class="w">        </span><span class="sd">"""Add this constraint's contribution ``P`` to the residual, and its tangent ``K = dP/dU``.</span>
+
+<span class="sd">        A constraint follows the rule every element and every load follows (see</span>
+<span class="sd">        :ref:`residual-and-tangent-convention`): ``P`` is the force the constraint needs at its</span>
+<span class="sd">        degrees of freedom, i.e. the *negative* of the force it exerts on the nodes, exactly as an</span>
+<span class="sd">        element of the same mechanics would add its internal force. A penalty spring of stiffness</span>
+<span class="sd">        :math:`k` that pulls a degree of freedom :math:`u` towards :math:`\\bar{u}`, for example, adds</span>
+
+<span class="sd">        .. math::</span>
+
+<span class="sd">            P \\mathrel{+}= k\\,(u - \\bar{u}), \\qquad K \\mathrel{+}= k .</span>
+
+<span class="sd">        A Lagrange multiplier constraint :math:`g(\\boldsymbol{u}) = 0` adds</span>
+<span class="sd">        :math:`\\boldsymbol{\\lambda}^T \\partial g / \\partial \\boldsymbol{u}` to the rows of its nodes</span>
+<span class="sd">        and :math:`g` to the rows of its multipliers.</span>
+
+<span class="sd">        Both ``P`` and ``K`` are augmented, never overwritten. ``K`` must be the derivative of what is</span>
+<span class="sd">        added to ``P``: a test can then check it by finite differences, which also catches a ``P``</span>
+<span class="sd">        whose sign alone is wrong. A ``P`` and a ``K`` negated together pass that check, so a test</span>
+<span class="sd">        checks the direction of the forces the constraint exerts as well.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
 <span class="sd">        U_np</span>
-<span class="sd">            The current total solution vector.</span>
+<span class="sd">            The current solution, restricted to this constraint's degrees of freedom; its own scalar</span>
+<span class="sd">            variables (e.g. Lagrange multipliers) come last.</span>
 <span class="sd">        dU</span>
-<span class="sd">            The current increment since the last time the constraint was applied.</span>
-<span class="sd">        PExt</span>
-<span class="sd">            The external load vector.</span>
+<span class="sd">            The solution increment since the last converged state, likewise restricted.</span>
+<span class="sd">        P</span>
+<span class="sd">            The residual contribution to augment.</span>
 <span class="sd">        K</span>
-<span class="sd">            The system (stiffness) matrix.</span>
-<span class="sd">        dT</span>
-<span class="sd">            The time increment.</span>
-<span class="sd">        time</span>
-<span class="sd">            The current step and total time.</span>
+<span class="sd">            The tangent ``dP/dU`` to augment, in the shape :meth:`shapeVIJContribution` gives it (a</span>
+<span class="sd">            dense ``nDof x nDof`` view unless the constraint declares a sparser pattern). A</span>
+<span class="sd">            constraint that inherits</span>
+<span class="sd">            :class:`~edelweissfe.constraints.base.forcesonlyexplicitevaluation.ForcesOnlyExplicitEvaluation`</span>
+<span class="sd">            is also called with ``K=None`` and must then skip the tangent.</span>
+<span class="sd">        timeStep</span>
+<span class="sd">            The current time step.</span>
 <span class="sd">        """</span></div>
 </div>
 
