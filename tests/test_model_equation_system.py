@@ -163,7 +163,7 @@ class _FirstElementsLayout(EquationSystemLayout):
                 self.dofManager.writeDofVectorToNodeField(vector, nodeField, entry)
             self.model.nodeFields[nodeField.name].copyEntriesFromOther(nodeField)
 
-    def updateMaterialPoints(self, dU, timeStep):
+    def updateMaterialPoints(self, dU, timeStep, forEachChunk):
         self.model.materialPointUpdates += 1
 
 

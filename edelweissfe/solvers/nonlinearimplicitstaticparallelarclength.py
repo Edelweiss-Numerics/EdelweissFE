@@ -36,8 +36,8 @@ import numpy as np
 from scipy.sparse import csr_matrix
 
 from edelweissfe.models.femodel import FEModel
-from edelweissfe.numerics.dofmanager import DofVector, VIJSystemMatrix
-from edelweissfe.numerics.parallelizationutilities import forEachSliceInParallel
+from edelweissfe.numerics.dofmanager import DofVector
+from edelweissfe.numerics.systemmatrixassembly import SystemMatrixAssembly
 from edelweissfe.outputmanagers.base.outputmanagerbase import OutputManagerBase
 from edelweissfe.solvers.nonlinearimplicitstaticparallel import NISTParallel
 from edelweissfe.stepactions.base.arclengthcontrollerbase import ArcLengthControllerBase
@@ -82,7 +82,7 @@ class ArcLengthIncrement:
     an unknown besides the solution, and the external load it scales, :math:`\\boldsymbol{f}_\\mathrm{ext} =
     \\boldsymbol{f}_0 + \\lambda \\, \\boldsymbol{f}_\\mathrm{ref}`, with the residual contributions of the dead load
     (the loads at the start of the step, :math:`-\\boldsymbol{f}_0`) and of the reference load (their change over the
-    step, :math:`-\\boldsymbol{f}_\\mathrm{ref}`), and their tangents. Created for every attempt of an increment by
+    step, :math:`-\\boldsymbol{f}_\\mathrm{ref}`). Created for every attempt of an increment by
     :meth:`NISTPArcLength.solveIncrement`; the loads are assembled by :meth:`NISTPArcLength.assembleLoadsAtIncrementEnd`,
     which adds their tangents to the tangent of the increment.
     """
@@ -98,10 +98,6 @@ class ArcLengthIncrement:
     deadLoad: DofVector
     #: The residual contribution of the reference load.
     referenceLoad: DofVector
-    #: The tangent of the dead load's contribution (nonzero only for loads that follow the deformation).
-    deadLoadTangent: VIJSystemMatrix
-    #: The tangent of the reference load's contribution.
-    referenceLoadTangent: VIJSystemMatrix
     #: The two right-hand sides of the linearized system, solved at once as its columns: the out-of-balance force
     #: :math:`\\boldsymbol{R}_0`, of the dead load and of the reference load scaled by the load parameter of the
     #: iterate, and the reference load alone, :math:`\\boldsymbol{R}_f`.
@@ -315,7 +311,7 @@ class NISTPArcLength(NISTParallel):
         U_n: DofVector,
         dU: DofVector,
         P: DofVector,
-        K: VIJSystemMatrix,
+        K: SystemMatrixAssembly,
         stepActions: dict,
         model: FEModel,
         timeStep: TimeStep,
@@ -355,7 +351,7 @@ class NISTPArcLength(NISTParallel):
         P
             The internal forces (the reaction), overwritten.
         K
-            The tangent in VIJ layout, overwritten.
+            The tangent being assembled, assembled anew.
         stepActions
             The active step actions.
         model
@@ -409,8 +405,6 @@ class NISTPArcLength(NISTParallel):
             referenceTimeStep=TimeStep(timeStep.number, 1.0, 1.0, 0.0, 0.0, 0.0),
             deadLoad=self.theDofManager.constructDofVector(),
             referenceLoad=self.theDofManager.constructDofVector(),
-            deadLoadTangent=self.theDofManager.constructVIJSystemMatrix(),
-            referenceLoadTangent=self.theDofManager.constructVIJSystemMatrix(),
             rightHandSides=np.tile(self.theDofManager.constructDofVector(), (2, 1)).T,
         )
         try:
@@ -680,9 +674,9 @@ class NISTPArcLength(NISTParallel):
         U_np: DofVector,
         dU: DofVector,
         P: DofVector,
-        K: VIJSystemMatrix,
+        K: SystemMatrixAssembly,
         timeStep: TimeStep,
-    ) -> tuple[DofVector, VIJSystemMatrix]:
+    ) -> tuple[DofVector, SystemMatrixAssembly]:
         """Assemble the loads at the end of the increment: under arc length control, the dead load plus the reference
         load scaled by the load parameter of the evaluated state, :math:`-(\\boldsymbol{f}_0 + \\lambda \\,
         \\boldsymbol{f}_\\mathrm{ref})`, with their tangents. The loads are evaluated at the start of the step (the dead
@@ -701,13 +695,13 @@ class NISTPArcLength(NISTParallel):
         P
             The residual contribution vector to assemble into.
         K
-            The tangent in VIJ layout to assemble into.
+            The tangent being assembled.
         timeStep
             The time step.
 
         Returns
         -------
-        tuple[DofVector,VIJSystemMatrix]
+        tuple[DofVector,SystemMatrixAssembly]
             The updated residual contribution vector and tangent.
         """
 
@@ -716,40 +710,34 @@ class NISTPArcLength(NISTParallel):
 
         increment = self.arcLengthIncrement
         loads = self.collectLoads(stepActions)
+        loadParameter = increment.loadParameter
 
         increment.deadLoad[:] = increment.referenceLoad[:] = 0.0
 
-        # the tangents hold the entries of all element matrices, far too many to zero on a single thread
-        def zeroTangents(s):
-            increment.referenceLoadTangent[s] = increment.deadLoadTangent[s] = 0.0
-
-        forEachSliceInParallel(zeroTangents, len(increment.deadLoadTangent))
-
-        increment.deadLoad, increment.deadLoadTangent = self.assembleLoads(
+        # The tangent of f_0 + lambda (f_1 - f_0) is the one of (1 - lambda) f_0 + lambda f_1: the tangents of the loads
+        # at the start and at the end of the step enter the tangent of the increment scaled by these factors, block by
+        # block, so that no matrix of their own is needed.
+        increment.deadLoad, _ = self.assembleLoads(
             loads,
             U_np,
             dU,
             increment.deadLoad,
-            increment.deadLoadTangent,
+            K.scaledBy(1.0 - loadParameter),
             TimeStep(timeStep.number, 0.0, 0.0, 0.0, 0.0, 0.0),
         )
-        increment.referenceLoad, increment.referenceLoadTangent = self.assembleLoads(
+        increment.referenceLoad, _ = self.assembleLoads(
             loads,
             U_np,
             dU,
             increment.referenceLoad,
-            increment.referenceLoadTangent,
+            K.scaledBy(loadParameter),
             TimeStep(timeStep.number, 1.0, 1.0, 0.0, 0.0, 0.0),
         )
         # the change of the loads over the step: the homogeneous, linear part
         increment.referenceLoad -= increment.deadLoad
-        increment.referenceLoadTangent -= increment.deadLoadTangent
 
         P += increment.deadLoad
-        P += increment.loadParameter * increment.referenceLoad
-
-        K[:] += increment.deadLoadTangent
-        K[:] += increment.loadParameter * increment.referenceLoadTangent
+        P += loadParameter * increment.referenceLoad
 
         return P, K
 

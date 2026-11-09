@@ -658,6 +658,11 @@ class Constraint(FrozenContactSearch, ForcesOnlyExplicitEvaluation, ConstraintBa
         self._frozenWeights = [None] * self.nSlaves
         self._frozenNormals = [None] * self.nSlaves
 
+    @property
+    def couplesAllItsDofs(self) -> bool:
+        """``False``: the block is the list of the values of the sparse pattern of :meth:`initializeVIJContribution`."""
+        return False
+
     def getVIJContributionSize(self) -> int:
         size = 0
         for s in range(self.nSlaves):
