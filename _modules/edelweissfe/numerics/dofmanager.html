@@ -327,6 +327,28 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">I</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">J</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">idcsOfHigherOrderEntitiesInVIJ</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_initializeVIJPattern</span><span class="p">()</span></div>
 
 
+<div class="viewcode-block" id="DofManager.dofNumbering">
+<a class="viewcode-back" href="../../../documentation/dofmanager.html#edelweissfe.numerics.dofmanager.DofManager.dofNumbering">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">dofNumbering</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""What decides the index of every degree of freedom: the fields with their slices in the DofVector, the field</span>
+<span class="sd">        variables (the nodes' entries of each field) in the order they are numbered, and the scalar variables in the</span>
+<span class="sd">        order they are numbered. Two managers whose numberings compare equal give every degree of freedom the same</span>
+<span class="sd">        index, so a DofVector of one is a DofVector of the other -- e.g., before and after a rebuild caused by a</span>
+<span class="sd">        contact search, which changes the coupling of the degrees of freedom but not their numbering.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        tuple</span>
+<span class="sd">            The numbering, to be compared with ``==``; field and scalar variables compare by identity.</span>
+<span class="sd">        """</span>
+
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="nb">tuple</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">idcsOfFieldsInDofVector</span><span class="o">.</span><span class="n">items</span><span class="p">()),</span>
+            <span class="nb">tuple</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">idcsOfFieldVariablesInDofVector</span><span class="p">),</span>
+            <span class="nb">tuple</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">idcsOfScalarVariablesInDofVector</span><span class="p">),</span>
+        <span class="p">)</span></div>
+
+
     <span class="k">def</span><span class="w"> </span><span class="nf">_reserveSpaceForNodeFields</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">idxStart</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
@@ -848,6 +870,47 @@
             <span class="n">dofVector</span><span class="p">[</span><span class="n">indices</span><span class="p">]</span> <span class="o">=</span> <span class="n">nodeField</span><span class="p">[</span><span class="n">resultName</span><span class="p">]</span><span class="o">.</span><span class="n">flatten</span><span class="p">()</span>
 
         <span class="k">return</span> <span class="n">dofVector</span></div>
+
+
+<div class="viewcode-block" id="DofManager.writeScalarVariablesToDofVector">
+<a class="viewcode-back" href="../../../documentation/dofmanager.html#edelweissfe.numerics.dofmanager.DofManager.writeScalarVariablesToDofVector">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">writeScalarVariablesToDofVector</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dofVector</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DofVector</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Write the values of the scalar variables of this equation system to their locations in a given</span>
+<span class="sd">        DofVector. Only the scalar variables this DofManager numbers are written: those of a constraint that is</span>
+<span class="sd">        switched off are not part of the equation system.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        dofVector</span>
+<span class="sd">            The result DofVector.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        DofVector</span>
+<span class="sd">            The DofVector.</span>
+<span class="sd">        """</span>
+
+        <span class="k">for</span> <span class="n">scalarVariable</span><span class="p">,</span> <span class="n">index</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">idcsOfScalarVariablesInDofVector</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="n">dofVector</span><span class="p">[</span><span class="n">index</span><span class="p">]</span> <span class="o">=</span> <span class="n">scalarVariable</span><span class="o">.</span><span class="n">value</span>
+
+        <span class="k">return</span> <span class="n">dofVector</span></div>
+
+
+<div class="viewcode-block" id="DofManager.writeDofVectorToScalarVariables">
+<a class="viewcode-back" href="../../../documentation/dofmanager.html#edelweissfe.numerics.dofmanager.DofManager.writeDofVectorToScalarVariables">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">writeDofVectorToScalarVariables</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dofVector</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Set the values of the scalar variables of this equation system from their locations in a given</span>
+<span class="sd">        DofVector; the counterpart of :meth:`writeScalarVariablesToDofVector`. A scalar variable this DofManager</span>
+<span class="sd">        does not number keeps its value.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        dofVector</span>
+<span class="sd">            The source DofVector.</span>
+<span class="sd">        """</span>
+
+        <span class="k">for</span> <span class="n">scalarVariable</span><span class="p">,</span> <span class="n">index</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">idcsOfScalarVariablesInDofVector</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="n">scalarVariable</span><span class="o">.</span><span class="n">value</span> <span class="o">=</span> <span class="n">dofVector</span><span class="p">[</span><span class="n">index</span><span class="p">]</span></div>
 </div>
 
 </pre></div>

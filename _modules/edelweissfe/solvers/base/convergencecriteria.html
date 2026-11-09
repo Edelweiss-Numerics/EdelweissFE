@@ -107,15 +107,72 @@
 <span class="sd">Two criteria are available, selected by the solver option ``convergenceCriterion``:</span>
 
 <span class="sd">``legacy`` (default)</span>
-<span class="sd">    The original EdelweissFE criterion. A field is converged if</span>
+<span class="sd">    EdelweissFE's own criterion. Field by field, it compares the largest flux residual :math:`r_{\\max}` with the</span>
+<span class="sd">    spatial average flux :math:`\\bar{q}` of the *current* iteration, computed from the element fluxes only, and the</span>
+<span class="sd">    largest correction :math:`c_{\\max}` with an absolute tolerance and with a tolerance relative to</span>
+<span class="sd">    :math:`\\Delta u_{\\max}`, the largest increment of the field in the current increment. A field is converged if</span>
 
 <span class="sd">    .. math::</span>
 
-<span class="sd">        r_{\\max} \\leq \\max(R \\, \\bar{q}, 10^{-7}) \\quad \\text{and} \\quad c_{\\max} &lt; C,</span>
+<span class="sd">        \\left( r_{\\max} \\leq R_a \\;\\text{or}\\; r_{\\max} \\leq R \\, \\bar{q} \\right)</span>
+<span class="sd">        \\quad \\text{and} \\quad</span>
+<span class="sd">        \\left( c_{\\max} &lt; C_a \\;\\text{or}\\; c_{\\max} &lt; C \\, \\Delta u_{\\max} \\right),</span>
 
-<span class="sd">    with the *absolute* correction tolerance :math:`C` (``fieldCorrectionTolerance``), the residual tolerance</span>
-<span class="sd">    :math:`R` (``fluxResidualTolerance``, ``fluxResidualToleranceAlternative`` from iteration 15 on), and the</span>
-<span class="sd">    spatial average flux :math:`\\bar{q}` of the *current* iteration, computed from the element fluxes only.</span>
+<span class="sd">    with the tolerances of the field:</span>
+
+<span class="sd">    * :math:`R`, the flux residual tolerance relative to the spatial average flux (``fluxResidualTolerance``),</span>
+<span class="sd">      replaced by ``fluxResidualToleranceAlternative`` from iteration :math:`I` (``iterationsForAlternativeTolerance``)</span>
+<span class="sd">      on, where a Newton iteration that converges only slowly may stop at a looser tolerance;</span>
+<span class="sd">    * :math:`R_a`, the absolute flux residual tolerance (``absoluteFluxResidualTolerance``): a floor for a field whose</span>
+<span class="sd">      flux is so small that a relative tolerance would ask for the round-off of the residual;</span>
+<span class="sd">    * :math:`C_a`, the absolute correction tolerance (``fieldCorrectionTolerance``);</span>
+<span class="sd">    * :math:`C`, the correction tolerance relative to the largest increment (``relativeFieldCorrectionTolerance``);</span>
+<span class="sd">      the default 0 accepts a correction by its absolute size only.</span>
+
+<span class="sd">    The tolerances of each field are set with ``*updateConfiguration``, for instance</span>
+
+<span class="sd">    .. code-block:: edelweiss</span>
+
+<span class="sd">        *updateConfiguration, configuration=absoluteFluxResidualTolerance</span>
+<span class="sd">        displacement=1e-10</span>
+
+<span class="sd">    and default to :mod:`edelweissfe.config.phenomena`. Three rules, set by solver options, are off by default:</span>
+
+<span class="sd">    * Zero flux (``zeroFluxThreshold``, :math:`\\bar{q}_0`): a field whose spatial average flux does not exceed</span>
+<span class="sd">      :math:`\\bar{q}_0` carries no flux its residual could be compared with, so its flux residual counts as</span>
+<span class="sd">      converged. An example is a nonlocal damage field before the onset of damage.</span>
+<span class="sd">    * Zero increment (``zeroIncrementThreshold``, :math:`\\Delta u_0`): a field whose largest increment does not</span>
+<span class="sd">      exceed :math:`\\Delta u_0` has not moved, so there is no increment to relate its correction to; its correction</span>
+<span class="sd">      counts as converged.</span>
+<span class="sd">    * Minimum iterations (``minimumIterations``, :math:`n`): no flux residual counts as converged before iteration</span>
+<span class="sd">      :math:`n`, so an increment takes at least :math:`n` Newton iterations. With :math:`n = 0`, a prediction that</span>
+<span class="sd">      already satisfies the criterion is accepted as it is. The zero flux rule needs :math:`n \\geq 1`, and refuses</span>
+<span class="sd">      a smaller :math:`n`: before the first correction, the elements of a model at rest report no flux at all.</span>
+
+<span class="sd">    The scalar variables (e.g., Lagrange multipliers) are checked like a field, with the tolerances of the entry</span>
+<span class="sd">    ``scalar variables``. No element flux acts on them, so their flux residual is compared with the tolerances</span>
+<span class="sd">    directly, as if their spatial average flux were one, and the zero flux rule does not apply to them: it would</span>
+<span class="sd">    accept any residual of theirs for a threshold of one or more.</span>
+
+<span class="sd">    Two parameter sets of this criterion are in use: EdelweissFE's defaults, which are those of the original</span>
+<span class="sd">    criterion, and the settings of EdelweissMeshfree's solvers (for every field):</span>
+
+<span class="sd">    ======================================  ==============================  ==================</span>
+<span class="sd">    parameter                               EdelweissFE                     EdelweissMeshfree</span>
+<span class="sd">    ======================================  ==============================  ==================</span>
+<span class="sd">    ``fluxResidualTolerance``               per field, see phenomena        1e-4</span>
+<span class="sd">    ``fluxResidualToleranceAlternative``    per field, see phenomena        1e-3</span>
+<span class="sd">    ``iterationsForAlternativeTolerance``   15                              5</span>
+<span class="sd">    ``absoluteFluxResidualTolerance``       1e-7, scalar variables 0        1e-14</span>
+<span class="sd">    ``fieldCorrectionTolerance``            per field, see phenomena        1e-14</span>
+<span class="sd">    ``relativeFieldCorrectionTolerance``    0                               1e-3</span>
+<span class="sd">    ``zeroFluxThreshold``                   off                             1e-9</span>
+<span class="sd">    ``zeroIncrementThreshold``              off                             1e-13</span>
+<span class="sd">    ``minimumIterations``                   0                               1</span>
+<span class="sd">    ======================================  ==============================  ==================</span>
+
+<span class="sd">    EdelweissMeshfree also counts the residual growths of a diverging iteration differently: its solvers set the</span>
+<span class="sd">    solver options ``countFirstResidualAsGrowth`` and ``countGrowthOfConvergedFields`` to False.</span>
 
 <span class="sd">``abaqus``</span>
 <span class="sd">    The criterion of Abaqus/Standard ("Convergence criteria for nonlinear problems", Abaqus Analysis User's</span>
@@ -137,6 +194,8 @@
 <span class="sd">    A field whose current spatial average flux is below :math:`\\varepsilon \\, \\tilde{q}` carries no flux; it is</span>
 <span class="sd">    converged if :math:`c_{\\max} \\leq C_\\varepsilon \\, \\Delta u_{\\max}`. A field with</span>
 <span class="sd">    :math:`r_{\\max} \\leq R_l \\, \\tilde{q}` is converged irrespective of the correction (linear case).</span>
+
+<span class="sd">    The criterion is formulated for fields; the scalar variables are checked by the ``legacy`` criterion.</span>
 
 <span class="sd">    Not implemented: the estimate of the next correction from the convergence rate (Abaqus accepts an increment</span>
 <span class="sd">    if it predicts a small enough correction), and the detection of inactive regions for the spatial average.</span>
@@ -251,6 +310,32 @@
 <span class="sd">        """</span></div>
 
 
+<div class="viewcode-block" id="ConvergenceCriterionBase.checkScalarVariables">
+<a class="viewcode-back" href="../../../../documentation/solvers.html#edelweissfe.solvers.base.convergencecriteria.ConvergenceCriterionBase.checkScalarVariables">[docs]</a>
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">checkScalarVariables</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">R</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">ddU</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">dU</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">iterationCounter</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">FieldConvergence</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Check the convergence of the scalar variables (e.g., Lagrange multipliers), together as one column.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        R</span>
+<span class="sd">            The residual of the scalar variables.</span>
+<span class="sd">        ddU</span>
+<span class="sd">            The current correction of the scalar variables, None if no correction was computed yet in this increment.</span>
+<span class="sd">        dU</span>
+<span class="sd">            The current increment of the scalar variables.</span>
+<span class="sd">        iterationCounter</span>
+<span class="sd">            The current iteration number.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        FieldConvergence</span>
+<span class="sd">            The convergence state of the scalar variables.</span>
+<span class="sd">        """</span></div>
+
+
 <div class="viewcode-block" id="ConvergenceCriterionBase.computeSpatialAveragedFluxes">
 <a class="viewcode-back" href="../../../../documentation/solvers.html#edelweissfe.solvers.base.convergencecriteria.ConvergenceCriterionBase.computeSpatialAveragedFluxes">[docs]</a>
     <span class="nd">@abstractmethod</span>
@@ -280,48 +365,173 @@
 <div class="viewcode-block" id="LegacyConvergenceCriterion">
 <a class="viewcode-back" href="../../../../documentation/solvers.html#edelweissfe.solvers.base.convergencecriteria.LegacyConvergenceCriterion">[docs]</a>
 <span class="k">class</span><span class="w"> </span><span class="nc">LegacyConvergenceCriterion</span><span class="p">(</span><span class="n">ConvergenceCriterionBase</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">"""The original EdelweissFE criterion; see the module documentation.</span>
+<span class="w">    </span><span class="sd">"""EdelweissFE's own criterion; see the module documentation.</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
 <span class="sd">    fluxResidualTolerances</span>
-<span class="sd">        The relative flux residual tolerances per field.</span>
-<span class="sd">    fluxResidualTolerancesAlt</span>
-<span class="sd">        The relative flux residual tolerances per field from iteration 15 on.</span>
+<span class="sd">        :math:`R` per field: the flux residual tolerances relative to the spatial average flux.</span>
+<span class="sd">    fluxResidualTolerancesAlternative</span>
+<span class="sd">        The relative flux residual tolerances per field from iteration :math:`I` on.</span>
+<span class="sd">    absoluteFluxResidualTolerances</span>
+<span class="sd">        :math:`R_a` per field: the absolute flux residual tolerances.</span>
 <span class="sd">    fieldCorrectionTolerances</span>
-<span class="sd">        The absolute correction tolerances per field.</span>
+<span class="sd">        :math:`C_a` per field: the absolute correction tolerances.</span>
+<span class="sd">    relativeFieldCorrectionTolerances</span>
+<span class="sd">        :math:`C` per field: the correction tolerances relative to the largest increment of the field.</span>
+<span class="sd">    iterationsForAlternativeTolerance</span>
+<span class="sd">        :math:`I`, the iteration from which on the alternative flux residual tolerances apply.</span>
+<span class="sd">    zeroFluxThreshold</span>
+<span class="sd">        :math:`\\bar{q}_0`, the spatial average flux up to which a field carries no flux; None for no zero flux rule.</span>
+<span class="sd">    zeroIncrementThreshold</span>
+<span class="sd">        :math:`\\Delta u_0`, the largest increment up to which a field has not moved; None for no zero increment rule.</span>
+<span class="sd">    minimumIterations</span>
+<span class="sd">        :math:`n`, the iteration before which no flux residual counts as converged.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If the zero flux rule is on with :math:`n &lt; 1`.</span>
 <span class="sd">    """</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">fluxResidualTolerances</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span> <span class="n">fluxResidualTolerancesAlt</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span> <span class="n">fieldCorrectionTolerances</span><span class="p">:</span> <span class="nb">dict</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">fluxResidualTolerances</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">],</span>
+        <span class="n">fluxResidualTolerancesAlternative</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">],</span>
+        <span class="n">absoluteFluxResidualTolerances</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">],</span>
+        <span class="n">fieldCorrectionTolerances</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">],</span>
+        <span class="n">relativeFieldCorrectionTolerances</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">],</span>
+        <span class="n">iterationsForAlternativeTolerance</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">zeroFluxThreshold</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">zeroIncrementThreshold</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">minimumIterations</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="k">if</span> <span class="n">zeroFluxThreshold</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">minimumIterations</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">"zeroFluxThreshold needs minimumIterations &gt;= 1, got </span><span class="si">{:}</span><span class="s2">: before the first correction, the elements of a "</span>
+                <span class="s2">"model at rest report no flux, and the zero flux rule would accept the prediction"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+                    <span class="n">minimumIterations</span>
+                <span class="p">)</span>
+            <span class="p">)</span>
+
         <span class="bp">self</span><span class="o">.</span><span class="n">fluxResidualTolerances</span> <span class="o">=</span> <span class="n">fluxResidualTolerances</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">fluxResidualTolerancesAlt</span> <span class="o">=</span> <span class="n">fluxResidualTolerancesAlt</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">fluxResidualTolerancesAlternative</span> <span class="o">=</span> <span class="n">fluxResidualTolerancesAlternative</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">absoluteFluxResidualTolerances</span> <span class="o">=</span> <span class="n">absoluteFluxResidualTolerances</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">fieldCorrectionTolerances</span> <span class="o">=</span> <span class="n">fieldCorrectionTolerances</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">relativeFieldCorrectionTolerances</span> <span class="o">=</span> <span class="n">relativeFieldCorrectionTolerances</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">iterationsForAlternativeTolerance</span> <span class="o">=</span> <span class="n">iterationsForAlternativeTolerance</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">zeroFluxThreshold</span> <span class="o">=</span> <span class="n">zeroFluxThreshold</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">zeroIncrementThreshold</span> <span class="o">=</span> <span class="n">zeroIncrementThreshold</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">minimumIterations</span> <span class="o">=</span> <span class="n">minimumIterations</span>
 
 <div class="viewcode-block" id="LegacyConvergenceCriterion.checkField">
 <a class="viewcode-back" href="../../../../documentation/solvers.html#edelweissfe.solvers.base.convergencecriteria.LegacyConvergenceCriterion.checkField">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">checkField</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">field</span><span class="p">,</span> <span class="n">R</span><span class="p">,</span> <span class="n">ddU</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">spatialAveragedFlux</span><span class="p">,</span> <span class="n">iterationCounter</span><span class="p">):</span>
-        <span class="n">fluxResidualTolerances</span> <span class="o">=</span> <span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">fluxResidualTolerances</span> <span class="k">if</span> <span class="n">iterationCounter</span> <span class="o">&lt;</span> <span class="mi">15</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">fluxResidualTolerancesAlt</span>
-        <span class="p">)</span>
-
         <span class="n">indexOfMax</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">argmax</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">R</span><span class="p">))</span>
         <span class="n">fluxResidual</span> <span class="o">=</span> <span class="nb">abs</span><span class="p">(</span><span class="n">R</span><span class="p">[</span><span class="n">indexOfMax</span><span class="p">])</span>
         <span class="n">correction</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">ddU</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">inf</span><span class="p">)</span> <span class="k">if</span> <span class="n">ddU</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="mf">0.0</span>
 
         <span class="k">return</span> <span class="n">FieldConvergence</span><span class="p">(</span>
             <span class="n">fluxResidual</span><span class="p">,</span>
-            <span class="n">fluxResidual</span> <span class="o">&lt;=</span> <span class="nb">max</span><span class="p">(</span><span class="n">fluxResidualTolerances</span><span class="p">[</span><span class="n">field</span><span class="p">]</span> <span class="o">*</span> <span class="n">spatialAveragedFlux</span><span class="p">,</span> <span class="mf">1e-7</span><span class="p">),</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">fluxResidualConverged</span><span class="p">(</span><span class="n">field</span><span class="p">,</span> <span class="n">fluxResidual</span><span class="p">,</span> <span class="n">spatialAveragedFlux</span><span class="p">,</span> <span class="n">iterationCounter</span><span class="p">),</span>
             <span class="n">correction</span><span class="p">,</span>
-            <span class="n">correction</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">fieldCorrectionTolerances</span><span class="p">[</span><span class="n">field</span><span class="p">],</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">correctionConverged</span><span class="p">(</span><span class="n">field</span><span class="p">,</span> <span class="n">correction</span><span class="p">,</span> <span class="n">dU</span><span class="p">),</span>
             <span class="n">indexOfMax</span><span class="p">,</span>
         <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="LegacyConvergenceCriterion.checkScalarVariables">
+<a class="viewcode-back" href="../../../../documentation/solvers.html#edelweissfe.solvers.base.convergencecriteria.LegacyConvergenceCriterion.checkScalarVariables">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">checkScalarVariables</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">R</span><span class="p">,</span> <span class="n">ddU</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">iterationCounter</span><span class="p">):</span>
+        <span class="c1"># No element flux acts on the scalar variables: their residual is compared with the tolerances directly, and the</span>
+        <span class="c1"># zero flux rule does not apply to them (see fluxResidualConverged).</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">checkField</span><span class="p">(</span><span class="s2">"scalar variables"</span><span class="p">,</span> <span class="n">R</span><span class="p">,</span> <span class="n">ddU</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="n">iterationCounter</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="LegacyConvergenceCriterion.fluxResidualConverged">
+<a class="viewcode-back" href="../../../../documentation/solvers.html#edelweissfe.solvers.base.convergencecriteria.LegacyConvergenceCriterion.fluxResidualConverged">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">fluxResidualConverged</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">field</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">fluxResidual</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">spatialAveragedFlux</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">iterationCounter</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The flux residual part of the criterion.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        field</span>
+<span class="sd">            The name of the field.</span>
+<span class="sd">        fluxResidual</span>
+<span class="sd">            The largest absolute flux residual :math:`r_{\\max}` of the field.</span>
+<span class="sd">        spatialAveragedFlux</span>
+<span class="sd">            The spatial average flux :math:`\\bar{q}` of the field; None for the scalar variables, on which no element</span>
+<span class="sd">            flux acts: their flux residual is compared with the tolerances directly, as if :math:`\\bar{q}` were one,</span>
+<span class="sd">            and the zero flux rule, which tells a field that carries no element flux, does not apply to them.</span>
+<span class="sd">        iterationCounter</span>
+<span class="sd">            The current iteration number.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        bool</span>
+<span class="sd">            True if the flux residual is converged.</span>
+<span class="sd">        """</span>
+
+        <span class="k">if</span> <span class="n">iterationCounter</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">minimumIterations</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">False</span>
+
+        <span class="k">if</span> <span class="n">fluxResidual</span> <span class="o">&lt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">absoluteFluxResidualTolerances</span><span class="p">[</span><span class="n">field</span><span class="p">]:</span>
+            <span class="k">return</span> <span class="kc">True</span>
+
+        <span class="n">relativeTolerances</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">fluxResidualTolerances</span>
+            <span class="k">if</span> <span class="n">iterationCounter</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">iterationsForAlternativeTolerance</span>
+            <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">fluxResidualTolerancesAlternative</span>
+        <span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">spatialAveragedFlux</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">fluxResidual</span> <span class="o">&lt;=</span> <span class="n">relativeTolerances</span><span class="p">[</span><span class="n">field</span><span class="p">]</span>
+
+        <span class="c1"># 'not above' rather than 'at most': a field without any element flux (a NaN average) carries no flux either</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">zeroFluxThreshold</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">spatialAveragedFlux</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">zeroFluxThreshold</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">True</span>
+
+        <span class="k">return</span> <span class="n">fluxResidual</span> <span class="o">&lt;=</span> <span class="n">relativeTolerances</span><span class="p">[</span><span class="n">field</span><span class="p">]</span> <span class="o">*</span> <span class="n">spatialAveragedFlux</span></div>
+
+
+<div class="viewcode-block" id="LegacyConvergenceCriterion.correctionConverged">
+<a class="viewcode-back" href="../../../../documentation/solvers.html#edelweissfe.solvers.base.convergencecriteria.LegacyConvergenceCriterion.correctionConverged">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">correctionConverged</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">field</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">correction</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">dU</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The correction part of the criterion.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        field</span>
+<span class="sd">            The name of the field.</span>
+<span class="sd">        correction</span>
+<span class="sd">            The largest absolute correction :math:`c_{\\max}` of the field.</span>
+<span class="sd">        dU</span>
+<span class="sd">            The current increment of the field.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        bool</span>
+<span class="sd">            True if the correction is converged.</span>
+<span class="sd">        """</span>
+
+        <span class="k">if</span> <span class="n">correction</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">fieldCorrectionTolerances</span><span class="p">[</span><span class="n">field</span><span class="p">]:</span>
+            <span class="k">return</span> <span class="kc">True</span>
+
+        <span class="n">largestIncrement</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">dU</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">inf</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">zeroIncrementThreshold</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">largestIncrement</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">zeroIncrementThreshold</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">True</span>
+
+        <span class="k">return</span> <span class="n">correction</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">relativeFieldCorrectionTolerances</span><span class="p">[</span><span class="n">field</span><span class="p">]</span> <span class="o">*</span> <span class="n">largestIncrement</span></div>
 
 
 <div class="viewcode-block" id="LegacyConvergenceCriterion.computeSpatialAveragedFluxes">
 <a class="viewcode-back" href="../../../../documentation/solvers.html#edelweissfe.solvers.base.convergencecriteria.LegacyConvergenceCriterion.computeSpatialAveragedFluxes">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">computeSpatialAveragedFluxes</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">F</span><span class="p">,</span> <span class="n">FConstraints</span><span class="p">,</span> <span class="n">theDofManager</span><span class="p">):</span>
         <span class="k">return</span> <span class="p">{</span>
-            <span class="n">field</span><span class="p">:</span> <span class="nb">max</span><span class="p">(</span><span class="mf">1e-10</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">F</span><span class="p">[</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">idcsOfFieldsInDofVector</span><span class="p">[</span><span class="n">field</span><span class="p">]],</span> <span class="mi">1</span><span class="p">)</span> <span class="o">/</span> <span class="n">nDof</span><span class="p">)</span>
+            <span class="n">field</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">F</span><span class="p">[</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">idcsOfFieldsInDofVector</span><span class="p">[</span><span class="n">field</span><span class="p">]],</span> <span class="mi">1</span><span class="p">)</span> <span class="o">/</span> <span class="n">nDof</span>
             <span class="k">for</span> <span class="n">field</span><span class="p">,</span> <span class="n">nDof</span> <span class="ow">in</span> <span class="n">theDofManager</span><span class="o">.</span><span class="n">nAccumulatedNodalFluxesFieldwise</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
         <span class="p">}</span></div>
 </div>
@@ -335,6 +545,8 @@
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
+<span class="sd">    scalarVariableCriterion</span>
+<span class="sd">        The criterion that checks the scalar variables, which Abaqus' criterion does not cover: the ``legacy`` one.</span>
 <span class="sd">    residualTolerance</span>
 <span class="sd">        :math:`R_n`, the flux residual tolerance relative to the time average flux.</span>
 <span class="sd">    correctionTolerance</span>
@@ -355,6 +567,7 @@
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
+        <span class="n">scalarVariableCriterion</span><span class="p">:</span> <span class="n">ConvergenceCriterionBase</span><span class="p">,</span>
         <span class="n">residualTolerance</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">5e-3</span><span class="p">,</span>
         <span class="n">correctionTolerance</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1e-2</span><span class="p">,</span>
         <span class="n">residualToleranceAlternative</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">2e-2</span><span class="p">,</span>
@@ -364,6 +577,7 @@
         <span class="n">linearResidualTolerance</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1e-8</span><span class="p">,</span>
         <span class="n">initialTimeAveragedFlux</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1e-2</span><span class="p">,</span>
     <span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">scalarVariableCriterion</span> <span class="o">=</span> <span class="n">scalarVariableCriterion</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">residualTolerance</span> <span class="o">=</span> <span class="n">residualTolerance</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">correctionTolerance</span> <span class="o">=</span> <span class="n">correctionTolerance</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">residualToleranceAlternative</span> <span class="o">=</span> <span class="n">residualToleranceAlternative</span>
@@ -476,6 +690,12 @@
             <span class="n">ddU</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">correction</span> <span class="o">&lt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">correctionTolerance</span> <span class="o">*</span> <span class="n">largestIncrement</span><span class="p">,</span>
             <span class="n">indexOfMax</span><span class="p">,</span>
         <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="AbaqusConvergenceCriterion.checkScalarVariables">
+<a class="viewcode-back" href="../../../../documentation/solvers.html#edelweissfe.solvers.base.convergencecriteria.AbaqusConvergenceCriterion.checkScalarVariables">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">checkScalarVariables</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">R</span><span class="p">,</span> <span class="n">ddU</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">iterationCounter</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">scalarVariableCriterion</span><span class="o">.</span><span class="n">checkScalarVariables</span><span class="p">(</span><span class="n">R</span><span class="p">,</span> <span class="n">ddU</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">iterationCounter</span><span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="AbaqusConvergenceCriterion.computeSpatialAveragedFluxes">

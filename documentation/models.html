@@ -143,34 +143,56 @@ for nodes and scalar degrees of freedem, and it manages the fields.</p>
 <p class="rubric">Methods</p>
 <table class="autosummary longtable docutils align-default">
 <tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.models.femodel.FEModel.advanceToTime" title="edelweissfe.models.femodel.FEModel.advanceToTime"><code class="xref py py-obj docutils literal notranslate"><span class="pre">advanceToTime</span></code></a>(time)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.models.femodel.FEModel.activeConstraints" title="edelweissfe.models.femodel.FEModel.activeConstraints"><code class="xref py py-obj docutils literal notranslate"><span class="pre">activeConstraints</span></code></a>()</p></td>
+<td><p>The constraints that take part in the equation system: all constraints, in their order, that are active, i.e. switched on and within reach (see <a class="reference internal" href="constraints.html#edelweissfe.constraints.base.constraintbase.ConstraintBase.active" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.active"><code class="xref py py-attr docutils literal notranslate"><span class="pre">active</span></code></a>).</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.models.femodel.FEModel.advanceToTime" title="edelweissfe.models.femodel.FEModel.advanceToTime"><code class="xref py py-obj docutils literal notranslate"><span class="pre">advanceToTime</span></code></a>(time)</p></td>
 <td><p>Accept the current state of the model and sub instances, and set the new time.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.models.femodel.FEModel.createElement" title="edelweissfe.models.femodel.FEModel.createElement"><code class="xref py py-obj docutils literal notranslate"><span class="pre">createElement</span></code></a>(element)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.models.femodel.FEModel.createElement" title="edelweissfe.models.femodel.FEModel.createElement"><code class="xref py py-obj docutils literal notranslate"><span class="pre">createElement</span></code></a>(element)</p></td>
 <td><p>Add a freshly created element to the model.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.models.femodel.FEModel.createNode" title="edelweissfe.models.femodel.FEModel.createNode"><code class="xref py py-obj docutils literal notranslate"><span class="pre">createNode</span></code></a>(node)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.models.femodel.FEModel.createNode" title="edelweissfe.models.femodel.FEModel.createNode"><code class="xref py py-obj docutils literal notranslate"><span class="pre">createNode</span></code></a>(node)</p></td>
 <td><p>Add a freshly created node to the model.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.models.femodel.FEModel.prepareYourself" title="edelweissfe.models.femodel.FEModel.prepareYourself"><code class="xref py py-obj docutils literal notranslate"><span class="pre">prepareYourself</span></code></a>(journal)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.models.femodel.FEModel.prepareYourself" title="edelweissfe.models.femodel.FEModel.prepareYourself"><code class="xref py py-obj docutils literal notranslate"><span class="pre">prepareYourself</span></code></a>(journal)</p></td>
 <td><p>Prepare the model for a simulation.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.models.femodel.FEModel.readRestart" title="edelweissfe.models.femodel.FEModel.readRestart"><code class="xref py py-obj docutils literal notranslate"><span class="pre">readRestart</span></code></a>(restartFile[, journal])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.models.femodel.FEModel.readRestart" title="edelweissfe.models.femodel.FEModel.readRestart"><code class="xref py py-obj docutils literal notranslate"><span class="pre">readRestart</span></code></a>(restartFile[, journal])</p></td>
 <td><p>Read the state of the model from a restart checkpoint written by <a class="reference internal" href="#edelweissfe.models.femodel.FEModel.writeRestart" title="edelweissfe.models.femodel.FEModel.writeRestart"><code class="xref py py-meth docutils literal notranslate"><span class="pre">writeRestart()</span></code></a>.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.models.femodel.FEModel.removeElement" title="edelweissfe.models.femodel.FEModel.removeElement"><code class="xref py py-obj docutils literal notranslate"><span class="pre">removeElement</span></code></a>(elNumber)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.models.femodel.FEModel.removeElement" title="edelweissfe.models.femodel.FEModel.removeElement"><code class="xref py py-obj docutils literal notranslate"><span class="pre">removeElement</span></code></a>(elNumber)</p></td>
 <td><p>Remove an element from the model.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.models.femodel.FEModel.writeRestart" title="edelweissfe.models.femodel.FEModel.writeRestart"><code class="xref py py-obj docutils literal notranslate"><span class="pre">writeRestart</span></code></a>(restartFile)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.models.femodel.FEModel.writeRestart" title="edelweissfe.models.femodel.FEModel.writeRestart"><code class="xref py py-obj docutils literal notranslate"><span class="pre">writeRestart</span></code></a>(restartFile)</p></td>
 <td><p>Write the current (converged) state of the model to a restart checkpoint.</p></td>
 </tr>
 </tbody>
 </table>
 <dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.models.femodel.FEModel.activeConstraints">
+<span class="sig-name descname"><span class="pre">activeConstraints</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/models/femodel.html#FEModel.activeConstraints"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.models.femodel.FEModel.activeConstraints" title="Link to this definition"></a></dt>
+<dd><p>The constraints that take part in the equation system: all constraints, in their order, that are active,
+i.e. switched on and within reach (see
+<a class="reference internal" href="constraints.html#edelweissfe.constraints.base.constraintbase.ConstraintBase.active" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.active"><code class="xref py py-attr docutils literal notranslate"><span class="pre">active</span></code></a>).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>The active constraints.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>list[<a class="reference internal" href="constraints.html#edelweissfe.constraints.base.constraintbase.ConstraintBase" title="edelweissfe.constraints.base.constraintbase.ConstraintBase">ConstraintBase</a>]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
 <dt class="sig sig-object py" id="edelweissfe.models.femodel.FEModel.advanceToTime">
 <span class="sig-name descname"><span class="pre">advanceToTime</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">time</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/models/femodel.html#FEModel.advanceToTime"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.models.femodel.FEModel.advanceToTime" title="Link to this definition"></a></dt>
 <dd><p>Accept the current state of the model and sub instances, and
 set the new time.</p>
+<p>Of the constraints, only the active ones accept their state (see <a class="reference internal" href="#edelweissfe.models.femodel.FEModel.activeConstraints" title="edelweissfe.models.femodel.FEModel.activeConstraints"><code class="xref py py-meth docutils literal notranslate"><span class="pre">activeConstraints()</span></code></a>): a constraint that
+took no part in the increment has no new state, and keeps its history as it was, e.g. the multipliers and the
+frictional history of a contact switched off for a step.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>time</strong> (<em>float</em>) – The new time.</p>

@@ -341,8 +341,8 @@
     <span class="nd">@abstractmethod</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">computeKernels</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
-        <span class="n">P</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
         <span class="n">K</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+        <span class="n">P</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
         <span class="n">U</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
         <span class="n">dU</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
         <span class="n">time</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
@@ -353,10 +353,10 @@
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
-<span class="sd">        P</span>
-<span class="sd">            The residual contribution to augment, the internal forces :math:`\\boldsymbol{f}_\\mathrm{int}`.</span>
 <span class="sd">        K</span>
 <span class="sd">            The tangent ``dP/dU`` to augment, the stiffness matrix.</span>
+<span class="sd">        P</span>
+<span class="sd">            The residual contribution to augment, the internal forces :math:`\\boldsymbol{f}_\\mathrm{int}`.</span>
 <span class="sd">        U</span>
 <span class="sd">            The current solution vector.</span>
 <span class="sd">        dU</span>

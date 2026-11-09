@@ -128,6 +128,56 @@
     <span class="c1">#: none) or overrides :meth:`getRestartData` and :meth:`setRestartData`.</span>
     <span class="n">checkpointedState</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
 
+    <span class="c1">#: Whether this constraint is within reach of what it constrains, as it finds itself in :meth:`updateConnectivity`:</span>
+    <span class="c1">#: e.g. a contact constraint whose partner is far away is not, and takes no part in the equation system then (see</span>
+    <span class="c1">#: :attr:`active`). A constraint sets it there, and reports a change of :attr:`active` as a change of its</span>
+    <span class="c1">#: connectivity, so that the solver rebuilds its equation system. A constraint that does not check stays within</span>
+    <span class="c1">#: reach.</span>
+    <span class="n">withinReach</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
+
+    <span class="c1">#: Whether this constraint is switched on from outside; see :attr:`switchedOn`.</span>
+    <span class="n">_switchedOn</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">switchedOn</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Whether this constraint is switched on from outside, e.g. by a ``modelupdate`` step action, which switches it</span>
+<span class="sd">        through :attr:`active`. A constraint switched off from outside rests: the solvers do not locate it anew</span>
+<span class="sd">        (:meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.updateTopologyAndConnectivity`), it</span>
+<span class="sd">        accepts no state (:meth:`acceptLastState`), so that its history stays as it was, and the solvers neither</span>
+<span class="sd">        evaluate it nor refuse it. A solver that cannot handle a constraint refuses it while it is switched on, even out</span>
+<span class="sd">        of reach: it may come within reach during the step.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        bool</span>
+<span class="sd">            Whether the constraint is switched on.</span>
+<span class="sd">        """</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_switchedOn</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">active</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Whether this constraint takes part in the equation system: while it is :attr:`switchedOn` and</span>
+<span class="sd">        :attr:`withinReach`. A constraint that does not take part gets no degrees of freedom and adds nothing to the</span>
+<span class="sd">        residual or the tangent; its scalar variables (e.g. Lagrange multipliers) leave the equation system with it, so</span>
+<span class="sd">        that they leave no empty rows behind.</span>
+
+<span class="sd">        Setting it switches the constraint on or off from outside, e.g. by a ``modelupdate`` step action at the start</span>
+<span class="sd">        of a step. A switch-off from outside lasts until the constraint is switched on again from outside, whatever the</span>
+<span class="sd">        constraint finds in reach; switched on again, it takes part while it is within reach.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        bool</span>
+<span class="sd">            Whether the constraint takes part in the equation system.</span>
+<span class="sd">        """</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_switchedOn</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">withinReach</span>
+
+    <span class="nd">@active</span><span class="o">.</span><span class="n">setter</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">active</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">switchedOn</span><span class="p">:</span> <span class="nb">bool</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_switchedOn</span> <span class="o">=</span> <span class="n">switchedOn</span>
+
 <div class="viewcode-block" id="ConstraintBase.fromConstraintDefinition">
 <a class="viewcode-back" href="../../../../documentation/constraints.html#edelweissfe.constraints.base.constraintbase.ConstraintBase.fromConstraintDefinition">[docs]</a>
     <span class="nd">@classmethod</span>
@@ -243,7 +293,8 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">acceptLastState</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">"""Called by :meth:`~edelweissfe.models.femodel.FEModel.advanceToTime` when an increment</span>
 <span class="sd">        is accepted, so a stateful constraint (e.g. frictional contact) can promote the state of</span>
-<span class="sd">        the last (converged) Newton iterate to its history.</span>
+<span class="sd">        the last (converged) Newton iterate to its history. Only an :attr:`active` constraint is called: one that took</span>
+<span class="sd">        no part in the increment keeps its history.</span>
 
 <span class="sd">        The default implementation does nothing, which is correct for every stateless constraint</span>
 <span class="sd">        (i.e. every constraint that does not override this method)."""</span></div>

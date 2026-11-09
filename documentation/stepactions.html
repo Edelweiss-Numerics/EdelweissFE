@@ -98,6 +98,13 @@
 <li class="toctree-l4"><a class="reference internal" href="#edelweissfe.stepactions.base.stepactionbase.StepActionBase"><code class="docutils literal notranslate"><span class="pre">StepActionBase</span></code></a></li>
 </ul>
 </li>
+<li class="toctree-l3"><a class="reference internal" href="#implementing-your-own-loads">Implementing your own loads</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.stepactions.base.loadbase.LoadBase"><code class="docutils literal notranslate"><span class="pre">LoadBase</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.stepactions.base.nodalloadbase.NodalLoadBase"><code class="docutils literal notranslate"><span class="pre">NodalLoadBase</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.stepactions.base.distributedloadbase.DistributedLoadBase"><code class="docutils literal notranslate"><span class="pre">DistributedLoadBase</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.stepactions.base.bodyloadbase.BodyLoadBase"><code class="docutils literal notranslate"><span class="pre">BodyLoadBase</span></code></a></li>
+</ul>
+</li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="utils.html">Utilities</a></li>
@@ -1139,6 +1146,451 @@ would work only until the first multi-step input.</p>
 <dd><p>The state this step action carries from one increment (and step) to the next, by attribute name and type;
 see <a class="reference internal" href="output.html#module-edelweissfe.utils.checkpointedstate" title="edelweissfe.utils.checkpointedstate"><code class="xref py py-mod docutils literal notranslate"><span class="pre">checkpointedstate</span></code></a>. Undeclared, <a class="reference internal" href="#edelweissfe.stepactions.base.stepactionbase.StepActionBase.getRestartData" title="edelweissfe.stepactions.base.stepactionbase.StepActionBase.getRestartData"><code class="xref py py-meth docutils literal notranslate"><span class="pre">getRestartData()</span></code></a> and
 <a class="reference internal" href="#edelweissfe.stepactions.base.stepactionbase.StepActionBase.setRestartData" title="edelweissfe.stepactions.base.stepactionbase.StepActionBase.setRestartData"><code class="xref py py-meth docutils literal notranslate"><span class="pre">setRestartData()</span></code></a> must be overridden for checkpointing.</p>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+<section id="implementing-your-own-loads">
+<h2>Implementing your own loads<a class="headerlink" href="#implementing-your-own-loads" title="Link to this heading"></a></h2>
+<p>A load is a step action that derives from <a class="reference internal" href="#edelweissfe.stepactions.base.loadbase.LoadBase" title="edelweissfe.stepactions.base.loadbase.LoadBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">LoadBase</span></code></a> and assembles its
+own contribution to the equation system in <code class="docutils literal notranslate"><span class="pre">assembleLoad</span></code>: the <em>negative</em> of the external load it applies, and the
+tangent of that contribution, nonzero only for a load that follows the deformation (see
+<a class="reference internal" href="solvers.html#residual-and-tangent-convention"><span class="std std-ref">The residual and the tangent</span></a>). The solvers do not need to know what a load acts on; their <code class="docutils literal notranslate"><span class="pre">assembleLoads</span></code>
+only loops over the loads of the step and lets each assemble itself. They find the loads by this base class, whatever
+step action module defines them: a load module of its own, registered like any step action, needs no change to any
+solver, and an arc length step scales it at its end like any other load.</p>
+<p>Three bases implement <code class="docutils literal notranslate"><span class="pre">assembleLoad</span></code> once for all loads of their kind, so that a load deriving from them only says
+how large it is at a time (<code class="docutils literal notranslate"><span class="pre">getCurrentLoad</span></code>) and where it acts:</p>
+<ul class="simple">
+<li><p><a class="reference internal" href="#edelweissfe.stepactions.base.nodalloadbase.NodalLoadBase" title="edelweissfe.stepactions.base.nodalloadbase.NodalLoadBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">NodalLoadBase</span></code></a>: concentrated loads on the degrees of freedom of
+a field on a node set, such as <code class="docutils literal notranslate"><span class="pre">nodeforces</span></code>;</p></li>
+<li><p><a class="reference internal" href="#edelweissfe.stepactions.base.distributedloadbase.DistributedLoadBase" title="edelweissfe.stepactions.base.distributedloadbase.DistributedLoadBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">DistributedLoadBase</span></code></a>: loads per unit area on the faces of
+a surface, which every element integrates over its loaded face, such as <code class="docutils literal notranslate"><span class="pre">distributedload</span></code>;</p></li>
+<li><p><a class="reference internal" href="#edelweissfe.stepactions.base.bodyloadbase.BodyLoadBase" title="edelweissfe.stepactions.base.bodyloadbase.BodyLoadBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">BodyLoadBase</span></code></a>: loads per unit volume, which every element of an
+element set integrates over its volume, such as <code class="docutils literal notranslate"><span class="pre">bodyforce</span></code>.</p></li>
+</ul>
+<p>A load that acts on something else – the cells or particles of a meshfree model, say – derives from
+<a class="reference internal" href="#edelweissfe.stepactions.base.loadbase.LoadBase" title="edelweissfe.stepactions.base.loadbase.LoadBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">LoadBase</span></code></a> directly.</p>
+<span class="target" id="module-edelweissfe.stepactions.base.loadbase"></span><dl class="py class">
+<dt class="sig sig-object py" id="edelweissfe.stepactions.base.loadbase.LoadBase">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">edelweissfe.stepactions.base.loadbase.</span></span><span class="sig-name descname"><span class="pre">LoadBase</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">definition</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">jobInfo</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fieldOutputController</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">journal</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/stepactions/base/loadbase.html#LoadBase"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.stepactions.base.loadbase.LoadBase" title="Link to this definition"></a></dt>
+<dd><p>A load: a step action that adds the residual contribution of the external load it applies – the <em>negative</em>
+of that load, see <a class="reference internal" href="solvers.html#residual-and-tangent-convention"><span class="std std-ref">The residual and the tangent</span></a> – and the tangent of that contribution, which is
+nonzero only for a load that follows the deformation.</p>
+<p>Every load assembles its own contribution in <a class="reference internal" href="#edelweissfe.stepactions.base.loadbase.LoadBase.assembleLoad" title="edelweissfe.stepactions.base.loadbase.LoadBase.assembleLoad"><code class="xref py py-meth docutils literal notranslate"><span class="pre">assembleLoad()</span></code></a>, wherever it acts: a node force goes to the
+degrees of freedom of its nodes, a distributed load or a body force asks each of its elements for the integral
+over the loaded face or volume. A solver therefore only loops over the loads, see
+<code class="xref py py-meth docutils literal notranslate"><span class="pre">assembleLoads()</span></code>, which it finds among the
+step’s actions by this base class, whatever step action module holds them (see
+<code class="xref py py-meth docutils literal notranslate"><span class="pre">collectLoads()</span></code>): a new kind of load – one
+acting on the cells or particles of a meshfree model, say – needs no change to any solver.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Attributes<span class="colon">:</span></dt>
+<dd class="field-odd"><dl class="simple">
+<dt><strong>checkpointedState</strong></dt><dd></dd>
+<dt><strong>schema</strong></dt><dd></dd>
+</dl>
+</dd>
+<dt class="field-even">Parameters<span class="colon">:</span></dt>
+<dd class="field-even"><ul class="simple">
+<li><p><strong>name</strong> (<em>str</em>)</p></li>
+<li><p><strong>definition</strong> (<em>dict</em>)</p></li>
+<li><p><strong>jobInfo</strong> (<em>dict</em>)</p></li>
+<li><p><strong>model</strong> (<a class="reference internal" href="models.html#edelweissfe.models.femodel.FEModel" title="edelweissfe.models.femodel.FEModel"><em>FEModel</em></a>)</p></li>
+<li><p><strong>fieldOutputController</strong> (<a class="reference internal" href="fieldoutputmanager.html#edelweissfe.utils.fieldoutput.FieldOutputController" title="edelweissfe.utils.fieldoutput.FieldOutputController"><em>FieldOutputController</em></a>)</p></li>
+<li><p><strong>journal</strong> (<a class="reference internal" href="journal.html#edelweissfe.journal.journal.Journal" title="edelweissfe.journal.journal.Journal"><em>Journal</em></a>)</p></li>
+</ul>
+</dd>
+</dl>
+<p class="rubric">Methods</p>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">applyAtIncrementStart</span></code>(model, timeStep)</p></td>
+<td><p>Is called when a step increment starts.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">applyAtStepEnd</span></code>(model)</p></td>
+<td><p>Is called when a step successfully finished.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">applyAtStepStart</span></code>(model)</p></td>
+<td><p>Is called when a step starts.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.stepactions.base.loadbase.LoadBase.assembleLoad" title="edelweissfe.stepactions.base.loadbase.LoadBase.assembleLoad"><code class="xref py py-obj docutils literal notranslate"><span class="pre">assembleLoad</span></code></a>(P, K, U_np, dU, timeStep, ...)</p></td>
+<td><p>Add this load's residual contribution to <code class="docutils literal notranslate"><span class="pre">P</span></code>, and its tangent to <code class="docutils literal notranslate"><span class="pre">K</span></code>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">fromStepActionDefinition</span></code>(name, definition, ...)</p></td>
+<td><p>Create this step action from a parsed <code class="docutils literal notranslate"><span class="pre">.inp</span></code> step action definition.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">getRestartData</span></code>()</p></td>
+<td><p>The state this step action carries; by default the attributes declared in <code class="xref py py-attr docutils literal notranslate"><span class="pre">checkpointedState</span></code>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setRestartData</span></code>(data)</p></td>
+<td><p>Restore the state <code class="xref py py-meth docutils literal notranslate"><span class="pre">getRestartData()</span></code> returned.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">updateStepAction</span></code>(definition, jobInfo, model, ...)</p></td>
+<td><p>Is called when an updated definition is present for a new step.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">updateStepActionFromDefinition</span></code>(definition, ...)</p></td>
+<td><p>Update this step action from a parsed <code class="docutils literal notranslate"><span class="pre">.inp</span></code> step action definition.</p></td>
+</tr>
+</tbody>
+</table>
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.stepactions.base.loadbase.LoadBase.assembleLoad">
+<span class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">assembleLoad</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">P</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">K</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">U_np</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dU</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">timeStep</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dofManager</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/stepactions/base/loadbase.html#LoadBase.assembleLoad"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.stepactions.base.loadbase.LoadBase.assembleLoad" title="Link to this definition"></a></dt>
+<dd><p>Add this load’s residual contribution to <code class="docutils literal notranslate"><span class="pre">P</span></code>, and its tangent to <code class="docutils literal notranslate"><span class="pre">K</span></code>.</p>
+<p>Both are augmented, never overwritten.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>P</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The global residual contribution vector to augment.</p></li>
+<li><p><strong>K</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.vijsystemmatrix.VIJSystemMatrix" title="edelweissfe.numerics.vijsystemmatrix.VIJSystemMatrix"><em>VIJSystemMatrix</em></a><em> | </em><em>None</em>) – The global system matrix to augment, which hands out the block of an entity (an element, a cell, a
+particle) by <code class="docutils literal notranslate"><span class="pre">K[entity]</span></code>; None for an explicit solver, which needs no tangent.</p></li>
+<li><p><strong>U_np</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The current global solution.</p></li>
+<li><p><strong>dU</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The global solution increment since the last converged state.</p></li>
+<li><p><strong>timeStep</strong> (<em>TimeStep</em>) – The current time step.</p></li>
+<li><p><strong>dofManager</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofmanager.DofManager" title="edelweissfe.numerics.dofmanager.DofManager"><em>DofManager</em></a>) – The DOF manager of the equation system, which locates the degrees of freedom the load acts on.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<span class="target" id="module-edelweissfe.stepactions.base.nodalloadbase"></span><dl class="py class">
+<dt class="sig sig-object py" id="edelweissfe.stepactions.base.nodalloadbase.NodalLoadBase">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">edelweissfe.stepactions.base.nodalloadbase.</span></span><span class="sig-name descname"><span class="pre">NodalLoadBase</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">definition</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">jobInfo</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fieldOutputController</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">journal</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/stepactions/base/nodalloadbase.html#NodalLoadBase"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.stepactions.base.nodalloadbase.NodalLoadBase" title="Link to this definition"></a></dt>
+<dd><p>Concentrated loads on the degrees of freedom of a field on a node set, such as node forces.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Attributes<span class="colon">:</span></dt>
+<dd class="field-odd"><dl class="simple">
+<dt><strong>checkpointedState</strong></dt><dd></dd>
+<dt><strong>field</strong></dt><dd></dd>
+<dt><strong>nodeSet</strong></dt><dd></dd>
+<dt><strong>schema</strong></dt><dd></dd>
+</dl>
+</dd>
+<dt class="field-even">Parameters<span class="colon">:</span></dt>
+<dd class="field-even"><ul class="simple">
+<li><p><strong>name</strong> (<em>str</em>)</p></li>
+<li><p><strong>definition</strong> (<em>dict</em>)</p></li>
+<li><p><strong>jobInfo</strong> (<em>dict</em>)</p></li>
+<li><p><strong>model</strong> (<a class="reference internal" href="models.html#edelweissfe.models.femodel.FEModel" title="edelweissfe.models.femodel.FEModel"><em>FEModel</em></a>)</p></li>
+<li><p><strong>fieldOutputController</strong> (<a class="reference internal" href="fieldoutputmanager.html#edelweissfe.utils.fieldoutput.FieldOutputController" title="edelweissfe.utils.fieldoutput.FieldOutputController"><em>FieldOutputController</em></a>)</p></li>
+<li><p><strong>journal</strong> (<a class="reference internal" href="journal.html#edelweissfe.journal.journal.Journal" title="edelweissfe.journal.journal.Journal"><em>Journal</em></a>)</p></li>
+</ul>
+</dd>
+</dl>
+<p class="rubric">Methods</p>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">applyAtIncrementStart</span></code>(model, timeStep)</p></td>
+<td><p>Is called when a step increment starts.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">applyAtStepEnd</span></code>(model)</p></td>
+<td><p>Is called when a step successfully finished.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">applyAtStepStart</span></code>(model)</p></td>
+<td><p>Is called when a step starts.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.stepactions.base.nodalloadbase.NodalLoadBase.assembleLoad" title="edelweissfe.stepactions.base.nodalloadbase.NodalLoadBase.assembleLoad"><code class="xref py py-obj docutils literal notranslate"><span class="pre">assembleLoad</span></code></a>(P, K, U_np, dU, timeStep, ...)</p></td>
+<td><p>Subtract the current node loads from the residual contribution at the degrees of freedom of the field on the node set; a dead load, so without a tangent.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">fromStepActionDefinition</span></code>(name, definition, ...)</p></td>
+<td><p>Create this step action from a parsed <code class="docutils literal notranslate"><span class="pre">.inp</span></code> step action definition.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.stepactions.base.nodalloadbase.NodalLoadBase.getCurrentLoad" title="edelweissfe.stepactions.base.nodalloadbase.NodalLoadBase.getCurrentLoad"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getCurrentLoad</span></code></a>(timeStep)</p></td>
+<td><p>Return the current magnitude for this body load.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">getRestartData</span></code>()</p></td>
+<td><p>The state this step action carries; by default the attributes declared in <code class="xref py py-attr docutils literal notranslate"><span class="pre">checkpointedState</span></code>.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setRestartData</span></code>(data)</p></td>
+<td><p>Restore the state <code class="xref py py-meth docutils literal notranslate"><span class="pre">getRestartData()</span></code> returned.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">updateStepAction</span></code>(definition, jobInfo, model, ...)</p></td>
+<td><p>Is called when an updated definition is present for a new step.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">updateStepActionFromDefinition</span></code>(definition, ...)</p></td>
+<td><p>Update this step action from a parsed <code class="docutils literal notranslate"><span class="pre">.inp</span></code> step action definition.</p></td>
+</tr>
+</tbody>
+</table>
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.stepactions.base.nodalloadbase.NodalLoadBase.assembleLoad">
+<span class="sig-name descname"><span class="pre">assembleLoad</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">P</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">K</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">U_np</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dU</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">timeStep</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dofManager</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/stepactions/base/nodalloadbase.html#NodalLoadBase.assembleLoad"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.stepactions.base.nodalloadbase.NodalLoadBase.assembleLoad" title="Link to this definition"></a></dt>
+<dd><p>Subtract the current node loads from the residual contribution at the degrees of freedom of the field
+on the node set; a dead load, so without a tangent. See
+<a class="reference internal" href="#edelweissfe.stepactions.base.loadbase.LoadBase.assembleLoad" title="edelweissfe.stepactions.base.loadbase.LoadBase.assembleLoad"><code class="xref py py-meth docutils literal notranslate"><span class="pre">assembleLoad()</span></code></a>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>P</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The global residual contribution vector to augment.</p></li>
+<li><p><strong>K</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.vijsystemmatrix.VIJSystemMatrix" title="edelweissfe.numerics.vijsystemmatrix.VIJSystemMatrix"><em>VIJSystemMatrix</em></a><em> | </em><em>None</em>) – The global system matrix; untouched.</p></li>
+<li><p><strong>U_np</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The current global solution.</p></li>
+<li><p><strong>dU</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The global solution increment.</p></li>
+<li><p><strong>timeStep</strong> (<em>TimeStep</em>) – The current time step.</p></li>
+<li><p><strong>dofManager</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofmanager.DofManager" title="edelweissfe.numerics.dofmanager.DofManager"><em>DofManager</em></a>) – The DOF manager of the equation system, which locates the degrees of freedom of the node set.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.stepactions.base.nodalloadbase.NodalLoadBase.getCurrentLoad">
+<span class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">getCurrentLoad</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">timeStep</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/stepactions/base/nodalloadbase.html#NodalLoadBase.getCurrentLoad"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.stepactions.base.nodalloadbase.NodalLoadBase.getCurrentLoad" title="Link to this definition"></a></dt>
+<dd><p>Return the current magnitude for this body load.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>The magnitude.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>np.ndarray</p>
+</dd>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>timeStep</strong> (<em>TimeStep</em>)</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<span class="target" id="module-edelweissfe.stepactions.base.distributedloadbase"></span><dl class="py class">
+<dt class="sig sig-object py" id="edelweissfe.stepactions.base.distributedloadbase.DistributedLoadBase">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">edelweissfe.stepactions.base.distributedloadbase.</span></span><span class="sig-name descname"><span class="pre">DistributedLoadBase</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">definition</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">jobInfo</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fieldOutputController</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">journal</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/stepactions/base/distributedloadbase.html#DistributedLoadBase"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.stepactions.base.distributedloadbase.DistributedLoadBase" title="Link to this definition"></a></dt>
+<dd><p>A load per unit area on a surface, such as a pressure: each element of the surface integrates it over its
+loaded face, see <a class="reference internal" href="elements.html#edelweissfe.elements.base.baseelement.BaseElement.computeDistributedLoad" title="edelweissfe.elements.base.baseelement.BaseElement.computeDistributedLoad"><code class="xref py py-meth docutils literal notranslate"><span class="pre">computeDistributedLoad()</span></code></a>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Attributes<span class="colon">:</span></dt>
+<dd class="field-odd"><dl class="simple">
+<dt><strong>checkpointedState</strong></dt><dd></dd>
+<dt><a class="reference internal" href="#edelweissfe.stepactions.base.distributedloadbase.DistributedLoadBase.loadType" title="edelweissfe.stepactions.base.distributedloadbase.DistributedLoadBase.loadType"><code class="xref py py-obj docutils literal notranslate"><span class="pre">loadType</span></code></a></dt><dd><p>Return the type of load (e.g., pressure, surface traction, …</p>
+</dd>
+<dt><strong>schema</strong></dt><dd></dd>
+<dt><a class="reference internal" href="#edelweissfe.stepactions.base.distributedloadbase.DistributedLoadBase.surface" title="edelweissfe.stepactions.base.distributedloadbase.DistributedLoadBase.surface"><code class="xref py py-obj docutils literal notranslate"><span class="pre">surface</span></code></a></dt><dd><p>The surface this distributed load ist acting on.</p>
+</dd>
+</dl>
+</dd>
+<dt class="field-even">Parameters<span class="colon">:</span></dt>
+<dd class="field-even"><ul class="simple">
+<li><p><strong>name</strong> (<em>str</em>)</p></li>
+<li><p><strong>definition</strong> (<em>dict</em>)</p></li>
+<li><p><strong>jobInfo</strong> (<em>dict</em>)</p></li>
+<li><p><strong>model</strong> (<a class="reference internal" href="models.html#edelweissfe.models.femodel.FEModel" title="edelweissfe.models.femodel.FEModel"><em>FEModel</em></a>)</p></li>
+<li><p><strong>fieldOutputController</strong> (<a class="reference internal" href="fieldoutputmanager.html#edelweissfe.utils.fieldoutput.FieldOutputController" title="edelweissfe.utils.fieldoutput.FieldOutputController"><em>FieldOutputController</em></a>)</p></li>
+<li><p><strong>journal</strong> (<a class="reference internal" href="journal.html#edelweissfe.journal.journal.Journal" title="edelweissfe.journal.journal.Journal"><em>Journal</em></a>)</p></li>
+</ul>
+</dd>
+</dl>
+<p class="rubric">Methods</p>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">applyAtIncrementStart</span></code>(model, timeStep)</p></td>
+<td><p>Is called when a step increment starts.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">applyAtStepEnd</span></code>(model)</p></td>
+<td><p>Is called when a step successfully finished.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">applyAtStepStart</span></code>(model)</p></td>
+<td><p>Is called when a step starts.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.stepactions.base.distributedloadbase.DistributedLoadBase.assembleLoad" title="edelweissfe.stepactions.base.distributedloadbase.DistributedLoadBase.assembleLoad"><code class="xref py py-obj docutils literal notranslate"><span class="pre">assembleLoad</span></code></a>(P, K, U_np, dU, timeStep, ...)</p></td>
+<td><p>Let every element of the surface add the residual contribution of the load on its face, the negative of the external load, and its tangent; see <a class="reference internal" href="#edelweissfe.stepactions.base.loadbase.LoadBase.assembleLoad" title="edelweissfe.stepactions.base.loadbase.LoadBase.assembleLoad"><code class="xref py py-meth docutils literal notranslate"><span class="pre">assembleLoad()</span></code></a>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">fromStepActionDefinition</span></code>(name, definition, ...)</p></td>
+<td><p>Create this step action from a parsed <code class="docutils literal notranslate"><span class="pre">.inp</span></code> step action definition.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.stepactions.base.distributedloadbase.DistributedLoadBase.getCurrentLoad" title="edelweissfe.stepactions.base.distributedloadbase.DistributedLoadBase.getCurrentLoad"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getCurrentLoad</span></code></a>(timeStep)</p></td>
+<td><p>Return the current load for this distributed load.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">getRestartData</span></code>()</p></td>
+<td><p>The state this step action carries; by default the attributes declared in <code class="xref py py-attr docutils literal notranslate"><span class="pre">checkpointedState</span></code>.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setRestartData</span></code>(data)</p></td>
+<td><p>Restore the state <code class="xref py py-meth docutils literal notranslate"><span class="pre">getRestartData()</span></code> returned.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">updateStepAction</span></code>(definition, jobInfo, model, ...)</p></td>
+<td><p>Is called when an updated definition is present for a new step.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">updateStepActionFromDefinition</span></code>(definition, ...)</p></td>
+<td><p>Update this step action from a parsed <code class="docutils literal notranslate"><span class="pre">.inp</span></code> step action definition.</p></td>
+</tr>
+</tbody>
+</table>
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.stepactions.base.distributedloadbase.DistributedLoadBase.assembleLoad">
+<span class="sig-name descname"><span class="pre">assembleLoad</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">P</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">K</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">U_np</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dU</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">timeStep</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dofManager</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/stepactions/base/distributedloadbase.html#DistributedLoadBase.assembleLoad"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.stepactions.base.distributedloadbase.DistributedLoadBase.assembleLoad" title="Link to this definition"></a></dt>
+<dd><p>Let every element of the surface add the residual contribution of the load on its face, the negative of
+the external load, and its tangent; see <a class="reference internal" href="#edelweissfe.stepactions.base.loadbase.LoadBase.assembleLoad" title="edelweissfe.stepactions.base.loadbase.LoadBase.assembleLoad"><code class="xref py py-meth docutils literal notranslate"><span class="pre">assembleLoad()</span></code></a>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>P</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The global residual contribution vector to augment.</p></li>
+<li><p><strong>K</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.vijsystemmatrix.VIJSystemMatrix" title="edelweissfe.numerics.vijsystemmatrix.VIJSystemMatrix"><em>VIJSystemMatrix</em></a><em> | </em><em>None</em>) – The global system matrix to augment; None for an explicit solver, which needs no tangent.</p></li>
+<li><p><strong>U_np</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The current global solution.</p></li>
+<li><p><strong>dU</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The global solution increment.</p></li>
+<li><p><strong>timeStep</strong> (<em>TimeStep</em>) – The current time step.</p></li>
+<li><p><strong>dofManager</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofmanager.DofManager" title="edelweissfe.numerics.dofmanager.DofManager"><em>DofManager</em></a>) – The DOF manager of the equation system.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.stepactions.base.distributedloadbase.DistributedLoadBase.getCurrentLoad">
+<span class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">getCurrentLoad</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">timeStep</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/stepactions/base/distributedloadbase.html#DistributedLoadBase.getCurrentLoad"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.stepactions.base.distributedloadbase.DistributedLoadBase.getCurrentLoad" title="Link to this definition"></a></dt>
+<dd><p>Return the current load for this distributed load.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>The magnitude.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>np.ndarray</p>
+</dd>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>timeStep</strong> (<em>TimeStep</em>)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="edelweissfe.stepactions.base.distributedloadbase.DistributedLoadBase.loadType">
+<span class="property"><span class="k"><span class="pre">abstract</span></span><span class="w"> </span><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">loadType</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><a class="headerlink" href="#edelweissfe.stepactions.base.distributedloadbase.DistributedLoadBase.loadType" title="Link to this definition"></a></dt>
+<dd><p>Return the type of load (e.g., pressure, surface traction, … )</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>The magnituide.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>float</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="edelweissfe.stepactions.base.distributedloadbase.DistributedLoadBase.surface">
+<span class="property"><span class="k"><span class="pre">abstract</span></span><span class="w"> </span><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">surface</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">dict</span></span><a class="headerlink" href="#edelweissfe.stepactions.base.distributedloadbase.DistributedLoadBase.surface" title="Link to this definition"></a></dt>
+<dd><p>The surface this distributed load ist acting on.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>The surface definition.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>dict</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<span class="target" id="module-edelweissfe.stepactions.base.bodyloadbase"></span><dl class="py class">
+<dt class="sig sig-object py" id="edelweissfe.stepactions.base.bodyloadbase.BodyLoadBase">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">edelweissfe.stepactions.base.bodyloadbase.</span></span><span class="sig-name descname"><span class="pre">BodyLoadBase</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">definition</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">jobInfo</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fieldOutputController</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">journal</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/stepactions/base/bodyloadbase.html#BodyLoadBase"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.stepactions.base.bodyloadbase.BodyLoadBase" title="Link to this definition"></a></dt>
+<dd><p>A load per unit volume on a set of elements, such as gravity: each element integrates it over its volume,
+see <a class="reference internal" href="elements.html#edelweissfe.elements.base.baseelement.BaseElement.computeBodyForce" title="edelweissfe.elements.base.baseelement.BaseElement.computeBodyForce"><code class="xref py py-meth docutils literal notranslate"><span class="pre">computeBodyForce()</span></code></a>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Attributes<span class="colon">:</span></dt>
+<dd class="field-odd"><dl class="simple">
+<dt><strong>checkpointedState</strong></dt><dd></dd>
+<dt><a class="reference internal" href="#edelweissfe.stepactions.base.bodyloadbase.BodyLoadBase.elementSet" title="edelweissfe.stepactions.base.bodyloadbase.BodyLoadBase.elementSet"><code class="xref py py-obj docutils literal notranslate"><span class="pre">elementSet</span></code></a></dt><dd><p>The elements this load is acting on</p>
+</dd>
+<dt><strong>schema</strong></dt><dd></dd>
+</dl>
+</dd>
+<dt class="field-even">Parameters<span class="colon">:</span></dt>
+<dd class="field-even"><ul class="simple">
+<li><p><strong>name</strong> (<em>str</em>)</p></li>
+<li><p><strong>definition</strong> (<em>dict</em>)</p></li>
+<li><p><strong>jobInfo</strong> (<em>dict</em>)</p></li>
+<li><p><strong>model</strong> (<a class="reference internal" href="models.html#edelweissfe.models.femodel.FEModel" title="edelweissfe.models.femodel.FEModel"><em>FEModel</em></a>)</p></li>
+<li><p><strong>fieldOutputController</strong> (<a class="reference internal" href="fieldoutputmanager.html#edelweissfe.utils.fieldoutput.FieldOutputController" title="edelweissfe.utils.fieldoutput.FieldOutputController"><em>FieldOutputController</em></a>)</p></li>
+<li><p><strong>journal</strong> (<a class="reference internal" href="journal.html#edelweissfe.journal.journal.Journal" title="edelweissfe.journal.journal.Journal"><em>Journal</em></a>)</p></li>
+</ul>
+</dd>
+</dl>
+<p class="rubric">Methods</p>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">applyAtIncrementStart</span></code>(model, timeStep)</p></td>
+<td><p>Is called when a step increment starts.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">applyAtStepEnd</span></code>(model)</p></td>
+<td><p>Is called when a step successfully finished.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">applyAtStepStart</span></code>(model)</p></td>
+<td><p>Is called when a step starts.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.stepactions.base.bodyloadbase.BodyLoadBase.assembleLoad" title="edelweissfe.stepactions.base.bodyloadbase.BodyLoadBase.assembleLoad"><code class="xref py py-obj docutils literal notranslate"><span class="pre">assembleLoad</span></code></a>(P, K, U_np, dU, timeStep, ...)</p></td>
+<td><p>Let every element of the element set add the residual contribution of the body force, the negative of the external load, and its tangent; see <a class="reference internal" href="#edelweissfe.stepactions.base.loadbase.LoadBase.assembleLoad" title="edelweissfe.stepactions.base.loadbase.LoadBase.assembleLoad"><code class="xref py py-meth docutils literal notranslate"><span class="pre">assembleLoad()</span></code></a>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">fromStepActionDefinition</span></code>(name, definition, ...)</p></td>
+<td><p>Create this step action from a parsed <code class="docutils literal notranslate"><span class="pre">.inp</span></code> step action definition.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.stepactions.base.bodyloadbase.BodyLoadBase.getCurrentLoad" title="edelweissfe.stepactions.base.bodyloadbase.BodyLoadBase.getCurrentLoad"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getCurrentLoad</span></code></a>(timeStep)</p></td>
+<td><p>Return the current magnitude for this body load.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">getRestartData</span></code>()</p></td>
+<td><p>The state this step action carries; by default the attributes declared in <code class="xref py py-attr docutils literal notranslate"><span class="pre">checkpointedState</span></code>.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setRestartData</span></code>(data)</p></td>
+<td><p>Restore the state <code class="xref py py-meth docutils literal notranslate"><span class="pre">getRestartData()</span></code> returned.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">updateStepAction</span></code>(definition, jobInfo, model, ...)</p></td>
+<td><p>Is called when an updated definition is present for a new step.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">updateStepActionFromDefinition</span></code>(definition, ...)</p></td>
+<td><p>Update this step action from a parsed <code class="docutils literal notranslate"><span class="pre">.inp</span></code> step action definition.</p></td>
+</tr>
+</tbody>
+</table>
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.stepactions.base.bodyloadbase.BodyLoadBase.assembleLoad">
+<span class="sig-name descname"><span class="pre">assembleLoad</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">P</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">K</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">U_np</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dU</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">timeStep</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dofManager</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/stepactions/base/bodyloadbase.html#BodyLoadBase.assembleLoad"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.stepactions.base.bodyloadbase.BodyLoadBase.assembleLoad" title="Link to this definition"></a></dt>
+<dd><p>Let every element of the element set add the residual contribution of the body force, the negative of
+the external load, and its tangent; see <a class="reference internal" href="#edelweissfe.stepactions.base.loadbase.LoadBase.assembleLoad" title="edelweissfe.stepactions.base.loadbase.LoadBase.assembleLoad"><code class="xref py py-meth docutils literal notranslate"><span class="pre">assembleLoad()</span></code></a>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>P</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The global residual contribution vector to augment.</p></li>
+<li><p><strong>K</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.vijsystemmatrix.VIJSystemMatrix" title="edelweissfe.numerics.vijsystemmatrix.VIJSystemMatrix"><em>VIJSystemMatrix</em></a><em> | </em><em>None</em>) – The global system matrix to augment; None for an explicit solver, which needs no tangent.</p></li>
+<li><p><strong>U_np</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The current global solution.</p></li>
+<li><p><strong>dU</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The global solution increment.</p></li>
+<li><p><strong>timeStep</strong> (<em>TimeStep</em>) – The current time step.</p></li>
+<li><p><strong>dofManager</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofmanager.DofManager" title="edelweissfe.numerics.dofmanager.DofManager"><em>DofManager</em></a>) – The DOF manager of the equation system.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.stepactions.base.bodyloadbase.BodyLoadBase.getCurrentLoad">
+<span class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">getCurrentLoad</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">timeStep</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/stepactions/base/bodyloadbase.html#BodyLoadBase.getCurrentLoad"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.stepactions.base.bodyloadbase.BodyLoadBase.getCurrentLoad" title="Link to this definition"></a></dt>
+<dd><p>Return the current magnitude for this body load.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>The magnitude.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>np.ndarray</p>
+</dd>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>timeStep</strong> (<em>TimeStep</em>)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="edelweissfe.stepactions.base.bodyloadbase.BodyLoadBase.elementSet">
+<span class="property"><span class="k"><span class="pre">abstract</span></span><span class="w"> </span><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">elementSet</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="sets.html#edelweissfe.sets.elementset.ElementSet" title="edelweissfe.sets.elementset.ElementSet"><span class="pre">ElementSet</span></a></span><a class="headerlink" href="#edelweissfe.stepactions.base.bodyloadbase.BodyLoadBase.elementSet" title="Link to this definition"></a></dt>
+<dd><p>The elements this load is acting on</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>The list of elements.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>list</p>
+</dd>
+</dl>
 </dd></dl>
 
 </dd></dl>

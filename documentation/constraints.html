@@ -2503,6 +2503,26 @@ global assembly uses – so that the check covers the pattern together with the 
 </dl>
 </dd></dl>
 
+<p>A constraint takes part in the equation system while it is <code class="docutils literal notranslate"><span class="pre">active</span></code>. A constraint that is not active gets no
+degrees of freedom, the solvers do not evaluate it, and its scalar variables – the Lagrange multipliers of
+<code class="docutils literal notranslate"><span class="pre">equalvaluelagrangian</span></code>, say – leave the equation system with it, so that they leave no unknowns without an equation
+behind. Two states decide it, and <code class="docutils literal notranslate"><span class="pre">active</span></code> is true while both are:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">switchedOn</span></code>: the constraint is <strong>switched on from outside</strong>. Setting <code class="docutils literal notranslate"><span class="pre">active</span></code> switches it, e.g. a
+<code class="docutils literal notranslate"><span class="pre">modelupdate</span></code> step action that switches a constraint off for a step, as in
+<code class="docutils literal notranslate"><span class="pre">testfiles/marmot/PenaltyBasedIndirectControl</span></code>. A switch-off from outside lasts until the constraint is switched
+on again from outside.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">withinReach</span></code>: the constraint finds itself within reach of what it constrains, in its <code class="docutils literal notranslate"><span class="pre">updateConnectivity</span></code>.
+A contact constraint whose partner is out of reach sets it to false, and reports the change of <code class="docutils literal notranslate"><span class="pre">active</span></code> as a
+change of its connectivity, so that the solver rebuilds its equation system. A constraint that does not check stays
+within reach.</p></li>
+</ul>
+<p>So a constraint switched off from outside stays off, whatever it finds in reach; switched on again, it takes part
+while it is within reach. Switched off from outside, a constraint rests: the solvers do not locate it anew
+(<code class="docutils literal notranslate"><span class="pre">updateConnectivity</span></code>), which they do for every constraint that is switched on, those out of reach included, so that
+they can find themselves within reach again. A constraint that is not active accepts no state either
+(<code class="docutils literal notranslate"><span class="pre">acceptLastState</span></code>): a contact switched off for a step keeps its multipliers and its frictional history as they
+were. A solver that cannot handle a constraint, e.g. <code class="docutils literal notranslate"><span class="pre">NEST</span></code> a contact, refuses it only while it is switched on.</p>
 <span class="target" id="module-edelweissfe.constraints.base.constraintbase"></span><dl class="py class">
 <dt class="sig sig-object py" id="edelweissfe.constraints.base.constraintbase.ConstraintBase">
 <span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">edelweissfe.constraints.base.constraintbase.</span></span><span class="sig-name descname"><span class="pre">ConstraintBase</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/constraints/base/constraintbase.html#ConstraintBase"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase" title="Link to this definition"></a></dt>
@@ -2537,6 +2557,8 @@ defining
 </dd>
 <dt class="field-even">Attributes<span class="colon">:</span></dt>
 <dd class="field-even"><dl class="simple">
+<dt><a class="reference internal" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.active" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.active"><code class="xref py py-obj docutils literal notranslate"><span class="pre">active</span></code></a></dt><dd><p>Whether this constraint takes part in the equation system: while it is <a class="reference internal" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.switchedOn" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.switchedOn"><code class="xref py py-attr docutils literal notranslate"><span class="pre">switchedOn</span></code></a> and <a class="reference internal" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.withinReach" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.withinReach"><code class="xref py py-attr docutils literal notranslate"><span class="pre">withinReach</span></code></a>.</p>
+</dd>
 <dt><strong>checkpointedState</strong></dt><dd></dd>
 <dt><a class="reference internal" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.fieldsOnNodes" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.fieldsOnNodes"><code class="xref py py-obj docutils literal notranslate"><span class="pre">fieldsOnNodes</span></code></a></dt><dd><p>The fields on the nodes this constraint is acting on.</p>
 </dd>
@@ -2545,6 +2567,8 @@ defining
 <dt><a class="reference internal" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.nodes" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.nodes"><code class="xref py py-obj docutils literal notranslate"><span class="pre">nodes</span></code></a></dt><dd><p>The nodes this constraint is acting on.</p>
 </dd>
 <dt><strong>schema</strong></dt><dd></dd>
+<dt><a class="reference internal" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.switchedOn" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.switchedOn"><code class="xref py py-obj docutils literal notranslate"><span class="pre">switchedOn</span></code></a></dt><dd><p>Whether this constraint is switched on from outside, e.g.</p>
+</dd>
 </dl>
 </dd>
 </dl>
@@ -2619,7 +2643,8 @@ typed <code class="docutils literal notranslate"><span class="pre">__init__</spa
 <span class="sig-name descname"><span class="pre">acceptLastState</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/constraints/base/constraintbase.html#ConstraintBase.acceptLastState"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.acceptLastState" title="Link to this definition"></a></dt>
 <dd><p>Called by <a class="reference internal" href="models.html#edelweissfe.models.femodel.FEModel.advanceToTime" title="edelweissfe.models.femodel.FEModel.advanceToTime"><code class="xref py py-meth docutils literal notranslate"><span class="pre">advanceToTime()</span></code></a> when an increment
 is accepted, so a stateful constraint (e.g. frictional contact) can promote the state of
-the last (converged) Newton iterate to its history.</p>
+the last (converged) Newton iterate to its history. Only an <a class="reference internal" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.active" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.active"><code class="xref py py-attr docutils literal notranslate"><span class="pre">active</span></code></a> constraint is called: one that took
+no part in the increment keeps its history.</p>
 <p>The default implementation does nothing, which is correct for every stateless constraint
 (i.e. every constraint that does not override this method).</p>
 </dd></dl>
@@ -2760,6 +2785,29 @@ equation system must be rebuilt before the next Newton solve.</p>
 </dl>
 </dd></dl>
 
+<dl class="py property">
+<dt class="sig sig-object py" id="edelweissfe.constraints.base.constraintbase.ConstraintBase.active">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">active</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></span><a class="headerlink" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.active" title="Link to this definition"></a></dt>
+<dd><p>while it is <a class="reference internal" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.switchedOn" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.switchedOn"><code class="xref py py-attr docutils literal notranslate"><span class="pre">switchedOn</span></code></a> and
+<a class="reference internal" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.withinReach" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.withinReach"><code class="xref py py-attr docutils literal notranslate"><span class="pre">withinReach</span></code></a>. A constraint that does not take part gets no degrees of freedom and adds nothing to the
+residual or the tangent; its scalar variables (e.g. Lagrange multipliers) leave the equation system with it, so
+that they leave no empty rows behind.</p>
+<p>Setting it switches the constraint on or off from outside, e.g. by a <code class="docutils literal notranslate"><span class="pre">modelupdate</span></code> step action at the start
+of a step. A switch-off from outside lasts until the constraint is switched on again from outside, whatever the
+constraint finds in reach; switched on again, it takes part while it is within reach.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Whether the constraint takes part in the equation system.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>bool</p>
+</dd>
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Whether this constraint takes part in the equation system</p>
+</dd>
+</dl>
+</dd></dl>
+
 <dl class="py attribute">
 <dt class="sig sig-object py" id="edelweissfe.constraints.base.constraintbase.ConstraintBase.checkpointedState">
 <span class="sig-name descname"><span class="pre">checkpointedState</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">dict</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.checkpointedState" title="Link to this definition"></a></dt>
@@ -2784,6 +2832,35 @@ none) or overrides <a class="reference internal" href="#edelweissfe.constraints.
 <dt class="sig sig-object py" id="edelweissfe.constraints.base.constraintbase.ConstraintBase.nodes">
 <span class="property"><span class="k"><span class="pre">abstract</span></span><span class="w"> </span><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">nodes</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">list</span></span><a class="headerlink" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.nodes" title="Link to this definition"></a></dt>
 <dd><p>The nodes this constraint is acting on.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="edelweissfe.constraints.base.constraintbase.ConstraintBase.switchedOn">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">switchedOn</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></span><a class="headerlink" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.switchedOn" title="Link to this definition"></a></dt>
+<dd><p>Whether this constraint is switched on from outside, e.g. by a <code class="docutils literal notranslate"><span class="pre">modelupdate</span></code> step action, which switches it
+through <a class="reference internal" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.active" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.active"><code class="xref py py-attr docutils literal notranslate"><span class="pre">active</span></code></a>. A constraint switched off from outside rests: the solvers do not locate it anew
+(<code class="xref py py-meth docutils literal notranslate"><span class="pre">updateTopologyAndConnectivity()</span></code>), it
+accepts no state (<a class="reference internal" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.acceptLastState" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.acceptLastState"><code class="xref py py-meth docutils literal notranslate"><span class="pre">acceptLastState()</span></code></a>), so that its history stays as it was, and the solvers neither
+evaluate it nor refuse it. A solver that cannot handle a constraint refuses it while it is switched on, even out
+of reach: it may come within reach during the step.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Whether the constraint is switched on.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>bool</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="edelweissfe.constraints.base.constraintbase.ConstraintBase.withinReach">
+<span class="sig-name descname"><span class="pre">withinReach</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">True</span></span><a class="headerlink" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.withinReach" title="Link to this definition"></a></dt>
+<dd><p>Whether this constraint is within reach of what it constrains, as it finds itself in <a class="reference internal" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.updateConnectivity" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.updateConnectivity"><code class="xref py py-meth docutils literal notranslate"><span class="pre">updateConnectivity()</span></code></a>:
+e.g. a contact constraint whose partner is far away is not, and takes no part in the equation system then (see
+<a class="reference internal" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.active" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.active"><code class="xref py py-attr docutils literal notranslate"><span class="pre">active</span></code></a>). A constraint sets it there, and reports a change of <a class="reference internal" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.active" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.active"><code class="xref py py-attr docutils literal notranslate"><span class="pre">active</span></code></a> as a change of its
+connectivity, so that the solver rebuilds its equation system. A constraint that does not check stays within
+reach.</p>
 </dd></dl>
 
 </dd></dl>

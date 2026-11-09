@@ -546,6 +546,27 @@ as well:
 .. automodule:: edelweissfe.utils.residualtangentcheck
     :members:
 
+A constraint takes part in the equation system while it is ``active``. A constraint that is not active gets no
+degrees of freedom, the solvers do not evaluate it, and its scalar variables -- the Lagrange multipliers of
+``equalvaluelagrangian``, say -- leave the equation system with it, so that they leave no unknowns without an equation
+behind. Two states decide it, and ``active`` is true while both are:
+
+* ``switchedOn``: the constraint is **switched on from outside**. Setting ``active`` switches it, e.g. a
+  ``modelupdate`` step action that switches a constraint off for a step, as in
+  ``testfiles/marmot/PenaltyBasedIndirectControl``. A switch-off from outside lasts until the constraint is switched
+  on again from outside.
+* ``withinReach``: the constraint finds itself within reach of what it constrains, in its ``updateConnectivity``.
+  A contact constraint whose partner is out of reach sets it to false, and reports the change of ``active`` as a
+  change of its connectivity, so that the solver rebuilds its equation system. A constraint that does not check stays
+  within reach.
+
+So a constraint switched off from outside stays off, whatever it finds in reach; switched on again, it takes part
+while it is within reach. Switched off from outside, a constraint rests: the solvers do not locate it anew
+(``updateConnectivity``), which they do for every constraint that is switched on, those out of reach included, so that
+they can find themselves within reach again. A constraint that is not active accepts no state either
+(``acceptLastState``): a contact switched off for a step keeps its multipliers and its frictional history as they
+were. A solver that cannot handle a constraint, e.g. ``NEST`` a contact, refuses it only while it is switched on.
+
 .. automodule:: edelweissfe.constraints.base.constraintbase
     :members:
 

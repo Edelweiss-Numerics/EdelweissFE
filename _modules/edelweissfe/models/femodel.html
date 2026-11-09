@@ -495,11 +495,31 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">topology</span><span class="o">.</span><span class="n">recordSetupFingerprint</span><span class="p">()</span></div>
 
 
+<div class="viewcode-block" id="FEModel.activeConstraints">
+<a class="viewcode-back" href="../../../documentation/models.html#edelweissfe.models.femodel.FEModel.activeConstraints">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">activeConstraints</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The constraints that take part in the equation system: all constraints, in their order, that are active,</span>
+<span class="sd">        i.e. switched on and within reach (see</span>
+<span class="sd">        :attr:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.active`).</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        list[ConstraintBase]</span>
+<span class="sd">            The active constraints.</span>
+<span class="sd">        """</span>
+
+        <span class="k">return</span> <span class="p">[</span><span class="n">constraint</span> <span class="k">for</span> <span class="n">constraint</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">constraints</span><span class="o">.</span><span class="n">values</span><span class="p">()</span> <span class="k">if</span> <span class="n">constraint</span><span class="o">.</span><span class="n">active</span><span class="p">]</span></div>
+
+
 <div class="viewcode-block" id="FEModel.advanceToTime">
 <a class="viewcode-back" href="../../../documentation/models.html#edelweissfe.models.femodel.FEModel.advanceToTime">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">advanceToTime</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">time</span><span class="p">:</span> <span class="nb">float</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">"""Accept the current state of the model and sub instances, and</span>
 <span class="sd">        set the new time.</span>
+
+<span class="sd">        Of the constraints, only the active ones accept their state (see :meth:`activeConstraints`): a constraint that</span>
+<span class="sd">        took no part in the increment has no new state, and keeps its history as it was, e.g. the multipliers and the</span>
+<span class="sd">        frictional history of a contact switched off for a step.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
@@ -512,7 +532,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_acceptElementStates</span><span class="p">()</span>
 
         <span class="c1"># Serial: negligible next to the element loop.</span>
-        <span class="k">for</span> <span class="n">constraint</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">constraints</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+        <span class="k">for</span> <span class="n">constraint</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">activeConstraints</span><span class="p">():</span>
             <span class="n">constraint</span><span class="o">.</span><span class="n">acceptLastState</span><span class="p">()</span>
 
         <span class="k">for</span> <span class="n">mpc</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">multiPointConstraints</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>

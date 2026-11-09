@@ -264,6 +264,20 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">arcLengthController</span> <span class="o">=</span> <span class="kc">None</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">dLambda</span> <span class="o">=</span> <span class="kc">None</span>
 
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">arcLengthController</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s2">"extrapolation"</span><span class="p">]</span> <span class="o">==</span> <span class="s2">"quadratic"</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
+                <span class="s2">"extrapolation=quadratic is not available under an arc length controller, which extrapolates the load "</span>
+                <span class="s2">"parameter linearly only"</span>
+            <span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">arcLengthController</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s2">"lineSearch"</span><span class="p">]</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s2">"fallBackToQuasiNewton"</span><span class="p">]</span>
+        <span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
+                <span class="s2">"lineSearch and fallBackToQuasiNewton are not available under an arc length controller, whose Newton "</span>
+                <span class="s2">"iterations solve for the load parameter, too"</span>
+            <span class="p">)</span>
+
         <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">beginStep</span><span class="p">(</span><span class="n">step</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">fieldOutputController</span><span class="p">,</span> <span class="n">outputmanagers</span><span class="p">)</span></div>
 
 
@@ -342,12 +356,10 @@
             <span class="k">raise</span> <span class="n">ConditionalStop</span>
 
         <span class="n">iterationCounter</span> <span class="o">=</span> <span class="mi">0</span>
-        <span class="n">incrementResidualHistory</span> <span class="o">=</span> <span class="nb">dict</span><span class="o">.</span><span class="n">fromkeys</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">idcsOfFieldsInDofVector</span><span class="p">,</span> <span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mi">0</span><span class="p">))</span>
+        <span class="n">incrementResidualHistory</span> <span class="o">=</span> <span class="p">{</span><span class="n">field</span><span class="p">:</span> <span class="p">[]</span> <span class="k">for</span> <span class="n">field</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">idcsOfFieldsInDofVector</span><span class="p">}</span>
 
         <span class="n">dirichlets</span> <span class="o">=</span> <span class="n">stepActions</span><span class="p">[</span><span class="s2">"dirichlet"</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">()</span>
-        <span class="n">nodeForces</span> <span class="o">=</span> <span class="n">stepActions</span><span class="p">[</span><span class="s2">"nodeforces"</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">()</span>
-        <span class="n">distributedLoads</span> <span class="o">=</span> <span class="n">stepActions</span><span class="p">[</span><span class="s2">"distributedload"</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">()</span>
-        <span class="n">bodyForces</span> <span class="o">=</span> <span class="n">stepActions</span><span class="p">[</span><span class="s2">"bodyforce"</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">()</span>
+        <span class="n">loads</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">collectLoads</span><span class="p">(</span><span class="n">stepActions</span><span class="p">)</span>
 
         <span class="k">with</span> <span class="n">performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"step actions at increment start"</span><span class="p">):</span>
             <span class="c1"># Find which global DOFs the Dirichlet BCs constrain, once up front.</span>
@@ -408,16 +420,8 @@
                 <span class="n">model</span><span class="o">.</span><span class="n">constraints</span><span class="p">,</span> <span class="n">U_np</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">PConstraints</span><span class="p">,</span> <span class="n">K</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">,</span> <span class="n">FConstraints</span>
             <span class="p">)</span>
 
-            <span class="n">P_0</span><span class="p">,</span> <span class="n">K_0</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">assembleLoads</span><span class="p">(</span><span class="n">nodeForces</span><span class="p">,</span> <span class="n">distributedLoads</span><span class="p">,</span> <span class="n">bodyForces</span><span class="p">,</span> <span class="n">U_np</span><span class="p">,</span> <span class="n">P_0</span><span class="p">,</span> <span class="n">K_0</span><span class="p">,</span> <span class="n">zeroTimeStep</span><span class="p">)</span>
-            <span class="n">P_f</span><span class="p">,</span> <span class="n">K_f</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">assembleLoads</span><span class="p">(</span>
-                <span class="n">nodeForces</span><span class="p">,</span>
-                <span class="n">distributedLoads</span><span class="p">,</span>
-                <span class="n">bodyForces</span><span class="p">,</span>
-                <span class="n">U_np</span><span class="p">,</span>
-                <span class="n">P_f</span><span class="p">,</span>
-                <span class="n">K_f</span><span class="p">,</span>
-                <span class="n">referenceTimeStep</span><span class="p">,</span>
-            <span class="p">)</span>
+            <span class="n">P_0</span><span class="p">,</span> <span class="n">K_0</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">assembleLoads</span><span class="p">(</span><span class="n">loads</span><span class="p">,</span> <span class="n">U_np</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">P_0</span><span class="p">,</span> <span class="n">K_0</span><span class="p">,</span> <span class="n">zeroTimeStep</span><span class="p">)</span>
+            <span class="n">P_f</span><span class="p">,</span> <span class="n">K_f</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">assembleLoads</span><span class="p">(</span><span class="n">loads</span><span class="p">,</span> <span class="n">U_np</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">P_f</span><span class="p">,</span> <span class="n">K_f</span><span class="p">,</span> <span class="n">referenceTimeStep</span><span class="p">)</span>
 
             <span class="n">P_f</span> <span class="o">-=</span> <span class="n">P_0</span>  <span class="c1"># and subtract the dead part, since we are only interested in the homogeneous linear part</span>
             <span class="n">K_f</span> <span class="o">-=</span> <span class="n">K_0</span>
@@ -571,12 +575,8 @@
 <span class="sd">        """</span>
 
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">arcLengthController</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">for</span> <span class="n">stepAction</span> <span class="ow">in</span> <span class="n">stepActions</span><span class="p">[</span><span class="s2">"nodeforces"</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
-                <span class="n">stepAction</span><span class="o">.</span><span class="n">applyAtStepEnd</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">stepMagnitude</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">Lambda</span><span class="p">)</span>
-            <span class="k">for</span> <span class="n">stepAction</span> <span class="ow">in</span> <span class="n">stepActions</span><span class="p">[</span><span class="s2">"distributedload"</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
-                <span class="n">stepAction</span><span class="o">.</span><span class="n">applyAtStepEnd</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">stepMagnitude</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">Lambda</span><span class="p">)</span>
-            <span class="k">for</span> <span class="n">stepAction</span> <span class="ow">in</span> <span class="n">stepActions</span><span class="p">[</span><span class="s2">"bodyforce"</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
-                <span class="n">stepAction</span><span class="o">.</span><span class="n">applyAtStepEnd</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">stepMagnitude</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">Lambda</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">load</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">collectLoads</span><span class="p">(</span><span class="n">stepActions</span><span class="p">):</span>
+                <span class="n">load</span><span class="o">.</span><span class="n">applyAtStepEnd</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">stepMagnitude</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">Lambda</span><span class="p">)</span>
 
         <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">applyStepActionsAtStepEnd</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">stepActions</span><span class="p">)</span></div>
 </div>

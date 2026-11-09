@@ -112,7 +112,7 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.constraints.base.constraintbase</span><span class="w"> </span><span class="kn">import</span> <span class="n">ConstraintBase</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.models.femodel</span><span class="w"> </span><span class="kn">import</span> <span class="n">FEModel</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.csrgeneratorv2</span><span class="w"> </span><span class="kn">import</span> <span class="n">CSRGenerator</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.dofmanager</span><span class="w"> </span><span class="kn">import</span> <span class="n">DofManager</span><span class="p">,</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">VIJSystemMatrix</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.dofmanager</span><span class="w"> </span><span class="kn">import</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">VIJSystemMatrix</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.outputmanagers.base.outputmanagerbase</span><span class="w"> </span><span class="kn">import</span> <span class="n">OutputManagerBase</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.solvers.nonlinearimplicitstatic</span><span class="w"> </span><span class="kn">import</span> <span class="n">NIST</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.timesteppers.timestep</span><span class="w"> </span><span class="kn">import</span> <span class="n">TimeStep</span>
@@ -315,6 +315,32 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">linSolver</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">linSolverName</span> <span class="o">=</span> <span class="kc">None</span>
 
+<div class="viewcode-block" id="NEST.validateModelCapabilities">
+<a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearexplicitstatic.NEST.validateModelCapabilities">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">validateModelCapabilities</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">:</span> <span class="n">FEModel</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Refuse, on top of the base checks, a constraint that is switched on and needs its connectivity updated in</span>
+<span class="sd">        every increment, i.e. a contact, which searches for what it touches: this solver never performs the update. A</span>
+<span class="sd">        constraint switched off from outside</span>
+<span class="sd">        (:attr:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.switchedOn`) is not refused: it rests,</span>
+<span class="sd">        and takes no part in the step.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        model</span>
+<span class="sd">            The model tree.</span>
+<span class="sd">        """</span>
+
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">validateModelCapabilities</span><span class="p">(</span><span class="n">model</span><span class="p">)</span>
+
+        <span class="k">for</span> <span class="n">constraintName</span><span class="p">,</span> <span class="n">constraint</span> <span class="ow">in</span> <span class="n">model</span><span class="o">.</span><span class="n">constraints</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">if</span> <span class="n">constraint</span><span class="o">.</span><span class="n">switchedOn</span> <span class="ow">and</span> <span class="nb">type</span><span class="p">(</span><span class="n">constraint</span><span class="p">)</span><span class="o">.</span><span class="n">updateConnectivity</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">ConstraintBase</span><span class="o">.</span><span class="n">updateConnectivity</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">"Constraint '</span><span class="si">{</span><span class="n">constraintName</span><span class="si">}</span><span class="s2">' requires a dynamic connectivity update "</span>
+                    <span class="sa">f</span><span class="s2">"(contact) every increment, which </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">identification</span><span class="si">}</span><span class="s2"> never performs -- "</span>
+                    <span class="s2">"contact is not currently supported with this solver."</span>
+                <span class="p">)</span></div>
+
+
 <div class="viewcode-block" id="NEST.beginStep">
 <a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearexplicitstatic.NEST.beginStep">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">beginStep</span><span class="p">(</span>
@@ -343,23 +369,9 @@
 
         <span class="bp">self</span><span class="o">.</span><span class="n">validateModelCapabilities</span><span class="p">(</span><span class="n">model</span><span class="p">)</span>
 
-        <span class="k">for</span> <span class="n">constraintName</span><span class="p">,</span> <span class="n">constraint</span> <span class="ow">in</span> <span class="n">model</span><span class="o">.</span><span class="n">constraints</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
-            <span class="k">if</span> <span class="nb">type</span><span class="p">(</span><span class="n">constraint</span><span class="p">)</span><span class="o">.</span><span class="n">updateConnectivity</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">ConstraintBase</span><span class="o">.</span><span class="n">updateConnectivity</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span>
-                    <span class="sa">f</span><span class="s2">"Constraint '</span><span class="si">{</span><span class="n">constraintName</span><span class="si">}</span><span class="s2">' requires a dynamic connectivity update "</span>
-                    <span class="sa">f</span><span class="s2">"(contact) every increment, which </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">identification</span><span class="si">}</span><span class="s2"> never performs -- "</span>
-                    <span class="s2">"contact is not currently supported with this solver."</span>
-                <span class="p">)</span>
-
         <span class="bp">self</span><span class="o">.</span><span class="n">journal</span><span class="o">.</span><span class="n">message</span><span class="p">(</span><span class="s2">"Creating monolithic equation system"</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">identification</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">forgetEquationSystem</span><span class="p">()</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span> <span class="o">=</span> <span class="n">DofManager</span><span class="p">(</span>
-            <span class="n">model</span><span class="o">.</span><span class="n">nodeFields</span><span class="o">.</span><span class="n">values</span><span class="p">(),</span>
-            <span class="n">model</span><span class="o">.</span><span class="n">scalarVariables</span><span class="o">.</span><span class="n">values</span><span class="p">(),</span>
-            <span class="n">model</span><span class="o">.</span><span class="n">elements</span><span class="o">.</span><span class="n">values</span><span class="p">(),</span>
-            <span class="n">model</span><span class="o">.</span><span class="n">constraints</span><span class="o">.</span><span class="n">values</span><span class="p">(),</span>
-            <span class="n">model</span><span class="o">.</span><span class="n">nodeSets</span><span class="o">.</span><span class="n">values</span><span class="p">(),</span>
-        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">createDofManager</span><span class="p">(</span><span class="n">model</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">journal</span><span class="o">.</span><span class="n">message</span><span class="p">(</span>
             <span class="s2">"total size of eq. system: </span><span class="si">{:}</span><span class="s2">"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">nDof</span><span class="p">),</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">identification</span><span class="p">,</span>
@@ -393,8 +405,7 @@
         <span class="k">for</span> <span class="n">fieldName</span><span class="p">,</span> <span class="n">field</span> <span class="ow">in</span> <span class="n">model</span><span class="o">.</span><span class="n">nodeFields</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
             <span class="n">U</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">writeNodeFieldToDofVector</span><span class="p">(</span><span class="n">U</span><span class="p">,</span> <span class="n">field</span><span class="p">,</span> <span class="s2">"U"</span><span class="p">)</span>
 
-        <span class="k">for</span> <span class="n">variable</span> <span class="ow">in</span> <span class="n">model</span><span class="o">.</span><span class="n">scalarVariables</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
-            <span class="n">U</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">idcsOfScalarVariablesInDofVector</span><span class="p">[</span><span class="n">variable</span><span class="p">]]</span> <span class="o">=</span> <span class="n">variable</span><span class="o">.</span><span class="n">value</span>
+        <span class="n">U</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">writeScalarVariablesToDofVector</span><span class="p">(</span><span class="n">U</span><span class="p">)</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_U</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dU</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_P</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_K</span> <span class="o">=</span> <span class="n">U</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">P</span><span class="p">,</span> <span class="n">K</span>
 
@@ -499,8 +510,7 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">writeDofVectorToNodeField</span><span class="p">(</span><span class="n">P</span><span class="p">,</span> <span class="n">field</span><span class="p">,</span> <span class="s2">"P"</span><span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">writeDofVectorToNodeField</span><span class="p">(</span><span class="n">dU</span><span class="p">,</span> <span class="n">field</span><span class="p">,</span> <span class="s2">"dU"</span><span class="p">)</span>
 
-        <span class="k">for</span> <span class="n">variable</span> <span class="ow">in</span> <span class="n">model</span><span class="o">.</span><span class="n">scalarVariables</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
-            <span class="n">variable</span><span class="o">.</span><span class="n">value</span> <span class="o">=</span> <span class="n">U</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">idcsOfScalarVariablesInDofVector</span><span class="p">[</span><span class="n">variable</span><span class="p">]]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">writeDofVectorToScalarVariables</span><span class="p">(</span><span class="n">U</span><span class="p">)</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">updateRigidBodies</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">)</span>
 
@@ -583,9 +593,7 @@
         <span class="n">err</span><span class="p">[:]</span> <span class="o">=</span> <span class="mf">0.0</span>
 
         <span class="n">dirichlets</span> <span class="o">=</span> <span class="n">stepActions</span><span class="p">[</span><span class="s2">"dirichlet"</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">()</span>
-        <span class="n">nodeforces</span> <span class="o">=</span> <span class="n">stepActions</span><span class="p">[</span><span class="s2">"nodeforces"</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">()</span>
-        <span class="n">distributedLoads</span> <span class="o">=</span> <span class="n">stepActions</span><span class="p">[</span><span class="s2">"distributedload"</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">()</span>
-        <span class="n">bodyForces</span> <span class="o">=</span> <span class="n">stepActions</span><span class="p">[</span><span class="s2">"bodyforce"</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">()</span>
+        <span class="n">loads</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">collectLoads</span><span class="p">(</span><span class="n">stepActions</span><span class="p">)</span>
 
         <span class="c1"># Find which global DOFs the Dirichlet BCs constrain, once up front.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">locateConstrainedDofs</span><span class="p">(</span><span class="n">dirichlets</span><span class="p">)</span>
@@ -612,9 +620,7 @@
             <span class="n">P</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">K</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">F</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">PLoadsAndConstraints</span><span class="p">[:]</span> <span class="o">=</span> <span class="mf">0.0</span>
 
             <span class="n">P</span><span class="p">,</span> <span class="n">K</span><span class="p">,</span> <span class="n">F</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">computeElements</span><span class="p">(</span><span class="n">elements</span><span class="p">,</span> <span class="n">U_np</span><span class="p">,</span> <span class="n">dU_</span><span class="p">[</span><span class="n">k</span><span class="p">],</span> <span class="n">P</span><span class="p">,</span> <span class="n">K</span><span class="p">,</span> <span class="n">F</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">)</span>
-            <span class="n">PLoadsAndConstraints</span><span class="p">,</span> <span class="n">K</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">assembleLoads</span><span class="p">(</span>
-                <span class="n">nodeforces</span><span class="p">,</span> <span class="n">distributedLoads</span><span class="p">,</span> <span class="n">bodyForces</span><span class="p">,</span> <span class="n">U_np</span><span class="p">,</span> <span class="n">PLoadsAndConstraints</span><span class="p">,</span> <span class="n">K</span><span class="p">,</span> <span class="n">timeStep</span>
-            <span class="p">)</span>
+            <span class="n">PLoadsAndConstraints</span><span class="p">,</span> <span class="n">K</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">assembleLoads</span><span class="p">(</span><span class="n">loads</span><span class="p">,</span> <span class="n">U_np</span><span class="p">,</span> <span class="n">dU_</span><span class="p">[</span><span class="n">k</span><span class="p">],</span> <span class="n">PLoadsAndConstraints</span><span class="p">,</span> <span class="n">K</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">)</span>
             <span class="n">PLoadsAndConstraints</span><span class="p">,</span> <span class="n">K</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">assembleConstraints</span><span class="p">(</span>
                 <span class="n">constraints</span><span class="p">,</span> <span class="n">U_np</span><span class="p">,</span> <span class="n">dU_</span><span class="p">[</span><span class="n">k</span><span class="p">],</span> <span class="n">PLoadsAndConstraints</span><span class="p">,</span> <span class="n">K</span><span class="p">,</span> <span class="n">timeStep</span>
             <span class="p">)</span>

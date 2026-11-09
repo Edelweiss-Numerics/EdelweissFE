@@ -161,7 +161,10 @@
 <span class="p">}</span>
 
 
-<span class="c1"># field                  tolerance</span>
+<span class="c1"># The tolerances of the legacy convergence criterion per field; see edelweissfe.solvers.base.convergencecriteria.</span>
+<span class="c1"># The entry "scalar variables" applies to the scalar variables (e.g., Lagrange multipliers) of the model.</span>
+
+<span class="c1"># field                  absolute correction tolerance</span>
 <span class="n">fieldCorrectionTolerance</span> <span class="o">=</span> <span class="p">{</span>
     <span class="s2">"displacement"</span><span class="p">:</span> <span class="mf">1e-7</span><span class="p">,</span>
     <span class="s2">"rotation"</span><span class="p">:</span> <span class="mf">1e-3</span><span class="p">,</span>
@@ -177,6 +180,23 @@
     <span class="s2">"jacobi"</span><span class="p">:</span> <span class="mf">1e-8</span><span class="p">,</span>
 <span class="p">}</span>
 
+<span class="c1"># field                  correction tolerance relative to the largest increment of the field; 0: none</span>
+<span class="n">relativeFieldCorrectionTolerance</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">"displacement"</span><span class="p">:</span> <span class="mf">0.0</span><span class="p">,</span>
+    <span class="s2">"rotation"</span><span class="p">:</span> <span class="mf">0.0</span><span class="p">,</span>
+    <span class="s2">"micro rotation"</span><span class="p">:</span> <span class="mf">0.0</span><span class="p">,</span>
+    <span class="s2">"nonlocal damage"</span><span class="p">:</span> <span class="mf">0.0</span><span class="p">,</span>
+    <span class="s2">"nonlocal damage 2"</span><span class="p">:</span> <span class="mf">0.0</span><span class="p">,</span>
+    <span class="s2">"concentration"</span><span class="p">:</span> <span class="mf">0.0</span><span class="p">,</span>
+    <span class="s2">"chemical potential"</span><span class="p">:</span> <span class="mf">0.0</span><span class="p">,</span>
+    <span class="s2">"strain symmetric"</span><span class="p">:</span> <span class="mf">0.0</span><span class="p">,</span>
+    <span class="s2">"scalar variables"</span><span class="p">:</span> <span class="mf">0.0</span><span class="p">,</span>
+    <span class="s2">"plastic multiplier"</span><span class="p">:</span> <span class="mf">0.0</span><span class="p">,</span>
+    <span class="s2">"pressure"</span><span class="p">:</span> <span class="mf">0.0</span><span class="p">,</span>
+    <span class="s2">"jacobi"</span><span class="p">:</span> <span class="mf">0.0</span><span class="p">,</span>
+<span class="p">}</span>
+
+<span class="c1"># field                  flux residual tolerance relative to the spatial average flux</span>
 <span class="n">fluxResidualTolerance</span> <span class="o">=</span> <span class="p">{</span>
     <span class="s2">"displacement"</span><span class="p">:</span> <span class="mf">1e-8</span><span class="p">,</span>
     <span class="s2">"rotation"</span><span class="p">:</span> <span class="mf">1e-4</span><span class="p">,</span>
@@ -192,6 +212,7 @@
     <span class="s2">"jacobi"</span><span class="p">:</span> <span class="mf">1e-8</span><span class="p">,</span>
 <span class="p">}</span>
 
+<span class="c1"># field                  relative flux residual tolerance from iteration iterationsForAlternativeTolerance on</span>
 <span class="n">fluxResidualToleranceAlternative</span> <span class="o">=</span> <span class="p">{</span>
     <span class="s2">"displacement"</span><span class="p">:</span> <span class="mf">5e-3</span><span class="p">,</span>
     <span class="s2">"rotation"</span><span class="p">:</span> <span class="mf">5e-3</span><span class="p">,</span>
@@ -205,6 +226,23 @@
     <span class="s2">"plastic multiplier"</span><span class="p">:</span> <span class="mf">5e-3</span><span class="p">,</span>
     <span class="s2">"pressure"</span><span class="p">:</span> <span class="mf">5e-3</span><span class="p">,</span>
     <span class="s2">"jacobi"</span><span class="p">:</span> <span class="mf">5e-3</span><span class="p">,</span>
+<span class="p">}</span>
+
+<span class="c1"># field                  absolute flux residual tolerance; the scalar variables' flux residual tolerances above are</span>
+<span class="c1">#                        absolute already</span>
+<span class="n">absoluteFluxResidualTolerance</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">"displacement"</span><span class="p">:</span> <span class="mf">1e-7</span><span class="p">,</span>
+    <span class="s2">"rotation"</span><span class="p">:</span> <span class="mf">1e-7</span><span class="p">,</span>
+    <span class="s2">"micro rotation"</span><span class="p">:</span> <span class="mf">1e-7</span><span class="p">,</span>
+    <span class="s2">"nonlocal damage"</span><span class="p">:</span> <span class="mf">1e-7</span><span class="p">,</span>
+    <span class="s2">"nonlocal damage 2"</span><span class="p">:</span> <span class="mf">1e-7</span><span class="p">,</span>
+    <span class="s2">"concentration"</span><span class="p">:</span> <span class="mf">1e-7</span><span class="p">,</span>
+    <span class="s2">"chemical potential"</span><span class="p">:</span> <span class="mf">1e-7</span><span class="p">,</span>
+    <span class="s2">"strain symmetric"</span><span class="p">:</span> <span class="mf">1e-7</span><span class="p">,</span>
+    <span class="s2">"scalar variables"</span><span class="p">:</span> <span class="mf">0.0</span><span class="p">,</span>
+    <span class="s2">"plastic multiplier"</span><span class="p">:</span> <span class="mf">1e-7</span><span class="p">,</span>
+    <span class="s2">"pressure"</span><span class="p">:</span> <span class="mf">1e-7</span><span class="p">,</span>
+    <span class="s2">"jacobi"</span><span class="p">:</span> <span class="mf">1e-7</span><span class="p">,</span>
 <span class="p">}</span>
 
 <span class="c1"># domain                 dimensions</span>

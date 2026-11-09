@@ -782,8 +782,8 @@ increment.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>P</strong> – The residual contribution to augment, the internal forces <span class="math notranslate nohighlight">\(\boldsymbol{f}_\mathrm{int}\)</span>.</p></li>
 <li><p><strong>K</strong> – The tangent <code class="docutils literal notranslate"><span class="pre">dP/dU</span></code> to augment, the stiffness matrix.</p></li>
+<li><p><strong>P</strong> – The residual contribution to augment, the internal forces <span class="math notranslate nohighlight">\(\boldsymbol{f}_\mathrm{int}\)</span>.</p></li>
 <li><p><strong>U</strong> (<em>ndarray</em>) – The current solution vector.</p></li>
 <li><p><strong>dU</strong> (<em>ndarray</em>) – The current solution vector increment.</p></li>
 <li><p><strong>time</strong> (<em>float</em>) – The current time.</p></li>
@@ -1256,7 +1256,7 @@ layout of <code class="docutils literal notranslate"><span class="pre">P</span><
 <tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">computeInternalEnergy</span></code>()</p></td>
 <td><p>Evaluate the internal energy of the element.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">computeKernels</span></code>(P, K, U, dU, time, dT)</p></td>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">computeKernels</span></code>(K, P, U, dU, time, dT)</p></td>
 <td><p>Add the internal forces to the residual, and their tangent, for given time, field, and field increment.</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">computeKernelsExplicit</span></code>(P, U, dU, time, dT)</p></td>
@@ -2503,7 +2503,7 @@ layout of <code class="docutils literal notranslate"><span class="pre">P</span><
 <tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">computeInternalEnergy</span></code>()</p></td>
 <td><p>Evaluate the internal energy of the element.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">computeKernels</span></code>(P, K, U, dU, time, dT)</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">computeKernels</span></code>(K, P, U, dU, time, dT)</p></td>
 <td><p>Add the internal forces to the residual, and their tangent, for given time, field, and field increment.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">computeKernelsExplicit</span></code>(P, U, dU, time, dT)</p></td>
@@ -2677,7 +2677,7 @@ layout of <code class="docutils literal notranslate"><span class="pre">P</span><
 <tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">computeInternalEnergy</span></code>()</p></td>
 <td><p>Evaluate the internal energy of the element.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">computeKernels</span></code>(P, K, U, dU, time, dT)</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">computeKernels</span></code>(K, P, U, dU, time, dT)</p></td>
 <td><p>Add the internal forces to the residual, and their tangent, for given time, field, and field increment.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">computeKernelsExplicit</span></code>(P, U, dU, time, dT)</p></td>
@@ -2766,9 +2766,9 @@ layout of <code class="docutils literal notranslate"><span class="pre">P</span><
 <p>Relevant module: <code class="docutils literal notranslate"><span class="pre">edelweissfe.elements.base.baseelement</span></code></p>
 <p>An element follows the rule every entity of the equation system follows (see
 <a class="reference internal" href="solvers.html#residual-and-tangent-convention"><span class="std std-ref">The residual and the tangent</span></a>): each method adds a residual contribution <code class="docutils literal notranslate"><span class="pre">P</span></code> and its tangent
-<code class="docutils literal notranslate"><span class="pre">K</span> <span class="pre">=</span> <span class="pre">dP/dU</span></code>. <code class="docutils literal notranslate"><span class="pre">computeKernels</span></code> adds the internal forces and the stiffness matrix; the load methods
-<code class="docutils literal notranslate"><span class="pre">computeDistributedLoad</span></code> and <code class="docutils literal notranslate"><span class="pre">computeBodyForce</span></code> add the <em>negative</em> of the external load, and its tangent if the
-load follows the deformation.</p>
+<code class="docutils literal notranslate"><span class="pre">K</span> <span class="pre">=</span> <span class="pre">dP/dU</span></code>. <code class="docutils literal notranslate"><span class="pre">computeKernels(K,</span> <span class="pre">P,</span> <span class="pre">U,</span> <span class="pre">dU,</span> <span class="pre">time,</span> <span class="pre">dT)</span></code> adds the internal forces and the stiffness matrix – the
+tangent comes first in its arguments; the load methods <code class="docutils literal notranslate"><span class="pre">computeDistributedLoad</span></code> and <code class="docutils literal notranslate"><span class="pre">computeBodyForce</span></code> add the
+<em>negative</em> of the external load, and its tangent if the load follows the deformation.</p>
 <p>An element carrying a material should also implement
 <a class="reference internal" href="#edelweissfe.elements.base.baseelement.BaseElement.updateMaterialProperty" title="edelweissfe.elements.base.baseelement.BaseElement.updateMaterialProperty"><code class="xref py py-meth docutils literal notranslate"><span class="pre">updateMaterialProperty()</span></code></a>, through which the
 <a class="reference internal" href="stepactions.html"><span class="doc">changeMaterialProperty</span></a> step action changes a material property during an
@@ -2857,7 +2857,7 @@ layout of <code class="docutils literal notranslate"><span class="pre">P</span><
 <tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.elements.base.baseelement.BaseElement.computeInternalEnergy" title="edelweissfe.elements.base.baseelement.BaseElement.computeInternalEnergy"><code class="xref py py-obj docutils literal notranslate"><span class="pre">computeInternalEnergy</span></code></a>()</p></td>
 <td><p>Evaluate the internal energy of the element.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.elements.base.baseelement.BaseElement.computeKernels" title="edelweissfe.elements.base.baseelement.BaseElement.computeKernels"><code class="xref py py-obj docutils literal notranslate"><span class="pre">computeKernels</span></code></a>(P, K, U, dU, time, dT)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.elements.base.baseelement.BaseElement.computeKernels" title="edelweissfe.elements.base.baseelement.BaseElement.computeKernels"><code class="xref py py-obj docutils literal notranslate"><span class="pre">computeKernels</span></code></a>(K, P, U, dU, time, dT)</p></td>
 <td><p>Add the internal forces to the residual, and their tangent, for given time, field, and field increment.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.elements.base.baseelement.BaseElement.computeKernelsExplicit" title="edelweissfe.elements.base.baseelement.BaseElement.computeKernelsExplicit"><code class="xref py py-obj docutils literal notranslate"><span class="pre">computeKernelsExplicit</span></code></a>(P, U, dU, time, dT)</p></td>
@@ -3045,14 +3045,14 @@ follows the deformation (e.g. a pressure on the current surface).</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="edelweissfe.elements.base.baseelement.BaseElement.computeKernels">
-<span class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">computeKernels</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">P</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">K</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">U</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dU</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dT</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/elements/base/baseelement.html#BaseElement.computeKernels"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.elements.base.baseelement.BaseElement.computeKernels" title="Link to this definition"></a></dt>
+<span class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">computeKernels</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">K</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">P</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">U</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dU</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dT</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/elements/base/baseelement.html#BaseElement.computeKernels"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.elements.base.baseelement.BaseElement.computeKernels" title="Link to this definition"></a></dt>
 <dd><p>Add the internal forces to the residual, and their tangent, for given time, field, and field
 increment.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>P</strong> (<em>ndarray</em>) – The residual contribution to augment, the internal forces <span class="math notranslate nohighlight">\(\boldsymbol{f}_\mathrm{int}\)</span>.</p></li>
 <li><p><strong>K</strong> (<em>ndarray</em>) – The tangent <code class="docutils literal notranslate"><span class="pre">dP/dU</span></code> to augment, the stiffness matrix.</p></li>
+<li><p><strong>P</strong> (<em>ndarray</em>) – The residual contribution to augment, the internal forces <span class="math notranslate nohighlight">\(\boldsymbol{f}_\mathrm{int}\)</span>.</p></li>
 <li><p><strong>U</strong> (<em>ndarray</em>) – The current solution vector.</p></li>
 <li><p><strong>dU</strong> (<em>ndarray</em>) – The current solution vector increment.</p></li>
 <li><p><strong>time</strong> (<em>float</em>) – The current time.</p></li>

@@ -26,7 +26,10 @@ vector :math:`\boldsymbol{P}` to the residual, and its tangent
   :math:`\boldsymbol{\lambda}^T \partial \boldsymbol{g} / \partial \boldsymbol{u}` to the rows of the nodes and
   :math:`\boldsymbol{g}` to the rows of the multipliers. See :doc:`constraints` for writing one.
 
-Summed over all entities,
+A solver sums the contributions in three loops of every iteration: ``computeElements`` over the elements,
+``assembleLoads`` over the loads -- every load assembles its own contribution, wherever it acts (see
+:class:`~edelweissfe.stepactions.base.loadbase.LoadBase`) -- and ``assembleConstraints`` over the constraints that
+are active (see :doc:`constraints`). Summed over all entities,
 
 .. math::
 
@@ -161,6 +164,71 @@ momentum and kinetic energy in that case.
 
 .. pprint:: solver:NIDParallel
 
+Prediction of an increment in the implicit solvers
+--------------------------------------------------
+
+Newton's method starts each increment from a prediction of its solution increment. The solver option
+``extrapolation`` chooses it:
+
+* ``off``: from zero, i.e., from the last converged state.
+* ``linear`` (default): the last accepted increment, scaled to the size of the new one. The path of the solution is
+  continued along its last secant.
+* ``quadratic``: the parabola through the last three accepted states, evaluated at the end of the new increment, which
+  continues the path along its curvature, too. For a solution that grows quadratically with the load, the prediction
+  is exact, and the increment converges without a correction. While only one increment of the step of nonzero size has
+  been accepted, the prediction is linear.
+
+Sizes are measured in step progress. The prescribed degrees of freedom take their prescribed increment, so the first
+iteration of a predicted increment already checks convergence. Not available yet under an arc length controller,
+which extrapolates its load parameter linearly.
+
+A prediction can lead Newton's method astray, e.g., when the path turns sharply. Two options decide what happens then
+and around rebuilds of the equation system, both off by default:
+
+* ``retryWithoutExtrapolation``: if an extrapolated increment fails, it is attempted once more from a zero prediction
+  before it is cut back. A failed increment then keeps the accepted history, and the smaller increment after the
+  cutback is extrapolated from it as well. Without this option, a failed increment drops the prediction, and the
+  increments up to the next accepted one start from zero.
+* ``extrapolateAcrossConnectivityChange``: a change of the connectivity, e.g., a contact search that couples other
+  nodes, rebuilds the equation system, and the increment starts from zero. With this option, it is extrapolated
+  nevertheless, as long as the rebuilt system numbers the degrees of freedom exactly as the last one
+  (:meth:`~edelweissfe.numerics.dofmanager.DofManager.dofNumbering`): the last accepted increments are vectors of the
+  same degrees of freedom then. A change of the topology, e.g., a mesh refinement, always starts from zero (see
+  ``extrapolateAfterModelChange`` for the increment that follows it).
+
+Both act on a prediction: a declaration of options -- the ``*solver`` datalines, or an ``>>options`` block -- that
+switches either on with ``extrapolation=off`` is refused.
+
+Line search and quasi-Newton fallback of the implicit solvers
+-------------------------------------------------------------
+
+Newton's method converges quadratically close to the solution, but far from it, or where the tangent changes abruptly
+(e.g., material points switching between loading and unloading), a full correction can overshoot, and the iterations
+oscillate or diverge. Two remedies, solver options of ``NIST``, ``NISTParallel``, ``NID`` and ``NIDParallel``, are off by
+default; neither is available yet under an arc length controller.
+
+**Line search** (``lineSearch``). The correction :math:`\Delta\Delta U` is scaled by a step length :math:`\alpha`:
+the largest residual :math:`\| R(\Delta U + \alpha \, \Delta\Delta U) \|_\infty` (without the Dirichlet degrees of
+freedom) is evaluated at the trial step lengths ``lineSearchStepLengths`` (default ``0.8, 1.0, 1.2``), a parabola is
+fitted to these values, and :math:`\alpha` minimizes the parabola on :math:`[0.1, 1.5]`: its vertex, limited to that
+range, or, for a parabola that does not open upwards, the end of the range where it is smaller. A trial at which the
+residual is not finite fits no parabola: :math:`\alpha` is then the trial step length of the smallest finite residual,
+and without one, the increment is cut back. Trial residuals that are equal to round-off do not tell the step lengths
+apart, and the correction is taken in full. Each trial costs one evaluation of the model, so the line search is done
+only after ``lineSearchAfterIterations`` iterations (default 5), and then in every iteration whose number is a multiple
+of ``lineSearchEveryIterations`` (default 2). Small trial step lengths, e.g.
+``lineSearchStepLengths='0.15, 0.4, 0.7, 1.0'``, damp an iteration that cycles between two states.
+
+**Quasi-Newton fallback** (``fallBackToQuasiNewton``). An increment whose residual grew more often than the step
+option ``maxGrowIter`` allows is cut back. With this option, it continues instead with the tangent of its first
+iteration, i.e., of the converged state at the start of the increment, or of the prediction if the increment is
+extrapolated. The convergence becomes linear, but a tangent that is not updated cannot switch abruptly either;
+``maxIter`` still ends an increment that does not converge.
+
+.. code-block:: edelweiss
+
+    >>options, name=theSolver, lineSearch=True, lineSearchAfterIterations=2, lineSearchEveryIterations=1, fallBackToQuasiNewton=True
+
 Convergence criteria of the implicit solvers
 --------------------------------------------
 
@@ -170,6 +238,46 @@ criterion of their Newton iterations with the solver option ``convergenceCriteri
 .. code-block:: edelweiss
 
     >>options, name=theSolver, convergenceCriterion=abaqus
+
+The options of the ``abaqus`` criterion are named ``abaqus...``; a declaration of options -- the ``*solver`` datalines,
+or an ``>>options`` block -- that sets one of them with ``convergenceCriterion=legacy`` is refused, since it would mean
+nothing.
+
+The ``legacy`` criterion is configured by tolerances per field and by solver options. EdelweissMeshfree's parameter
+set, for instance, reads for a model with a displacement field
+
+.. code-block:: edelweiss
+
+    *updateConfiguration, configuration=fluxResidualTolerance
+    displacement=1e-4
+    *updateConfiguration, configuration=fluxResidualToleranceAlternative
+    displacement=1e-3
+    *updateConfiguration, configuration=absoluteFluxResidualTolerance
+    displacement=1e-14
+    *updateConfiguration, configuration=fieldCorrectionTolerance
+    displacement=1e-14
+    *updateConfiguration, configuration=relativeFieldCorrectionTolerance
+    displacement=1e-3
+
+together with
+
+.. code-block:: edelweiss
+
+    >>options, name=theSolver, iterationsForAlternativeTolerance=5, zeroFluxThreshold=1e-9, zeroIncrementThreshold=1e-13, minimumIterations=1, countFirstResidualAsGrowth=False, countGrowthOfConvergedFields=False
+
+The last two options belong to the test for a diverging Newton iteration, which holds for either criterion: an
+increment is abandoned, and retried smaller, once the flux residual of a field has grown more than ``maxGrowIter`` (a
+step option) times in it. A growth is a flux residual larger than that of the previous checked iteration, and the two
+options decide what else counts:
+
+* ``countFirstResidualAsGrowth`` (default True): the residual history of a field starts at zero, so the first checked
+  residual of an increment is a growth already. This is EdelweissFE's original counting; with False, counting starts
+  with the second checked iteration.
+* ``countGrowthOfConvergedFields`` (default True): a growth counts even in an iteration in which the field is
+  converged, and only another field keeps the iterations going. With False, such growths are ignored: the residual of
+  a converged field fluctuates at the level of its round-off, which says nothing about divergence.
+
+Independent of the criterion, a residual that contains a NaN ends the increment at once.
 
 .. automodule:: edelweissfe.solvers.base.convergencecriteria
    :members:
