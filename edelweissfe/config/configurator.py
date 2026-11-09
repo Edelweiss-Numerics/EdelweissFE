@@ -31,18 +31,24 @@ Created on Mon Apr 10 20:26:22 2017
 @author: Matthias Neuner
 """
 from edelweissfe.config.phenomena import (
+    absoluteFluxResidualTolerance,
     fieldCorrectionTolerance,
     fluxResidualTolerance,
     fluxResidualToleranceAlternative,
+    relativeFieldCorrectionTolerance,
 )
 from edelweissfe.utils.misc import convertLinesToStringDictionary
 
 
 def loadConfiguration(jobInfo):
-    """load the default (field) tolerance settings from phenomena.py"""
-    jobInfo["fieldCorrectionTolerance"] = fieldCorrectionTolerance
-    jobInfo["fluxResidualTolerance"] = fluxResidualTolerance
-    jobInfo["fluxResidualToleranceAlternative"] = fluxResidualToleranceAlternative
+    """Load the default tolerances of the convergence criterion per field, from :mod:`edelweissfe.config.phenomena`,
+    into ``jobInfo``. The job gets copies of them: ``*updateConfiguration`` (:func:`updateConfiguration`) changes the
+    tolerances of its own job, and never the defaults of the jobs that follow in the same process."""
+    jobInfo["fieldCorrectionTolerance"] = dict(fieldCorrectionTolerance)
+    jobInfo["relativeFieldCorrectionTolerance"] = dict(relativeFieldCorrectionTolerance)
+    jobInfo["fluxResidualTolerance"] = dict(fluxResidualTolerance)
+    jobInfo["fluxResidualToleranceAlternative"] = dict(fluxResidualToleranceAlternative)
+    jobInfo["absoluteFluxResidualTolerance"] = dict(absoluteFluxResidualTolerance)
     return jobInfo
 
 

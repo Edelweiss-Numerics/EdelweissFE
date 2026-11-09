@@ -252,7 +252,7 @@ class NISTPArcLength(NISTParallel):
             raise ConditionalStop
 
         iterationCounter = 0
-        incrementResidualHistory = dict.fromkeys(self.theDofManager.idcsOfFieldsInDofVector, (0.0, 0))
+        incrementResidualHistory = {field: [] for field in self.theDofManager.idcsOfFieldsInDofVector}
 
         dirichlets = stepActions["dirichlet"].values()
         nodeForces = stepActions["nodeforces"].values()

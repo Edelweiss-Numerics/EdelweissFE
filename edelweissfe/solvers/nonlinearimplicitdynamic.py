@@ -618,7 +618,7 @@ class NonlinearImplicitDynamic(NIST):
                 2,
             )
             dU[:] = 0.0
-            return U_n, dU, P, 0, dict.fromkeys(self.theDofManager.idcsOfFieldsInDofVector, (0.0, 0))
+            return U_n, dU, P, 0, {field: [] for field in self.theDofManager.idcsOfFieldsInDofVector}
 
         return super().solveIncrement(
             U_n, dU, P, K, stepActions, model, timeStep, prevTimeStep, extrapolation, maxIter, maxGrowingIter

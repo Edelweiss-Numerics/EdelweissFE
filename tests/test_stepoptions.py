@@ -114,7 +114,13 @@ def _journal() -> Journal:
 
 
 def _jobInfo() -> dict:
-    return {"fieldCorrectionTolerance": {}, "fluxResidualTolerance": {}, "fluxResidualToleranceAlternative": {}}
+    return {
+        "fieldCorrectionTolerance": {},
+        "relativeFieldCorrectionTolerance": {},
+        "fluxResidualTolerance": {},
+        "fluxResidualToleranceAlternative": {},
+        "absoluteFluxResidualTolerance": {},
+    }
 
 
 class _FakeModel:

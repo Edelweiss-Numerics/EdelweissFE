@@ -41,7 +41,6 @@ from edelweissfe.numerics.mpctransformation import (
     MultiPointConstraintTransformation,
     _flattenChainedRecords,
 )
-from edelweissfe.solvers.base.convergencecriteria import FieldConvergence
 from edelweissfe.solvers.base.convergencetable import ConvergenceTable
 from edelweissfe.stepactions.base.stepactionbase import StepActionBase
 from edelweissfe.timesteppers.timestep import TimeStep
@@ -142,17 +141,24 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
             If True, an unrecognised option raises an AttributeError instead of being ignored. Use it
             for option sources which are exclusively owned by this solver (i.e. the datalines of the
             *solver keyword), such that typos are not silently swallowed.
+
+        Returns
+        -------
+        set[str]
+            The names of the options updated.
         """
 
         # Option keys arrive lowercased: match them case-insensitively against the camelCase names. A >>options
         # block carries every solver's options plus meta keys, so keys of other solvers are skipped.
         canonicalByLower = {key.lower(): key for key in self.SolverSpecificOptions}
+        updatedNames = set()
         for k, v in updatedOptions.items():
             canonicalKey = canonicalByLower.get(k.lower())
             if canonicalKey is None:
                 if strict:
                     raise AttributeError("Invalid option {:} for {:}".format(k, self.identification))
                 continue
+            updatedNames.add(canonicalKey)
             journal.message("Updating option {:}={:}".format(canonicalKey, v), self.identification)
             defaultValue = self.SolverSpecificOptions[canonicalKey]
             if isinstance(defaultValue, bool):
@@ -167,6 +173,8 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
                 self.options[canonicalKey] = coerceValue(v, dtype)
             else:
                 self.options[canonicalKey] = type(defaultValue)(v)
+
+        return updatedNames
 
     @performancetiming.timeit("topology update")
     def updateTopologyAndConnectivity(self, model: FEModel, step, offerModelModifiers: bool = True) -> TopologyUpdate:
@@ -561,9 +569,10 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
         iterationCounter: int,
         residualHistory: dict,
     ) -> tuple[bool, dict]:
-        """Check the convergence, individually for each field, based on the current flux residual and the field
-        correction, using the convergence criterion of the solver (see :mod:`edelweissfe.solvers.base.convergencecriteria`).
-        Is called by solveStep() to decide whether to continue iterating or stop.
+        """Check the convergence, individually for each field and for the scalar variables, based on the current flux
+        residual and the correction, using the convergence criterion of the solver (see
+        :mod:`edelweissfe.solvers.base.convergencecriteria`). Is called by solveIncrement() to decide whether to
+        continue iterating or stop.
 
         Parameters
         ----------
@@ -580,15 +589,24 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
         iterationCounter
             The current iteration number.
         residualHistory
-            The previous residuals.
+            The convergence state of every field in each iteration checked so far in this increment; the state of
+            this iteration is appended, for
+            :meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.checkDivergingSolution`.
 
         Returns
         -------
         tuple[bool,dict]
             - True if converged.
-            - The residual histories field wise.
+            - The nodes with the largest residual, per field.
 
+        Raises
+        ------
+        DivergingSolution
+            If the residual contains a NaN: no further iteration can recover from it.
         """
+
+        if np.isnan(R).any():
+            raise DivergingSolution("Obtained NaN in the residual")
 
         tableColumns = []
         convergedAtAll = True
@@ -607,16 +625,12 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
                 spatialAveragedFluxes[field],
                 iterationCounter,
             )
-            fluxResidual = fieldConvergence.fluxResidual
 
             nodesWithLargestResidual[field] = self.theDofManager.getNodeForIndexInDofVector(
                 range(len(R))[fieldIndices][fieldConvergence.indexOfLargestResidual]
             )
 
-            previousFluxResidual, nGrew = residualHistory[field]
-            if fluxResidual > previousFluxResidual:
-                nGrew += 1
-            residualHistory[field] = (fluxResidual, nGrew)
+            residualHistory[field].append(fieldConvergence)
 
             tableColumns.append(fieldConvergence)
             convergedAtAll = (
@@ -624,35 +638,20 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
             )
 
         if self.theDofManager.idcsOfScalarVariablesInDofVector:
-            fluxResidualTolerances = (
-                self.fluxResidualTolerances if iterationCounter < 15 else self.fluxResidualTolerancesAlt
-            )
-            scalarResiduals = np.abs(R[list(self.theDofManager.idcsOfScalarVariablesInDofVector.values())])
-            indexOfLargestScalarResidual = int(np.argmax(scalarResiduals))
-            residualScalarVariables = scalarResiduals[indexOfLargestScalarResidual]
-            correction = (
-                np.linalg.norm(
-                    ddU[list(self.theDofManager.idcsOfScalarVariablesInDofVector.values())],
-                    np.inf,
-                )
-                if ddU is not None
-                else 0.0
+            scalarVariableIndices = list(self.theDofManager.idcsOfScalarVariablesInDofVector.values())
+            scalarVariablesConvergence = self.convergenceCriterion.checkScalarVariables(
+                R[scalarVariableIndices],
+                ddU[scalarVariableIndices] if ddU is not None else None,
+                dU[scalarVariableIndices],
+                iterationCounter,
             )
 
-            convergedCorrection = correction < self.fieldCorrectionTolerances["scalar variables"]
-            convergedFlux = residualScalarVariables <= fluxResidualTolerances["scalar variables"]
-
-            tableColumns.append(
-                FieldConvergence(
-                    residualScalarVariables,
-                    convergedFlux,
-                    correction,
-                    convergedCorrection,
-                    indexOfLargestScalarResidual,
-                )
+            tableColumns.append(scalarVariablesConvergence)
+            convergedAtAll = (
+                convergedAtAll
+                and scalarVariablesConvergence.correctionConverged
+                and scalarVariablesConvergence.fluxResidualConverged
             )
-
-            convergedAtAll = convergedAtAll and convergedCorrection and convergedFlux
 
         summary = self.linSolver.lastSolveSummary if self.linSolver.reportsSolveSummary else None
         # ddU is None on the first iteration of an increment: no solve yet, so the column stays blank.
@@ -757,26 +756,6 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
             dU[:] = 0.0
 
         return dU, isExtrapolatedIncrement
-
-    def checkDivergingSolution(self, incrementResidualHistory: dict, maxGrowingIter: int) -> bool:
-        """Check if the iterative solution scheme is diverging.
-
-        Parameters
-        ----------
-        incrementResidualHistory
-            The dictionary containing the residual history of all fields.
-        maxGrowingIter
-            The maximum allows number of growths of a residual during the iterative solution scheme.
-
-        Returns
-        -------
-        bool
-            True if solution is diverging.
-        """
-        for previousFluxResidual, nGrew in incrementResidualHistory.values():
-            if nGrew > maxGrowingIter:
-                return True
-        return False
 
     def printResidualOutlierNodes(self, residualOutliers: dict):
         """Print which nodes have the largest residuals.
