@@ -172,6 +172,15 @@
         <span class="p">),</span>
         <span class="n">dtype</span><span class="o">=</span><span class="nb">int</span><span class="p">,</span>
         <span class="n">default</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">makeZeroIncrementFirst</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="n">schemaField</span><span class="p">(</span>
+        <span class="n">description</span><span class="o">=</span><span class="p">(</span>
+            <span class="s2">"Begin the step with an increment of size zero, which brings the model into equilibrium with the state the "</span>
+            <span class="s2">"step starts from before time advances (AdaptiveStep only: an explicit step always begins with it, and "</span>
+            <span class="s2">"refuses False)."</span>
+        <span class="p">),</span>
+        <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">,</span>
+        <span class="n">default</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
     <span class="p">)</span></div>
 
 
@@ -240,6 +249,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">cutbackFactor</span> <span class="o">=</span> <span class="n">options</span><span class="o">.</span><span class="n">cutbackFactor</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">increaseFactor</span> <span class="o">=</span> <span class="n">options</span><span class="o">.</span><span class="n">increaseFactor</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">goodIncrementsBeforeIncrease</span> <span class="o">=</span> <span class="n">options</span><span class="o">.</span><span class="n">goodIncrementsBeforeIncrease</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">makeZeroIncrementFirst</span> <span class="o">=</span> <span class="n">options</span><span class="o">.</span><span class="n">makeZeroIncrementFirst</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">timeStepper</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_createTimeStepper</span><span class="p">()</span>
 

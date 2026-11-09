@@ -112,6 +112,10 @@
 <span class="k">class</span><span class="w"> </span><span class="nc">AdaptiveStepForExplicitSimulations</span><span class="p">(</span><span class="n">StepBase</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""</span>
 <span class="sd">    An adaptive incremental step to be used in nonlinear simulations with explicit time integration.</span>
+
+<span class="sd">    It always begins with the zero increment, in which the explicit solver builds its initial state before time</span>
+<span class="sd">    advances (see :class:`~edelweissfe.timesteppers.simpletimestepper.SimpleTimeStepper`), and refuses</span>
+<span class="sd">    ``makeZeroIncrementFirst=False``.</span>
 <span class="sd">    """</span>
 
     <span class="c1">#: Option schema for this step, per OptionSchemaProvider. Shared with</span>
@@ -119,6 +123,25 @@
     <span class="n">schema</span> <span class="o">=</span> <span class="n">StepIncrementationSchema</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_createTimeStepper</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">SimpleTimeStepper</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The time stepper of the step, which begins with the zero increment.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        SimpleTimeStepper</span>
+<span class="sd">            The time stepper.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If the step is asked to begin without the zero increment (``makeZeroIncrementFirst=False``).</span>
+<span class="sd">        """</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">makeZeroIncrementFirst</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">"step </span><span class="si">{:}</span><span class="s2">: an explicit step always begins with the zero increment, in which the explicit solver builds "</span>
+                <span class="s2">"its initial state; makeZeroIncrementFirst=False is an option of AdaptiveStep only"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">number</span><span class="p">)</span>
+            <span class="p">)</span>
+
         <span class="k">return</span> <span class="n">SimpleTimeStepper</span><span class="p">(</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">time</span><span class="p">,</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">length</span><span class="p">,</span>
