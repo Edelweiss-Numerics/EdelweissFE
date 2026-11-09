@@ -109,6 +109,10 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
     #: above the table, not inside it.
     tableHeaderWritten: bool = False
 
+    #: The force buffer of each constraint, by name, with the DOF indices it was made for, which
+    #: :meth:`assembleConstraintForces` reuses from increment to increment as long as the constraint has these indices.
+    _constraintForcePlans: dict | None = None
+
     def __init__(self, jobInfo, journal, **kwargs):
         pass
 
@@ -287,6 +291,88 @@ class NonlinearSolverBase(OptionSchemaProvider, ABC):
             K.flush()
 
         return P, K
+
+    @performancetiming.timeit("assemble constraints")
+    def assembleConstraintForces(
+        self,
+        constraints: dict,
+        U_np: DofVector,
+        dU: DofVector,
+        P: DofVector,
+        timeStep: TimeStep,
+    ) -> DofVector:
+        """Evaluate every active constraint and add its residual contribution to the given vector; a constraint
+        that is switched off (see :attr:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.active`) is
+        skipped.
+
+        The explicit counterpart of
+        :meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.assembleConstraints`, with the same
+        sign: a constraint adds the negative of the force it exerts on the nodes, like an element its
+        internal force, see :ref:`residual-and-tangent-convention`.
+
+        No tangent is requested. An explicit increment solves no linear system, so a constraint's
+        stiffness enters nothing, and
+        :meth:`~edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernelsExplicit`
+        is the entry point that evaluates the constraint forces directly without assembling a tangent.
+        A constraint that could act *only* through its tangent would contribute nothing here; an explicit solver
+        refuses it in its ``validateModelCapabilities``.
+
+        The force buffer and the DOF indices of each constraint are kept in :attr:`_constraintForcePlans` (by
+        constraint name) and reused in every increment. They hold for the indices of the constraint they were made
+        for: whenever the DofManager locates the constraint anew -- a rebuilt equation system, or one whose
+        constraints are re-located in place --, the constraint has indices of its own, and its plan is made anew.
+
+        Parameters
+        ----------
+        constraints
+            The constraints of the model, by name.
+        U_np
+            The current solution vector.
+        dU
+            The current solution increment.
+        P
+            The residual contribution vector to be augmented.
+        timeStep
+            The current time step.
+
+        Returns
+        -------
+        DofVector
+            The augmented residual contribution vector.
+        """
+
+        # Per-constraint buffers and index plans, made once per equation system.
+        if self._constraintForcePlans is None:
+            self._constraintForcePlans = {}
+        PPlain = P.asPlainArray()
+
+        for name, constraint in constraints.items():
+            # a constraint that is switched off has no place in the equation system
+            if not constraint.active:
+                continue
+
+            # A plan holds for the DOF indices it was made for: a constraint that is located anew has new ones.
+            indices = P.entitiesInDofVector[constraint]
+            plan = self._constraintForcePlans.get(name)
+            if plan is None or plan[1] is not indices:
+                # np.add.at only if a DOF appears more than once (e.g. a slave node in its own master
+                # facet), since fancy-indexed += would drop repeated contributions.
+                plan = (np.zeros(constraint.nDof), indices, len(np.unique(indices)) != len(indices))
+                self._constraintForcePlans[name] = plan
+
+            Pc, _, namesDofMoreThanOnce = plan
+
+            # Reused, so it must be cleared: computeKernelsExplicit augments what it is handed.
+            Pc[:] = 0.0
+
+            constraint.computeKernelsExplicit(U_np[constraint], dU[constraint], Pc, timeStep)
+
+            if namesDofMoreThanOnce:
+                np.add.at(PPlain, indices, Pc)
+            else:
+                PPlain[indices] += Pc
+
+        return P
 
     def getRestartData(self) -> dict[str, np.ndarray]:
         """The state this solver carries from one increment to the next, as it is; see
