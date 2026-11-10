@@ -802,19 +802,50 @@ class DofManager:
                 "written as a whole only by the DofManager that numbers it".format(nodeField.name)
             )
 
-    def writeDofVectorToNodeField(self, dofVector, nodeField, resultName):
-        """Write the current values of an entire NodeField from the respective locations in a given DofVector.
+    def _locateNodeFieldOnNodeSet(self, nodeField: NodeField, nodeSet: NodeSet) -> tuple[np.ndarray, list]:
+        """Where the values of a NodeField on the nodes of a node set lie, in the DofVector and in the NodeField: the
+        nodes of the set whose field is part of this equation system (see :meth:`locateFieldOnNodeSet`).
 
+        Parameters
+        ----------
+        nodeField
+            The NodeField.
+        nodeSet
+            The NodeSet.
+
+        Returns
+        -------
+        tuple[np.ndarray, list]
+            - The indices of the degrees of freedom in the DofVector, node after node.
+            - The rows of these nodes in the NodeField, in the same order.
+        """
+
+        indices, nodePositions = self.locateFieldOnNodeSet(nodeField.name, nodeSet)
+        nodes = list(nodeSet)
+
+        return indices, [nodeField.indexOfNode(nodes[position]) for position in nodePositions]
+
+    def writeDofVectorToNodeField(
+        self, dofVector: DofVector, nodeField: NodeField, resultName: str, nodeSet: NodeSet = None
+    ) -> NodeField:
+        """Write the values of a NodeField from the respective locations in a given DofVector; the counterpart of
+        :meth:`writeNodeFieldToDofVector`.
 
         Parameters
         ----------
         dofVector
             The source DofVector.
         nodeField
-            The NodeField to get the updated values: one this DofManager numbers, see :attr:`numberedNodeFields`.
+            The NodeField to get the updated values. Written as a whole, it must be the one this DofManager numbers
+            (see :attr:`numberedNodeFields`); written on a node set, any node field of a field this DofManager numbers,
+            since its rows are then found by node.
         resultName
             The entry of the NodeField to write, one of
             :attr:`NodeField.ENTRIES <edelweissfe.fields.nodefield.NodeField.ENTRIES>`.
+        nodeSet
+            The NodeSet to write: its nodes whose field is part of this equation system (see
+            :meth:`locateFieldOnNodeSet`); the other rows of the NodeField keep their values. If None, all nodes of the
+            NodeField are written.
 
         Returns
         -------
@@ -826,14 +857,20 @@ class DofManager:
         KeyError
             If the entry is not one a node field holds.
         ValueError
-            If this DofManager does not number the NodeField.
+            If this DofManager does not number the field, or, written as a whole, numbers another NodeField of that
+            name.
         """
 
-        self._checkNodeFieldAccess(nodeField, resultName, wholeField=True)
+        self._checkNodeFieldAccess(nodeField, resultName, wholeField=nodeSet is None)
 
-        indices = self.idcsOfNodeFieldsInDofVector[nodeField.name]
-        data = dofVector[indices]
-        nodeField[resultName][:] = data.reshape((-1, nodeField.dimension))
+        if nodeSet is not None:
+            indices, rowsInNodeField = self._locateNodeFieldOnNodeSet(nodeField, nodeSet)
+            nodeField[resultName][rowsInNodeField] = dofVector[indices].reshape((-1, nodeField.dimension))
+
+        else:
+            indices = self.idcsOfNodeFieldsInDofVector[nodeField.name]
+            data = dofVector[indices]
+            nodeField[resultName][:] = data.reshape((-1, nodeField.dimension))
 
         return nodeField
 
@@ -874,9 +911,7 @@ class DofManager:
         self._checkNodeFieldAccess(nodeField, resultName, wholeField=nodeSet is None)
 
         if nodeSet is not None:
-            indices, nodePositions = self.locateFieldOnNodeSet(nodeField.name, nodeSet)
-            nodes = list(nodeSet)
-            rowsInNodeField = [nodeField.indexOfNode(nodes[position]) for position in nodePositions]
+            indices, rowsInNodeField = self._locateNodeFieldOnNodeSet(nodeField, nodeSet)
             dofVector[indices] = nodeField[resultName][rowsInNodeField].flatten()
 
         else:

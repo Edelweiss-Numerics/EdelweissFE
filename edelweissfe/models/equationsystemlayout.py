@@ -78,31 +78,66 @@ class EquationSystemLayout:
         #: whose node fields are the ones the DOF manager numbers: here, the model itself.
         self.modelForLinearSolver = model
 
-    def writeSolutionToDofVector(self, U: DofVector) -> DofVector:
-        """Write the solution the model carries from increment to increment into the solution vector of a (re)built
-        equation system, from which the next increment starts. In a finite element model, every node carries its total
-        solution: the entry ``U`` of every node field is written, and the values of the scalar variables (e.g. the
-        Lagrange multipliers of constraints).
+    def readStateFromModel(self, U: DofVector, V: DofVector = None, A: DofVector = None, dynamicFields: list = None):
+        """Read the state the model carries from increment to increment into the vectors of a (re)built equation
+        system, from which the next increment starts (see the documentation page *Node field results*): the solution
+        ``U``, and, for a solver that integrates in time, the velocity ``V`` and the acceleration ``A``.
+
+        In a finite element model, every node carries its total solution: the entry ``U`` of every node field is read
+        into ``U``, and the values of the scalar variables (e.g. the Lagrange multipliers of constraints). The entries
+        ``V`` and ``A`` of the node fields are read into ``V`` and ``A``, if given.
 
         Parameters
         ----------
         U
-            The solution vector of the equation system, overwritten.
-
-        Returns
-        -------
-        DofVector
-            The solution vector.
+            The solution vector of the equation system, zero, overwritten.
+        V
+            The velocity vector of the equation system, zero, overwritten; None if the solver has none.
+        A
+            The acceleration vector of the equation system, zero, overwritten; None if the solver has none.
+        dynamicFields
+            The names of the fields whose velocity and acceleration are read, e.g. those the solver integrates in time;
+            None for every field.
         """
 
         for nodeField in self.model.nodeFields.values():
-            U = self.dofManager.writeNodeFieldToDofVector(U, nodeField, "U")
+            self.dofManager.writeNodeFieldToDofVector(U, nodeField, "U")
+        self.dofManager.writeScalarVariablesToDofVector(U)
 
-        return self.dofManager.writeScalarVariablesToDofVector(U)
+        for nodeField in self._nodeFieldsWithVelocity(dynamicFields):
+            if V is not None:
+                self.dofManager.writeNodeFieldToDofVector(V, nodeField, "V")
+            if A is not None:
+                self.dofManager.writeNodeFieldToDofVector(A, nodeField, "A")
 
-    def writeResultsToModel(self, U: DofVector, dU: DofVector, P: DofVector):
-        """Write the results of a converged increment to the model: the solution ``U``, its increment ``dU`` and the
-        reaction ``P`` to the entries of the same names of the node fields, and the solution to the scalar variables.
+    def zeroIncrementalCoefficients(self, U: DofVector):
+        """Set the degrees of freedom of the nodes that carry no total solution to zero in the solution vector of a
+        converged increment, before its results are written to the model: these *incremental* degrees of freedom are
+        the coefficients of one increment, and every increment starts them at zero (see
+        the documentation page *Node field results*).
+
+        In a finite element model, every node carries its total solution, so there is nothing to do here. A meshfree
+        model, whose background grid and kernel functions are incremental, sets their degrees of freedom to zero.
+
+        Parameters
+        ----------
+        U
+            The solution vector of the converged increment, modified in place.
+        """
+
+    def writeResultsToModel(
+        self,
+        U: DofVector,
+        dU: DofVector,
+        P: DofVector,
+        V: DofVector = None,
+        A: DofVector = None,
+        dynamicFields: list = None,
+    ):
+        """Write the results of an accepted increment to the model, once (see the documentation page *Node field
+        results*): the solution ``U``, its increment ``dU`` and the internal force ``P`` to the entries of the same
+        names of the node fields, the solution to the scalar variables, and, for a solver that integrates in time, the
+        velocity ``V`` and the acceleration ``A`` (see :meth:`writeVelocityAndAccelerationToModel`).
 
         Parameters
         ----------
@@ -111,15 +146,62 @@ class EquationSystemLayout:
         dU
             The increment of the solution.
         P
-            The reaction, the sum of the elements' internal forces.
+            The internal force, the sum of the elements' residual contributions.
+        V
+            The velocity; None to leave the entry ``V`` of the node fields as it is.
+        A
+            The acceleration; None to leave the entry ``A`` of the node fields as it is.
+        dynamicFields
+            The names of the fields whose velocity and acceleration are written; None for every field.
         """
 
         for nodeField in self.model.nodeFields.values():
             self.dofManager.writeDofVectorToNodeField(U, nodeField, "U")
             self.dofManager.writeDofVectorToNodeField(P, nodeField, "P")
             self.dofManager.writeDofVectorToNodeField(dU, nodeField, "dU")
-
         self.dofManager.writeDofVectorToScalarVariables(U)
+
+        self.writeVelocityAndAccelerationToModel(V, A, dynamicFields)
+
+    def writeVelocityAndAccelerationToModel(self, V: DofVector, A: DofVector, dynamicFields: list = None):
+        """Write the velocity and the acceleration to the entries ``V`` and ``A`` of the node fields: at acceptance,
+        as part of :meth:`writeResultsToModel`, and when a solver completes the state an increment starts from, e.g.
+        the acceleration the implicit dynamic solver computes from equilibrium at the start of a step.
+
+        Parameters
+        ----------
+        V
+            The velocity; None to leave the entry ``V`` as it is.
+        A
+            The acceleration; None to leave the entry ``A`` as it is.
+        dynamicFields
+            The names of the fields whose velocity and acceleration are written; None for every field.
+        """
+
+        for nodeField in self._nodeFieldsWithVelocity(dynamicFields):
+            if V is not None:
+                self.dofManager.writeDofVectorToNodeField(V, nodeField, "V")
+            if A is not None:
+                self.dofManager.writeDofVectorToNodeField(A, nodeField, "A")
+
+    def _nodeFieldsWithVelocity(self, dynamicFields: list | None) -> list:
+        """The node fields of the model whose velocity and acceleration a solver reads or writes.
+
+        Parameters
+        ----------
+        dynamicFields
+            Their names, or None for every node field.
+
+        Returns
+        -------
+        list
+            The node fields.
+        """
+
+        if dynamicFields is None:
+            return list(self.model.nodeFields.values())
+
+        return [self.model.nodeFields[fieldName] for fieldName in dynamicFields]
 
     def updateMaterialPoints(self, dU: DofVector, timeStep: TimeStep, forEachChunk: Callable[[list, Callable], None]):
         """Bring the material points that belong to no element up to date with the trial solution increment, right

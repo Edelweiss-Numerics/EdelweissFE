@@ -423,9 +423,9 @@ class NIST(NonlinearSolverBase):
     #: freedom these dU are vectors of; and the state of the convergence criterion.
     checkpointedState = {
         "prevTimeStep": TimeStep,
-        "dU": np.ndarray,
-        "timeStepBeforePrev": TimeStep,
-        "dUBeforePrev": np.ndarray,
+        "dUOfLastIncrement": np.ndarray,
+        "timeStepOfIncrementBeforeLast": TimeStep,
+        "dUOfIncrementBeforeLast": np.ndarray,
         "dofNumberingOfLastIncrement": str,
         "convergenceCriterion": ConvergenceCriterionBase,
     }
@@ -452,15 +452,17 @@ class NIST(NonlinearSolverBase):
 
         #: The last accepted increment, from which the predictor extrapolates (None: no extrapolation).
         self.prevTimeStep = None
-        #: The solution increment of the last accepted increment.
-        self.dU = None
+        #: The solution increment of the last accepted increment, kept for the predictor: a copy, since the working
+        #: increment of the equation system changes in every iteration, and the model's entry ``dU`` is a result,
+        #: which no solver reads back.
+        self.dUOfLastIncrement = None
         #: The accepted increment before :attr:`prevTimeStep`, kept for a quadratic extrapolation only (else None).
-        self.timeStepBeforePrev = None
-        #: The solution increment of :attr:`timeStepBeforePrev`.
-        self.dUBeforePrev = None
+        self.timeStepOfIncrementBeforeLast = None
+        #: The solution increment of :attr:`timeStepOfIncrementBeforeLast`.
+        self.dUOfIncrementBeforeLast = None
         #: The digest of the numbering of the degrees of freedom of the equation system the last increment was accepted
-        #: in (:attr:`~edelweissfe.numerics.dofmanager.DofManager.dofNumberingDigest`): :attr:`dU` is a
-        #: vector of it, and so is :attr:`dUBeforePrev`, which is kept only as long as the prediction
+        #: in (:attr:`~edelweissfe.numerics.dofmanager.DofManager.dofNumberingDigest`): :attr:`dUOfLastIncrement` is a
+        #: vector of it, and so is :attr:`dUOfIncrementBeforeLast`, which is kept only as long as the prediction
         #: survives the rebuilds of the equation system (see :meth:`predictionSurvivesRebuild`).
         self.dofNumberingOfLastIncrement = None
         #: The convergence criterion of the current step, created when the step begins (None before).
@@ -605,9 +607,9 @@ class NIST(NonlinearSolverBase):
 
         # A step starts without a predictor state; a resumed step takes over the checkpointed one.
         self.prevTimeStep = None
-        self.dU = None
-        self.timeStepBeforePrev = None
-        self.dUBeforePrev = None
+        self.dUOfLastIncrement = None
+        self.timeStepOfIncrementBeforeLast = None
+        self.dUOfIncrementBeforeLast = None
         self.dofNumberingOfLastIncrement = None
 
         self.validateModelCapabilities(model)
@@ -737,7 +739,7 @@ class NIST(NonlinearSolverBase):
                 P = self.theDofManager.constructDofVector()
                 dU = self.theDofManager.constructDofVector()
 
-                U = self.equationSystemLayout.writeSolutionToDofVector(U)
+                self.readStateFromModel(U)
 
                 with performancetiming.timeit("mpc transformation build"):
                     self.mpcTransformation = self.buildMPCTransformation(model, step.actions)
@@ -818,7 +820,7 @@ class NIST(NonlinearSolverBase):
 
             # Commit the settled state as a converged sub-increment (no output): elements integrate
             # incrementally from the committed state, so otherwise U and the internal state disagree.
-            self.equationSystemLayout.writeResultsToModel(U, dU, P)
+            self.writeResultsToModel(U, dU, P)
             model.advanceToTime(equilibrationTimeStep.totalTime)
             self._U, self._dU, self._P = U, dU, P
 
@@ -865,6 +867,55 @@ class NIST(NonlinearSolverBase):
 
         self._U, self._dU, self._P = U, dU, P
         self._iterationCounter = iterationCounter
+
+    def readStateFromModel(self, U: DofVector):
+        """Read the state the next increment starts from out of the model, into the vectors of the equation system just
+        (re)built: here, the solution, through the model's layout of the equation system (see
+        :meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.readStateFromModel`). A solver that
+        integrates in time reads its velocity and acceleration as well.
+
+        Parameters
+        ----------
+        U
+            The solution vector of the equation system, zero, overwritten.
+        """
+
+        self.equationSystemLayout.readStateFromModel(U)
+
+    def writeResultsToModel(
+        self,
+        U: DofVector,
+        dU: DofVector,
+        P: DofVector,
+        V: DofVector = None,
+        A: DofVector = None,
+        dynamicFields: list = None,
+    ):
+        """Write the results of a converged increment to the model, through the model's layout of the equation system:
+        the incremental degrees of freedom are set to zero first, from where the next increment starts them (see
+        :meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.zeroIncrementalCoefficients`), then the
+        solution, its increment and the internal force are written (see
+        :meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeResultsToModel`). A solver that
+        integrates in time passes its velocity and acceleration as well.
+
+        Parameters
+        ----------
+        U
+            The solution.
+        dU
+            The solution increment.
+        P
+            The internal force.
+        V
+            The velocity of a solver that integrates in time; None for a static solver.
+        A
+            The acceleration of a solver that integrates in time; None for a static solver.
+        dynamicFields
+            The names of the fields the solver integrates in time; None for a static solver.
+        """
+
+        self.equationSystemLayout.zeroIncrementalCoefficients(U)
+        self.equationSystemLayout.writeResultsToModel(U, dU, P, V, A, dynamicFields)
 
     def createSystemMatrixAssembly(self, assemblyType: type) -> SystemMatrixAssembly:
         """The assembly of the system matrix of the equation system just built (option ``systemMatrixAssembly``), on
@@ -967,16 +1018,16 @@ class NIST(NonlinearSolverBase):
 
         # The predictor's history: a quadratic extrapolation needs the accepted increment before the last one, too.
         if self.options["extrapolation"] == "quadratic" and self.prevTimeStep is not None:
-            self.timeStepBeforePrev, self.dUBeforePrev = self.prevTimeStep, self.dU
+            self.timeStepOfIncrementBeforeLast, self.dUOfIncrementBeforeLast = self.prevTimeStep, self.dUOfLastIncrement
         else:
-            self.timeStepBeforePrev, self.dUBeforePrev = None, None
+            self.timeStepOfIncrementBeforeLast, self.dUOfIncrementBeforeLast = None, None
         # After a model change, dU contains the remesh settling transient: optionally do not extrapolate it.
         if self._modelHasChanged and not self.options["extrapolateAfterModelChange"]:
             self.prevTimeStep = None
         else:
             self.prevTimeStep = timeStep
         # A copy: the next increment iterates on dU in place, and may fail.
-        self.dU = dU.copy()
+        self.dUOfLastIncrement = dU.copy()
         self.dofNumberingOfLastIncrement = self.theDofManager.dofNumberingDigest
         self.convergenceCriterion.acceptIncrement()
 
@@ -984,7 +1035,7 @@ class NIST(NonlinearSolverBase):
             step.timeStepper.preventIncrementIncrease()
 
         with performancetiming.timeit("write results to nodes"):
-            self.equationSystemLayout.writeResultsToModel(U, dU, P)
+            self.writeResultsToModel(U, dU, P)
 
         self.updateRigidBodies(model, timeStep)
 
@@ -1138,9 +1189,9 @@ class NIST(NonlinearSolverBase):
             return dU, False
 
         weightOfLast, weightOfBeforeLast = self.extrapolationWeights(extrapolation, timeStep, prevTimeStep)
-        np.multiply(self.dU, weightOfLast, out=dU)
+        np.multiply(self.dUOfLastIncrement, weightOfLast, out=dU)
         if weightOfBeforeLast is not None:
-            dU += weightOfBeforeLast * self.dUBeforePrev
+            dU += weightOfBeforeLast * self.dUOfIncrementBeforeLast
 
         dU = self.applyDirichletToResidual(timeStep, dU, dirichlets)
 
@@ -1180,8 +1231,8 @@ class NIST(NonlinearSolverBase):
         h = timeStep.stepProgressIncrement
         h_n = prevTimeStep.stepProgressIncrement
 
-        if extrapolation == "quadratic" and self.extrapolates(extrapolation, self.timeStepBeforePrev):
-            h_nm1 = self.timeStepBeforePrev.stepProgressIncrement
+        if extrapolation == "quadratic" and self.extrapolates(extrapolation, self.timeStepOfIncrementBeforeLast):
+            h_nm1 = self.timeStepOfIncrementBeforeLast.stepProgressIncrement
             curvatureFactor = h * (h + h_n) / (h_nm1 + h_n)
             return h / h_n + curvatureFactor / h_n, -(curvatureFactor / h_nm1)
 

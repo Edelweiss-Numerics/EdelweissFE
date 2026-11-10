@@ -210,19 +210,23 @@ def test_the_warm_start_reaches_the_deepest_new_nodes(tmp_path):
     model = _buildModel(tmp_path)
     amr = model.modelModifiers["amr"]
 
-    # a non-trivial converged state to warm-start from: u_x = x
+    # a non-trivial converged state to warm-start from: u_x = x, and a result P_x = x
     nodeField = model.nodeFields["displacement"]
     for node in nodeField.nodes:
         idx = nodeField._indicesOfNodesInArray[node]
         nodeField["U"][idx, 0] = node.coordinates[0]
         nodeField["P"][idx, 0] = node.coordinates[0]
+    retainedNodes = set(nodeField.nodes)
 
     _driveMirrorAhead(model, amr, 3)
     with model.topology.changes():
         amr.apply(model, RefinementPlan(eids=[]))
 
     nodeField = model.nodeFields["displacement"]
+    assert set(nodeField.nodes) > retainedNodes
     for node in nodeField.nodes:
         idx = nodeField._indicesOfNodesInArray[node]
         assert np.isclose(nodeField["U"][idx, 0], node.coordinates[0], atol=1e-9), node.label
-        assert np.isclose(nodeField["P"][idx, 0], node.coordinates[0], atol=1e-9), node.label
+        # a result is not interpolated: a new node holds zero until the next accepted increment writes it
+        expectedP = node.coordinates[0] if node in retainedNodes else 0.0
+        assert nodeField["P"][idx, 0] == expectedP, node.label

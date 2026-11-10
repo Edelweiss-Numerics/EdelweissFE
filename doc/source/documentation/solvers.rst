@@ -94,7 +94,11 @@ A solver solves; what the equation system is made of, the model says. ``NIST``, 
      locates the degrees of freedom of a field on a node set, those a Dirichlet boundary condition prescribes or a node
      force loads (:meth:`~edelweissfe.numerics.dofmanager.DofManager.locateFieldOnNodeSet`);
    * the elements, a list of everything the solver computes like an element (``computeElements``);
-   * where the solution vector starts from after a rebuild, and where the results of a converged increment go;
+   * the state the solution vector (and the velocity and acceleration of a dynamic solver) starts from after a
+     rebuild, :meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.readStateFromModel`, and where the
+     results of an accepted increment go,
+     :meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeResultsToModel` (see
+     :doc:`nodefieldresults`);
    * the model the linear solver is set up for.
 
 3. **Is anything to be updated before the elements are computed?** In every evaluation of the model -- every Newton
@@ -110,8 +114,9 @@ The loops over the entities stay with the solver: ``NIST`` computes the elements
 
 The other solvers ask a part of these questions. ``NID`` and ``NEST`` derive from ``NIST``, and build, fill and write
 back their equation systems through the layout; ``NEST`` builds its system once per step and has no topology update,
-and ``NID`` assembles its mass matrix from the model's finite elements. ``NED`` takes only the numbering of the
-degrees of freedom from the layout, and evaluates the model's finite elements in its own loop.
+and ``NID`` assembles its mass matrix from the model's finite elements. ``NED`` takes the numbering of the
+degrees of freedom from the layout and passes the state and the results through it, and evaluates the model's finite
+elements in its own loop.
 
 A finite element model answers as follows: its constraints update the nodes they couple (a contact constraint
 searches for the surface it touches); its equation system numbers all nodes and the active constraints with their
@@ -264,7 +269,7 @@ The options of Newton's method act on the pair of the solution increment and the
   not satisfy it yet.
 * ``fallBackToQuasiNewton``: the tangent of the first iteration serves both right-hand sides.
 
-Every converged increment publishes the load parameter of its step as
+Every accepted increment writes the load parameter of its step to the model, with its results, as
 ``model.additionalParameters["arc length parameter"]``, e.g. for a load-displacement curve. The solver checkpoints the
 load parameter of the step and the increments of it its predictor extrapolates, the loads what they keep from step to
 step, and the controller the change of its controlled quantity over the step, so an arc length controlled run resumes
