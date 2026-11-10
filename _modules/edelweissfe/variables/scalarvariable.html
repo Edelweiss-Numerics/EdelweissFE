@@ -110,11 +110,19 @@
 <div class="viewcode-block" id="ScalarVariable">
 <a class="viewcode-back" href="../../../documentation/variables.html#edelweissfe.variables.scalarvariable.ScalarVariable">[docs]</a>
 <span class="k">class</span><span class="w"> </span><span class="nc">ScalarVariable</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""A basic scalar variable, not tied to a spatial position."""</span>
+<span class="w">    </span><span class="sd">"""A basic scalar variable, not tied to a spatial position.</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span>
-    <span class="p">):</span>
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    name</span>
+<span class="sd">        The name under which the model holds it (see :attr:`~edelweissfe.models.femodel.FEModel.scalarVariables`),</span>
+<span class="sd">        the same in every run of the model: a restart checkpoint stores its value under this name, and the numbering</span>
+<span class="sd">        of the degrees of freedom names it so</span>
+<span class="sd">        (:attr:`~edelweissfe.numerics.dofmanager.DofManager.dofNumberingDigest`).</span>
+<span class="sd">    """</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">name</span> <span class="o">=</span> <span class="n">name</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">value</span> <span class="o">=</span> <span class="mf">0.0</span></div>
 
 </pre></div>

@@ -275,13 +275,23 @@ and initializes elements.</p>
 <dt class="sig sig-object py" id="edelweissfe.models.femodel.FEModel.readRestart">
 <span class="sig-name descname"><span class="pre">readRestart</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">restartFile</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">journal</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/models/femodel.html#FEModel.readRestart"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.models.femodel.FEModel.readRestart" title="Link to this definition"></a></dt>
 <dd><p>Read the state of the model from a restart checkpoint written by <a class="reference internal" href="#edelweissfe.models.femodel.FEModel.writeRestart" title="edelweissfe.models.femodel.FEModel.writeRestart"><code class="xref py py-meth docutils literal notranslate"><span class="pre">writeRestart()</span></code></a>.</p>
-<p>The model must already have been rebuilt from the original <code class="docutils literal notranslate"><span class="pre">.inp</span></code> file (same topology)
-and <a class="reference internal" href="#edelweissfe.models.femodel.FEModel.prepareYourself" title="edelweissfe.models.femodel.FEModel.prepareYourself"><code class="xref py py-meth docutils literal notranslate"><span class="pre">prepareYourself()</span></code></a> called, before this is called.</p>
+<p>Either the model has been rebuilt from the original <code class="docutils literal notranslate"><span class="pre">.inp</span></code> file and <a class="reference internal" href="#edelweissfe.models.femodel.FEModel.prepareYourself" title="edelweissfe.models.femodel.FEModel.prepareYourself"><code class="xref py py-meth docutils literal notranslate"><span class="pre">prepareYourself()</span></code></a>
+called – a resumed run – or it is the very model the checkpoint was written from, going back
+to it within the run (see <a class="reference internal" href="steps.html#edelweissfe.steps.base.stepbase.StepBase.fallBackToCheckpoint" title="edelweissfe.steps.base.stepbase.StepBase.fallBackToCheckpoint"><code class="xref py py-meth docutils literal notranslate"><span class="pre">fallBackToCheckpoint()</span></code></a>).
+Of the recorded topology decisions, those the model has not applied yet are replayed: all of
+them for a rebuilt model, none for a model going back. A model whose mesh has changed since
+the checkpoint cannot go back to it, since a mesh change cannot be undone.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>restartFile</strong> (<em>File</em>) – An open, readable <code class="xref py py-class docutils literal notranslate"><span class="pre">h5py.File</span></code> (or group) to read the checkpoint from.</p></li>
 <li><p><strong>journal</strong> (<a class="reference internal" href="journal.html#edelweissfe.journal.journal.Journal" title="edelweissfe.journal.journal.Journal"><em>Journal</em></a>) – Optional Journal for the progress messages of the topology replay.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><ul class="simple">
+<li><p><a class="reference internal" href="exceptions.html#edelweissfe.utils.exceptions.RestartError" title="edelweissfe.utils.exceptions.RestartError"><strong>RestartError</strong></a> – If the model is not the one the checkpoint was written from, before anything is restored.</p></li>
+<li><p><a class="reference internal" href="exceptions.html#edelweissfe.utils.exceptions.MeshChangedSinceCheckpoint" title="edelweissfe.utils.exceptions.MeshChangedSinceCheckpoint"><strong>MeshChangedSinceCheckpoint</strong></a> – If the model’s mesh has changed since the checkpoint was written, before anything is restored.</p></li>
 </ul>
 </dd>
 </dl>

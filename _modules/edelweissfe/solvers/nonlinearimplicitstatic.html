@@ -499,20 +499,20 @@
         <span class="s2">"abaqusInitialTimeAveragedFlux"</span><span class="p">:</span> <span class="mf">1e-2</span><span class="p">,</span>
     <span class="p">}</span>
 
-    <span class="c1">#: The convergence criterion of the current step.</span>
-    <span class="n">convergenceCriterion</span> <span class="o">=</span> <span class="kc">None</span>
-
     <span class="c1">#: What the model's current equation system is made of (see</span>
     <span class="c1">#: :meth:`~edelweissfe.models.femodel.FEModel.buildEquationSystem`), rebuilt with it; None until it is built.</span>
     <span class="n">equationSystemLayout</span> <span class="o">=</span> <span class="kc">None</span>
 
-    <span class="c1">#: The predictor's state between increments: the last accepted increment and its dU, and, for a quadratic</span>
-    <span class="c1">#: extrapolation, the accepted increment before it and its dU.</span>
+    <span class="c1">#: The predictor's state between increments: the last accepted increment and its dU, for a quadratic</span>
+    <span class="c1">#: extrapolation the accepted increment before it and its dU, and the digest of the numbering of the degrees of</span>
+    <span class="c1">#: freedom these dU are vectors of; and the state of the convergence criterion.</span>
     <span class="n">checkpointedState</span> <span class="o">=</span> <span class="p">{</span>
         <span class="s2">"prevTimeStep"</span><span class="p">:</span> <span class="n">TimeStep</span><span class="p">,</span>
         <span class="s2">"dU"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
         <span class="s2">"timeStepBeforePrev"</span><span class="p">:</span> <span class="n">TimeStep</span><span class="p">,</span>
         <span class="s2">"dUBeforePrev"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+        <span class="s2">"dofNumberingOfLastIncrement"</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="s2">"convergenceCriterion"</span><span class="p">:</span> <span class="n">ConvergenceCriterionBase</span><span class="p">,</span>
     <span class="p">}</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">jobInfo</span><span class="p">,</span> <span class="n">journal</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
@@ -543,6 +543,13 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">timeStepBeforePrev</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="c1">#: The solution increment of :attr:`timeStepBeforePrev`.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">dUBeforePrev</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="c1">#: The digest of the numbering of the degrees of freedom of the equation system the last increment was accepted</span>
+        <span class="c1">#: in (:attr:`~edelweissfe.numerics.dofmanager.DofManager.dofNumberingDigest`): :attr:`dU` is a</span>
+        <span class="c1">#: vector of it, and so is :attr:`dUBeforePrev`, which is kept only as long as the prediction</span>
+        <span class="c1">#: survives the rebuilds of the equation system (see :meth:`predictionSurvivesRebuild`).</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dofNumberingOfLastIncrement</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="c1">#: The convergence criterion of the current step, created when the step begins (None before).</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">convergenceCriterion</span> <span class="o">=</span> <span class="kc">None</span>
 
 <div class="viewcode-block" id="NIST.applyOptionsOverride">
 <a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.applyOptionsOverride">[docs]</a>
@@ -700,6 +707,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">dU</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">timeStepBeforePrev</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">dUBeforePrev</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dofNumberingOfLastIncrement</span> <span class="o">=</span> <span class="kc">None</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">validateModelCapabilities</span><span class="p">(</span><span class="n">model</span><span class="p">)</span>
 
@@ -787,16 +795,6 @@
             <span class="p">)</span>
 
         <span class="k">if</span> <span class="n">modelHasChanged</span> <span class="ow">or</span> <span class="n">connectivityHasChanged</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="c1"># The prediction may survive a rebuild caused by the connectivity alone, if the rebuilt system numbers the</span>
-            <span class="c1"># degrees of freedom as the last one: remember that numbering, before the last system is dropped.</span>
-            <span class="n">numberingBeforeRebuild</span> <span class="o">=</span> <span class="p">(</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">dofNumbering</span><span class="p">()</span>
-                <span class="k">if</span> <span class="n">connectivityHasChanged</span>
-                <span class="ow">and</span> <span class="ow">not</span> <span class="n">modelHasChanged</span>
-                <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
-                <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s2">"extrapolateAcrossConnectivityChange"</span><span class="p">]</span>
-                <span class="k">else</span> <span class="kc">None</span>
-            <span class="p">)</span>
             <span class="k">with</span> <span class="n">performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"equation system rebuild"</span><span class="p">):</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">forgetEquationSystem</span><span class="p">()</span>
                 <span class="c1"># The model says what its equation system is made of: the numbering of the degrees of freedom, the</span>
@@ -862,11 +860,9 @@
                 <span class="k">with</span> <span class="n">performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"system matrix assembly setup"</span><span class="p">):</span>
                     <span class="n">K</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">createSystemMatrixAssembly</span><span class="p">(</span><span class="n">assemblyType</span><span class="p">)</span>
 
-                <span class="c1"># After a topology change, the last dU belongs to a different DOF layout: do not extrapolate this</span>
-                <span class="c1"># increment. After a change of the connectivity alone, it may still fit.</span>
-                <span class="k">if</span> <span class="n">modelHasChanged</span> <span class="ow">or</span> <span class="p">(</span>
-                    <span class="n">connectivityHasChanged</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">predictionSurvivesRebuild</span><span class="p">(</span><span class="n">numberingBeforeRebuild</span><span class="p">)</span>
-                <span class="p">):</span>
+                <span class="c1"># The last accepted increments are vectors of the equation system they were solved in: this increment</span>
+                <span class="c1"># extrapolates them only if the rebuilt system numbers the degrees of freedom alike.</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">predictionSurvivesRebuild</span><span class="p">(</span><span class="n">modelHasChanged</span><span class="p">,</span> <span class="n">connectivityHasChanged</span><span class="p">):</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">prevTimeStep</span> <span class="o">=</span> <span class="kc">None</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_U</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dU</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_P</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_K</span> <span class="o">=</span> <span class="n">U</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">P</span><span class="p">,</span> <span class="n">K</span>
         <span class="c1"># the equation system of this increment, just built or kept from the last one</span>
@@ -1033,29 +1029,40 @@
 
 <div class="viewcode-block" id="NIST.predictionSurvivesRebuild">
 <a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.predictionSurvivesRebuild">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">predictionSurvivesRebuild</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">numberingBeforeRebuild</span><span class="p">:</span> <span class="nb">tuple</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""Whether the last accepted increment still fits the equation system rebuilt after a change of the</span>
-<span class="sd">        connectivity alone (e.g., a contact search), so that this increment may extrapolate it: only with</span>
-<span class="sd">        ``extrapolateAcrossConnectivityChange``, and only if the rebuilt system numbers the degrees of freedom as the</span>
-<span class="sd">        last one. At the first increment of a resumed step there is no last system, and the numbering of the checkpoint</span>
-<span class="sd">        is assumed, as for every resumed prediction.</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">predictionSurvivesRebuild</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">modelHasChanged</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span> <span class="n">connectivityHasChanged</span><span class="p">:</span> <span class="nb">bool</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Whether this increment may extrapolate the last accepted increments after the equation system was rebuilt.</span>
+<span class="sd">        They are vectors of the equation system they were solved in, so they fit the rebuilt one only if it numbers the</span>
+<span class="sd">        degrees of freedom alike, which the digests of the two numberings tell</span>
+<span class="sd">        (:attr:`~edelweissfe.numerics.dofmanager.DofManager.dofNumberingDigest`; the one of the last accepted</span>
+<span class="sd">        increments is :attr:`dofNumberingOfLastIncrement`):</span>
+
+<span class="sd">        * after a change of the topology (e.g., a mesh refinement), never;</span>
+<span class="sd">        * after a change of the connectivity alone (e.g., a contact search), only with</span>
+<span class="sd">          ``extrapolateAcrossConnectivityChange``, and only if the numbering is unchanged;</span>
+<span class="sd">        * at the first increment of a step that continues from a restart checkpoint -- resumed, or fallen back to --</span>
+<span class="sd">          only if the rebuilt system numbers the degrees of freedom as the checkpoint's last accepted increments are</span>
+<span class="sd">          numbered: e.g., the active cells of a material point model may have changed since. A prediction without the</span>
+<span class="sd">          digest of its numbering has nothing to be compared with, and is dropped.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
-<span class="sd">        numberingBeforeRebuild</span>
-<span class="sd">            The :meth:`~edelweissfe.numerics.dofmanager.DofManager.dofNumbering` of the last equation system, or None</span>
-<span class="sd">            if there was none.</span>
+<span class="sd">        modelHasChanged</span>
+<span class="sd">            Whether the topology update changed the model.</span>
+<span class="sd">        connectivityHasChanged</span>
+<span class="sd">            Whether it changed the connectivity alone.</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
 <span class="sd">        bool</span>
-<span class="sd">            True if the prediction may extrapolate the last accepted increment.</span>
+<span class="sd">            True if the prediction may extrapolate the last accepted increments.</span>
 <span class="sd">        """</span>
 
-        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s2">"extrapolateAcrossConnectivityChange"</span><span class="p">]:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">prevTimeStep</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">modelHasChanged</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">False</span>
+        <span class="k">if</span> <span class="n">connectivityHasChanged</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s2">"extrapolateAcrossConnectivityChange"</span><span class="p">]:</span>
             <span class="k">return</span> <span class="kc">False</span>
 
-        <span class="k">return</span> <span class="n">numberingBeforeRebuild</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">dofNumbering</span><span class="p">()</span> <span class="o">==</span> <span class="n">numberingBeforeRebuild</span></div>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">dofNumberingOfLastIncrement</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">dofNumberingDigest</span></div>
 
 
 <div class="viewcode-block" id="NIST.acceptIncrement">
@@ -1090,6 +1097,7 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">prevTimeStep</span> <span class="o">=</span> <span class="n">timeStep</span>
         <span class="c1"># A copy: the next increment iterates on dU in place, and may fail.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">dU</span> <span class="o">=</span> <span class="n">dU</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dofNumberingOfLastIncrement</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">dofNumberingDigest</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">convergenceCriterion</span><span class="o">.</span><span class="n">acceptIncrement</span><span class="p">()</span>
 
         <span class="k">if</span> <span class="n">iterationCounter</span> <span class="o">&gt;=</span> <span class="n">step</span><span class="o">.</span><span class="n">criticalIter</span><span class="p">:</span>

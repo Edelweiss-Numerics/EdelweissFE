@@ -365,7 +365,6 @@ material points evaluate their material; the cells then integrate the result.</p
 </dd>
 <dt class="field-even">Attributes<span class="colon">:</span></dt>
 <dd class="field-even"><dl class="simple">
-<dt><strong>convergenceCriterion</strong></dt><dd></dd>
 <dt><strong>convergenceTable</strong></dt><dd></dd>
 <dt><strong>equationSystemLayout</strong></dt><dd></dd>
 <dt><strong>incrementStatus</strong></dt><dd></dd>
@@ -511,8 +510,8 @@ material points evaluate their material; the cells then integrate the result.</p
 <tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.solvers.nonlinearimplicitstatic.NIST.numberOfAssemblyWorkers" title="edelweissfe.solvers.nonlinearimplicitstatic.NIST.numberOfAssemblyWorkers"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numberOfAssemblyWorkers</span></code></a>()</p></td>
 <td><p>How many threads write blocks of the system matrix at the same time: one, the elements are computed in the calling thread.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.solvers.nonlinearimplicitstatic.NIST.predictionSurvivesRebuild" title="edelweissfe.solvers.nonlinearimplicitstatic.NIST.predictionSurvivesRebuild"><code class="xref py py-obj docutils literal notranslate"><span class="pre">predictionSurvivesRebuild</span></code></a>(numberingBeforeRebuild)</p></td>
-<td><p>Whether the last accepted increment still fits the equation system rebuilt after a change of the connectivity alone (e.g., a contact search), so that this increment may extrapolate it: only with <code class="docutils literal notranslate"><span class="pre">extrapolateAcrossConnectivityChange</span></code>, and only if the rebuilt system numbers the degrees of freedom as the last one.</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.solvers.nonlinearimplicitstatic.NIST.predictionSurvivesRebuild" title="edelweissfe.solvers.nonlinearimplicitstatic.NIST.predictionSurvivesRebuild"><code class="xref py py-obj docutils literal notranslate"><span class="pre">predictionSurvivesRebuild</span></code></a>(modelHasChanged, ...)</p></td>
+<td><p>Whether this increment may extrapolate the last accepted increments after the equation system was rebuilt.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.solvers.nonlinearimplicitstatic.NIST.prepareIncrement" title="edelweissfe.solvers.nonlinearimplicitstatic.NIST.prepareIncrement"><code class="xref py py-obj docutils literal notranslate"><span class="pre">prepareIncrement</span></code></a>(step, model, isRetry)</p></td>
 <td><p>The topology update, at the start of every increment; see <code class="xref py py-meth docutils literal notranslate"><span class="pre">prepareIncrement()</span></code>.</p></td>
@@ -1241,19 +1240,30 @@ calling thread.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="edelweissfe.solvers.nonlinearimplicitstatic.NIST.predictionSurvivesRebuild">
-<span class="sig-name descname"><span class="pre">predictionSurvivesRebuild</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">numberingBeforeRebuild</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/solvers/nonlinearimplicitstatic.html#NIST.predictionSurvivesRebuild"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.solvers.nonlinearimplicitstatic.NIST.predictionSurvivesRebuild" title="Link to this definition"></a></dt>
-<dd><p>Whether the last accepted increment still fits the equation system rebuilt after a change of the
-connectivity alone (e.g., a contact search), so that this increment may extrapolate it: only with
-<code class="docutils literal notranslate"><span class="pre">extrapolateAcrossConnectivityChange</span></code>, and only if the rebuilt system numbers the degrees of freedom as the
-last one. At the first increment of a resumed step there is no last system, and the numbering of the checkpoint
-is assumed, as for every resumed prediction.</p>
+<span class="sig-name descname"><span class="pre">predictionSurvivesRebuild</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">modelHasChanged</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">connectivityHasChanged</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/solvers/nonlinearimplicitstatic.html#NIST.predictionSurvivesRebuild"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.solvers.nonlinearimplicitstatic.NIST.predictionSurvivesRebuild" title="Link to this definition"></a></dt>
+<dd><p>Whether this increment may extrapolate the last accepted increments after the equation system was rebuilt.
+They are vectors of the equation system they were solved in, so they fit the rebuilt one only if it numbers the
+degrees of freedom alike, which the digests of the two numberings tell
+(<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofmanager.DofManager.dofNumberingDigest" title="edelweissfe.numerics.dofmanager.DofManager.dofNumberingDigest"><code class="xref py py-attr docutils literal notranslate"><span class="pre">dofNumberingDigest</span></code></a>; the one of the last accepted
+increments is <a class="reference internal" href="#edelweissfe.solvers.nonlinearimplicitstatic.NIST.dofNumberingOfLastIncrement" title="edelweissfe.solvers.nonlinearimplicitstatic.NIST.dofNumberingOfLastIncrement"><code class="xref py py-attr docutils literal notranslate"><span class="pre">dofNumberingOfLastIncrement</span></code></a>):</p>
+<ul class="simple">
+<li><p>after a change of the topology (e.g., a mesh refinement), never;</p></li>
+<li><p>after a change of the connectivity alone (e.g., a contact search), only with
+<code class="docutils literal notranslate"><span class="pre">extrapolateAcrossConnectivityChange</span></code>, and only if the numbering is unchanged;</p></li>
+<li><p>at the first increment of a step that continues from a restart checkpoint – resumed, or fallen back to –
+only if the rebuilt system numbers the degrees of freedom as the checkpoint’s last accepted increments are
+numbered: e.g., the active cells of a material point model may have changed since. A prediction without the
+digest of its numbering has nothing to be compared with, and is dropped.</p></li>
+</ul>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>numberingBeforeRebuild</strong> (<em>tuple</em><em> | </em><em>None</em>) – The <a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofmanager.DofManager.dofNumbering" title="edelweissfe.numerics.dofmanager.DofManager.dofNumbering"><code class="xref py py-meth docutils literal notranslate"><span class="pre">dofNumbering()</span></code></a> of the last equation system, or None
-if there was none.</p>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>modelHasChanged</strong> (<em>bool</em>) – Whether the topology update changed the model.</p></li>
+<li><p><strong>connectivityHasChanged</strong> (<em>bool</em>) – Whether it changed the connectivity alone.</p></li>
+</ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>True if the prediction may extrapolate the last accepted increment.</p>
+<dd class="field-even"><p>True if the prediction may extrapolate the last accepted increments.</p>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>bool</p>
@@ -1472,9 +1482,10 @@ the load parameter an unknown of the iterations, through the predictor and the m
 
 <dl class="py attribute">
 <dt class="sig sig-object py" id="edelweissfe.solvers.nonlinearimplicitstatic.NIST.checkpointedState">
-<span class="sig-name descname"><span class="pre">checkpointedState</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">dict</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">{'dU':</span> <span class="pre">&lt;class</span> <span class="pre">'numpy.ndarray'&gt;,</span> <span class="pre">'dUBeforePrev':</span> <span class="pre">&lt;class</span> <span class="pre">'numpy.ndarray'&gt;,</span> <span class="pre">'prevTimeStep':</span> <span class="pre">&lt;class</span> <span class="pre">'edelweissfe.timesteppers.timestep.TimeStep'&gt;,</span> <span class="pre">'timeStepBeforePrev':</span> <span class="pre">&lt;class</span> <span class="pre">'edelweissfe.timesteppers.timestep.TimeStep'&gt;}</span></span><a class="headerlink" href="#edelweissfe.solvers.nonlinearimplicitstatic.NIST.checkpointedState" title="Link to this definition"></a></dt>
-<dd><p>the last accepted increment and its dU, and, for a quadratic
-extrapolation, the accepted increment before it and its dU.</p>
+<span class="sig-name descname"><span class="pre">checkpointedState</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">dict</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">{'convergenceCriterion':</span> <span class="pre">&lt;class</span> <span class="pre">'edelweissfe.solvers.base.convergencecriteria.ConvergenceCriterionBase'&gt;,</span> <span class="pre">'dU':</span> <span class="pre">&lt;class</span> <span class="pre">'numpy.ndarray'&gt;,</span> <span class="pre">'dUBeforePrev':</span> <span class="pre">&lt;class</span> <span class="pre">'numpy.ndarray'&gt;,</span> <span class="pre">'dofNumberingOfLastIncrement':</span> <span class="pre">&lt;class</span> <span class="pre">'str'&gt;,</span> <span class="pre">'prevTimeStep':</span> <span class="pre">&lt;class</span> <span class="pre">'edelweissfe.timesteppers.timestep.TimeStep'&gt;,</span> <span class="pre">'timeStepBeforePrev':</span> <span class="pre">&lt;class</span> <span class="pre">'edelweissfe.timesteppers.timestep.TimeStep'&gt;}</span></span><a class="headerlink" href="#edelweissfe.solvers.nonlinearimplicitstatic.NIST.checkpointedState" title="Link to this definition"></a></dt>
+<dd><p>the last accepted increment and its dU, for a quadratic
+extrapolation the accepted increment before it and its dU, and the digest of the numbering of the degrees of
+freedom these dU are vectors of; and the state of the convergence criterion.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>The predictor’s state between increments</p>
@@ -1484,8 +1495,8 @@ extrapolation, the accepted increment before it and its dU.</p>
 
 <dl class="py attribute">
 <dt class="sig sig-object py" id="edelweissfe.solvers.nonlinearimplicitstatic.NIST.convergenceCriterion">
-<span class="sig-name descname"><span class="pre">convergenceCriterion</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#edelweissfe.solvers.nonlinearimplicitstatic.NIST.convergenceCriterion" title="Link to this definition"></a></dt>
-<dd><p>The convergence criterion of the current step.</p>
+<span class="sig-name descname"><span class="pre">convergenceCriterion</span></span><a class="headerlink" href="#edelweissfe.solvers.nonlinearimplicitstatic.NIST.convergenceCriterion" title="Link to this definition"></a></dt>
+<dd><p>The convergence criterion of the current step, created when the step begins (None before).</p>
 </dd></dl>
 
 <dl class="py attribute">
@@ -1498,6 +1509,15 @@ extrapolation, the accepted increment before it and its dU.</p>
 <dt class="sig sig-object py" id="edelweissfe.solvers.nonlinearimplicitstatic.NIST.dUBeforePrev">
 <span class="sig-name descname"><span class="pre">dUBeforePrev</span></span><a class="headerlink" href="#edelweissfe.solvers.nonlinearimplicitstatic.NIST.dUBeforePrev" title="Link to this definition"></a></dt>
 <dd><p>The solution increment of <a class="reference internal" href="#edelweissfe.solvers.nonlinearimplicitstatic.NIST.timeStepBeforePrev" title="edelweissfe.solvers.nonlinearimplicitstatic.NIST.timeStepBeforePrev"><code class="xref py py-attr docutils literal notranslate"><span class="pre">timeStepBeforePrev</span></code></a>.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="edelweissfe.solvers.nonlinearimplicitstatic.NIST.dofNumberingOfLastIncrement">
+<span class="sig-name descname"><span class="pre">dofNumberingOfLastIncrement</span></span><a class="headerlink" href="#edelweissfe.solvers.nonlinearimplicitstatic.NIST.dofNumberingOfLastIncrement" title="Link to this definition"></a></dt>
+<dd><p>The digest of the numbering of the degrees of freedom of the equation system the last increment was accepted
+in (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofmanager.DofManager.dofNumberingDigest" title="edelweissfe.numerics.dofmanager.DofManager.dofNumberingDigest"><code class="xref py py-attr docutils literal notranslate"><span class="pre">dofNumberingDigest</span></code></a>): <a class="reference internal" href="#edelweissfe.solvers.nonlinearimplicitstatic.NIST.dU" title="edelweissfe.solvers.nonlinearimplicitstatic.NIST.dU"><code class="xref py py-attr docutils literal notranslate"><span class="pre">dU</span></code></a> is a
+vector of it, and so is <a class="reference internal" href="#edelweissfe.solvers.nonlinearimplicitstatic.NIST.dUBeforePrev" title="edelweissfe.solvers.nonlinearimplicitstatic.NIST.dUBeforePrev"><code class="xref py py-attr docutils literal notranslate"><span class="pre">dUBeforePrev</span></code></a>, which is kept only as long as the prediction
+survives the rebuilds of the equation system (see <a class="reference internal" href="#edelweissfe.solvers.nonlinearimplicitstatic.NIST.predictionSurvivesRebuild" title="edelweissfe.solvers.nonlinearimplicitstatic.NIST.predictionSurvivesRebuild"><code class="xref py py-meth docutils literal notranslate"><span class="pre">predictionSurvivesRebuild()</span></code></a>).</p>
 </dd></dl>
 
 <dl class="py attribute">
@@ -1817,7 +1837,6 @@ cannot switch abruptly either, as a tangent of materials switching between loadi
 </dd>
 <dt class="field-even">Attributes<span class="colon">:</span></dt>
 <dd class="field-even"><dl class="simple">
-<dt><strong>convergenceCriterion</strong></dt><dd></dd>
 <dt><strong>convergenceTable</strong></dt><dd></dd>
 <dt><strong>equationSystemLayout</strong></dt><dd></dd>
 <dt><strong>incrementStatus</strong></dt><dd></dd>
@@ -1963,8 +1982,8 @@ cannot switch abruptly either, as a tangent of materials switching between loadi
 <tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.solvers.nonlinearimplicitstaticparallel.NISTParallel.numberOfAssemblyWorkers" title="edelweissfe.solvers.nonlinearimplicitstaticparallel.NISTParallel.numberOfAssemblyWorkers"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numberOfAssemblyWorkers</span></code></a>()</p></td>
 <td><p>How many threads write blocks of the system matrix at the same time: those that compute the elements.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">predictionSurvivesRebuild</span></code>(numberingBeforeRebuild)</p></td>
-<td><p>Whether the last accepted increment still fits the equation system rebuilt after a change of the connectivity alone (e.g., a contact search), so that this increment may extrapolate it: only with <code class="docutils literal notranslate"><span class="pre">extrapolateAcrossConnectivityChange</span></code>, and only if the rebuilt system numbers the degrees of freedom as the last one.</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">predictionSurvivesRebuild</span></code>(modelHasChanged, ...)</p></td>
+<td><p>Whether this increment may extrapolate the last accepted increments after the equation system was rebuilt.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">prepareIncrement</span></code>(step, model, isRetry)</p></td>
 <td><p>The topology update, at the start of every increment; see <code class="xref py py-meth docutils literal notranslate"><span class="pre">prepareIncrement()</span></code>.</p></td>
@@ -2350,7 +2369,6 @@ the load parameter it reaches, committed with its state, is the one the next inc
 </dd>
 <dt class="field-even">Attributes<span class="colon">:</span></dt>
 <dd class="field-even"><dl class="simple">
-<dt><strong>convergenceCriterion</strong></dt><dd></dd>
 <dt><strong>convergenceTable</strong></dt><dd></dd>
 <dt><strong>equationSystemLayout</strong></dt><dd></dd>
 <dt><strong>incrementStatus</strong></dt><dd></dd>
@@ -2505,8 +2523,8 @@ the load parameter it reaches, committed with its state, is the one the next inc
 <tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">numberOfAssemblyWorkers</span></code>()</p></td>
 <td><p>How many threads write blocks of the system matrix at the same time: those that compute the elements.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">predictionSurvivesRebuild</span></code>(numberingBeforeRebuild)</p></td>
-<td><p>Whether the last accepted increment still fits the equation system rebuilt after a change of the connectivity alone (e.g., a contact search), so that this increment may extrapolate it: only with <code class="docutils literal notranslate"><span class="pre">extrapolateAcrossConnectivityChange</span></code>, and only if the rebuilt system numbers the degrees of freedom as the last one.</p></td>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">predictionSurvivesRebuild</span></code>(modelHasChanged, ...)</p></td>
+<td><p>Whether this increment may extrapolate the last accepted increments after the equation system was rebuilt.</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">prepareIncrement</span></code>(step, model, isRetry)</p></td>
 <td><p>The topology update, at the start of every increment; see <code class="xref py py-meth docutils literal notranslate"><span class="pre">prepareIncrement()</span></code>.</p></td>
@@ -2956,7 +2974,7 @@ solution it belongs to.</p>
 
 <dl class="py attribute">
 <dt class="sig sig-object py" id="edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength.checkpointedState">
-<span class="sig-name descname"><span class="pre">checkpointedState</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">dict</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">{'Lambda':</span> <span class="pre">&lt;class</span> <span class="pre">'float'&gt;,</span> <span class="pre">'dLambda':</span> <span class="pre">&lt;class</span> <span class="pre">'float'&gt;,</span> <span class="pre">'dLambdaBeforePrev':</span> <span class="pre">&lt;class</span> <span class="pre">'float'&gt;,</span> <span class="pre">'dU':</span> <span class="pre">&lt;class</span> <span class="pre">'numpy.ndarray'&gt;,</span> <span class="pre">'dUBeforePrev':</span> <span class="pre">&lt;class</span> <span class="pre">'numpy.ndarray'&gt;,</span> <span class="pre">'prevTimeStep':</span> <span class="pre">&lt;class</span> <span class="pre">'edelweissfe.timesteppers.timestep.TimeStep'&gt;,</span> <span class="pre">'timeStepBeforePrev':</span> <span class="pre">&lt;class</span> <span class="pre">'edelweissfe.timesteppers.timestep.TimeStep'&gt;}</span></span><a class="headerlink" href="#edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength.checkpointedState" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">checkpointedState</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">dict</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">{'Lambda':</span> <span class="pre">&lt;class</span> <span class="pre">'float'&gt;,</span> <span class="pre">'convergenceCriterion':</span> <span class="pre">&lt;class</span> <span class="pre">'edelweissfe.solvers.base.convergencecriteria.ConvergenceCriterionBase'&gt;,</span> <span class="pre">'dLambda':</span> <span class="pre">&lt;class</span> <span class="pre">'float'&gt;,</span> <span class="pre">'dLambdaBeforePrev':</span> <span class="pre">&lt;class</span> <span class="pre">'float'&gt;,</span> <span class="pre">'dU':</span> <span class="pre">&lt;class</span> <span class="pre">'numpy.ndarray'&gt;,</span> <span class="pre">'dUBeforePrev':</span> <span class="pre">&lt;class</span> <span class="pre">'numpy.ndarray'&gt;,</span> <span class="pre">'dofNumberingOfLastIncrement':</span> <span class="pre">&lt;class</span> <span class="pre">'str'&gt;,</span> <span class="pre">'prevTimeStep':</span> <span class="pre">&lt;class</span> <span class="pre">'edelweissfe.timesteppers.timestep.TimeStep'&gt;,</span> <span class="pre">'timeStepBeforePrev':</span> <span class="pre">&lt;class</span> <span class="pre">'edelweissfe.timesteppers.timestep.TimeStep'&gt;}</span></span><a class="headerlink" href="#edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength.checkpointedState" title="Link to this definition"></a></dt>
 <dd><p>the load parameter the step has reached, and the predictor’s state, NIST’s plus
 the increments of the load parameter that belong to its accepted increments.</p>
 <dl class="field-list simple">
@@ -3711,16 +3729,18 @@ and the Newmark update would divide by its square.</p>
 - \boldsymbol{C} \dot{\boldsymbol{u}}_0\)</span>, with the loads evaluated at the step’s own start (an
 <code class="docutils literal notranslate"><span class="pre">f(t)</span></code> amplitude at <span class="math notranslate nohighlight">\(t = 0\)</span>). Without it, a load applied suddenly at the start of a step
 would enter the trapezoidal rule as though it were zero at <span class="math notranslate nohighlight">\(t_0\)</span>, which costs one first-order
-error in the momentum, and the scheme’s second order is lost. A resumed run skips this: the
-checkpoint carries the acceleration, and recomputing it would replace a consistent state with one
-that agrees only to solver tolerance. Switch it off with <code class="docutils literal notranslate"><span class="pre">computeInitialAcceleration=False</span></code> to
-continue a step from whatever acceleration was carried over.</p>
+error in the momentum, and the scheme’s second order is lost. It is computed in the first real
+increment of the step. A step that continues from a restart checkpoint – a resumed run, or a step
+that falls back to one – therefore computes it only if the checkpoint was written before that,
+after the zero increment: every later checkpoint carries the acceleration, and recomputing it would
+replace a consistent state with one that agrees only to solver tolerance. Switch it off with
+<code class="docutils literal notranslate"><span class="pre">computeInitialAcceleration=False</span></code> to continue a step from whatever acceleration was carried over.</p>
 <p><strong>State and restart.</strong> Velocity and acceleration are ordinary node-field entries, <code class="docutils literal notranslate"><span class="pre">V</span></code> and <code class="docutils literal notranslate"><span class="pre">A</span></code>,
 written after every converged increment alongside the parent’s <code class="docutils literal notranslate"><span class="pre">U</span></code>/<code class="docutils literal notranslate"><span class="pre">P</span></code>/<code class="docutils literal notranslate"><span class="pre">dU</span></code> – the same
 mechanism the explicit solver uses for its velocity. That makes them part of every checkpoint the
 <code class="docutils literal notranslate"><span class="pre">*output,</span> <span class="pre">type=restart</span></code> manager writes and of every <code class="docutils literal notranslate"><span class="pre">*fieldOutput</span></code> (<code class="docutils literal notranslate"><span class="pre">result=V</span></code>,
-<code class="docutils literal notranslate"><span class="pre">result=A</span></code>), with no solver-specific restart code beyond a marker that tells a resumed run not to
-recompute the initial acceleration.</p>
+<code class="docutils literal notranslate"><span class="pre">result=A</span></code>), with no solver-specific restart code beyond the marker of whether the initial
+acceleration is still to be computed.</p>
 <p><strong>Live h-adaptivity.</strong> A <code class="docutils literal notranslate"><span class="pre">*modelModifier,</span> <span class="pre">type=hAdaptivity</span></code> refining the mesh mid-step is
 supported. Three things make that work, and only the third is this solver’s own:</p>
 <ul class="simple">
@@ -3834,7 +3854,6 @@ top of the Newton loop of <a class="reference internal" href="#edelweissfe.solve
 </dd>
 <dt class="field-even">Attributes<span class="colon">:</span></dt>
 <dd class="field-even"><dl class="simple">
-<dt><strong>convergenceCriterion</strong></dt><dd></dd>
 <dt><strong>convergenceTable</strong></dt><dd></dd>
 <dt><strong>equationSystemLayout</strong></dt><dd></dd>
 <dt><strong>incrementStatus</strong></dt><dd></dd>
@@ -3980,8 +3999,8 @@ top of the Newton loop of <a class="reference internal" href="#edelweissfe.solve
 <tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">numberOfAssemblyWorkers</span></code>()</p></td>
 <td><p>How many threads write blocks of the system matrix at the same time: one, the elements are computed in the calling thread.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">predictionSurvivesRebuild</span></code>(numberingBeforeRebuild)</p></td>
-<td><p>Whether the last accepted increment still fits the equation system rebuilt after a change of the connectivity alone (e.g., a contact search), so that this increment may extrapolate it: only with <code class="docutils literal notranslate"><span class="pre">extrapolateAcrossConnectivityChange</span></code>, and only if the rebuilt system numbers the degrees of freedom as the last one.</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">predictionSurvivesRebuild</span></code>(modelHasChanged, ...)</p></td>
+<td><p>Whether this increment may extrapolate the last accepted increments after the equation system was rebuilt.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">prepareIncrement</span></code>(step, model, isRetry)</p></td>
 <td><p>The topology update, at the start of every increment; see <code class="xref py py-meth docutils literal notranslate"><span class="pre">prepareIncrement()</span></code>.</p></td>
@@ -4065,9 +4084,12 @@ tangent; see the parent’s hook. The trial displacement increment fixes the tri
 <dt class="sig sig-object py" id="edelweissfe.solvers.nonlinearimplicitdynamic.NonlinearImplicitDynamic.beginStep">
 <span class="sig-name descname"><span class="pre">beginStep</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">step</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fieldOutputController</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">outputmanagers</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/solvers/nonlinearimplicitdynamic.html#NonlinearImplicitDynamic.beginStep"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.solvers.nonlinearimplicitdynamic.NonlinearImplicitDynamic.beginStep" title="Link to this definition"></a></dt>
 <dd><p>Start a step; see the parent.</p>
-<p>Arms the initial-acceleration computation for a step starting cold and drops the operators
-of the previous step – the parent rebuilds its equation system at the start of every step,
-and the operators follow that system. The velocity and acceleration are not dropped: they
+<p>Arms the initial-acceleration computation and drops the operators of the previous step – the
+parent rebuilds its equation system at the start of every step, and the operators follow that
+system. A step that continues from a restart checkpoint takes over, with the checkpointed state
+restored after this, whether the initial acceleration is still to be computed: the first real
+increment of the step computes it, and a checkpoint written after the zero increment comes
+before that. The velocity and acceleration are not dropped: they
 are re-read from the <code class="docutils literal notranslate"><span class="pre">V</span></code>/<code class="docutils literal notranslate"><span class="pre">A</span></code> node-field entries the previous step (or the checkpoint)
 left, which is what carries the kinematic state across steps.</p>
 <dl class="field-list simple">
@@ -4185,10 +4207,12 @@ appearing at that instant is answered by the initial acceleration, not by a disp
 
 <dl class="py attribute">
 <dt class="sig sig-object py" id="edelweissfe.solvers.nonlinearimplicitdynamic.NonlinearImplicitDynamic.checkpointedState">
-<span class="sig-name descname"><span class="pre">checkpointedState</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">dict</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">{'_conservationCheck':</span> <span class="pre">&lt;class</span> <span class="pre">'edelweissfe.solvers.base.conservationchecks.ConservationCheck'&gt;,</span> <span class="pre">'_conservedAtLastAccept':</span> <span class="pre">&lt;class</span> <span class="pre">'edelweissfe.solvers.nonlinearimplicitdynamic._ConservedQuantities'&gt;,</span> <span class="pre">'dU':</span> <span class="pre">&lt;class</span> <span class="pre">'numpy.ndarray'&gt;,</span> <span class="pre">'dUBeforePrev':</span> <span class="pre">&lt;class</span> <span class="pre">'numpy.ndarray'&gt;,</span> <span class="pre">'prevTimeStep':</span> <span class="pre">&lt;class</span> <span class="pre">'edelweissfe.timesteppers.timestep.TimeStep'&gt;,</span> <span class="pre">'timeStepBeforePrev':</span> <span class="pre">&lt;class</span> <span class="pre">'edelweissfe.timesteppers.timestep.TimeStep'&gt;}</span></span><a class="headerlink" href="#edelweissfe.solvers.nonlinearimplicitdynamic.NonlinearImplicitDynamic.checkpointedState" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">checkpointedState</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">dict</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">{'_conservationCheck':</span> <span class="pre">&lt;class</span> <span class="pre">'edelweissfe.solvers.base.conservationchecks.ConservationCheck'&gt;,</span> <span class="pre">'_conservedAtLastAccept':</span> <span class="pre">&lt;class</span> <span class="pre">'edelweissfe.solvers.nonlinearimplicitdynamic._ConservedQuantities'&gt;,</span> <span class="pre">'_initialAccelerationPending':</span> <span class="pre">&lt;class</span> <span class="pre">'bool'&gt;,</span> <span class="pre">'convergenceCriterion':</span> <span class="pre">&lt;class</span> <span class="pre">'edelweissfe.solvers.base.convergencecriteria.ConvergenceCriterionBase'&gt;,</span> <span class="pre">'dU':</span> <span class="pre">&lt;class</span> <span class="pre">'numpy.ndarray'&gt;,</span> <span class="pre">'dUBeforePrev':</span> <span class="pre">&lt;class</span> <span class="pre">'numpy.ndarray'&gt;,</span> <span class="pre">'dofNumberingOfLastIncrement':</span> <span class="pre">&lt;class</span> <span class="pre">'str'&gt;,</span> <span class="pre">'prevTimeStep':</span> <span class="pre">&lt;class</span> <span class="pre">'edelweissfe.timesteppers.timestep.TimeStep'&gt;,</span> <span class="pre">'timeStepBeforePrev':</span> <span class="pre">&lt;class</span> <span class="pre">'edelweissfe.timesteppers.timestep.TimeStep'&gt;}</span></span><a class="headerlink" href="#edelweissfe.solvers.nonlinearimplicitdynamic.NonlinearImplicitDynamic.checkpointedState" title="Link to this definition"></a></dt>
 <dd><p>The predictor’s state, as in the parent, the drift the conservation checks accumulate over the
-step, and the conserved totals after the last accepted increment, which a topology change is
-compared against. The velocity and acceleration are node-field entries, restored with the model.</p>
+step, the conserved totals after the last accepted increment, which a topology change is
+compared against, and whether the next increment computes the acceleration from equilibrium
+first, which a checkpoint written after the zero increment of a step still has to do. The
+velocity and acceleration are node-field entries, restored with the model.</p>
 </dd></dl>
 
 <dl class="py attribute">
@@ -4436,7 +4460,6 @@ initial-acceleration solve evaluate the elements in parallel.</p>
 </dd>
 <dt class="field-even">Attributes<span class="colon">:</span></dt>
 <dd class="field-even"><dl class="simple">
-<dt><strong>convergenceCriterion</strong></dt><dd></dd>
 <dt><strong>convergenceTable</strong></dt><dd></dd>
 <dt><strong>equationSystemLayout</strong></dt><dd></dd>
 <dt><strong>incrementStatus</strong></dt><dd></dd>
@@ -4582,8 +4605,8 @@ initial-acceleration solve evaluate the elements in parallel.</p>
 <tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">numberOfAssemblyWorkers</span></code>()</p></td>
 <td><p>How many threads write blocks of the system matrix at the same time: those that compute the elements.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">predictionSurvivesRebuild</span></code>(numberingBeforeRebuild)</p></td>
-<td><p>Whether the last accepted increment still fits the equation system rebuilt after a change of the connectivity alone (e.g., a contact search), so that this increment may extrapolate it: only with <code class="docutils literal notranslate"><span class="pre">extrapolateAcrossConnectivityChange</span></code>, and only if the rebuilt system numbers the degrees of freedom as the last one.</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">predictionSurvivesRebuild</span></code>(modelHasChanged, ...)</p></td>
+<td><p>Whether this increment may extrapolate the last accepted increments after the equation system was rebuilt.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">prepareIncrement</span></code>(step, model, isRetry)</p></td>
 <td><p>The topology update, at the start of every increment; see <code class="xref py py-meth docutils literal notranslate"><span class="pre">prepareIncrement()</span></code>.</p></td>
@@ -4816,13 +4839,18 @@ cutback is extrapolated from it as well. Without this option, a failed increment
 increments up to the next accepted one start from zero.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">extrapolateAcrossConnectivityChange</span></code>: a change of the connectivity, e.g., a contact search that couples other
 nodes, rebuilds the equation system, and the increment starts from zero. With this option, it is extrapolated
-nevertheless, as long as the rebuilt system numbers the degrees of freedom exactly as the last one
-(<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofmanager.DofManager.dofNumbering" title="edelweissfe.numerics.dofmanager.DofManager.dofNumbering"><code class="xref py py-meth docutils literal notranslate"><span class="pre">dofNumbering()</span></code></a>): the last accepted increments are vectors of the
-same degrees of freedom then. A change of the topology, e.g., a mesh refinement, always starts from zero (see
+nevertheless, as long as the rebuilt system numbers the degrees of freedom exactly as the one the last increments
+were accepted in (compared by the digests of the two numberings,
+<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofmanager.DofManager.dofNumberingDigest" title="edelweissfe.numerics.dofmanager.DofManager.dofNumberingDigest"><code class="xref py py-attr docutils literal notranslate"><span class="pre">dofNumberingDigest</span></code></a>): the last accepted increments are vectors of
+the same degrees of freedom then. A change of the topology, e.g., a mesh refinement, always starts from zero (see
 <code class="docutils literal notranslate"><span class="pre">extrapolateAfterModelChange</span></code> for the increment that follows it).</p></li>
 </ul>
 <p>Both act on a prediction: a declaration of options – the <code class="docutils literal notranslate"><span class="pre">*solver</span></code> datalines, or an <code class="docutils literal notranslate"><span class="pre">&gt;&gt;options</span></code> block – that
 switches either on with <code class="docutils literal notranslate"><span class="pre">extrapolation=off</span></code> is refused.</p>
+<p>The last accepted increments are checkpointed with the digest of their numbering. A step that continues from a
+restart checkpoint, resumed or fallen back to (see <a class="reference internal" href="restart.html"><span class="doc">Restart</span></a>), rebuilds its equation system at its first
+increment, and extrapolates them only if the rebuilt system numbers the degrees of freedom alike: the numbering of a
+meshfree model, e.g., follows its active cells, which may have changed since the checkpoint was written.</p>
 </section>
 <section id="line-search-and-quasi-newton-fallback-of-the-implicit-solvers">
 <h2>Line search and quasi-Newton fallback of the implicit solvers<a class="headerlink" href="#line-search-and-quasi-newton-fallback-of-the-implicit-solvers" title="Link to this heading"></a></h2>
@@ -5170,12 +5198,25 @@ Both make Abaqus’ criterion <em>more</em> permissive than this implementation.
 </dl>
 </dd></dl>
 
+<dl class="py attribute">
+<dt class="sig sig-object py" id="edelweissfe.solvers.base.convergencecriteria.AbaqusConvergenceCriterion.checkpointedState">
+<span class="sig-name descname"><span class="pre">checkpointedState</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">dict</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">{'_nIncrementsWithFlux':</span> <span class="pre">&lt;class</span> <span class="pre">'dict'&gt;,</span> <span class="pre">'_sumOfConvergedSpatialAveragedFluxes':</span> <span class="pre">&lt;class</span> <span class="pre">'dict'&gt;,</span> <span class="pre">'_timeAveragedFluxOfPreviousStep':</span> <span class="pre">&lt;class</span> <span class="pre">'dict'&gt;}</span></span><a class="headerlink" href="#edelweissfe.solvers.base.convergencecriteria.AbaqusConvergenceCriterion.checkpointedState" title="Link to this definition"></a></dt>
+<dd><p>The time average flux of every field, as the converged increments of the step and the previous step left it.</p>
+</dd></dl>
+
 </dd></dl>
 
 <dl class="py class">
 <dt class="sig sig-object py" id="edelweissfe.solvers.base.convergencecriteria.ConvergenceCriterionBase">
 <span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">edelweissfe.solvers.base.convergencecriteria.</span></span><span class="sig-name descname"><span class="pre">ConvergenceCriterionBase</span></span><a class="reference internal" href="../_modules/edelweissfe/solvers/base/convergencecriteria.html#ConvergenceCriterionBase"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.solvers.base.convergencecriteria.ConvergenceCriterionBase" title="Link to this definition"></a></dt>
 <dd><p>Base class for the field-wise convergence criteria of the implicit solvers.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Attributes<span class="colon">:</span></dt>
+<dd class="field-odd"><dl class="simple">
+<dt><strong>checkpointedState</strong></dt><dd></dd>
+</dl>
+</dd>
+</dl>
 <p class="rubric">Methods</p>
 <table class="autosummary longtable docutils align-default">
 <tbody>
@@ -5295,6 +5336,14 @@ Both make Abaqus’ criterion <em>more</em> permissive than this implementation.
 <dd class="field-even"><p>dict[str,float]</p>
 </dd>
 </dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="edelweissfe.solvers.base.convergencecriteria.ConvergenceCriterionBase.checkpointedState">
+<span class="sig-name descname"><span class="pre">checkpointedState</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">dict</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#edelweissfe.solvers.base.convergencecriteria.ConvergenceCriterionBase.checkpointedState" title="Link to this definition"></a></dt>
+<dd><p>The state this criterion carries from one increment to the next, checkpointed with the solver; see
+<a class="reference internal" href="output.html#module-edelweissfe.utils.checkpointedstate" title="edelweissfe.utils.checkpointedstate"><code class="xref py py-mod docutils literal notranslate"><span class="pre">checkpointedstate</span></code></a>. Every criterion declares it, an empty mapping if it carries
+nothing: one whose declaration is still None cannot be checkpointed.</p>
 </dd></dl>
 
 </dd></dl>
@@ -5475,6 +5524,17 @@ and the zero flux rule, which tells a field that carries no element flux, does n
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>bool</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="edelweissfe.solvers.base.convergencecriteria.LegacyConvergenceCriterion.checkpointedState">
+<span class="sig-name descname"><span class="pre">checkpointedState</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">dict</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">{}</span></span><a class="headerlink" href="#edelweissfe.solvers.base.convergencecriteria.LegacyConvergenceCriterion.checkpointedState" title="Link to this definition"></a></dt>
+<dd><p>every decision is taken from the current iteration alone.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Nothing</p>
 </dd>
 </dl>
 </dd></dl>
@@ -5661,7 +5721,6 @@ topology history prints that replay in a table of its own (top-level <code class
 <dt class="field-even">Attributes<span class="colon">:</span></dt>
 <dd class="field-even"><dl class="simple">
 <dt><strong>checkpointedState</strong></dt><dd></dd>
-<dt><strong>convergenceCriterion</strong></dt><dd></dd>
 <dt><strong>convergenceTable</strong></dt><dd></dd>
 <dt><strong>equationSystemLayout</strong></dt><dd></dd>
 <dt><strong>incrementStatus</strong></dt><dd></dd>
@@ -5807,8 +5866,8 @@ topology history prints that replay in a table of its own (top-level <code class
 <tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">numberOfAssemblyWorkers</span></code>()</p></td>
 <td><p>How many threads write blocks of the system matrix at the same time: one, the elements are computed in the calling thread.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">predictionSurvivesRebuild</span></code>(numberingBeforeRebuild)</p></td>
-<td><p>Whether the last accepted increment still fits the equation system rebuilt after a change of the connectivity alone (e.g., a contact search), so that this increment may extrapolate it: only with <code class="docutils literal notranslate"><span class="pre">extrapolateAcrossConnectivityChange</span></code>, and only if the rebuilt system numbers the degrees of freedom as the last one.</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">predictionSurvivesRebuild</span></code>(modelHasChanged, ...)</p></td>
+<td><p>Whether this increment may extrapolate the last accepted increments after the equation system was rebuilt.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.solvers.nonlinearexplicitstatic.NEST.prepareIncrement" title="edelweissfe.solvers.nonlinearexplicitstatic.NEST.prepareIncrement"><code class="xref py py-obj docutils literal notranslate"><span class="pre">prepareIncrement</span></code></a>(step, model, isRetry)</p></td>
 <td><p>Nothing to prepare: this solver has neither topology updates nor contact.</p></td>
@@ -6106,7 +6165,6 @@ indirection.</p>
 <dt class="field-odd">Attributes<span class="colon">:</span></dt>
 <dd class="field-odd"><dl class="simple">
 <dt><strong>checkpointedState</strong></dt><dd></dd>
-<dt><strong>convergenceCriterion</strong></dt><dd></dd>
 <dt><strong>convergenceTable</strong></dt><dd></dd>
 <dt><strong>equationSystemLayout</strong></dt><dd></dd>
 <dt><strong>incrementStatus</strong></dt><dd></dd>
@@ -6249,8 +6307,8 @@ indirection.</p>
 <tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.solvers.nonlinearexplicitstaticparallel.NESTParallel.numberOfAssemblyWorkers" title="edelweissfe.solvers.nonlinearexplicitstaticparallel.NESTParallel.numberOfAssemblyWorkers"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numberOfAssemblyWorkers</span></code></a>()</p></td>
 <td><p>How many threads write blocks of the system matrix at the same time: those that compute the elements.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">predictionSurvivesRebuild</span></code>(numberingBeforeRebuild)</p></td>
-<td><p>Whether the last accepted increment still fits the equation system rebuilt after a change of the connectivity alone (e.g., a contact search), so that this increment may extrapolate it: only with <code class="docutils literal notranslate"><span class="pre">extrapolateAcrossConnectivityChange</span></code>, and only if the rebuilt system numbers the degrees of freedom as the last one.</p></td>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">predictionSurvivesRebuild</span></code>(modelHasChanged, ...)</p></td>
+<td><p>Whether this increment may extrapolate the last accepted increments after the equation system was rebuilt.</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">prepareIncrement</span></code>(step, model, isRetry)</p></td>
 <td><p>Nothing to prepare: this solver has neither topology updates nor contact.</p></td>

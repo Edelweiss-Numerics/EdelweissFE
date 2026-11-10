@@ -527,12 +527,13 @@ module, used by this output manager for writing and by the driver for resuming (
 <p id="module-edelweissfe.utils.checkpoint">Restart checkpoints: the one place that knows how a checkpoint file is laid out.</p>
 <p>A checkpoint is an HDF5 file holding</p>
 <ul class="simple">
-<li><p>the attribute <code class="docutils literal notranslate"><span class="pre">stepNumber</span></code>, the step the run was in;</p></li>
+<li><p>the attribute <code class="docutils literal notranslate"><span class="pre">stepNumber</span></code>, the step the run was in, and <code class="docutils literal notranslate"><span class="pre">numberOfIncrementsDone</span></code>, how many
+increments of it were accepted;</p></li>
 <li><p>the model’s state, written by <a class="reference internal" href="models.html#edelweissfe.models.femodel.FEModel.writeRestart" title="edelweissfe.models.femodel.FEModel.writeRestart"><code class="xref py py-meth docutils literal notranslate"><span class="pre">writeRestart()</span></code></a>;</p></li>
 <li><p>groups <code class="docutils literal notranslate"><span class="pre">timestepper</span></code> and <code class="docutils literal notranslate"><span class="pre">solver</span></code> with the time stepper’s and the solver’s state;</p></li>
 <li><p>a group <code class="docutils literal notranslate"><span class="pre">stepActions</span></code> with the state of every step action, by type and name – including what
 the steps before carried over, e.g. an accumulated load, and whether an action is still active;</p></li>
-<li><p>a group <code class="docutils literal notranslate"><span class="pre">outputManagers</span></code> with the state of every output manager;</p></li>
+<li><p>a group <code class="docutils literal notranslate"><span class="pre">outputManagers</span></code> with the state of every output manager of the step, by name;</p></li>
 <li><p>a group <code class="docutils literal notranslate"><span class="pre">fieldOutputs</span></code> with the history of every field output, and how much of its export file
 belongs to the run.</p></li>
 </ul>
@@ -546,9 +547,10 @@ reads one back, the driver uses it.</p>
 <span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">edelweissfe.utils.checkpoint.</span></span><span class="sig-name descname"><span class="pre">ResumeCheckpoint</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">fileName</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/utils/checkpoint.html#ResumeCheckpoint"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.utils.checkpoint.ResumeCheckpoint" title="Link to this definition"></a></dt>
 <dd><p>A restart checkpoint opened for resuming a run, restored piece by piece as the run is set up.</p>
 <p>The pieces are restored at different moments, because the objects they belong to are created at
-different moments: the model first (<a class="reference internal" href="#edelweissfe.utils.checkpoint.ResumeCheckpoint.restoreModel" title="edelweissfe.utils.checkpoint.ResumeCheckpoint.restoreModel"><code class="xref py py-meth docutils literal notranslate"><span class="pre">restoreModel()</span></code></a>), the output managers once they exist
-(<code class="xref py py-meth docutils literal notranslate"><span class="pre">restoreOutputManagers()</span></code>), and the time stepper and solver when the resumed step begins
-(<a class="reference internal" href="#edelweissfe.utils.checkpoint.ResumeCheckpoint.restoreStep" title="edelweissfe.utils.checkpoint.ResumeCheckpoint.restoreStep"><code class="xref py py-meth docutils literal notranslate"><span class="pre">restoreStep()</span></code></a>). Close the checkpoint right after that, see <a class="reference internal" href="#edelweissfe.utils.checkpoint.ResumeCheckpoint.close" title="edelweissfe.utils.checkpoint.ResumeCheckpoint.close"><code class="xref py py-meth docutils literal notranslate"><span class="pre">close()</span></code></a>.</p>
+different moments: the model first (<a class="reference internal" href="#edelweissfe.utils.checkpoint.ResumeCheckpoint.restoreModel" title="edelweissfe.utils.checkpoint.ResumeCheckpoint.restoreModel"><code class="xref py py-meth docutils literal notranslate"><span class="pre">restoreModel()</span></code></a>), the time stepper before the resumed
+step begins (<a class="reference internal" href="#edelweissfe.utils.checkpoint.ResumeCheckpoint.restoreTimeStepper" title="edelweissfe.utils.checkpoint.ResumeCheckpoint.restoreTimeStepper"><code class="xref py py-meth docutils literal notranslate"><span class="pre">restoreTimeStepper()</span></code></a>), and the solver, the step actions, the output managers
+and the field outputs of the step once it has begun (<a class="reference internal" href="#edelweissfe.utils.checkpoint.ResumeCheckpoint.restoreStep" title="edelweissfe.utils.checkpoint.ResumeCheckpoint.restoreStep"><code class="xref py py-meth docutils literal notranslate"><span class="pre">restoreStep()</span></code></a>). Close the checkpoint
+right after that, see <a class="reference internal" href="#edelweissfe.utils.checkpoint.ResumeCheckpoint.close" title="edelweissfe.utils.checkpoint.ResumeCheckpoint.close"><code class="xref py py-meth docutils literal notranslate"><span class="pre">close()</span></code></a>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>fileName</strong> (<em>str</em>) – The checkpoint to resume from.</p>
@@ -563,8 +565,8 @@ different moments: the model first (<a class="reference internal" href="#edelwei
 <tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.utils.checkpoint.ResumeCheckpoint.restoreModel" title="edelweissfe.utils.checkpoint.ResumeCheckpoint.restoreModel"><code class="xref py py-obj docutils literal notranslate"><span class="pre">restoreModel</span></code></a>(model, journal)</p></td>
 <td><p>Restore the model's state, see <a class="reference internal" href="models.html#edelweissfe.models.femodel.FEModel.readRestart" title="edelweissfe.models.femodel.FEModel.readRestart"><code class="xref py py-meth docutils literal notranslate"><span class="pre">readRestart()</span></code></a>.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.utils.checkpoint.ResumeCheckpoint.restoreStep" title="edelweissfe.utils.checkpoint.ResumeCheckpoint.restoreStep"><code class="xref py py-obj docutils literal notranslate"><span class="pre">restoreStep</span></code></a>(step, outputManagers)</p></td>
-<td><p>Restore everything else <code class="docutils literal notranslate"><span class="pre">step</span></code> continues from, after it began as if cold: the solver's state between increments, the state of the step actions -- which the skipped steps before it never brought to their step end -- and the output managers' state (Ensight's file numbering, for instance).</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.utils.checkpoint.ResumeCheckpoint.restoreStep" title="edelweissfe.utils.checkpoint.ResumeCheckpoint.restoreStep"><code class="xref py py-obj docutils literal notranslate"><span class="pre">restoreStep</span></code></a>(step)</p></td>
+<td><p>Restore everything else <code class="docutils literal notranslate"><span class="pre">step</span></code> continues from, after it began as if cold: the solver's state between increments, the state of the step actions -- which the skipped steps before it never brought to their step end -- and the state of the step's output managers (Ensight's file numbering, for instance).</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.utils.checkpoint.ResumeCheckpoint.restoreTimeStepper" title="edelweissfe.utils.checkpoint.ResumeCheckpoint.restoreTimeStepper"><code class="xref py py-obj docutils literal notranslate"><span class="pre">restoreTimeStepper</span></code></a>(step)</p></td>
 <td><p>Restore the progress of <code class="docutils literal notranslate"><span class="pre">step</span></code>'s time stepper, before the step begins: it is what tells the step that it is not at its start (see <a class="reference internal" href="utils.html#edelweissfe.timesteppers.base.timestepperbase.TimeStepperBase.isAtStepStart" title="edelweissfe.timesteppers.base.timestepperbase.TimeStepperBase.isAtStepStart"><code class="xref py py-meth docutils literal notranslate"><span class="pre">isAtStepStart()</span></code></a>).</p></td>
@@ -597,17 +599,14 @@ open”, which reads like a solver failure and is not one.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="edelweissfe.utils.checkpoint.ResumeCheckpoint.restoreStep">
-<span class="sig-name descname"><span class="pre">restoreStep</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">step</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">outputManagers</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/utils/checkpoint.html#ResumeCheckpoint.restoreStep"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.utils.checkpoint.ResumeCheckpoint.restoreStep" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">restoreStep</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">step</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/utils/checkpoint.html#ResumeCheckpoint.restoreStep"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.utils.checkpoint.ResumeCheckpoint.restoreStep" title="Link to this definition"></a></dt>
 <dd><p>Restore everything else <code class="docutils literal notranslate"><span class="pre">step</span></code> continues from, after it began as if cold: the solver’s
 state between increments, the state of the step actions – which the skipped steps before it
-never brought to their step end – and the output managers’ state (Ensight’s file numbering,
-for instance). An output manager added for the resumed run starts afresh.</p>
+never brought to their step end – and the state of the step’s output managers (Ensight’s
+file numbering, for instance). An output manager added for the resumed run starts afresh.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>step</strong> – The resumed step.</p></li>
-<li><p><strong>outputManagers</strong> (<em>dict</em>) – The output managers, by name.</p></li>
-</ul>
+<dd class="field-odd"><p><strong>step</strong> – The resumed step.</p>
 </dd>
 </dl>
 </dd></dl>
@@ -621,9 +620,22 @@ the step that it is not at its start (see
 </dd></dl>
 
 <dl class="py attribute">
+<dt class="sig sig-object py" id="edelweissfe.utils.checkpoint.ResumeCheckpoint.numberOfIncrementsDone">
+<span class="sig-name descname"><span class="pre">numberOfIncrementsDone</span></span><a class="headerlink" href="#edelweissfe.utils.checkpoint.ResumeCheckpoint.numberOfIncrementsDone" title="Link to this definition"></a></dt>
+<dd><p>How many increments of that step were accepted when the checkpoint was written (see
+<a class="reference internal" href="utils.html#edelweissfe.timesteppers.base.timestepperbase.TimeStepperBase.numberOfIncrementsDone" title="edelweissfe.timesteppers.base.timestepperbase.TimeStepperBase.numberOfIncrementsDone"><code class="xref py py-meth docutils literal notranslate"><span class="pre">numberOfIncrementsDone()</span></code></a>).</p>
+</dd></dl>
+
+<dl class="py attribute">
 <dt class="sig sig-object py" id="edelweissfe.utils.checkpoint.ResumeCheckpoint.stepNumber">
 <span class="sig-name descname"><span class="pre">stepNumber</span></span><a class="headerlink" href="#edelweissfe.utils.checkpoint.ResumeCheckpoint.stepNumber" title="Link to this definition"></a></dt>
 <dd><p>The step the checkpointed run was in; the steps before it are not solved again.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="edelweissfe.utils.checkpoint.ResumeCheckpoint.time">
+<span class="sig-name descname"><span class="pre">time</span></span><a class="headerlink" href="#edelweissfe.utils.checkpoint.ResumeCheckpoint.time" title="Link to this definition"></a></dt>
+<dd><p>The model time the checkpoint was written at.</p>
 </dd></dl>
 
 </dd></dl>
@@ -647,7 +659,7 @@ checkpointed run.</p></li>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="edelweissfe.utils.checkpoint.writeCheckpoint">
-<span class="sig-prename descclassname"><span class="pre">edelweissfe.utils.checkpoint.</span></span><span class="sig-name descname"><span class="pre">writeCheckpoint</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">fileName</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">step</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">outputManagers</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">serial</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/utils/checkpoint.html#writeCheckpoint"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.utils.checkpoint.writeCheckpoint" title="Link to this definition"></a></dt>
+<span class="sig-prename descclassname"><span class="pre">edelweissfe.utils.checkpoint.</span></span><span class="sig-name descname"><span class="pre">writeCheckpoint</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">fileName</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">step</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">serial</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/utils/checkpoint.html#writeCheckpoint"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.utils.checkpoint.writeCheckpoint" title="Link to this definition"></a></dt>
 <dd><p>Write a restart checkpoint of the converged state.</p>
 <p>Written to a temporary file first, and renamed to <code class="docutils literal notranslate"><span class="pre">fileName</span></code> only once complete: a job killed
 while writing leaves the previous checkpoint of that name intact, never a truncated one.</p>
@@ -656,8 +668,8 @@ while writing leaves the previous checkpoint of that name intact, never a trunca
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>fileName</strong> (<em>str</em>) – The file to write; replaced if it exists.</p></li>
 <li><p><strong>model</strong> – The model tree.</p></li>
-<li><p><strong>step</strong> – The current step, whose time stepper and solver write their own state.</p></li>
-<li><p><strong>outputManagers</strong> (<em>dict</em>) – The output managers, by name.</p></li>
+<li><p><strong>step</strong> – The current step, whose time stepper, solver, step actions, output managers and field
+outputs write their own state.</p></li>
 <li><p><strong>serial</strong> (<em>int</em>) – The number of this checkpoint in the sequence its writer writes, stored in the file: it
 orders checkpoints independently of file times.</p></li>
 </ul>
@@ -681,7 +693,7 @@ orders checkpoints independently of file times.</p></li>
 
 <dl class="py data">
 <dt class="sig sig-object py" id="edelweissfe.utils.checkpoint.CHECKPOINT_FORMAT_VERSION">
-<span class="sig-prename descclassname"><span class="pre">edelweissfe.utils.checkpoint.</span></span><span class="sig-name descname"><span class="pre">CHECKPOINT_FORMAT_VERSION</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">9</span></span><a class="headerlink" href="#edelweissfe.utils.checkpoint.CHECKPOINT_FORMAT_VERSION" title="Link to this definition"></a></dt>
+<span class="sig-prename descclassname"><span class="pre">edelweissfe.utils.checkpoint.</span></span><span class="sig-name descname"><span class="pre">CHECKPOINT_FORMAT_VERSION</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">10</span></span><a class="headerlink" href="#edelweissfe.utils.checkpoint.CHECKPOINT_FORMAT_VERSION" title="Link to this definition"></a></dt>
 <dd><p>a run resumes
 only from checkpoints of its own layout.</p>
 <dl class="field-list simple">
@@ -704,9 +716,10 @@ solver’s</p>
 arrays a checkpoint stores, and back. An empty mapping declares that a component carries nothing
 between increments. A component whose declaration is still None has not been declared at all, and
 cannot be checkpointed.</p>
-<p>An attribute that is None is simply left out, and read back as None. A <code class="docutils literal notranslate"><span class="pre">dict</span></code> maps strings to
-floats. An attribute whose type is none of the plain ones is a helper object that declares its own
-<code class="docutils literal notranslate"><span class="pre">checkpointedState</span></code>; its state is stored under the attribute’s name as a prefix.</p>
+<p>An attribute that is None is simply left out, and read back as None. A <code class="docutils literal notranslate"><span class="pre">str</span></code> is stored as bytes;
+a <code class="docutils literal notranslate"><span class="pre">dict</span></code> maps strings to floats. An attribute whose type is none of the plain ones is a helper
+object that declares its own <code class="docutils literal notranslate"><span class="pre">checkpointedState</span></code>; its state is stored under the attribute’s name
+as a prefix. A helper that declares an empty mapping stores nothing and keeps itself as it is.</p>
 <dl class="py function">
 <dt class="sig sig-object py" id="edelweissfe.utils.checkpointedstate.packState">
 <span class="sig-prename descclassname"><span class="pre">edelweissfe.utils.checkpointedstate.</span></span><span class="sig-name descname"><span class="pre">packState</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">component</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/utils/checkpointedstate.html#packState"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.utils.checkpointedstate.packState" title="Link to this definition"></a></dt>

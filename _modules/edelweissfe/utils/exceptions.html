@@ -190,6 +190,28 @@
 
 
 
+<div class="viewcode-block" id="MeshChangedSinceCheckpoint">
+<a class="viewcode-back" href="../../../documentation/exceptions.html#edelweissfe.utils.exceptions.MeshChangedSinceCheckpoint">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">MeshChangedSinceCheckpoint</span><span class="p">(</span><span class="n">RestartError</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""The model's mesh has changed since the checkpoint was written, and a mesh change cannot be</span>
+<span class="sd">    undone: the model cannot go back to the checkpoint.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    firstChange</span>
+<span class="sd">        The first topology decision the model applied after the checkpoint was written, a</span>
+<span class="sd">        :class:`~edelweissfe.models.modelchange.TopologyRecord`.</span>
+<span class="sd">    """</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">firstChange</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span>
+            <span class="s2">"the mesh has changed since the checkpoint was written (model modifier </span><span class="si">{:}</span><span class="s2"> at time </span><span class="si">{:}</span><span class="s2">), and a mesh "</span>
+            <span class="s2">"change cannot be undone"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">firstChange</span><span class="o">.</span><span class="n">modifier</span><span class="p">,</span> <span class="n">firstChange</span><span class="o">.</span><span class="n">time</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">firstChange</span> <span class="o">=</span> <span class="n">firstChange</span></div>
+
+
+
 <div class="viewcode-block" id="TopologyError">
 <a class="viewcode-back" href="../../../documentation/exceptions.html#edelweissfe.utils.exceptions.TopologyError">[docs]</a>
 <span class="k">class</span><span class="w"> </span><span class="nc">TopologyError</span><span class="p">(</span><span class="ne">Exception</span><span class="p">):</span>

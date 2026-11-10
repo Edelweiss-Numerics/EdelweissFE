@@ -243,6 +243,11 @@
 <span class="k">class</span><span class="w"> </span><span class="nc">ConvergenceCriterionBase</span><span class="p">(</span><span class="n">ABC</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""Base class for the field-wise convergence criteria of the implicit solvers."""</span>
 
+    <span class="c1">#: The state this criterion carries from one increment to the next, checkpointed with the solver; see</span>
+    <span class="c1">#: :mod:`~edelweissfe.utils.checkpointedstate`. Every criterion declares it, an empty mapping if it carries</span>
+    <span class="c1">#: nothing: one whose declaration is still None cannot be checkpointed.</span>
+    <span class="n">checkpointedState</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+
 <div class="viewcode-block" id="ConvergenceCriterionBase.startStep">
 <a class="viewcode-back" href="../../../../documentation/solvers.html#edelweissfe.solvers.base.convergencecriteria.ConvergenceCriterionBase.startStep">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">startStep</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">previousCriterion</span><span class="p">:</span> <span class="s2">"ConvergenceCriterionBase | None"</span><span class="p">):</span>
@@ -393,6 +398,9 @@
 <span class="sd">    ValueError</span>
 <span class="sd">        If the zero flux rule is on with :math:`n &lt; 1`.</span>
 <span class="sd">    """</span>
+
+    <span class="c1">#: Nothing: every decision is taken from the current iteration alone.</span>
+    <span class="n">checkpointedState</span> <span class="o">=</span> <span class="p">{}</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
@@ -564,6 +572,13 @@
 <span class="sd">    initialTimeAveragedFlux</span>
 <span class="sd">        :math:`\\tilde{q}^0`, the time average flux of a field that has not carried flux yet, in the first step.</span>
 <span class="sd">    """</span>
+
+    <span class="c1">#: The time average flux of every field, as the converged increments of the step and the previous step left it.</span>
+    <span class="n">checkpointedState</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s2">"_sumOfConvergedSpatialAveragedFluxes"</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span>
+        <span class="s2">"_nIncrementsWithFlux"</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span>
+        <span class="s2">"_timeAveragedFluxOfPreviousStep"</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span>
+    <span class="p">}</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>

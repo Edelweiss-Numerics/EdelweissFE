@@ -106,12 +106,13 @@
 
 <span class="sd">A checkpoint is an HDF5 file holding</span>
 
-<span class="sd">- the attribute ``stepNumber``, the step the run was in;</span>
+<span class="sd">- the attribute ``stepNumber``, the step the run was in, and ``numberOfIncrementsDone``, how many</span>
+<span class="sd">  increments of it were accepted;</span>
 <span class="sd">- the model's state, written by :meth:`~edelweissfe.models.femodel.FEModel.writeRestart`;</span>
 <span class="sd">- groups ``timestepper`` and ``solver`` with the time stepper's and the solver's state;</span>
 <span class="sd">- a group ``stepActions`` with the state of every step action, by type and name -- including what</span>
 <span class="sd">  the steps before carried over, e.g. an accumulated load, and whether an action is still active;</span>
-<span class="sd">- a group ``outputManagers`` with the state of every output manager;</span>
+<span class="sd">- a group ``outputManagers`` with the state of every output manager of the step, by name;</span>
 <span class="sd">- a group ``fieldOutputs`` with the history of every field output, and how much of its export file</span>
 <span class="sd">  belongs to the run.</span>
 
@@ -131,7 +132,7 @@
 
 <span class="c1">#: The layout of a checkpoint. Raise it whenever a checkpoint gains or changes state: a run resumes</span>
 <span class="c1">#: only from checkpoints of its own layout.</span>
-<span class="n">CHECKPOINT_FORMAT_VERSION</span> <span class="o">=</span> <span class="mi">9</span>
+<span class="n">CHECKPOINT_FORMAT_VERSION</span> <span class="o">=</span> <span class="mi">10</span>
 
 
 <div class="viewcode-block" id="writeRestartDataOf">
@@ -180,9 +181,26 @@
 
 
 
+<span class="k">def</span><span class="w"> </span><span class="nf">_outputManagersOf</span><span class="p">(</span><span class="n">step</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""The output managers of a step, by name: those whose state a checkpoint of the step holds.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    step</span>
+<span class="sd">        The step.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    dict</span>
+<span class="sd">        The output managers, by name.</span>
+<span class="sd">    """</span>
+
+    <span class="k">return</span> <span class="p">{</span><span class="n">outputManager</span><span class="o">.</span><span class="n">name</span><span class="p">:</span> <span class="n">outputManager</span> <span class="k">for</span> <span class="n">outputManager</span> <span class="ow">in</span> <span class="n">step</span><span class="o">.</span><span class="n">outputManagers</span><span class="p">}</span>
+
+
 <div class="viewcode-block" id="writeCheckpoint">
 <a class="viewcode-back" href="../../../documentation/output.html#edelweissfe.utils.checkpoint.writeCheckpoint">[docs]</a>
-<span class="k">def</span><span class="w"> </span><span class="nf">writeCheckpoint</span><span class="p">(</span><span class="n">fileName</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">step</span><span class="p">,</span> <span class="n">outputManagers</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span> <span class="n">serial</span><span class="p">:</span> <span class="nb">int</span><span class="p">):</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">writeCheckpoint</span><span class="p">(</span><span class="n">fileName</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">step</span><span class="p">,</span> <span class="n">serial</span><span class="p">:</span> <span class="nb">int</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""Write a restart checkpoint of the converged state.</span>
 
 <span class="sd">    Written to a temporary file first, and renamed to ``fileName`` only once complete: a job killed</span>
@@ -195,9 +213,8 @@
 <span class="sd">    model</span>
 <span class="sd">        The model tree.</span>
 <span class="sd">    step</span>
-<span class="sd">        The current step, whose time stepper and solver write their own state.</span>
-<span class="sd">    outputManagers</span>
-<span class="sd">        The output managers, by name.</span>
+<span class="sd">        The current step, whose time stepper, solver, step actions, output managers and field</span>
+<span class="sd">        outputs write their own state.</span>
 <span class="sd">    serial</span>
 <span class="sd">        The number of this checkpoint in the sequence its writer writes, stored in the file: it</span>
 <span class="sd">        orders checkpoints independently of file times.</span>
@@ -208,12 +225,13 @@
         <span class="n">f</span><span class="o">.</span><span class="n">attrs</span><span class="p">[</span><span class="s2">"formatVersion"</span><span class="p">]</span> <span class="o">=</span> <span class="n">CHECKPOINT_FORMAT_VERSION</span>
         <span class="n">f</span><span class="o">.</span><span class="n">attrs</span><span class="p">[</span><span class="s2">"serial"</span><span class="p">]</span> <span class="o">=</span> <span class="n">serial</span>
         <span class="n">f</span><span class="o">.</span><span class="n">attrs</span><span class="p">[</span><span class="s2">"stepNumber"</span><span class="p">]</span> <span class="o">=</span> <span class="n">step</span><span class="o">.</span><span class="n">number</span>
+        <span class="n">f</span><span class="o">.</span><span class="n">attrs</span><span class="p">[</span><span class="s2">"numberOfIncrementsDone"</span><span class="p">]</span> <span class="o">=</span> <span class="n">step</span><span class="o">.</span><span class="n">timeStepper</span><span class="o">.</span><span class="n">numberOfIncrementsDone</span><span class="p">()</span>
         <span class="n">model</span><span class="o">.</span><span class="n">writeRestart</span><span class="p">(</span><span class="n">f</span><span class="p">)</span>
         <span class="n">writeRestartDataOf</span><span class="p">(</span><span class="n">f</span><span class="p">,</span> <span class="p">{</span><span class="s2">"timestepper"</span><span class="p">:</span> <span class="n">step</span><span class="o">.</span><span class="n">timeStepper</span><span class="p">,</span> <span class="s2">"solver"</span><span class="p">:</span> <span class="n">step</span><span class="o">.</span><span class="n">solver</span><span class="p">})</span>
         <span class="n">stepActionsGroup</span> <span class="o">=</span> <span class="n">f</span><span class="o">.</span><span class="n">create_group</span><span class="p">(</span><span class="s2">"stepActions"</span><span class="p">)</span>
         <span class="k">for</span> <span class="n">actionType</span><span class="p">,</span> <span class="n">actions</span> <span class="ow">in</span> <span class="n">step</span><span class="o">.</span><span class="n">actions</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
             <span class="n">writeRestartDataOf</span><span class="p">(</span><span class="n">stepActionsGroup</span><span class="o">.</span><span class="n">create_group</span><span class="p">(</span><span class="n">actionType</span><span class="p">),</span> <span class="n">actions</span><span class="p">)</span>
-        <span class="n">writeRestartDataOf</span><span class="p">(</span><span class="n">f</span><span class="o">.</span><span class="n">create_group</span><span class="p">(</span><span class="s2">"outputManagers"</span><span class="p">),</span> <span class="n">outputManagers</span><span class="p">)</span>
+        <span class="n">writeRestartDataOf</span><span class="p">(</span><span class="n">f</span><span class="o">.</span><span class="n">create_group</span><span class="p">(</span><span class="s2">"outputManagers"</span><span class="p">),</span> <span class="n">_outputManagersOf</span><span class="p">(</span><span class="n">step</span><span class="p">))</span>
         <span class="n">writeRestartDataOf</span><span class="p">(</span><span class="n">f</span><span class="o">.</span><span class="n">create_group</span><span class="p">(</span><span class="s2">"fieldOutputs"</span><span class="p">),</span> <span class="n">step</span><span class="o">.</span><span class="n">fieldOutputController</span><span class="o">.</span><span class="n">fieldOutputs</span><span class="p">)</span>
     <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">temporaryFileName</span><span class="p">,</span> <span class="s2">"rb+"</span><span class="p">)</span> <span class="k">as</span> <span class="n">written</span><span class="p">:</span>
         <span class="n">os</span><span class="o">.</span><span class="n">fsync</span><span class="p">(</span><span class="n">written</span><span class="o">.</span><span class="n">fileno</span><span class="p">())</span>
@@ -227,9 +245,10 @@
 <span class="w">    </span><span class="sd">"""A restart checkpoint opened for resuming a run, restored piece by piece as the run is set up.</span>
 
 <span class="sd">    The pieces are restored at different moments, because the objects they belong to are created at</span>
-<span class="sd">    different moments: the model first (:meth:`restoreModel`), the output managers once they exist</span>
-<span class="sd">    (:meth:`restoreOutputManagers`), and the time stepper and solver when the resumed step begins</span>
-<span class="sd">    (:meth:`restoreStep`). Close the checkpoint right after that, see :meth:`close`.</span>
+<span class="sd">    different moments: the model first (:meth:`restoreModel`), the time stepper before the resumed</span>
+<span class="sd">    step begins (:meth:`restoreTimeStepper`), and the solver, the step actions, the output managers</span>
+<span class="sd">    and the field outputs of the step once it has begun (:meth:`restoreStep`). Close the checkpoint</span>
+<span class="sd">    right after that, see :meth:`close`.</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
@@ -249,6 +268,11 @@
             <span class="p">)</span>
         <span class="c1">#: The step the checkpointed run was in; the steps before it are not solved again.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">stepNumber</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_file</span><span class="o">.</span><span class="n">attrs</span><span class="p">[</span><span class="s2">"stepNumber"</span><span class="p">])</span>
+        <span class="c1">#: How many increments of that step were accepted when the checkpoint was written (see</span>
+        <span class="c1">#: :meth:`~edelweissfe.timesteppers.base.timestepperbase.TimeStepperBase.numberOfIncrementsDone`).</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">numberOfIncrementsDone</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_file</span><span class="o">.</span><span class="n">attrs</span><span class="p">[</span><span class="s2">"numberOfIncrementsDone"</span><span class="p">])</span>
+        <span class="c1">#: The model time the checkpoint was written at.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">time</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_file</span><span class="o">.</span><span class="n">attrs</span><span class="p">[</span><span class="s2">"time"</span><span class="p">])</span>
 
 <div class="viewcode-block" id="ResumeCheckpoint.restoreModel">
 <a class="viewcode-back" href="../../../documentation/output.html#edelweissfe.utils.checkpoint.ResumeCheckpoint.restoreModel">[docs]</a>
@@ -279,22 +303,20 @@
 
 <div class="viewcode-block" id="ResumeCheckpoint.restoreStep">
 <a class="viewcode-back" href="../../../documentation/output.html#edelweissfe.utils.checkpoint.ResumeCheckpoint.restoreStep">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">restoreStep</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">step</span><span class="p">,</span> <span class="n">outputManagers</span><span class="p">:</span> <span class="nb">dict</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">restoreStep</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">step</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">"""Restore everything else ``step`` continues from, after it began as if cold: the solver's</span>
 <span class="sd">        state between increments, the state of the step actions -- which the skipped steps before it</span>
-<span class="sd">        never brought to their step end -- and the output managers' state (Ensight's file numbering,</span>
-<span class="sd">        for instance). An output manager added for the resumed run starts afresh.</span>
+<span class="sd">        never brought to their step end -- and the state of the step's output managers (Ensight's</span>
+<span class="sd">        file numbering, for instance). An output manager added for the resumed run starts afresh.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
 <span class="sd">        step</span>
 <span class="sd">            The resumed step.</span>
-<span class="sd">        outputManagers</span>
-<span class="sd">            The output managers, by name.</span>
 <span class="sd">        """</span>
 
         <span class="n">readRestartDataInto</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_file</span><span class="p">,</span> <span class="p">{</span><span class="s2">"solver"</span><span class="p">:</span> <span class="n">step</span><span class="o">.</span><span class="n">solver</span><span class="p">})</span>
-        <span class="n">readRestartDataInto</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_file</span><span class="p">[</span><span class="s2">"outputManagers"</span><span class="p">],</span> <span class="n">outputManagers</span><span class="p">,</span> <span class="n">newEntitiesStartAfresh</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">readRestartDataInto</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_file</span><span class="p">[</span><span class="s2">"outputManagers"</span><span class="p">],</span> <span class="n">_outputManagersOf</span><span class="p">(</span><span class="n">step</span><span class="p">),</span> <span class="n">newEntitiesStartAfresh</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
         <span class="n">readRestartDataInto</span><span class="p">(</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_file</span><span class="p">[</span><span class="s2">"fieldOutputs"</span><span class="p">],</span> <span class="n">step</span><span class="o">.</span><span class="n">fieldOutputController</span><span class="o">.</span><span class="n">fieldOutputs</span><span class="p">,</span> <span class="n">newEntitiesStartAfresh</span><span class="o">=</span><span class="kc">True</span>
         <span class="p">)</span>

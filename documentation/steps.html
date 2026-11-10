@@ -57,6 +57,8 @@
 <li class="toctree-l2"><a class="reference internal" href="linsolvers.html">Linear solvers</a></li>
 <li class="toctree-l2 current"><a class="current reference internal" href="#">Steps</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="#edelweissfe.steps.base.stepbase.StepBase"><code class="docutils literal notranslate"><span class="pre">StepBase</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.steps.base.stepbase.StepBase.fallBackToCheckpoint"><code class="docutils literal notranslate"><span class="pre">StepBase.fallBackToCheckpoint()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.steps.base.stepbase.StepBase.latestCheckpointOfStep"><code class="docutils literal notranslate"><span class="pre">StepBase.latestCheckpointOfStep()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#edelweissfe.steps.base.stepbase.StepBase.solve"><code class="docutils literal notranslate"><span class="pre">StepBase.solve()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#edelweissfe.steps.base.stepbase.StepBase.length"><code class="docutils literal notranslate"><span class="pre">StepBase.length</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#edelweissfe.steps.base.stepbase.StepBase.number"><code class="docutils literal notranslate"><span class="pre">StepBase.number</span></code></a></li>
@@ -64,6 +66,7 @@
 </li>
 <li class="toctree-l3"><a class="reference internal" href="#edelweissfe.steps.base.stepbase.StepIncrementationSchema"><code class="docutils literal notranslate"><span class="pre">StepIncrementationSchema</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#increment-control-of-adaptive-steps">Increment control of adaptive steps</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#falling-back-to-a-restart-checkpoint">Falling back to a restart checkpoint</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#module-edelweissfe.steps.adaptivestep"><code class="docutils literal notranslate"><span class="pre">AdaptiveStep</span></code> - A classical adpative step for transient simulations</a><ul>
 <li class="toctree-l4"><a class="reference internal" href="#edelweissfe.steps.adaptivestep.AdaptiveStep"><code class="docutils literal notranslate"><span class="pre">AdaptiveStep</span></code></a></li>
 </ul>
@@ -163,11 +166,84 @@ concrete step type.</p>
 <p class="rubric">Methods</p>
 <table class="autosummary longtable docutils align-default">
 <tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.steps.base.stepbase.StepBase.fallBackToCheckpoint" title="edelweissfe.steps.base.stepbase.StepBase.fallBackToCheckpoint"><code class="xref py py-obj docutils literal notranslate"><span class="pre">fallBackToCheckpoint</span></code></a>(model, outputManagers, ...)</p></td>
+<td><p>Continue the step from its latest restart checkpoint, after an increment failed and could not be cut back any further, and cut the increment back from there.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.steps.base.stepbase.StepBase.latestCheckpointOfStep" title="edelweissfe.steps.base.stepbase.StepBase.latestCheckpointOfStep"><code class="xref py py-obj docutils literal notranslate"><span class="pre">latestCheckpointOfStep</span></code></a>(restartWriter)</p></td>
+<td><p>Open the latest restart checkpoint <code class="docutils literal notranslate"><span class="pre">restartWriter</span></code> offers (see <code class="xref py py-meth docutils literal notranslate"><span class="pre">latestCheckpoint()</span></code>), if it belongs to this step.</p></td>
+</tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.steps.base.stepbase.StepBase.solve" title="edelweissfe.steps.base.stepbase.StepBase.solve"><code class="xref py py-obj docutils literal notranslate"><span class="pre">solve</span></code></a>([resumeFrom])</p></td>
 <td><p>Solve this step, increment by increment.</p></td>
 </tr>
 </tbody>
 </table>
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.steps.base.stepbase.StepBase.fallBackToCheckpoint">
+<span class="sig-name descname"><span class="pre">fallBackToCheckpoint</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">outputManagers</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fallbacksLeft</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/steps/base/stepbase.html#StepBase.fallBackToCheckpoint"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.steps.base.stepbase.StepBase.fallBackToCheckpoint" title="Link to this definition"></a></dt>
+<dd><p>Continue the step from its latest restart checkpoint, after an increment failed and could not
+be cut back any further, and cut the increment back from there.</p>
+<p>The increments accepted after the checkpoint are discarded, and the step resumes from the
+checkpoint exactly as a resumed run does (see <a class="reference internal" href="output.html#edelweissfe.utils.checkpoint.ResumeCheckpoint" title="edelweissfe.utils.checkpoint.ResumeCheckpoint"><code class="xref py py-class docutils literal notranslate"><span class="pre">ResumeCheckpoint</span></code></a>):
+the model, the time stepper, the solver, the step actions, the output managers and the field
+outputs take over the checkpointed state, so that the output of the discarded increments is
+overwritten, not duplicated. The solver ends the abandoned attempt and begins anew from the
+checkpoint. The retried increments then take a different, smaller path through the same
+load history. If the increment the checkpoint holds cannot be cut back either, the step
+falls back further, to the checkpoint before it.</p>
+<p>A checkpoint written after the last increment the step accepted holds the state the failed
+increment started from, from where every increment size down to the minimum has just
+failed: falling back to it would only retry them. The step goes back to the checkpoint
+before it instead. With a checkpoint after every accepted increment (<code class="docutils literal notranslate"><span class="pre">writeInterval=1</span></code>), the
+latest one always is such a checkpoint.</p>
+<p>The checkpoints are those of the step’s restart output, of which there is exactly one, as
+long as their files hold them – a resumed step’s included: the checkpoint it resumed from,
+and those before it. Every checkpoint serves one fallback at most: falling back again takes
+the checkpoint before it, unless newer ones were written since. The step may fall back to
+checkpoints of its own only, and only as long as its mesh has not changed since (a mesh
+change cannot be undone).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>model</strong> (<a class="reference internal" href="models.html#edelweissfe.models.femodel.FEModel" title="edelweissfe.models.femodel.FEModel"><em>FEModel</em></a>) – The model tree.</p></li>
+<li><p><strong>outputManagers</strong> (<em>list</em>) – The output managers of the step.</p></li>
+<li><p><strong>fallbacksLeft</strong> (<em>int</em>) – How often the step may still fall back.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>How often the step may fall back after this.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>int</p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><ul class="simple">
+<li><p><a class="reference internal" href="exceptions.html#edelweissfe.utils.exceptions.ReachedMinIncrementSize" title="edelweissfe.utils.exceptions.ReachedMinIncrementSize"><strong>ReachedMinIncrementSize</strong></a> – If there is no checkpoint of this step left to fall back to, or no fallback is left.</p></li>
+<li><p><a class="reference internal" href="exceptions.html#edelweissfe.utils.exceptions.StepFailed" title="edelweissfe.utils.exceptions.StepFailed"><strong>StepFailed</strong></a> – If the mesh has changed since the checkpoint, with a message saying so.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.steps.base.stepbase.StepBase.latestCheckpointOfStep">
+<span class="sig-name descname"><span class="pre">latestCheckpointOfStep</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">restartWriter</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/steps/base/stepbase.html#StepBase.latestCheckpointOfStep"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.steps.base.stepbase.StepBase.latestCheckpointOfStep" title="Link to this definition"></a></dt>
+<dd><p>Open the latest restart checkpoint <code class="docutils literal notranslate"><span class="pre">restartWriter</span></code> offers (see
+<code class="xref py py-meth docutils literal notranslate"><span class="pre">latestCheckpoint()</span></code>),
+if it belongs to this step. The writer’s checkpoints are offered newest first, so once one
+belongs to an earlier step, all that remain do.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>restartWriter</strong> – The output manager writing the restart checkpoints of this step.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The opened checkpoint, or None if no checkpoint of this step is left.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference internal" href="output.html#edelweissfe.utils.checkpoint.ResumeCheckpoint" title="edelweissfe.utils.checkpoint.ResumeCheckpoint">ResumeCheckpoint</a> | None</p>
+</dd>
+</dl>
+</dd></dl>
+
 <dl class="py method">
 <dt class="sig sig-object py" id="edelweissfe.steps.base.stepbase.StepBase.solve">
 <span class="sig-name descname"><span class="pre">solve</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">resumeFrom</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/steps/base/stepbase.html#StepBase.solve"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.steps.base.stepbase.StepBase.solve" title="Link to this definition"></a></dt>
@@ -178,6 +254,7 @@ while the step is not finished:
     prepare the increment     topology update when due
     propose an increment      time stepper
     attempt it                solver; if it fails: reject it, retry smaller
+                              (at the minimum size: fall back to a checkpoint, if allowed)
     accept it                 solver, then time stepper
     write output              field outputs, output managers, restart checkpoint last
 end the step
@@ -187,6 +264,10 @@ end the step
 exactly the state the next increment starts from – and a resumed step simply continues
 this loop. It begins like any step, and then takes over the checkpointed state, in this one
 place.</p>
+<p>An increment that fails at the minimum increment size fails the step, unless the step may
+fall back to a checkpoint (<code class="docutils literal notranslate"><span class="pre">maxCheckpointFallbacks</span></code>, see <a class="reference internal" href="#edelweissfe.steps.base.stepbase.StepBase.fallBackToCheckpoint" title="edelweissfe.steps.base.stepbase.StepBase.fallBackToCheckpoint"><code class="xref py py-meth docutils literal notranslate"><span class="pre">fallBackToCheckpoint()</span></code></a>):
+it then continues from its latest restart checkpoint, as a resumed step would, with a
+smaller increment.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>resumeFrom</strong> – The <a class="reference internal" href="output.html#edelweissfe.utils.checkpoint.ResumeCheckpoint" title="edelweissfe.utils.checkpoint.ResumeCheckpoint"><code class="xref py py-class docutils literal notranslate"><span class="pre">ResumeCheckpoint</span></code></a> this step continues from, or
@@ -211,7 +292,7 @@ None.</p>
 
 <dl class="py class">
 <dt class="sig sig-object py" id="edelweissfe.steps.base.stepbase.StepIncrementationSchema">
-<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">edelweissfe.steps.base.stepbase.</span></span><span class="sig-name descname"><span class="pre">StepIncrementationSchema</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">stepLength</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">startInc</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">maxInc</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">minInc</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.0001</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">maxNumInc</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1000</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">maxIter</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">10</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">criticalIter</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">5</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">maxGrowIter</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">10</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cutbackFactor</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.25</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">increaseFactor</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1.1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">goodIncrementsBeforeIncrease</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">3</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">makeZeroIncrementFirst</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/steps/base/stepbase.html#StepIncrementationSchema"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.steps.base.stepbase.StepIncrementationSchema" title="Link to this definition"></a></dt>
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">edelweissfe.steps.base.stepbase.</span></span><span class="sig-name descname"><span class="pre">StepIncrementationSchema</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">stepLength</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">startInc</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">maxInc</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">minInc</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.0001</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">maxNumInc</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1000</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">maxIter</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">10</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">criticalIter</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">5</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">maxGrowIter</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">10</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cutbackFactor</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.25</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">increaseFactor</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1.1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">goodIncrementsBeforeIncrease</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">3</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">makeZeroIncrementFirst</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">maxCheckpointFallbacks</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/steps/base/stepbase.html#StepIncrementationSchema"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.steps.base.stepbase.StepIncrementationSchema" title="Link to this definition"></a></dt>
 <dd><p>The standard incrementation options common to every step type (<code class="docutils literal notranslate"><span class="pre">*step</span></code> keyword
 datalines), owned by this module and never mutated from outside it.</p>
 <p>Every concrete <a class="reference internal" href="#edelweissfe.steps.base.stepbase.StepBase" title="edelweissfe.steps.base.stepbase.StepBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">StepBase</span></code></a> subclass shares exactly this option set – there is no
@@ -231,6 +312,7 @@ per-step-type variation – so it is declared once here rather than once per ste
 <li><p><strong>increaseFactor</strong> (<em>float</em>)</p></li>
 <li><p><strong>goodIncrementsBeforeIncrease</strong> (<em>int</em>)</p></li>
 <li><p><strong>makeZeroIncrementFirst</strong> (<em>bool</em>)</p></li>
+<li><p><strong>maxCheckpointFallbacks</strong> (<em>int</em>)</p></li>
 </ul>
 </dd>
 </dl>
@@ -258,6 +340,44 @@ fails, the step fails. Any other increment, including a first increment of nonze
 An explicit step (<code class="docutils literal notranslate"><span class="pre">AdaptiveStepForExplicitSimulations</span></code>) always begins with the zero increment, in which the explicit
 solver builds its initial state, and refuses <code class="docutils literal notranslate"><span class="pre">makeZeroIncrementFirst=False</span></code>.</p>
 </section>
+<section id="falling-back-to-a-restart-checkpoint">
+<h2>Falling back to a restart checkpoint<a class="headerlink" href="#falling-back-to-a-restart-checkpoint" title="Link to this heading"></a></h2>
+<p>An increment that fails at the minimum increment size <code class="docutils literal notranslate"><span class="pre">minInc</span></code> fails the step, and so does a failing last increment
+of the step that is smaller than <code class="docutils literal notranslate"><span class="pre">minInc</span></code> already, the remainder of the step. With <code class="docutils literal notranslate"><span class="pre">maxCheckpointFallbacks=n</span></code>, the
+step instead goes back to its latest restart checkpoint and continues from there with an increment cut back by
+<code class="docutils literal notranslate"><span class="pre">cutbackFactor</span></code>, at most <code class="docutils literal notranslate"><span class="pre">n</span></code> times:</p>
+<div class="highlight-edelweiss notranslate"><div class="highlight"><pre><span></span><span class="k">*output</span>,<span class="nv"> type</span><span class="ow">=</span><span class="m">restart</span>,<span class="nv"> name</span><span class="ow">=</span><span class="m">restart</span>
+<span class="nv">writeInterval</span><span class="ow">=</span><span class="m">5</span>,<span class="nv"> baseName</span><span class="ow">=</span><span class="m">restart</span>,<span class="nv"> numberOfFilesToKeep</span><span class="ow">=</span><span class="m">3</span>
+
+<span class="k">*step</span>,<span class="nv"> solver</span><span class="ow">=</span><span class="m">theSolver</span>
+<span class="nv">maxInc</span><span class="ow">=</span><span class="m">1e-2</span>,<span class="nv"> minInc</span><span class="ow">=</span><span class="m">1e-6</span>,<span class="nv"> maxCheckpointFallbacks</span><span class="ow">=</span><span class="m">3</span>
+</pre></div>
+</div>
+<p>The increments accepted after the checkpoint are discarded, and the step continues exactly as a run resumed from that
+checkpoint would (see <a class="reference internal" href="restart.html"><span class="doc">Restart</span></a>), with the one difference that its next increment is smaller. Their output is
+replaced: field output exports are cut back to the checkpoint, and the Ensight sequence continues from it. Path
+dependent materials (plasticity, damage) then follow a different, finer path through the same load history, which may
+pass where the coarser one got stuck. If the increment the checkpoint holds cannot be cut back either, the step goes
+back to the checkpoint before it.</p>
+<ul class="simple">
+<li><p>The checkpoints are those of the restart output, of which the job must define exactly one: with none, or several,
+the step refuses to start. A resumed run may go back to the checkpoint it resumed from, and to the ones the
+interrupted run wrote before it, as long as their files still hold them.</p></li>
+<li><p>The step does not go back to a checkpoint that holds the state the failed increment started from, i.e., one written
+after the last increment it accepted: from there, every increment size down to <code class="docutils literal notranslate"><span class="pre">minInc</span></code> has just failed. It goes
+back to the checkpoint before it instead. With <code class="docutils literal notranslate"><span class="pre">writeInterval=1</span></code>, the latest checkpoint always is such a one, so
+a fallback goes back at least one increment before the failed one.</p></li>
+<li><p>Every checkpoint serves one fallback: falling back again takes the checkpoint before it, unless the step has written
+newer ones since. How far back the step can go is set by <code class="docutils literal notranslate"><span class="pre">writeInterval</span></code> and <code class="docutils literal notranslate"><span class="pre">numberOfFilesToKeep</span></code> of the restart
+output.</p></li>
+<li><p>The step falls back to checkpoints of its own only, never into an earlier step: a failed zero increment, or a
+failure before the step has written a checkpoint after its zero increment, still fails the step.</p></li>
+<li><p>A mesh change cannot be undone, so a step whose mesh has changed since the checkpoint (e.g. by adaptive refinement)
+cannot go back to it, nor to any older one, and fails, naming the checkpoint and the mesh change it predates. A step
+with adaptive refinement can fall back only to checkpoints written after its last refinement.</p></li>
+<li><p>Each fallback is reported, together with the performance timing of the discarded part of the step.</p></li>
+</ul>
+</section>
 <section id="module-edelweissfe.steps.adaptivestep">
 <span id="adaptivestep-a-classical-adpative-step-for-transient-simulations"></span><h2><code class="docutils literal notranslate"><span class="pre">AdaptiveStep</span></code> - A classical adpative step for transient simulations<a class="headerlink" href="#module-edelweissfe.steps.adaptivestep" title="Link to this heading"></a></h2>
 <dl class="py class">
@@ -267,6 +387,12 @@ solver builds its initial state, and refuses <code class="docutils literal notra
 <p class="rubric">Methods</p>
 <table class="autosummary longtable docutils align-default">
 <tbody>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">fallBackToCheckpoint</span></code>(model, outputManagers, ...)</p></td>
+<td><p>Continue the step from its latest restart checkpoint, after an increment failed and could not be cut back any further, and cut the increment back from there.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">latestCheckpointOfStep</span></code>(restartWriter)</p></td>
+<td><p>Open the latest restart checkpoint <code class="docutils literal notranslate"><span class="pre">restartWriter</span></code> offers (see <code class="xref py py-meth docutils literal notranslate"><span class="pre">latestCheckpoint()</span></code>), if it belongs to this step.</p></td>
+</tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.steps.adaptivestep.AdaptiveStep.schema" title="edelweissfe.steps.adaptivestep.AdaptiveStep.schema"><code class="xref py py-obj docutils literal notranslate"><span class="pre">schema</span></code></a></p></td>
 <td><p>Option schema for this step; all step types share the same incrementation options.</p></td>
 </tr>
@@ -310,6 +436,12 @@ advances (see <a class="reference internal" href="utils.html#edelweissfe.timeste
 <p class="rubric">Methods</p>
 <table class="autosummary longtable docutils align-default">
 <tbody>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">fallBackToCheckpoint</span></code>(model, outputManagers, ...)</p></td>
+<td><p>Continue the step from its latest restart checkpoint, after an increment failed and could not be cut back any further, and cut the increment back from there.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">latestCheckpointOfStep</span></code>(restartWriter)</p></td>
+<td><p>Open the latest restart checkpoint <code class="docutils literal notranslate"><span class="pre">restartWriter</span></code> offers (see <code class="xref py py-meth docutils literal notranslate"><span class="pre">latestCheckpoint()</span></code>), if it belongs to this step.</p></td>
+</tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.steps.adaptivestepforexplicitsimulations.AdaptiveStepForExplicitSimulations.schema" title="edelweissfe.steps.adaptivestepforexplicitsimulations.AdaptiveStepForExplicitSimulations.schema"><code class="xref py py-obj docutils literal notranslate"><span class="pre">schema</span></code></a></p></td>
 <td><p>Option schema for this step, per OptionSchemaProvider.</p></td>
 </tr>

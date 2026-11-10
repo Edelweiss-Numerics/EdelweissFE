@@ -107,7 +107,9 @@
 <span class="sd">This module contains important classes for describing the global equation system by means of a sparse system.</span>
 <span class="sd">"""</span>
 
+<span class="kn">import</span><span class="w"> </span><span class="nn">hashlib</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">collections</span><span class="w"> </span><span class="kn">import</span> <span class="n">Counter</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">functools</span><span class="w"> </span><span class="kn">import</span> <span class="n">cached_property</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">itertools</span><span class="w"> </span><span class="kn">import</span> <span class="n">chain</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
@@ -247,6 +249,10 @@
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_determineDofsAndTheirIndices</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">nodeFields</span><span class="p">:</span> <span class="nb">list</span><span class="p">,</span> <span class="n">scalarVariables</span><span class="p">:</span> <span class="nb">list</span><span class="p">):</span>
 
+        <span class="n">nodeFields</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">nodeFields</span><span class="p">)</span>
+        <span class="c1">#: The NodeFields this DofManager numbers, by name.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">numberedNodeFields</span> <span class="o">=</span> <span class="p">{</span><span class="n">nodeField</span><span class="o">.</span><span class="n">name</span><span class="p">:</span> <span class="n">nodeField</span> <span class="k">for</span> <span class="n">nodeField</span> <span class="ow">in</span> <span class="n">nodeFields</span><span class="p">}</span>
+
         <span class="p">(</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_nDofNodeFields</span><span class="p">,</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">idcsOfFieldVariablesInDofVector</span><span class="p">,</span>
@@ -330,26 +336,32 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">I</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">J</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">idcsOfHigherOrderEntitiesInVIJ</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_initializeVIJPattern</span><span class="p">()</span></div>
 
 
-<div class="viewcode-block" id="DofManager.dofNumbering">
-<a class="viewcode-back" href="../../../documentation/dofmanager.html#edelweissfe.numerics.dofmanager.DofManager.dofNumbering">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">dofNumbering</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""What decides the index of every degree of freedom: the fields with their slices in the DofVector, the field</span>
-<span class="sd">        variables (the nodes' entries of each field) in the order they are numbered, and the scalar variables in the</span>
-<span class="sd">        order they are numbered. Two managers whose numberings compare equal give every degree of freedom the same</span>
-<span class="sd">        index, so a DofVector of one is a DofVector of the other -- e.g., before and after a rebuild caused by a</span>
-<span class="sd">        contact search, which changes the coupling of the degrees of freedom but not their numbering.</span>
+<div class="viewcode-block" id="DofManager.dofNumberingDigest">
+<a class="viewcode-back" href="../../../documentation/dofmanager.html#edelweissfe.numerics.dofmanager.DofManager.dofNumberingDigest">[docs]</a>
+    <span class="nd">@cached_property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">dofNumberingDigest</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""A digest, a hexadecimal string, of what decides the index of every degree of freedom: for every field, its</span>
+<span class="sd">        name, its dimension, its slice in the DofVector and the labels of its nodes in the order they are numbered; and</span>
+<span class="sd">        the names of the scalar variables, which follow, in the order they are numbered. Two equation systems with the</span>
+<span class="sd">        same digest give every degree of freedom the same index, so a DofVector of one is a DofVector of the other --</span>
+<span class="sd">        e.g., before and after a rebuild caused by a contact search, which changes the coupling of the degrees of</span>
+<span class="sd">        freedom but not their numbering. The scalar variables are named, not counted: they are those of the</span>
+<span class="sd">        constraints switched on, which a constraint may change within a step (switched from outside, or by itself), so</span>
+<span class="sd">        that two systems with as many scalar variables may number different ones.</span>
 
-<span class="sd">        Returns</span>
-<span class="sd">        -------</span>
-<span class="sd">        tuple</span>
-<span class="sd">            The numbering, to be compared with ``==``; field and scalar variables compare by identity.</span>
-<span class="sd">        """</span>
+<span class="sd">        The digest names the nodes by their labels, so it is the same in every run of a model: a restart checkpoint</span>
+<span class="sd">        holds it together with the vectors it numbers. Computed at the first request; the numbering of a DofManager</span>
+<span class="sd">        does not change."""</span>
 
-        <span class="k">return</span> <span class="p">(</span>
-            <span class="nb">tuple</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">idcsOfFieldsInDofVector</span><span class="o">.</span><span class="n">items</span><span class="p">()),</span>
-            <span class="nb">tuple</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">idcsOfFieldVariablesInDofVector</span><span class="p">),</span>
-            <span class="nb">tuple</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">idcsOfScalarVariablesInDofVector</span><span class="p">),</span>
-        <span class="p">)</span></div>
+        <span class="n">digest</span> <span class="o">=</span> <span class="n">hashlib</span><span class="o">.</span><span class="n">blake2b</span><span class="p">(</span><span class="n">digest_size</span><span class="o">=</span><span class="mi">16</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">fieldName</span><span class="p">,</span> <span class="n">fieldIndices</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">idcsOfFieldsInDofVector</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="n">nodeField</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">numberedNodeFields</span><span class="p">[</span><span class="n">fieldName</span><span class="p">]</span>
+            <span class="n">digest</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="nb">repr</span><span class="p">((</span><span class="n">fieldName</span><span class="p">,</span> <span class="n">nodeField</span><span class="o">.</span><span class="n">dimension</span><span class="p">,</span> <span class="n">fieldIndices</span><span class="o">.</span><span class="n">start</span><span class="p">,</span> <span class="n">fieldIndices</span><span class="o">.</span><span class="n">stop</span><span class="p">))</span><span class="o">.</span><span class="n">encode</span><span class="p">())</span>
+            <span class="n">labels</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">fromiter</span><span class="p">((</span><span class="n">node</span><span class="o">.</span><span class="n">label</span> <span class="k">for</span> <span class="n">node</span> <span class="ow">in</span> <span class="n">nodeField</span><span class="o">.</span><span class="n">nodes</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">,</span> <span class="n">count</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="n">nodeField</span><span class="o">.</span><span class="n">nodes</span><span class="p">))</span>
+            <span class="n">digest</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">labels</span><span class="o">.</span><span class="n">tobytes</span><span class="p">())</span>
+        <span class="n">digest</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="nb">repr</span><span class="p">([</span><span class="n">scalarVariable</span><span class="o">.</span><span class="n">name</span> <span class="k">for</span> <span class="n">scalarVariable</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">idcsOfScalarVariablesInDofVector</span><span class="p">])</span><span class="o">.</span><span class="n">encode</span><span class="p">())</span>
+
+        <span class="k">return</span> <span class="n">digest</span><span class="o">.</span><span class="n">hexdigest</span><span class="p">()</span></div>
 
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_reserveSpaceForNodeFields</span><span class="p">(</span>

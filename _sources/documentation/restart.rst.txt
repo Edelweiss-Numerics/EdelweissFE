@@ -80,7 +80,7 @@ The model is first rebuilt from the same input file, then restored in this order
    * - mesh
      - the mesh rebuilt from the input file is checked against the one the checkpointed run started
        from (:meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.setupFingerprint`), then
-       the recorded topology decisions are replayed through the model modifiers' own ``apply``
+       the recorded topology decisions the model has not applied yet are replayed through the model modifiers' own ``apply``
        (:meth:`~edelweissfe.models.topologypipeline.TopologyPipeline.replayHistory`), and the
        result is checked against the recorded fingerprint; the time of a replay is printed in a
        performance table of its own, before the resumed step's table
@@ -94,21 +94,44 @@ The model is first rebuilt from the same input file, then restored in this order
    * - constraint state (e.g. a frozen contact search)
      - read; adopted only if it refers to the restored model's contact points, otherwise refused
    * - output managers' sequence bookkeeping
-     - read, including each restart writer's position in its write interval
+     - read, including each restart writer's position in its write interval and its record of the
+       checkpoints a step may fall back to: the one resumed from, and those before it whose files
+       still hold them
    * - time stepper
      - its state after the last accepted increment, as it is: progress, increment counter, the size
        of the next increment, the enforced time increment, and whether the zero increment was done
    * - solver
      - its state between increments: the implicit solver's predictor (the last accepted increments
-       and their ``dU``, under arc length control also their increments of the load parameter, and the
-       load parameter of the step), the explicit solver's last increment and accumulated external work
+       and their ``dU``, with the digest of the numbering of the degrees of freedom these are vectors
+       of, under arc length control also their increments of the load parameter, and the load
+       parameter of the step) and the time average fluxes of the Abaqus convergence criterion, the
+       implicit dynamic solver's conservation check and whether the initial acceleration of the step
+       is still to be computed (in a checkpoint written after the zero increment, it is: the first
+       real increment computes it), the explicit solver's last increment and accumulated
+       external work. The resumed step extrapolates the last accepted increments only if its first equation system numbers the
+       degrees of freedom as they are numbered (see :doc:`solvers`)
+
+Going back to a checkpoint within a run
+---------------------------------------
+
+A step that may fall back to a checkpoint (``maxCheckpointFallbacks``, see :doc:`steps`) restores one
+within the running job, by the same pieces and in the same order as a resumed run: the model, the time
+stepper, then the solver begins the step anew -- a restored time stepper is not at the step start, so
+nothing of the step start is repeated -- and takes over the checkpointed state together with the step
+actions, output managers and field outputs
+(:meth:`~edelweissfe.steps.base.stepbase.StepBase.fallBackToCheckpoint`). The model has not been
+rebuilt then, so of the recorded topology decisions only those it has not applied yet are replayed --
+none, since it can go back only to a checkpoint of its own mesh: a mesh change cannot be undone, and a
+model whose mesh has changed since the checkpoint refuses it, before anything is restored
+(:class:`~edelweissfe.utils.exceptions.MeshChangedSinceCheckpoint`). The checkpoints are those of the
+one restart output of the job; a step that may fall back refuses to start with none or several.
 
 Adding something that carries state between increments
 -------------------------------------------------------
 
-Declare it. Every solver, time stepper, constraint and output manager states which of its attributes
-it carries from one increment to the next, by name and type, and the checkpoint writes and reads
-exactly those, as they are (:mod:`~edelweissfe.utils.checkpointedstate`):
+Declare it. Every solver, convergence criterion, time stepper, constraint and output manager states
+which of its attributes it carries from one increment to the next, by name and type, and the
+checkpoint writes and reads exactly those, as they are (:mod:`~edelweissfe.utils.checkpointedstate`):
 
 .. code-block:: python
 
@@ -130,8 +153,9 @@ resumed run skips the steps before the checkpoint, and declares the step actions
 model, so it restores that state rather than re-deriving it.
 
 Field outputs carry their history the same way, and how much of their export file belongs to the
-run: before its first write, a resumed run cuts the file back to that size, so the rows an
-interrupted run wrote after its last checkpoint are replaced, not duplicated.
+run: before its first write after a checkpoint is restored, the file is cut back to that size, so the
+rows an interrupted run wrote after its last checkpoint, or a step falling back to a checkpoint
+discards, are replaced, not duplicated.
 
 Then add a scenario to ``tests/test_restart_exhaustive.py``: it resumes from every checkpoint of a
 small run and requires the bitwise-identical end state, the same checkpoints and the same output.

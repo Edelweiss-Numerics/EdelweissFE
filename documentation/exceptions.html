@@ -71,6 +71,7 @@
 <li class="toctree-l3"><a class="reference internal" href="#edelweissfe.utils.exceptions.DivergingSolution"><code class="docutils literal notranslate"><span class="pre">DivergingSolution</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#edelweissfe.utils.exceptions.IncrementFailed"><code class="docutils literal notranslate"><span class="pre">IncrementFailed</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#edelweissfe.utils.exceptions.InputExecption"><code class="docutils literal notranslate"><span class="pre">InputExecption</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#edelweissfe.utils.exceptions.MeshChangedSinceCheckpoint"><code class="docutils literal notranslate"><span class="pre">MeshChangedSinceCheckpoint</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#edelweissfe.utils.exceptions.ReachedMaxIncrements"><code class="docutils literal notranslate"><span class="pre">ReachedMaxIncrements</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#edelweissfe.utils.exceptions.ReachedMaxIterations"><code class="docutils literal notranslate"><span class="pre">ReachedMaxIterations</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#edelweissfe.utils.exceptions.ReachedMinIncrementSize"><code class="docutils literal notranslate"><span class="pre">ReachedMinIncrementSize</span></code></a></li>
@@ -169,6 +170,19 @@
 <dt class="sig sig-object py" id="edelweissfe.utils.exceptions.InputExecption">
 <span class="property"><span class="k"><span class="pre">exception</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">edelweissfe.utils.exceptions.</span></span><span class="sig-name descname"><span class="pre">InputExecption</span></span><a class="reference internal" href="../_modules/edelweissfe/utils/exceptions.html#InputExecption"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.utils.exceptions.InputExecption" title="Link to this definition"></a></dt>
 <dd><p>Invalid input file parameters.</p>
+</dd></dl>
+
+<dl class="py exception">
+<dt class="sig sig-object py" id="edelweissfe.utils.exceptions.MeshChangedSinceCheckpoint">
+<span class="property"><span class="k"><span class="pre">exception</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">edelweissfe.utils.exceptions.</span></span><span class="sig-name descname"><span class="pre">MeshChangedSinceCheckpoint</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">firstChange</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/utils/exceptions.html#MeshChangedSinceCheckpoint"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.utils.exceptions.MeshChangedSinceCheckpoint" title="Link to this definition"></a></dt>
+<dd><p>The model’s mesh has changed since the checkpoint was written, and a mesh change cannot be
+undone: the model cannot go back to the checkpoint.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>firstChange</strong> – The first topology decision the model applied after the checkpoint was written, a
+<code class="xref py py-class docutils literal notranslate"><span class="pre">TopologyRecord</span></code>.</p>
+</dd>
+</dl>
 </dd></dl>
 
 <dl class="py exception">

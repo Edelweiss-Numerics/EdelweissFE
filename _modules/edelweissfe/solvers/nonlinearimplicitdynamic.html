@@ -213,17 +213,19 @@
 <span class="sd">- \\boldsymbol{C} \\dot{\\boldsymbol{u}}_0`, with the loads evaluated at the step's own start (an</span>
 <span class="sd">``f(t)`` amplitude at :math:`t = 0`). Without it, a load applied suddenly at the start of a step</span>
 <span class="sd">would enter the trapezoidal rule as though it were zero at :math:`t_0`, which costs one first-order</span>
-<span class="sd">error in the momentum, and the scheme's second order is lost. A resumed run skips this: the</span>
-<span class="sd">checkpoint carries the acceleration, and recomputing it would replace a consistent state with one</span>
-<span class="sd">that agrees only to solver tolerance. Switch it off with ``computeInitialAcceleration=False`` to</span>
-<span class="sd">continue a step from whatever acceleration was carried over.</span>
+<span class="sd">error in the momentum, and the scheme's second order is lost. It is computed in the first real</span>
+<span class="sd">increment of the step. A step that continues from a restart checkpoint -- a resumed run, or a step</span>
+<span class="sd">that falls back to one -- therefore computes it only if the checkpoint was written before that,</span>
+<span class="sd">after the zero increment: every later checkpoint carries the acceleration, and recomputing it would</span>
+<span class="sd">replace a consistent state with one that agrees only to solver tolerance. Switch it off with</span>
+<span class="sd">``computeInitialAcceleration=False`` to continue a step from whatever acceleration was carried over.</span>
 
 <span class="sd">**State and restart.** Velocity and acceleration are ordinary node-field entries, ``V`` and ``A``,</span>
 <span class="sd">written after every converged increment alongside the parent's ``U``/``P``/``dU`` -- the same</span>
 <span class="sd">mechanism the explicit solver uses for its velocity. That makes them part of every checkpoint the</span>
 <span class="sd">``*output, type=restart`` manager writes and of every ``*fieldOutput`` (``result=V``,</span>
-<span class="sd">``result=A``), with no solver-specific restart code beyond a marker that tells a resumed run not to</span>
-<span class="sd">recompute the initial acceleration.</span>
+<span class="sd">``result=A``), with no solver-specific restart code beyond the marker of whether the initial</span>
+<span class="sd">acceleration is still to be computed.</span>
 
 <span class="sd">**Live h-adaptivity.** A ``*modelModifier, type=hAdaptivity`` refining the mesh mid-step is</span>
 <span class="sd">supported. Three things make that work, and only the third is this solver's own:</span>
@@ -506,11 +508,14 @@
     <span class="n">systemMatrixAssemblies</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"vij"</span><span class="p">:</span> <span class="n">VIJSystemMatrixAssembly</span><span class="p">}</span>
 
     <span class="c1">#: The predictor's state, as in the parent, the drift the conservation checks accumulate over the</span>
-    <span class="c1">#: step, and the conserved totals after the last accepted increment, which a topology change is</span>
-    <span class="c1">#: compared against. The velocity and acceleration are node-field entries, restored with the model.</span>
+    <span class="c1">#: step, the conserved totals after the last accepted increment, which a topology change is</span>
+    <span class="c1">#: compared against, and whether the next increment computes the acceleration from equilibrium</span>
+    <span class="c1">#: first, which a checkpoint written after the zero increment of a step still has to do. The</span>
+    <span class="c1">#: velocity and acceleration are node-field entries, restored with the model.</span>
     <span class="n">checkpointedState</span> <span class="o">=</span> <span class="n">NIST</span><span class="o">.</span><span class="n">checkpointedState</span> <span class="o">|</span> <span class="p">{</span>
         <span class="s2">"_conservationCheck"</span><span class="p">:</span> <span class="n">ConservationCheck</span><span class="p">,</span>
         <span class="s2">"_conservedAtLastAccept"</span><span class="p">:</span> <span class="n">_ConservedQuantities</span><span class="p">,</span>
+        <span class="s2">"_initialAccelerationPending"</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
     <span class="p">}</span>
 
     <span class="n">SolverSpecificOptions</span> <span class="o">=</span> <span class="n">NIST</span><span class="o">.</span><span class="n">SolverSpecificOptions</span> <span class="o">|</span> <span class="p">{</span>
@@ -583,9 +588,12 @@
     <span class="p">):</span>
 <span class="w">        </span><span class="sd">"""Start a step; see the parent.</span>
 
-<span class="sd">        Arms the initial-acceleration computation for a step starting cold and drops the operators</span>
-<span class="sd">        of the previous step -- the parent rebuilds its equation system at the start of every step,</span>
-<span class="sd">        and the operators follow that system. The velocity and acceleration are not dropped: they</span>
+<span class="sd">        Arms the initial-acceleration computation and drops the operators of the previous step -- the</span>
+<span class="sd">        parent rebuilds its equation system at the start of every step, and the operators follow that</span>
+<span class="sd">        system. A step that continues from a restart checkpoint takes over, with the checkpointed state</span>
+<span class="sd">        restored after this, whether the initial acceleration is still to be computed: the first real</span>
+<span class="sd">        increment of the step computes it, and a checkpoint written after the zero increment comes</span>
+<span class="sd">        before that. The velocity and acceleration are not dropped: they</span>
 <span class="sd">        are re-read from the ``V``/``A`` node-field entries the previous step (or the checkpoint)</span>
 <span class="sd">        left, which is what carries the kinematic state across steps.</span>
 
@@ -612,14 +620,15 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_topologyRecordsAtLastBuild</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">topology</span><span class="o">.</span><span class="n">history</span><span class="p">)</span>
 
         <span class="n">resumed</span> <span class="o">=</span> <span class="ow">not</span> <span class="n">step</span><span class="o">.</span><span class="n">timeStepper</span><span class="o">.</span><span class="n">isAtStepStart</span><span class="p">()</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_initialAccelerationPending</span> <span class="o">=</span> <span class="nb">bool</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s2">"computeInitialAcceleration"</span><span class="p">])</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">resumed</span>
+        <span class="c1"># A resumed step overwrites it with the checkpointed one.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_initialAccelerationPending</span> <span class="o">=</span> <span class="nb">bool</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s2">"computeInitialAcceleration"</span><span class="p">])</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">journal</span><span class="o">.</span><span class="n">message</span><span class="p">(</span>
             <span class="s2">"Newmark-beta time integration, beta=</span><span class="si">{:}</span><span class="s2">, gamma=</span><span class="si">{:}</span><span class="s2">; consistent mass</span><span class="si">{:}</span><span class="s2">"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s2">"newmarkBeta"</span><span class="p">],</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s2">"newmarkGamma"</span><span class="p">],</span>
                 <span class="p">(</span>
-                    <span class="s2">"; acceleration from the restart checkpoint"</span>
+                    <span class="s2">"; continuing from the restart checkpoint"</span>
                     <span class="k">if</span> <span class="n">resumed</span>
                     <span class="k">else</span> <span class="p">(</span>
                         <span class="s2">"; initial acceleration from equilibrium"</span>

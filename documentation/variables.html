@@ -146,8 +146,16 @@ we store results in cumulative Fields, such as NodeField.</p>
 
 <span class="target" id="module-edelweissfe.variables.scalarvariable"></span><dl class="py class">
 <dt class="sig sig-object py" id="edelweissfe.variables.scalarvariable.ScalarVariable">
-<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">edelweissfe.variables.scalarvariable.</span></span><span class="sig-name descname"><span class="pre">ScalarVariable</span></span><a class="reference internal" href="../_modules/edelweissfe/variables/scalarvariable.html#ScalarVariable"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.variables.scalarvariable.ScalarVariable" title="Link to this definition"></a></dt>
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">edelweissfe.variables.scalarvariable.</span></span><span class="sig-name descname"><span class="pre">ScalarVariable</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/variables/scalarvariable.html#ScalarVariable"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.variables.scalarvariable.ScalarVariable" title="Link to this definition"></a></dt>
 <dd><p>A basic scalar variable, not tied to a spatial position.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>name</strong> (<em>str</em>) – The name under which the model holds it (see <a class="reference internal" href="models.html#edelweissfe.models.femodel.FEModel.scalarVariables" title="edelweissfe.models.femodel.FEModel.scalarVariables"><code class="xref py py-attr docutils literal notranslate"><span class="pre">scalarVariables</span></code></a>),
+the same in every run of the model: a restart checkpoint stores its value under this name, and the numbering
+of the degrees of freedom names it so
+(<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofmanager.DofManager.dofNumberingDigest" title="edelweissfe.numerics.dofmanager.DofManager.dofNumberingDigest"><code class="xref py py-attr docutils literal notranslate"><span class="pre">dofNumberingDigest</span></code></a>).</p>
+</dd>
+</dl>
 </dd></dl>
 
 </section>

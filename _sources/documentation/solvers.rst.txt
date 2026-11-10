@@ -373,13 +373,19 @@ and around rebuilds of the equation system, both off by default:
   increments up to the next accepted one start from zero.
 * ``extrapolateAcrossConnectivityChange``: a change of the connectivity, e.g., a contact search that couples other
   nodes, rebuilds the equation system, and the increment starts from zero. With this option, it is extrapolated
-  nevertheless, as long as the rebuilt system numbers the degrees of freedom exactly as the last one
-  (:meth:`~edelweissfe.numerics.dofmanager.DofManager.dofNumbering`): the last accepted increments are vectors of the
-  same degrees of freedom then. A change of the topology, e.g., a mesh refinement, always starts from zero (see
+  nevertheless, as long as the rebuilt system numbers the degrees of freedom exactly as the one the last increments
+  were accepted in (compared by the digests of the two numberings,
+  :attr:`~edelweissfe.numerics.dofmanager.DofManager.dofNumberingDigest`): the last accepted increments are vectors of
+  the same degrees of freedom then. A change of the topology, e.g., a mesh refinement, always starts from zero (see
   ``extrapolateAfterModelChange`` for the increment that follows it).
 
 Both act on a prediction: a declaration of options -- the ``*solver`` datalines, or an ``>>options`` block -- that
 switches either on with ``extrapolation=off`` is refused.
+
+The last accepted increments are checkpointed with the digest of their numbering. A step that continues from a
+restart checkpoint, resumed or fallen back to (see :doc:`restart`), rebuilds its equation system at its first
+increment, and extrapolates them only if the rebuilt system numbers the degrees of freedom alike: the numbering of a
+meshfree model, e.g., follows its active cells, which may have changed since the checkpoint was written.
 
 Line search and quasi-Newton fallback of the implicit solvers
 -------------------------------------------------------------

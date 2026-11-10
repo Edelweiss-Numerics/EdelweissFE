@@ -30,6 +30,46 @@ fails, the step fails. Any other increment, including a first increment of nonze
 An explicit step (``AdaptiveStepForExplicitSimulations``) always begins with the zero increment, in which the explicit
 solver builds its initial state, and refuses ``makeZeroIncrementFirst=False``.
 
+Falling back to a restart checkpoint
+------------------------------------
+
+An increment that fails at the minimum increment size ``minInc`` fails the step, and so does a failing last increment
+of the step that is smaller than ``minInc`` already, the remainder of the step. With ``maxCheckpointFallbacks=n``, the
+step instead goes back to its latest restart checkpoint and continues from there with an increment cut back by
+``cutbackFactor``, at most ``n`` times:
+
+.. code-block:: edelweiss
+
+    *output, type=restart, name=restart
+    writeInterval=5, baseName=restart, numberOfFilesToKeep=3
+
+    *step, solver=theSolver
+    maxInc=1e-2, minInc=1e-6, maxCheckpointFallbacks=3
+
+The increments accepted after the checkpoint are discarded, and the step continues exactly as a run resumed from that
+checkpoint would (see :doc:`restart`), with the one difference that its next increment is smaller. Their output is
+replaced: field output exports are cut back to the checkpoint, and the Ensight sequence continues from it. Path
+dependent materials (plasticity, damage) then follow a different, finer path through the same load history, which may
+pass where the coarser one got stuck. If the increment the checkpoint holds cannot be cut back either, the step goes
+back to the checkpoint before it.
+
+- The checkpoints are those of the restart output, of which the job must define exactly one: with none, or several,
+  the step refuses to start. A resumed run may go back to the checkpoint it resumed from, and to the ones the
+  interrupted run wrote before it, as long as their files still hold them.
+- The step does not go back to a checkpoint that holds the state the failed increment started from, i.e., one written
+  after the last increment it accepted: from there, every increment size down to ``minInc`` has just failed. It goes
+  back to the checkpoint before it instead. With ``writeInterval=1``, the latest checkpoint always is such a one, so
+  a fallback goes back at least one increment before the failed one.
+- Every checkpoint serves one fallback: falling back again takes the checkpoint before it, unless the step has written
+  newer ones since. How far back the step can go is set by ``writeInterval`` and ``numberOfFilesToKeep`` of the restart
+  output.
+- The step falls back to checkpoints of its own only, never into an earlier step: a failed zero increment, or a
+  failure before the step has written a checkpoint after its zero increment, still fails the step.
+- A mesh change cannot be undone, so a step whose mesh has changed since the checkpoint (e.g. by adaptive refinement)
+  cannot go back to it, nor to any older one, and fails, naming the checkpoint and the mesh change it predates. A step
+  with adaptive refinement can fall back only to checkpoints written after its last refinement.
+- Each fallback is reported, together with the performance timing of the discarded part of the step.
+
 ``AdaptiveStep`` - A classical adpative step for transient simulations
 ----------------------------------------------------------------------
 

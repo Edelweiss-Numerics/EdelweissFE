@@ -117,9 +117,10 @@
 <span class="sd">between increments. A component whose declaration is still None has not been declared at all, and</span>
 <span class="sd">cannot be checkpointed.</span>
 
-<span class="sd">An attribute that is None is simply left out, and read back as None. A ``dict`` maps strings to</span>
-<span class="sd">floats. An attribute whose type is none of the plain ones is a helper object that declares its own</span>
-<span class="sd">``checkpointedState``; its state is stored under the attribute's name as a prefix.</span>
+<span class="sd">An attribute that is None is simply left out, and read back as None. A ``str`` is stored as bytes;</span>
+<span class="sd">a ``dict`` maps strings to floats. An attribute whose type is none of the plain ones is a helper</span>
+<span class="sd">object that declares its own ``checkpointedState``; its state is stored under the attribute's name</span>
+<span class="sd">as a prefix. A helper that declares an empty mapping stores nothing and keeps itself as it is.</span>
 <span class="sd">"""</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
@@ -132,6 +133,7 @@
     <span class="nb">float</span><span class="p">:</span> <span class="k">lambda</span> <span class="n">value</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">),</span>
     <span class="nb">int</span><span class="p">:</span> <span class="k">lambda</span> <span class="n">value</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">),</span>
     <span class="nb">bool</span><span class="p">:</span> <span class="k">lambda</span> <span class="n">value</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">),</span>
+    <span class="nb">str</span><span class="p">:</span> <span class="k">lambda</span> <span class="n">value</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">value</span><span class="o">.</span><span class="n">encode</span><span class="p">()),</span>
     <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">,</span>
     <span class="nb">list</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">,</span>
     <span class="nb">set</span><span class="p">:</span> <span class="k">lambda</span> <span class="n">value</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="nb">sorted</span><span class="p">(</span><span class="n">value</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">bytes</span><span class="p">),</span>
@@ -144,6 +146,7 @@
     <span class="nb">float</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
     <span class="nb">int</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
     <span class="nb">bool</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
+    <span class="nb">str</span><span class="p">:</span> <span class="k">lambda</span> <span class="n">a</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">a</span><span class="p">)</span><span class="o">.</span><span class="n">item</span><span class="p">()</span><span class="o">.</span><span class="n">decode</span><span class="p">(),</span>
     <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">,</span>
     <span class="nb">list</span><span class="p">:</span> <span class="nb">list</span><span class="p">,</span>
     <span class="nb">set</span><span class="p">:</span> <span class="k">lambda</span> <span class="n">a</span><span class="p">:</span> <span class="p">{</span><span class="n">entry</span><span class="o">.</span><span class="n">decode</span><span class="p">()</span> <span class="k">for</span> <span class="n">entry</span> <span class="ow">in</span> <span class="n">a</span><span class="p">},</span>
@@ -217,10 +220,13 @@
         <span class="k">else</span><span class="p">:</span>
             <span class="n">prefix</span> <span class="o">=</span> <span class="n">name</span> <span class="o">+</span> <span class="s2">"."</span>
             <span class="n">nested</span> <span class="o">=</span> <span class="p">{</span><span class="n">key</span><span class="p">[</span><span class="nb">len</span><span class="p">(</span><span class="n">prefix</span><span class="p">)</span> <span class="p">:]:</span> <span class="n">array</span> <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">array</span> <span class="ow">in</span> <span class="n">state</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">key</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="n">prefix</span><span class="p">)}</span>
-            <span class="k">if</span> <span class="ow">not</span> <span class="n">nested</span><span class="p">:</span>
-                <span class="n">component</span><span class="o">.</span><span class="vm">__dict__</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
-                <span class="k">continue</span>
             <span class="n">helper</span> <span class="o">=</span> <span class="n">component</span><span class="o">.</span><span class="vm">__dict__</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">name</span><span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">nested</span><span class="p">:</span>
+                <span class="c1"># A helper that carries nothing stores nothing, and has nothing to restore; otherwise, the</span>
+                <span class="c1"># attribute was None.</span>
+                <span class="k">if</span> <span class="n">helper</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">_declaration</span><span class="p">(</span><span class="n">helper</span><span class="p">):</span>
+                    <span class="n">component</span><span class="o">.</span><span class="vm">__dict__</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+                <span class="k">continue</span>
             <span class="k">if</span> <span class="n">helper</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="n">helper</span> <span class="o">=</span> <span class="n">kind</span><span class="o">.</span><span class="fm">__new__</span><span class="p">(</span><span class="n">kind</span><span class="p">)</span>
             <span class="n">unpackState</span><span class="p">(</span><span class="n">helper</span><span class="p">,</span> <span class="n">nested</span><span class="p">)</span>

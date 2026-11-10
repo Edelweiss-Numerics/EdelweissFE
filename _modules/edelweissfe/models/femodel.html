@@ -125,7 +125,11 @@
     <span class="n">mapChunksInParallel</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.utils.checkpoint</span><span class="w"> </span><span class="kn">import</span> <span class="n">readRestartDataInto</span><span class="p">,</span> <span class="n">writeRestartDataOf</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.utils.exceptions</span><span class="w"> </span><span class="kn">import</span> <span class="n">RestartError</span><span class="p">,</span> <span class="n">TopologyError</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.utils.exceptions</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">MeshChangedSinceCheckpoint</span><span class="p">,</span>
+    <span class="n">RestartError</span><span class="p">,</span>
+    <span class="n">TopologyError</span><span class="p">,</span>
+<span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.variables.fieldvariable</span><span class="w"> </span><span class="kn">import</span> <span class="n">FieldVariable</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.variables.scalarvariable</span><span class="w"> </span><span class="kn">import</span> <span class="n">ScalarVariable</span>
 
@@ -346,7 +350,7 @@
         <span class="k">if</span> <span class="n">name</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">scalarVariables</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s2">"ScalarVariable with name </span><span class="si">{:}</span><span class="s2"> already exists!"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">name</span><span class="p">))</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">scalarVariables</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">ScalarVariable</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">scalarVariables</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">ScalarVariable</span><span class="p">(</span><span class="n">name</span><span class="p">)</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">scalarVariables</span><span class="p">[</span><span class="n">name</span><span class="p">]</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_createAndAssignScalarVariableForConstraints</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">journal</span><span class="p">:</span> <span class="n">Journal</span><span class="p">):</span>
@@ -705,8 +709,12 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">readRestart</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">restartFile</span><span class="p">:</span> <span class="n">h5py</span><span class="o">.</span><span class="n">File</span><span class="p">,</span> <span class="n">journal</span><span class="p">:</span> <span class="n">Journal</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">"""Read the state of the model from a restart checkpoint written by :meth:`writeRestart`.</span>
 
-<span class="sd">        The model must already have been rebuilt from the original ``.inp`` file (same topology)</span>
-<span class="sd">        and :meth:`prepareYourself` called, before this is called.</span>
+<span class="sd">        Either the model has been rebuilt from the original ``.inp`` file and :meth:`prepareYourself`</span>
+<span class="sd">        called -- a resumed run -- or it is the very model the checkpoint was written from, going back</span>
+<span class="sd">        to it within the run (see :meth:`~edelweissfe.steps.base.stepbase.StepBase.fallBackToCheckpoint`).</span>
+<span class="sd">        Of the recorded topology decisions, those the model has not applied yet are replayed: all of</span>
+<span class="sd">        them for a rebuilt model, none for a model going back. A model whose mesh has changed since</span>
+<span class="sd">        the checkpoint cannot go back to it, since a mesh change cannot be undone.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
@@ -714,32 +722,49 @@
 <span class="sd">            An open, readable :class:`h5py.File` (or group) to read the checkpoint from.</span>
 <span class="sd">        journal</span>
 <span class="sd">            Optional Journal for the progress messages of the topology replay.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        RestartError</span>
+<span class="sd">            If the model is not the one the checkpoint was written from, before anything is restored.</span>
+<span class="sd">        MeshChangedSinceCheckpoint</span>
+<span class="sd">            If the model's mesh has changed since the checkpoint was written, before anything is restored.</span>
 <span class="sd">        """</span>
 
         <span class="n">f</span> <span class="o">=</span> <span class="n">restartFile</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">time</span> <span class="o">=</span> <span class="n">f</span><span class="o">.</span><span class="n">attrs</span><span class="p">[</span><span class="s2">"time"</span><span class="p">]</span>
-
-        <span class="c1"># Must run before every restore below: the replay materializes elements/nodes (e.g. AMR-refined</span>
-        <span class="c1"># children) which those restores address by label.</span>
+        <span class="c1"># Checked before anything is restored, so that a refused checkpoint leaves the model as it is.</span>
         <span class="n">historyGroup</span> <span class="o">=</span> <span class="n">f</span><span class="p">[</span><span class="s2">"topologyHistory"</span><span class="p">]</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">topology</span><span class="o">.</span><span class="n">setupFingerprint</span><span class="p">()</span> <span class="o">!=</span> <span class="n">historyGroup</span><span class="o">.</span><span class="n">attrs</span><span class="p">[</span><span class="s2">"setupFingerprint"</span><span class="p">]:</span>
             <span class="k">raise</span> <span class="n">RestartError</span><span class="p">(</span>
                 <span class="s2">"the model rebuilt from the input file is not the one the checkpoint was written from: "</span>
                 <span class="s2">"its mesh (nodes, elements, coordinates, numbering) differs"</span>
             <span class="p">)</span>
-        <span class="n">records</span> <span class="o">=</span> <span class="p">[]</span>
-        <span class="k">for</span> <span class="n">index</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">historyGroup</span><span class="o">.</span><span class="n">attrs</span><span class="p">[</span><span class="s2">"count"</span><span class="p">])):</span>
-            <span class="n">recordGroup</span> <span class="o">=</span> <span class="n">historyGroup</span><span class="p">[</span><span class="s2">"</span><span class="si">{:06d}</span><span class="s2">"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">index</span><span class="p">)]</span>
-            <span class="n">records</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
-                <span class="n">TopologyRecord</span><span class="p">(</span>
-                    <span class="n">modifier</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">recordGroup</span><span class="o">.</span><span class="n">attrs</span><span class="p">[</span><span class="s2">"modifier"</span><span class="p">]),</span>
-                    <span class="n">roundNumber</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">recordGroup</span><span class="o">.</span><span class="n">attrs</span><span class="p">[</span><span class="s2">"roundNumber"</span><span class="p">]),</span>
-                    <span class="n">time</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">recordGroup</span><span class="o">.</span><span class="n">attrs</span><span class="p">[</span><span class="s2">"time"</span><span class="p">]),</span>
-                    <span class="n">plan</span><span class="o">=</span><span class="p">{</span><span class="n">entryName</span><span class="p">:</span> <span class="n">values</span><span class="p">[:]</span> <span class="k">for</span> <span class="n">entryName</span><span class="p">,</span> <span class="n">values</span> <span class="ow">in</span> <span class="n">recordGroup</span><span class="o">.</span><span class="n">items</span><span class="p">()},</span>
-                    <span class="n">fingerprint</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">recordGroup</span><span class="o">.</span><span class="n">attrs</span><span class="p">[</span><span class="s2">"fingerprint"</span><span class="p">]),</span>
-                <span class="p">)</span>
+        <span class="n">recordGroups</span> <span class="o">=</span> <span class="p">[</span><span class="n">historyGroup</span><span class="p">[</span><span class="s2">"</span><span class="si">{:06d}</span><span class="s2">"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">index</span><span class="p">)]</span> <span class="k">for</span> <span class="n">index</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">historyGroup</span><span class="o">.</span><span class="n">attrs</span><span class="p">[</span><span class="s2">"count"</span><span class="p">]))]</span>
+        <span class="n">appliedRecords</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">topology</span><span class="o">.</span><span class="n">history</span>
+        <span class="k">if</span> <span class="nb">any</span><span class="p">(</span>
+            <span class="p">(</span><span class="n">applied</span><span class="o">.</span><span class="n">modifier</span><span class="p">,</span> <span class="n">applied</span><span class="o">.</span><span class="n">roundNumber</span><span class="p">,</span> <span class="n">applied</span><span class="o">.</span><span class="n">fingerprint</span><span class="p">)</span>
+            <span class="o">!=</span> <span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">group</span><span class="o">.</span><span class="n">attrs</span><span class="p">[</span><span class="s2">"modifier"</span><span class="p">]),</span> <span class="nb">int</span><span class="p">(</span><span class="n">group</span><span class="o">.</span><span class="n">attrs</span><span class="p">[</span><span class="s2">"roundNumber"</span><span class="p">]),</span> <span class="nb">str</span><span class="p">(</span><span class="n">group</span><span class="o">.</span><span class="n">attrs</span><span class="p">[</span><span class="s2">"fingerprint"</span><span class="p">]))</span>
+            <span class="k">for</span> <span class="n">applied</span><span class="p">,</span> <span class="n">group</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">appliedRecords</span><span class="p">,</span> <span class="n">recordGroups</span><span class="p">)</span>
+        <span class="p">):</span>
+            <span class="k">raise</span> <span class="n">RestartError</span><span class="p">(</span><span class="s2">"the topology decisions of the model differ from those the checkpoint records"</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">appliedRecords</span><span class="p">)</span> <span class="o">&gt;</span> <span class="nb">len</span><span class="p">(</span><span class="n">recordGroups</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="n">MeshChangedSinceCheckpoint</span><span class="p">(</span><span class="n">appliedRecords</span><span class="p">[</span><span class="nb">len</span><span class="p">(</span><span class="n">recordGroups</span><span class="p">)])</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">time</span> <span class="o">=</span> <span class="n">f</span><span class="o">.</span><span class="n">attrs</span><span class="p">[</span><span class="s2">"time"</span><span class="p">]</span>
+
+        <span class="c1"># Must run before every restore below: the replay materializes elements/nodes (e.g. AMR-refined</span>
+        <span class="c1"># children) which those restores address by label.</span>
+        <span class="n">records</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="n">TopologyRecord</span><span class="p">(</span>
+                <span class="n">modifier</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">recordGroup</span><span class="o">.</span><span class="n">attrs</span><span class="p">[</span><span class="s2">"modifier"</span><span class="p">]),</span>
+                <span class="n">roundNumber</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">recordGroup</span><span class="o">.</span><span class="n">attrs</span><span class="p">[</span><span class="s2">"roundNumber"</span><span class="p">]),</span>
+                <span class="n">time</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">recordGroup</span><span class="o">.</span><span class="n">attrs</span><span class="p">[</span><span class="s2">"time"</span><span class="p">]),</span>
+                <span class="n">plan</span><span class="o">=</span><span class="p">{</span><span class="n">entryName</span><span class="p">:</span> <span class="n">values</span><span class="p">[:]</span> <span class="k">for</span> <span class="n">entryName</span><span class="p">,</span> <span class="n">values</span> <span class="ow">in</span> <span class="n">recordGroup</span><span class="o">.</span><span class="n">items</span><span class="p">()},</span>
+                <span class="n">fingerprint</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">recordGroup</span><span class="o">.</span><span class="n">attrs</span><span class="p">[</span><span class="s2">"fingerprint"</span><span class="p">]),</span>
             <span class="p">)</span>
+            <span class="k">for</span> <span class="n">recordGroup</span> <span class="ow">in</span> <span class="n">recordGroups</span><span class="p">[</span><span class="nb">len</span><span class="p">(</span><span class="n">appliedRecords</span><span class="p">)</span> <span class="p">:]</span>
+        <span class="p">]</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">topology</span><span class="o">.</span><span class="n">replayHistory</span><span class="p">(</span><span class="n">records</span><span class="p">,</span> <span class="n">journal</span><span class="p">)</span>
         <span class="n">readRestartDataInto</span><span class="p">(</span><span class="n">f</span><span class="p">[</span><span class="s2">"modelModifiers"</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">modelModifiers</span><span class="p">)</span>
         <span class="c1"># Bring the mesh-dependent consumers (ties, contact surfaces) up to date with the replayed mesh, as</span>

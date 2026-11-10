@@ -274,9 +274,10 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">f_export</span> <span class="o">=</span> <span class="n">fExport_x</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">timeHistory</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">export</span> <span class="o">=</span> <span class="n">export</span>
-        <span class="c1">#: The size of the export file the run has written so far. Before its first write, a</span>
-        <span class="c1">#: process truncates the file to it: a cold run starts the file afresh, and a resumed run</span>
-        <span class="c1">#: drops whatever the interrupted run wrote after its checkpoint.</span>
+        <span class="c1">#: The size of the export file the run has written so far. Before its first write after</span>
+        <span class="c1">#: a start or a restored checkpoint, the file is truncated to it: a cold run starts the file</span>
+        <span class="c1">#: afresh, a resumed run drops whatever the interrupted run wrote after its checkpoint, and</span>
+        <span class="c1">#: a step falling back to a checkpoint drops the rows of the increments it discards.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_exportedBytes</span> <span class="o">=</span> <span class="mi">0</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_exportFileTruncated</span> <span class="o">=</span> <span class="kc">False</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_reshape_to_dimensions</span> <span class="o">=</span> <span class="n">reshape_to_dimensions</span>
@@ -504,6 +505,7 @@
 
         <span class="bp">self</span><span class="o">.</span><span class="n">timeHistory</span> <span class="o">=</span> <span class="p">[</span><span class="nb">float</span><span class="p">(</span><span class="n">t</span><span class="p">)</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">data</span><span class="p">[</span><span class="s2">"timeHistory"</span><span class="p">]]</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_exportedBytes</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="s2">"exportedBytes"</span><span class="p">])</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_exportFileTruncated</span> <span class="o">=</span> <span class="kc">False</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">appendResults</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">result</span><span class="p">,</span> <span class="n">offset</span> <span class="o">=</span> <span class="p">[],</span> <span class="mi">0</span>
             <span class="k">for</span> <span class="n">shape</span> <span class="ow">in</span> <span class="n">data</span><span class="p">[</span><span class="s2">"resultShapes"</span><span class="p">]:</span>

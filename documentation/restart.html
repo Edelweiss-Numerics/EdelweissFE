@@ -76,6 +76,7 @@
 <li class="toctree-l3"><a class="reference internal" href="#the-rule">The rule</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#one-increment-and-where-the-checkpoint-is-written">One increment, and where the checkpoint is written</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#restoring-a-checkpoint">Restoring a checkpoint</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#going-back-to-a-checkpoint-within-a-run">Going back to a checkpoint within a run</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#adding-something-that-carries-state-between-increments">Adding something that carries state between increments</a></li>
 </ul>
 </li>
@@ -199,7 +200,7 @@ accepted state, so the model modifiers are not asked again: they decide once per
 <tr class="row-odd"><td><p>mesh</p></td>
 <td><p>the mesh rebuilt from the input file is checked against the one the checkpointed run started
 from (<a class="reference internal" href="models.html#edelweissfe.models.topologypipeline.TopologyPipeline.setupFingerprint" title="edelweissfe.models.topologypipeline.TopologyPipeline.setupFingerprint"><code class="xref py py-meth docutils literal notranslate"><span class="pre">setupFingerprint()</span></code></a>), then
-the recorded topology decisions are replayed through the model modifiers’ own <code class="docutils literal notranslate"><span class="pre">apply</span></code>
+the recorded topology decisions the model has not applied yet are replayed through the model modifiers’ own <code class="docutils literal notranslate"><span class="pre">apply</span></code>
 (<a class="reference internal" href="models.html#edelweissfe.models.topologypipeline.TopologyPipeline.replayHistory" title="edelweissfe.models.topologypipeline.TopologyPipeline.replayHistory"><code class="xref py py-meth docutils literal notranslate"><span class="pre">replayHistory()</span></code></a>), and the
 result is checked against the recorded fingerprint; the time of a replay is printed in a
 performance table of its own, before the resumed step’s table</p></td>
@@ -218,7 +219,9 @@ method publishes)</p></td>
 <td><p>read; adopted only if it refers to the restored model’s contact points, otherwise refused</p></td>
 </tr>
 <tr class="row-even"><td><p>output managers’ sequence bookkeeping</p></td>
-<td><p>read, including each restart writer’s position in its write interval</p></td>
+<td><p>read, including each restart writer’s position in its write interval and its record of the
+checkpoints a step may fall back to: the one resumed from, and those before it whose files
+still hold them</p></td>
 </tr>
 <tr class="row-odd"><td><p>time stepper</p></td>
 <td><p>its state after the last accepted increment, as it is: progress, increment counter, the size
@@ -226,17 +229,37 @@ of the next increment, the enforced time increment, and whether the zero increme
 </tr>
 <tr class="row-even"><td><p>solver</p></td>
 <td><p>its state between increments: the implicit solver’s predictor (the last accepted increments
-and their <code class="docutils literal notranslate"><span class="pre">dU</span></code>, under arc length control also their increments of the load parameter, and the
-load parameter of the step), the explicit solver’s last increment and accumulated external work</p></td>
+and their <code class="docutils literal notranslate"><span class="pre">dU</span></code>, with the digest of the numbering of the degrees of freedom these are vectors
+of, under arc length control also their increments of the load parameter, and the load
+parameter of the step) and the time average fluxes of the Abaqus convergence criterion, the
+implicit dynamic solver’s conservation check and whether the initial acceleration of the step
+is still to be computed (in a checkpoint written after the zero increment, it is: the first
+real increment computes it), the explicit solver’s last increment and accumulated
+external work. The resumed step extrapolates the last accepted increments only if its first equation system numbers the
+degrees of freedom as they are numbered (see <a class="reference internal" href="solvers.html"><span class="doc">Solvers</span></a>)</p></td>
 </tr>
 </tbody>
 </table>
 </section>
+<section id="going-back-to-a-checkpoint-within-a-run">
+<h2>Going back to a checkpoint within a run<a class="headerlink" href="#going-back-to-a-checkpoint-within-a-run" title="Link to this heading"></a></h2>
+<p>A step that may fall back to a checkpoint (<code class="docutils literal notranslate"><span class="pre">maxCheckpointFallbacks</span></code>, see <a class="reference internal" href="steps.html"><span class="doc">Steps</span></a>) restores one
+within the running job, by the same pieces and in the same order as a resumed run: the model, the time
+stepper, then the solver begins the step anew – a restored time stepper is not at the step start, so
+nothing of the step start is repeated – and takes over the checkpointed state together with the step
+actions, output managers and field outputs
+(<a class="reference internal" href="steps.html#edelweissfe.steps.base.stepbase.StepBase.fallBackToCheckpoint" title="edelweissfe.steps.base.stepbase.StepBase.fallBackToCheckpoint"><code class="xref py py-meth docutils literal notranslate"><span class="pre">fallBackToCheckpoint()</span></code></a>). The model has not been
+rebuilt then, so of the recorded topology decisions only those it has not applied yet are replayed –
+none, since it can go back only to a checkpoint of its own mesh: a mesh change cannot be undone, and a
+model whose mesh has changed since the checkpoint refuses it, before anything is restored
+(<a class="reference internal" href="exceptions.html#edelweissfe.utils.exceptions.MeshChangedSinceCheckpoint" title="edelweissfe.utils.exceptions.MeshChangedSinceCheckpoint"><code class="xref py py-class docutils literal notranslate"><span class="pre">MeshChangedSinceCheckpoint</span></code></a>). The checkpoints are those of the
+one restart output of the job; a step that may fall back refuses to start with none or several.</p>
+</section>
 <section id="adding-something-that-carries-state-between-increments">
 <h2>Adding something that carries state between increments<a class="headerlink" href="#adding-something-that-carries-state-between-increments" title="Link to this heading"></a></h2>
-<p>Declare it. Every solver, time stepper, constraint and output manager states which of its attributes
-it carries from one increment to the next, by name and type, and the checkpoint writes and reads
-exactly those, as they are (<a class="reference internal" href="output.html#module-edelweissfe.utils.checkpointedstate" title="edelweissfe.utils.checkpointedstate"><code class="xref py py-mod docutils literal notranslate"><span class="pre">checkpointedstate</span></code></a>):</p>
+<p>Declare it. Every solver, convergence criterion, time stepper, constraint and output manager states
+which of its attributes it carries from one increment to the next, by name and type, and the
+checkpoint writes and reads exactly those, as they are (<a class="reference internal" href="output.html#module-edelweissfe.utils.checkpointedstate" title="edelweissfe.utils.checkpointedstate"><code class="xref py py-mod docutils literal notranslate"><span class="pre">checkpointedstate</span></code></a>):</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">NIST</span><span class="p">(</span><span class="n">NonlinearSolverBase</span><span class="p">):</span>
     <span class="c1">#: The predictor's state between increments: the last accepted increment and its dU.</span>
     <span class="n">checkpointedState</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"prevTimeStep"</span><span class="p">:</span> <span class="n">TimeStep</span><span class="p">,</span> <span class="s2">"dU"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">}</span>
@@ -254,8 +277,9 @@ derives the change of its controlled quantity over the step from the model it is
 resumed run skips the steps before the checkpoint, and declares the step actions on the restored
 model, so it restores that state rather than re-deriving it.</p>
 <p>Field outputs carry their history the same way, and how much of their export file belongs to the
-run: before its first write, a resumed run cuts the file back to that size, so the rows an
-interrupted run wrote after its last checkpoint are replaced, not duplicated.</p>
+run: before its first write after a checkpoint is restored, the file is cut back to that size, so the
+rows an interrupted run wrote after its last checkpoint, or a step falling back to a checkpoint
+discards, are replaced, not duplicated.</p>
 <p>Then add a scenario to <code class="docutils literal notranslate"><span class="pre">tests/test_restart_exhaustive.py</span></code>: it resumes from every checkpoint of a
 small run and requires the bitwise-identical end state, the same checkpoints and the same output.</p>
 </section>
