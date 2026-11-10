@@ -898,11 +898,8 @@ class NonlinearImplicitDynamic(NIST):
                 A = self.theDofManager.constructDofVector()
                 for fieldName in dynamicFields:
                     field = model.nodeFields[fieldName]
-                    # A missing entry (programmatically assembled model) means a start from rest.
-                    if "V" in field:
-                        V = self.theDofManager.writeNodeFieldToDofVector(V, field, "V")
-                    if "A" in field:
-                        A = self.theDofManager.writeNodeFieldToDofVector(A, field, "A")
+                    V = self.theDofManager.writeNodeFieldToDofVector(V, field, "V")
+                    A = self.theDofManager.writeNodeFieldToDofVector(A, field, "A")
             else:
                 V, A = system.V, system.A
 

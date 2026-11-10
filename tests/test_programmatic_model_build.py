@@ -351,10 +351,6 @@ def test_full_step_and_solver_cycle_driven_programmatically():
 
     jobInfo = loadConfiguration(dict())
 
-    for nodeField in model.nodeFields.values():
-        nodeField.createFieldValueEntry("U")
-        nodeField.createFieldValueEntry("P")
-
     model._linkFieldVariableObjects(model.nodeSets["all"])
 
     # --- field outputs, built through the controller's typed methods ---
@@ -479,9 +475,6 @@ def _runPatchWithRestartOutput(directory, journal, resumeFrom: str = None) -> FE
     model.prepareYourself(journal)
     model.advanceToTime(0.0)
     jobInfo = loadConfiguration(dict())
-    for nodeField in model.nodeFields.values():
-        nodeField.createFieldValueEntry("U")
-        nodeField.createFieldValueEntry("P")
     model._linkFieldVariableObjects(model.nodeSets["all"])
 
     resumeCheckpoint = ResumeCheckpoint(resumeFrom) if resumeFrom is not None else None

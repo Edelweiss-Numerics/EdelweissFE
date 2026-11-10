@@ -328,7 +328,6 @@ class TestIntegratedSurfaceContact(unittest.TestCase):
         for node in model.nodes.values():
             node.fields["displacement"] = model.domainSize
         field = NodeField("displacement", model.domainSize, NodeSet("all", list(model.nodes.values())))
-        field.createFieldValueEntry("U")
         model.nodeFields["displacement"] = field
         return field
 
