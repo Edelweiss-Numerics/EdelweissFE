@@ -625,9 +625,8 @@ class NIST(NonlinearSolverBase):
     def newmarkParametersOfEntities(self) -> tuple[float, float]:
         """The Newmark parameters :math:`(\\beta, \\gamma)` that the entities of the model which integrate their own
         inertia take at the start of every step (see
-        :meth:`~edelweissfe.models.femodel.FEModel.setNewmarkParametersOfEntities`), e.g. the particles of a meshfree
-        model. A quasi-static solver does not integrate in time: :math:`(0, 0)`, no inertia, whatever the entities were
-        given before.
+        :meth:`~edelweissfe.models.femodel.FEModel.setNewmarkParametersOfEntities`). A quasi-static solver does not
+        integrate in time: :math:`(0, 0)`, no inertia, whatever the entities were given before.
 
         Returns
         -------

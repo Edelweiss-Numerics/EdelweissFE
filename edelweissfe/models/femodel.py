@@ -461,8 +461,9 @@ class FEModel:
         quasi-static solver passes, such an entity carries no inertia.
 
         In a finite element model, no entity integrates its own inertia: the elements report their mass, and a
-        dynamic solver integrates the nodes. The particles of a meshfree model of EdelweissMeshfree carry their state,
-        velocity and acceleration included, and each integrates the Newmark scheme at its own evaluation points.
+        dynamic solver integrates the nodes. An entity that carries its state in itself, velocity and acceleration
+        included, integrates the Newmark scheme at its own evaluation points; a model with such entities passes the
+        parameters on to them.
 
         Parameters
         ----------

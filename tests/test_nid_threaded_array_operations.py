@@ -204,8 +204,8 @@ def test_the_mass_and_the_damping_assembled_on_the_thread_pool_are_the_serial_on
     assembleMassAndDamping = NonlinearImplicitDynamic._assembleMassAndDamping
 
     def recordingAssemblies(assemblies):
-        def assemble(self, model, dynamicDofs, dynamicFields, lumpedMassOfParticles):
-            result = assembleMassAndDamping(self, model, dynamicDofs, dynamicFields, lumpedMassOfParticles)
+        def assemble(self, model, dynamicDofs, dynamicFields, lumpedMassOfEntities):
+            result = assembleMassAndDamping(self, model, dynamicDofs, dynamicFields, lumpedMassOfEntities)
             Mvij, damping, M, C, massByField = result
             assemblies.append((np.asarray(Mvij).tobytes(), damping, M.data.tobytes(), C.data.tobytes()))
             return result

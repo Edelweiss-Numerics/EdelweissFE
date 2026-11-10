@@ -120,10 +120,10 @@ back their equation systems through the layout; ``NEST`` builds its system once 
 and ``NID`` assembles its mass matrix from the model's finite elements, asks the layout which degrees of freedom
 carry the mass of the nodes
 (:meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.dofsWithNodalInertia`) and, if it integrates the
-inertia of meshfree particles at the nodes, for their lumped mass
-(:meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.assembleLumpedMassOfParticles`), and, at the
-start of a step, where the model holds the motion of the particles
-(:meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.carriersOfTheMotionOfParticles`). At the start
+inertia of the entities that integrate their own at the nodes, for their lumped mass
+(:meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.assembleLumpedMassOfEntitiesWithOwnInertia`),
+and, at the start of a step, where the model holds the motion of these entities
+(:meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.carriersOfTheMotion`). At the start
 of every step, the implicit solvers give the entities of the model that integrate their own inertia their Newmark
 parameters (:meth:`~edelweissfe.models.femodel.FEModel.setNewmarkParametersOfEntities`): ``NID`` its own, every
 quasi-static solver zero, so that a quasi-static solver is quasi-static by construction. ``NED`` takes the numbering of the
@@ -346,11 +346,10 @@ The material must report a density (for ``LinearElastic``, the third material pa
 is assembled from it, and a time-integrated degree of freedom that receives none is refused rather
 than integrated as though it had inertia.
 
-A meshfree model (RKPM) of EdelweissMeshfree is solved through the same layout: its particles integrate their own
-inertia with the solver's Newmark parameters (``meshfreeInertia=particles``, the default), or the solver integrates
-the nodes of their kernel functions with the particles' lumped mass (``meshfreeInertia=nodes``). The module
-documentation above states what each one does and which error it makes; models of the material point method are
-refused.
+A model whose entities carry their state, and with it their inertia, in themselves is solved through the same
+layout: these entities integrate their own inertia with the solver's Newmark parameters (``inertia=entities``, the
+default), or the solver integrates the nodes they couple with their lumped mass (``inertia=nodes``). The module
+documentation above states what each one does; material points that belong to no element are refused.
 
 A ``*modelModifier, type=hAdaptivity`` refining the mesh mid-step is supported: ``V`` and ``A`` are
 carried onto new nodes by the node-field warm start, the mass and damping are reassembled on the

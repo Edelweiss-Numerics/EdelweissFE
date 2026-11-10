@@ -244,8 +244,8 @@ def test_the_layout_of_a_finite_element_model_has_the_inertia_at_the_nodes():
         layout.dofsWithNodalInertia([_FIELD]), np.arange(displacement.start, displacement.stop)
     )
     np.testing.assert_array_equal(layout.dofsWithNodalInertia([_FIELD, "rotation"]), np.arange(dofManager.nDof))
-    # no particles, no lumped mass of particles, and no material points
-    assert layout.assembleLumpedMassOfParticles(lambda entities, work: work(entities)) is None
+    # no entity with an inertia of its own, so no lumped mass of such entities, and no material points
+    assert layout.assembleLumpedMassOfEntitiesWithOwnInertia(lambda entities, work: work(entities)) is None
     assert layout.materialPoints == []
 
 

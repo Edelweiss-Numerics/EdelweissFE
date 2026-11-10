@@ -262,9 +262,9 @@ class EquationSystemLayout:
         assemble: those the implicit dynamic solver integrates in time with its own Newmark scheme.
 
         In a finite element model, every node carries its total solution and every element its mass, so these are all
-        degrees of freedom of the fields. A meshfree model leaves out the nodes of its kernel functions: their values
-        are the coefficients of one increment, while the particles carry the state, and with it the inertia (see
-        :meth:`assembleLumpedMassOfParticles`).
+        degrees of freedom of the fields. A model whose entities carry their state in themselves, and with it the
+        inertia, leaves out the nodes these entities couple: their values are the coefficients of one increment (see
+        :meth:`assembleLumpedMassOfEntitiesWithOwnInertia`).
 
         Parameters
         ----------
@@ -283,14 +283,16 @@ class EquationSystemLayout:
 
         return np.flatnonzero(isWithNodalInertia)
 
-    def assembleLumpedMassOfParticles(self, forEachChunk: Callable[[list, Callable], None]) -> DofVector | None:
-        """The lumped (diagonal) mass of the meshfree particles at the nodes of their kernel functions,
-        :math:`m_A = \\sum_p \\rho_0\\, V_{0,p}\\, T_A(\\boldsymbol{x}_p)`: what the explicit meshfree solver divides
-        the net force by, and what the implicit dynamic solver adds to the mass of the nodes when it integrates the
-        particles' inertia at the nodes (option ``meshfreeInertia=nodes``). The particles move with every increment,
-        so this mass is one of the current configuration.
+    def assembleLumpedMassOfEntitiesWithOwnInertia(
+        self, forEachChunk: Callable[[list, Callable], None]
+    ) -> DofVector | None:
+        """The lumped (diagonal) mass, at the nodes they couple, of the entities that integrate their own inertia (see
+        :meth:`~edelweissfe.models.femodel.FEModel.setNewmarkParametersOfEntities`): what the implicit dynamic solver
+        adds to the mass of the nodes when it integrates the inertia of these entities there instead (option
+        ``inertia=nodes``). Such entities may move with every increment, so this mass is one of the current
+        configuration.
 
-        A finite element model has no particles: None.
+        A finite element model has no such entity: None.
 
         Parameters
         ----------
@@ -300,23 +302,24 @@ class EquationSystemLayout:
         Returns
         -------
         DofVector | None
-            The lumped mass, one value per degree of freedom; None if the model has no particles.
+            The lumped mass, one value per degree of freedom; None if the model has no such entity.
         """
 
         return None
 
-    def carriersOfTheMotionOfParticles(self) -> set[str]:
-        """Where the model holds the motion of its meshfree particles: ``"particles"`` if a particle carries a velocity
-        or an acceleration in its own state, ``"nodes"`` if a node of their kernel functions carries one in the entries
-        ``V`` and ``A`` of the model's node fields. Asked by the implicit dynamic solver at the start of a step: it takes
-        the motion from one of the two, as its option ``meshfreeInertia`` says, and nothing transfers it from the other.
+    def carriersOfTheMotion(self) -> set[str]:
+        """Where the model holds the motion of its entities that integrate their own inertia: ``"entities"`` if such
+        an entity carries a velocity or an acceleration in its own state, ``"nodes"`` if a node these entities couple
+        carries one in the entries ``V`` and ``A`` of the model's node fields. Asked by the implicit dynamic solver at
+        the start of a step: it takes the motion from one of the two, as its option ``inertia`` says, and nothing
+        transfers it from the other.
 
-        A finite element model has no particles: none.
+        A finite element model has no such entity: none.
 
         Returns
         -------
         set[str]
-            ``"particles"``, ``"nodes"``, both or none.
+            ``"entities"``, ``"nodes"``, both or none.
         """
 
         return set()

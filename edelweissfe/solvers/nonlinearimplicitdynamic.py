@@ -124,49 +124,44 @@ warning, once per field. A model with no such field is refused. Which degrees of
 the mass of the nodes, the model says (:meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.dofsWithNodalInertia`):
 in a finite element model, all of them.
 
-**Meshfree particles (RKPM).** A model of EdelweissMeshfree is solved through the same layout of its equation system.
-Its finite elements contribute their consistent mass as above, and their nodes are integrated by this solver. The
-particles carry the state of the material, their velocity and acceleration included, while the nodes of their kernel
-functions are the coefficients of one increment (updated Lagrangian, see the documentation page *Node field results*).
-Where their inertia is integrated, the option ``meshfreeInertia`` selects:
+**Entities that integrate their own inertia.** A finite element reports its mass, and this solver integrates its
+nodes. A model may also hold entities that carry their state in themselves, their velocity and acceleration
+included, and that integrate the Newmark scheme at their own evaluation points, with the Newmark parameters the
+solver gives them at the start of every step
+(:meth:`~edelweissfe.models.femodel.FEModel.setNewmarkParametersOfEntities`). The nodes such an entity couples are
+then the coefficients of one increment, without an inertia of their own: the layout leaves them out of
+:meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.dofsWithNodalInertia`. Where the inertia of these
+entities is integrated, the option ``inertia`` selects:
 
-* ``particles`` (default): each particle integrates the Newmark scheme at its own evaluation points, with this solver's
-  :math:`\\beta, \\gamma` (passed to the particles at the start of every step, see
-  :meth:`NonlinearImplicitDynamic.newmarkParametersOfEntities`), and adds its inertial force
-  :math:`\\rho_0 V_0 T_A \\ddot{\\boldsymbol{u}}` to its residual and :math:`\\rho_0 V_0 T_A N_B / (\\beta \\Delta t^2)` to
-  its tangent. This solver integrates only the nodes of the finite elements; the inertia sits where the state lives,
-  and nothing is projected between particles and nodes. A model of particles alone has no degree of freedom for this
-  solver to integrate: it assembles no mass and adds nothing to the residual and the tangent. The particles start
-  every analysis from the acceleration in
-  their state, zero at first: unlike the nodes, they get no acceleration from equilibrium, so a load applied suddenly
-  at the start enters their scheme at first order. Their mass :math:`\\sum_p \\rho_0 V_0 T_A N_B` is not symmetric
-  when VCI corrects the test functions, so no exact energy statement holds; the kinetic energy and momentum this
-  solver reports cover the nodes of the finite elements only.
-* ``nodes``: the particles are quasi-static (:math:`\\beta = \\gamma = 0`), and this solver integrates the nodes of the
-  kernel functions too, with the particles' lumped mass
-  (:meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.assembleLumpedMassOfParticles`, the one the
-  explicit meshfree solver uses). The kernel functions move with their particles, so this mass is assembled anew for
-  every increment, and the velocity and acceleration of a node are carried by node in the model's ``V`` and ``A``
-  from one increment, and one equation system, to the next; a node whose kernel function has just become active
-  starts at rest, and a node without positive mass is quasi-static. This makes the error the explicit meshfree solver
-  makes: the nodal velocity and acceleration are coefficients of the kernel functions of the increment they were
-  computed on, and lose that meaning when the support of the particles changes. The acceleration from equilibrium
-  covers these nodes, as every node.
+* ``entities`` (default): each such entity integrates its inertia itself, with this solver's :math:`\\beta, \\gamma`
+  (see :meth:`NonlinearImplicitDynamic.newmarkParametersOfEntities`), and adds its inertial force to its residual and
+  its inertial stiffness to its tangent. This solver integrates only the nodes with a nodal inertia; the inertia sits
+  where the state lives, and nothing is projected between the entities and the nodes. A model of such entities alone
+  has no degree of freedom for this solver to integrate: it assembles no mass and adds nothing to the residual and the
+  tangent. The entities start every analysis from the acceleration in their state, zero at first: unlike the nodes,
+  they get no acceleration from equilibrium, so a load applied suddenly at the start enters their scheme at first
+  order. Their mass need not be symmetric, so no exact energy statement holds; the kinetic energy and momentum this
+  solver reports cover the nodes it integrates only.
+* ``nodes``: the entities are quasi-static (:math:`\\beta = \\gamma = 0`), and this solver integrates the nodes they
+  couple too, with their lumped mass
+  (:meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.assembleLumpedMassOfEntitiesWithOwnInertia`).
+  Such entities may move with every increment, so this mass is assembled anew for every increment, and the velocity
+  and acceleration of a node are carried by node in the model's ``V`` and ``A`` from one increment, and one equation
+  system, to the next; a node that has just become active starts at rest, and a node without positive mass is
+  quasi-static. The acceleration from equilibrium covers these nodes, as every node. A model without such entities has
+  nothing for this choice to act on, and is refused.
 
-Both report the same force ``P``: in ``particles``, the particles' inertia is in their internal force, and this solver
+Both report the same force ``P``: in ``entities``, the entities' inertia is in their internal force, and this solver
 adds the inertial and damping forces of the nodes it integrates; in ``nodes``, it adds those of all nodes.
 
-The two keep the motion of the particles in different places: ``particles`` in the particles' state, ``nodes`` in the
-entries ``V`` and ``A`` of the kernel functions' nodes (and the explicit meshfree solver in both: it keeps the velocity
-of the nodes, and the particles take theirs from it). Nothing transfers the motion from the one place to the other --
-a projection from the particles to the nodes is not offered, since it works poorly -- so a step that would take the
-motion from where the model does not hold it refuses to start
-(:meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.carriersOfTheMotionOfParticles`): a step in
-``nodes`` after a step in ``particles``, or after an initial velocity given to the particles; a step in ``particles``
-after a step in ``nodes``. Either continue in the place of the step before, or let a quasi-static step bring the model
-to rest in between. The
-material point method is refused: its material points carry no inertia, and its background grid is reset in every
-increment.
+The two keep the motion of the entities in different places: ``entities`` in the entities' state, ``nodes`` in the
+entries ``V`` and ``A`` of the nodes they couple. Nothing transfers the motion from the one place to the other, so a
+step that would take the motion from where the model does not hold it refuses to start
+(:meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.carriersOfTheMotion`): a step in ``nodes`` after
+a step in ``entities``, or after an initial velocity given to the entities; a step in ``entities`` after a step in
+``nodes``. Either continue in the place of the step before, or let a quasi-static step bring the model to rest in
+between. Material points that belong to no element are refused: they carry no inertia of their own, and there are no
+nodes of theirs to integrate in time.
 
 **Zero-length and negligible increments.** The time stepper proposes a zero-length increment before
 the first real one of every step. A quasi-static solver equilibrates it; this solver skips it with
@@ -244,7 +239,7 @@ some algorithmic damping (``newmarkGamma > 1/2``), keeps that out of the respons
 
 **Not supported in this version.** Rayleigh or any other damping model beyond what the elements
 report as their lumped damping; elements without a consistent mass (the pure-Python element
-library), which are refused at the first increment; the material point method (see above).
+library), which are refused at the first increment; material points that belong to no element (see above).
 """
 
 from dataclasses import dataclass
@@ -321,15 +316,15 @@ class NIDSchema(NISTSchema):
         dtype=bool,
         default=True,
     )
-    meshfreeInertia: str | None = schemaField(
+    inertia: str | None = schemaField(
         description=(
-            "Where the inertia of meshfree particles is integrated in time (particles|nodes): by each particle at its "
-            "evaluation points, with the solver's Newmark parameters, or by the solver at the nodes of the kernel "
-            "functions, with the particles' lumped mass. No effect on a model without particles. See the documentation "
-            "of the solver."
+            "Where the inertia of the entities that integrate their own is integrated in time (entities|nodes): by "
+            "each entity at its evaluation points, with the solver's Newmark parameters, or by the solver at the nodes "
+            "the entities couple, with their lumped mass. nodes is refused for a model without such entities. See the "
+            "documentation of the solver."
         ),
         dtype=str,
-        default="particles",
+        default="entities",
     )
     massConservationTolerance: float | None = schemaField(
         description=(
@@ -377,9 +372,10 @@ class _NewmarkSystem:
     massByField
         Each dynamic field's total assembled mass (:meth:`NonlinearImplicitDynamic._totalMassByField`),
         a property of ``M`` alone, so computed once here rather than per accepted increment.
-    includesMassOfParticles
-        Whether ``M`` holds the lumped mass of meshfree particles (``meshfreeInertia=nodes``). The particles move
-        with every increment, and their mass with them, so such a system is reassembled for every increment.
+    includesLumpedMassOfEntities
+        Whether ``M`` holds the lumped mass of the entities that integrate their own inertia (``inertia=nodes``).
+        Such entities may move with every increment, and their mass with them, so such a system is reassembled for
+        every increment.
     V, A
         The velocity and acceleration at the last converged increment: the solver's own vectors of the
         current equation system, read from the model when it was built.
@@ -396,7 +392,7 @@ class _NewmarkSystem:
     MRowBlocks: list[csr_matrix]
     MRowsPerBlock: int
     massByField: dict
-    includesMassOfParticles: bool
+    includesLumpedMassOfEntities: bool
     V: DofVector
     A: DofVector
 
@@ -509,13 +505,13 @@ class NonlinearImplicitDynamic(NIST):
         "newmarkBeta": 0.25,
         "newmarkGamma": 0.5,
         "computeInitialAcceleration": True,
-        "meshfreeInertia": "particles",
+        "inertia": "entities",
         "massConservationTolerance": CONSERVATION_TOLERANCE,
     }
 
-    #: The places the inertia of meshfree particles can be integrated at (option ``meshfreeInertia``); see the module
-    #: documentation.
-    meshfreeInertias = ("particles", "nodes")
+    #: The places the inertia of the entities that integrate their own can be integrated at (option ``inertia``); see
+    #: the module documentation.
+    placesOfInertia = ("entities", "nodes")
 
     def __init__(self, jobInfo, journal, **kwargs):
         super().__init__(jobInfo, journal, **kwargs)
@@ -525,10 +521,10 @@ class NonlinearImplicitDynamic(NIST):
         self._newmarkSystem = None
         #: Whether the next increment has to compute the acceleration from equilibrium first.
         self._initialAccelerationPending = False
-        #: Whether the first equation system of a step checks where the model holds the motion of its meshfree
-        #: particles (see :meth:`_refuseMotionOfParticlesItDoesNotTakeOver`); not on a resumed step, which continues
-        #: from its own checkpoint.
-        self._motionOfParticlesToBeChecked = False
+        #: Whether the first equation system of a step checks where the model holds the motion of its entities that
+        #: integrate their own inertia (see :meth:`_refuseMotionItDoesNotTakeOver`); not on a resumed step, which
+        #: continues from its own checkpoint.
+        self._carriersOfTheMotionToBeChecked = False
         #: Length of ``model.topology.history`` when the current equation system was assembled; tells
         #: a mesh change from a constraint re-reporting its connectivity (see :meth:`_updateNewmarkSystem`).
         self._topologyRecordsAtLastBuild = 0
@@ -551,16 +547,16 @@ class NonlinearImplicitDynamic(NIST):
         self._validateNewmarkParameters()
 
     def _validateNewmarkParameters(self):
-        """Refuse a beta the implicit formulation divides by zero with, and an unknown ``meshfreeInertia``, and warn
+        """Refuse a beta the implicit formulation divides by zero with, and an unknown ``inertia``, and warn
         about a pair of Newmark parameters outside the unconditionally stable region."""
 
         beta = self.options["newmarkBeta"]
         gamma = self.options["newmarkGamma"]
 
-        if self.options["meshfreeInertia"] not in self.meshfreeInertias:
+        if self.options["inertia"] not in self.placesOfInertia:
             raise ValueError(
-                "{:} supports meshfreeInertia={:}, not '{:}'".format(
-                    self.identification, "|".join(self.meshfreeInertias), self.options["meshfreeInertia"]
+                "{:} supports inertia={:}, not '{:}'".format(
+                    self.identification, "|".join(self.placesOfInertia), self.options["inertia"]
                 )
             )
 
@@ -630,16 +626,16 @@ class NonlinearImplicitDynamic(NIST):
         resumed = not step.timeStepper.isAtStepStart()
         # A resumed step overwrites it with the checkpointed one.
         self._initialAccelerationPending = bool(self.options["computeInitialAcceleration"])
-        self._motionOfParticlesToBeChecked = not resumed
+        self._carriersOfTheMotionToBeChecked = not resumed
 
         self.journal.message(
             "Newmark-beta time integration, beta={:}, gamma={:}; consistent mass{:}{:}".format(
                 self.options["newmarkBeta"],
                 self.options["newmarkGamma"],
                 (
-                    "; meshfree particles integrate their own inertia"
-                    if self.options["meshfreeInertia"] == "particles"
-                    else "; the lumped mass of meshfree particles at the nodes"
+                    "; entities with an inertia of their own integrate it"
+                    if self.options["inertia"] == "entities"
+                    else "; the lumped mass of entities with an inertia of their own at the nodes"
                 ),
                 (
                     "; continuing from the restart checkpoint"
@@ -658,10 +654,10 @@ class NonlinearImplicitDynamic(NIST):
         return super().beginStep(step, model, fieldOutputController, outputmanagers)
 
     def newmarkParametersOfEntities(self) -> tuple[float, float]:
-        """The Newmark parameters the entities that integrate their own inertia (meshfree particles) take at the start
-        of every step; see the parent. With ``meshfreeInertia=particles``, this solver's :math:`(\\beta, \\gamma)`, so
-        that the particles and the nodes are integrated by one scheme; with ``meshfreeInertia=nodes``, :math:`(0, 0)`:
-        the particles are quasi-static, and their inertia is integrated at the nodes.
+        """The Newmark parameters the entities that integrate their own inertia take at the start of every step; see
+        the parent. With ``inertia=entities``, this solver's :math:`(\\beta, \\gamma)`, so that the entities and the
+        nodes are integrated by one scheme; with ``inertia=nodes``, :math:`(0, 0)`: the entities are quasi-static, and
+        their inertia is integrated at the nodes.
 
         Returns
         -------
@@ -669,7 +665,7 @@ class NonlinearImplicitDynamic(NIST):
             :math:`\\beta` and :math:`\\gamma`.
         """
 
-        if self.options["meshfreeInertia"] == "particles":
+        if self.options["inertia"] == "entities":
             return self.options["newmarkBeta"], self.options["newmarkGamma"]
 
         return 0.0, 0.0
@@ -798,8 +794,8 @@ class NonlinearImplicitDynamic(NIST):
 
         if self._initialAccelerationPending:
             self._initialAccelerationPending = False
-            # A model whose only inertia is that of its particles (meshfreeInertia=particles) has no degree of freedom
-            # to compute an acceleration for: the particles start from the acceleration in their state.
+            # A model whose only inertia is that of entities which integrate it themselves (inertia=entities) has no
+            # degree of freedom to compute an acceleration for: they start from the acceleration in their state.
             if system.dynamicDofs.size:
                 self._computeInitialAcceleration(system, U_n, stepActions, model, timeStep)
 
@@ -953,8 +949,8 @@ class NonlinearImplicitDynamic(NIST):
         (re)built: the solution, as in the parent, and the velocity and the acceleration of the fields carrying a mass,
         where the last accepted increment (or the checkpoint, or nothing -- a start from rest) left them, and where a
         refinement has meanwhile interpolated them onto the nodes it created. After a quasi-static step, they are zero:
-        the step starts from rest. At the start of a step, the motion of meshfree particles must be where this solver
-        takes it from (see :meth:`_refuseMotionOfParticlesItDoesNotTakeOver`).
+        the step starts from rest. At the start of a step, the motion of the entities that integrate their own inertia
+        must be where this solver takes it from (see :meth:`_refuseMotionItDoesNotTakeOver`).
 
         Parameters
         ----------
@@ -967,9 +963,9 @@ class NonlinearImplicitDynamic(NIST):
         self._A = self.theDofManager.constructDofVector()
         self.equationSystemLayout.readStateFromModel(U, self._V, self._A, self._dynamicFields)
 
-        if self._motionOfParticlesToBeChecked:
-            self._motionOfParticlesToBeChecked = False
-            self._refuseMotionOfParticlesItDoesNotTakeOver()
+        if self._carriersOfTheMotionToBeChecked:
+            self._carriersOfTheMotionToBeChecked = False
+            self._refuseMotionItDoesNotTakeOver()
 
     def writeResultsToModel(self, U: DofVector, dU: DofVector, P: DofVector):
         """Write the results of a converged increment to the model, as the parent does, with the velocity and the
@@ -1053,15 +1049,19 @@ class NonlinearImplicitDynamic(NIST):
         system = self._newmarkSystem
         dofManagerChanged = system is None or system.dofManager is not self.theDofManager
 
-        if not dofManagerChanged and not stepActions["changematerialproperty"] and not system.includesMassOfParticles:
+        if (
+            not dofManagerChanged
+            and not stepActions["changematerialproperty"]
+            and not system.includesLumpedMassOfEntities
+        ):
             return system
 
         if dofManagerChanged and self.equationSystemLayout.materialPoints:
             raise NotImplementedError(
-                "The model has material points (the material point method). {:} integrates the inertia of finite "
-                "elements and of meshfree particles; material points carry none of their own, and their background grid "
-                "is reset in every increment, so there are no nodes to integrate in time. Solve the model with a "
-                "quasi-static solver (NIST, NISTParallel).".format(self.identification)
+                "The model has material points that belong to no element. {:} integrates the inertia the elements "
+                "report and that of the entities that integrate their own; such material points carry none, so there "
+                "is nothing to integrate in time. Solve the model with a quasi-static solver (NIST, "
+                "NISTParallel).".format(self.identification)
             )
 
         # Safe to advance here: a topology change always rebuilds the manager, so it is never skipped above.
@@ -1070,13 +1070,22 @@ class NonlinearImplicitDynamic(NIST):
         self._topologyRecordsAtLastBuild = topologyRecords
 
         dynamicFields = self._dynamicFields
-        lumpedMassOfParticles = None
-        if self.options["meshfreeInertia"] == "nodes":
-            with performancetiming.timeit("lumped mass of particles"):
-                lumpedMassOfParticles = self.equationSystemLayout.assembleLumpedMassOfParticles(self.forEachChunk)
+        lumpedMassOfEntities = None
+        if self.options["inertia"] == "nodes":
+            with performancetiming.timeit("lumped mass of entities"):
+                lumpedMassOfEntities = self.equationSystemLayout.assembleLumpedMassOfEntitiesWithOwnInertia(
+                    self.forEachChunk
+                )
+            if lumpedMassOfEntities is None:
+                raise ValueError(
+                    "{:} with inertia=nodes integrates the inertia of the entities that integrate their own at the "
+                    "nodes, but the model has no such entity: inertia=nodes means nothing here.".format(
+                        self.identification
+                    )
+                )
 
         with performancetiming.timeit("newmark system setup"):
-            dynamicDofs = self._locateDynamicDofs(dynamicFields, lumpedMassOfParticles)
+            dynamicDofs = self._locateDynamicDofs(dynamicFields, lumpedMassOfEntities)
 
         reusedMassAndDamping = None
         if (
@@ -1086,8 +1095,8 @@ class NonlinearImplicitDynamic(NIST):
             and dynamicDofs.size
             and not topologyChanged
             and not stepActions["changematerialproperty"]
-            and lumpedMassOfParticles is None
-            and not system.includesMassOfParticles
+            and lumpedMassOfEntities is None
+            and not system.includesLumpedMassOfEntities
         ):
             reusedMassAndDamping = self._reuseMassAndDamping(system, model)
 
@@ -1097,7 +1106,7 @@ class NonlinearImplicitDynamic(NIST):
             Mvij, damping, M, C, massByField = reusedMassAndDamping
         else:
             Mvij, damping, M, C, massByField = self._assembleMassAndDamping(
-                model, dynamicDofs, dynamicFields, lumpedMassOfParticles
+                model, dynamicDofs, dynamicFields, lumpedMassOfEntities
             )
 
         self._newmarkSystem = _NewmarkSystem(
@@ -1112,7 +1121,7 @@ class NonlinearImplicitDynamic(NIST):
             MRowBlocks=self._rowBlocks(M, _MASS_ROWS_PER_BLOCK),
             MRowsPerBlock=_MASS_ROWS_PER_BLOCK,
             massByField=massByField,
-            includesMassOfParticles=lumpedMassOfParticles is not None,
+            includesLumpedMassOfEntities=lumpedMassOfEntities is not None,
             V=self._V,
             A=self._A,
         )
@@ -1137,46 +1146,47 @@ class NonlinearImplicitDynamic(NIST):
 
         return self._newmarkSystem
 
-    #: Where each option of ``meshfreeInertia`` takes the motion of the particles from, and keeps it.
-    _placesOfTheMotionOfParticles = {
-        "particles": "in the particles' own state (their velocity and acceleration)",
-        "nodes": "at the nodes of their kernel functions (V and A of the node fields)",
+    #: Where each option of ``inertia`` takes the motion of the entities that integrate their own inertia from, and
+    #: keeps it.
+    _placesOfTheMotion = {
+        "entities": "in the entities' own state (their velocity and acceleration)",
+        "nodes": "at the nodes they couple (V and A of the node fields)",
     }
 
-    def _refuseMotionOfParticlesItDoesNotTakeOver(self):
-        """At the start of a step: refuse to start if the model holds the motion of its meshfree particles, but not
-        where this solver's ``meshfreeInertia`` takes it from (see the module documentation, "Meshfree particles"):
-        nothing transfers it from the other place, so the step would start the particles from rest.
+    def _refuseMotionItDoesNotTakeOver(self):
+        """At the start of a step: refuse to start if the model holds the motion of its entities that integrate their
+        own inertia, but not where this solver's ``inertia`` takes it from (see the module documentation, "Entities
+        that integrate their own inertia"): nothing transfers it from the other place, so the step would start the
+        entities from rest.
 
         Raises
         ------
         ValueError
-            If the model holds the motion of its particles only where this solver does not take it from.
+            If the model holds the motion of these entities only where this solver does not take it from.
         """
 
-        carriers = self.equationSystemLayout.carriersOfTheMotionOfParticles()
-        meshfreeInertia = self.options["meshfreeInertia"]
-        if not carriers or meshfreeInertia in carriers:
+        carriers = self.equationSystemLayout.carriersOfTheMotion()
+        inertia = self.options["inertia"]
+        if not carriers or inertia in carriers:
             return
 
         (carrier,) = carriers
         raise ValueError(
-            "The model holds the motion of its meshfree particles {:}, but {:} with meshfreeInertia={:} takes it {:}. "
-            "Nothing transfers it from one place to the other (a projection from the particles to the nodes is not "
-            "offered), so this step would start the particles from rest. Continue with meshfreeInertia={:}, or bring "
-            "the model to rest first with a quasi-static step.".format(
-                self._placesOfTheMotionOfParticles[carrier],
+            "The model holds the motion of its entities that integrate their own inertia {:}, but {:} with "
+            "inertia={:} takes it {:}. Nothing transfers it from one place to the other, so this step would start "
+            "them from rest. Continue with inertia={:}, or bring the model to rest first with a quasi-static "
+            "step.".format(
+                self._placesOfTheMotion[carrier],
                 self.identification,
-                meshfreeInertia,
-                self._placesOfTheMotionOfParticles[meshfreeInertia],
+                inertia,
+                self._placesOfTheMotion[inertia],
                 carrier,
             )
         )
 
     def _noMassAndDamping(self) -> tuple[None, tuple[np.ndarray, np.ndarray], csr_matrix, csr_matrix, dict]:
         """The mass and the damping of an equation system none of whose degrees of freedom is integrated in time here --
-        a model whose only inertia is that of meshfree particles, which integrate it themselves
-        (``meshfreeInertia=particles``). Nothing is assembled: the matrices are empty, so that the products with them
+        a model whose only inertia is that of entities which integrate it themselves (``inertia=entities``). Nothing is assembled: the matrices are empty, so that the products with them
         cost nothing, and there is no VIJ value vector, so that the Newmark terms add nothing to the tangent (see
         :meth:`assembleAdditionalTerms`).
 
@@ -1438,20 +1448,19 @@ class NonlinearImplicitDynamic(NIST):
 
         return dynamicFields
 
-    def _locateDynamicDofs(self, dynamicFields: list, lumpedMassOfParticles: DofVector | None) -> np.ndarray:
+    def _locateDynamicDofs(self, dynamicFields: list, lumpedMassOfEntities: DofVector | None) -> np.ndarray:
         """The degrees of freedom integrated in time: those of the fields carrying a mass whose inertia is that of the
         nodes (see :meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.dofsWithNodalInertia`) -- in a
-        finite element model, all of them -- and, if the lumped mass of meshfree particles is integrated at the nodes,
-        those of the nodes of the kernel functions that receive a positive mass from it. A node that the particles
-        reach only where its kernel function vanishes gets no positive mass; it carries no inertia and stays
-        quasi-static, as in the explicit meshfree solver.
+        finite element model, all of them -- and, if the lumped mass of the entities that integrate their own inertia
+        is integrated at the nodes, those of the nodes that receive a positive mass from it. A node that receives no
+        positive mass carries no inertia and stays quasi-static.
 
         Parameters
         ----------
         dynamicFields
             The fields carrying a mass.
-        lumpedMassOfParticles
-            The lumped mass of the particles at the nodes, or None if the particles integrate their own inertia.
+        lumpedMassOfEntities
+            The lumped mass of the entities at the nodes, or None if the entities integrate their own inertia.
 
         Returns
         -------
@@ -1462,11 +1471,11 @@ class NonlinearImplicitDynamic(NIST):
         isDynamic = np.zeros(self.theDofManager.nDof, dtype=bool)
         isDynamic[self.equationSystemLayout.dofsWithNodalInertia(dynamicFields)] = True
 
-        if lumpedMassOfParticles is not None:
-            hasMassOfParticles = np.asarray(lumpedMassOfParticles) > 0.0
+        if lumpedMassOfEntities is not None:
+            hasLumpedMass = np.asarray(lumpedMassOfEntities) > 0.0
             for fieldName in dynamicFields:
                 indices = self.theDofManager.idcsOfFieldsInDofVector[fieldName]
-                isDynamic[indices] |= hasMassOfParticles[indices]
+                isDynamic[indices] |= hasLumpedMass[indices]
 
         return np.flatnonzero(isDynamic)
 
@@ -1476,11 +1485,12 @@ class NonlinearImplicitDynamic(NIST):
         model: FEModel,
         dynamicDofs: np.ndarray,
         dynamicFields: list,
-        lumpedMassOfParticles: DofVector | None,
+        lumpedMassOfEntities: DofVector | None,
     ) -> tuple[VIJSystemMatrix, tuple[np.ndarray, np.ndarray], csr_matrix, csr_matrix]:
         """Assemble the consistent mass and the diagonal damping, in the stiffness' VIJ layout and
-        as CSR matrices, with the lumped mass of meshfree particles on the diagonal if it is integrated at the nodes
-        (see :meth:`_addLumpedMassOfParticles`).
+        as CSR matrices, with the lumped mass of the entities that integrate their own inertia on the diagonal if it
+        is integrated at the nodes
+        (see :meth:`_addLumpedMassOfEntities`).
 
         Entries coupling to a degree of freedom that is not integrated in time are zeroed in both:
         the mass an element reports on a non-mechanical block (a micro-inertia) belongs to a field
@@ -1495,8 +1505,8 @@ class NonlinearImplicitDynamic(NIST):
             The degrees of freedom integrated in time.
         dynamicFields
             Their fields, for the per-field mass report.
-        lumpedMassOfParticles
-            The lumped mass of the particles at the nodes, or None if the particles integrate their own inertia.
+        lumpedMassOfEntities
+            The lumped mass of the entities at the nodes, or None if the entities integrate their own inertia.
 
         Returns
         -------
@@ -1543,8 +1553,8 @@ class NonlinearImplicitDynamic(NIST):
         dampingVIJIndices = np.concatenate([np.zeros(0, dtype=np.int64)] + [i for chunk in chunks for i in chunk[0]])
         dampingVIJValues = np.concatenate([np.zeros(0)] + [v for chunk in chunks for v in chunk[1]])
 
-        if lumpedMassOfParticles is not None:
-            self._addLumpedMassOfParticles(Mvij, lumpedMassOfParticles)
+        if lumpedMassOfEntities is not None:
+            self._addLumpedMassOfEntities(Mvij, lumpedMassOfEntities)
 
         nDof = self.theDofManager.nDof
         I = self.theDofManager.I  # noqa: E741
@@ -1607,19 +1617,19 @@ class NonlinearImplicitDynamic(NIST):
 
         return Mvij, (dampingVIJIndices, dampingVIJValues), M, C, massByField
 
-    def _addLumpedMassOfParticles(self, Mvij: VIJSystemMatrix, lumpedMassOfParticles: DofVector):
-        """Add the positive entries of the lumped mass of the meshfree particles to the diagonal of the mass, in the
-        VIJ layout: each to one diagonal slot of its degree of freedom, which the blocks of the particles hold. A
-        diagonal is the same in every layout, so the mass gathered into CSR holds exactly the lumped mass the explicit
-        meshfree solver divides by (see
-        :meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.assembleLumpedMassOfParticles`).
+    def _addLumpedMassOfEntities(self, Mvij: VIJSystemMatrix, lumpedMassOfEntities: DofVector):
+        """Add the positive entries of the lumped mass of the entities that integrate their own inertia to the
+        diagonal of the mass, in the VIJ layout: each to one diagonal slot of its degree of freedom, which the blocks of
+        these entities hold. A diagonal is the same in every layout, so the mass gathered into CSR holds exactly the
+        lumped mass the layout assembled (see
+        :meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.assembleLumpedMassOfEntitiesWithOwnInertia`).
 
         Parameters
         ----------
         Mvij
             The mass as a VIJ value vector, augmented in place.
-        lumpedMassOfParticles
-            The lumped mass of the particles, one value per degree of freedom.
+        lumpedMassOfEntities
+            The lumped mass of the entities, one value per degree of freedom.
 
         Raises
         ------
@@ -1629,7 +1639,7 @@ class NonlinearImplicitDynamic(NIST):
 
         I = self.theDofManager.I  # noqa: E741
         J = self.theDofManager.J
-        lumpedMass = np.asarray(lumpedMassOfParticles)
+        lumpedMass = np.asarray(lumpedMassOfEntities)
 
         diagonalSlots = np.flatnonzero(I == J)
         dofsOnTheDiagonal, firstSlotOfDof = np.unique(I[diagonalSlots], return_index=True)
@@ -1637,8 +1647,8 @@ class NonlinearImplicitDynamic(NIST):
 
         if np.count_nonzero(hasMass) != np.count_nonzero(lumpedMass > 0.0):
             raise ValueError(
-                "The lumped mass of the particles lies on degrees of freedom that have no diagonal entry in the system "
-                "matrix: no particle couples them."
+                "The lumped mass of the entities lies on degrees of freedom that have no diagonal entry in the system "
+                "matrix: no entity couples them."
             )
 
         Mvij[diagonalSlots[firstSlotOfDof[hasMass]]] += lumpedMass[dofsOnTheDiagonal[hasMass]]
