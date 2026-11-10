@@ -1478,10 +1478,11 @@
     <span class="nd">@performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"write results to nodes"</span><span class="p">)</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">writeResultsToModel</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">U</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">dU</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">P</span><span class="p">:</span> <span class="n">DofVector</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">V</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">A</span><span class="p">:</span> <span class="n">DofVector</span> <span class="o">|</span> <span class="kc">None</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">"""Write the results of an increment to the model, through the model's layout of the equation system: the</span>
-<span class="sd">        solution, its increment, the internal, inertial and damping force, the velocity and the acceleration to the node</span>
-<span class="sd">        fields, and the solution to the scalar variables (see</span>
-<span class="sd">        :meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeResultsToModel`); the incremental</span>
-<span class="sd">        degrees of freedom are set to zero first, from where the next increment starts them (see</span>
+<span class="sd">        solution, its increment and the internal, inertial and damping force to the node fields, and the solution to the</span>
+<span class="sd">        scalar variables (see :meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeResultsToModel`),</span>
+<span class="sd">        then the velocity and the acceleration (see</span>
+<span class="sd">        :meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeVelocityAndAccelerationToModel`); the</span>
+<span class="sd">        incremental degrees of freedom are set to zero first, from where the next increment starts them (see</span>
 <span class="sd">        :meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.zeroIncrementalCoefficients`).</span>
 
 <span class="sd">        Written at every accepted increment, not only on output increments, for two reasons: an h-adaptivity</span>
@@ -1506,7 +1507,8 @@
 <span class="sd">        """</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">equationSystemLayout</span><span class="o">.</span><span class="n">zeroIncrementalCoefficients</span><span class="p">(</span><span class="n">U</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">equationSystemLayout</span><span class="o">.</span><span class="n">writeResultsToModel</span><span class="p">(</span><span class="n">U</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">P</span><span class="p">,</span> <span class="n">V</span><span class="o">=</span><span class="n">V</span><span class="p">,</span> <span class="n">A</span><span class="o">=</span><span class="n">A</span><span class="p">)</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">equationSystemLayout</span><span class="o">.</span><span class="n">writeResultsToModel</span><span class="p">(</span><span class="n">U</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">P</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">equationSystemLayout</span><span class="o">.</span><span class="n">writeVelocityAndAccelerationToModel</span><span class="p">(</span><span class="n">V</span><span class="p">,</span> <span class="n">A</span><span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="NED.updateConstraintConnectivity">

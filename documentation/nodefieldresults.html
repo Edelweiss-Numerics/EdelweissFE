@@ -68,9 +68,9 @@
 <li class="toctree-l2 current"><a class="current reference internal" href="#">Node field results</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="#who-owns-what">Who owns what</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#the-entries">The entries</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#what-each-solver-writes">What each solver writes</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#models-whose-equation-system-covers-a-part-of-their-nodes">Models whose equation system covers a part of their nodes</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#using-the-entries-in-code">Using the entries in code</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#where-the-solvers-do-not-follow-this-page-yet">Where the solvers do not follow this page yet</a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="elements.html">Elements</a></li>
@@ -161,7 +161,12 @@ zero until the next accepted increment.</p>
 (<a class="reference internal" href="models.html#edelweissfe.models.equationsystemlayout.EquationSystemLayout" title="edelweissfe.models.equationsystemlayout.EquationSystemLayout"><code class="xref py py-class docutils literal notranslate"><span class="pre">EquationSystemLayout</span></code></a>), and in no other way:
 <a class="reference internal" href="models.html#edelweissfe.models.equationsystemlayout.EquationSystemLayout.readStateFromModel" title="edelweissfe.models.equationsystemlayout.EquationSystemLayout.readStateFromModel"><code class="xref py py-meth docutils literal notranslate"><span class="pre">readStateFromModel()</span></code></a> when it (re)builds the
 system, <a class="reference internal" href="models.html#edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeResultsToModel" title="edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeResultsToModel"><code class="xref py py-meth docutils literal notranslate"><span class="pre">writeResultsToModel()</span></code></a> when it accepts
-an increment.</p>
+an increment, and, if it integrates in time,
+<a class="reference internal" href="models.html#edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeVelocityAndAccelerationToModel" title="edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeVelocityAndAccelerationToModel"><code class="xref py py-meth docutils literal notranslate"><span class="pre">writeVelocityAndAccelerationToModel()</span></code></a> for the
+velocity and the acceleration. A quasi-static solver does not integrate in time: the state it accepts is at rest, and it writes zero to
+<code class="docutils literal notranslate"><span class="pre">V</span></code> and <code class="docutils literal notranslate"><span class="pre">A</span></code> of every node field
+(<a class="reference internal" href="models.html#edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeZeroVelocityAndAccelerationToModel" title="edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeZeroVelocityAndAccelerationToModel"><code class="xref py py-meth docutils literal notranslate"><span class="pre">writeZeroVelocityAndAccelerationToModel()</span></code></a>), so
+that a dynamic step after it starts from rest.</p>
 <p>A step hands the next one the model’s state at its end time: the solution, and the velocity and the acceleration at
 that time. The explicit solvers integrate the velocity staggered half an increment behind the solution, and so write
 that staggered velocity at every accepted increment; at the end of their step, the model advances it by the half
@@ -217,20 +222,67 @@ summed over the nodes of a support, it is the reaction force. Zero at a node wit
 </tr>
 </tbody>
 </table>
+<p>The Lagrange multipliers of constraints are scalar variables, not node field entries
+(<a class="reference internal" href="variables.html#edelweissfe.variables.scalarvariable.ScalarVariable" title="edelweissfe.variables.scalarvariable.ScalarVariable"><code class="xref py py-class docutils literal notranslate"><span class="pre">ScalarVariable</span></code></a>). They are state as well: each holds its total
+value, written at acceptance and read back at every rebuild. A constraint that is not active keeps the value it
+had.</p>
+</section>
+<section id="what-each-solver-writes">
+<h2>What each solver writes<a class="headerlink" href="#what-each-solver-writes" title="Link to this heading"></a></h2>
+<p>Every solver writes <code class="docutils literal notranslate"><span class="pre">U</span></code> and <code class="docutils literal notranslate"><span class="pre">dU</span></code> of every node field at acceptance, and these:</p>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 18.0%" />
+<col style="width: 28.0%" />
+<col style="width: 28.0%" />
+<col style="width: 26.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Solver</p></th>
+<th class="head"><p><code class="docutils literal notranslate"><span class="pre">P</span></code></p></th>
+<th class="head"><p><code class="docutils literal notranslate"><span class="pre">V</span></code></p></th>
+<th class="head"><p><code class="docutils literal notranslate"><span class="pre">A</span></code></p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">NIST</span></code>, <code class="docutils literal notranslate"><span class="pre">NISTParallel</span></code>, <code class="docutils literal notranslate"><span class="pre">NISTPArcLength</span></code>, <code class="docutils literal notranslate"><span class="pre">NEST</span></code></p></td>
+<td><p>the internal force</p></td>
+<td><p>zero</p></td>
+<td><p>zero</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">NID</span></code>, <code class="docutils literal notranslate"><span class="pre">NIDParallel</span></code></p></td>
+<td><p><span class="math notranslate nohighlight">\(\boldsymbol{f}_\mathrm{int} + \boldsymbol{M} \boldsymbol{a} + \boldsymbol{C} \boldsymbol{v}\)</span> of the
+converged state</p></td>
+<td><p><span class="math notranslate nohighlight">\(\boldsymbol{v}_{n+1}\)</span> on the fields with a mass; zero on the others, which it treats quasi-statically</p></td>
+<td><p><span class="math notranslate nohighlight">\(\boldsymbol{a}_{n+1}\)</span>, likewise; at the start of a step and after a refinement, the acceleration from
+equilibrium, written at the start of the increment</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">NED</span></code>, <code class="docutils literal notranslate"><span class="pre">NEDParallel</span></code></p></td>
+<td><p><span class="math notranslate nohighlight">\(\boldsymbol{f}_\mathrm{int} + \boldsymbol{f}_\mathrm{net}\)</span>; <span class="math notranslate nohighlight">\(\boldsymbol{f}_\mathrm{int}\)</span> at a
+prescribed motion and on a multi-point-constraint slave</p></td>
+<td><p><span class="math notranslate nohighlight">\(\boldsymbol{v}_{n+1/2}\)</span> (on a field integrated by forward Euler, the rate of the increment just taken);
+at the end of the step, the velocity at its end time</p></td>
+<td><p><span class="math notranslate nohighlight">\(\boldsymbol{a}_{n+1}\)</span> (on a field integrated by forward Euler, the one with which
+<span class="math notranslate nohighlight">\(\boldsymbol{v}_{n+1/2} + \tfrac{1}{2} \Delta t \, \boldsymbol{a}_{n+1}\)</span> is the rate at the end of the
+increment); zero at a prescribed motion; on a multi-point-constraint slave, from its masters</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">MeshfreeExplicitDynamic</span></code> (EdelweissMeshfree)</p></td>
+<td><p><span class="math notranslate nohighlight">\(\boldsymbol{f}_\mathrm{int} + \boldsymbol{M} \boldsymbol{a}\)</span></p></td>
+<td><p>as <code class="docutils literal notranslate"><span class="pre">NED</span></code>, on the nodes of the kernel functions</p></td>
+<td><p><span class="math notranslate nohighlight">\(\boldsymbol{a} = \boldsymbol{M}^{-1} \boldsymbol{f}_\mathrm{net}\)</span>; zero on a node without mass</p></td>
+</tr>
+</tbody>
+</table>
 <p>In the explicit solver (<code class="docutils literal notranslate"><span class="pre">NED</span></code>), the inertial and damping forces of a node with an equation of motion are the
 net force the next velocity update divides by, so its <code class="docutils literal notranslate"><span class="pre">P</span></code> is the internal force plus that net force: the force of
 the loads and the constraints acting there. At a node with a prescribed motion, the acceleration at the end of an
 increment is set by the prescribed velocity of the next one, which is not known when the increment is accepted, so
 its <code class="docutils literal notranslate"><span class="pre">P</span></code> is the internal force alone: the support reaction, without the inertia of the support node’s own lumped
-mass. Its <code class="docutils literal notranslate"><span class="pre">A</span></code> is the acceleration at the end of the increment, the one with which the velocity at that time, half an
-increment after its <code class="docutils literal notranslate"><span class="pre">V</span></code>, satisfies the equation of motion; zero at a prescribed motion. A multi-point-constraint
-slave integrates no equation of motion of its own: its inertia and its force are folded onto its masters, so its <code class="docutils literal notranslate"><span class="pre">P</span></code>
-is its internal force, and it takes its <code class="docutils literal notranslate"><span class="pre">V</span></code> and <code class="docutils literal notranslate"><span class="pre">A</span></code> from its masters. The net force itself is the solver’s state,
-not an entry (see <a class="reference internal" href="solvers.html#module-edelweissfe.solvers.nonlinearexplicitdynamic" title="edelweissfe.solvers.nonlinearexplicitdynamic"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nonlinearexplicitdynamic</span></code></a>).</p>
-<p>The Lagrange multipliers of constraints are scalar variables, not node field entries
-(<a class="reference internal" href="variables.html#edelweissfe.variables.scalarvariable.ScalarVariable" title="edelweissfe.variables.scalarvariable.ScalarVariable"><code class="xref py py-class docutils literal notranslate"><span class="pre">ScalarVariable</span></code></a>). They are state as well: each holds its total
-value, written at acceptance and read back at every rebuild. A constraint that is not active keeps the value it
-had.</p>
+mass, and its <code class="docutils literal notranslate"><span class="pre">A</span></code> is zero. A multi-point-constraint slave integrates no equation of motion of its own: its inertia
+and its force are folded onto its masters, so its <code class="docutils literal notranslate"><span class="pre">P</span></code> is its internal force, and it takes its <code class="docutils literal notranslate"><span class="pre">V</span></code> and <code class="docutils literal notranslate"><span class="pre">A</span></code> from
+its masters. Elsewhere, its <code class="docutils literal notranslate"><span class="pre">A</span></code> is the acceleration with which the velocity at the end of the increment, half an
+increment after its <code class="docutils literal notranslate"><span class="pre">V</span></code>, satisfies the equation of motion. The net force itself is the solver’s state, not an entry
+(see <a class="reference internal" href="solvers.html#module-edelweissfe.solvers.nonlinearexplicitdynamic" title="edelweissfe.solvers.nonlinearexplicitdynamic"><code class="xref py py-mod docutils literal notranslate"><span class="pre">nonlinearexplicitdynamic</span></code></a>).</p>
 </section>
 <section id="models-whose-equation-system-covers-a-part-of-their-nodes">
 <h2>Models whose equation system covers a part of their nodes<a class="headerlink" href="#models-whose-equation-system-covers-a-part-of-their-nodes" title="Link to this heading"></a></h2>
@@ -241,12 +293,15 @@ material points carry the state. On these nodes, <code class="docutils literal n
 accepted increment, which is their meaningful nodal value. Nodes outside the active domain of an increment hold
 zero in every entry.</p>
 <p>The explicit meshfree solver carries the velocity of the kernel functions in <code class="docutils literal notranslate"><span class="pre">V</span></code>: it writes <code class="docutils literal notranslate"><span class="pre">V</span></code> by node at
-acceptance and reads it back by node whenever its equation system is rebuilt, so that a node keeps its velocity
-when the active domain changes around it; a node that becomes active starts at rest. Its increment ends on other
-kernel functions than it started on – the particles move, and reach other nodes – so it writes the results in two
-parts, each through the layout of the equation system that holds them: <code class="docutils literal notranslate"><span class="pre">dU</span></code> on the nodes the increment was taken
-on, <code class="docutils literal notranslate"><span class="pre">P</span></code> and <code class="docutils literal notranslate"><span class="pre">V</span></code> on the nodes of the configuration it ends in. A node that left the active domain in that
-increment therefore keeps its <code class="docutils literal notranslate"><span class="pre">dU</span></code>, and holds zero in <code class="docutils literal notranslate"><span class="pre">P</span></code> and <code class="docutils literal notranslate"><span class="pre">V</span></code>.</p>
+acceptance and reads it back by node whenever its equation system is rebuilt, also at the start of a step, so that a
+node keeps its velocity when the active domain changes around it; a node that becomes active starts at rest. Its
+increment ends on other kernel functions than it started on – the particles move, and reach other nodes – so it
+writes the results in two parts, each through the layout of the equation system that holds them: <code class="docutils literal notranslate"><span class="pre">dU</span></code> on the nodes
+the increment was taken on, <code class="docutils literal notranslate"><span class="pre">P</span></code>, <code class="docutils literal notranslate"><span class="pre">V</span></code> and <code class="docutils literal notranslate"><span class="pre">A</span></code> on the nodes of the configuration it ends in. A node that left the
+active domain in that increment therefore keeps its <code class="docutils literal notranslate"><span class="pre">dU</span></code>, and holds zero in <code class="docutils literal notranslate"><span class="pre">P</span></code>, <code class="docutils literal notranslate"><span class="pre">V</span></code> and <code class="docutils literal notranslate"><span class="pre">A</span></code>. Its zero-length
+increment evaluates the forces of the configuration the step starts from, and writes them, when the model’s nodes
+are at rest; a step that continues the motion the model holds at its nodes evaluates no force there, and leaves <code class="docutils literal notranslate"><span class="pre">P</span></code>
+as it is.</p>
 </section>
 <section id="using-the-entries-in-code">
 <h2>Using the entries in code<a class="headerlink" href="#using-the-entries-in-code" title="Link to this heading"></a></h2>
@@ -258,14 +313,6 @@ since its rows are addressed by position; on a node set, its rows are found by n
 numbered field can be read or written there (e.g. the node field of the model, while the equation system numbers
 that of an active domain). A restart checkpoint holds every entry of every node field, and a
 checkpoint lacking one is refused (see <a class="reference internal" href="restart.html"><span class="doc">Restart</span></a>).</p>
-</section>
-<section id="where-the-solvers-do-not-follow-this-page-yet">
-<h2>Where the solvers do not follow this page yet<a class="headerlink" href="#where-the-solvers-do-not-follow-this-page-yet" title="Link to this heading"></a></h2>
-<p>The meanings above are being made to hold in every solver. Until then, these deviations remain; each is removed
-from this list together with the deviation:</p>
-<ul class="simple">
-<li><p>A quasi-static step after a dynamic one leaves <code class="docutils literal notranslate"><span class="pre">V</span></code> and <code class="docutils literal notranslate"><span class="pre">A</span></code> of the last dynamic increment in the model.</p></li>
-</ul>
 </section>
 </section>
 

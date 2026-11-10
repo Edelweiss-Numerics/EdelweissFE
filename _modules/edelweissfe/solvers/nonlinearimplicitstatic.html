@@ -993,22 +993,13 @@
 
 <div class="viewcode-block" id="NIST.writeResultsToModel">
 <a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.writeResultsToModel">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">writeResultsToModel</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span>
-        <span class="n">U</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
-        <span class="n">dU</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
-        <span class="n">P</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
-        <span class="n">V</span><span class="p">:</span> <span class="n">DofVector</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">A</span><span class="p">:</span> <span class="n">DofVector</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">dynamicFields</span><span class="p">:</span> <span class="nb">list</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-    <span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">writeResultsToModel</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">U</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">dU</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">P</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">"""Write the results of a converged increment to the model, through the model's layout of the equation system:</span>
 <span class="sd">        the incremental degrees of freedom are set to zero first, from where the next increment starts them (see</span>
 <span class="sd">        :meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.zeroIncrementalCoefficients`), then the</span>
-<span class="sd">        solution, its increment and the internal force are written (see</span>
-<span class="sd">        :meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeResultsToModel`). A solver that</span>
-<span class="sd">        integrates in time passes its velocity and acceleration as well, and the internal force with its inertial and</span>
-<span class="sd">        damping forces.</span>
+<span class="sd">        solution, its increment and the force are written (see</span>
+<span class="sd">        :meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeResultsToModel`), and the velocity</span>
+<span class="sd">        and the acceleration (see :meth:`writeVelocityAndAccelerationToModel`).</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
@@ -1019,16 +1010,24 @@
 <span class="sd">        P</span>
 <span class="sd">            The internal force (with the inertial and damping forces of a solver that integrates in time); None to</span>
 <span class="sd">            leave the model's as it is.</span>
-<span class="sd">        V</span>
-<span class="sd">            The velocity of a solver that integrates in time; None for a static solver.</span>
-<span class="sd">        A</span>
-<span class="sd">            The acceleration of a solver that integrates in time; None for a static solver.</span>
-<span class="sd">        dynamicFields</span>
-<span class="sd">            The names of the fields the solver integrates in time; None for a static solver.</span>
 <span class="sd">        """</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">equationSystemLayout</span><span class="o">.</span><span class="n">zeroIncrementalCoefficients</span><span class="p">(</span><span class="n">U</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">equationSystemLayout</span><span class="o">.</span><span class="n">writeResultsToModel</span><span class="p">(</span><span class="n">U</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">P</span><span class="p">,</span> <span class="n">V</span><span class="p">,</span> <span class="n">A</span><span class="p">,</span> <span class="n">dynamicFields</span><span class="p">)</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">equationSystemLayout</span><span class="o">.</span><span class="n">writeResultsToModel</span><span class="p">(</span><span class="n">U</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">P</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">writeVelocityAndAccelerationToModel</span><span class="p">()</span></div>
+
+
+<div class="viewcode-block" id="NIST.writeVelocityAndAccelerationToModel">
+<a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.writeVelocityAndAccelerationToModel">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">writeVelocityAndAccelerationToModel</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Write the velocity and the acceleration of a converged increment to the model, as part of</span>
+<span class="sd">        :meth:`writeResultsToModel`. A quasi-static solver does not integrate in time: the state it accepts is at</span>
+<span class="sd">        rest, with zero velocity and acceleration on every field (see</span>
+<span class="sd">        :meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeZeroVelocityAndAccelerationToModel`),</span>
+<span class="sd">        so a dynamic step that follows starts from rest. A solver that integrates in time writes its own.</span>
+<span class="sd">        """</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">equationSystemLayout</span><span class="o">.</span><span class="n">writeZeroVelocityAndAccelerationToModel</span><span class="p">()</span></div>
 
 
 <div class="viewcode-block" id="NIST.createSystemMatrixAssembly">

@@ -194,7 +194,8 @@
 <span class="sd">**Which fields.** Only the fields whose inertia is a mass</span>
 <span class="sd">(:func:`~edelweissfe.config.phenomena.carriesLinearMomentum`, i.e. the displacement) are integrated</span>
 <span class="sd">in time. Rows and columns of the mass and the damping belonging to any other field are zeroed, and</span>
-<span class="sd">those fields keep the parent's quasi-static treatment. A nonzero inertia an element reports there --</span>
+<span class="sd">those fields keep the parent's quasi-static treatment: their velocity and acceleration are zero, and</span>
+<span class="sd">so is what the model receives for them at acceptance. A nonzero inertia an element reports there --</span>
 <span class="sd">a rotational inertia, or the micro-inertia of a gradient-enhanced element -- is discarded with a</span>
 <span class="sd">warning, once per field. A model with no such field is refused.</span>
 
@@ -556,7 +557,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_V</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_A</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="c1">#: The names of the fields of the current equation system that carry a mass, whose velocity and acceleration</span>
-        <span class="c1">#: this solver reads from and writes to the model.</span>
+        <span class="c1">#: this solver reads from the model; it writes them to every field, zero where there is no mass.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_dynamicFields</span> <span class="o">=</span> <span class="kc">None</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_validateNewmarkParameters</span><span class="p">()</span>
@@ -942,7 +943,8 @@
 <span class="w">        </span><span class="sd">"""Read the state the next increment starts from out of the model, into the vectors of the equation system just</span>
 <span class="sd">        (re)built: the solution, as in the parent, and the velocity and the acceleration of the fields carrying a mass,</span>
 <span class="sd">        where the last accepted increment (or the checkpoint, or nothing -- a start from rest) left them, and where a</span>
-<span class="sd">        refinement has meanwhile interpolated them onto the nodes it created.</span>
+<span class="sd">        refinement has meanwhile interpolated them onto the nodes it created. After a quasi-static step, they are zero:</span>
+<span class="sd">        the step starts from rest.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
@@ -959,9 +961,8 @@
 <div class="viewcode-block" id="NonlinearImplicitDynamic.writeResultsToModel">
 <a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitdynamic.NonlinearImplicitDynamic.writeResultsToModel">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">writeResultsToModel</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">U</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">dU</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">P</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">"""Write the results of a converged increment to the model, as the parent does, and the velocity and the</span>
-<span class="sd">        acceleration of the fields carrying a mass with them: what field outputs read, what a checkpoint stores, and</span>
-<span class="sd">        what the next equation system reads back.</span>
+<span class="w">        </span><span class="sd">"""Write the results of a converged increment to the model, as the parent does, with the velocity and the</span>
+<span class="sd">        acceleration (see :meth:`writeVelocityAndAccelerationToModel`).</span>
 
 <span class="sd">        The force written is the internal force with the inertial and damping forces of the converged state,</span>
 <span class="sd">        :math:`\\boldsymbol{f}_\\mathrm{int} + \\boldsymbol{M} \\ddot{\\boldsymbol{u}}_{n+1} + \\boldsymbol{C}</span>
@@ -988,7 +989,20 @@
             <span class="n">internalInertialAndDampingForce</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
             <span class="n">internalInertialAndDampingForce</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">P</span> <span class="o">+</span> <span class="n">system</span><span class="o">.</span><span class="n">massTimes</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_A</span><span class="p">)</span> <span class="o">+</span> <span class="n">system</span><span class="o">.</span><span class="n">C</span> <span class="o">@</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_V</span><span class="p">)</span>
 
-        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">writeResultsToModel</span><span class="p">(</span><span class="n">U</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">internalInertialAndDampingForce</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_V</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_A</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dynamicFields</span><span class="p">)</span></div>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">writeResultsToModel</span><span class="p">(</span><span class="n">U</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">internalInertialAndDampingForce</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="NonlinearImplicitDynamic.writeVelocityAndAccelerationToModel">
+<a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitdynamic.NonlinearImplicitDynamic.writeVelocityAndAccelerationToModel">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">writeVelocityAndAccelerationToModel</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Write the velocity and the acceleration of the converged increment to every field, as part of</span>
+<span class="sd">        :meth:`writeResultsToModel`, instead of the parent's state at rest: what field outputs read, what a checkpoint</span>
+<span class="sd">        stores, and what the next equation system reads back. The fields carrying a mass get the state of their</span>
+<span class="sd">        Newmark integration; every other field, which this solver treats quasi-statically, is at rest, and gets zero,</span>
+<span class="sd">        which is what the solver's vectors hold there.</span>
+<span class="sd">        """</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">equationSystemLayout</span><span class="o">.</span><span class="n">writeVelocityAndAccelerationToModel</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_V</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_A</span><span class="p">)</span></div>
 
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_updateNewmarkSystem</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">:</span> <span class="n">FEModel</span><span class="p">,</span> <span class="n">stepActions</span><span class="p">:</span> <span class="nb">dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">_NewmarkSystem</span><span class="p">:</span>
@@ -1637,8 +1651,9 @@
         <span class="n">system</span><span class="o">.</span><span class="n">A</span><span class="p">[:]</span> <span class="o">=</span> <span class="mf">0.0</span>
         <span class="n">system</span><span class="o">.</span><span class="n">A</span><span class="p">[</span><span class="n">system</span><span class="o">.</span><span class="n">dynamicDofs</span><span class="p">]</span> <span class="o">=</span> <span class="n">A0</span><span class="p">[</span><span class="n">system</span><span class="o">.</span><span class="n">dynamicDofs</span><span class="p">]</span>
         <span class="c1"># It completes the state the increment starts from: a rebuild before the increment is accepted -- a retry</span>
-        <span class="c1"># after a cutback whose contact search changes the connectivity -- reads it back from the model.</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">equationSystemLayout</span><span class="o">.</span><span class="n">writeVelocityAndAccelerationToModel</span><span class="p">(</span><span class="n">system</span><span class="o">.</span><span class="n">V</span><span class="p">,</span> <span class="n">system</span><span class="o">.</span><span class="n">A</span><span class="p">,</span> <span class="n">system</span><span class="o">.</span><span class="n">dynamicFields</span><span class="p">)</span>
+        <span class="c1"># after a cutback whose contact search changes the connectivity -- reads it back from the model. Every field,</span>
+        <span class="c1"># as at acceptance: a field without a mass is at rest.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">equationSystemLayout</span><span class="o">.</span><span class="n">writeVelocityAndAccelerationToModel</span><span class="p">(</span><span class="n">system</span><span class="o">.</span><span class="n">V</span><span class="p">,</span> <span class="n">system</span><span class="o">.</span><span class="n">A</span><span class="p">)</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">journal</span><span class="o">.</span><span class="n">message</span><span class="p">(</span>
             <span class="s2">"acceleration from equilibrium at t = </span><span class="si">{:g}</span><span class="s2">: ||a0||inf = </span><span class="si">{:e}</span><span class="s2">"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
