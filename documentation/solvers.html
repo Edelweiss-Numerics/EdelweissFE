@@ -5319,9 +5319,10 @@ converged increments of the step in which the field carried flux, and the curren
 average <span class="math notranslate nohighlight">\(\bar{q}\)</span> includes the fluxes of constraints (e.g., contact forces). Until a field has carried
 flux, <span class="math notranslate nohighlight">\(\tilde{q}\)</span> is the time average flux of the previous step or, in the first step, the initial value
 <span class="math notranslate nohighlight">\(\tilde{q}^0\)</span> (Abaqus’ “initial value of time average force”, <code class="docutils literal notranslate"><span class="pre">1e-2</span></code>).</p>
-<p>A field whose current spatial average flux is below <span class="math notranslate nohighlight">\(\varepsilon \, \tilde{q}\)</span> carries no flux; it is
-converged if <span class="math notranslate nohighlight">\(c_{\max} \leq C_\varepsilon \, \Delta u_{\max}\)</span>. A field with
-<span class="math notranslate nohighlight">\(r_{\max} \leq R_l \, \tilde{q}\)</span> is converged irrespective of the correction (linear case).</p>
+<p>A field with <span class="math notranslate nohighlight">\(r_{\max} \leq R_l \, \tilde{q}\)</span> is converged irrespective of the correction (linear case),
+whether it carries flux or not. Otherwise, a field whose current spatial average flux is below
+<span class="math notranslate nohighlight">\(\varepsilon \, \tilde{q}\)</span> carries no flux; it is converged if
+<span class="math notranslate nohighlight">\(c_{\max} \leq C_\varepsilon \, \Delta u_{\max}\)</span>.</p>
 <p>The criterion is formulated for fields; the scalar variables are checked by the <code class="docutils literal notranslate"><span class="pre">legacy</span></code> criterion.</p>
 <p>Not implemented: the estimate of the next correction from the convergence rate (Abaqus accepts an increment
 if it predicts a small enough correction), and the detection of inactive regions for the spatial average.

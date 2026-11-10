@@ -191,9 +191,10 @@
 <span class="sd">    flux, :math:`\\tilde{q}` is the time average flux of the previous step or, in the first step, the initial value</span>
 <span class="sd">    :math:`\\tilde{q}^0` (Abaqus' "initial value of time average force", ``1e-2``).</span>
 
-<span class="sd">    A field whose current spatial average flux is below :math:`\\varepsilon \\, \\tilde{q}` carries no flux; it is</span>
-<span class="sd">    converged if :math:`c_{\\max} \\leq C_\\varepsilon \\, \\Delta u_{\\max}`. A field with</span>
-<span class="sd">    :math:`r_{\\max} \\leq R_l \\, \\tilde{q}` is converged irrespective of the correction (linear case).</span>
+<span class="sd">    A field with :math:`r_{\\max} \\leq R_l \\, \\tilde{q}` is converged irrespective of the correction (linear case),</span>
+<span class="sd">    whether it carries flux or not. Otherwise, a field whose current spatial average flux is below</span>
+<span class="sd">    :math:`\\varepsilon \\, \\tilde{q}` carries no flux; it is converged if</span>
+<span class="sd">    :math:`c_{\\max} \\leq C_\\varepsilon \\, \\Delta u_{\\max}`.</span>
 
 <span class="sd">    The criterion is formulated for fields; the scalar variables are checked by the ``legacy`` criterion.</span>
 
@@ -681,16 +682,15 @@
         <span class="n">largestIncrement</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">dU</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">inf</span><span class="p">)</span>
         <span class="n">timeAveragedFlux</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">timeAveragedFlux</span><span class="p">(</span><span class="n">field</span><span class="p">,</span> <span class="n">spatialAveragedFlux</span><span class="p">)</span>
 
-        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_carriesFlux</span><span class="p">(</span><span class="n">field</span><span class="p">,</span> <span class="n">spatialAveragedFlux</span><span class="p">):</span>
-            <span class="c1"># A field without flux and without residual (e.g., a nonlocal field before the onset of damage) has</span>
-            <span class="c1"># nothing left to iterate on, even if its correction is pure round-off of the size of its increment.</span>
-            <span class="n">correctionConverged</span> <span class="o">=</span> <span class="n">fluxResidual</span> <span class="o">==</span> <span class="mf">0.0</span> <span class="ow">or</span> <span class="p">(</span>
-                <span class="n">ddU</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">correction</span> <span class="o">&lt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">zeroFluxCorrectionTolerance</span> <span class="o">*</span> <span class="n">largestIncrement</span>
-            <span class="p">)</span>
-            <span class="k">return</span> <span class="n">FieldConvergence</span><span class="p">(</span><span class="n">fluxResidual</span><span class="p">,</span> <span class="kc">True</span><span class="p">,</span> <span class="n">correction</span><span class="p">,</span> <span class="n">correctionConverged</span><span class="p">,</span> <span class="n">indexOfMax</span><span class="p">)</span>
-
+        <span class="c1"># The linear case comes first, with or without flux: a field whose residual is negligible (e.g., a nonlocal</span>
+        <span class="c1"># field before the onset of damage, whose residual is round-off or exactly zero) has nothing left to iterate</span>
+        <span class="c1"># on, even if its correction is pure round-off of the size of its increment.</span>
         <span class="k">if</span> <span class="n">fluxResidual</span> <span class="o">&lt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">linearResidualTolerance</span> <span class="o">*</span> <span class="n">timeAveragedFlux</span><span class="p">:</span>
             <span class="k">return</span> <span class="n">FieldConvergence</span><span class="p">(</span><span class="n">fluxResidual</span><span class="p">,</span> <span class="kc">True</span><span class="p">,</span> <span class="n">correction</span><span class="p">,</span> <span class="kc">True</span><span class="p">,</span> <span class="n">indexOfMax</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_carriesFlux</span><span class="p">(</span><span class="n">field</span><span class="p">,</span> <span class="n">spatialAveragedFlux</span><span class="p">):</span>
+            <span class="n">correctionConverged</span> <span class="o">=</span> <span class="n">ddU</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">correction</span> <span class="o">&lt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">zeroFluxCorrectionTolerance</span> <span class="o">*</span> <span class="n">largestIncrement</span>
+            <span class="k">return</span> <span class="n">FieldConvergence</span><span class="p">(</span><span class="n">fluxResidual</span><span class="p">,</span> <span class="kc">True</span><span class="p">,</span> <span class="n">correction</span><span class="p">,</span> <span class="n">correctionConverged</span><span class="p">,</span> <span class="n">indexOfMax</span><span class="p">)</span>
 
         <span class="n">residualTolerance</span> <span class="o">=</span> <span class="p">(</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">residualTolerance</span>
