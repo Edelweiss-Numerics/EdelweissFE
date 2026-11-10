@@ -2484,8 +2484,9 @@ constraint with a history (friction) reads both.</p>
 <dt class="sig sig-object py" id="edelweissfe.utils.residualtangentcheck.residualContributionAndTangent">
 <span class="sig-prename descclassname"><span class="pre">edelweissfe.utils.residualtangentcheck.</span></span><span class="sig-name descname"><span class="pre">residualContributionAndTangent</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">constraint</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">U</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dU</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">timeStep</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/utils/residualtangentcheck.html#residualContributionAndTangent"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.utils.residualtangentcheck.residualContributionAndTangent" title="Link to this definition"></a></dt>
 <dd><p>The residual contribution of a constraint and its tangent, the latter as one dense matrix.</p>
-<p>The tangent is scattered from the flat VIJ values with the constraint’s own <code class="docutils literal notranslate"><span class="pre">(I,</span> <span class="pre">J)</span></code> pattern – the one the
-global assembly uses – so that the check covers the pattern together with the values.</p>
+<p>The tangent is scattered from the flat values with the constraint’s own local entries – the ones the global
+assembly uses – so that the check covers the entries together with the values; every local entry must lie within
+the constraint’s degrees of freedom.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -2500,6 +2501,9 @@ global assembly uses – so that the check covers the pattern together with the 
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>tuple[np.ndarray, np.ndarray]</p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>ValueError</strong> – If a local entry of the constraint’s block lies outside its degrees of freedom.</p>
 </dd>
 </dl>
 </dd></dl>
@@ -2561,7 +2565,7 @@ defining
 <dt><a class="reference internal" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.active" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.active"><code class="xref py py-obj docutils literal notranslate"><span class="pre">active</span></code></a></dt><dd><p>Whether this constraint takes part in the equation system: while it is <a class="reference internal" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.switchedOn" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.switchedOn"><code class="xref py py-attr docutils literal notranslate"><span class="pre">switchedOn</span></code></a> and <a class="reference internal" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.withinReach" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.withinReach"><code class="xref py py-attr docutils literal notranslate"><span class="pre">withinReach</span></code></a>.</p>
 </dd>
 <dt><strong>checkpointedState</strong></dt><dd></dd>
-<dt><a class="reference internal" href="dofmanager.html#edelweissfe.numerics.vijentitybase.VIJEntityBase.couplesAllItsDofs" title="edelweissfe.numerics.vijentitybase.VIJEntityBase.couplesAllItsDofs"><code class="xref py py-obj docutils literal notranslate"><span class="pre">couplesAllItsDofs</span></code></a></dt><dd><p>Whether the entity’s block couples every one of its degrees of freedom with every other one.</p>
+<dt><a class="reference internal" href="dofmanager.html#edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.couplesAllItsDofs" title="edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.couplesAllItsDofs"><code class="xref py py-obj docutils literal notranslate"><span class="pre">couplesAllItsDofs</span></code></a></dt><dd><p>Whether the entity’s block couples every one of its degrees of freedom with every other one.</p>
 </dd>
 <dt><a class="reference internal" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.fieldsOnNodes" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.fieldsOnNodes"><code class="xref py py-obj docutils literal notranslate"><span class="pre">fieldsOnNodes</span></code></a></dt><dd><p>The fields on the nodes this constraint is acting on.</p>
 </dd>
@@ -2599,17 +2603,17 @@ defining
 <tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.getRestartData" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.getRestartData"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getRestartData</span></code></a>()</p></td>
 <td><p>The state this constraint carries from one increment to the next; by default the attributes declared in <a class="reference internal" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.checkpointedState" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.checkpointedState"><code class="xref py py-attr docutils literal notranslate"><span class="pre">checkpointedState</span></code></a>.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">getVIJContributionSize</span></code>()</p></td>
-<td><p>Return the number of entries this entity contributes to the VIJ (COO) system matrix.</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">localEntriesOfBlock</span></code>()</p></td>
+<td><p>The local row and column of every value of the entity's block, in the order of the values.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">initializeVIJContribution</span></code>(idcs, I_, J_, offset)</p></td>
-<td><p>Fill the global <code class="docutils literal notranslate"><span class="pre">I</span></code> and <code class="docutils literal notranslate"><span class="pre">J</span></code> index arrays for this constraint's VIJ contribution.</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.prepareExplicitEvaluation" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.prepareExplicitEvaluation"><code class="xref py py-obj docutils literal notranslate"><span class="pre">prepareExplicitEvaluation</span></code></a>()</p></td>
+<td><p>Called by an explicit solver whenever the constraint is located anew in its equation system (a rebuilt one, or one whose constraints are re-located), before it evaluates the constraint there with <a class="reference internal" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernelsExplicit" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernelsExplicit"><code class="xref py py-meth docutils literal notranslate"><span class="pre">computeKernelsExplicit()</span></code></a>.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.setRestartData" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.setRestartData"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setRestartData</span></code></a>(data)</p></td>
 <td><p>Restore the state <a class="reference internal" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.getRestartData" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.getRestartData"><code class="xref py py-meth docutils literal notranslate"><span class="pre">getRestartData()</span></code></a> returned.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">shapeVIJContribution</span></code>(flat_view)</p></td>
-<td><p>Shape the flat VIJ values slice for this entity.</p></td>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">shapeBlock</span></code>(values)</p></td>
+<td><p>The entity's view of the flat array of the values of its block, which it writes its tangent into.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.updateConnectivity" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.updateConnectivity"><code class="xref py py-obj docutils literal notranslate"><span class="pre">updateConnectivity</span></code></a>(model)</p></td>
 <td><p>Called once at the start of every increment, before the global equation system is (re)created, so a constraint can refresh a dynamic candidate set (e.g. proximity-based contact pairs) and declare whether its <code class="docutils literal notranslate"><span class="pre">nodes</span></code>/<code class="docutils literal notranslate"><span class="pre">fieldsOnNodes</span></code>/<code class="docutils literal notranslate"><span class="pre">nDof</span></code> footprint has changed since the last call.</p></td>
@@ -2691,7 +2695,7 @@ checks the direction of the forces the constraint exerts as well.</p>
 variables (e.g. Lagrange multipliers) come last.</p></li>
 <li><p><strong>dU</strong> (<em>ndarray</em>) – The solution increment since the last converged state, likewise restricted.</p></li>
 <li><p><strong>P</strong> (<em>ndarray</em>) – The residual contribution to augment.</p></li>
-<li><p><strong>K</strong> (<em>ndarray</em>) – The tangent <code class="docutils literal notranslate"><span class="pre">dP/dU</span></code> to augment, in the shape <code class="xref py py-meth docutils literal notranslate"><span class="pre">shapeVIJContribution()</span></code> gives it (a
+<li><p><strong>K</strong> (<em>ndarray</em>) – The tangent <code class="docutils literal notranslate"><span class="pre">dP/dU</span></code> to augment, in the shape <code class="xref py py-meth docutils literal notranslate"><span class="pre">shapeBlock()</span></code> gives it (a
 dense <code class="docutils literal notranslate"><span class="pre">nDof</span> <span class="pre">x</span> <span class="pre">nDof</span></code> view unless the constraint declares a sparser pattern). A
 constraint that inherits
 <code class="xref py py-class docutils literal notranslate"><span class="pre">ForcesOnlyExplicitEvaluation</span></code>
@@ -2709,7 +2713,9 @@ is also called with <code class="docutils literal notranslate"><span class="pre"
 <p>The counterpart of <a class="reference internal" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernels" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernels"><code class="xref py py-meth docutils literal notranslate"><span class="pre">computeKernels()</span></code></a> for an explicit solver, which solves no linear
 system and so has no use for a tangent. This default calls <a class="reference internal" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernels" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernels"><code class="xref py py-meth docutils literal notranslate"><span class="pre">computeKernels()</span></code></a> with a
 scratch tangent that is thrown away, so that every constraint also works in an explicit
-analysis. A constraint whose tangent is costly overrides it, e.g. through
+analysis; the scratch is sized once per equation system: a solver that evaluates constraints itself calls
+<a class="reference internal" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.prepareExplicitEvaluation" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.prepareExplicitEvaluation"><code class="xref py py-meth docutils literal notranslate"><span class="pre">prepareExplicitEvaluation()</span></code></a> whenever the constraint is located anew.
+A constraint whose tangent is costly overrides it, e.g. through
 <code class="xref py py-class docutils literal notranslate"><span class="pre">ForcesOnlyExplicitEvaluation</span></code>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -2751,6 +2757,23 @@ declared in <a class="reference internal" href="#edelweissfe.constraints.base.co
 <dd class="field-even"><p>dict[str, numpy.ndarray]</p>
 </dd>
 </dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.constraints.base.constraintbase.ConstraintBase.prepareExplicitEvaluation">
+<span class="sig-name descname"><span class="pre">prepareExplicitEvaluation</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/constraints/base/constraintbase.html#ConstraintBase.prepareExplicitEvaluation"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.prepareExplicitEvaluation" title="Link to this definition"></a></dt>
+<dd><p>Called by an explicit solver whenever the constraint is located anew in its equation system (a rebuilt
+one, or one whose constraints are re-located), before it evaluates the constraint there with
+<a class="reference internal" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernelsExplicit" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernelsExplicit"><code class="xref py py-meth docutils literal notranslate"><span class="pre">computeKernelsExplicit()</span></code></a>.</p>
+<p>This default forgets the tangent that <a class="reference internal" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernelsExplicit" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernelsExplicit"><code class="xref py py-meth docutils literal notranslate"><span class="pre">computeKernelsExplicit()</span></code></a> throws away, so that the next evaluation
+sizes it, once, for the block the constraint has now. The size is the number of entries of the block
+(<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.systemmatrixcontributor.countEntriesOfBlock" title="edelweissfe.numerics.systemmatrixcontributor.countEntriesOfBlock"><code class="xref py py-func docutils literal notranslate"><span class="pre">countEntriesOfBlock()</span></code></a>), which for a constraint that lists
+its entries means building the list: once per equation system, not in every increment. A constraint that
+evaluates its forces without a tangent needs nothing here.</p>
+<p>A solver that evaluates constraints itself, rather than through
+<code class="xref py py-meth docutils literal notranslate"><span class="pre">assembleConstraintForces()</span></code>, calls this
+whenever the constraint is located anew: the default <a class="reference internal" href="#edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernelsExplicit" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernelsExplicit"><code class="xref py py-meth docutils literal notranslate"><span class="pre">computeKernelsExplicit()</span></code></a> does not size its tangent
+again on its own, and a block whose size has changed (a contact with other slave nodes) would not fit it.</p>
 </dd></dl>
 
 <dl class="py method">

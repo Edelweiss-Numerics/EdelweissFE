@@ -118,6 +118,7 @@
 <span class="sd">"""</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">ABC</span><span class="p">,</span> <span class="n">abstractmethod</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Callable</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">scipy.sparse</span><span class="w"> </span><span class="kn">import</span> <span class="n">csr_matrix</span>
@@ -125,7 +126,15 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">edelweissfe.utils.performancetiming</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">performancetiming</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.csrgeneratorv2</span><span class="w"> </span><span class="kn">import</span> <span class="n">CSRGenerator</span><span class="p">,</span> <span class="n">DirectCSRAssembler</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.dofmanager</span><span class="w"> </span><span class="kn">import</span> <span class="n">DofManager</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.parallelizationutilities</span><span class="w"> </span><span class="kn">import</span> <span class="n">forEachSliceInParallel</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.parallelizationutilities</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">forEachSliceInParallel</span><span class="p">,</span>
+    <span class="n">mapChunksInParallel</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.systemmatrixcontributor</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">SystemMatrixEntities</span><span class="p">,</span>
+    <span class="n">countEntriesOfBlock</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.vijsystemmatrix</span><span class="w"> </span><span class="kn">import</span> <span class="n">VIJSystemMatrix</span>
 
 
 <div class="viewcode-block" id="SystemMatrixBlocks">
@@ -133,9 +142,9 @@
 <span class="k">class</span><span class="w"> </span><span class="nc">SystemMatrixBlocks</span><span class="p">(</span><span class="n">ABC</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""Hands out the blocks of the system matrix: ``K[entity]`` returns the array an entity writes its block of the</span>
 <span class="sd">    tangent into, shaped by the entity (see</span>
-<span class="sd">    :meth:`~edelweissfe.numerics.vijentitybase.VIJEntityBase.shapeVIJContribution`). A block that is handed out must</span>
-<span class="sd">    be committed to the matrix with :meth:`flush`; handing out the next block commits the previous one, so whoever</span>
-<span class="sd">    loops over entities flushes once after the loop.</span>
+<span class="sd">    :meth:`~edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.shapeBlock`). A block that is</span>
+<span class="sd">    handed out must be committed to the matrix with :meth:`flush`; handing out the next block commits the previous</span>
+<span class="sd">    one, so whoever loops over entities flushes once after the loop.</span>
 
 <span class="sd">    A block is either the entity's own place in the matrix, which already holds what was assembled for the entity</span>
 <span class="sd">    before, or a zeroed scratch array. So an entity adds its block to the array it is given or overwrites it, and</span>
@@ -149,7 +158,7 @@
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
 <span class="sd">        entity</span>
-<span class="sd">            An element, a constraint, or any other entity of the DOF manager's VIJ pattern.</span>
+<span class="sd">            An element, a constraint, or any other entity that contributes a block to the system matrix.</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
@@ -166,9 +175,71 @@
 
 
 
+<span class="k">class</span><span class="w"> </span><span class="nc">_ScratchSystemMatrixBlocks</span><span class="p">(</span><span class="n">SystemMatrixBlocks</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Blocks handed out as one zeroed scratch array, reused for every entity, and committed elsewhere: the block</span>
+<span class="sd">    handed out last is pending until the next one is handed out or :meth:`flush` is called, which commits it</span>
+<span class="sd">    (:meth:`_commit`)."""</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_scratch</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_pendingEntity</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_pendingValues</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">numberOfEntriesInBlock</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">entity</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The number of values of the block of ``entity``, from the stored slice bounds.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        entity</span>
+<span class="sd">            An entity of the assembly.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        int</span>
+<span class="sd">            The number of values.</span>
+<span class="sd">        """</span>
+
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_commit</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">entity</span><span class="p">,</span> <span class="n">values</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Commit the values of the block of ``entity``.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        entity</span>
+<span class="sd">            The entity.</span>
+<span class="sd">        values</span>
+<span class="sd">            The values of its block, flat, in the order of the block.</span>
+<span class="sd">        """</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__getitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">entity</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">flush</span><span class="p">()</span>
+
+        <span class="n">size</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">numberOfEntriesInBlock</span><span class="p">(</span><span class="n">entity</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">size</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">_scratch</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_scratch</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">size</span><span class="p">)</span>
+        <span class="n">values</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_scratch</span><span class="p">[:</span><span class="n">size</span><span class="p">]</span>
+        <span class="n">values</span><span class="p">[:]</span> <span class="o">=</span> <span class="mf">0.0</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_pendingEntity</span> <span class="o">=</span> <span class="n">entity</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_pendingValues</span> <span class="o">=</span> <span class="n">values</span>
+        <span class="k">return</span> <span class="n">entity</span><span class="o">.</span><span class="n">shapeBlock</span><span class="p">(</span><span class="n">values</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">flush</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_pendingEntity</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_commit</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_pendingEntity</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_pendingValues</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dropPendingBlock</span><span class="p">()</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">dropPendingBlock</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Forget the block handed out last, without committing it."""</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_pendingEntity</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_pendingValues</span> <span class="o">=</span> <span class="kc">None</span>
+
+
 <div class="viewcode-block" id="ScaledSystemMatrixBlocks">
 <a class="viewcode-back" href="../../../documentation/assembly.html#edelweissfe.numerics.systemmatrixassembly.ScaledSystemMatrixBlocks">[docs]</a>
-<span class="k">class</span><span class="w"> </span><span class="nc">ScaledSystemMatrixBlocks</span><span class="p">(</span><span class="n">SystemMatrixBlocks</span><span class="p">):</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">ScaledSystemMatrixBlocks</span><span class="p">(</span><span class="n">_ScratchSystemMatrixBlocks</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""Blocks that enter another :class:`SystemMatrixBlocks` scaled by a factor: every block is handed out as a zeroed</span>
 <span class="sd">    scratch array, and is added, times the factor, to the entity's block of the target when it is committed.</span>
 
@@ -179,41 +250,26 @@
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
 <span class="sd">    target</span>
-<span class="sd">        The blocks the scaled blocks enter.</span>
+<span class="sd">        The assembly the scaled blocks enter.</span>
 <span class="sd">    factor</span>
 <span class="sd">        The factor.</span>
 <span class="sd">    """</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">target</span><span class="p">:</span> <span class="n">SystemMatrixBlocks</span><span class="p">,</span> <span class="n">factor</span><span class="p">:</span> <span class="nb">float</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">target</span><span class="p">:</span> <span class="s2">"SystemMatrixAssembly"</span><span class="p">,</span> <span class="n">factor</span><span class="p">:</span> <span class="nb">float</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_target</span> <span class="o">=</span> <span class="n">target</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_factor</span> <span class="o">=</span> <span class="n">factor</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_scratch</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_pendingEntity</span> <span class="o">=</span> <span class="kc">None</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_pendingBlock</span> <span class="o">=</span> <span class="kc">None</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="fm">__getitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">entity</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">flush</span><span class="p">()</span>
+<div class="viewcode-block" id="ScaledSystemMatrixBlocks.numberOfEntriesInBlock">
+<a class="viewcode-back" href="../../../documentation/assembly.html#edelweissfe.numerics.systemmatrixassembly.ScaledSystemMatrixBlocks.numberOfEntriesInBlock">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">numberOfEntriesInBlock</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">entity</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_target</span><span class="o">.</span><span class="n">numberOfEntriesInBlock</span><span class="p">(</span><span class="n">entity</span><span class="p">)</span></div>
 
-        <span class="n">size</span> <span class="o">=</span> <span class="n">entity</span><span class="o">.</span><span class="n">getVIJContributionSize</span><span class="p">()</span>
-        <span class="k">if</span> <span class="n">size</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">_scratch</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_scratch</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">size</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_scratch</span><span class="p">[:</span><span class="n">size</span><span class="p">]</span> <span class="o">=</span> <span class="mf">0.0</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">_pendingEntity</span> <span class="o">=</span> <span class="n">entity</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_pendingBlock</span> <span class="o">=</span> <span class="n">entity</span><span class="o">.</span><span class="n">shapeVIJContribution</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_scratch</span><span class="p">[:</span><span class="n">size</span><span class="p">])</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_pendingBlock</span>
-
-<div class="viewcode-block" id="ScaledSystemMatrixBlocks.flush">
-<a class="viewcode-back" href="../../../documentation/assembly.html#edelweissfe.numerics.systemmatrixassembly.ScaledSystemMatrixBlocks.flush">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">flush</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_pendingEntity</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">return</span>
-        <span class="n">targetBlock</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_target</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_pendingEntity</span><span class="p">]</span>
-        <span class="n">targetBlock</span> <span class="o">+=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_factor</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">_pendingBlock</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_target</span><span class="o">.</span><span class="n">flush</span><span class="p">()</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_pendingEntity</span> <span class="o">=</span> <span class="kc">None</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_pendingBlock</span> <span class="o">=</span> <span class="kc">None</span></div>
-</div>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_commit</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">entity</span><span class="p">,</span> <span class="n">values</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">):</span>
+        <span class="n">targetBlock</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_target</span><span class="p">[</span><span class="n">entity</span><span class="p">]</span>
+        <span class="n">targetBlock</span> <span class="o">+=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_factor</span> <span class="o">*</span> <span class="n">entity</span><span class="o">.</span><span class="n">shapeBlock</span><span class="p">(</span><span class="n">values</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_target</span><span class="o">.</span><span class="n">flush</span><span class="p">()</span></div>
 
 
 
@@ -224,7 +280,7 @@
 
 <span class="sd">    One assembly per Newton iteration: :meth:`beginAssembly`, then every entity writes its block (``K[entity]``, or</span>
 <span class="sd">    from a worker thread, ``K.blocksOfWorker(worker)[entity]``), then :meth:`assembledMatrix` returns the global</span>
-<span class="sd">    matrix. It is built per equation system, after its CSR pattern is complete, see</span>
+<span class="sd">    matrix. It is built per equation system, together with its CSR pattern, see</span>
 <span class="sd">    :meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.createSystemMatrixAssembly`.</span>
 
 <span class="sd">    ``K[entity]`` hands out the blocks of worker 0, for the entity loops in the calling thread.</span>
@@ -235,10 +291,6 @@
 <span class="sd">        How many threads may write blocks at the same time, each through its own</span>
 <span class="sd">        :meth:`blocksOfWorker`.</span>
 <span class="sd">    """</span>
-
-    <span class="c1">#: Whether the CSR generator of the pattern must keep its gather map for this assembly (see</span>
-    <span class="c1">#: :class:`~edelweissfe.numerics.csrgeneratorv2.CSRGenerator`).</span>
-    <span class="n">needsGatherMap</span> <span class="o">=</span> <span class="kc">True</span>
 
     <span class="c1">#: The VIJ value array, for code that works on it directly (e.g., the mass term of a dynamic solver, or a compiled</span>
     <span class="c1">#: entity loop); None on a path without one.</span>
@@ -273,6 +325,30 @@
 <span class="sd">            The blocks of this worker.</span>
 <span class="sd">        """</span></div>
 
+
+<div class="viewcode-block" id="SystemMatrixAssembly.numberOfEntriesInBlock">
+<a class="viewcode-back" href="../../../documentation/assembly.html#edelweissfe.numerics.systemmatrixassembly.SystemMatrixAssembly.numberOfEntriesInBlock">[docs]</a>
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">numberOfEntriesInBlock</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">entity</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The number of values of the block of ``entity``, as the assembly stored it when it was built.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        entity</span>
+<span class="sd">            An element, a constraint, or any other entity that contributes a block to the system matrix.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        int</span>
+<span class="sd">            The number of values.</span>
+<span class="sd">        """</span></div>
+
+
+    <span class="nd">@property</span>
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">csrMatrix</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">csr_matrix</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The CSR matrix the assembly assembles into, the one :meth:`assembledMatrix` returns: its own buffer, which</span>
+<span class="sd">        the next assembly overwrites, and whose pattern must not change."""</span>
 
 <div class="viewcode-block" id="SystemMatrixAssembly.assembledMatrix">
 <a class="viewcode-back" href="../../../documentation/assembly.html#edelweissfe.numerics.systemmatrixassembly.SystemMatrixAssembly.assembledMatrix">[docs]</a>
@@ -326,26 +402,80 @@
 <span class="w">    </span><span class="sd">"""Stage, then gather: every block is the entity's own slice of one value array in VIJ (COO) layout, which is</span>
 <span class="sd">    gathered into CSR, summing the duplicates, once all blocks are written.</span>
 
+<span class="sd">    The textbook way: every value ``V[k]`` of a block has its global row ``I[k]`` and column ``J[k]``, the entity's</span>
+<span class="sd">    local row and column (:meth:`~edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.localEntriesOfBlock`)</span>
+<span class="sd">    looked up in its global DOF list, and the CSR matrix is the sum of all ``(I[k], J[k], V[k])``.</span>
+
 <span class="sd">    The blocks of all workers are slices of the same array, and no two entities share a slice, so the workers need</span>
 <span class="sd">    nothing of their own. An entity that is handed its block more than once in an assembly (an element, then a body</span>
 <span class="sd">    load on it) adds to what is there.</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
-<span class="sd">    csrGenerator</span>
-<span class="sd">        The CSR pattern and the gather map.</span>
 <span class="sd">    dofManager</span>
-<span class="sd">        The DOF manager of the equation system, with its VIJ pattern.</span>
+<span class="sd">        The DOF manager of the equation system: the global DOF list of every entity.</span>
 <span class="sd">    numberOfWorkers</span>
 <span class="sd">        How many threads may write blocks at the same time.</span>
+<span class="sd">    patternFillIn</span>
+<span class="sd">        Called with the CSR pattern (as a matrix of zeros) once it is derived; returns the entries no entity</span>
+<span class="sd">        contributes that the pattern must have as well (e.g.</span>
+<span class="sd">        :meth:`~edelweissfe.numerics.mpctransformation.MultiPointConstraintTransformation.condensedPatternFillIn`).</span>
 <span class="sd">    """</span>
 
-    <span class="n">needsGatherMap</span> <span class="o">=</span> <span class="kc">True</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">csrGenerator</span><span class="p">:</span> <span class="n">CSRGenerator</span><span class="p">,</span> <span class="n">dofManager</span><span class="p">:</span> <span class="n">DofManager</span><span class="p">,</span> <span class="n">numberOfWorkers</span><span class="p">:</span> <span class="nb">int</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dofManager</span><span class="p">:</span> <span class="n">DofManager</span><span class="p">,</span> <span class="n">numberOfWorkers</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">patternFillIn</span><span class="p">:</span> <span class="n">Callable</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">numberOfWorkers</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">vijArray</span> <span class="o">=</span> <span class="n">dofManager</span><span class="o">.</span><span class="n">constructVIJSystemMatrix</span><span class="p">()</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_csrGenerator</span> <span class="o">=</span> <span class="n">csrGenerator</span>
+
+        <span class="n">idcsOfEntity</span> <span class="o">=</span> <span class="n">dofManager</span><span class="o">.</span><span class="n">idcsOfHigherOrderEntitiesInDofVector</span>
+
+        <span class="c1"># The entities follow one another in V, I and J, so where each one starts is known before any of them is</span>
+        <span class="c1"># located; each then fills only its own part of I and J, and they do so in chunks on the thread pool.</span>
+        <span class="c1">#: The slice of V, I and J that belongs to every entity.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">vijSliceOfEntity</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="n">nEntries</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="k">for</span> <span class="n">entity</span> <span class="ow">in</span> <span class="n">idcsOfEntity</span><span class="p">:</span>
+            <span class="n">nEntriesOfEntity</span> <span class="o">=</span> <span class="n">countEntriesOfBlock</span><span class="p">(</span><span class="n">entity</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">vijSliceOfEntity</span><span class="p">[</span><span class="n">entity</span><span class="p">]</span> <span class="o">=</span> <span class="nb">slice</span><span class="p">(</span><span class="n">nEntries</span><span class="p">,</span> <span class="n">nEntries</span> <span class="o">+</span> <span class="n">nEntriesOfEntity</span><span class="p">)</span>
+            <span class="n">nEntries</span> <span class="o">+=</span> <span class="n">nEntriesOfEntity</span>
+
+        <span class="c1">#: The global row of every value.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">I</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="n">nEntries</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">intc</span><span class="p">)</span>  <span class="c1"># noqa: E741</span>
+        <span class="c1">#: The global column of every value.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">J</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="n">nEntries</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">intc</span><span class="p">)</span>
+        <span class="n">mapChunksInParallel</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">idcsOfEntity</span><span class="o">.</span><span class="n">items</span><span class="p">()),</span> <span class="bp">self</span><span class="o">.</span><span class="n">_locateEntriesInSystem</span><span class="p">)</span>
+
+        <span class="c1">#: The CSR pattern, derived from I and J by sort-and-sum, and the gather map.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">csrGenerator</span> <span class="o">=</span> <span class="n">CSRGenerator</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">I</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">J</span><span class="p">,</span> <span class="n">dofManager</span><span class="o">.</span><span class="n">nDof</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">patternFillIn</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">csrGenerator</span><span class="o">.</span><span class="n">addToPattern</span><span class="p">(</span><span class="n">patternFillIn</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">csrGenerator</span><span class="o">.</span><span class="n">csrMatrix</span><span class="p">))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">vijArray</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">constructVIJSystemMatrix</span><span class="p">()</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_locateEntriesInSystem</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">entitiesWithIndices</span><span class="p">:</span> <span class="nb">list</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""The local-to-global step: the global row and column of every value of the blocks of some entities.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        entitiesWithIndices</span>
+<span class="sd">            The entities, each with its global DOF list.</span>
+<span class="sd">        """</span>
+        <span class="k">for</span> <span class="n">entity</span><span class="p">,</span> <span class="n">idcs</span> <span class="ow">in</span> <span class="n">entitiesWithIndices</span><span class="p">:</span>
+            <span class="n">localRows</span><span class="p">,</span> <span class="n">localColumns</span> <span class="o">=</span> <span class="n">entity</span><span class="o">.</span><span class="n">localEntriesOfBlock</span><span class="p">()</span>
+            <span class="n">vijSlice</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">vijSliceOfEntity</span><span class="p">[</span><span class="n">entity</span><span class="p">]</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">I</span><span class="p">[</span><span class="n">vijSlice</span><span class="p">]</span> <span class="o">=</span> <span class="n">idcs</span><span class="p">[</span><span class="n">localRows</span><span class="p">]</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">J</span><span class="p">[</span><span class="n">vijSlice</span><span class="p">]</span> <span class="o">=</span> <span class="n">idcs</span><span class="p">[</span><span class="n">localColumns</span><span class="p">]</span>
+
+<div class="viewcode-block" id="VIJSystemMatrixAssembly.constructVIJSystemMatrix">
+<a class="viewcode-back" href="../../../documentation/assembly.html#edelweissfe.numerics.systemmatrixassembly.VIJSystemMatrixAssembly.constructVIJSystemMatrix">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">constructVIJSystemMatrix</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">VIJSystemMatrix</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""A value array in the layout of this assembly, zeroed, for another matrix on the same pattern (the mass of a</span>
+<span class="sd">        dynamic solver); :attr:`csrGenerator` gathers it into CSR.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        VIJSystemMatrix</span>
+<span class="sd">            The value array.</span>
+<span class="sd">        """</span>
+        <span class="k">return</span> <span class="n">VIJSystemMatrix</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">I</span><span class="p">),</span> <span class="bp">self</span><span class="o">.</span><span class="n">vijSliceOfEntity</span><span class="p">)</span></div>
+
 
 <div class="viewcode-block" id="VIJSystemMatrixAssembly.beginAssembly">
 <a class="viewcode-back" href="../../../documentation/assembly.html#edelweissfe.numerics.systemmatrixassembly.VIJSystemMatrixAssembly.beginAssembly">[docs]</a>
@@ -360,6 +490,13 @@
         <span class="k">return</span> <span class="bp">self</span></div>
 
 
+<div class="viewcode-block" id="VIJSystemMatrixAssembly.numberOfEntriesInBlock">
+<a class="viewcode-back" href="../../../documentation/assembly.html#edelweissfe.numerics.systemmatrixassembly.VIJSystemMatrixAssembly.numberOfEntriesInBlock">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">numberOfEntriesInBlock</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">entity</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+        <span class="n">vijSlice</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">vijSliceOfEntity</span><span class="p">[</span><span class="n">entity</span><span class="p">]</span>
+        <span class="k">return</span> <span class="n">vijSlice</span><span class="o">.</span><span class="n">stop</span> <span class="o">-</span> <span class="n">vijSlice</span><span class="o">.</span><span class="n">start</span></div>
+
+
     <span class="k">def</span><span class="w"> </span><span class="fm">__getitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">entity</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">vijArray</span><span class="p">[</span><span class="n">entity</span><span class="p">]</span>
 
@@ -370,18 +507,25 @@
         <span class="k">pass</span></div>
 
 
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">csrMatrix</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">csr_matrix</span><span class="p">:</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">csrGenerator</span><span class="o">.</span><span class="n">csrMatrix</span>
+
 <div class="viewcode-block" id="VIJSystemMatrixAssembly.assembledMatrix">
 <a class="viewcode-back" href="../../../documentation/assembly.html#edelweissfe.numerics.systemmatrixassembly.VIJSystemMatrixAssembly.assembledMatrix">[docs]</a>
     <span class="nd">@performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"gather VIJ to CSR"</span><span class="p">)</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">assembledMatrix</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">csr_matrix</span><span class="p">:</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_csrGenerator</span><span class="o">.</span><span class="n">updateInPlace</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">vijArray</span><span class="p">)</span></div>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">csrGenerator</span><span class="o">.</span><span class="n">updateInPlace</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">vijArray</span><span class="p">)</span></div>
 </div>
 
 
 
-<span class="k">class</span><span class="w"> </span><span class="nc">_DirectCSRBlocksOfWorker</span><span class="p">(</span><span class="n">SystemMatrixBlocks</span><span class="p">):</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">_DirectCSRBlocksOfWorker</span><span class="p">(</span><span class="n">_ScratchSystemMatrixBlocks</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""The blocks one worker of a :class:`DirectCSRSystemMatrixAssembly` writes: one zeroed scratch array, reused for</span>
 <span class="sd">    every entity, added to the CSR values when the block is committed.</span>
+
+<span class="sd">    It holds what it needs of the assembly, not the assembly itself: a reference cycle would keep the whole assembly</span>
+<span class="sd">    alive until the cyclic garbage collector runs, also across a rebuild of the equation system.</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
@@ -389,89 +533,72 @@
 <span class="sd">        The scatter.</span>
 <span class="sd">    entityIds</span>
 <span class="sd">        The number of every entity in the assembler.</span>
+<span class="sd">    entryStart</span>
+<span class="sd">        Where the values of the block of every entity begin, see :attr:`DirectCSRSystemMatrixAssembly.entryStart`.</span>
 <span class="sd">    worker</span>
 <span class="sd">        The number of the worker, which selects its scratch in the scatter.</span>
 <span class="sd">    """</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">assembler</span><span class="p">:</span> <span class="n">DirectCSRAssembler</span><span class="p">,</span> <span class="n">entityIds</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span> <span class="n">worker</span><span class="p">:</span> <span class="nb">int</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">assembler</span><span class="p">:</span> <span class="n">DirectCSRAssembler</span><span class="p">,</span> <span class="n">entityIds</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span> <span class="n">entryStart</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">worker</span><span class="p">:</span> <span class="nb">int</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_assembler</span> <span class="o">=</span> <span class="n">assembler</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_entityIds</span> <span class="o">=</span> <span class="n">entityIds</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_entryStart</span> <span class="o">=</span> <span class="n">entryStart</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_worker</span> <span class="o">=</span> <span class="n">worker</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_scratch</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_pendingEntity</span> <span class="o">=</span> <span class="kc">None</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_pendingBlock</span> <span class="o">=</span> <span class="kc">None</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="fm">__getitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">entity</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">flush</span><span class="p">()</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">numberOfEntriesInBlock</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">entity</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+        <span class="n">i</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_entityIds</span><span class="p">[</span><span class="n">entity</span><span class="p">]</span>
+        <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_entryStart</span><span class="p">[</span><span class="n">i</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">_entryStart</span><span class="p">[</span><span class="n">i</span><span class="p">])</span>
 
-        <span class="n">size</span> <span class="o">=</span> <span class="n">entity</span><span class="o">.</span><span class="n">getVIJContributionSize</span><span class="p">()</span>
-        <span class="k">if</span> <span class="n">size</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">_scratch</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_scratch</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">size</span><span class="p">)</span>
-        <span class="n">block</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_scratch</span><span class="p">[:</span><span class="n">size</span><span class="p">]</span>
-        <span class="n">block</span><span class="p">[:]</span> <span class="o">=</span> <span class="mf">0.0</span>
-
-        <span class="bp">self</span><span class="o">.</span><span class="n">_pendingEntity</span> <span class="o">=</span> <span class="n">entity</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_pendingBlock</span> <span class="o">=</span> <span class="n">block</span>
-        <span class="k">return</span> <span class="n">entity</span><span class="o">.</span><span class="n">shapeVIJContribution</span><span class="p">(</span><span class="n">block</span><span class="p">)</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="nf">flush</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_pendingEntity</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">return</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_assembler</span><span class="o">.</span><span class="n">scatterBlock</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_worker</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_entityIds</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_pendingEntity</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">_pendingBlock</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_pendingEntity</span> <span class="o">=</span> <span class="kc">None</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_pendingBlock</span> <span class="o">=</span> <span class="kc">None</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="nf">dropPendingBlock</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">"""Forget the block handed out last, without committing it."""</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_pendingEntity</span> <span class="o">=</span> <span class="kc">None</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_pendingBlock</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_commit</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">entity</span><span class="p">,</span> <span class="n">values</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_assembler</span><span class="o">.</span><span class="n">scatterBlock</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_worker</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_entityIds</span><span class="p">[</span><span class="n">entity</span><span class="p">],</span> <span class="n">values</span><span class="p">)</span>
 
 
 <div class="viewcode-block" id="DirectCSRSystemMatrixAssembly">
 <a class="viewcode-back" href="../../../documentation/assembly.html#edelweissfe.numerics.systemmatrixassembly.DirectCSRSystemMatrixAssembly">[docs]</a>
 <span class="k">class</span><span class="w"> </span><span class="nc">DirectCSRSystemMatrixAssembly</span><span class="p">(</span><span class="n">SystemMatrixAssembly</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""Scatter directly: every block is scattered into CSR as soon as it is committed, through a map that knows the</span>
-<span class="sd">    CSR position of every entry of the VIJ pattern</span>
-<span class="sd">    (:class:`~edelweissfe.numerics.csrgeneratorv2.DirectCSRAssembler`). No value array of the VIJ pattern's length</span>
-<span class="sd">    exists.</span>
+<span class="sd">    CSR position of every value of every block (:class:`~edelweissfe.numerics.csrgeneratorv2.DirectCSRAssembler`).</span>
+<span class="sd">    The CSR pattern is derived from the entities' DOF lists; neither a value array nor index arrays of the VIJ layout</span>
+<span class="sd">    exist.</span>
 
 <span class="sd">    Every worker writes its blocks into a scratch array of its own, and all workers add them to the one CSR matrix,</span>
 <span class="sd">    each addition atomic. The order in which the workers add to an entry depends on their timing, so with more than</span>
 <span class="sd">    one worker the matrix agrees from run to run to round-off, not bit for bit.</span>
 
 <span class="sd">    Every block is a zeroed scratch array: an entity that is handed its block more than once in an assembly (an</span>
-<span class="sd">    element, then a body load on it) has each one scattered on its own. Entities with a sparse VIJ pattern of their</span>
-<span class="sd">    own (constraints that couple only some of their degrees of freedom, which say so through</span>
-<span class="sd">    :attr:`~edelweissfe.numerics.vijentitybase.VIJEntityBase.couplesAllItsDofs`) are scattered entry by entry.</span>
+<span class="sd">    element, then a body load on it) has each one scattered on its own. Entities that list the entries of their block</span>
+<span class="sd">    themselves (constraints that couple only some of their degrees of freedom, see</span>
+<span class="sd">    :meth:`~edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.localEntriesOfBlock`) are</span>
+<span class="sd">    scattered entry by entry.</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
-<span class="sd">    csrGenerator</span>
-<span class="sd">        The CSR pattern, complete (with the entries the multi-point-constraint condensation adds); its gather map is</span>
-<span class="sd">        not needed.</span>
 <span class="sd">    dofManager</span>
-<span class="sd">        The DOF manager of the equation system, with its VIJ pattern.</span>
+<span class="sd">        The DOF manager of the equation system: the global DOF list of every entity.</span>
 <span class="sd">    numberOfWorkers</span>
 <span class="sd">        How many threads may write blocks at the same time; one scratch array each.</span>
+<span class="sd">    patternFillIn</span>
+<span class="sd">        As for :class:`VIJSystemMatrixAssembly`.</span>
 <span class="sd">    """</span>
 
-    <span class="n">needsGatherMap</span> <span class="o">=</span> <span class="kc">False</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">csrGenerator</span><span class="p">:</span> <span class="n">CSRGenerator</span><span class="p">,</span> <span class="n">dofManager</span><span class="p">:</span> <span class="n">DofManager</span><span class="p">,</span> <span class="n">numberOfWorkers</span><span class="p">:</span> <span class="nb">int</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dofManager</span><span class="p">:</span> <span class="n">DofManager</span><span class="p">,</span> <span class="n">numberOfWorkers</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">patternFillIn</span><span class="p">:</span> <span class="n">Callable</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">numberOfWorkers</span><span class="p">)</span>
 
-        <span class="n">entities</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">dofManager</span><span class="o">.</span><span class="n">idcsOfHigherOrderEntitiesInVIJ</span><span class="p">)</span>
+        <span class="n">dofsOfEntity</span> <span class="o">=</span> <span class="n">dofManager</span><span class="o">.</span><span class="n">idcsOfHigherOrderEntitiesInDofVector</span>
         <span class="c1">#: The scatter, for a compiled entity loop that scatters from its own threads.</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">assembler</span> <span class="o">=</span> <span class="n">DirectCSRAssembler</span><span class="p">(</span><span class="n">csrGenerator</span><span class="p">,</span> <span class="n">dofManager</span><span class="p">,</span> <span class="n">numberOfWorkers</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">assembler</span><span class="o">.</span><span class="n">registerEntities</span><span class="p">(</span>
-            <span class="n">np</span><span class="o">.</span><span class="n">fromiter</span><span class="p">(</span><span class="n">dofManager</span><span class="o">.</span><span class="n">idcsOfHigherOrderEntitiesInVIJ</span><span class="o">.</span><span class="n">values</span><span class="p">(),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">,</span> <span class="n">count</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="n">entities</span><span class="p">)),</span>
-            <span class="n">np</span><span class="o">.</span><span class="n">fromiter</span><span class="p">((</span><span class="n">entity</span><span class="o">.</span><span class="n">nDof</span> <span class="k">for</span> <span class="n">entity</span> <span class="ow">in</span> <span class="n">entities</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">intc</span><span class="p">,</span> <span class="n">count</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="n">entities</span><span class="p">)),</span>
-            <span class="n">np</span><span class="o">.</span><span class="n">fromiter</span><span class="p">((</span><span class="n">entity</span><span class="o">.</span><span class="n">getVIJContributionSize</span><span class="p">()</span> <span class="k">for</span> <span class="n">entity</span> <span class="ow">in</span> <span class="n">entities</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">,</span> <span class="n">count</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="n">entities</span><span class="p">)),</span>
-            <span class="n">np</span><span class="o">.</span><span class="n">fromiter</span><span class="p">((</span><span class="n">entity</span><span class="o">.</span><span class="n">couplesAllItsDofs</span> <span class="k">for</span> <span class="n">entity</span> <span class="ow">in</span> <span class="n">entities</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">intc</span><span class="p">,</span> <span class="n">count</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="n">entities</span><span class="p">)),</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assembler</span> <span class="o">=</span> <span class="n">DirectCSRAssembler</span><span class="p">(</span>
+            <span class="n">SystemMatrixEntities</span><span class="o">.</span><span class="n">ofEntities</span><span class="p">(</span><span class="n">dofsOfEntity</span><span class="p">),</span> <span class="n">dofManager</span><span class="o">.</span><span class="n">nDof</span><span class="p">,</span> <span class="n">numberOfWorkers</span><span class="p">,</span> <span class="n">patternFillIn</span>
         <span class="p">)</span>
+        <span class="c1">#: Where the values of the block of every entity begin, counted over all entities in their order, and in the</span>
+        <span class="c1">#: last place the number of all values: the block of entity ``i`` has ``entryStart[i + 1] - entryStart[i]``</span>
+        <span class="c1">#: values.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">entryStart</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">assembler</span><span class="o">.</span><span class="n">entryStart</span>
         <span class="c1">#: The number of every entity in :attr:`assembler`.</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">entityIds</span> <span class="o">=</span> <span class="p">{</span><span class="n">entity</span><span class="p">:</span> <span class="n">i</span> <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">entity</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">entities</span><span class="p">)}</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_workers</span> <span class="o">=</span> <span class="p">[</span><span class="n">_DirectCSRBlocksOfWorker</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">assembler</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">entityIds</span><span class="p">,</span> <span class="n">w</span><span class="p">)</span> <span class="k">for</span> <span class="n">w</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">numberOfWorkers</span><span class="p">)]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">entityIds</span> <span class="o">=</span> <span class="p">{</span><span class="n">entity</span><span class="p">:</span> <span class="n">i</span> <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">entity</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">dofsOfEntity</span><span class="p">)}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_workers</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="n">_DirectCSRBlocksOfWorker</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">assembler</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">entityIds</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">entryStart</span><span class="p">,</span> <span class="n">w</span><span class="p">)</span> <span class="k">for</span> <span class="n">w</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">numberOfWorkers</span><span class="p">)</span>
+        <span class="p">]</span>
 
 <div class="viewcode-block" id="DirectCSRSystemMatrixAssembly.beginAssembly">
 <a class="viewcode-back" href="../../../documentation/assembly.html#edelweissfe.numerics.systemmatrixassembly.DirectCSRSystemMatrixAssembly.beginAssembly">[docs]</a>
@@ -486,6 +613,16 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">blocksOfWorker</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">worker</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">SystemMatrixBlocks</span><span class="p">:</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_workers</span><span class="p">[</span><span class="n">worker</span><span class="p">]</span></div>
 
+
+<div class="viewcode-block" id="DirectCSRSystemMatrixAssembly.numberOfEntriesInBlock">
+<a class="viewcode-back" href="../../../documentation/assembly.html#edelweissfe.numerics.systemmatrixassembly.DirectCSRSystemMatrixAssembly.numberOfEntriesInBlock">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">numberOfEntriesInBlock</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">entity</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_workers</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">numberOfEntriesInBlock</span><span class="p">(</span><span class="n">entity</span><span class="p">)</span></div>
+
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">csrMatrix</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">csr_matrix</span><span class="p">:</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">assembler</span><span class="o">.</span><span class="n">csrMatrix</span>
 
 <div class="viewcode-block" id="DirectCSRSystemMatrixAssembly.assembledMatrix">
 <a class="viewcode-back" href="../../../documentation/assembly.html#edelweissfe.numerics.systemmatrixassembly.DirectCSRSystemMatrixAssembly.assembledMatrix">[docs]</a>

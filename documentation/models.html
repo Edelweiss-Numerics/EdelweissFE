@@ -158,7 +158,7 @@ for nodes and scalar degrees of freedem, and it manages the fields.</p>
 <tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.models.femodel.FEModel.advanceVelocity" title="edelweissfe.models.femodel.FEModel.advanceVelocity"><code class="xref py py-obj docutils literal notranslate"><span class="pre">advanceVelocity</span></code></a>(timeIncrement)</p></td>
 <td><p>Advance the velocity of the model by its acceleration over a time increment, <span class="math notranslate nohighlight">\(\boldsymbol{V} \leftarrow \boldsymbol{V} + \Delta t \, \boldsymbol{A}\)</span>, in every node field, on every node.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.models.femodel.FEModel.buildEquationSystem" title="edelweissfe.models.femodel.FEModel.buildEquationSystem"><code class="xref py py-obj docutils literal notranslate"><span class="pre">buildEquationSystem</span></code></a>([withSystemMatrix])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.models.femodel.FEModel.buildEquationSystem" title="edelweissfe.models.femodel.FEModel.buildEquationSystem"><code class="xref py py-obj docutils literal notranslate"><span class="pre">buildEquationSystem</span></code></a>()</p></td>
 <td><p>Lay out the global equation system of the model as it is now: number its degrees of freedom, and say which elements contribute to it, see <a class="reference internal" href="#edelweissfe.models.equationsystemlayout.EquationSystemLayout" title="edelweissfe.models.equationsystemlayout.EquationSystemLayout"><code class="xref py py-class docutils literal notranslate"><span class="pre">EquationSystemLayout</span></code></a>.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.models.femodel.FEModel.createElement" title="edelweissfe.models.femodel.FEModel.createElement"><code class="xref py py-obj docutils literal notranslate"><span class="pre">createElement</span></code></a>(element)</p></td>
@@ -237,7 +237,7 @@ it is. The model does this itself, without an equation system: a step resumed at
 
 <dl class="py method">
 <dt class="sig sig-object py" id="edelweissfe.models.femodel.FEModel.buildEquationSystem">
-<span class="sig-name descname"><span class="pre">buildEquationSystem</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">withSystemMatrix</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/models/femodel.html#FEModel.buildEquationSystem"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.models.femodel.FEModel.buildEquationSystem" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">buildEquationSystem</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/models/femodel.html#FEModel.buildEquationSystem"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.models.femodel.FEModel.buildEquationSystem" title="Link to this definition"></a></dt>
 <dd><p>Lay out the global equation system of the model as it is now: number its degrees of freedom, and say which
 elements contribute to it, see <a class="reference internal" href="#edelweissfe.models.equationsystemlayout.EquationSystemLayout" title="edelweissfe.models.equationsystemlayout.EquationSystemLayout"><code class="xref py py-class docutils literal notranslate"><span class="pre">EquationSystemLayout</span></code></a>. Called
 by a solver whenever it (re)builds its equation system: at the start of a step, and after the topology update
@@ -247,16 +247,11 @@ with their scalar variables (e.g. Lagrange multipliers). A constraint that is no
 <a class="reference internal" href="constraints.html#edelweissfe.constraints.base.constraintbase.ConstraintBase.active" title="edelweissfe.constraints.base.constraintbase.ConstraintBase.active"><code class="xref py py-attr docutils literal notranslate"><span class="pre">active</span></code></a>) is left out together with its
 scalar variables, which would otherwise be unknowns without an equation.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>withSystemMatrix</strong> (<em>bool</em>) – False for an explicit solver, which assembles no system matrix: then neither the pattern of the system
-matrix is built, nor the map from the degrees of freedom back to their nodes, by which the Newton iterations
-report the nodes with the largest residuals.</p>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>The layout of the equation system.</p>
 </dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>The layout of the equation system.</p>
-</dd>
-<dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p><a class="reference internal" href="#edelweissfe.models.equationsystemlayout.EquationSystemLayout" title="edelweissfe.models.equationsystemlayout.EquationSystemLayout">EquationSystemLayout</a></p>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference internal" href="#edelweissfe.models.equationsystemlayout.EquationSystemLayout" title="edelweissfe.models.equationsystemlayout.EquationSystemLayout">EquationSystemLayout</a></p>
 </dd>
 </dl>
 </dd></dl>

@@ -1,0 +1,405 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>edelweissfe.numerics.systemmatrixcontributor &mdash; EdelweissFE v22.07 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=cfdaff8d" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/custom.css?v=37fbe429" />
+
+  
+      <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../_static/documentation_options.js?v=17e2f33f"></script>
+      <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../index.html" class="icon icon-home">
+            EdelweissFE
+              <img src="../../../_static/edelweiss_fe_logo.png" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../features.html">Features</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../prerequisites.html">Prerequisites</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../documentation/index.html">Documentation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../contributors.html">Contributors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../publications.html">Publications</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">EdelweissFE</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">edelweissfe.numerics.systemmatrixcontributor</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for edelweissfe.numerics.systemmatrixcontributor</h1><div class="highlight"><pre>
+<span></span><span class="ch">#!/usr/bin/env python3</span>
+<span class="c1"># -*- coding: utf-8 -*-</span>
+<span class="c1">#  ---------------------------------------------------------------------</span>
+<span class="c1">#</span>
+<span class="c1">#  _____    _      _              _         _____ _____</span>
+<span class="c1"># | ____|__| | ___| |_      _____(_)___ ___|  ___| ____|</span>
+<span class="c1"># |  _| / _` |/ _ \ \ \ /\ / / _ \ / __/ __| |_  |  _|</span>
+<span class="c1"># | |__| (_| |  __/ |\ V  V /  __/ \__ \__ \  _| | |___</span>
+<span class="c1"># |_____\__,_|\___|_| \_/\_/ \___|_|___/___/_|   |_____|</span>
+<span class="c1">#</span>
+<span class="c1">#</span>
+<span class="c1">#  Unit of Strength of Materials and Structural Analysis</span>
+<span class="c1">#  University of Innsbruck,</span>
+<span class="c1">#  2017 - today</span>
+<span class="c1">#</span>
+<span class="c1">#  Alexander Dummer alexander.dummer@uibk.ac.at</span>
+<span class="c1">#</span>
+<span class="c1">#  This file is part of EdelweissFE.</span>
+<span class="c1">#</span>
+<span class="c1">#  This library is free software; you can redistribute it and/or</span>
+<span class="c1">#  modify it under the terms of the GNU Lesser General Public</span>
+<span class="c1">#  License as published by the Free Software Foundation; either</span>
+<span class="c1">#  version 2.1 of the License, or (at your option) any later version.</span>
+<span class="c1">#</span>
+<span class="c1">#  The full text of the license can be found in the file LICENSE.md at</span>
+<span class="c1">#  the top level directory of EdelweissFE.</span>
+<span class="c1">#  ---------------------------------------------------------------------</span>
+
+<span class="sd">"""The entities that contribute a block to the system matrix -- elements, constraints, and whatever else couples</span>
+<span class="sd">nodes -- and the layout of that block.</span>
+
+<span class="sd">An entity knows its block only in its own numbering: row ``a`` and column ``b`` of the block are its ``a``-th and</span>
+<span class="sd">``b``-th degree of freedom. Where these lie in the global system (the global DOF list of the entity, see</span>
+<span class="sd">:class:`~edelweissfe.numerics.dofmanager.DofManager`), and how the blocks are stored and summed, is the business of the</span>
+<span class="sd">system matrix assembly (:mod:`edelweissfe.numerics.systemmatrixassembly`).</span>
+<span class="sd">"""</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+
+
+<div class="viewcode-block" id="denseBlockLocalEntries">
+<a class="viewcode-back" href="../../../documentation/dofmanager.html#edelweissfe.numerics.systemmatrixcontributor.denseBlockLocalEntries">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">denseBlockLocalEntries</span><span class="p">(</span><span class="n">nDof</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""The local row and column of every value of a dense ``nDof x nDof`` block, stored column-major.</span>
+
+<span class="sd">    Value ``k`` of the block lies in row ``k % nDof`` and column ``k // nDof``. This is the definition of the dense</span>
+<span class="sd">    layout; the direct CSR assembly applies the same rule in C++, without materialising the pairs.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    nDof</span>
+<span class="sd">        The number of degrees of freedom of the entity.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    tuple[numpy.ndarray, numpy.ndarray]</span>
+<span class="sd">        The local rows and the local columns (int32).</span>
+<span class="sd">    """</span>
+
+    <span class="n">localRows</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">tile</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">nDof</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">intc</span><span class="p">),</span> <span class="n">nDof</span><span class="p">)</span>
+    <span class="n">localColumns</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">repeat</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">nDof</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">intc</span><span class="p">),</span> <span class="n">nDof</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">localRows</span><span class="p">,</span> <span class="n">localColumns</span></div>
+
+
+
+<div class="viewcode-block" id="localEntriesOfSubBlocks">
+<a class="viewcode-back" href="../../../documentation/dofmanager.html#edelweissfe.numerics.systemmatrixcontributor.localEntriesOfSubBlocks">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">localEntriesOfSubBlocks</span><span class="p">(</span><span class="n">subBlocks</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]])</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""The local row and column of every value of a block made of dense sub-blocks, each stored row by row, one</span>
+<span class="sd">    after the other: the layout of the constraints that couple only some of their degrees of freedom.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    subBlocks</span>
+<span class="sd">        For each sub-block, in the order of the values, its local rows and its local columns.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    tuple[numpy.ndarray, numpy.ndarray]</span>
+<span class="sd">        The local rows and the local columns (int32), one per value of the block.</span>
+<span class="sd">    """</span>
+
+    <span class="n">localRows</span> <span class="o">=</span> <span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">repeat</span><span class="p">(</span><span class="n">rows</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">columns</span><span class="p">))</span> <span class="k">for</span> <span class="n">rows</span><span class="p">,</span> <span class="n">columns</span> <span class="ow">in</span> <span class="n">subBlocks</span><span class="p">]</span>
+    <span class="n">localColumns</span> <span class="o">=</span> <span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">tile</span><span class="p">(</span><span class="n">columns</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">rows</span><span class="p">))</span> <span class="k">for</span> <span class="n">rows</span><span class="p">,</span> <span class="n">columns</span> <span class="ow">in</span> <span class="n">subBlocks</span><span class="p">]</span>
+    <span class="k">return</span> <span class="p">(</span>
+        <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">([</span><span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">intc</span><span class="p">)]</span> <span class="o">+</span> <span class="n">localRows</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">intc</span><span class="p">),</span>
+        <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">([</span><span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">intc</span><span class="p">)]</span> <span class="o">+</span> <span class="n">localColumns</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">intc</span><span class="p">),</span>
+    <span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="countEntriesOfBlock">
+<a class="viewcode-back" href="../../../documentation/dofmanager.html#edelweissfe.numerics.systemmatrixcontributor.countEntriesOfBlock">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">countEntriesOfBlock</span><span class="p">(</span><span class="n">entity</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""The number of values of the block of ``entity``: ``nDof**2`` for a dense block, else the number of entries it</span>
+<span class="sd">    lists in its ``localEntriesOfBlock``. An assembly counts once per equation system and stores where each block</span>
+<span class="sd">    begins and ends.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    entity</span>
+<span class="sd">        An element, a constraint, or any other entity that contributes a block to the system matrix.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    int</span>
+<span class="sd">        The number of values.</span>
+<span class="sd">    """</span>
+
+    <span class="k">if</span> <span class="n">entity</span><span class="o">.</span><span class="n">couplesAllItsDofs</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">entity</span><span class="o">.</span><span class="n">nDof</span><span class="o">**</span><span class="mi">2</span>
+    <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="n">entity</span><span class="o">.</span><span class="n">localEntriesOfBlock</span><span class="p">()[</span><span class="mi">0</span><span class="p">])</span></div>
+
+
+
+<div class="viewcode-block" id="SystemMatrixContributorBase">
+<a class="viewcode-back" href="../../../documentation/dofmanager.html#edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">SystemMatrixContributorBase</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Base class for the entities that contribute a block to the system matrix.</span>
+
+<span class="sd">    The block couples the entity's degrees of freedom with each other. By default it couples all of them: the block is</span>
+<span class="sd">    the dense ``nDof x nDof`` matrix, stored column-major. An entity that couples only some of its degrees of freedom</span>
+<span class="sd">    (a contact constraint, which couples every slave node with the master side but not the slave nodes with each</span>
+<span class="sd">    other) lists the local row and column of each value of its block: it overrides :meth:`localEntriesOfBlock`, and</span>
+<span class="sd">    that is all it does to declare the layout of its block (:attr:`couplesAllItsDofs` follows from it). The number of</span>
+<span class="sd">    values of a block is always the length of that list (:func:`countEntriesOfBlock`).</span>
+
+<span class="sd">    The layout is declared once, by the override: a subclass that declares :attr:`couplesAllItsDofs` itself is refused</span>
+<span class="sd">    when it is defined, as a second declaration could contradict the first. An extension type, which cannot inherit</span>
+<span class="sd">    this class (the Marmot elements, for one), declares both itself: a dense block, whose</span>
+<span class="sd">    :meth:`localEntriesOfBlock` is :func:`denseBlockLocalEntries`.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    nDof</span>
+<span class="sd">        The number of degrees of freedom of the entity.</span>
+<span class="sd">    """</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">__init_subclass__</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Refuse a subclass that declares :attr:`couplesAllItsDofs` itself: the layout of its block follows from</span>
+<span class="sd">        whether it overrides :meth:`localEntriesOfBlock`.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        TypeError</span>
+<span class="sd">            If the subclass declares :attr:`couplesAllItsDofs`.</span>
+<span class="sd">        """</span>
+
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">__init_subclass__</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">cls</span><span class="o">.</span><span class="n">couplesAllItsDofs</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">SystemMatrixContributorBase</span><span class="o">.</span><span class="n">couplesAllItsDofs</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                <span class="s2">"</span><span class="si">{:}</span><span class="s2"> declares couplesAllItsDofs: the layout of the block follows from localEntriesOfBlock alone, "</span>
+                <span class="s2">"which an entity that couples only some of its degrees of freedom overrides."</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">cls</span><span class="o">.</span><span class="vm">__qualname__</span><span class="p">)</span>
+            <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">nDof</span><span class="p">:</span> <span class="nb">int</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">nDof</span> <span class="o">=</span> <span class="n">nDof</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">couplesAllItsDofs</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Whether the entity's block couples every one of its degrees of freedom with every other one.</span>
+
+<span class="sd">        ``True`` (the default, every element) means the block is the dense ``nDof x nDof`` matrix, stored</span>
+<span class="sd">        column-major. ``False`` means the entity lists the entries of its block itself, by overriding</span>
+<span class="sd">        :meth:`localEntriesOfBlock`, and its block is the list of their values, in that order. It is ``False``</span>
+<span class="sd">        exactly for the entities that override it.</span>
+
+<span class="sd">        The layout is never guessed from the number of entries, which cannot tell: a sparse pattern can happen to</span>
+<span class="sd">        have exactly ``nDof**2`` entries. A rigid body contact with a single slave node in 3D couples the six degrees</span>
+<span class="sd">        of freedom of the reference point with each other, the three of the node with each other, and the two groups</span>
+<span class="sd">        both ways: 36 + 9 + 18 + 18 = 81 = 9², yet its entries are ordered block by block, not column by column.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        bool</span>
+<span class="sd">            ``True`` for a dense block, ``False`` for a list of entries of the entity's own.</span>
+<span class="sd">        """</span>
+
+        <span class="k">return</span> <span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">localEntriesOfBlock</span> <span class="ow">is</span> <span class="n">SystemMatrixContributorBase</span><span class="o">.</span><span class="n">localEntriesOfBlock</span>
+
+<div class="viewcode-block" id="SystemMatrixContributorBase.localEntriesOfBlock">
+<a class="viewcode-back" href="../../../documentation/dofmanager.html#edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.localEntriesOfBlock">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">localEntriesOfBlock</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""The local row and column of every value of the entity's block, in the order of the values.</span>
+
+<span class="sd">        Local means in the entity's own list of degrees of freedom: row ``a`` is the entity's ``a``-th degree of</span>
+<span class="sd">        freedom. The default is the dense column-major block (:func:`denseBlockLocalEntries`); an entity that does not</span>
+<span class="sd">        couple all its degrees of freedom overrides it, which makes its block the list of the values of these entries</span>
+<span class="sd">        (:attr:`couplesAllItsDofs` is then ``False``).</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        tuple[numpy.ndarray, numpy.ndarray]</span>
+<span class="sd">            The local rows and the local columns (int32), one per value of the block.</span>
+<span class="sd">        """</span>
+
+        <span class="k">return</span> <span class="n">denseBlockLocalEntries</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">nDof</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="SystemMatrixContributorBase.shapeBlock">
+<a class="viewcode-back" href="../../../documentation/dofmanager.html#edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.shapeBlock">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">shapeBlock</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">values</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The entity's view of the flat array of the values of its block, which it writes its tangent into.</span>
+
+<span class="sd">        By default the dense block as a 2-D ``nDof x nDof`` array (column-major) if :attr:`couplesAllItsDofs`, else the</span>
+<span class="sd">        flat array itself. An entity with a block of its own layout returns a structured view of it.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        values</span>
+<span class="sd">            The values of the block, one per entry of :meth:`localEntriesOfBlock`.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        numpy.ndarray</span>
+<span class="sd">            The view the entity writes into.</span>
+<span class="sd">        """</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">couplesAllItsDofs</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">values</span><span class="o">.</span><span class="n">reshape</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">nDof</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">nDof</span><span class="p">),</span> <span class="n">order</span><span class="o">=</span><span class="s2">"F"</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">values</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="SystemMatrixEntities">
+<a class="viewcode-back" href="../../../documentation/dofmanager.html#edelweissfe.numerics.systemmatrixcontributor.SystemMatrixEntities">[docs]</a>
+<span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">SystemMatrixEntities</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""The entities of an equation system as the direct CSR assembly reads them: flat arrays, the counterpart of the</span>
+<span class="sd">    C++ struct of the same name in ``_csrcore.h``.</span>
+
+<span class="sd">    Entity ``e`` has the global DOF list ``dofs[dofStart[e] : dofStart[e + 1]]``. A dense block (``couplesAllItsDofs``)</span>
+<span class="sd">    is described by that list alone; the block of any other entity is the list of entries it gives in</span>
+<span class="sd">    :meth:`SystemMatrixContributorBase.localEntriesOfBlock`, stored in ``localRows`` and ``localColumns`` from</span>
+<span class="sd">    ``localEntryStart[e]`` to ``localEntryStart[e + 1]``. A dense entity lists no entries: its ``nDof**2`` pairs are</span>
+<span class="sd">    never materialised. The lists of the entities lie one after the other: ``dofStart`` and ``localEntryStart`` begin</span>
+<span class="sd">    at 0 and never decrease, and the direct assembly refuses a table whose starts do not.</span>
+<span class="sd">    """</span>
+
+    <span class="c1">#: where the DOF list of each entity begins in :attr:`dofs` (int64, one more than there are entities)</span>
+    <span class="n">dofStart</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+    <span class="c1">#: the global DOF lists of all entities, one after the other (int32)</span>
+    <span class="n">dofs</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+    <span class="c1">#: whether the block of each entity is dense (uint8)</span>
+    <span class="n">couplesAllItsDofs</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+    <span class="c1">#: where the listed entries of each entity begin in :attr:`localRows` and :attr:`localColumns` (int64, one more</span>
+    <span class="c1">#: than there are entities)</span>
+    <span class="n">localEntryStart</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+    <span class="c1">#: the local row of every listed entry (int32)</span>
+    <span class="n">localRows</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+    <span class="c1">#: the local column of every listed entry (int32)</span>
+    <span class="n">localColumns</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+
+<div class="viewcode-block" id="SystemMatrixEntities.ofEntities">
+<a class="viewcode-back" href="../../../documentation/dofmanager.html#edelweissfe.numerics.systemmatrixcontributor.SystemMatrixEntities.ofEntities">[docs]</a>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">ofEntities</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">dofsOfEntity</span><span class="p">:</span> <span class="nb">dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"SystemMatrixEntities"</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The table of the entities, in the order of ``dofsOfEntity``.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        dofsOfEntity</span>
+<span class="sd">            The global DOF list of every entity.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        SystemMatrixEntities</span>
+<span class="sd">            The table.</span>
+<span class="sd">        """</span>
+
+        <span class="n">entities</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">dofsOfEntity</span><span class="p">)</span>
+        <span class="n">nEntities</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">entities</span><span class="p">)</span>
+        <span class="n">noEntries</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">intc</span><span class="p">)</span>
+
+        <span class="n">couplesAllItsDofs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">fromiter</span><span class="p">((</span><span class="n">entity</span><span class="o">.</span><span class="n">couplesAllItsDofs</span> <span class="k">for</span> <span class="n">entity</span> <span class="ow">in</span> <span class="n">entities</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">uint8</span><span class="p">,</span> <span class="n">nEntities</span><span class="p">)</span>
+        <span class="n">listedEntries</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="p">(</span><span class="n">noEntries</span><span class="p">,</span> <span class="n">noEntries</span><span class="p">)</span> <span class="k">if</span> <span class="n">couplesAll</span> <span class="k">else</span> <span class="n">entity</span><span class="o">.</span><span class="n">localEntriesOfBlock</span><span class="p">()</span>
+            <span class="k">for</span> <span class="n">entity</span><span class="p">,</span> <span class="n">couplesAll</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">entities</span><span class="p">,</span> <span class="n">couplesAllItsDofs</span><span class="p">)</span>
+        <span class="p">]</span>
+
+        <span class="k">def</span><span class="w"> </span><span class="nf">startsOf</span><span class="p">(</span><span class="n">lengths</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+            <span class="n">starts</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">nEntities</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">cumsum</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">fromiter</span><span class="p">(</span><span class="n">lengths</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">,</span> <span class="n">nEntities</span><span class="p">),</span> <span class="n">out</span><span class="o">=</span><span class="n">starts</span><span class="p">[</span><span class="mi">1</span><span class="p">:])</span>
+            <span class="k">return</span> <span class="n">starts</span>
+
+        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span>
+            <span class="n">dofStart</span><span class="o">=</span><span class="n">startsOf</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">dofs</span><span class="p">)</span> <span class="k">for</span> <span class="n">dofs</span> <span class="ow">in</span> <span class="n">dofsOfEntity</span><span class="o">.</span><span class="n">values</span><span class="p">()),</span>
+            <span class="n">dofs</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">([</span><span class="n">noEntries</span><span class="p">,</span> <span class="o">*</span><span class="n">dofsOfEntity</span><span class="o">.</span><span class="n">values</span><span class="p">()])</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">intc</span><span class="p">),</span>
+            <span class="n">couplesAllItsDofs</span><span class="o">=</span><span class="n">couplesAllItsDofs</span><span class="p">,</span>
+            <span class="n">localEntryStart</span><span class="o">=</span><span class="n">startsOf</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">localRows</span><span class="p">)</span> <span class="k">for</span> <span class="n">localRows</span><span class="p">,</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">listedEntries</span><span class="p">),</span>
+            <span class="n">localRows</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">([</span><span class="n">noEntries</span><span class="p">,</span> <span class="o">*</span><span class="p">(</span><span class="n">localRows</span> <span class="k">for</span> <span class="n">localRows</span><span class="p">,</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">listedEntries</span><span class="p">)])</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">intc</span><span class="p">),</span>
+            <span class="n">localColumns</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">([</span><span class="n">noEntries</span><span class="p">,</span> <span class="o">*</span><span class="p">(</span><span class="n">columns</span> <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">columns</span> <span class="ow">in</span> <span class="n">listedEntries</span><span class="p">)])</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">intc</span><span class="p">),</span>
+        <span class="p">)</span></div>
+</div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Matthias Neuner.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

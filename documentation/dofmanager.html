@@ -78,8 +78,12 @@
 <li class="toctree-l4"><a class="reference internal" href="#edelweissfe.numerics.vijsystemmatrix.VIJSystemMatrix"><code class="docutils literal notranslate"><span class="pre">VIJSystemMatrix</span></code></a></li>
 </ul>
 </li>
-<li class="toctree-l3"><a class="reference internal" href="#module-edelweissfe.numerics.vijentitybase">VIJEntityBase</a><ul>
-<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.numerics.vijentitybase.VIJEntityBase"><code class="docutils literal notranslate"><span class="pre">VIJEntityBase</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#module-edelweissfe.numerics.systemmatrixcontributor">SystemMatrixContributorBase</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase"><code class="docutils literal notranslate"><span class="pre">SystemMatrixContributorBase</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.numerics.systemmatrixcontributor.SystemMatrixEntities"><code class="docutils literal notranslate"><span class="pre">SystemMatrixEntities</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.numerics.systemmatrixcontributor.countEntriesOfBlock"><code class="docutils literal notranslate"><span class="pre">countEntriesOfBlock()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.numerics.systemmatrixcontributor.denseBlockLocalEntries"><code class="docutils literal notranslate"><span class="pre">denseBlockLocalEntries()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#edelweissfe.numerics.systemmatrixcontributor.localEntriesOfSubBlocks"><code class="docutils literal notranslate"><span class="pre">localEntriesOfSubBlocks()</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l3"><a class="reference internal" href="#module-edelweissfe.numerics.parallelizationutilities">Parallelization Utilities</a><ul>
@@ -155,22 +159,26 @@
   <section id="degree-of-freedom-dof-manager-and-numerics">
 <h1>Degree of Freedom (DOF) Manager and Numerics<a class="headerlink" href="#degree-of-freedom-dof-manager-and-numerics" title="Link to this heading"></a></h1>
 <p>The <code class="docutils literal notranslate"><span class="pre">edelweissfe.numerics</span></code> package provides core data structures and managers for global equation systems in EdelweissFE.</p>
+<p>The DOF manager numbers the degrees of freedom: every node field, scalar variable and entity gets its indices in the
+global DOF vector. It knows nothing about the system matrix. How the blocks of the entities – each given in the
+entity’s own numbering by <a class="reference internal" href="#edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase" title="edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase"><code class="xref py py-class docutils literal notranslate"><span class="pre">SystemMatrixContributorBase</span></code></a> – become
+the global matrix is the business of the system matrix assembly, see <a class="reference internal" href="assembly.html#system-matrix-assembly"><span class="std std-ref">System matrix assembly</span></a>.</p>
 <section id="module-edelweissfe.numerics.dofmanager">
 <span id="dofmanager"></span><h2>DofManager<a class="headerlink" href="#module-edelweissfe.numerics.dofmanager" title="Link to this heading"></a></h2>
 <p>This module contains important classes for describing the global equation system by means of a sparse system.</p>
 <dl class="py class">
 <dt class="sig sig-object py" id="edelweissfe.numerics.dofmanager.DofManager">
-<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">edelweissfe.numerics.dofmanager.</span></span><span class="sig-name descname"><span class="pre">DofManager</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">nodeFields</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scalarVariables</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">elements</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">constraints</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nodeSets</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">initializeVIJPattern</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">initializeAccumulatedNodalFluxesFieldwise</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">determiningIndexToHostObjectMapping</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/numerics/dofmanager.html#DofManager"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.numerics.dofmanager.DofManager" title="Link to this definition"></a></dt>
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">edelweissfe.numerics.dofmanager.</span></span><span class="sig-name descname"><span class="pre">DofManager</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">nodeFields</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scalarVariables</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">elements</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">constraints</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nodeSets</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">initializeAccumulatedNodalFluxesFieldwise</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/numerics/dofmanager.html#DofManager"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.numerics.dofmanager.DofManager" title="Link to this definition"></a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
 <p>The DofManager coordinates the global equation system structure.</p>
 <dl class="simple">
 <dt>Specifically, <cite>DofManager</cite>:</dt><dd><ul class="simple">
 <li><p>Analyzes the simulation domain (nodes, scalar variables, elements, constraints, and node sets).</p></li>
 <li><p>Collects and assigns global Degree-of-Freedom (DOF) indices for node fields and scalar variables.</p></li>
-<li><p>Manages entity-to-index mappings for fast scatter/gather operations.</p></li>
-<li><p>Generates sparse system matrix sparsity patterns (<cite>I</cite> and <cite>J</cite> vectors in COO/VIJ format).</p></li>
+<li><p>Manages entity-to-index mappings for fast scatter/gather operations: the global DOF list of every element and
+constraint, from which a system matrix assembly derives where each block goes.</p></li>
 <li><p>Calculates accumulated elemental/constraint fluxes fieldwise for convergence tests.</p></li>
-<li><p>Constructs domain-aware <cite>DofVector</cite>, <cite>ScatterDofVector</cite>, and <cite>VIJSystemMatrix</cite> instances.</p></li>
+<li><p>Constructs domain-aware <cite>DofVector</cite> and <cite>ScatterDofVector</cite> instances.</p></li>
 </ul>
 </dd>
 </dl>
@@ -182,9 +190,7 @@
 <li><p><strong>elements</strong> (<em>list</em><em> of </em><em>BaseNodeCouplingEntity</em><em>, </em><em>optional</em>) – The list of Elements for which DOF index mappings will be created.</p></li>
 <li><p><strong>constraints</strong> (<em>list</em><em> of </em><em>BaseNodeCouplingEntity</em><em>, </em><em>optional</em>) – The list of Constraints for which DOF index mappings will be created.</p></li>
 <li><p><strong>nodeSets</strong> (<em>list</em><em> of </em><a class="reference internal" href="sets.html#edelweissfe.sets.nodeset.NodeSet" title="edelweissfe.sets.nodeset.NodeSet"><em>NodeSet</em></a><em>, </em><em>optional</em>) – The list of NodeSets for which DOF index mappings will be created.</p></li>
-<li><p><strong>initializeVIJPattern</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether to initialize the sparse VIJ pattern (<cite>I</cite> and <cite>J</cite> vectors) during construction. Default is True.</p></li>
 <li><p><strong>initializeAccumulatedNodalFluxesFieldwise</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether to compute accumulated nodal fluxes fieldwise during construction. Default is True.</p></li>
-<li><p><strong>determiningIndexToHostObjectMapping</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether to determine the mapping from global DOF indices to their host objects (e.g. Node) during construction. Default is True.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Attributes<span class="colon">:</span></dt>
@@ -201,6 +207,11 @@ that two systems with as many scalar variables may number different ones.</p>
 holds it together with the vectors it numbers. Computed at the first request; the numbering of a DofManager
 does not change.</p>
 </dd>
+<dt><strong>indexToHostObjectMapping</strong></dt><dd><p>The node of every index of a field variable in the DofVector, built on first use: only the report of the
+largest residual of an implicit solver reads it (through <a class="reference internal" href="#edelweissfe.numerics.dofmanager.DofManager.getNodeForIndexInDofVector" title="edelweissfe.numerics.dofmanager.DofManager.getNodeForIndexInDofVector"><code class="xref py py-meth docutils literal notranslate"><span class="pre">getNodeForIndexInDofVector()</span></code></a>), while building it
+costs a pass over every degree of freedom, which a DOF manager that is never asked – one of the many an explicit
+solver builds over a run, say – does not pay.</p>
+</dd>
 </dl>
 </dd>
 </dl>
@@ -210,28 +221,25 @@ does not change.</p>
 <tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.numerics.dofmanager.DofManager.constructDofVector" title="edelweissfe.numerics.dofmanager.DofManager.constructDofVector"><code class="xref py py-obj docutils literal notranslate"><span class="pre">constructDofVector</span></code></a>()</p></td>
 <td><p>Construct a vector with size=nDof and which has knowledge about the location of each entity.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.numerics.dofmanager.DofManager.constructVIJSystemMatrix" title="edelweissfe.numerics.dofmanager.DofManager.constructVIJSystemMatrix"><code class="xref py py-obj docutils literal notranslate"><span class="pre">constructVIJSystemMatrix</span></code></a>()</p></td>
-<td><p>Construct a VIJ (COO) Sparse System matrix object, which also has knowledge about the location of each entity.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.numerics.dofmanager.DofManager.getNodeForIndexInDofVector" title="edelweissfe.numerics.dofmanager.DofManager.getNodeForIndexInDofVector"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getNodeForIndexInDofVector</span></code></a>(index)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.numerics.dofmanager.DofManager.getNodeForIndexInDofVector" title="edelweissfe.numerics.dofmanager.DofManager.getNodeForIndexInDofVector"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getNodeForIndexInDofVector</span></code></a>(index)</p></td>
 <td><p>Find the node for a given index in the equuation system.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.numerics.dofmanager.DofManager.locateFieldOnNodeSet" title="edelweissfe.numerics.dofmanager.DofManager.locateFieldOnNodeSet"><code class="xref py py-obj docutils literal notranslate"><span class="pre">locateFieldOnNodeSet</span></code></a>(field, nodeSet)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.numerics.dofmanager.DofManager.locateFieldOnNodeSet" title="edelweissfe.numerics.dofmanager.DofManager.locateFieldOnNodeSet"><code class="xref py py-obj docutils literal notranslate"><span class="pre">locateFieldOnNodeSet</span></code></a>(field, nodeSet)</p></td>
 <td><p>Where the degrees of freedom of a field on the nodes of a node set lie in the DofVector, e.g. those a Dirichlet boundary condition prescribes, or those a node force acts on.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.numerics.dofmanager.DofManager.refreshConstraintIndices" title="edelweissfe.numerics.dofmanager.DofManager.refreshConstraintIndices"><code class="xref py py-obj docutils literal notranslate"><span class="pre">refreshConstraintIndices</span></code></a>(constraints)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.numerics.dofmanager.DofManager.refreshConstraintIndices" title="edelweissfe.numerics.dofmanager.DofManager.refreshConstraintIndices"><code class="xref py py-obj docutils literal notranslate"><span class="pre">refreshConstraintIndices</span></code></a>(constraints)</p></td>
 <td><p>Re-locate the constraints' degrees of freedom after their connectivity changed.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.numerics.dofmanager.DofManager.writeDofVectorToNodeField" title="edelweissfe.numerics.dofmanager.DofManager.writeDofVectorToNodeField"><code class="xref py py-obj docutils literal notranslate"><span class="pre">writeDofVectorToNodeField</span></code></a>(dofVector, ...[, ...])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.numerics.dofmanager.DofManager.writeDofVectorToNodeField" title="edelweissfe.numerics.dofmanager.DofManager.writeDofVectorToNodeField"><code class="xref py py-obj docutils literal notranslate"><span class="pre">writeDofVectorToNodeField</span></code></a>(dofVector, ...[, ...])</p></td>
 <td><p>Write the values of a NodeField from the respective locations in a given DofVector; the counterpart of <a class="reference internal" href="#edelweissfe.numerics.dofmanager.DofManager.writeNodeFieldToDofVector" title="edelweissfe.numerics.dofmanager.DofManager.writeNodeFieldToDofVector"><code class="xref py py-meth docutils literal notranslate"><span class="pre">writeNodeFieldToDofVector()</span></code></a>.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.numerics.dofmanager.DofManager.writeDofVectorToScalarVariables" title="edelweissfe.numerics.dofmanager.DofManager.writeDofVectorToScalarVariables"><code class="xref py py-obj docutils literal notranslate"><span class="pre">writeDofVectorToScalarVariables</span></code></a>(dofVector)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.numerics.dofmanager.DofManager.writeDofVectorToScalarVariables" title="edelweissfe.numerics.dofmanager.DofManager.writeDofVectorToScalarVariables"><code class="xref py py-obj docutils literal notranslate"><span class="pre">writeDofVectorToScalarVariables</span></code></a>(dofVector)</p></td>
 <td><p>Set the values of the scalar variables of this equation system from their locations in a given DofVector; the counterpart of <a class="reference internal" href="#edelweissfe.numerics.dofmanager.DofManager.writeScalarVariablesToDofVector" title="edelweissfe.numerics.dofmanager.DofManager.writeScalarVariablesToDofVector"><code class="xref py py-meth docutils literal notranslate"><span class="pre">writeScalarVariablesToDofVector()</span></code></a>.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.numerics.dofmanager.DofManager.writeNodeFieldToDofVector" title="edelweissfe.numerics.dofmanager.DofManager.writeNodeFieldToDofVector"><code class="xref py py-obj docutils literal notranslate"><span class="pre">writeNodeFieldToDofVector</span></code></a>(dofVector, ...[, ...])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.numerics.dofmanager.DofManager.writeNodeFieldToDofVector" title="edelweissfe.numerics.dofmanager.DofManager.writeNodeFieldToDofVector"><code class="xref py py-obj docutils literal notranslate"><span class="pre">writeNodeFieldToDofVector</span></code></a>(dofVector, ...[, ...])</p></td>
 <td><p>Write the current values of an entire NodeField to the respective locations in a given DofVector.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.numerics.dofmanager.DofManager.writeScalarVariablesToDofVector" title="edelweissfe.numerics.dofmanager.DofManager.writeScalarVariablesToDofVector"><code class="xref py py-obj docutils literal notranslate"><span class="pre">writeScalarVariablesToDofVector</span></code></a>(dofVector)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.numerics.dofmanager.DofManager.writeScalarVariablesToDofVector" title="edelweissfe.numerics.dofmanager.DofManager.writeScalarVariablesToDofVector"><code class="xref py py-obj docutils literal notranslate"><span class="pre">writeScalarVariablesToDofVector</span></code></a>(dofVector)</p></td>
 <td><p>Write the values of the scalar variables of this equation system to their locations in a given DofVector.</p></td>
 </tr>
 </tbody>
@@ -247,21 +255,6 @@ the location of each entity.</p>
 </dd>
 <dt class="field-even">Return type<span class="colon">:</span></dt>
 <dd class="field-even"><p><a class="reference internal" href="#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector">DofVector</a></p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="edelweissfe.numerics.dofmanager.DofManager.constructVIJSystemMatrix">
-<span class="sig-name descname"><span class="pre">constructVIJSystemMatrix</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/numerics/dofmanager.html#DofManager.constructVIJSystemMatrix"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.numerics.dofmanager.DofManager.constructVIJSystemMatrix" title="Link to this definition"></a></dt>
-<dd><p>Construct a VIJ (COO) Sparse System matrix object, which also has knowledge about
-the location of each entity.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Returns<span class="colon">:</span></dt>
-<dd class="field-odd"><p>The system Matrix.</p>
-</dd>
-<dt class="field-even">Return type<span class="colon">:</span></dt>
-<dd class="field-even"><p><a class="reference internal" href="#edelweissfe.numerics.vijsystemmatrix.VIJSystemMatrix" title="edelweissfe.numerics.vijsystemmatrix.VIJSystemMatrix">VIJSystemMatrix</a></p>
 </dd>
 </dl>
 </dd></dl>
@@ -516,15 +509,18 @@ does not change.</p>
 <dd><p>Dictionary mapping scalar variables to all indices in the DofVector</p>
 </dd></dl>
 
-<dl class="py attribute">
+<dl class="py property">
 <dt class="sig sig-object py" id="edelweissfe.numerics.dofmanager.DofManager.indexToHostObjectMapping">
-<span class="sig-name descname"><span class="pre">indexToHostObjectMapping</span></span><a class="headerlink" href="#edelweissfe.numerics.dofmanager.DofManager.indexToHostObjectMapping" title="Link to this definition"></a></dt>
-<dd><p>Reverse dictionary mapping an index to its Host object (e.g., a Node).</p>
-<div class="admonition warning">
-<p class="admonition-title">Warning</p>
-<p>Not read within EdelweissFE (kept for external callers); building it costs a pass over
-every degree of freedom.</p>
-</div>
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">indexToHostObjectMapping</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="points.html#edelweissfe.points.node.Node" title="edelweissfe.points.node.Node"><span class="pre">Node</span></a><span class="p"><span class="pre">]</span></span></span><a class="reference internal" href="../_modules/edelweissfe/numerics/dofmanager.html#DofManager.indexToHostObjectMapping"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.numerics.dofmanager.DofManager.indexToHostObjectMapping" title="Link to this definition"></a></dt>
+<dd><p>only the report of the
+largest residual of an implicit solver reads it (through <a class="reference internal" href="#edelweissfe.numerics.dofmanager.DofManager.getNodeForIndexInDofVector" title="edelweissfe.numerics.dofmanager.DofManager.getNodeForIndexInDofVector"><code class="xref py py-meth docutils literal notranslate"><span class="pre">getNodeForIndexInDofVector()</span></code></a>), while building it
+costs a pass over every degree of freedom, which a DOF manager that is never asked – one of the many an explicit
+solver builds over a run, say – does not pay.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>The node of every index of a field variable in the DofVector, built on first use</p>
+</dd>
+</dl>
 </dd></dl>
 
 <dl class="py attribute">
@@ -1148,19 +1144,18 @@ system, e.g. across Newton iterations.</p>
 <span id="vijsystemmatrix"></span><h2>VIJSystemMatrix<a class="headerlink" href="#module-edelweissfe.numerics.vijsystemmatrix" title="Link to this heading"></a></h2>
 <dl class="py class">
 <dt class="sig sig-object py" id="edelweissfe.numerics.vijsystemmatrix.VIJSystemMatrix">
-<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">edelweissfe.numerics.vijsystemmatrix.</span></span><span class="sig-name descname"><span class="pre">VIJSystemMatrix</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">nDof</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">I</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">J</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">entitiesInVIJ</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/numerics/vijsystemmatrix.html#VIJSystemMatrix"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.numerics.vijsystemmatrix.VIJSystemMatrix" title="Link to this definition"></a></dt>
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">edelweissfe.numerics.vijsystemmatrix.</span></span><span class="sig-name descname"><span class="pre">VIJSystemMatrix</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">nEntries</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">vijSliceOfEntity</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/numerics/vijsystemmatrix.html#VIJSystemMatrix"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.numerics.vijsystemmatrix.VIJSystemMatrix" title="Link to this definition"></a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">ndarray</span></code></p>
-<p>Represents the value vector <cite>V</cite> of a COO (VIJ triple) sparse matrix.</p>
-<p><cite>VIJSystemMatrix</cite> stores matrix entry values for sparse global systems (Coordinate format),
-maintaining associated row indices <cite>I</cite>, column indices <cite>J</cite>, and an <cite>entitiesInVIJ</cite> mapping.
-It supports entity-aware indexing to slice, reshape, and assign local entity matrices directly.</p>
+<p>The value vector <cite>V</cite> of a VIJ (COO) system matrix: one value per entry of the block of every entity, the entities
+one after the other, in the layout of a
+<a class="reference internal" href="assembly.html#edelweissfe.numerics.systemmatrixassembly.VIJSystemMatrixAssembly" title="edelweissfe.numerics.systemmatrixassembly.VIJSystemMatrixAssembly"><code class="xref py py-class docutils literal notranslate"><span class="pre">VIJSystemMatrixAssembly</span></code></a>, which holds the row and column
+indices <cite>I</cite> and <cite>J</cite> of the values.</p>
+<p>Indexed by an entity, it is the entity’s view of its block, so that an entity writes its block into it directly.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>nDof</strong> (<em>int</em>) – The dimension (number of rows/columns) of the system matrix.</p></li>
-<li><p><strong>I</strong> (<em>ndarray</em>) – The 1D integer array of global row indices.</p></li>
-<li><p><strong>J</strong> (<em>ndarray</em>) – The 1D integer array of global column indices.</p></li>
-<li><p><strong>entitiesInVIJ</strong> (<em>dict</em>) – A dictionary mapping entities to their starting offset index in <cite>V</cite>.</p></li>
+<li><p><strong>nEntries</strong> (<em>int</em>) – The number of values.</p></li>
+<li><p><strong>vijSliceOfEntity</strong> (<em>dict</em>) – A dictionary mapping entities to the slice of <cite>V</cite> that holds the values of their block.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Attributes<span class="colon">:</span></dt>
@@ -1198,6 +1193,7 @@ It supports entity-aware indexing to slice, reshape, and assign local entity mat
 </dd>
 <dt><code class="xref py py-obj docutils literal notranslate"><span class="pre">strides</span></code></dt><dd><p>Tuple of bytes to step in each dimension when traversing an array.</p>
 </dd>
+<dt><strong>vijSliceOfEntity</strong></dt><dd></dd>
 </dl>
 </dd>
 </dl>
@@ -1382,115 +1378,112 @@ It supports entity-aware indexing to slice, reshape, and assign local entity mat
 </dl>
 </dd></dl>
 
+<dl class="py attribute">
+<dt class="sig sig-object py" id="edelweissfe.numerics.vijsystemmatrix.VIJSystemMatrix.vijSliceOfEntity">
+<span class="sig-name descname"><span class="pre">vijSliceOfEntity</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">dict</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#edelweissfe.numerics.vijsystemmatrix.VIJSystemMatrix.vijSliceOfEntity" title="Link to this definition"></a></dt>
+<dd><p>The slice of the values of every entity; None for an array derived from one without it.</p>
+</dd></dl>
+
 </dd></dl>
 
 </section>
-<section id="module-edelweissfe.numerics.vijentitybase">
-<span id="vijentitybase"></span><h2>VIJEntityBase<a class="headerlink" href="#module-edelweissfe.numerics.vijentitybase" title="Link to this heading"></a></h2>
+<section id="module-edelweissfe.numerics.systemmatrixcontributor">
+<span id="systemmatrixcontributorbase"></span><h2>SystemMatrixContributorBase<a class="headerlink" href="#module-edelweissfe.numerics.systemmatrixcontributor" title="Link to this heading"></a></h2>
+<p>The entities that contribute a block to the system matrix – elements, constraints, and whatever else couples
+nodes – and the layout of that block.</p>
+<p>An entity knows its block only in its own numbering: row <code class="docutils literal notranslate"><span class="pre">a</span></code> and column <code class="docutils literal notranslate"><span class="pre">b</span></code> of the block are its <code class="docutils literal notranslate"><span class="pre">a</span></code>-th and
+<code class="docutils literal notranslate"><span class="pre">b</span></code>-th degree of freedom. Where these lie in the global system (the global DOF list of the entity, see
+<a class="reference internal" href="#edelweissfe.numerics.dofmanager.DofManager" title="edelweissfe.numerics.dofmanager.DofManager"><code class="xref py py-class docutils literal notranslate"><span class="pre">DofManager</span></code></a>), and how the blocks are stored and summed, is the business of the
+system matrix assembly (<a class="reference internal" href="assembly.html#module-edelweissfe.numerics.systemmatrixassembly" title="edelweissfe.numerics.systemmatrixassembly"><code class="xref py py-mod docutils literal notranslate"><span class="pre">edelweissfe.numerics.systemmatrixassembly</span></code></a>).</p>
 <dl class="py class">
-<dt class="sig sig-object py" id="edelweissfe.numerics.vijentitybase.VIJEntityBase">
-<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">edelweissfe.numerics.vijentitybase.</span></span><span class="sig-name descname"><span class="pre">VIJEntityBase</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">nDof</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/numerics/vijentitybase.html#VIJEntityBase"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.numerics.vijentitybase.VIJEntityBase" title="Link to this definition"></a></dt>
+<dt class="sig sig-object py" id="edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">edelweissfe.numerics.systemmatrixcontributor.</span></span><span class="sig-name descname"><span class="pre">SystemMatrixContributorBase</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">nDof</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/numerics/systemmatrixcontributor.html#SystemMatrixContributorBase"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase" title="Link to this definition"></a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
-<p>Initialize the VIJEntityBase.</p>
+<p>Base class for the entities that contribute a block to the system matrix.</p>
+<p>The block couples the entity’s degrees of freedom with each other. By default it couples all of them: the block is
+the dense <code class="docutils literal notranslate"><span class="pre">nDof</span> <span class="pre">x</span> <span class="pre">nDof</span></code> matrix, stored column-major. An entity that couples only some of its degrees of freedom
+(a contact constraint, which couples every slave node with the master side but not the slave nodes with each
+other) lists the local row and column of each value of its block: it overrides <a class="reference internal" href="#edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.localEntriesOfBlock" title="edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.localEntriesOfBlock"><code class="xref py py-meth docutils literal notranslate"><span class="pre">localEntriesOfBlock()</span></code></a>, and
+that is all it does to declare the layout of its block (<a class="reference internal" href="#edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.couplesAllItsDofs" title="edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.couplesAllItsDofs"><code class="xref py py-attr docutils literal notranslate"><span class="pre">couplesAllItsDofs</span></code></a> follows from it). The number of
+values of a block is always the length of that list (<a class="reference internal" href="#edelweissfe.numerics.systemmatrixcontributor.countEntriesOfBlock" title="edelweissfe.numerics.systemmatrixcontributor.countEntriesOfBlock"><code class="xref py py-func docutils literal notranslate"><span class="pre">countEntriesOfBlock()</span></code></a>).</p>
+<p>The layout is declared once, by the override: a subclass that declares <a class="reference internal" href="#edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.couplesAllItsDofs" title="edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.couplesAllItsDofs"><code class="xref py py-attr docutils literal notranslate"><span class="pre">couplesAllItsDofs</span></code></a> itself is refused
+when it is defined, as a second declaration could contradict the first. An extension type, which cannot inherit
+this class (the Marmot elements, for one), declares both itself: a dense block, whose
+<a class="reference internal" href="#edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.localEntriesOfBlock" title="edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.localEntriesOfBlock"><code class="xref py py-meth docutils literal notranslate"><span class="pre">localEntriesOfBlock()</span></code></a> is <a class="reference internal" href="#edelweissfe.numerics.systemmatrixcontributor.denseBlockLocalEntries" title="edelweissfe.numerics.systemmatrixcontributor.denseBlockLocalEntries"><code class="xref py py-func docutils literal notranslate"><span class="pre">denseBlockLocalEntries()</span></code></a>.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Attributes<span class="colon">:</span></dt>
-<dd class="field-odd"><dl class="simple">
-<dt><a class="reference internal" href="#edelweissfe.numerics.vijentitybase.VIJEntityBase.couplesAllItsDofs" title="edelweissfe.numerics.vijentitybase.VIJEntityBase.couplesAllItsDofs"><code class="xref py py-obj docutils literal notranslate"><span class="pre">couplesAllItsDofs</span></code></a></dt><dd><p>Whether the entity’s block couples every one of its degrees of freedom with every other one.</p>
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>nDof</strong> (<em>int</em>) – The number of degrees of freedom of the entity.</p>
+</dd>
+<dt class="field-even">Attributes<span class="colon">:</span></dt>
+<dd class="field-even"><dl class="simple">
+<dt><a class="reference internal" href="#edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.couplesAllItsDofs" title="edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.couplesAllItsDofs"><code class="xref py py-obj docutils literal notranslate"><span class="pre">couplesAllItsDofs</span></code></a></dt><dd><p>Whether the entity’s block couples every one of its degrees of freedom with every other one.</p>
 </dd>
 </dl>
-</dd>
-<dt class="field-even">Parameters<span class="colon">:</span></dt>
-<dd class="field-even"><p><strong>nDof</strong> (<em>int</em>)</p>
 </dd>
 </dl>
 <p class="rubric">Methods</p>
 <table class="autosummary longtable docutils align-default">
 <tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.numerics.vijentitybase.VIJEntityBase.getVIJContributionSize" title="edelweissfe.numerics.vijentitybase.VIJEntityBase.getVIJContributionSize"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getVIJContributionSize</span></code></a>()</p></td>
-<td><p>Return the number of entries this entity contributes to the VIJ (COO) system matrix.</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.localEntriesOfBlock" title="edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.localEntriesOfBlock"><code class="xref py py-obj docutils literal notranslate"><span class="pre">localEntriesOfBlock</span></code></a>()</p></td>
+<td><p>The local row and column of every value of the entity's block, in the order of the values.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.numerics.vijentitybase.VIJEntityBase.initializeVIJContribution" title="edelweissfe.numerics.vijentitybase.VIJEntityBase.initializeVIJContribution"><code class="xref py py-obj docutils literal notranslate"><span class="pre">initializeVIJContribution</span></code></a>(idcs, I_, J_, offset)</p></td>
-<td><p>Fill the global <code class="docutils literal notranslate"><span class="pre">I</span></code> and <code class="docutils literal notranslate"><span class="pre">J</span></code> index arrays for this constraint's VIJ contribution.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.numerics.vijentitybase.VIJEntityBase.shapeVIJContribution" title="edelweissfe.numerics.vijentitybase.VIJEntityBase.shapeVIJContribution"><code class="xref py py-obj docutils literal notranslate"><span class="pre">shapeVIJContribution</span></code></a>(flat_view)</p></td>
-<td><p>Shape the flat VIJ values slice for this entity.</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.shapeBlock" title="edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.shapeBlock"><code class="xref py py-obj docutils literal notranslate"><span class="pre">shapeBlock</span></code></a>(values)</p></td>
+<td><p>The entity's view of the flat array of the values of its block, which it writes its tangent into.</p></td>
 </tr>
 </tbody>
 </table>
 <dl class="py method">
-<dt class="sig sig-object py" id="edelweissfe.numerics.vijentitybase.VIJEntityBase.getVIJContributionSize">
-<span class="sig-name descname"><span class="pre">getVIJContributionSize</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/numerics/vijentitybase.html#VIJEntityBase.getVIJContributionSize"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.numerics.vijentitybase.VIJEntityBase.getVIJContributionSize" title="Link to this definition"></a></dt>
-<dd><p>Return the number of entries this entity contributes to the VIJ (COO) system matrix.</p>
-<p>By default this is <code class="docutils literal notranslate"><span class="pre">nDof**2</span></code>, which corresponds to a full dense block.</p>
+<dt class="sig sig-object py" id="edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.localEntriesOfBlock">
+<span class="sig-name descname"><span class="pre">localEntriesOfBlock</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/numerics/systemmatrixcontributor.html#SystemMatrixContributorBase.localEntriesOfBlock"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.localEntriesOfBlock" title="Link to this definition"></a></dt>
+<dd><p>The local row and column of every value of the entity’s block, in the order of the values.</p>
+<p>Local means in the entity’s own list of degrees of freedom: row <code class="docutils literal notranslate"><span class="pre">a</span></code> is the entity’s <code class="docutils literal notranslate"><span class="pre">a</span></code>-th degree of
+freedom. The default is the dense column-major block (<a class="reference internal" href="#edelweissfe.numerics.systemmatrixcontributor.denseBlockLocalEntries" title="edelweissfe.numerics.systemmatrixcontributor.denseBlockLocalEntries"><code class="xref py py-func docutils literal notranslate"><span class="pre">denseBlockLocalEntries()</span></code></a>); an entity that does not
+couple all its degrees of freedom overrides it, which makes its block the list of the values of these entries
+(<a class="reference internal" href="#edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.couplesAllItsDofs" title="edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.couplesAllItsDofs"><code class="xref py py-attr docutils literal notranslate"><span class="pre">couplesAllItsDofs</span></code></a> is then <code class="docutils literal notranslate"><span class="pre">False</span></code>).</p>
 <dl class="field-list simple">
 <dt class="field-odd">Returns<span class="colon">:</span></dt>
-<dd class="field-odd"><p>Number of VIJ entries for this entity.</p>
+<dd class="field-odd"><p>The local rows and the local columns (int32), one per value of the block.</p>
 </dd>
 <dt class="field-even">Return type<span class="colon">:</span></dt>
-<dd class="field-even"><p>int</p>
+<dd class="field-even"><p>tuple[numpy.ndarray, numpy.ndarray]</p>
 </dd>
 </dl>
 </dd></dl>
 
 <dl class="py method">
-<dt class="sig sig-object py" id="edelweissfe.numerics.vijentitybase.VIJEntityBase.initializeVIJContribution">
-<span class="sig-name descname"><span class="pre">initializeVIJContribution</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">idcs</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">I_</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">J_</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">offset</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/numerics/vijentitybase.html#VIJEntityBase.initializeVIJContribution"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.numerics.vijentitybase.VIJEntityBase.initializeVIJContribution" title="Link to this definition"></a></dt>
-<dd><p>Fill the global <code class="docutils literal notranslate"><span class="pre">I</span></code> and <code class="docutils literal notranslate"><span class="pre">J</span></code> index arrays for this constraint’s VIJ contribution.</p>
-<p>The default implementation writes a full dense <code class="docutils literal notranslate"><span class="pre">nDof</span> <span class="pre">×</span> <span class="pre">nDof</span></code> block, identical to
-the behaviour used for finite elements.
-Entities that override <a class="reference internal" href="#edelweissfe.numerics.vijentitybase.VIJEntityBase.getVIJContributionSize" title="edelweissfe.numerics.vijentitybase.VIJEntityBase.getVIJContributionSize"><code class="xref py py-meth docutils literal notranslate"><span class="pre">getVIJContributionSize()</span></code></a> to return a smaller value <strong>must</strong> also override
-this method so that exactly <code class="docutils literal notranslate"><span class="pre">getVIJContributionSize()</span></code> <code class="docutils literal notranslate"><span class="pre">(I,</span> <span class="pre">J)</span></code> pairs are
-written starting at <code class="docutils literal notranslate"><span class="pre">offset</span></code>.</p>
+<dt class="sig sig-object py" id="edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.shapeBlock">
+<span class="sig-name descname"><span class="pre">shapeBlock</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">values</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/numerics/systemmatrixcontributor.html#SystemMatrixContributorBase.shapeBlock"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.shapeBlock" title="Link to this definition"></a></dt>
+<dd><p>The entity’s view of the flat array of the values of its block, which it writes its tangent into.</p>
+<p>By default the dense block as a 2-D <code class="docutils literal notranslate"><span class="pre">nDof</span> <span class="pre">x</span> <span class="pre">nDof</span></code> array (column-major) if <a class="reference internal" href="#edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.couplesAllItsDofs" title="edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.couplesAllItsDofs"><code class="xref py py-attr docutils literal notranslate"><span class="pre">couplesAllItsDofs</span></code></a>, else the
+flat array itself. An entity with a block of its own layout returns a structured view of it.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>idcs</strong> (<em>ndarray</em>) – Global DOF indices for this entity (length = <code class="docutils literal notranslate"><span class="pre">nDof</span></code>).</p></li>
-<li><p><strong>I</strong> – The global row-index array of the VIJ triple (written in-place).</p></li>
-<li><p><strong>J</strong> – The global column-index array of the VIJ triple (written in-place).</p></li>
-<li><p><strong>offset</strong> (<em>int</em>) – First position in <code class="docutils literal notranslate"><span class="pre">I</span></code> / <code class="docutils literal notranslate"><span class="pre">J</span></code> that belongs to this entity.</p></li>
-<li><p><strong>I_</strong> (<em>ndarray</em>)</p></li>
-<li><p><strong>J_</strong> (<em>ndarray</em>)</p></li>
-</ul>
+<dd class="field-odd"><p><strong>values</strong> (<em>ndarray</em>) – The values of the block, one per entry of <a class="reference internal" href="#edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.localEntriesOfBlock" title="edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.localEntriesOfBlock"><code class="xref py py-meth docutils literal notranslate"><span class="pre">localEntriesOfBlock()</span></code></a>.</p>
 </dd>
-<dt class="field-even">Return type<span class="colon">:</span></dt>
-<dd class="field-even"><p>None</p>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The view the entity writes into.</p>
 </dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="edelweissfe.numerics.vijentitybase.VIJEntityBase.shapeVIJContribution">
-<span class="sig-name descname"><span class="pre">shapeVIJContribution</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">flat_view</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/numerics/vijentitybase.html#VIJEntityBase.shapeVIJContribution"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.numerics.vijentitybase.VIJEntityBase.shapeVIJContribution" title="Link to this definition"></a></dt>
-<dd><p>Shape the flat VIJ values slice for this entity.</p>
-<p>By default, if the contribution is dense (<a class="reference internal" href="#edelweissfe.numerics.vijentitybase.VIJEntityBase.couplesAllItsDofs" title="edelweissfe.numerics.vijentitybase.VIJEntityBase.couplesAllItsDofs"><code class="xref py py-attr docutils literal notranslate"><span class="pre">couplesAllItsDofs</span></code></a>),
-it reshapes the flat view to a 2-D array of shape (nDof, nDof)
-using column-major (Fortran) order.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>flat_view</strong> (<em>ndarray</em>)</p>
-</dd>
-<dt class="field-even">Return type<span class="colon">:</span></dt>
-<dd class="field-even"><p><em>ndarray</em></p>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>numpy.ndarray</p>
 </dd>
 </dl>
 </dd></dl>
 
 <dl class="py property">
-<dt class="sig sig-object py" id="edelweissfe.numerics.vijentitybase.VIJEntityBase.couplesAllItsDofs">
-<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">couplesAllItsDofs</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></span><a class="headerlink" href="#edelweissfe.numerics.vijentitybase.VIJEntityBase.couplesAllItsDofs" title="Link to this definition"></a></dt>
+<dt class="sig sig-object py" id="edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.couplesAllItsDofs">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">couplesAllItsDofs</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></span><a class="headerlink" href="#edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.couplesAllItsDofs" title="Link to this definition"></a></dt>
 <dd><p>Whether the entity’s block couples every one of its degrees of freedom with every other one.</p>
-<p><code class="docutils literal notranslate"><span class="pre">True</span></code> (the default, every element) means the block is the dense <code class="docutils literal notranslate"><span class="pre">nDof</span> <span class="pre">×</span> <span class="pre">nDof</span></code> matrix, stored
-column-major, with the entity’s global DOF indices as its rows and its columns. <code class="docutils literal notranslate"><span class="pre">False</span></code> means the entity
-declared a sparse pattern of its own in <a class="reference internal" href="#edelweissfe.numerics.vijentitybase.VIJEntityBase.initializeVIJContribution" title="edelweissfe.numerics.vijentitybase.VIJEntityBase.initializeVIJContribution"><code class="xref py py-meth docutils literal notranslate"><span class="pre">initializeVIJContribution()</span></code></a> (a constraint that couples only
-some of its degrees of freedom), and its block is the list of the values of these <code class="docutils literal notranslate"><span class="pre">(I,</span> <span class="pre">J)</span></code> pairs, in the
-order it declared them.</p>
-<p>The entity says which, because the number of entries cannot tell: a sparse pattern can happen to have
-exactly <code class="docutils literal notranslate"><span class="pre">nDof**2</span></code> entries. A rigid body contact with a single slave node in 3D couples the six degrees of
-freedom of the reference point with each other, the three of the node with each other, and the two groups
+<p><code class="docutils literal notranslate"><span class="pre">True</span></code> (the default, every element) means the block is the dense <code class="docutils literal notranslate"><span class="pre">nDof</span> <span class="pre">x</span> <span class="pre">nDof</span></code> matrix, stored
+column-major. <code class="docutils literal notranslate"><span class="pre">False</span></code> means the entity lists the entries of its block itself, by overriding
+<a class="reference internal" href="#edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.localEntriesOfBlock" title="edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.localEntriesOfBlock"><code class="xref py py-meth docutils literal notranslate"><span class="pre">localEntriesOfBlock()</span></code></a>, and its block is the list of their values, in that order. It is <code class="docutils literal notranslate"><span class="pre">False</span></code>
+exactly for the entities that override it.</p>
+<p>The layout is never guessed from the number of entries, which cannot tell: a sparse pattern can happen to
+have exactly <code class="docutils literal notranslate"><span class="pre">nDof**2</span></code> entries. A rigid body contact with a single slave node in 3D couples the six degrees
+of freedom of the reference point with each other, the three of the node with each other, and the two groups
 both ways: 36 + 9 + 18 + 18 = 81 = 9², yet its entries are ordered block by block, not column by column.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Returns<span class="colon">:</span></dt>
-<dd class="field-odd"><p><code class="docutils literal notranslate"><span class="pre">True</span></code> for a dense block, <code class="docutils literal notranslate"><span class="pre">False</span></code> for a pattern of the entity’s own.</p>
+<dd class="field-odd"><p><code class="docutils literal notranslate"><span class="pre">True</span></code> for a dense block, <code class="docutils literal notranslate"><span class="pre">False</span></code> for a list of entries of the entity’s own.</p>
 </dd>
 <dt class="field-even">Return type<span class="colon">:</span></dt>
 <dd class="field-even"><p>bool</p>
@@ -1498,6 +1491,150 @@ both ways: 36 + 9 + 18 + 18 = 81 = 9², yet its entries are ordered block by blo
 </dl>
 </dd></dl>
 
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="edelweissfe.numerics.systemmatrixcontributor.SystemMatrixEntities">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">edelweissfe.numerics.systemmatrixcontributor.</span></span><span class="sig-name descname"><span class="pre">SystemMatrixEntities</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dofStart</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dofs</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">couplesAllItsDofs</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">localEntryStart</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">localRows</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">localColumns</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/numerics/systemmatrixcontributor.html#SystemMatrixEntities"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.numerics.systemmatrixcontributor.SystemMatrixEntities" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>The entities of an equation system as the direct CSR assembly reads them: flat arrays, the counterpart of the
+C++ struct of the same name in <code class="docutils literal notranslate"><span class="pre">_csrcore.h</span></code>.</p>
+<p>Entity <code class="docutils literal notranslate"><span class="pre">e</span></code> has the global DOF list <code class="docutils literal notranslate"><span class="pre">dofs[dofStart[e]</span> <span class="pre">:</span> <span class="pre">dofStart[e</span> <span class="pre">+</span> <span class="pre">1]]</span></code>. A dense block (<code class="docutils literal notranslate"><span class="pre">couplesAllItsDofs</span></code>)
+is described by that list alone; the block of any other entity is the list of entries it gives in
+<a class="reference internal" href="#edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.localEntriesOfBlock" title="edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.localEntriesOfBlock"><code class="xref py py-meth docutils literal notranslate"><span class="pre">SystemMatrixContributorBase.localEntriesOfBlock()</span></code></a>, stored in <code class="docutils literal notranslate"><span class="pre">localRows</span></code> and <code class="docutils literal notranslate"><span class="pre">localColumns</span></code> from
+<code class="docutils literal notranslate"><span class="pre">localEntryStart[e]</span></code> to <code class="docutils literal notranslate"><span class="pre">localEntryStart[e</span> <span class="pre">+</span> <span class="pre">1]</span></code>. A dense entity lists no entries: its <code class="docutils literal notranslate"><span class="pre">nDof**2</span></code> pairs are
+never materialised. The lists of the entities lie one after the other: <code class="docutils literal notranslate"><span class="pre">dofStart</span></code> and <code class="docutils literal notranslate"><span class="pre">localEntryStart</span></code> begin
+at 0 and never decrease, and the direct assembly refuses a table whose starts do not.</p>
+<p class="rubric">Methods</p>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.numerics.systemmatrixcontributor.SystemMatrixEntities.ofEntities" title="edelweissfe.numerics.systemmatrixcontributor.SystemMatrixEntities.ofEntities"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ofEntities</span></code></a>(dofsOfEntity)</p></td>
+<td><p>The table of the entities, in the order of <code class="docutils literal notranslate"><span class="pre">dofsOfEntity</span></code>.</p></td>
+</tr>
+</tbody>
+</table>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>dofStart</strong> (<em>ndarray</em>)</p></li>
+<li><p><strong>dofs</strong> (<em>ndarray</em>)</p></li>
+<li><p><strong>couplesAllItsDofs</strong> (<em>ndarray</em>)</p></li>
+<li><p><strong>localEntryStart</strong> (<em>ndarray</em>)</p></li>
+<li><p><strong>localRows</strong> (<em>ndarray</em>)</p></li>
+<li><p><strong>localColumns</strong> (<em>ndarray</em>)</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.numerics.systemmatrixcontributor.SystemMatrixEntities.ofEntities">
+<span class="property"><span class="k"><span class="pre">classmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">ofEntities</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dofsOfEntity</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/numerics/systemmatrixcontributor.html#SystemMatrixEntities.ofEntities"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.numerics.systemmatrixcontributor.SystemMatrixEntities.ofEntities" title="Link to this definition"></a></dt>
+<dd><p>The table of the entities, in the order of <code class="docutils literal notranslate"><span class="pre">dofsOfEntity</span></code>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>dofsOfEntity</strong> (<em>dict</em>) – The global DOF list of every entity.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The table.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference internal" href="#edelweissfe.numerics.systemmatrixcontributor.SystemMatrixEntities" title="edelweissfe.numerics.systemmatrixcontributor.SystemMatrixEntities">SystemMatrixEntities</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="edelweissfe.numerics.systemmatrixcontributor.SystemMatrixEntities.couplesAllItsDofs">
+<span class="sig-name descname"><span class="pre">couplesAllItsDofs</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">ndarray</span></span><a class="headerlink" href="#edelweissfe.numerics.systemmatrixcontributor.SystemMatrixEntities.couplesAllItsDofs" title="Link to this definition"></a></dt>
+<dd><p>whether the block of each entity is dense (uint8)</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="edelweissfe.numerics.systemmatrixcontributor.SystemMatrixEntities.dofStart">
+<span class="sig-name descname"><span class="pre">dofStart</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">ndarray</span></span><a class="headerlink" href="#edelweissfe.numerics.systemmatrixcontributor.SystemMatrixEntities.dofStart" title="Link to this definition"></a></dt>
+<dd><p>where the DOF list of each entity begins in <a class="reference internal" href="#edelweissfe.numerics.systemmatrixcontributor.SystemMatrixEntities.dofs" title="edelweissfe.numerics.systemmatrixcontributor.SystemMatrixEntities.dofs"><code class="xref py py-attr docutils literal notranslate"><span class="pre">dofs</span></code></a> (int64, one more than there are entities)</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="edelweissfe.numerics.systemmatrixcontributor.SystemMatrixEntities.dofs">
+<span class="sig-name descname"><span class="pre">dofs</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">ndarray</span></span><a class="headerlink" href="#edelweissfe.numerics.systemmatrixcontributor.SystemMatrixEntities.dofs" title="Link to this definition"></a></dt>
+<dd><p>the global DOF lists of all entities, one after the other (int32)</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="edelweissfe.numerics.systemmatrixcontributor.SystemMatrixEntities.localColumns">
+<span class="sig-name descname"><span class="pre">localColumns</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">ndarray</span></span><a class="headerlink" href="#edelweissfe.numerics.systemmatrixcontributor.SystemMatrixEntities.localColumns" title="Link to this definition"></a></dt>
+<dd><p>the local column of every listed entry (int32)</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="edelweissfe.numerics.systemmatrixcontributor.SystemMatrixEntities.localEntryStart">
+<span class="sig-name descname"><span class="pre">localEntryStart</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">ndarray</span></span><a class="headerlink" href="#edelweissfe.numerics.systemmatrixcontributor.SystemMatrixEntities.localEntryStart" title="Link to this definition"></a></dt>
+<dd><p>where the listed entries of each entity begin in <a class="reference internal" href="#edelweissfe.numerics.systemmatrixcontributor.SystemMatrixEntities.localRows" title="edelweissfe.numerics.systemmatrixcontributor.SystemMatrixEntities.localRows"><code class="xref py py-attr docutils literal notranslate"><span class="pre">localRows</span></code></a> and <a class="reference internal" href="#edelweissfe.numerics.systemmatrixcontributor.SystemMatrixEntities.localColumns" title="edelweissfe.numerics.systemmatrixcontributor.SystemMatrixEntities.localColumns"><code class="xref py py-attr docutils literal notranslate"><span class="pre">localColumns</span></code></a> (int64, one more
+than there are entities)</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="edelweissfe.numerics.systemmatrixcontributor.SystemMatrixEntities.localRows">
+<span class="sig-name descname"><span class="pre">localRows</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">ndarray</span></span><a class="headerlink" href="#edelweissfe.numerics.systemmatrixcontributor.SystemMatrixEntities.localRows" title="Link to this definition"></a></dt>
+<dd><p>the local row of every listed entry (int32)</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="edelweissfe.numerics.systemmatrixcontributor.countEntriesOfBlock">
+<span class="sig-prename descclassname"><span class="pre">edelweissfe.numerics.systemmatrixcontributor.</span></span><span class="sig-name descname"><span class="pre">countEntriesOfBlock</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">entity</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/numerics/systemmatrixcontributor.html#countEntriesOfBlock"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.numerics.systemmatrixcontributor.countEntriesOfBlock" title="Link to this definition"></a></dt>
+<dd><p>The number of values of the block of <code class="docutils literal notranslate"><span class="pre">entity</span></code>: <code class="docutils literal notranslate"><span class="pre">nDof**2</span></code> for a dense block, else the number of entries it
+lists in its <code class="docutils literal notranslate"><span class="pre">localEntriesOfBlock</span></code>. An assembly counts once per equation system and stores where each block
+begins and ends.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>entity</strong> – An element, a constraint, or any other entity that contributes a block to the system matrix.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The number of values.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="edelweissfe.numerics.systemmatrixcontributor.denseBlockLocalEntries">
+<span class="sig-prename descclassname"><span class="pre">edelweissfe.numerics.systemmatrixcontributor.</span></span><span class="sig-name descname"><span class="pre">denseBlockLocalEntries</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">nDof</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/numerics/systemmatrixcontributor.html#denseBlockLocalEntries"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.numerics.systemmatrixcontributor.denseBlockLocalEntries" title="Link to this definition"></a></dt>
+<dd><p>The local row and column of every value of a dense <code class="docutils literal notranslate"><span class="pre">nDof</span> <span class="pre">x</span> <span class="pre">nDof</span></code> block, stored column-major.</p>
+<p>Value <code class="docutils literal notranslate"><span class="pre">k</span></code> of the block lies in row <code class="docutils literal notranslate"><span class="pre">k</span> <span class="pre">%</span> <span class="pre">nDof</span></code> and column <code class="docutils literal notranslate"><span class="pre">k</span> <span class="pre">//</span> <span class="pre">nDof</span></code>. This is the definition of the dense
+layout; the direct CSR assembly applies the same rule in C++, without materialising the pairs.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>nDof</strong> (<em>int</em>) – The number of degrees of freedom of the entity.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The local rows and the local columns (int32).</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>tuple[numpy.ndarray, numpy.ndarray]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="edelweissfe.numerics.systemmatrixcontributor.localEntriesOfSubBlocks">
+<span class="sig-prename descclassname"><span class="pre">edelweissfe.numerics.systemmatrixcontributor.</span></span><span class="sig-name descname"><span class="pre">localEntriesOfSubBlocks</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">subBlocks</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/numerics/systemmatrixcontributor.html#localEntriesOfSubBlocks"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.numerics.systemmatrixcontributor.localEntriesOfSubBlocks" title="Link to this definition"></a></dt>
+<dd><p>The local row and column of every value of a block made of dense sub-blocks, each stored row by row, one
+after the other: the layout of the constraints that couple only some of their degrees of freedom.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>subBlocks</strong> (<em>list</em><em>[</em><em>tuple</em><em>[</em><em>ndarray</em><em>, </em><em>ndarray</em><em>]</em><em>]</em>) – For each sub-block, in the order of the values, its local rows and its local columns.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The local rows and the local columns (int32), one per value of the block.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>tuple[numpy.ndarray, numpy.ndarray]</p>
+</dd>
+</dl>
 </dd></dl>
 
 </section>

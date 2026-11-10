@@ -110,41 +110,33 @@
 <a class="viewcode-back" href="../../../documentation/dofmanager.html#edelweissfe.numerics.vijsystemmatrix.VIJSystemMatrix">[docs]</a>
 <span class="k">class</span><span class="w"> </span><span class="nc">VIJSystemMatrix</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""</span>
-<span class="sd">    Represents the value vector `V` of a COO (VIJ triple) sparse matrix.</span>
+<span class="sd">    The value vector `V` of a VIJ (COO) system matrix: one value per entry of the block of every entity, the entities</span>
+<span class="sd">    one after the other, in the layout of a</span>
+<span class="sd">    :class:`~edelweissfe.numerics.systemmatrixassembly.VIJSystemMatrixAssembly`, which holds the row and column</span>
+<span class="sd">    indices `I` and `J` of the values.</span>
 
-<span class="sd">    `VIJSystemMatrix` stores matrix entry values for sparse global systems (Coordinate format),</span>
-<span class="sd">    maintaining associated row indices `I`, column indices `J`, and an `entitiesInVIJ` mapping.</span>
-<span class="sd">    It supports entity-aware indexing to slice, reshape, and assign local entity matrices directly.</span>
+<span class="sd">    Indexed by an entity, it is the entity's view of its block, so that an entity writes its block into it directly.</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
-<span class="sd">    nDof : int</span>
-<span class="sd">        The dimension (number of rows/columns) of the system matrix.</span>
-<span class="sd">    I : ndarray</span>
-<span class="sd">        The 1D integer array of global row indices.</span>
-<span class="sd">    J : ndarray</span>
-<span class="sd">        The 1D integer array of global column indices.</span>
-<span class="sd">    entitiesInVIJ : dict</span>
-<span class="sd">        A dictionary mapping entities to their starting offset index in `V`.</span>
+<span class="sd">    nEntries : int</span>
+<span class="sd">        The number of values.</span>
+<span class="sd">    vijSliceOfEntity : dict</span>
+<span class="sd">        A dictionary mapping entities to the slice of `V` that holds the values of their block.</span>
 <span class="sd">    """</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="fm">__new__</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">nDof</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">I</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">J</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">entitiesInVIJ</span><span class="p">:</span> <span class="nb">dict</span><span class="p">):</span>  <span class="c1"># noqa: E741</span>
-        <span class="n">obj</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">I</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="bp">cls</span><span class="p">)</span>
+    <span class="c1">#: The slice of the values of every entity; None for an array derived from one without it.</span>
+    <span class="n">vijSliceOfEntity</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
 
-        <span class="n">obj</span><span class="o">.</span><span class="n">nDof</span> <span class="o">=</span> <span class="n">nDof</span>
-        <span class="n">obj</span><span class="o">.</span><span class="n">I</span> <span class="o">=</span> <span class="n">I</span>  <span class="c1"># noqa: E741</span>
-        <span class="n">obj</span><span class="o">.</span><span class="n">J</span> <span class="o">=</span> <span class="n">J</span>
-        <span class="n">obj</span><span class="o">.</span><span class="n">entitiesInVIJ</span> <span class="o">=</span> <span class="n">entitiesInVIJ</span>
-
+    <span class="k">def</span><span class="w"> </span><span class="fm">__new__</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">nEntries</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">vijSliceOfEntity</span><span class="p">:</span> <span class="nb">dict</span><span class="p">):</span>
+        <span class="n">obj</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">nEntries</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="bp">cls</span><span class="p">)</span>
+        <span class="n">obj</span><span class="o">.</span><span class="n">vijSliceOfEntity</span> <span class="o">=</span> <span class="n">vijSliceOfEntity</span>
         <span class="k">return</span> <span class="n">obj</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">__array_finalize__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">obj</span><span class="p">):</span>
-        <span class="k">if</span> <span class="n">obj</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">return</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">nDof</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="s2">"nDof"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">I</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="s2">"I"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>  <span class="c1"># noqa: E741</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">J</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="s2">"J"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>  <span class="c1"># noqa: E741</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">entitiesInVIJ</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="s2">"entitiesInVIJ"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="c1"># a view, a copy or the result of an operation keeps the layout of the value array it comes from</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="n">VIJSystemMatrix</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">vijSliceOfEntity</span> <span class="o">=</span> <span class="n">obj</span><span class="o">.</span><span class="n">vijSliceOfEntity</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__getitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">"""</span>
@@ -160,18 +152,13 @@
 <span class="sd">        ndarray or float</span>
 <span class="sd">            Sub-array or shaped entity matrix view.</span>
 <span class="sd">        """</span>
-        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="p">(</span><span class="nb">int</span><span class="p">,</span> <span class="nb">slice</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="nb">list</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">)):</span>
+        <span class="c1"># An entity of the layout first, as the DOF vectors do; any other key is an index of the array. What the</span>
+        <span class="c1"># entity does with its values is not caught: an error in it is the entity's.</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">vijSlice</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">vijSliceOfEntity</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
+        <span class="k">except</span> <span class="p">(</span><span class="ne">KeyError</span><span class="p">,</span> <span class="ne">TypeError</span><span class="p">):</span>
             <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__getitem__</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
-
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">entitiesInVIJ</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">try</span><span class="p">:</span>
-                <span class="n">idxInVIJ</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">entitiesInVIJ</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
-                <span class="n">size</span> <span class="o">=</span> <span class="n">key</span><span class="o">.</span><span class="n">getVIJContributionSize</span><span class="p">()</span>
-                <span class="n">flat_view</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__getitem__</span><span class="p">(</span><span class="nb">slice</span><span class="p">(</span><span class="n">idxInVIJ</span><span class="p">,</span> <span class="n">idxInVIJ</span> <span class="o">+</span> <span class="n">size</span><span class="p">))</span>
-                <span class="k">return</span> <span class="n">key</span><span class="o">.</span><span class="n">shapeVIJContribution</span><span class="p">(</span><span class="n">flat_view</span><span class="p">)</span>
-            <span class="k">except</span> <span class="p">(</span><span class="ne">KeyError</span><span class="p">,</span> <span class="ne">TypeError</span><span class="p">,</span> <span class="ne">AttributeError</span><span class="p">):</span>
-                <span class="k">pass</span>
-        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__getitem__</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">key</span><span class="o">.</span><span class="n">shapeBlock</span><span class="p">(</span><span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__getitem__</span><span class="p">(</span><span class="n">vijSlice</span><span class="p">))</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__setitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">"""</span>
@@ -184,19 +171,12 @@
 <span class="sd">        value : array_like or float</span>
 <span class="sd">            Value(s) to assign.</span>
 <span class="sd">        """</span>
-        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="p">(</span><span class="nb">int</span><span class="p">,</span> <span class="nb">slice</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="nb">list</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">)):</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">vijSlice</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">vijSliceOfEntity</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
+        <span class="k">except</span> <span class="p">(</span><span class="ne">KeyError</span><span class="p">,</span> <span class="ne">TypeError</span><span class="p">):</span>
             <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__setitem__</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
             <span class="k">return</span>
-
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">entitiesInVIJ</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">try</span><span class="p">:</span>
-                <span class="n">idxInVIJ</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">entitiesInVIJ</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
-                <span class="n">size</span> <span class="o">=</span> <span class="n">key</span><span class="o">.</span><span class="n">getVIJContributionSize</span><span class="p">()</span>
-                <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__setitem__</span><span class="p">(</span><span class="nb">slice</span><span class="p">(</span><span class="n">idxInVIJ</span><span class="p">,</span> <span class="n">idxInVIJ</span> <span class="o">+</span> <span class="n">size</span><span class="p">),</span> <span class="n">value</span><span class="p">)</span>
-                <span class="k">return</span>
-            <span class="k">except</span> <span class="p">(</span><span class="ne">KeyError</span><span class="p">,</span> <span class="ne">TypeError</span><span class="p">,</span> <span class="ne">AttributeError</span><span class="p">):</span>
-                <span class="k">pass</span>
-        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__setitem__</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__setitem__</span><span class="p">(</span><span class="n">vijSlice</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
 
 <div class="viewcode-block" id="VIJSystemMatrix.copy">
 <a class="viewcode-back" href="../../../documentation/dofmanager.html#edelweissfe.numerics.vijsystemmatrix.VIJSystemMatrix.copy">[docs]</a>
@@ -215,13 +195,8 @@
 <span class="sd">            A new `VIJSystemMatrix` instance with copied values and metadata.</span>
 <span class="sd">        """</span>
         <span class="n">new_mat</span> <span class="o">=</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">copy</span><span class="p">(</span><span class="n">order</span><span class="p">)</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="n">VIJSystemMatrix</span><span class="p">)</span>
-        <span class="n">new_mat</span><span class="o">.</span><span class="n">nDof</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">nDof</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">I</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">new_mat</span><span class="o">.</span><span class="n">I</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">I</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>  <span class="c1"># noqa: E741</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">J</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">new_mat</span><span class="o">.</span><span class="n">J</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">J</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">entitiesInVIJ</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">new_mat</span><span class="o">.</span><span class="n">entitiesInVIJ</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">entitiesInVIJ</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">vijSliceOfEntity</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">new_mat</span><span class="o">.</span><span class="n">vijSliceOfEntity</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">vijSliceOfEntity</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
         <span class="k">return</span> <span class="n">new_mat</span></div>
 </div>
 

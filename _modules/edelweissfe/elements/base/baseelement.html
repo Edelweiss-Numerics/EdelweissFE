@@ -118,13 +118,13 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.nodecouplingentity.base.nodecouplingentity</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">BaseNodeCouplingEntity</span><span class="p">,</span>
 <span class="p">)</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.vijentitybase</span><span class="w"> </span><span class="kn">import</span> <span class="n">VIJEntityBase</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.systemmatrixcontributor</span><span class="w"> </span><span class="kn">import</span> <span class="n">SystemMatrixContributorBase</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.points.node</span><span class="w"> </span><span class="kn">import</span> <span class="n">Node</span>
 
 
 <div class="viewcode-block" id="BaseElement">
 <a class="viewcode-back" href="../../../../documentation/elements.html#edelweissfe.elements.base.baseelement.BaseElement">[docs]</a>
-<span class="k">class</span><span class="w"> </span><span class="nc">BaseElement</span><span class="p">(</span><span class="n">BaseNodeCouplingEntity</span><span class="p">,</span> <span class="n">VIJEntityBase</span><span class="p">):</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">BaseElement</span><span class="p">(</span><span class="n">BaseNodeCouplingEntity</span><span class="p">,</span> <span class="n">SystemMatrixContributorBase</span><span class="p">):</span>
     <span class="nd">@property</span>
     <span class="nd">@abstractmethod</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">elNumber</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>

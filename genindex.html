@@ -301,8 +301,6 @@
         <li><a href="documentation/assembly.html#edelweissfe.numerics.systemmatrixassembly.VIJSystemMatrixAssembly.assembledMatrix">(edelweissfe.numerics.systemmatrixassembly.VIJSystemMatrixAssembly method)</a>
 </li>
       </ul></li>
-      <li><a href="documentation/assembly.html#edelweissfe.numerics.csrgeneratorv2.DirectCSRAssembler.assembleFromVIJ">assembleFromVIJ() (edelweissfe.numerics.csrgeneratorv2.DirectCSRAssembler method)</a>
-</li>
       <li><a href="documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.assembleInternalForces">assembleInternalForces() (edelweissfe.solvers.nonlinearimplicitstatic.NIST method)</a>
 </li>
       <li><a href="documentation/dofmanager.html#edelweissfe.numerics.scatterdofvector.ScatterDofVector.assembleInto">assembleInto() (edelweissfe.numerics.scatterdofvector.ScatterDofVector method)</a>
@@ -689,8 +687,6 @@
         <li><a href="documentation/elements.html#edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.computeInternalEnergy">(edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement method)</a>
 </li>
       </ul></li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="documentation/constraints.html#edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernels">computeKernels() (edelweissfe.constraints.base.constraintbase.ConstraintBase method)</a>
 
       <ul>
@@ -705,6 +701,8 @@
         <li><a href="documentation/elements.html#edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.computeKernels">(edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement method)</a>
 </li>
       </ul></li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="documentation/constraints.html#edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernelsExplicit">computeKernelsExplicit() (edelweissfe.constraints.base.constraintbase.ConstraintBase method)</a>
 
       <ul>
@@ -803,7 +801,7 @@
 </li>
       <li><a href="documentation/dofmanager.html#edelweissfe.numerics.dofmanager.DofManager.constructDofVector">constructDofVector() (edelweissfe.numerics.dofmanager.DofManager method)</a>
 </li>
-      <li><a href="documentation/dofmanager.html#edelweissfe.numerics.dofmanager.DofManager.constructVIJSystemMatrix">constructVIJSystemMatrix() (edelweissfe.numerics.dofmanager.DofManager method)</a>
+      <li><a href="documentation/assembly.html#edelweissfe.numerics.systemmatrixassembly.VIJSystemMatrixAssembly.constructVIJSystemMatrix">constructVIJSystemMatrix() (edelweissfe.numerics.systemmatrixassembly.VIJSystemMatrixAssembly method)</a>
 </li>
       <li><a href="documentation/models.html#edelweissfe.models.femodel.FEModel.contactFacetRecipes">contactFacetRecipes (edelweissfe.models.femodel.FEModel attribute)</a>
 </li>
@@ -865,10 +863,14 @@
 </li>
       <li><a href="documentation/solvers.html#edelweissfe.solvers.base.convergencecriteria.LegacyConvergenceCriterion.correctionConverged">correctionConverged() (edelweissfe.solvers.base.convergencecriteria.LegacyConvergenceCriterion method)</a>
 </li>
+      <li><a href="documentation/dofmanager.html#edelweissfe.numerics.systemmatrixcontributor.countEntriesOfBlock">countEntriesOfBlock() (in module edelweissfe.numerics.systemmatrixcontributor)</a>
+</li>
       <li><a href="documentation/elements.html#edelweissfe.elements.marmotelement.element.MarmotElementWrapper.couplesAllItsDofs">couplesAllItsDofs (edelweissfe.elements.marmotelement.element.MarmotElementWrapper attribute)</a>
 
       <ul>
-        <li><a href="documentation/dofmanager.html#edelweissfe.numerics.vijentitybase.VIJEntityBase.couplesAllItsDofs">(edelweissfe.numerics.vijentitybase.VIJEntityBase property)</a>
+        <li><a href="documentation/dofmanager.html#edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.couplesAllItsDofs">(edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase property)</a>
+</li>
+        <li><a href="documentation/dofmanager.html#edelweissfe.numerics.systemmatrixcontributor.SystemMatrixEntities.couplesAllItsDofs">(edelweissfe.numerics.systemmatrixcontributor.SystemMatrixEntities attribute)</a>
 </li>
       </ul></li>
       <li><a href="documentation/linsolveapi.html#edelweissfe.linsolve.composition.systemmatrix.FieldSplitBlocks.couplingTimes">couplingTimes() (edelweissfe.linsolve.composition.systemmatrix.FieldSplitBlocks method)</a>
@@ -891,12 +893,20 @@
 </li>
       <li><a href="documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.createSystemMatrixAssembly">createSystemMatrixAssembly() (edelweissfe.solvers.nonlinearimplicitstatic.NIST method)</a>
 </li>
-      <li><a href="documentation/utils.html#edelweissfe.numerics.csrgenerator.CSRGenerator">CSRGenerator (class in edelweissfe.numerics.csrgenerator)</a>
+      <li><a href="documentation/utils.html#edelweissfe.numerics.csrgeneratorv2.CSRGenerator">CSRGenerator (class in edelweissfe.numerics.csrgeneratorv2)</a>
+</li>
+      <li><a href="documentation/assembly.html#edelweissfe.numerics.systemmatrixassembly.VIJSystemMatrixAssembly.csrGenerator">csrGenerator (edelweissfe.numerics.systemmatrixassembly.VIJSystemMatrixAssembly attribute)</a>
+</li>
+      <li><a href="documentation/assembly.html#edelweissfe.numerics.systemmatrixassembly.DirectCSRSystemMatrixAssembly.csrMatrix">csrMatrix (edelweissfe.numerics.systemmatrixassembly.DirectCSRSystemMatrixAssembly property)</a>
 
       <ul>
-        <li><a href="documentation/utils.html#edelweissfe.numerics.csrgeneratorv2.CSRGenerator">(class in edelweissfe.numerics.csrgeneratorv2)</a>
+        <li><a href="documentation/assembly.html#edelweissfe.numerics.systemmatrixassembly.SystemMatrixAssembly.csrMatrix">(edelweissfe.numerics.systemmatrixassembly.SystemMatrixAssembly property)</a>
+</li>
+        <li><a href="documentation/assembly.html#edelweissfe.numerics.systemmatrixassembly.VIJSystemMatrixAssembly.csrMatrix">(edelweissfe.numerics.systemmatrixassembly.VIJSystemMatrixAssembly property)</a>
 </li>
       </ul></li>
+      <li><a href="documentation/assembly.html#edelweissfe.numerics.csrgeneratorv2.csrPatternOfEntities">csrPatternOfEntities() (in module edelweissfe.numerics.csrgeneratorv2)</a>
+</li>
       <li><a href="documentation/utils.html#edelweissfe.timesteppers.adaptivetimestepper.AdaptiveTimeStepper.currentTime">currentTime (edelweissfe.timesteppers.adaptivetimestepper.AdaptiveTimeStepper attribute)</a>
 
       <ul>
@@ -945,6 +955,8 @@
 </li>
       <li><a href="documentation/models.html#edelweissfe.models.topologypipeline.TopologyPipeline.deferNodeFieldResize">deferNodeFieldResize() (edelweissfe.models.topologypipeline.TopologyPipeline method)</a>
 </li>
+      <li><a href="documentation/dofmanager.html#edelweissfe.numerics.systemmatrixcontributor.denseBlockLocalEntries">denseBlockLocalEntries() (in module edelweissfe.numerics.systemmatrixcontributor)</a>
+</li>
       <li><a href="documentation/linsolveapi.html#edelweissfe.linsolve.composition.amg.AMG.describe">describe() (edelweissfe.linsolve.composition.amg.AMG method)</a>
 
       <ul>
@@ -987,10 +999,10 @@
 </li>
       <li><a href="documentation/linsolveapi.html#edelweissfe.linsolve.composition.diagonalscaling.DiagonalScaling">DiagonalScaling (class in edelweissfe.linsolve.composition.diagonalscaling)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="documentation/linsolveapi.html#edelweissfe.linsolve.composition.diagonalscaling.diagonalScalingOf">diagonalScalingOf() (in module edelweissfe.linsolve.composition.diagonalscaling)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="documentation/assembly.html#edelweissfe.numerics.csrgeneratorv2.DirectCSRAssembler">DirectCSRAssembler (class in edelweissfe.numerics.csrgeneratorv2)</a>
 </li>
       <li><a href="documentation/assembly.html#edelweissfe.numerics.systemmatrixassembly.DirectCSRSystemMatrixAssembly">DirectCSRSystemMatrixAssembly (class in edelweissfe.numerics.systemmatrixassembly)</a>
@@ -1036,6 +1048,12 @@
       <li><a href="documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.dofNumberingOfLastIncrement">dofNumberingOfLastIncrement (edelweissfe.solvers.nonlinearimplicitstatic.NIST attribute)</a>
 </li>
       <li><a href="documentation/linsolveapi.html#edelweissfe.linsolve.composition.schurcomplement.Window.dofs">dofs (edelweissfe.linsolve.composition.schurcomplement.Window attribute)</a>
+
+      <ul>
+        <li><a href="documentation/dofmanager.html#edelweissfe.numerics.systemmatrixcontributor.SystemMatrixEntities.dofs">(edelweissfe.numerics.systemmatrixcontributor.SystemMatrixEntities attribute)</a>
+</li>
+      </ul></li>
+      <li><a href="documentation/dofmanager.html#edelweissfe.numerics.systemmatrixcontributor.SystemMatrixEntities.dofStart">dofStart (edelweissfe.numerics.systemmatrixcontributor.SystemMatrixEntities attribute)</a>
 </li>
       <li><a href="documentation/models.html#edelweissfe.models.equationsystemlayout.EquationSystemLayout.dofsWithNodalInertia">dofsWithNodalInertia() (edelweissfe.models.equationsystemlayout.EquationSystemLayout method)</a>
 </li>
@@ -1617,10 +1635,10 @@
 </li>
       </ul></li>
       <li>
-    edelweissfe.numerics.vijentitybase
+    edelweissfe.numerics.systemmatrixcontributor
 
       <ul>
-        <li><a href="documentation/dofmanager.html#module-edelweissfe.numerics.vijentitybase">module</a>
+        <li><a href="documentation/dofmanager.html#module-edelweissfe.numerics.systemmatrixcontributor">module</a>
 </li>
       </ul></li>
       <li>
@@ -2125,6 +2143,12 @@
 </li>
       <li><a href="documentation/fields.html#edelweissfe.fields.nodefield.NodeField.ENTRIES">ENTRIES (edelweissfe.fields.nodefield.NodeField attribute)</a>
 </li>
+      <li><a href="documentation/assembly.html#edelweissfe.numerics.csrgeneratorv2.DirectCSRAssembler.entryStart">entryStart (edelweissfe.numerics.csrgeneratorv2.DirectCSRAssembler attribute)</a>
+
+      <ul>
+        <li><a href="documentation/assembly.html#edelweissfe.numerics.systemmatrixassembly.DirectCSRSystemMatrixAssembly.entryStart">(edelweissfe.numerics.systemmatrixassembly.DirectCSRSystemMatrixAssembly attribute)</a>
+</li>
+      </ul></li>
       <li><a href="documentation/models.html#edelweissfe.models.equationsystemlayout.EquationSystemLayout">EquationSystemLayout (class in edelweissfe.models.equationsystemlayout)</a>
 </li>
       <li><a href="documentation/solvers.html#edelweissfe.solvers.nonlinearexplicitdynamic.NED.equationSystemLayout">equationSystemLayout (edelweissfe.solvers.nonlinearexplicitdynamic.NED attribute)</a>
@@ -2285,11 +2309,9 @@
 </li>
       <li><a href="documentation/linsolveapi.html#edelweissfe.linsolve.composition.krylov.FixedTolerance">FixedTolerance (class in edelweissfe.linsolve.composition.krylov)</a>
 </li>
-      <li><a href="documentation/assembly.html#edelweissfe.numerics.systemmatrixassembly.ScaledSystemMatrixBlocks.flush">flush() (edelweissfe.numerics.systemmatrixassembly.ScaledSystemMatrixBlocks method)</a>
+      <li><a href="documentation/assembly.html#edelweissfe.numerics.systemmatrixassembly.SystemMatrixAssembly.flush">flush() (edelweissfe.numerics.systemmatrixassembly.SystemMatrixAssembly method)</a>
 
       <ul>
-        <li><a href="documentation/assembly.html#edelweissfe.numerics.systemmatrixassembly.SystemMatrixAssembly.flush">(edelweissfe.numerics.systemmatrixassembly.SystemMatrixAssembly method)</a>
-</li>
         <li><a href="documentation/assembly.html#edelweissfe.numerics.systemmatrixassembly.SystemMatrixBlocks.flush">(edelweissfe.numerics.systemmatrixassembly.SystemMatrixBlocks method)</a>
 </li>
         <li><a href="documentation/assembly.html#edelweissfe.numerics.systemmatrixassembly.VIJSystemMatrixAssembly.flush">(edelweissfe.numerics.systemmatrixassembly.VIJSystemMatrixAssembly method)</a>
@@ -2358,8 +2380,6 @@
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="documentation/linsolveapi.html#edelweissfe.linsolve.composition.krylov.ResidualGapCompensation.gap">gap (edelweissfe.linsolve.composition.krylov.ResidualGapCompensation attribute)</a>
-</li>
-      <li><a href="documentation/utils.html#edelweissfe.numerics.csrgeneratorv2.CSRGenerator.gatherMapReleased">gatherMapReleased (edelweissfe.numerics.csrgeneratorv2.CSRGenerator attribute)</a>
 </li>
       <li><a href="documentation/linsolveapi.html#edelweissfe.linsolve.composition.combinators.gaussSeidelOrder">gaussSeidelOrder() (in module edelweissfe.linsolve.composition.combinators)</a>
 </li>
@@ -2537,12 +2557,6 @@
 </li>
       <li><a href="documentation/fieldoutputmanager.html#edelweissfe.utils.fieldoutput._FieldOutputBase.getTimeHistory">getTimeHistory() (edelweissfe.utils.fieldoutput._FieldOutputBase method)</a>
 </li>
-      <li><a href="documentation/elements.html#edelweissfe.elements.marmotelement.element.MarmotElementWrapper.getVIJContributionSize">getVIJContributionSize() (edelweissfe.elements.marmotelement.element.MarmotElementWrapper method)</a>
-
-      <ul>
-        <li><a href="documentation/dofmanager.html#edelweissfe.numerics.vijentitybase.VIJEntityBase.getVIJContributionSize">(edelweissfe.numerics.vijentitybase.VIJEntityBase method)</a>
-</li>
-      </ul></li>
       <li><a href="documentation/rigidbodies.html#edelweissfe.rigidbodies.discreterigidbody.DiscreteRigidBody.getVisualizationElements">getVisualizationElements() (edelweissfe.rigidbodies.discreterigidbody.DiscreteRigidBody method)</a>
 
       <ul>
@@ -2609,6 +2623,8 @@
 <h2 id="I">I</h2>
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="documentation/assembly.html#edelweissfe.numerics.systemmatrixassembly.VIJSystemMatrixAssembly.I">I (edelweissfe.numerics.systemmatrixassembly.VIJSystemMatrixAssembly attribute)</a>
+</li>
       <li><a href="documentation/dofmanager.html#edelweissfe.numerics.dofmanager.DofManager.idcsOfConstraintsInDofVector">idcsOfConstraintsInDofVector (edelweissfe.numerics.dofmanager.DofManager attribute)</a>
 </li>
       <li><a href="documentation/dofmanager.html#edelweissfe.numerics.dofmanager.DofManager.idcsOfElementsInDofVector">idcsOfElementsInDofVector (edelweissfe.numerics.dofmanager.DofManager attribute)</a>
@@ -2649,7 +2665,7 @@
 </li>
       <li><a href="documentation/fields.html#edelweissfe.fields.nodefield.NodeField.indexOfNode">indexOfNode() (edelweissfe.fields.nodefield.NodeField method)</a>
 </li>
-      <li><a href="documentation/dofmanager.html#edelweissfe.numerics.dofmanager.DofManager.indexToHostObjectMapping">indexToHostObjectMapping (edelweissfe.numerics.dofmanager.DofManager attribute)</a>
+      <li><a href="documentation/dofmanager.html#edelweissfe.numerics.dofmanager.DofManager.indexToHostObjectMapping">indexToHostObjectMapping (edelweissfe.numerics.dofmanager.DofManager property)</a>
 </li>
       <li><a href="documentation/solvers.html#edelweissfe.stepactions.base.indirectdisplacementcontrolbase.IndirectDisplacementControlBase">IndirectDisplacementControlBase (class in edelweissfe.stepactions.base.indirectdisplacementcontrolbase)</a>
 </li>
@@ -2667,26 +2683,20 @@
         <li><a href="documentation/elements.html#edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.initializeElement">(edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement method)</a>
 </li>
       </ul></li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitdynamic.NonlinearImplicitDynamic.initializeIncrement">initializeIncrement() (edelweissfe.solvers.nonlinearimplicitdynamic.NonlinearImplicitDynamic method)</a>
 
       <ul>
         <li><a href="documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.initializeIncrement">(edelweissfe.solvers.nonlinearimplicitstatic.NIST method)</a>
 </li>
       </ul></li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="documentation/fieldoutputmanager.html#edelweissfe.utils.fieldoutput._FieldOutputBase.initializeJob">initializeJob() (edelweissfe.utils.fieldoutput._FieldOutputBase method)</a>
 </li>
       <li><a href="documentation/fieldoutputmanager.html#edelweissfe.utils.fieldoutput._FieldOutputBase.initializeStep">initializeStep() (edelweissfe.utils.fieldoutput._FieldOutputBase method)</a>
 
       <ul>
         <li><a href="documentation/fieldoutputmanager.html#edelweissfe.utils.fieldoutput.FieldOutputController.initializeStep">(edelweissfe.utils.fieldoutput.FieldOutputController method)</a>
-</li>
-      </ul></li>
-      <li><a href="documentation/elements.html#edelweissfe.elements.marmotelement.element.MarmotElementWrapper.initializeVIJContribution">initializeVIJContribution() (edelweissfe.elements.marmotelement.element.MarmotElementWrapper method)</a>
-
-      <ul>
-        <li><a href="documentation/dofmanager.html#edelweissfe.numerics.vijentitybase.VIJEntityBase.initializeVIJContribution">(edelweissfe.numerics.vijentitybase.VIJEntityBase method)</a>
 </li>
       </ul></li>
       <li><a href="documentation/elements.html#edelweissfe.elements.base.baseelement.BaseElement.initialVelocity">initialVelocity (edelweissfe.elements.base.baseelement.BaseElement property)</a>
@@ -2743,6 +2753,8 @@
 <h2 id="J">J</h2>
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="documentation/assembly.html#edelweissfe.numerics.systemmatrixassembly.VIJSystemMatrixAssembly.J">J (edelweissfe.numerics.systemmatrixassembly.VIJSystemMatrixAssembly attribute)</a>
+</li>
       <li><a href="documentation/linsolveapi.html#edelweissfe.linsolve.composition.combinators.Jacobi">Jacobi (class in edelweissfe.linsolve.composition.combinators)</a>
 </li>
   </ul></td>
@@ -2821,8 +2833,6 @@
 </li>
       <li><a href="documentation/solvers.html#edelweissfe.solvers.base.convergencetable.ConvergenceTable.linearSolveGap">linearSolveGap (edelweissfe.solvers.base.convergencetable.ConvergenceTable attribute)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="documentation/linsolveapi.html#edelweissfe.linsolve.base.LinearSolver">LinearSolver (class in edelweissfe.linsolve.base)</a>
 </li>
       <li><a href="documentation/solvers.html#edelweissfe.solvers.nonlinearexplicitstatic.NEST.linearSolverDefinitions">linearSolverDefinitions (edelweissfe.solvers.nonlinearexplicitstatic.NEST attribute)</a>
@@ -2833,6 +2843,8 @@
       </ul></li>
       <li><a href="documentation/linsolveapi.html#edelweissfe.config.linsolve.linearSolverDefinitionsFromInputFile">linearSolverDefinitionsFromInputFile() (in module edelweissfe.config.linsolve)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="documentation/linsolveapi.html#edelweissfe.linsolve.types.LinearSolverSchema">LinearSolverSchema (class in edelweissfe.linsolve.types)</a>
 </li>
       <li><a href="documentation/linsolveapi.html#edelweissfe.linsolve.types.LinearSolverType">LinearSolverType (class in edelweissfe.linsolve.types)</a>
@@ -2863,9 +2875,25 @@
 </li>
       <li><a href="documentation/modelmodifiers.html#edelweissfe.adaptivity.rootentities.RootEntityTable.local_point">local_point() (edelweissfe.adaptivity.rootentities.RootEntityTable method)</a>
 </li>
+      <li><a href="documentation/dofmanager.html#edelweissfe.numerics.systemmatrixcontributor.SystemMatrixEntities.localColumns">localColumns (edelweissfe.numerics.systemmatrixcontributor.SystemMatrixEntities attribute)</a>
+</li>
+      <li><a href="documentation/elements.html#edelweissfe.elements.marmotelement.element.MarmotElementWrapper.localEntriesOfBlock">localEntriesOfBlock() (edelweissfe.elements.marmotelement.element.MarmotElementWrapper method)</a>
+
+      <ul>
+        <li><a href="documentation/dofmanager.html#edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.localEntriesOfBlock">(edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase method)</a>
+</li>
+      </ul></li>
+      <li><a href="documentation/dofmanager.html#edelweissfe.numerics.systemmatrixcontributor.localEntriesOfSubBlocks">localEntriesOfSubBlocks() (in module edelweissfe.numerics.systemmatrixcontributor)</a>
+</li>
+      <li><a href="documentation/dofmanager.html#edelweissfe.numerics.systemmatrixcontributor.SystemMatrixEntities.localEntryStart">localEntryStart (edelweissfe.numerics.systemmatrixcontributor.SystemMatrixEntities attribute)</a>
+</li>
+      <li><a href="documentation/dofmanager.html#edelweissfe.numerics.systemmatrixcontributor.SystemMatrixEntities.localRows">localRows (edelweissfe.numerics.systemmatrixcontributor.SystemMatrixEntities attribute)</a>
+</li>
       <li><a href="documentation/constraints.html#edelweissfe.utils.residualtangentcheck.localVector">localVector() (in module edelweissfe.utils.residualtangentcheck)</a>
 </li>
       <li><a href="documentation/dofmanager.html#edelweissfe.numerics.dofmanager.DofManager.locateFieldOnNodeSet">locateFieldOnNodeSet() (edelweissfe.numerics.dofmanager.DofManager method)</a>
+</li>
+      <li><a href="documentation/assembly.html#edelweissfe.numerics.csrgeneratorv2.AliasedCSRMatrix.lock">lock() (edelweissfe.numerics.csrgeneratorv2.AliasedCSRMatrix method)</a>
 </li>
       <li><a href="documentation/linsolveapi.html#edelweissfe.linsolve.composition.base.SetUpContext.log">log (edelweissfe.linsolve.composition.base.SetUpContext attribute)</a>
 </li>
@@ -3115,7 +3143,7 @@
 </li>
         <li><a href="documentation/assembly.html#module-edelweissfe.numerics.systemmatrixassembly">edelweissfe.numerics.systemmatrixassembly</a>
 </li>
-        <li><a href="documentation/dofmanager.html#module-edelweissfe.numerics.vijentitybase">edelweissfe.numerics.vijentitybase</a>
+        <li><a href="documentation/dofmanager.html#module-edelweissfe.numerics.systemmatrixcontributor">edelweissfe.numerics.systemmatrixcontributor</a>
 </li>
         <li><a href="documentation/dofmanager.html#module-edelweissfe.numerics.vijsystemmatrix">edelweissfe.numerics.vijsystemmatrix</a>
 </li>
@@ -3300,14 +3328,6 @@
 </li>
       <li><a href="documentation/solvers.html#edelweissfe.solvers.nonlinearexplicitdynamic.NEDSchema">NEDSchema (class in edelweissfe.solvers.nonlinearexplicitdynamic)</a>
 </li>
-      <li><a href="documentation/assembly.html#edelweissfe.numerics.systemmatrixassembly.DirectCSRSystemMatrixAssembly.needsGatherMap">needsGatherMap (edelweissfe.numerics.systemmatrixassembly.DirectCSRSystemMatrixAssembly attribute)</a>
-
-      <ul>
-        <li><a href="documentation/assembly.html#edelweissfe.numerics.systemmatrixassembly.SystemMatrixAssembly.needsGatherMap">(edelweissfe.numerics.systemmatrixassembly.SystemMatrixAssembly attribute)</a>
-</li>
-        <li><a href="documentation/assembly.html#edelweissfe.numerics.systemmatrixassembly.VIJSystemMatrixAssembly.needsGatherMap">(edelweissfe.numerics.systemmatrixassembly.VIJSystemMatrixAssembly attribute)</a>
-</li>
-      </ul></li>
       <li><a href="documentation/linsolveapi.html#edelweissfe.linsolve.base.LinearSolver.needsPrunedSystemMatrix">needsPrunedSystemMatrix (edelweissfe.linsolve.base.LinearSolver attribute)</a>
 
       <ul>
@@ -3340,14 +3360,14 @@
 </li>
       <li><a href="documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitstaticparallel.NISTParallel">NISTParallel (class in edelweissfe.solvers.nonlinearimplicitstaticparallel)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength">NISTPArcLength (class in edelweissfe.solvers.nonlinearimplicitstaticparallelarclength)</a>
 </li>
       <li><a href="documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLengthSchema">NISTPArcLengthSchema (class in edelweissfe.solvers.nonlinearimplicitstaticparallelarclength)</a>
 </li>
       <li><a href="documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NISTSchema">NISTSchema (class in edelweissfe.solvers.nonlinearimplicitstatic)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="documentation/elements.html#edelweissfe.elements.base.displacementelementbase.DisplacementElementBase.nNodes">nNodes (edelweissfe.elements.base.displacementelementbase.DisplacementElementBase property)</a>
 
       <ul>
@@ -3410,6 +3430,16 @@
         <li><a href="documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitstaticparallel.NISTParallel.numberOfAssemblyWorkers">(edelweissfe.solvers.nonlinearimplicitstaticparallel.NISTParallel method)</a>
 </li>
       </ul></li>
+      <li><a href="documentation/assembly.html#edelweissfe.numerics.systemmatrixassembly.DirectCSRSystemMatrixAssembly.numberOfEntriesInBlock">numberOfEntriesInBlock() (edelweissfe.numerics.systemmatrixassembly.DirectCSRSystemMatrixAssembly method)</a>
+
+      <ul>
+        <li><a href="documentation/assembly.html#edelweissfe.numerics.systemmatrixassembly.ScaledSystemMatrixBlocks.numberOfEntriesInBlock">(edelweissfe.numerics.systemmatrixassembly.ScaledSystemMatrixBlocks method)</a>
+</li>
+        <li><a href="documentation/assembly.html#edelweissfe.numerics.systemmatrixassembly.SystemMatrixAssembly.numberOfEntriesInBlock">(edelweissfe.numerics.systemmatrixassembly.SystemMatrixAssembly method)</a>
+</li>
+        <li><a href="documentation/assembly.html#edelweissfe.numerics.systemmatrixassembly.VIJSystemMatrixAssembly.numberOfEntriesInBlock">(edelweissfe.numerics.systemmatrixassembly.VIJSystemMatrixAssembly method)</a>
+</li>
+      </ul></li>
       <li><a href="documentation/output.html#edelweissfe.utils.checkpoint.ResumeCheckpoint.numberOfIncrementsDone">numberOfIncrementsDone (edelweissfe.utils.checkpoint.ResumeCheckpoint attribute)</a>
 </li>
       <li><a href="documentation/utils.html#edelweissfe.timesteppers.adaptivetimestepper.AdaptiveTimeStepper.numberOfIncrementsDone">numberOfIncrementsDone() (edelweissfe.timesteppers.adaptivetimestepper.AdaptiveTimeStepper method)</a>
@@ -3432,12 +3462,14 @@
 </li>
       <li><a href="documentation/linsolveapi.html#edelweissfe.linsolve.composition.base.SetUpContext.ofCoarseNodes">ofCoarseNodes() (edelweissfe.linsolve.composition.base.SetUpContext method)</a>
 </li>
-      <li><a href="documentation/dofmanager.html#edelweissfe.numerics.scatterdofvector.ScatterDofVector.offsetMap">offsetMap (edelweissfe.numerics.scatterdofvector.ScatterDofVector property)</a>
+      <li><a href="documentation/dofmanager.html#edelweissfe.numerics.systemmatrixcontributor.SystemMatrixEntities.ofEntities">ofEntities() (edelweissfe.numerics.systemmatrixcontributor.SystemMatrixEntities class method)</a>
 </li>
-      <li><a href="documentation/linsolveapi.html#edelweissfe.linsolve.composition.combinators.OnField">OnField (class in edelweissfe.linsolve.composition.combinators)</a>
+      <li><a href="documentation/dofmanager.html#edelweissfe.numerics.scatterdofvector.ScatterDofVector.offsetMap">offsetMap (edelweissfe.numerics.scatterdofvector.ScatterDofVector property)</a>
 </li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="documentation/linsolveapi.html#edelweissfe.linsolve.composition.combinators.OnField">OnField (class in edelweissfe.linsolve.composition.combinators)</a>
+</li>
       <li><a href="documentation/linsolveapi.html#edelweissfe.linsolve.composition.base.SetUpContext.onlyField">onlyField() (edelweissfe.linsolve.composition.base.SetUpContext method)</a>
 </li>
       <li><a href="documentation/linsolveapi.html#edelweissfe.linsolve.composition.base.Step.operation">operation (edelweissfe.linsolve.composition.base.Step attribute)</a>
@@ -3502,15 +3534,17 @@
 </li>
       <li><a href="documentation/rigidbodies.html#edelweissfe.rigidbodies.discreterigidbody.DiscreteRigidBody.poseFromDofs">poseFromDofs() (edelweissfe.rigidbodies.discreterigidbody.DiscreteRigidBody method)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="documentation/linsolveapi.html#edelweissfe.linsolve.composition.base.Preconditioner">Preconditioner (class in edelweissfe.linsolve.composition.base)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="documentation/linsolveapi.html#edelweissfe.linsolve.composition.amg.preconditionerMatrix">preconditionerMatrix() (in module edelweissfe.linsolve.composition.amg)</a>
 </li>
       <li><a href="documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.predictionSurvivesRebuild">predictionSurvivesRebuild() (edelweissfe.solvers.nonlinearimplicitstatic.NIST method)</a>
 </li>
       <li><a href="documentation/journal.html#edelweissfe.journal.journal.Journal.preformatted">preformatted() (edelweissfe.journal.journal.Journal method)</a>
+</li>
+      <li><a href="documentation/constraints.html#edelweissfe.constraints.base.constraintbase.ConstraintBase.prepareExplicitEvaluation">prepareExplicitEvaluation() (edelweissfe.constraints.base.constraintbase.ConstraintBase method)</a>
 </li>
       <li><a href="documentation/solvers.html#edelweissfe.solvers.nonlinearexplicitdynamic.NED.prepareIncrement">prepareIncrement() (edelweissfe.solvers.nonlinearexplicitdynamic.NED method)</a>
 
@@ -3648,8 +3682,6 @@
 </li>
       <li><a href="documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.refuseOptionsThatMeanNothing">refuseOptionsThatMeanNothing() (edelweissfe.solvers.nonlinearimplicitstatic.NIST method)</a>
 </li>
-      <li><a href="documentation/assembly.html#edelweissfe.numerics.csrgeneratorv2.DirectCSRAssembler.registerEntities">registerEntities() (edelweissfe.numerics.csrgeneratorv2.DirectCSRAssembler method)</a>
-</li>
       <li><a href="documentation/models.html#edelweissfe.models.topologypipeline.TopologyPipeline.registerMeshDependent">registerMeshDependent() (edelweissfe.models.topologypipeline.TopologyPipeline method)</a>
 </li>
       <li><a href="documentation/utils.html#edelweissfe.timesteppers.adaptivetimestepper.AdaptiveTimeStepper.rejectTimeStep">rejectTimeStep() (edelweissfe.timesteppers.adaptivetimestepper.AdaptiveTimeStepper method)</a>
@@ -3663,8 +3695,6 @@
       <li><a href="documentation/linsolveapi.html#edelweissfe.linsolve.base.DirectSolverBackend.releaseFactorization">releaseFactorization() (edelweissfe.linsolve.base.DirectSolverBackend method)</a>
 </li>
       <li><a href="documentation/linsolveapi.html#edelweissfe.linsolve.composition.systemmatrix.SystemMatrix.releaseFormedMatrices">releaseFormedMatrices() (edelweissfe.linsolve.composition.systemmatrix.SystemMatrix method)</a>
-</li>
-      <li><a href="documentation/utils.html#edelweissfe.numerics.csrgeneratorv2.CSRGenerator.releaseGatherMap">releaseGatherMap() (edelweissfe.numerics.csrgeneratorv2.CSRGenerator method)</a>
 </li>
       <li><a href="documentation/linsolveapi.html#edelweissfe.linsolve.composition.schurcomplement.SchurComplementCondensation.remainingFieldBlocks">remainingFieldBlocks() (edelweissfe.linsolve.composition.schurcomplement.SchurComplementCondensation method)</a>
 </li>
@@ -3984,10 +4014,10 @@
 </li>
       <li><a href="documentation/journal.html#edelweissfe.journal.journal.Journal.setVerbose">setVerbose() (edelweissfe.journal.journal.Journal method)</a>
 </li>
-      <li><a href="documentation/elements.html#edelweissfe.elements.marmotelement.element.MarmotElementWrapper.shapeVIJContribution">shapeVIJContribution() (edelweissfe.elements.marmotelement.element.MarmotElementWrapper method)</a>
+      <li><a href="documentation/elements.html#edelweissfe.elements.marmotelement.element.MarmotElementWrapper.shapeBlock">shapeBlock() (edelweissfe.elements.marmotelement.element.MarmotElementWrapper method)</a>
 
       <ul>
-        <li><a href="documentation/dofmanager.html#edelweissfe.numerics.vijentitybase.VIJEntityBase.shapeVIJContribution">(edelweissfe.numerics.vijentitybase.VIJEntityBase method)</a>
+        <li><a href="documentation/dofmanager.html#edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.shapeBlock">(edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase method)</a>
 </li>
       </ul></li>
       <li><a href="documentation/plotter.html#edelweissfe.utils.plotter.Plotter.show">show() (edelweissfe.utils.plotter.Plotter method)</a>
@@ -4128,6 +4158,10 @@
 </li>
       <li><a href="documentation/assembly.html#edelweissfe.numerics.systemmatrixassembly.SystemMatrixBlocks">SystemMatrixBlocks (class in edelweissfe.numerics.systemmatrixassembly)</a>
 </li>
+      <li><a href="documentation/dofmanager.html#edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase">SystemMatrixContributorBase (class in edelweissfe.numerics.systemmatrixcontributor)</a>
+</li>
+      <li><a href="documentation/dofmanager.html#edelweissfe.numerics.systemmatrixcontributor.SystemMatrixEntities">SystemMatrixEntities (class in edelweissfe.numerics.systemmatrixcontributor)</a>
+</li>
   </ul></td>
 </tr></table>
 
@@ -4224,12 +4258,8 @@
       </ul></li>
       <li><a href="documentation/solvers.html#edelweissfe.solvers.nonlinearexplicitdynamic.NED.updateConstraintConnectivity">updateConstraintConnectivity() (edelweissfe.solvers.nonlinearexplicitdynamic.NED method)</a>
 </li>
-      <li><a href="documentation/utils.html#edelweissfe.numerics.csrgenerator.CSRGenerator.updateCSR">updateCSR() (edelweissfe.numerics.csrgenerator.CSRGenerator method)</a>
-
-      <ul>
-        <li><a href="documentation/utils.html#edelweissfe.numerics.csrgeneratorv2.CSRGenerator.updateCSR">(edelweissfe.numerics.csrgeneratorv2.CSRGenerator method)</a>
+      <li><a href="documentation/utils.html#edelweissfe.numerics.csrgeneratorv2.CSRGenerator.updateCSR">updateCSR() (edelweissfe.numerics.csrgeneratorv2.CSRGenerator method)</a>
 </li>
-      </ul></li>
       <li><a href="documentation/utils.html#edelweissfe.numerics.csrgeneratorv2.CSRGenerator.updateInPlace">updateInPlace() (edelweissfe.numerics.csrgeneratorv2.CSRGenerator method)</a>
 </li>
       <li><a href="documentation/rigidbodies.html#edelweissfe.rigidbodies.discreterigidbody.DiscreteRigidBody.updateKinematics">updateKinematics() (edelweissfe.rigidbodies.discreterigidbody.DiscreteRigidBody method)</a>
@@ -4292,10 +4322,14 @@
 </li>
       <li><a href="documentation/assembly.html#edelweissfe.numerics.systemmatrixassembly.SystemMatrixAssembly.vijArray">vijArray (edelweissfe.numerics.systemmatrixassembly.SystemMatrixAssembly attribute)</a>
 </li>
+      <li><a href="documentation/assembly.html#edelweissfe.numerics.systemmatrixassembly.VIJSystemMatrixAssembly.vijSliceOfEntity">vijSliceOfEntity (edelweissfe.numerics.systemmatrixassembly.VIJSystemMatrixAssembly attribute)</a>
+
+      <ul>
+        <li><a href="documentation/dofmanager.html#edelweissfe.numerics.vijsystemmatrix.VIJSystemMatrix.vijSliceOfEntity">(edelweissfe.numerics.vijsystemmatrix.VIJSystemMatrix attribute)</a>
+</li>
+      </ul></li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
-      <li><a href="documentation/dofmanager.html#edelweissfe.numerics.vijentitybase.VIJEntityBase">VIJEntityBase (class in edelweissfe.numerics.vijentitybase)</a>
-</li>
       <li><a href="documentation/dofmanager.html#edelweissfe.numerics.vijsystemmatrix.VIJSystemMatrix">VIJSystemMatrix (class in edelweissfe.numerics.vijsystemmatrix)</a>
 </li>
       <li><a href="documentation/assembly.html#edelweissfe.numerics.systemmatrixassembly.VIJSystemMatrixAssembly">VIJSystemMatrixAssembly (class in edelweissfe.numerics.systemmatrixassembly)</a>

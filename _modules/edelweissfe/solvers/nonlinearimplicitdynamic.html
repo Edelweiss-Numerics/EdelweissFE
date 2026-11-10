@@ -327,7 +327,7 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">edelweissfe.utils.performancetiming</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">performancetiming</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.config.phenomena</span><span class="w"> </span><span class="kn">import</span> <span class="n">carriesLinearMomentum</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.models.femodel</span><span class="w"> </span><span class="kn">import</span> <span class="n">FEModel</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.dofmanager</span><span class="w"> </span><span class="kn">import</span> <span class="n">DofManager</span><span class="p">,</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">VIJSystemMatrix</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.dofmanager</span><span class="w"> </span><span class="kn">import</span> <span class="n">DofManager</span><span class="p">,</span> <span class="n">DofVector</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.parallelizationutilities</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">forEachSliceInParallel</span><span class="p">,</span>
     <span class="n">mapChunksInParallel</span><span class="p">,</span>
@@ -336,6 +336,7 @@
     <span class="n">SystemMatrixAssembly</span><span class="p">,</span>
     <span class="n">VIJSystemMatrixAssembly</span><span class="p">,</span>
 <span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.vijsystemmatrix</span><span class="w"> </span><span class="kn">import</span> <span class="n">VIJSystemMatrix</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.outputmanagers.base.outputmanagerbase</span><span class="w"> </span><span class="kn">import</span> <span class="n">OutputManagerBase</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.solvers.base.conservationchecks</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">CONSERVATION_TOLERANCE</span><span class="p">,</span>
@@ -432,6 +433,10 @@
 <span class="sd">    ----------</span>
 <span class="sd">    dofManager</span>
 <span class="sd">        The manager these operators and vectors are indexed by.</span>
+<span class="sd">    I, J, vijSliceOfEntity</span>
+<span class="sd">        The VIJ layout ``Mvij`` and the damping indices are in: the row and column of every value and the slice of</span>
+<span class="sd">        every entity, the arrays of the stiffness' assembly they were assembled for (references to them alone, not to</span>
+<span class="sd">        the assembly, whose value array and gather map would otherwise outlive a rebuild).</span>
 <span class="sd">    dynamicDofs</span>
 <span class="sd">        The degrees of freedom integrated in time -- those of the fields carrying a mass.</span>
 <span class="sd">    dynamicFields</span>
@@ -462,6 +467,9 @@
 <span class="sd">    """</span>
 
     <span class="n">dofManager</span><span class="p">:</span> <span class="n">DofManager</span>
+    <span class="n">I</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+    <span class="n">J</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+    <span class="n">vijSliceOfEntity</span><span class="p">:</span> <span class="nb">dict</span>
     <span class="n">dynamicDofs</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
     <span class="n">dynamicFields</span><span class="p">:</span> <span class="nb">list</span>
     <span class="n">Mvij</span><span class="p">:</span> <span class="n">VIJSystemMatrix</span> <span class="o">|</span> <span class="kc">None</span>
@@ -1220,6 +1228,9 @@
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_newmarkSystem</span> <span class="o">=</span> <span class="n">_NewmarkSystem</span><span class="p">(</span>
             <span class="n">dofManager</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="p">,</span>
+            <span class="n">I</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_K</span><span class="o">.</span><span class="n">I</span><span class="p">,</span>
+            <span class="n">J</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_K</span><span class="o">.</span><span class="n">J</span><span class="p">,</span>
+            <span class="n">vijSliceOfEntity</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_K</span><span class="o">.</span><span class="n">vijSliceOfEntity</span><span class="p">,</span>
             <span class="n">dynamicDofs</span><span class="o">=</span><span class="n">dynamicDofs</span><span class="p">,</span>
             <span class="n">dynamicFields</span><span class="o">=</span><span class="n">dynamicFields</span><span class="p">,</span>
             <span class="n">Mvij</span><span class="o">=</span><span class="n">Mvij</span><span class="p">,</span>
@@ -1352,16 +1363,17 @@
         <span class="k">if</span> <span class="n">new</span><span class="o">.</span><span class="n">idcsOfElementsInDofVector</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span> <span class="o">!=</span> <span class="n">old</span><span class="o">.</span><span class="n">idcsOfElementsInDofVector</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
             <span class="k">return</span> <span class="kc">None</span>
 
+        <span class="n">K</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_K</span>
         <span class="n">nElementVIJ</span> <span class="o">=</span> <span class="mi">0</span>
         <span class="k">for</span> <span class="n">el</span> <span class="ow">in</span> <span class="n">model</span><span class="o">.</span><span class="n">elements</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
-            <span class="n">start</span> <span class="o">=</span> <span class="n">new</span><span class="o">.</span><span class="n">idcsOfHigherOrderEntitiesInVIJ</span><span class="p">[</span><span class="n">el</span><span class="p">]</span>
-            <span class="k">if</span> <span class="n">start</span> <span class="o">!=</span> <span class="n">old</span><span class="o">.</span><span class="n">idcsOfHigherOrderEntitiesInVIJ</span><span class="p">[</span><span class="n">el</span><span class="p">]:</span>
+            <span class="n">vijSlice</span> <span class="o">=</span> <span class="n">K</span><span class="o">.</span><span class="n">vijSliceOfEntity</span><span class="p">[</span><span class="n">el</span><span class="p">]</span>
+            <span class="k">if</span> <span class="n">vijSlice</span> <span class="o">!=</span> <span class="n">system</span><span class="o">.</span><span class="n">vijSliceOfEntity</span><span class="p">[</span><span class="n">el</span><span class="p">]:</span>
                 <span class="k">return</span> <span class="kc">None</span>
-            <span class="n">nElementVIJ</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">nElementVIJ</span><span class="p">,</span> <span class="n">start</span> <span class="o">+</span> <span class="n">el</span><span class="o">.</span><span class="n">getVIJContributionSize</span><span class="p">())</span>
+            <span class="n">nElementVIJ</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">nElementVIJ</span><span class="p">,</span> <span class="n">vijSlice</span><span class="o">.</span><span class="n">stop</span><span class="p">)</span>
 
         <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span>
-            <span class="n">np</span><span class="o">.</span><span class="n">array_equal</span><span class="p">(</span><span class="n">new</span><span class="o">.</span><span class="n">I</span><span class="p">[:</span><span class="n">nElementVIJ</span><span class="p">],</span> <span class="n">old</span><span class="o">.</span><span class="n">I</span><span class="p">[:</span><span class="n">nElementVIJ</span><span class="p">])</span>
-            <span class="ow">and</span> <span class="n">np</span><span class="o">.</span><span class="n">array_equal</span><span class="p">(</span><span class="n">new</span><span class="o">.</span><span class="n">J</span><span class="p">[:</span><span class="n">nElementVIJ</span><span class="p">],</span> <span class="n">old</span><span class="o">.</span><span class="n">J</span><span class="p">[:</span><span class="n">nElementVIJ</span><span class="p">])</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">array_equal</span><span class="p">(</span><span class="n">K</span><span class="o">.</span><span class="n">I</span><span class="p">[:</span><span class="n">nElementVIJ</span><span class="p">],</span> <span class="n">system</span><span class="o">.</span><span class="n">I</span><span class="p">[:</span><span class="n">nElementVIJ</span><span class="p">])</span>
+            <span class="ow">and</span> <span class="n">np</span><span class="o">.</span><span class="n">array_equal</span><span class="p">(</span><span class="n">K</span><span class="o">.</span><span class="n">J</span><span class="p">[:</span><span class="n">nElementVIJ</span><span class="p">],</span> <span class="n">system</span><span class="o">.</span><span class="n">J</span><span class="p">[:</span><span class="n">nElementVIJ</span><span class="p">])</span>
         <span class="p">):</span>
             <span class="k">return</span> <span class="kc">None</span>
 
@@ -1369,7 +1381,7 @@
         <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">system</span><span class="o">.</span><span class="n">Mvij</span><span class="p">)[</span><span class="n">nElementVIJ</span><span class="p">:])</span> <span class="ow">or</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">system</span><span class="o">.</span><span class="n">dampingVIJIndices</span> <span class="o">&gt;=</span> <span class="n">nElementVIJ</span><span class="p">):</span>
             <span class="k">return</span> <span class="kc">None</span>
 
-        <span class="n">Mvij</span> <span class="o">=</span> <span class="n">new</span><span class="o">.</span><span class="n">constructVIJSystemMatrix</span><span class="p">()</span>
+        <span class="n">Mvij</span> <span class="o">=</span> <span class="n">K</span><span class="o">.</span><span class="n">constructVIJSystemMatrix</span><span class="p">()</span>
         <span class="n">Mvij</span><span class="p">[:]</span> <span class="o">=</span> <span class="mf">0.0</span>
         <span class="n">Mvij</span><span class="p">[:</span><span class="n">nElementVIJ</span><span class="p">]</span> <span class="o">=</span> <span class="n">system</span><span class="o">.</span><span class="n">Mvij</span><span class="p">[:</span><span class="n">nElementVIJ</span><span class="p">]</span>
 
@@ -1634,7 +1646,7 @@
 <span class="sd">            leaves a dynamic degree of freedom without any mass.</span>
 <span class="sd">        """</span>
 
-        <span class="n">Mvij</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">constructVIJSystemMatrix</span><span class="p">()</span>
+        <span class="n">Mvij</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_K</span><span class="o">.</span><span class="n">constructVIJSystemMatrix</span><span class="p">()</span>
 
         <span class="c1"># The elements are independent: each writes its mass into its own slice of Mvij and reports its damping, so</span>
         <span class="c1"># they are done in chunks on the thread pool. The chunks come back in the order of the elements, which makes</span>
@@ -1669,8 +1681,8 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">_addLumpedMassOfEntities</span><span class="p">(</span><span class="n">Mvij</span><span class="p">,</span> <span class="n">lumpedMassOfEntities</span><span class="p">)</span>
 
         <span class="n">nDof</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">nDof</span>
-        <span class="n">I</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">I</span>  <span class="c1"># noqa: E741</span>
-        <span class="n">J</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">J</span>
+        <span class="n">I</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_K</span><span class="o">.</span><span class="n">I</span>  <span class="c1"># noqa: E741</span>
+        <span class="n">J</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_K</span><span class="o">.</span><span class="n">J</span>
 
         <span class="n">isDynamic</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">nDof</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">)</span>
         <span class="n">isDynamic</span><span class="p">[</span><span class="n">dynamicDofs</span><span class="p">]</span> <span class="o">=</span> <span class="kc">True</span>
@@ -1697,7 +1709,7 @@
         <span class="n">dampingVIJValues</span> <span class="o">=</span> <span class="n">dampingVIJValues</span><span class="p">[</span><span class="n">keptDamping</span><span class="p">]</span>
 
         <span class="c1"># The mass matrix has the stiffness' VIJ layout, so K's CSR generator sums it into K's pattern.</span>
-        <span class="n">M</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">csrGenerator</span><span class="o">.</span><span class="n">updateCSR</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">Mvij</span><span class="p">))</span>
+        <span class="n">M</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_K</span><span class="o">.</span><span class="n">csrGenerator</span><span class="o">.</span><span class="n">updateCSR</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">Mvij</span><span class="p">))</span>
         <span class="n">C</span> <span class="o">=</span> <span class="n">coo_matrix</span><span class="p">((</span><span class="n">dampingVIJValues</span><span class="p">,</span> <span class="p">(</span><span class="n">I</span><span class="p">[</span><span class="n">dampingVIJIndices</span><span class="p">],</span> <span class="n">J</span><span class="p">[</span><span class="n">dampingVIJIndices</span><span class="p">])),</span> <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="n">nDof</span><span class="p">,</span> <span class="n">nDof</span><span class="p">))</span><span class="o">.</span><span class="n">tocsr</span><span class="p">()</span>
 
         <span class="c1"># Symmetry is checked per element type in the tests; see the module documentation.</span>
@@ -1749,8 +1761,8 @@
 <span class="sd">            If a degree of freedom with a positive lumped mass has no diagonal slot in the layout.</span>
 <span class="sd">        """</span>
 
-        <span class="n">I</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">I</span>  <span class="c1"># noqa: E741</span>
-        <span class="n">J</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">J</span>
+        <span class="n">I</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_K</span><span class="o">.</span><span class="n">I</span>  <span class="c1"># noqa: E741</span>
+        <span class="n">J</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_K</span><span class="o">.</span><span class="n">J</span>
         <span class="n">lumpedMass</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">lumpedMassOfEntities</span><span class="p">)</span>
 
         <span class="n">diagonalSlots</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">flatnonzero</span><span class="p">(</span><span class="n">I</span> <span class="o">==</span> <span class="n">J</span><span class="p">)</span>
@@ -1769,7 +1781,7 @@
 <span class="w">        </span><span class="sd">"""The lumped (diagonal) damping one element reports, placed on the diagonal of its own</span>
 <span class="sd">        block in the VIJ layout -- only the nonzero entries, as their VIJ indices and values.</span>
 
-<span class="sd">        An element's block occupies ``nDof * nDof`` consecutive VIJ entries in row-major order, so</span>
+<span class="sd">        An element's block occupies ``nDof * nDof`` consecutive VIJ entries in column-major order, so</span>
 <span class="sd">        its ``k``-th diagonal entry is at ``start + k * (nDof + 1)``. Each slot belongs to one</span>
 <span class="sd">        element, so indices collected over all elements are unique.</span>
 
@@ -1788,7 +1800,7 @@
         <span class="n">el</span><span class="o">.</span><span class="n">computeLumpedDamping</span><span class="p">(</span><span class="n">Ce</span><span class="p">)</span>
         <span class="n">nonzero</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">flatnonzero</span><span class="p">(</span><span class="n">Ce</span><span class="p">)</span>
 
-        <span class="n">start</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">idcsOfHigherOrderEntitiesInVIJ</span><span class="p">[</span><span class="n">el</span><span class="p">]</span>
+        <span class="n">start</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_K</span><span class="o">.</span><span class="n">vijSliceOfEntity</span><span class="p">[</span><span class="n">el</span><span class="p">]</span><span class="o">.</span><span class="n">start</span>
         <span class="k">return</span> <span class="p">(</span><span class="n">start</span> <span class="o">+</span> <span class="n">nonzero</span> <span class="o">*</span> <span class="p">(</span><span class="n">el</span><span class="o">.</span><span class="n">nDof</span> <span class="o">+</span> <span class="mi">1</span><span class="p">))</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">),</span> <span class="n">Ce</span><span class="p">[</span><span class="n">nonzero</span><span class="p">]</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_warnAboutDiscardedInertia</span><span class="p">(</span>
@@ -1820,8 +1832,8 @@
         <span class="k">if</span> <span class="ow">not</span> <span class="n">discarded</span><span class="o">.</span><span class="n">size</span><span class="p">:</span>
             <span class="k">return</span>
 
-        <span class="n">I</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">I</span>  <span class="c1"># noqa: E741</span>
-        <span class="n">J</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">J</span>
+        <span class="n">I</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_K</span><span class="o">.</span><span class="n">I</span>  <span class="c1"># noqa: E741</span>
+        <span class="n">J</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_K</span><span class="o">.</span><span class="n">J</span>
         <span class="n">isAffected</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">nDof</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">)</span>
         <span class="n">isAffected</span><span class="p">[</span><span class="n">I</span><span class="p">[</span><span class="n">discarded</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">True</span>
         <span class="n">isAffected</span><span class="p">[</span><span class="n">J</span><span class="p">[</span><span class="n">discarded</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">True</span>

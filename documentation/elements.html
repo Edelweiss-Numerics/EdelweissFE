@@ -280,37 +280,34 @@ element type, which lets a third party contribute an element type through an ent
 <tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.elements.marmotelement.element.MarmotElementWrapper.getStateVars" title="edelweissfe.elements.marmotelement.element.MarmotElementWrapper.getStateVars"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getStateVars</span></code></a>()</p></td>
 <td><p>Return a copy of the converged quadrature-point state-variable buffer.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.elements.marmotelement.element.MarmotElementWrapper.getVIJContributionSize" title="edelweissfe.elements.marmotelement.element.MarmotElementWrapper.getVIJContributionSize"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getVIJContributionSize</span></code></a>()</p></td>
-<td><p>Return the number of entries this entity contributes to the VIJ (COO) system matrix.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.elements.marmotelement.element.MarmotElementWrapper.initializeElement" title="edelweissfe.elements.marmotelement.element.MarmotElementWrapper.initializeElement"><code class="xref py py-obj docutils literal notranslate"><span class="pre">initializeElement</span></code></a>()</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.elements.marmotelement.element.MarmotElementWrapper.initializeElement" title="edelweissfe.elements.marmotelement.element.MarmotElementWrapper.initializeElement"><code class="xref py py-obj docutils literal notranslate"><span class="pre">initializeElement</span></code></a>()</p></td>
 <td><p>Let the underlying MarmotElement initialize itself</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.elements.marmotelement.element.MarmotElementWrapper.initializeVIJContribution" title="edelweissfe.elements.marmotelement.element.MarmotElementWrapper.initializeVIJContribution"><code class="xref py py-obj docutils literal notranslate"><span class="pre">initializeVIJContribution</span></code></a>(idcs, I_, J_, offset)</p></td>
-<td><p>Initialize the I and J arrays for the VIJ (COO) system matrix assembly.</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.elements.marmotelement.element.MarmotElementWrapper.localEntriesOfBlock" title="edelweissfe.elements.marmotelement.element.MarmotElementWrapper.localEntriesOfBlock"><code class="xref py py-obj docutils literal notranslate"><span class="pre">localEntriesOfBlock</span></code></a>()</p></td>
+<td><p>The entries of the dense block, see <a class="reference internal" href="dofmanager.html#edelweissfe.numerics.systemmatrixcontributor.denseBlockLocalEntries" title="edelweissfe.numerics.systemmatrixcontributor.denseBlockLocalEntries"><code class="xref py py-func docutils literal notranslate"><span class="pre">denseBlockLocalEntries()</span></code></a>.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.elements.marmotelement.element.MarmotElementWrapper.resetToLastValidState" title="edelweissfe.elements.marmotelement.element.MarmotElementWrapper.resetToLastValidState"><code class="xref py py-obj docutils literal notranslate"><span class="pre">resetToLastValidState</span></code></a>()</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.elements.marmotelement.element.MarmotElementWrapper.resetToLastValidState" title="edelweissfe.elements.marmotelement.element.MarmotElementWrapper.resetToLastValidState"><code class="xref py py-obj docutils literal notranslate"><span class="pre">resetToLastValidState</span></code></a>()</p></td>
 <td><p>Reset to the last valid state.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.elements.marmotelement.element.MarmotElementWrapper.setInitialCondition" title="edelweissfe.elements.marmotelement.element.MarmotElementWrapper.setInitialCondition"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setInitialCondition</span></code></a>(stateType, values)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.elements.marmotelement.element.MarmotElementWrapper.setInitialCondition" title="edelweissfe.elements.marmotelement.element.MarmotElementWrapper.setInitialCondition"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setInitialCondition</span></code></a>(stateType, values)</p></td>
 <td><p>Assign initial conditions to the underlying Marmot element</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.elements.marmotelement.element.MarmotElementWrapper.setMaterial" title="edelweissfe.elements.marmotelement.element.MarmotElementWrapper.setMaterial"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setMaterial</span></code></a>(materialName, materialProperties)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.elements.marmotelement.element.MarmotElementWrapper.setMaterial" title="edelweissfe.elements.marmotelement.element.MarmotElementWrapper.setMaterial"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setMaterial</span></code></a>(materialName, materialProperties)</p></td>
 <td><p>Assign a material and material properties to the underlying MarmotElement.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.elements.marmotelement.element.MarmotElementWrapper.setNodes" title="edelweissfe.elements.marmotelement.element.MarmotElementWrapper.setNodes"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setNodes</span></code></a>(nodes)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.elements.marmotelement.element.MarmotElementWrapper.setNodes" title="edelweissfe.elements.marmotelement.element.MarmotElementWrapper.setNodes"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setNodes</span></code></a>(nodes)</p></td>
 <td><p>Assign the nodes coordinates to the underyling MarmotElement</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.elements.marmotelement.element.MarmotElementWrapper.setProperties" title="edelweissfe.elements.marmotelement.element.MarmotElementWrapper.setProperties"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setProperties</span></code></a>(elementProperties)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.elements.marmotelement.element.MarmotElementWrapper.setProperties" title="edelweissfe.elements.marmotelement.element.MarmotElementWrapper.setProperties"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setProperties</span></code></a>(elementProperties)</p></td>
 <td><p>Assign a set of properties to the underyling MarmotElement</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.elements.marmotelement.element.MarmotElementWrapper.setStateVars" title="edelweissfe.elements.marmotelement.element.MarmotElementWrapper.setStateVars"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setStateVars</span></code></a>(values)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.elements.marmotelement.element.MarmotElementWrapper.setStateVars" title="edelweissfe.elements.marmotelement.element.MarmotElementWrapper.setStateVars"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setStateVars</span></code></a>(values)</p></td>
 <td><p>Overwrite the converged and trial state-variable buffers in place (so the MarmotElement's assigned pointer to the trial buffer stays valid).</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.elements.marmotelement.element.MarmotElementWrapper.shapeVIJContribution" title="edelweissfe.elements.marmotelement.element.MarmotElementWrapper.shapeVIJContribution"><code class="xref py py-obj docutils literal notranslate"><span class="pre">shapeVIJContribution</span></code></a>(flat_view)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.elements.marmotelement.element.MarmotElementWrapper.shapeBlock" title="edelweissfe.elements.marmotelement.element.MarmotElementWrapper.shapeBlock"><code class="xref py py-obj docutils literal notranslate"><span class="pre">shapeBlock</span></code></a>(values)</p></td>
 <td><p>Keep the view flat for Cython 1-D memoryview compatibility.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.elements.marmotelement.element.MarmotElementWrapper.updateMaterialProperty" title="edelweissfe.elements.marmotelement.element.MarmotElementWrapper.updateMaterialProperty"><code class="xref py py-obj docutils literal notranslate"><span class="pre">updateMaterialProperty</span></code></a>(index, value)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.elements.marmotelement.element.MarmotElementWrapper.updateMaterialProperty" title="edelweissfe.elements.marmotelement.element.MarmotElementWrapper.updateMaterialProperty"><code class="xref py py-obj docutils literal notranslate"><span class="pre">updateMaterialProperty</span></code></a>(index, value)</p></td>
 <td><p>Change one entry of the property vector of the material, keeping the state.</p></td>
 </tr>
 </tbody>
@@ -436,37 +433,19 @@ strategies (copy / project / reset).</p>
 </dd></dl>
 
 <dl class="py method">
-<dt class="sig sig-object py" id="edelweissfe.elements.marmotelement.element.MarmotElementWrapper.getVIJContributionSize">
-<span class="sig-name descname"><span class="pre">getVIJContributionSize</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#edelweissfe.elements.marmotelement.element.MarmotElementWrapper.getVIJContributionSize" title="Link to this definition"></a></dt>
-<dd><p>Return the number of entries this entity contributes to the VIJ (COO) system matrix.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p>int</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
 <dt class="sig sig-object py" id="edelweissfe.elements.marmotelement.element.MarmotElementWrapper.initializeElement">
 <span class="sig-name descname"><span class="pre">initializeElement</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#edelweissfe.elements.marmotelement.element.MarmotElementWrapper.initializeElement" title="Link to this definition"></a></dt>
 <dd><p>Let the underlying MarmotElement initialize itself</p>
 </dd></dl>
 
 <dl class="py method">
-<dt class="sig sig-object py" id="edelweissfe.elements.marmotelement.element.MarmotElementWrapper.initializeVIJContribution">
-<span class="sig-name descname"><span class="pre">initializeVIJContribution</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">idcs</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">I_</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">J_</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">offset</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#edelweissfe.elements.marmotelement.element.MarmotElementWrapper.initializeVIJContribution" title="Link to this definition"></a></dt>
-<dd><p>Initialize the I and J arrays for the VIJ (COO) system matrix assembly.</p>
+<dt class="sig sig-object py" id="edelweissfe.elements.marmotelement.element.MarmotElementWrapper.localEntriesOfBlock">
+<span class="sig-name descname"><span class="pre">localEntriesOfBlock</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#edelweissfe.elements.marmotelement.element.MarmotElementWrapper.localEntriesOfBlock" title="Link to this definition"></a></dt>
+<dd><p>The entries of the dense block, see
+<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.systemmatrixcontributor.denseBlockLocalEntries" title="edelweissfe.numerics.systemmatrixcontributor.denseBlockLocalEntries"><code class="xref py py-func docutils literal notranslate"><span class="pre">denseBlockLocalEntries()</span></code></a>.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>idcs</strong> (<em>ndarray</em>)</p></li>
-<li><p><strong>I_</strong> (<em>ndarray</em>)</p></li>
-<li><p><strong>J_</strong> (<em>ndarray</em>)</p></li>
-<li><p><strong>offset</strong> (<em>int</em>)</p></li>
-</ul>
-</dd>
-<dt class="field-even">Return type<span class="colon">:</span></dt>
-<dd class="field-even"><p>None</p>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>tuple[<em>ndarray</em>, <em>ndarray</em>]</p>
 </dd>
 </dl>
 </dd></dl>
@@ -515,12 +494,12 @@ history to child elements.</p>
 </dd></dl>
 
 <dl class="py method">
-<dt class="sig sig-object py" id="edelweissfe.elements.marmotelement.element.MarmotElementWrapper.shapeVIJContribution">
-<span class="sig-name descname"><span class="pre">shapeVIJContribution</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">flat_view</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#edelweissfe.elements.marmotelement.element.MarmotElementWrapper.shapeVIJContribution" title="Link to this definition"></a></dt>
+<dt class="sig sig-object py" id="edelweissfe.elements.marmotelement.element.MarmotElementWrapper.shapeBlock">
+<span class="sig-name descname"><span class="pre">shapeBlock</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">values</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#edelweissfe.elements.marmotelement.element.MarmotElementWrapper.shapeBlock" title="Link to this definition"></a></dt>
 <dd><p>Keep the view flat for Cython 1-D memoryview compatibility.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>flat_view</strong> (<em>ndarray</em>)</p>
+<dd class="field-odd"><p><strong>values</strong> (<em>ndarray</em>)</p>
 </dd>
 <dt class="field-even">Return type<span class="colon">:</span></dt>
 <dd class="field-even"><p><em>ndarray</em></p>
@@ -600,7 +579,7 @@ MarmotMaterialHypoElastic.</p></li>
 </dd>
 <dt class="field-even">Attributes<span class="colon">:</span></dt>
 <dd class="field-even"><dl class="simple">
-<dt><a class="reference internal" href="dofmanager.html#edelweissfe.numerics.vijentitybase.VIJEntityBase.couplesAllItsDofs" title="edelweissfe.numerics.vijentitybase.VIJEntityBase.couplesAllItsDofs"><code class="xref py py-obj docutils literal notranslate"><span class="pre">couplesAllItsDofs</span></code></a></dt><dd><p>Whether the entity’s block couples every one of its degrees of freedom with every other one.</p>
+<dt><a class="reference internal" href="dofmanager.html#edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.couplesAllItsDofs" title="edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.couplesAllItsDofs"><code class="xref py py-obj docutils literal notranslate"><span class="pre">couplesAllItsDofs</span></code></a></dt><dd><p>Whether the entity’s block couples every one of its degrees of freedom with every other one.</p>
 </dd>
 <dt><a class="reference internal" href="#edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.dofIndicesPermutation" title="edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.dofIndicesPermutation"><code class="xref py py-obj docutils literal notranslate"><span class="pre">dofIndicesPermutation</span></code></a></dt><dd><p>If the provides computes residual vectors and stiffness matrices not nodewise, but e.g., fieldwise, this permutation pattern is used to aggregate all entries in order to resemble the defined fields nodewise.</p>
 </dd>
@@ -689,37 +668,34 @@ MarmotMaterialHypoElastic.</p></li>
 <tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.getStateVars" title="edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.getStateVars"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getStateVars</span></code></a>()</p></td>
 <td><p>Return a copy of the converged state-variable buffer.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">getVIJContributionSize</span></code>()</p></td>
-<td><p>Return the number of entries this entity contributes to the VIJ (COO) system matrix.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.initializeElement" title="edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.initializeElement"><code class="xref py py-obj docutils literal notranslate"><span class="pre">initializeElement</span></code></a>()</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.initializeElement" title="edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.initializeElement"><code class="xref py py-obj docutils literal notranslate"><span class="pre">initializeElement</span></code></a>()</p></td>
 <td><p>Not used by this driver</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">initializeVIJContribution</span></code>(idcs, I_, J_, offset)</p></td>
-<td><p>Fill the global <code class="docutils literal notranslate"><span class="pre">I</span></code> and <code class="docutils literal notranslate"><span class="pre">J</span></code> index arrays for this constraint's VIJ contribution.</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">localEntriesOfBlock</span></code>()</p></td>
+<td><p>The local row and column of every value of the entity's block, in the order of the values.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.resetToLastValidState" title="edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.resetToLastValidState"><code class="xref py py-obj docutils literal notranslate"><span class="pre">resetToLastValidState</span></code></a>()</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.resetToLastValidState" title="edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.resetToLastValidState"><code class="xref py py-obj docutils literal notranslate"><span class="pre">resetToLastValidState</span></code></a>()</p></td>
 <td><p>Rest to the last valid state.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.setInitialCondition" title="edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.setInitialCondition"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setInitialCondition</span></code></a>(stateType, values)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.setInitialCondition" title="edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.setInitialCondition"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setInitialCondition</span></code></a>(stateType, values)</p></td>
 <td><p>Assign initial conditions.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.setMaterial" title="edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.setMaterial"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setMaterial</span></code></a>(materialNameOrInstance[, ...])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.setMaterial" title="edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.setMaterial"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setMaterial</span></code></a>(materialNameOrInstance[, ...])</p></td>
 <td><p>Assign a material to the underlying driver, either a Marmot material by name and properties, or an already constructed one (e.g. a native EdelweissFE material, honoring the same interface as its Marmot point-wise counterpart).</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.setNodes" title="edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.setNodes"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setNodes</span></code></a>(nodes)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.setNodes" title="edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.setNodes"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setNodes</span></code></a>(nodes)</p></td>
 <td><p>Assign the nodes.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.setProperties" title="edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.setProperties"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setProperties</span></code></a>(elementProperties)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.setProperties" title="edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.setProperties"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setProperties</span></code></a>(elementProperties)</p></td>
 <td><p>Not used by this driver</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.setStateVars" title="edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.setStateVars"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setStateVars</span></code></a>(values)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.setStateVars" title="edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.setStateVars"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setStateVars</span></code></a>(values)</p></td>
 <td><p>Overwrite the converged and trial state-variable buffers in place (so the Marmot material wrapper's assigned pointer to the trial buffer stays valid).</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">shapeVIJContribution</span></code>(flat_view)</p></td>
-<td><p>Shape the flat VIJ values slice for this entity.</p></td>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">shapeBlock</span></code>(values)</p></td>
+<td><p>The entity's view of the flat array of the values of its block, which it writes its tangent into.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.updateMaterialProperty" title="edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.updateMaterialProperty"><code class="xref py py-obj docutils literal notranslate"><span class="pre">updateMaterialProperty</span></code></a>(index, value)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.updateMaterialProperty" title="edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.updateMaterialProperty"><code class="xref py py-obj docutils literal notranslate"><span class="pre">updateMaterialProperty</span></code></a>(index, value)</p></td>
 <td><p>Change one entry of the property vector of the driven material, keeping the state.</p></td>
 </tr>
 </tbody>
@@ -1216,7 +1192,7 @@ layout of <code class="docutils literal notranslate"><span class="pre">P</span><
 </dd>
 <dt class="field-even">Attributes<span class="colon">:</span></dt>
 <dd class="field-even"><dl class="simple">
-<dt><a class="reference internal" href="dofmanager.html#edelweissfe.numerics.vijentitybase.VIJEntityBase.couplesAllItsDofs" title="edelweissfe.numerics.vijentitybase.VIJEntityBase.couplesAllItsDofs"><code class="xref py py-obj docutils literal notranslate"><span class="pre">couplesAllItsDofs</span></code></a></dt><dd><p>Whether the entity’s block couples every one of its degrees of freedom with every other one.</p>
+<dt><a class="reference internal" href="dofmanager.html#edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.couplesAllItsDofs" title="edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.couplesAllItsDofs"><code class="xref py py-obj docutils literal notranslate"><span class="pre">couplesAllItsDofs</span></code></a></dt><dd><p>Whether the entity’s block couples every one of its degrees of freedom with every other one.</p>
 </dd>
 <dt><a class="reference internal" href="#edelweissfe.elements.base.displacementelementbase.DisplacementElementBase.dofIndicesPermutation" title="edelweissfe.elements.base.displacementelementbase.DisplacementElementBase.dofIndicesPermutation"><code class="xref py py-obj docutils literal notranslate"><span class="pre">dofIndicesPermutation</span></code></a></dt><dd><p>The permutation pattern for the residual vector and the stiffness matrix to aggregate all entries in order to resemble the defined fields nodewise.</p>
 </dd>
@@ -1310,37 +1286,34 @@ layout of <code class="docutils literal notranslate"><span class="pre">P</span><
 <tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.elements.base.displacementelementbase.DisplacementElementBase.getStateVars" title="edelweissfe.elements.base.displacementelementbase.DisplacementElementBase.getStateVars"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getStateVars</span></code></a>()</p></td>
 <td><p>Return a copy of the converged quadrature-point state-variable buffer.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">getVIJContributionSize</span></code>()</p></td>
-<td><p>Return the number of entries this entity contributes to the VIJ (COO) system matrix.</p></td>
-</tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">initializeElement</span></code>()</p></td>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">initializeElement</span></code>()</p></td>
 <td><p>Initalize the element to be ready for computing.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">initializeVIJContribution</span></code>(idcs, I_, J_, offset)</p></td>
-<td><p>Fill the global <code class="docutils literal notranslate"><span class="pre">I</span></code> and <code class="docutils literal notranslate"><span class="pre">J</span></code> index arrays for this constraint's VIJ contribution.</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">localEntriesOfBlock</span></code>()</p></td>
+<td><p>The local row and column of every value of the entity's block, in the order of the values.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.elements.base.displacementelementbase.DisplacementElementBase.resetToLastValidState" title="edelweissfe.elements.base.displacementelementbase.DisplacementElementBase.resetToLastValidState"><code class="xref py py-obj docutils literal notranslate"><span class="pre">resetToLastValidState</span></code></a>()</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.elements.base.displacementelementbase.DisplacementElementBase.resetToLastValidState" title="edelweissfe.elements.base.displacementelementbase.DisplacementElementBase.resetToLastValidState"><code class="xref py py-obj docutils literal notranslate"><span class="pre">resetToLastValidState</span></code></a>()</p></td>
 <td><p>Reset to the last valid state.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.elements.base.displacementelementbase.DisplacementElementBase.setInitialCondition" title="edelweissfe.elements.base.displacementelementbase.DisplacementElementBase.setInitialCondition"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setInitialCondition</span></code></a>(stateType, values)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.elements.base.displacementelementbase.DisplacementElementBase.setInitialCondition" title="edelweissfe.elements.base.displacementelementbase.DisplacementElementBase.setInitialCondition"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setInitialCondition</span></code></a>(stateType, values)</p></td>
 <td><p>Assign initial conditions.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.elements.base.displacementelementbase.DisplacementElementBase.setMaterial" title="edelweissfe.elements.base.displacementelementbase.DisplacementElementBase.setMaterial"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setMaterial</span></code></a>(material)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.elements.base.displacementelementbase.DisplacementElementBase.setMaterial" title="edelweissfe.elements.base.displacementelementbase.DisplacementElementBase.setMaterial"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setMaterial</span></code></a>(material)</p></td>
 <td><p>Assign a material.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.elements.base.displacementelementbase.DisplacementElementBase.setNodes" title="edelweissfe.elements.base.displacementelementbase.DisplacementElementBase.setNodes"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setNodes</span></code></a>(nodes)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.elements.base.displacementelementbase.DisplacementElementBase.setNodes" title="edelweissfe.elements.base.displacementelementbase.DisplacementElementBase.setNodes"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setNodes</span></code></a>(nodes)</p></td>
 <td><p>Assign the nodes to the element.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.elements.base.displacementelementbase.DisplacementElementBase.setProperties" title="edelweissfe.elements.base.displacementelementbase.DisplacementElementBase.setProperties"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setProperties</span></code></a>(elementProperties)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.elements.base.displacementelementbase.DisplacementElementBase.setProperties" title="edelweissfe.elements.base.displacementelementbase.DisplacementElementBase.setProperties"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setProperties</span></code></a>(elementProperties)</p></td>
 <td><p>Assign a set of properties to the element.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.elements.base.displacementelementbase.DisplacementElementBase.setStateVars" title="edelweissfe.elements.base.displacementelementbase.DisplacementElementBase.setStateVars"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setStateVars</span></code></a>(values)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.elements.base.displacementelementbase.DisplacementElementBase.setStateVars" title="edelweissfe.elements.base.displacementelementbase.DisplacementElementBase.setStateVars"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setStateVars</span></code></a>(values)</p></td>
 <td><p>Overwrite the converged quadrature-point state-variable buffer in place, so the <code class="docutils literal notranslate"><span class="pre">_stateVars</span></code> per-quadrature-point views (stress/strain/materialstate) stay valid.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">shapeVIJContribution</span></code>(flat_view)</p></td>
-<td><p>Shape the flat VIJ values slice for this entity.</p></td>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">shapeBlock</span></code>(values)</p></td>
+<td><p>The entity's view of the flat array of the values of its block, which it writes its tangent into.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.elements.base.displacementelementbase.DisplacementElementBase.updateMaterialProperty" title="edelweissfe.elements.base.displacementelementbase.DisplacementElementBase.updateMaterialProperty"><code class="xref py py-obj docutils literal notranslate"><span class="pre">updateMaterialProperty</span></code></a>(index, value)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.elements.base.displacementelementbase.DisplacementElementBase.updateMaterialProperty" title="edelweissfe.elements.base.displacementelementbase.DisplacementElementBase.updateMaterialProperty"><code class="xref py py-obj docutils literal notranslate"><span class="pre">updateMaterialProperty</span></code></a>(index, value)</p></td>
 <td><p>Change one entry of the property vector of the assigned material, keeping the state.</p></td>
 </tr>
 </tbody>
@@ -1723,7 +1696,7 @@ layout of <code class="docutils literal notranslate"><span class="pre">P</span><
 </dd>
 <dt class="field-even">Attributes<span class="colon">:</span></dt>
 <dd class="field-even"><dl class="simple">
-<dt><a class="reference internal" href="dofmanager.html#edelweissfe.numerics.vijentitybase.VIJEntityBase.couplesAllItsDofs" title="edelweissfe.numerics.vijentitybase.VIJEntityBase.couplesAllItsDofs"><code class="xref py py-obj docutils literal notranslate"><span class="pre">couplesAllItsDofs</span></code></a></dt><dd><p>Whether the entity’s block couples every one of its degrees of freedom with every other one.</p>
+<dt><a class="reference internal" href="dofmanager.html#edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.couplesAllItsDofs" title="edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.couplesAllItsDofs"><code class="xref py py-obj docutils literal notranslate"><span class="pre">couplesAllItsDofs</span></code></a></dt><dd><p>Whether the entity’s block couples every one of its degrees of freedom with every other one.</p>
 </dd>
 <dt><a class="reference internal" href="#edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.dofIndicesPermutation" title="edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.dofIndicesPermutation"><code class="xref py py-obj docutils literal notranslate"><span class="pre">dofIndicesPermutation</span></code></a></dt><dd><p>The permutation pattern for the residual vector and the stiffness matrix to aggregate all entries in order to resemble the defined fields nodewise.</p>
 </dd>
@@ -1817,37 +1790,34 @@ layout of <code class="docutils literal notranslate"><span class="pre">P</span><
 <tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">getStateVars</span></code>()</p></td>
 <td><p>Return a copy of the converged quadrature-point state-variable buffer.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">getVIJContributionSize</span></code>()</p></td>
-<td><p>Return the number of entries this entity contributes to the VIJ (COO) system matrix.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.elements.displacementelement.element.DisplacementElement.initializeElement" title="edelweissfe.elements.displacementelement.element.DisplacementElement.initializeElement"><code class="xref py py-obj docutils literal notranslate"><span class="pre">initializeElement</span></code></a>()</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.elements.displacementelement.element.DisplacementElement.initializeElement" title="edelweissfe.elements.displacementelement.element.DisplacementElement.initializeElement"><code class="xref py py-obj docutils literal notranslate"><span class="pre">initializeElement</span></code></a>()</p></td>
 <td><p>Initalize the element to be ready for computing.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">initializeVIJContribution</span></code>(idcs, I_, J_, offset)</p></td>
-<td><p>Fill the global <code class="docutils literal notranslate"><span class="pre">I</span></code> and <code class="docutils literal notranslate"><span class="pre">J</span></code> index arrays for this constraint's VIJ contribution.</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">localEntriesOfBlock</span></code>()</p></td>
+<td><p>The local row and column of every value of the entity's block, in the order of the values.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">resetToLastValidState</span></code>()</p></td>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">resetToLastValidState</span></code>()</p></td>
 <td><p>Reset to the last valid state.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setInitialCondition</span></code>(stateType, values)</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setInitialCondition</span></code>(stateType, values)</p></td>
 <td><p>Assign initial conditions.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.elements.displacementelement.element.DisplacementElement.setMaterial" title="edelweissfe.elements.displacementelement.element.DisplacementElement.setMaterial"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setMaterial</span></code></a>(material)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.elements.displacementelement.element.DisplacementElement.setMaterial" title="edelweissfe.elements.displacementelement.element.DisplacementElement.setMaterial"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setMaterial</span></code></a>(material)</p></td>
 <td><p>Assign a material and allocate the small-strain material tangent dStress/dStrain.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setNodes</span></code>(nodes)</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setNodes</span></code>(nodes)</p></td>
 <td><p>Assign the nodes to the element.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setProperties</span></code>(elementProperties)</p></td>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setProperties</span></code>(elementProperties)</p></td>
 <td><p>Assign a set of properties to the element.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setStateVars</span></code>(values)</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setStateVars</span></code>(values)</p></td>
 <td><p>Overwrite the converged quadrature-point state-variable buffer in place, so the <code class="docutils literal notranslate"><span class="pre">_stateVars</span></code> per-quadrature-point views (stress/strain/materialstate) stay valid.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">shapeVIJContribution</span></code>(flat_view)</p></td>
-<td><p>Shape the flat VIJ values slice for this entity.</p></td>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">shapeBlock</span></code>(values)</p></td>
+<td><p>The entity's view of the flat array of the values of its block, which it writes its tangent into.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">updateMaterialProperty</span></code>(index, value)</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">updateMaterialProperty</span></code>(index, value)</p></td>
 <td><p>Change one entry of the property vector of the assigned material, keeping the state.</p></td>
 </tr>
 </tbody>
@@ -2138,7 +2108,7 @@ layout of <code class="docutils literal notranslate"><span class="pre">P</span><
 </dd>
 <dt class="field-even">Attributes<span class="colon">:</span></dt>
 <dd class="field-even"><dl class="simple">
-<dt><a class="reference internal" href="dofmanager.html#edelweissfe.numerics.vijentitybase.VIJEntityBase.couplesAllItsDofs" title="edelweissfe.numerics.vijentitybase.VIJEntityBase.couplesAllItsDofs"><code class="xref py py-obj docutils literal notranslate"><span class="pre">couplesAllItsDofs</span></code></a></dt><dd><p>Whether the entity’s block couples every one of its degrees of freedom with every other one.</p>
+<dt><a class="reference internal" href="dofmanager.html#edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.couplesAllItsDofs" title="edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.couplesAllItsDofs"><code class="xref py py-obj docutils literal notranslate"><span class="pre">couplesAllItsDofs</span></code></a></dt><dd><p>Whether the entity’s block couples every one of its degrees of freedom with every other one.</p>
 </dd>
 <dt><a class="reference internal" href="#edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.dofIndicesPermutation" title="edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.dofIndicesPermutation"><code class="xref py py-obj docutils literal notranslate"><span class="pre">dofIndicesPermutation</span></code></a></dt><dd><p>The permutation pattern for the residual vector and the stiffness matrix to aggregate all entries in order to resemble the defined fields nodewise.</p>
 </dd>
@@ -2232,37 +2202,34 @@ layout of <code class="docutils literal notranslate"><span class="pre">P</span><
 <tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.elements.displacementtlelement.element.DisplacementTLElement.getStateVars" title="edelweissfe.elements.displacementtlelement.element.DisplacementTLElement.getStateVars"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getStateVars</span></code></a>()</p></td>
 <td><p>Return a copy of the converged quadrature-point state-variable buffer, including the converged Green-Lagrange strain (<code class="docutils literal notranslate"><span class="pre">_Eold</span></code>) needed to resume the total-Lagrangian incremental-strain computation.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">getVIJContributionSize</span></code>()</p></td>
-<td><p>Return the number of entries this entity contributes to the VIJ (COO) system matrix.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.elements.displacementtlelement.element.DisplacementTLElement.initializeElement" title="edelweissfe.elements.displacementtlelement.element.DisplacementTLElement.initializeElement"><code class="xref py py-obj docutils literal notranslate"><span class="pre">initializeElement</span></code></a>()</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.elements.displacementtlelement.element.DisplacementTLElement.initializeElement" title="edelweissfe.elements.displacementtlelement.element.DisplacementTLElement.initializeElement"><code class="xref py py-obj docutils literal notranslate"><span class="pre">initializeElement</span></code></a>()</p></td>
 <td><p>Initalize the element to be ready for computing.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">initializeVIJContribution</span></code>(idcs, I_, J_, offset)</p></td>
-<td><p>Fill the global <code class="docutils literal notranslate"><span class="pre">I</span></code> and <code class="docutils literal notranslate"><span class="pre">J</span></code> index arrays for this constraint's VIJ contribution.</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">localEntriesOfBlock</span></code>()</p></td>
+<td><p>The local row and column of every value of the entity's block, in the order of the values.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">resetToLastValidState</span></code>()</p></td>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">resetToLastValidState</span></code>()</p></td>
 <td><p>Reset to the last valid state.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setInitialCondition</span></code>(stateType, values)</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setInitialCondition</span></code>(stateType, values)</p></td>
 <td><p>Assign initial conditions.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.elements.displacementtlelement.element.DisplacementTLElement.setMaterial" title="edelweissfe.elements.displacementtlelement.element.DisplacementTLElement.setMaterial"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setMaterial</span></code></a>(material)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.elements.displacementtlelement.element.DisplacementTLElement.setMaterial" title="edelweissfe.elements.displacementtlelement.element.DisplacementTLElement.setMaterial"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setMaterial</span></code></a>(material)</p></td>
 <td><p>Assign a material and allocate its material tangent: dStress/dDeformationGradient for a hyperelastic material, dStress/dStrain otherwise.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setNodes</span></code>(nodes)</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setNodes</span></code>(nodes)</p></td>
 <td><p>Assign the nodes to the element.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setProperties</span></code>(elementProperties)</p></td>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setProperties</span></code>(elementProperties)</p></td>
 <td><p>Assign a set of properties to the element.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.elements.displacementtlelement.element.DisplacementTLElement.setStateVars" title="edelweissfe.elements.displacementtlelement.element.DisplacementTLElement.setStateVars"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setStateVars</span></code></a>(values)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.elements.displacementtlelement.element.DisplacementTLElement.setStateVars" title="edelweissfe.elements.displacementtlelement.element.DisplacementTLElement.setStateVars"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setStateVars</span></code></a>(values)</p></td>
 <td><p>Overwrite the converged quadrature-point state-variable buffer and <code class="docutils literal notranslate"><span class="pre">_Eold</span></code> in place.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">shapeVIJContribution</span></code>(flat_view)</p></td>
-<td><p>Shape the flat VIJ values slice for this entity.</p></td>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">shapeBlock</span></code>(values)</p></td>
+<td><p>The entity's view of the flat array of the values of its block, which it writes its tangent into.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.elements.displacementtlelement.element.DisplacementTLElement.updateMaterialProperty" title="edelweissfe.elements.displacementtlelement.element.DisplacementTLElement.updateMaterialProperty"><code class="xref py py-obj docutils literal notranslate"><span class="pre">updateMaterialProperty</span></code></a>(index, value)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.elements.displacementtlelement.element.DisplacementTLElement.updateMaterialProperty" title="edelweissfe.elements.displacementtlelement.element.DisplacementTLElement.updateMaterialProperty"><code class="xref py py-obj docutils literal notranslate"><span class="pre">updateMaterialProperty</span></code></a>(index, value)</p></td>
 <td><p>Change one entry of the property vector of the assigned material, keeping the state.</p></td>
 </tr>
 </tbody>
@@ -2462,7 +2429,7 @@ layout of <code class="docutils literal notranslate"><span class="pre">P</span><
 </dd>
 <dt class="field-even">Attributes<span class="colon">:</span></dt>
 <dd class="field-even"><dl class="simple">
-<dt><a class="reference internal" href="dofmanager.html#edelweissfe.numerics.vijentitybase.VIJEntityBase.couplesAllItsDofs" title="edelweissfe.numerics.vijentitybase.VIJEntityBase.couplesAllItsDofs"><code class="xref py py-obj docutils literal notranslate"><span class="pre">couplesAllItsDofs</span></code></a></dt><dd><p>Whether the entity’s block couples every one of its degrees of freedom with every other one.</p>
+<dt><a class="reference internal" href="dofmanager.html#edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.couplesAllItsDofs" title="edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.couplesAllItsDofs"><code class="xref py py-obj docutils literal notranslate"><span class="pre">couplesAllItsDofs</span></code></a></dt><dd><p>Whether the entity’s block couples every one of its degrees of freedom with every other one.</p>
 </dd>
 <dt><a class="reference internal" href="#edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.dofIndicesPermutation" title="edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.dofIndicesPermutation"><code class="xref py py-obj docutils literal notranslate"><span class="pre">dofIndicesPermutation</span></code></a></dt><dd><p>If the provides computes residual vectors and stiffness matrices not nodewise, but e.g., fieldwise, this permutation pattern is used to aggregate all entries in order to resemble the defined fields nodewise.</p>
 </dd>
@@ -2560,43 +2527,40 @@ layout of <code class="docutils literal notranslate"><span class="pre">P</span><
 <tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">getStateVars</span></code>()</p></td>
 <td><p>This element carries no state from one increment to the next.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">getVIJContributionSize</span></code>()</p></td>
-<td><p>Return the number of entries this entity contributes to the VIJ (COO) system matrix.</p></td>
-</tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">initializeElement</span></code>()</p></td>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">initializeElement</span></code>()</p></td>
 <td><p>Initalize the element to be ready for computing.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">initializeVIJContribution</span></code>(idcs, I_, J_, offset)</p></td>
-<td><p>Fill the global <code class="docutils literal notranslate"><span class="pre">I</span></code> and <code class="docutils literal notranslate"><span class="pre">J</span></code> index arrays for this constraint's VIJ contribution.</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">localEntriesOfBlock</span></code>()</p></td>
+<td><p>The local row and column of every value of the entity's block, in the order of the values.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">resetToLastValidState</span></code>()</p></td>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">resetToLastValidState</span></code>()</p></td>
 <td><p>Rest to the last valid state.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setInitialCondition</span></code>(stateType, values)</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setInitialCondition</span></code>(stateType, values)</p></td>
 <td><p>Assign initial conditions.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setMaterial</span></code>(materialName, materialProperties)</p></td>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setMaterial</span></code>(materialName, materialProperties)</p></td>
 <td><p>Assign a material and material properties.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setNodes</span></code>(nodes)</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setNodes</span></code>(nodes)</p></td>
 <td><p>Assign the nodes to the element.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setParentFace</span></code>(faceType, parentFaceNodes, ...)</p></td>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setParentFace</span></code>(faceType, parentFaceNodes, ...)</p></td>
 <td><p>Record the element face this facet was cut from.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setProperties</span></code>(elementProperties)</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setProperties</span></code>(elementProperties)</p></td>
 <td><p>Assign a set of properties to the element.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setStateVars</span></code>(values)</p></td>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setStateVars</span></code>(values)</p></td>
 <td><p>Nothing to restore: this element carries no state.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setWeightTransform</span></code>(transform)</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setWeightTransform</span></code>(transform)</p></td>
 <td><p>Install (or clear, with <code class="docutils literal notranslate"><span class="pre">None</span></code>) this facet's weight transform.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">shapeVIJContribution</span></code>(flat_view)</p></td>
-<td><p>Shape the flat VIJ values slice for this entity.</p></td>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">shapeBlock</span></code>(values)</p></td>
+<td><p>The entity's view of the flat array of the values of its block, which it writes its tangent into.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">updateMaterialProperty</span></code>(index, value)</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">updateMaterialProperty</span></code>(index, value)</p></td>
 <td><p>Change one entry of the property vector of the assigned material, during an analysis.</p></td>
 </tr>
 </tbody>
@@ -2638,7 +2602,7 @@ layout of <code class="docutils literal notranslate"><span class="pre">P</span><
 </dd>
 <dt class="field-even">Attributes<span class="colon">:</span></dt>
 <dd class="field-even"><dl class="simple">
-<dt><a class="reference internal" href="dofmanager.html#edelweissfe.numerics.vijentitybase.VIJEntityBase.couplesAllItsDofs" title="edelweissfe.numerics.vijentitybase.VIJEntityBase.couplesAllItsDofs"><code class="xref py py-obj docutils literal notranslate"><span class="pre">couplesAllItsDofs</span></code></a></dt><dd><p>Whether the entity’s block couples every one of its degrees of freedom with every other one.</p>
+<dt><a class="reference internal" href="dofmanager.html#edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.couplesAllItsDofs" title="edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.couplesAllItsDofs"><code class="xref py py-obj docutils literal notranslate"><span class="pre">couplesAllItsDofs</span></code></a></dt><dd><p>Whether the entity’s block couples every one of its degrees of freedom with every other one.</p>
 </dd>
 <dt><a class="reference internal" href="#edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.dofIndicesPermutation" title="edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.dofIndicesPermutation"><code class="xref py py-obj docutils literal notranslate"><span class="pre">dofIndicesPermutation</span></code></a></dt><dd><p>If the provides computes residual vectors and stiffness matrices not nodewise, but e.g., fieldwise, this permutation pattern is used to aggregate all entries in order to resemble the defined fields nodewise.</p>
 </dd>
@@ -2736,43 +2700,40 @@ layout of <code class="docutils literal notranslate"><span class="pre">P</span><
 <tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">getStateVars</span></code>()</p></td>
 <td><p>This element carries no state from one increment to the next.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">getVIJContributionSize</span></code>()</p></td>
-<td><p>Return the number of entries this entity contributes to the VIJ (COO) system matrix.</p></td>
-</tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">initializeElement</span></code>()</p></td>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">initializeElement</span></code>()</p></td>
 <td><p>Initalize the element to be ready for computing.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">initializeVIJContribution</span></code>(idcs, I_, J_, offset)</p></td>
-<td><p>Fill the global <code class="docutils literal notranslate"><span class="pre">I</span></code> and <code class="docutils literal notranslate"><span class="pre">J</span></code> index arrays for this constraint's VIJ contribution.</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">localEntriesOfBlock</span></code>()</p></td>
+<td><p>The local row and column of every value of the entity's block, in the order of the values.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">resetToLastValidState</span></code>()</p></td>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">resetToLastValidState</span></code>()</p></td>
 <td><p>Rest to the last valid state.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setInitialCondition</span></code>(stateType, values)</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setInitialCondition</span></code>(stateType, values)</p></td>
 <td><p>Assign initial conditions.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setMaterial</span></code>(materialName, materialProperties)</p></td>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setMaterial</span></code>(materialName, materialProperties)</p></td>
 <td><p>Assign a material and material properties.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setNodes</span></code>(nodes)</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setNodes</span></code>(nodes)</p></td>
 <td><p>Assign the nodes to the element.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setParentFace</span></code>(faceType, parentFaceNodes, ...)</p></td>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setParentFace</span></code>(faceType, parentFaceNodes, ...)</p></td>
 <td><p>Record the element face this facet was cut from.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setProperties</span></code>(elementProperties)</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setProperties</span></code>(elementProperties)</p></td>
 <td><p>Assign a set of properties to the element.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setStateVars</span></code>(values)</p></td>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setStateVars</span></code>(values)</p></td>
 <td><p>Nothing to restore: this element carries no state.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setWeightTransform</span></code>(transform)</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setWeightTransform</span></code>(transform)</p></td>
 <td><p>Install (or clear, with <code class="docutils literal notranslate"><span class="pre">None</span></code>) this facet's weight transform.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">shapeVIJContribution</span></code>(flat_view)</p></td>
-<td><p>Shape the flat VIJ values slice for this entity.</p></td>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">shapeBlock</span></code>(values)</p></td>
+<td><p>The entity's view of the flat array of the values of its block, which it writes its tangent into.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">updateMaterialProperty</span></code>(index, value)</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">updateMaterialProperty</span></code>(index, value)</p></td>
 <td><p>Change one entry of the property vector of the assigned material, during an analysis.</p></td>
 </tr>
 </tbody>
@@ -2830,7 +2791,7 @@ layout of <code class="docutils literal notranslate"><span class="pre">P</span><
 </dd>
 <dt class="field-even">Attributes<span class="colon">:</span></dt>
 <dd class="field-even"><dl class="simple">
-<dt><a class="reference internal" href="dofmanager.html#edelweissfe.numerics.vijentitybase.VIJEntityBase.couplesAllItsDofs" title="edelweissfe.numerics.vijentitybase.VIJEntityBase.couplesAllItsDofs"><code class="xref py py-obj docutils literal notranslate"><span class="pre">couplesAllItsDofs</span></code></a></dt><dd><p>Whether the entity’s block couples every one of its degrees of freedom with every other one.</p>
+<dt><a class="reference internal" href="dofmanager.html#edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.couplesAllItsDofs" title="edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.couplesAllItsDofs"><code class="xref py py-obj docutils literal notranslate"><span class="pre">couplesAllItsDofs</span></code></a></dt><dd><p>Whether the entity’s block couples every one of its degrees of freedom with every other one.</p>
 </dd>
 <dt><a class="reference internal" href="#edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.dofIndicesPermutation" title="edelweissfe.elements.marmotsingleqpelement.element.MarmotMaterialWrappingElement.dofIndicesPermutation"><code class="xref py py-obj docutils literal notranslate"><span class="pre">dofIndicesPermutation</span></code></a></dt><dd><p>If the provides computes residual vectors and stiffness matrices not nodewise, but e.g., fieldwise, this permutation pattern is used to aggregate all entries in order to resemble the defined fields nodewise.</p>
 </dd>
@@ -2918,37 +2879,34 @@ layout of <code class="docutils literal notranslate"><span class="pre">P</span><
 <tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.elements.base.baseelement.BaseElement.getStateVars" title="edelweissfe.elements.base.baseelement.BaseElement.getStateVars"><code class="xref py py-obj docutils literal notranslate"><span class="pre">getStateVars</span></code></a>()</p></td>
 <td><p>Return a copy of the element's flat (converged) quadrature-point state-variable buffer.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">getVIJContributionSize</span></code>()</p></td>
-<td><p>Return the number of entries this entity contributes to the VIJ (COO) system matrix.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.elements.base.baseelement.BaseElement.initializeElement" title="edelweissfe.elements.base.baseelement.BaseElement.initializeElement"><code class="xref py py-obj docutils literal notranslate"><span class="pre">initializeElement</span></code></a>()</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.elements.base.baseelement.BaseElement.initializeElement" title="edelweissfe.elements.base.baseelement.BaseElement.initializeElement"><code class="xref py py-obj docutils literal notranslate"><span class="pre">initializeElement</span></code></a>()</p></td>
 <td><p>Initalize the element to be ready for computing.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">initializeVIJContribution</span></code>(idcs, I_, J_, offset)</p></td>
-<td><p>Fill the global <code class="docutils literal notranslate"><span class="pre">I</span></code> and <code class="docutils literal notranslate"><span class="pre">J</span></code> index arrays for this constraint's VIJ contribution.</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">localEntriesOfBlock</span></code>()</p></td>
+<td><p>The local row and column of every value of the entity's block, in the order of the values.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.elements.base.baseelement.BaseElement.resetToLastValidState" title="edelweissfe.elements.base.baseelement.BaseElement.resetToLastValidState"><code class="xref py py-obj docutils literal notranslate"><span class="pre">resetToLastValidState</span></code></a>()</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.elements.base.baseelement.BaseElement.resetToLastValidState" title="edelweissfe.elements.base.baseelement.BaseElement.resetToLastValidState"><code class="xref py py-obj docutils literal notranslate"><span class="pre">resetToLastValidState</span></code></a>()</p></td>
 <td><p>Rest to the last valid state.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.elements.base.baseelement.BaseElement.setInitialCondition" title="edelweissfe.elements.base.baseelement.BaseElement.setInitialCondition"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setInitialCondition</span></code></a>(stateType, values)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.elements.base.baseelement.BaseElement.setInitialCondition" title="edelweissfe.elements.base.baseelement.BaseElement.setInitialCondition"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setInitialCondition</span></code></a>(stateType, values)</p></td>
 <td><p>Assign initial conditions.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.elements.base.baseelement.BaseElement.setMaterial" title="edelweissfe.elements.base.baseelement.BaseElement.setMaterial"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setMaterial</span></code></a>(materialName, materialProperties)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.elements.base.baseelement.BaseElement.setMaterial" title="edelweissfe.elements.base.baseelement.BaseElement.setMaterial"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setMaterial</span></code></a>(materialName, materialProperties)</p></td>
 <td><p>Assign a material and material properties.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.elements.base.baseelement.BaseElement.setNodes" title="edelweissfe.elements.base.baseelement.BaseElement.setNodes"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setNodes</span></code></a>(nodes)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.elements.base.baseelement.BaseElement.setNodes" title="edelweissfe.elements.base.baseelement.BaseElement.setNodes"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setNodes</span></code></a>(nodes)</p></td>
 <td><p>Assign the nodes to the element.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.elements.base.baseelement.BaseElement.setProperties" title="edelweissfe.elements.base.baseelement.BaseElement.setProperties"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setProperties</span></code></a>(elementProperties)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.elements.base.baseelement.BaseElement.setProperties" title="edelweissfe.elements.base.baseelement.BaseElement.setProperties"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setProperties</span></code></a>(elementProperties)</p></td>
 <td><p>Assign a set of properties to the element.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.elements.base.baseelement.BaseElement.setStateVars" title="edelweissfe.elements.base.baseelement.BaseElement.setStateVars"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setStateVars</span></code></a>(values)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.elements.base.baseelement.BaseElement.setStateVars" title="edelweissfe.elements.base.baseelement.BaseElement.setStateVars"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setStateVars</span></code></a>(values)</p></td>
 <td><p>Overwrite the element's (converged and trial) state-variable buffer.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">shapeVIJContribution</span></code>(flat_view)</p></td>
-<td><p>Shape the flat VIJ values slice for this entity.</p></td>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">shapeBlock</span></code>(values)</p></td>
+<td><p>The entity's view of the flat array of the values of its block, which it writes its tangent into.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.elements.base.baseelement.BaseElement.updateMaterialProperty" title="edelweissfe.elements.base.baseelement.BaseElement.updateMaterialProperty"><code class="xref py py-obj docutils literal notranslate"><span class="pre">updateMaterialProperty</span></code></a>(index, value)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.elements.base.baseelement.BaseElement.updateMaterialProperty" title="edelweissfe.elements.base.baseelement.BaseElement.updateMaterialProperty"><code class="xref py py-obj docutils literal notranslate"><span class="pre">updateMaterialProperty</span></code></a>(index, value)</p></td>
 <td><p>Change one entry of the property vector of the assigned material, during an analysis.</p></td>
 </tr>
 </tbody>

@@ -109,7 +109,10 @@
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.journal.journal</span><span class="w"> </span><span class="kn">import</span> <span class="n">Journal</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.models.femodel</span><span class="w"> </span><span class="kn">import</span> <span class="n">FEModel</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.vijentitybase</span><span class="w"> </span><span class="kn">import</span> <span class="n">VIJEntityBase</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.systemmatrixcontributor</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">SystemMatrixContributorBase</span><span class="p">,</span>
+    <span class="n">countEntriesOfBlock</span><span class="p">,</span>
+<span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.timesteppers.timestep</span><span class="w"> </span><span class="kn">import</span> <span class="n">TimeStep</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.utils.checkpointedstate</span><span class="w"> </span><span class="kn">import</span> <span class="n">packState</span><span class="p">,</span> <span class="n">unpackState</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.utils.schema</span><span class="w"> </span><span class="kn">import</span> <span class="n">OptionSchemaProvider</span>
@@ -118,9 +121,10 @@
 
 <div class="viewcode-block" id="ConstraintBase">
 <a class="viewcode-back" href="../../../../documentation/constraints.html#edelweissfe.constraints.base.constraintbase.ConstraintBase">[docs]</a>
-<span class="k">class</span><span class="w"> </span><span class="nc">ConstraintBase</span><span class="p">(</span><span class="n">OptionSchemaProvider</span><span class="p">,</span> <span class="n">ABC</span><span class="p">,</span> <span class="n">VIJEntityBase</span><span class="p">):</span>
-    <span class="c1">#: Scratch buffer for the tangent that :meth:`computeKernelsExplicit` computes and discards;</span>
-    <span class="c1">#: re-allocated only when the DOF footprint changes.</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">ConstraintBase</span><span class="p">(</span><span class="n">OptionSchemaProvider</span><span class="p">,</span> <span class="n">ABC</span><span class="p">,</span> <span class="n">SystemMatrixContributorBase</span><span class="p">):</span>
+    <span class="c1">#: Scratch buffer for the tangent that :meth:`computeKernelsExplicit` computes and discards, sized for the block</span>
+    <span class="c1">#: the constraint has in the equation system it is evaluated in; None until its first evaluation there (see</span>
+    <span class="c1">#: :meth:`prepareExplicitEvaluation`).</span>
     <span class="n">_discardedTangentScratch</span> <span class="o">=</span> <span class="kc">None</span>
 
     <span class="c1">#: The state this constraint carries from one increment to the next, by attribute name and type;</span>
@@ -362,6 +366,28 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">scalarVariables</span> <span class="o">=</span> <span class="n">scalarVariables</span></div>
 
 
+<div class="viewcode-block" id="ConstraintBase.prepareExplicitEvaluation">
+<a class="viewcode-back" href="../../../../documentation/constraints.html#edelweissfe.constraints.base.constraintbase.ConstraintBase.prepareExplicitEvaluation">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">prepareExplicitEvaluation</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Called by an explicit solver whenever the constraint is located anew in its equation system (a rebuilt</span>
+<span class="sd">        one, or one whose constraints are re-located), before it evaluates the constraint there with</span>
+<span class="sd">        :meth:`computeKernelsExplicit`.</span>
+
+<span class="sd">        This default forgets the tangent that :meth:`computeKernelsExplicit` throws away, so that the next evaluation</span>
+<span class="sd">        sizes it, once, for the block the constraint has now. The size is the number of entries of the block</span>
+<span class="sd">        (:func:`~edelweissfe.numerics.systemmatrixcontributor.countEntriesOfBlock`), which for a constraint that lists</span>
+<span class="sd">        its entries means building the list: once per equation system, not in every increment. A constraint that</span>
+<span class="sd">        evaluates its forces without a tangent needs nothing here.</span>
+
+<span class="sd">        A solver that evaluates constraints itself, rather than through</span>
+<span class="sd">        :meth:`~edelweissfe.solvers.base.nonlinearsolverbase.NonlinearSolverBase.assembleConstraintForces`, calls this</span>
+<span class="sd">        whenever the constraint is located anew: the default :meth:`computeKernelsExplicit` does not size its tangent</span>
+<span class="sd">        again on its own, and a block whose size has changed (a contact with other slave nodes) would not fit it.</span>
+<span class="sd">        """</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_discardedTangentScratch</span> <span class="o">=</span> <span class="kc">None</span></div>
+
+
 <div class="viewcode-block" id="ConstraintBase.computeKernelsExplicit">
 <a class="viewcode-back" href="../../../../documentation/constraints.html#edelweissfe.constraints.base.constraintbase.ConstraintBase.computeKernelsExplicit">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">computeKernelsExplicit</span><span class="p">(</span>
@@ -376,7 +402,9 @@
 <span class="sd">        The counterpart of :meth:`computeKernels` for an explicit solver, which solves no linear</span>
 <span class="sd">        system and so has no use for a tangent. This default calls :meth:`computeKernels` with a</span>
 <span class="sd">        scratch tangent that is thrown away, so that every constraint also works in an explicit</span>
-<span class="sd">        analysis. A constraint whose tangent is costly overrides it, e.g. through</span>
+<span class="sd">        analysis; the scratch is sized once per equation system: a solver that evaluates constraints itself calls</span>
+<span class="sd">        :meth:`prepareExplicitEvaluation` whenever the constraint is located anew.</span>
+<span class="sd">        A constraint whose tangent is costly overrides it, e.g. through</span>
 <span class="sd">        :class:`~edelweissfe.constraints.base.forcesonlyexplicitevaluation.ForcesOnlyExplicitEvaluation`.</span>
 
 <span class="sd">        Parameters</span>
@@ -391,15 +419,14 @@
 <span class="sd">            The current time step.</span>
 <span class="sd">        """</span>
 
-        <span class="c1"># The discarded tangent buffer is kept across increments and re-zeroed rather than reallocated.</span>
-        <span class="n">size</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">getVIJContributionSize</span><span class="p">()</span>
+        <span class="c1"># The discarded tangent buffer is sized once per equation system, and re-zeroed in every increment.</span>
         <span class="n">scratch</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_discardedTangentScratch</span>
-        <span class="k">if</span> <span class="n">scratch</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">scratch</span><span class="o">.</span><span class="n">size</span> <span class="o">!=</span> <span class="n">size</span><span class="p">:</span>
-            <span class="n">scratch</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_discardedTangentScratch</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">size</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">scratch</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">scratch</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_discardedTangentScratch</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">countEntriesOfBlock</span><span class="p">(</span><span class="bp">self</span><span class="p">))</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="n">scratch</span><span class="p">[:]</span> <span class="o">=</span> <span class="mf">0.0</span>
 
-        <span class="n">K</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">shapeVIJContribution</span><span class="p">(</span><span class="n">scratch</span><span class="p">)</span>
+        <span class="n">K</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">shapeBlock</span><span class="p">(</span><span class="n">scratch</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">computeKernels</span><span class="p">(</span><span class="n">U_np</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">P</span><span class="p">,</span> <span class="n">K</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">)</span></div>
 
 
@@ -445,7 +472,7 @@
 <span class="sd">        P</span>
 <span class="sd">            The residual contribution to augment.</span>
 <span class="sd">        K</span>
-<span class="sd">            The tangent ``dP/dU`` to augment, in the shape :meth:`shapeVIJContribution` gives it (a</span>
+<span class="sd">            The tangent ``dP/dU`` to augment, in the shape :meth:`shapeBlock` gives it (a</span>
 <span class="sd">            dense ``nDof x nDof`` view unless the constraint declares a sparser pattern). A</span>
 <span class="sd">            constraint that inherits</span>
 <span class="sd">            :class:`~edelweissfe.constraints.base.forcesonlyexplicitevaluation.ForcesOnlyExplicitEvaluation`</span>

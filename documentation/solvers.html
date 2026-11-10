@@ -477,8 +477,8 @@ material points evaluate their material; the cells then integrate the result.</p
 <tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.solvers.nonlinearimplicitstatic.NIST.createConvergenceCriterion" title="edelweissfe.solvers.nonlinearimplicitstatic.NIST.createConvergenceCriterion"><code class="xref py py-obj docutils literal notranslate"><span class="pre">createConvergenceCriterion</span></code></a>()</p></td>
 <td><p>Create the convergence criterion selected by the option <code class="docutils literal notranslate"><span class="pre">convergenceCriterion</span></code>.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.solvers.nonlinearimplicitstatic.NIST.createSystemMatrixAssembly" title="edelweissfe.solvers.nonlinearimplicitstatic.NIST.createSystemMatrixAssembly"><code class="xref py py-obj docutils literal notranslate"><span class="pre">createSystemMatrixAssembly</span></code></a>(assemblyType)</p></td>
-<td><p>The assembly of the system matrix of the equation system just built (option <code class="docutils literal notranslate"><span class="pre">systemMatrixAssembly</span></code>), on the complete CSR pattern of <code class="xref py py-attr docutils literal notranslate"><span class="pre">csrGenerator</span></code>, with <a class="reference internal" href="#edelweissfe.solvers.nonlinearimplicitstatic.NIST.numberOfAssemblyWorkers" title="edelweissfe.solvers.nonlinearimplicitstatic.NIST.numberOfAssemblyWorkers"><code class="xref py py-meth docutils literal notranslate"><span class="pre">numberOfAssemblyWorkers()</span></code></a> workers.</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.solvers.nonlinearimplicitstatic.NIST.createSystemMatrixAssembly" title="edelweissfe.solvers.nonlinearimplicitstatic.NIST.createSystemMatrixAssembly"><code class="xref py py-obj docutils literal notranslate"><span class="pre">createSystemMatrixAssembly</span></code></a>(assemblyType[, ...])</p></td>
+<td><p>The assembly of the system matrix of the equation system just built (option <code class="docutils literal notranslate"><span class="pre">systemMatrixAssembly</span></code>), with its CSR pattern and <a class="reference internal" href="#edelweissfe.solvers.nonlinearimplicitstatic.NIST.numberOfAssemblyWorkers" title="edelweissfe.solvers.nonlinearimplicitstatic.NIST.numberOfAssemblyWorkers"><code class="xref py py-meth docutils literal notranslate"><span class="pre">numberOfAssemblyWorkers()</span></code></a> workers.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.solvers.nonlinearimplicitstatic.NIST.endStep" title="edelweissfe.solvers.nonlinearimplicitstatic.NIST.endStep"><code class="xref py py-obj docutils literal notranslate"><span class="pre">endStep</span></code></a>(step, model)</p></td>
 <td><p>Report the step's performance timing.</p></td>
@@ -999,12 +999,16 @@ whatever else contributes like an element – in a meshfree model, its cells and
 
 <dl class="py method">
 <dt class="sig sig-object py" id="edelweissfe.solvers.nonlinearimplicitstatic.NIST.createSystemMatrixAssembly">
-<span class="sig-name descname"><span class="pre">createSystemMatrixAssembly</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">assemblyType</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/solvers/nonlinearimplicitstatic.html#NIST.createSystemMatrixAssembly"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.solvers.nonlinearimplicitstatic.NIST.createSystemMatrixAssembly" title="Link to this definition"></a></dt>
-<dd><p>The assembly of the system matrix of the equation system just built (option <code class="docutils literal notranslate"><span class="pre">systemMatrixAssembly</span></code>), on
-the complete CSR pattern of <code class="xref py py-attr docutils literal notranslate"><span class="pre">csrGenerator</span></code>, with <a class="reference internal" href="#edelweissfe.solvers.nonlinearimplicitstatic.NIST.numberOfAssemblyWorkers" title="edelweissfe.solvers.nonlinearimplicitstatic.NIST.numberOfAssemblyWorkers"><code class="xref py py-meth docutils literal notranslate"><span class="pre">numberOfAssemblyWorkers()</span></code></a> workers.</p>
+<span class="sig-name descname"><span class="pre">createSystemMatrixAssembly</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">assemblyType</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">patternFillIn</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/solvers/nonlinearimplicitstatic.html#NIST.createSystemMatrixAssembly"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.solvers.nonlinearimplicitstatic.NIST.createSystemMatrixAssembly" title="Link to this definition"></a></dt>
+<dd><p>The assembly of the system matrix of the equation system just built (option <code class="docutils literal notranslate"><span class="pre">systemMatrixAssembly</span></code>), with
+its CSR pattern and <a class="reference internal" href="#edelweissfe.solvers.nonlinearimplicitstatic.NIST.numberOfAssemblyWorkers" title="edelweissfe.solvers.nonlinearimplicitstatic.NIST.numberOfAssemblyWorkers"><code class="xref py py-meth docutils literal notranslate"><span class="pre">numberOfAssemblyWorkers()</span></code></a> workers.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>assemblyType</strong> (<em>type</em>) – The type of the assembly, one of <a class="reference internal" href="#edelweissfe.solvers.nonlinearimplicitstatic.NIST.systemMatrixAssemblies" title="edelweissfe.solvers.nonlinearimplicitstatic.NIST.systemMatrixAssemblies"><code class="xref py py-attr docutils literal notranslate"><span class="pre">systemMatrixAssemblies</span></code></a>.</p>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>assemblyType</strong> (<em>type</em>) – The type of the assembly, one of <a class="reference internal" href="#edelweissfe.solvers.nonlinearimplicitstatic.NIST.systemMatrixAssemblies" title="edelweissfe.solvers.nonlinearimplicitstatic.NIST.systemMatrixAssemblies"><code class="xref py py-attr docutils literal notranslate"><span class="pre">systemMatrixAssemblies</span></code></a>.</p></li>
+<li><p><strong>patternFillIn</strong> (<em>Callable</em><em> | </em><em>None</em>) – The entries the pattern must have although no entity contributes them, see
+<a class="reference internal" href="assembly.html#edelweissfe.numerics.systemmatrixassembly.VIJSystemMatrixAssembly" title="edelweissfe.numerics.systemmatrixassembly.VIJSystemMatrixAssembly"><code class="xref py py-class docutils literal notranslate"><span class="pre">VIJSystemMatrixAssembly</span></code></a>.</p></li>
+</ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>The assembly.</p>
@@ -2030,8 +2034,8 @@ cannot switch abruptly either, as a tangent of materials switching between loadi
 <tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">createConvergenceCriterion</span></code>()</p></td>
 <td><p>Create the convergence criterion selected by the option <code class="docutils literal notranslate"><span class="pre">convergenceCriterion</span></code>.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">createSystemMatrixAssembly</span></code>(assemblyType)</p></td>
-<td><p>The assembly of the system matrix of the equation system just built (option <code class="docutils literal notranslate"><span class="pre">systemMatrixAssembly</span></code>), on the complete CSR pattern of <code class="xref py py-attr docutils literal notranslate"><span class="pre">csrGenerator</span></code>, with <a class="reference internal" href="#edelweissfe.solvers.nonlinearimplicitstaticparallel.NISTParallel.numberOfAssemblyWorkers" title="edelweissfe.solvers.nonlinearimplicitstaticparallel.NISTParallel.numberOfAssemblyWorkers"><code class="xref py py-meth docutils literal notranslate"><span class="pre">numberOfAssemblyWorkers()</span></code></a> workers.</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">createSystemMatrixAssembly</span></code>(assemblyType[, ...])</p></td>
+<td><p>The assembly of the system matrix of the equation system just built (option <code class="docutils literal notranslate"><span class="pre">systemMatrixAssembly</span></code>), with its CSR pattern and <a class="reference internal" href="#edelweissfe.solvers.nonlinearimplicitstaticparallel.NISTParallel.numberOfAssemblyWorkers" title="edelweissfe.solvers.nonlinearimplicitstaticparallel.NISTParallel.numberOfAssemblyWorkers"><code class="xref py py-meth docutils literal notranslate"><span class="pre">numberOfAssemblyWorkers()</span></code></a> workers.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">endStep</span></code>(step, model)</p></td>
 <td><p>Report the step's performance timing.</p></td>
@@ -2585,8 +2589,8 @@ the load parameter it reaches, committed with its state, is the one the next inc
 <tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">createConvergenceCriterion</span></code>()</p></td>
 <td><p>Create the convergence criterion selected by the option <code class="docutils literal notranslate"><span class="pre">convergenceCriterion</span></code>.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">createSystemMatrixAssembly</span></code>(assemblyType)</p></td>
-<td><p>The assembly of the system matrix of the equation system just built (option <code class="docutils literal notranslate"><span class="pre">systemMatrixAssembly</span></code>), on the complete CSR pattern of <code class="xref py py-attr docutils literal notranslate"><span class="pre">csrGenerator</span></code>, with <code class="xref py py-meth docutils literal notranslate"><span class="pre">numberOfAssemblyWorkers()</span></code> workers.</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">createSystemMatrixAssembly</span></code>(assemblyType[, ...])</p></td>
+<td><p>The assembly of the system matrix of the equation system just built (option <code class="docutils literal notranslate"><span class="pre">systemMatrixAssembly</span></code>), with its CSR pattern and <code class="xref py py-meth docutils literal notranslate"><span class="pre">numberOfAssemblyWorkers()</span></code> workers.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">endStep</span></code>(step, model)</p></td>
 <td><p>Report the step's performance timing.</p></td>
@@ -4125,8 +4129,8 @@ top of the Newton loop of <a class="reference internal" href="#edelweissfe.solve
 <tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">createConvergenceCriterion</span></code>()</p></td>
 <td><p>Create the convergence criterion selected by the option <code class="docutils literal notranslate"><span class="pre">convergenceCriterion</span></code>.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">createSystemMatrixAssembly</span></code>(assemblyType)</p></td>
-<td><p>The assembly of the system matrix of the equation system just built (option <code class="docutils literal notranslate"><span class="pre">systemMatrixAssembly</span></code>), on the complete CSR pattern of <code class="xref py py-attr docutils literal notranslate"><span class="pre">csrGenerator</span></code>, with <code class="xref py py-meth docutils literal notranslate"><span class="pre">numberOfAssemblyWorkers()</span></code> workers.</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">createSystemMatrixAssembly</span></code>(assemblyType[, ...])</p></td>
+<td><p>The assembly of the system matrix of the equation system just built (option <code class="docutils literal notranslate"><span class="pre">systemMatrixAssembly</span></code>), with its CSR pattern and <code class="xref py py-meth docutils literal notranslate"><span class="pre">numberOfAssemblyWorkers()</span></code> workers.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">endStep</span></code>(step, model)</p></td>
 <td><p>Report the step's performance timing.</p></td>
@@ -4824,8 +4828,8 @@ initial-acceleration solve evaluate the elements in parallel.</p>
 <tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">createConvergenceCriterion</span></code>()</p></td>
 <td><p>Create the convergence criterion selected by the option <code class="docutils literal notranslate"><span class="pre">convergenceCriterion</span></code>.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">createSystemMatrixAssembly</span></code>(assemblyType)</p></td>
-<td><p>The assembly of the system matrix of the equation system just built (option <code class="docutils literal notranslate"><span class="pre">systemMatrixAssembly</span></code>), on the complete CSR pattern of <code class="xref py py-attr docutils literal notranslate"><span class="pre">csrGenerator</span></code>, with <code class="xref py py-meth docutils literal notranslate"><span class="pre">numberOfAssemblyWorkers()</span></code> workers.</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">createSystemMatrixAssembly</span></code>(assemblyType[, ...])</p></td>
+<td><p>The assembly of the system matrix of the equation system just built (option <code class="docutils literal notranslate"><span class="pre">systemMatrixAssembly</span></code>), with its CSR pattern and <code class="xref py py-meth docutils literal notranslate"><span class="pre">numberOfAssemblyWorkers()</span></code> workers.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">endStep</span></code>(step, model)</p></td>
 <td><p>Report the step's performance timing.</p></td>
@@ -6101,8 +6105,8 @@ topology history prints that replay in a table of its own (top-level <code class
 <tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">createConvergenceCriterion</span></code>()</p></td>
 <td><p>Create the convergence criterion selected by the option <code class="docutils literal notranslate"><span class="pre">convergenceCriterion</span></code>.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">createSystemMatrixAssembly</span></code>(assemblyType)</p></td>
-<td><p>The assembly of the system matrix of the equation system just built (option <code class="docutils literal notranslate"><span class="pre">systemMatrixAssembly</span></code>), on the complete CSR pattern of <code class="xref py py-attr docutils literal notranslate"><span class="pre">csrGenerator</span></code>, with <code class="xref py py-meth docutils literal notranslate"><span class="pre">numberOfAssemblyWorkers()</span></code> workers.</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">createSystemMatrixAssembly</span></code>(assemblyType[, ...])</p></td>
+<td><p>The assembly of the system matrix of the equation system just built (option <code class="docutils literal notranslate"><span class="pre">systemMatrixAssembly</span></code>), with its CSR pattern and <code class="xref py py-meth docutils literal notranslate"><span class="pre">numberOfAssemblyWorkers()</span></code> workers.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.solvers.nonlinearexplicitstatic.NEST.endStep" title="edelweissfe.solvers.nonlinearexplicitstatic.NEST.endStep"><code class="xref py py-obj docutils literal notranslate"><span class="pre">endStep</span></code></a>(step, model)</p></td>
 <td><p>Report the step's performance timing.</p></td>
@@ -6556,8 +6560,8 @@ indirection.</p>
 <tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">createConvergenceCriterion</span></code>()</p></td>
 <td><p>Create the convergence criterion selected by the option <code class="docutils literal notranslate"><span class="pre">convergenceCriterion</span></code>.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">createSystemMatrixAssembly</span></code>(assemblyType)</p></td>
-<td><p>The assembly of the system matrix of the equation system just built (option <code class="docutils literal notranslate"><span class="pre">systemMatrixAssembly</span></code>), on the complete CSR pattern of <code class="xref py py-attr docutils literal notranslate"><span class="pre">csrGenerator</span></code>, with <a class="reference internal" href="#edelweissfe.solvers.nonlinearexplicitstaticparallel.NESTParallel.numberOfAssemblyWorkers" title="edelweissfe.solvers.nonlinearexplicitstaticparallel.NESTParallel.numberOfAssemblyWorkers"><code class="xref py py-meth docutils literal notranslate"><span class="pre">numberOfAssemblyWorkers()</span></code></a> workers.</p></td>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">createSystemMatrixAssembly</span></code>(assemblyType[, ...])</p></td>
+<td><p>The assembly of the system matrix of the equation system just built (option <code class="docutils literal notranslate"><span class="pre">systemMatrixAssembly</span></code>), with its CSR pattern and <a class="reference internal" href="#edelweissfe.solvers.nonlinearexplicitstaticparallel.NESTParallel.numberOfAssemblyWorkers" title="edelweissfe.solvers.nonlinearexplicitstaticparallel.NESTParallel.numberOfAssemblyWorkers"><code class="xref py py-meth docutils literal notranslate"><span class="pre">numberOfAssemblyWorkers()</span></code></a> workers.</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">endStep</span></code>(step, model)</p></td>
 <td><p>Report the step's performance timing.</p></td>

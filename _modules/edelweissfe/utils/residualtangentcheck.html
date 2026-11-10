@@ -166,8 +166,9 @@
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]:</span>
 <span class="w">    </span><span class="sd">"""The residual contribution of a constraint and its tangent, the latter as one dense matrix.</span>
 
-<span class="sd">    The tangent is scattered from the flat VIJ values with the constraint's own ``(I, J)`` pattern -- the one the</span>
-<span class="sd">    global assembly uses -- so that the check covers the pattern together with the values.</span>
+<span class="sd">    The tangent is scattered from the flat values with the constraint's own local entries -- the ones the global</span>
+<span class="sd">    assembly uses -- so that the check covers the entries together with the values; every local entry must lie within</span>
+<span class="sd">    the constraint's degrees of freedom.</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
@@ -184,20 +185,27 @@
 <span class="sd">    -------</span>
 <span class="sd">    tuple[np.ndarray, np.ndarray]</span>
 <span class="sd">        ``P`` and the dense ``nDof x nDof`` tangent.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If a local entry of the constraint's block lies outside its degrees of freedom.</span>
 <span class="sd">    """</span>
 
     <span class="n">nDof</span> <span class="o">=</span> <span class="n">constraint</span><span class="o">.</span><span class="n">nDof</span>
-    <span class="n">size</span> <span class="o">=</span> <span class="n">constraint</span><span class="o">.</span><span class="n">getVIJContributionSize</span><span class="p">()</span>
-    <span class="n">I_</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">size</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">int</span><span class="p">)</span>
-    <span class="n">J_</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">size</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">int</span><span class="p">)</span>
-    <span class="n">constraint</span><span class="o">.</span><span class="n">initializeVIJContribution</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">nDof</span><span class="p">),</span> <span class="n">I_</span><span class="p">,</span> <span class="n">J_</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+    <span class="n">localRows</span><span class="p">,</span> <span class="n">localColumns</span> <span class="o">=</span> <span class="n">constraint</span><span class="o">.</span><span class="n">localEntriesOfBlock</span><span class="p">()</span>
+    <span class="k">for</span> <span class="n">localIndices</span> <span class="ow">in</span> <span class="p">(</span><span class="n">localRows</span><span class="p">,</span> <span class="n">localColumns</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">np</span><span class="o">.</span><span class="n">all</span><span class="p">((</span><span class="n">localIndices</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">localIndices</span> <span class="o">&lt;</span> <span class="n">nDof</span><span class="p">)):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">"a local entry of the constraint's block lies outside its </span><span class="si">{:}</span><span class="s2"> degrees of freedom"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">nDof</span><span class="p">)</span>
+            <span class="p">)</span>
 
-    <span class="n">flat</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">size</span><span class="p">)</span>
+    <span class="n">flat</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">localRows</span><span class="p">))</span>
     <span class="n">P</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">nDof</span><span class="p">)</span>
-    <span class="n">constraint</span><span class="o">.</span><span class="n">computeKernels</span><span class="p">(</span><span class="n">U</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">P</span><span class="p">,</span> <span class="n">constraint</span><span class="o">.</span><span class="n">shapeVIJContribution</span><span class="p">(</span><span class="n">flat</span><span class="p">),</span> <span class="n">timeStep</span><span class="p">)</span>
+    <span class="n">constraint</span><span class="o">.</span><span class="n">computeKernels</span><span class="p">(</span><span class="n">U</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">P</span><span class="p">,</span> <span class="n">constraint</span><span class="o">.</span><span class="n">shapeBlock</span><span class="p">(</span><span class="n">flat</span><span class="p">),</span> <span class="n">timeStep</span><span class="p">)</span>
 
     <span class="n">K</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">nDof</span><span class="p">,</span> <span class="n">nDof</span><span class="p">))</span>
-    <span class="n">np</span><span class="o">.</span><span class="n">add</span><span class="o">.</span><span class="n">at</span><span class="p">(</span><span class="n">K</span><span class="p">,</span> <span class="p">(</span><span class="n">I_</span><span class="p">,</span> <span class="n">J_</span><span class="p">),</span> <span class="n">flat</span><span class="p">)</span>
+    <span class="n">np</span><span class="o">.</span><span class="n">add</span><span class="o">.</span><span class="n">at</span><span class="p">(</span><span class="n">K</span><span class="p">,</span> <span class="p">(</span><span class="n">localRows</span><span class="p">,</span> <span class="n">localColumns</span><span class="p">),</span> <span class="n">flat</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">P</span><span class="p">,</span> <span class="n">K</span></div>
 
 

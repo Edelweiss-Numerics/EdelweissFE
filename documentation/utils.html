@@ -85,8 +85,7 @@
 <li class="toctree-l2"><a class="reference internal" href="stepactions.html">Step actions</a></li>
 <li class="toctree-l2 current"><a class="current reference internal" href="#">Utilities</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="#matrix-conversion-from-coo-sparse-format-to-csr-format">Matrix conversion from COO sparse format to CSR format</a><ul>
-<li class="toctree-l4"><a class="reference internal" href="#legacy-generator-teaching-reference">Legacy Generator (teaching reference)</a></li>
-<li class="toctree-l4"><a class="reference internal" href="#high-performance-generator">High-Performance Generator</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#csr-generator">CSR Generator</a></li>
 </ul>
 </li>
 <li class="toctree-l3"><a class="reference internal" href="#gathering-efficiently-of-element-results">Gathering efficiently of element results</a><ul>
@@ -147,89 +146,39 @@ but very handy if fundamental new functionalities should be added.</p>
 <section id="matrix-conversion-from-coo-sparse-format-to-csr-format">
 <h2>Matrix conversion from COO sparse format to CSR format<a class="headerlink" href="#matrix-conversion-from-coo-sparse-format-to-csr-format" title="Link to this heading"></a></h2>
 <p>Matrix assembly is a critical performance bottleneck in Finite Element simulations, particularly during non-linear implicit or explicit iterations where the system matrix structure (non-zero pattern) remains constant, but its numerical values are updated at every iteration.</p>
-<p>EdelweissFE offers two generators to convert COO (Coordinate) format sparse matrices to CSR (Compressed Sparse Row) format efficiently without re-analysing the sparsity pattern:</p>
-<ol class="arabic simple">
-<li><p><strong>Legacy Generator (``csrgenerator``)</strong>: a plain, single-threaded Cython implementation using a
-binary search for the COO-to-CSR mapping. Kept deliberately simple and short – <strong>not used by any
-solver</strong>, its purpose is teaching: reading it end to end is the fastest way to understand what the
-high-performance generator below does, before its parallelism, memory-layout tricks and the direct
-scatter-to-CSR alternative are layered on top.</p></li>
-<li><p><strong>High-Performance Generator (``csrgeneratorv2``)</strong>: A parallelized C++ engine with OpenMP support, thread-safe memory layouts, cache friendliness, and vectorized operations. This is what every solver actually uses.</p></li>
-</ol>
+<p>The CSR generator (<code class="docutils literal notranslate"><span class="pre">csrgeneratorv2</span></code>) converts COO (Coordinate) format sparse matrices to CSR (Compressed Sparse Row) format efficiently without re-analysing the sparsity pattern: a parallelized C++ engine with OpenMP support, thread-safe memory layouts, cache friendliness, and vectorized operations.</p>
 <div class="admonition seealso">
 <p class="admonition-title">See also</p>
 <p><a class="reference internal" href="assembly.html"><span class="doc">System matrix assembly</span></a> compares this stage-then-gather route against direct scatter-to-CSR assembly, which
 avoids the staging array entirely – relevant whenever the number of stored contributions greatly
 exceeds the number of matrix entries, as it does for meshfree discretisations.</p>
 </div>
-<section id="legacy-generator-teaching-reference">
-<h3>Legacy Generator (teaching reference)<a class="headerlink" href="#legacy-generator-teaching-reference" title="Link to this heading"></a></h3>
-<p>Module <code class="docutils literal notranslate"><span class="pre">edelweissfe.numerics.csrgenerator</span></code></p>
-<dl class="py class">
-<dt class="sig sig-object py" id="edelweissfe.numerics.csrgenerator.CSRGenerator">
-<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">edelweissfe.numerics.csrgenerator.</span></span><span class="sig-name descname"><span class="pre">CSRGenerator</span></span><a class="headerlink" href="#edelweissfe.numerics.csrgenerator.CSRGenerator" title="Link to this definition"></a></dt>
-<dd><p>This cdef class generates Compressed Sparse Row Matrices from the COO format,
-and offers the possibility to update the matrix without reanalyzing the
-pattern (in contrast to SciPy).</p>
-<p>Legacy, teaching-oriented generator: single-threaded, no memory-layout optimizations. Not
-used by any solver – see <code class="docutils literal notranslate"><span class="pre">edelweissfe.numerics.csrgeneratorv2.CSRGenerator</span></code> for the
-parallelized generator every solver actually uses, and <code class="docutils literal notranslate"><span class="pre">doc/source/documentation/utils.rst</span></code>
-for how the two relate.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>systemMatrix</strong> – The system matrix in COO format, for the first initialization V can be a dummy (empty) vector.</p>
-</dd>
-</dl>
-<p class="rubric">Methods</p>
-<table class="autosummary longtable docutils align-default">
-<tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.numerics.csrgenerator.CSRGenerator.updateCSR" title="edelweissfe.numerics.csrgenerator.CSRGenerator.updateCSR"><code class="xref py py-obj docutils literal notranslate"><span class="pre">updateCSR</span></code></a>(V)</p></td>
-<td><p>Get updated copies of the CSR matrix.</p></td>
-</tr>
-</tbody>
-</table>
-<dl class="py method">
-<dt class="sig sig-object py" id="edelweissfe.numerics.csrgenerator.CSRGenerator.updateCSR">
-<span class="sig-name descname"><span class="pre">updateCSR</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">V</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#edelweissfe.numerics.csrgenerator.CSRGenerator.updateCSR" title="Link to this definition"></a></dt>
-<dd><p>Get updated copies of the CSR matrix.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Returns<span class="colon">:</span></dt>
-<dd class="field-odd"><p>The system matrix in CSR format.</p>
-</dd>
-<dt class="field-even">Return type<span class="colon">:</span></dt>
-<dd class="field-even"><p>csr_matrix</p>
-</dd>
-</dl>
-</dd></dl>
-
-</dd></dl>
-
-</section>
-<section id="high-performance-generator">
-<h3>High-Performance Generator<a class="headerlink" href="#high-performance-generator" title="Link to this heading"></a></h3>
+<section id="csr-generator">
+<h3>CSR Generator<a class="headerlink" href="#csr-generator" title="Link to this heading"></a></h3>
 <p>Module <code class="docutils literal notranslate"><span class="pre">edelweissfe.numerics.csrgeneratorv2</span></code></p>
 <dl class="py class">
 <dt class="sig sig-object py" id="edelweissfe.numerics.csrgeneratorv2.CSRGenerator">
 <span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">edelweissfe.numerics.csrgeneratorv2.</span></span><span class="sig-name descname"><span class="pre">CSRGenerator</span></span><a class="headerlink" href="#edelweissfe.numerics.csrgeneratorv2.CSRGenerator" title="Link to this definition"></a></dt>
 <dd><p>CSRGenerator class to create and manage a CSR matrix from COO format.</p>
-<p>This class utilizes a C++ core for efficient conversion and updating of the CSR matrix.</p>
+<p>This class utilizes a C++ core for efficient conversion and updating of the CSR matrix. The gather map indexes the
+COO pairs with 32-bit integers, so there may be at most <code class="docutils literal notranslate"><span class="pre">INT32_MAX</span></code> of them.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>systemMatrix</strong> (<em>object</em>) – An object containing COO format data with attributes I, J, and nDof.</p></li>
-<li><p><strong>patternOnly</strong> (<em>bool</em>) – Build only the CSR pattern (<code class="docutils literal notranslate"><span class="pre">indptr</span></code>/<code class="docutils literal notranslate"><span class="pre">indices</span></code>), not the gather map. Halves the sort
-array and, more importantly, removes the 32-bit limit on the pair count – <code class="docutils literal notranslate"><span class="pre">gather_sources</span></code>
-and <code class="docutils literal notranslate"><span class="pre">assembly_ptr</span></code> are int32 indices into the COO list, so a full build refuses more than
-INT32_MAX pairs. <a class="reference internal" href="#edelweissfe.numerics.csrgeneratorv2.CSRGenerator.updateInPlace" title="edelweissfe.numerics.csrgeneratorv2.CSRGenerator.updateInPlace"><code class="xref py py-meth docutils literal notranslate"><span class="pre">updateInPlace()</span></code></a> and <a class="reference internal" href="#edelweissfe.numerics.csrgeneratorv2.CSRGenerator.updateCSR" title="edelweissfe.numerics.csrgeneratorv2.CSRGenerator.updateCSR"><code class="xref py py-meth docutils literal notranslate"><span class="pre">updateCSR()</span></code></a> then raise, exactly as after
-<a class="reference internal" href="#edelweissfe.numerics.csrgeneratorv2.CSRGenerator.releaseGatherMap" title="edelweissfe.numerics.csrgeneratorv2.CSRGenerator.releaseGatherMap"><code class="xref py py-meth docutils literal notranslate"><span class="pre">releaseGatherMap()</span></code></a>. Use it when the pattern is being borrowed by a
-<a class="reference internal" href="assembly.html#edelweissfe.numerics.csrgeneratorv2.DirectCSRAssembler" title="edelweissfe.numerics.csrgeneratorv2.DirectCSRAssembler"><code class="xref py py-class docutils literal notranslate"><span class="pre">DirectCSRAssembler</span></code></a> and nothing will gather.</p></li>
+<li><p><strong>I</strong> – The row of every COO pair, in <code class="docutils literal notranslate"><span class="pre">[0,</span> <span class="pre">nDof)</span></code>.</p></li>
+<li><p><strong>J</strong> – The column of every COO pair, in <code class="docutils literal notranslate"><span class="pre">[0,</span> <span class="pre">nDof)</span></code>; as many as rows.</p></li>
+<li><p><strong>nDof</strong> – The number of rows and columns.</p></li>
 </ul>
 </dd>
-<dt class="field-even">Attributes<span class="colon">:</span></dt>
-<dd class="field-even"><dl class="simple">
-<dt><strong>csrMatrix</strong></dt><dd></dd>
-<dt><a class="reference internal" href="#edelweissfe.numerics.csrgeneratorv2.CSRGenerator.gatherMapReleased" title="edelweissfe.numerics.csrgeneratorv2.CSRGenerator.gatherMapReleased"><code class="xref py py-obj docutils literal notranslate"><span class="pre">gatherMapReleased</span></code></a></dt><dd><p>True once <a class="reference internal" href="#edelweissfe.numerics.csrgeneratorv2.CSRGenerator.releaseGatherMap" title="edelweissfe.numerics.csrgeneratorv2.CSRGenerator.releaseGatherMap"><code class="xref py py-meth docutils literal notranslate"><span class="pre">releaseGatherMap()</span></code></a> has been called and this generator can no longer gather.</p>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><ul class="simple">
+<li><p><strong>ValueError</strong> – If <code class="docutils literal notranslate"><span class="pre">I</span></code> and <code class="docutils literal notranslate"><span class="pre">J</span></code> differ in length, or <code class="docutils literal notranslate"><span class="pre">nDof</span></code> is negative.</p></li>
+<li><p><strong>IndexError</strong> – If a row or a column lies outside the matrix.</p></li>
+</ul>
 </dd>
+<dt class="field-odd">Attributes<span class="colon">:</span></dt>
+<dd class="field-odd"><dl class="simple">
+<dt><strong>csrMatrix</strong></dt><dd></dd>
 <dt><a class="reference internal" href="#edelweissfe.numerics.csrgeneratorv2.CSRGenerator.memoryBytes" title="edelweissfe.numerics.csrgeneratorv2.CSRGenerator.memoryBytes"><code class="xref py py-obj docutils literal notranslate"><span class="pre">memoryBytes</span></code></a></dt><dd><p>Bytes held by the CSR pattern, the gather map and the CSR data array.</p>
 </dd>
 <dt><a class="reference internal" href="#edelweissfe.numerics.csrgeneratorv2.CSRGenerator.nnz" title="edelweissfe.numerics.csrgeneratorv2.CSRGenerator.nnz"><code class="xref py py-obj docutils literal notranslate"><span class="pre">nnz</span></code></a></dt><dd><p>Number of stored entries in the CSR pattern.</p>
@@ -243,13 +192,10 @@ INT32_MAX pairs. <a class="reference internal" href="#edelweissfe.numerics.csrge
 <tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.numerics.csrgeneratorv2.CSRGenerator.addToPattern" title="edelweissfe.numerics.csrgeneratorv2.CSRGenerator.addToPattern"><code class="xref py py-obj docutils literal notranslate"><span class="pre">addToPattern</span></code></a>(entries)</p></td>
 <td><p>Add entries to the CSR pattern that no COO pair contributes to; they are assembled as stored zeros.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.numerics.csrgeneratorv2.CSRGenerator.releaseGatherMap" title="edelweissfe.numerics.csrgeneratorv2.CSRGenerator.releaseGatherMap"><code class="xref py py-obj docutils literal notranslate"><span class="pre">releaseGatherMap</span></code></a>()</p></td>
-<td><p>Give back the gather map, keeping the CSR pattern -- and give up the ability to gather.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.numerics.csrgeneratorv2.CSRGenerator.updateCSR" title="edelweissfe.numerics.csrgeneratorv2.CSRGenerator.updateCSR"><code class="xref py py-obj docutils literal notranslate"><span class="pre">updateCSR</span></code></a>(V)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.numerics.csrgeneratorv2.CSRGenerator.updateCSR" title="edelweissfe.numerics.csrgeneratorv2.CSRGenerator.updateCSR"><code class="xref py py-obj docutils literal notranslate"><span class="pre">updateCSR</span></code></a>(V)</p></td>
 <td><p>Update the values of the CSR matrix and return an independent copy.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.numerics.csrgeneratorv2.CSRGenerator.updateInPlace" title="edelweissfe.numerics.csrgeneratorv2.CSRGenerator.updateInPlace"><code class="xref py py-obj docutils literal notranslate"><span class="pre">updateInPlace</span></code></a>(V)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.numerics.csrgeneratorv2.CSRGenerator.updateInPlace" title="edelweissfe.numerics.csrgeneratorv2.CSRGenerator.updateInPlace"><code class="xref py py-obj docutils literal notranslate"><span class="pre">updateInPlace</span></code></a>(V)</p></td>
 <td><p>Update the values of the CSR matrix in-place based on the input vector V.</p></td>
 </tr>
 </tbody>
@@ -268,21 +214,14 @@ pattern array obtained before keeps the old pattern and stays valid, but the gen
 <dd class="field-odd"><p><strong>entries</strong> – The entries to add (CSR, <code class="docutils literal notranslate"><span class="pre">nDof</span> <span class="pre">x</span> <span class="pre">nDof</span></code>), with sorted rows and none of them already in the pattern; only
 the pattern is read.</p>
 </dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><ul class="simple">
+<li><p><strong>ValueError</strong> – If <code class="docutils literal notranslate"><span class="pre">entries</span></code> is not a CSR matrix of the shape of <code class="xref py py-attr docutils literal notranslate"><span class="pre">csrMatrix</span></code>, if one of its rows is not sorted, or
+if one of its entries is already in the pattern.</p></li>
+<li><p><strong>IndexError</strong> – If a column of an entry lies outside the matrix.</p></li>
+</ul>
+</dd>
 </dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="edelweissfe.numerics.csrgeneratorv2.CSRGenerator.releaseGatherMap">
-<span class="sig-name descname"><span class="pre">releaseGatherMap</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#edelweissfe.numerics.csrgeneratorv2.CSRGenerator.releaseGatherMap" title="Link to this definition"></a></dt>
-<dd><p>Give back the gather map, keeping the CSR pattern – and give up the ability to gather.</p>
-<p><code class="docutils literal notranslate"><span class="pre">gather_sources</span></code> is one int32 per COO pair, so the map is by far the largest thing this
-object holds (6.69 GiB at 43,350 DOF against 0.80 GiB for the pattern and the data array).
-A solver assembling directly into CSR borrows only the pattern, so holding the map would
-cancel most of what the direct path saves.</p>
-<p>After this call <a class="reference internal" href="#edelweissfe.numerics.csrgeneratorv2.CSRGenerator.updateInPlace" title="edelweissfe.numerics.csrgeneratorv2.CSRGenerator.updateInPlace"><code class="xref py py-meth docutils literal notranslate"><span class="pre">updateInPlace()</span></code></a> and <a class="reference internal" href="#edelweissfe.numerics.csrgeneratorv2.CSRGenerator.updateCSR" title="edelweissfe.numerics.csrgeneratorv2.CSRGenerator.updateCSR"><code class="xref py py-meth docutils literal notranslate"><span class="pre">updateCSR()</span></code></a> raise. That is deliberate: the
-alternative is a <code class="docutils literal notranslate"><span class="pre">nogil</span></code> loop reading freed vectors, and a matrix that is quietly wrong is
-worse than one that is loudly unavailable. <code class="xref py py-attr docutils literal notranslate"><span class="pre">csrMatrix</span></code> and the pattern stay valid and
-usable, and <a class="reference internal" href="#edelweissfe.numerics.csrgeneratorv2.CSRGenerator.memoryBytes" title="edelweissfe.numerics.csrgeneratorv2.CSRGenerator.memoryBytes"><code class="xref py py-attr docutils literal notranslate"><span class="pre">memoryBytes</span></code></a> drops accordingly.</p>
 </dd></dl>
 
 <dl class="py method">
@@ -294,13 +233,16 @@ the matrix across subsequent assembly steps, to avoid the allocation
 cost of copying.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>V</strong> (<em>double</em><em>[</em><em>:</em><em>]</em>) – Input vector used to update the CSR matrix values.</p>
+<dd class="field-odd"><p><strong>V</strong> (<em>double</em><em>[</em><em>::1</em><em>]</em>) – Input vector used to update the CSR matrix values, as in <a class="reference internal" href="#edelweissfe.numerics.csrgeneratorv2.CSRGenerator.updateInPlace" title="edelweissfe.numerics.csrgeneratorv2.CSRGenerator.updateInPlace"><code class="xref py py-meth docutils literal notranslate"><span class="pre">updateInPlace()</span></code></a>.</p>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>An independent copy of the updated CSR matrix.</p>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>csr_matrix</p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>ValueError</strong> – As <a class="reference internal" href="#edelweissfe.numerics.csrgeneratorv2.CSRGenerator.updateInPlace" title="edelweissfe.numerics.csrgeneratorv2.CSRGenerator.updateInPlace"><code class="xref py py-meth docutils literal notranslate"><span class="pre">updateInPlace()</span></code></a>.</p>
 </dd>
 </dl>
 </dd></dl>
@@ -318,7 +260,8 @@ the returned <a class="reference internal" href="assembly.html#edelweissfe.numer
 silently; see its docstring and GitHub issue #72.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>V</strong> (<em>double</em><em>[</em><em>:</em><em>]</em>) – Input vector used to update the CSR matrix values.</p>
+<dd class="field-odd"><p><strong>V</strong> (<em>double</em><em>[</em><em>::1</em><em>]</em>) – Input vector used to update the CSR matrix values, one per COO pair, contiguous: the core reads them one
+after the other.</p>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>A live view of the internal CSR matrix (not a copy).</p>
@@ -326,13 +269,10 @@ silently; see its docstring and GitHub issue #72.</p>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p><a class="reference internal" href="assembly.html#edelweissfe.numerics.csrgeneratorv2.AliasedCSRMatrix" title="edelweissfe.numerics.csrgeneratorv2.AliasedCSRMatrix">AliasedCSRMatrix</a></p>
 </dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>ValueError</strong> – If <code class="docutils literal notranslate"><span class="pre">V</span></code> is not contiguous (a strided view), or does not hold one value per COO pair.</p>
+</dd>
 </dl>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="edelweissfe.numerics.csrgeneratorv2.CSRGenerator.gatherMapReleased">
-<span class="sig-name descname"><span class="pre">gatherMapReleased</span></span><a class="headerlink" href="#edelweissfe.numerics.csrgeneratorv2.CSRGenerator.gatherMapReleased" title="Link to this definition"></a></dt>
-<dd><p>True once <a class="reference internal" href="#edelweissfe.numerics.csrgeneratorv2.CSRGenerator.releaseGatherMap" title="edelweissfe.numerics.csrgeneratorv2.CSRGenerator.releaseGatherMap"><code class="xref py py-meth docutils literal notranslate"><span class="pre">releaseGatherMap()</span></code></a> has been called and this generator can no longer gather.</p>
 </dd></dl>
 
 <dl class="py attribute">
@@ -341,9 +281,9 @@ silently; see its docstring and GitHub issue #72.</p>
 <dd><p>Bytes held by the CSR pattern, the gather map and the CSR data array.</p>
 <p>The counterpart to <a class="reference internal" href="assembly.html#edelweissfe.numerics.csrgeneratorv2.DirectCSRAssembler.memoryBytes" title="edelweissfe.numerics.csrgeneratorv2.DirectCSRAssembler.memoryBytes"><code class="xref py py-attr docutils literal notranslate"><span class="pre">DirectCSRAssembler.memoryBytes</span></code></a>, on the same basis – what the
 object owns. The dominant term is the gather map’s <code class="docutils literal notranslate"><span class="pre">gather_sources</span></code>, one int32 per COO
-pair, which is what the direct path replaces with a uint16 offset per pair.</p>
-<p>Neither figure counts the VIJ value array or the <code class="docutils literal notranslate"><span class="pre">I</span></code>/<code class="docutils literal notranslate"><span class="pre">J</span></code> index arrays: those belong to
-the DofManager, and <code class="docutils literal notranslate"><span class="pre">I</span></code>/<code class="docutils literal notranslate"><span class="pre">J</span></code> are needed by both paths.</p>
+pair, which is what the direct path replaces with a uint16 offset per pair (of a dense block in rows short
+enough for it; any other pair keeps an int32 position).</p>
+<p>The VIJ value array and the <code class="docutils literal notranslate"><span class="pre">I</span></code>/<code class="docutils literal notranslate"><span class="pre">J</span></code> index arrays are not counted: the generator does not own them.</p>
 </dd></dl>
 
 <dl class="py attribute">
@@ -384,7 +324,7 @@ When updating the matrix via <code class="docutils literal notranslate"><span cl
 <h4>Memory Safety and Lifetime Management<a class="headerlink" href="#memory-safety-and-lifetime-management" title="Link to this heading"></a></h4>
 <ul class="simple">
 <li><p><strong>Type Safety</strong>:
-The constructor of <code class="docutils literal notranslate"><span class="pre">csrgeneratorv2.CSRGenerator</span></code> explicitly casts the input coordinate arrays <code class="docutils literal notranslate"><span class="pre">I</span></code> and <code class="docutils literal notranslate"><span class="pre">J</span></code> to contiguous memoryviews of type <code class="docutils literal notranslate"><span class="pre">int</span></code> (representing 32-bit signed integers, <code class="docutils literal notranslate"><span class="pre">np.intc</span></code>). This ensures memory safety even if the coordinates originate from non-standard array types outside the <cite>dofmanager</cite>.</p></li>
+The constructor of <code class="docutils literal notranslate"><span class="pre">csrgeneratorv2.CSRGenerator</span></code> explicitly casts the input coordinate arrays <code class="docutils literal notranslate"><span class="pre">I</span></code> and <code class="docutils literal notranslate"><span class="pre">J</span></code> to contiguous memoryviews of type <code class="docutils literal notranslate"><span class="pre">int</span></code> (representing 32-bit signed integers, <code class="docutils literal notranslate"><span class="pre">np.intc</span></code>). This ensures memory safety whatever array type the coordinates come in.</p></li>
 <li><p><strong>In-Place Matrix Updates</strong>:
 <code class="docutils literal notranslate"><span class="pre">updateInPlace(V)</span></code> modifies the internal SciPy <code class="docutils literal notranslate"><span class="pre">csr_matrix.data</span></code> buffer directly using raw C++ pointers, avoiding any Python object creation or memory allocations during iteration loops. Note that the returned matrix is a live view; its contents are mutated on subsequent update calls.</p></li>
 <li><p><strong>Lifetime of the C++ core</strong>:

@@ -117,7 +117,6 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.config.linsolve</span><span class="w"> </span><span class="kn">import</span> <span class="n">createLinearSolver</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.constraints.base.constraintbase</span><span class="w"> </span><span class="kn">import</span> <span class="n">ConstraintBase</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.models.femodel</span><span class="w"> </span><span class="kn">import</span> <span class="n">FEModel</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.csrgeneratorv2</span><span class="w"> </span><span class="kn">import</span> <span class="n">CSRGenerator</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.dofmanager</span><span class="w"> </span><span class="kn">import</span> <span class="n">DofVector</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.systemmatrixassembly</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">DirectCSRSystemMatrixAssembly</span><span class="p">,</span>
@@ -638,7 +637,6 @@
 <span class="sd">        before the next one is built, never both at once."""</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">equationSystemLayout</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span> <span class="o">=</span> <span class="kc">None</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">csrGenerator</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">mpcTransformation</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_U</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dU</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_P</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_K</span> <span class="o">=</span> <span class="kc">None</span></div>
 
@@ -855,10 +853,6 @@
 
                 <span class="bp">self</span><span class="o">.</span><span class="n">convergenceTable</span> <span class="o">=</span> <span class="n">ConvergenceTable</span><span class="p">(</span><span class="n">presentVariableNames</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">linSolver</span><span class="o">.</span><span class="n">reportsSolveSummary</span><span class="p">)</span>
 
-                <span class="n">assemblyType</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">systemMatrixAssemblies</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s2">"systemMatrixAssembly"</span><span class="p">]]</span>
-                <span class="k">with</span> <span class="n">performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"system matrix pattern"</span><span class="p">):</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">csrGenerator</span> <span class="o">=</span> <span class="n">CSRGenerator</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="p">,</span> <span class="n">patternOnly</span><span class="o">=</span><span class="ow">not</span> <span class="n">assemblyType</span><span class="o">.</span><span class="n">needsGatherMap</span><span class="p">)</span>
-
                 <span class="n">U</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
                 <span class="n">P</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
                 <span class="n">dU</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
@@ -869,17 +863,13 @@
                     <span class="bp">self</span><span class="o">.</span><span class="n">mpcTransformation</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">buildMPCTransformation</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">step</span><span class="o">.</span><span class="n">actions</span><span class="p">)</span>
                 <span class="k">with</span> <span class="n">performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"mpc dirichlet conflict check"</span><span class="p">):</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">checkMPCDirichletConflicts</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">mpcTransformation</span><span class="p">,</span> <span class="n">step</span><span class="o">.</span><span class="n">actions</span><span class="p">)</span>
-                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">mpcTransformation</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                    <span class="c1"># Room in the CSR pattern for the entries the condensation adds, so that it can be done in place</span>
-                    <span class="k">with</span> <span class="n">performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"mpc condensed pattern"</span><span class="p">):</span>
-                        <span class="bp">self</span><span class="o">.</span><span class="n">csrGenerator</span><span class="o">.</span><span class="n">addToPattern</span><span class="p">(</span>
-                            <span class="bp">self</span><span class="o">.</span><span class="n">mpcTransformation</span><span class="o">.</span><span class="n">condensedPatternFillIn</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">csrGenerator</span><span class="o">.</span><span class="n">csrMatrix</span><span class="p">)</span>
-                        <span class="p">)</span>
-
-                <span class="c1"># Built on the complete pattern, the entries the condensation adds included: the assembly writes the</span>
-                <span class="c1"># matrix of the pattern it is built on.</span>
-                <span class="k">with</span> <span class="n">performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"system matrix assembly setup"</span><span class="p">):</span>
-                    <span class="n">K</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">createSystemMatrixAssembly</span><span class="p">(</span><span class="n">assemblyType</span><span class="p">)</span>
+                <span class="c1"># The CSR pattern with room for the entries the condensation adds, so that it can be done in place:</span>
+                <span class="c1"># the assembly writes the matrix of the pattern it is built on.</span>
+                <span class="k">with</span> <span class="n">performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"system matrix pattern"</span><span class="p">):</span>
+                    <span class="n">K</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">createSystemMatrixAssembly</span><span class="p">(</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">systemMatrixAssemblies</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s2">"systemMatrixAssembly"</span><span class="p">]],</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">mpcTransformation</span><span class="o">.</span><span class="n">condensedPatternFillIn</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">mpcTransformation</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
+                    <span class="p">)</span>
 
                 <span class="c1"># The last accepted increments are vectors of the equation system they were solved in: this increment</span>
                 <span class="c1"># extrapolates them only if the rebuilt system numbers the degrees of freedom alike.</span>
@@ -1051,14 +1041,19 @@
 
 <div class="viewcode-block" id="NIST.createSystemMatrixAssembly">
 <a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.createSystemMatrixAssembly">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">createSystemMatrixAssembly</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">assemblyType</span><span class="p">:</span> <span class="nb">type</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">SystemMatrixAssembly</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""The assembly of the system matrix of the equation system just built (option ``systemMatrixAssembly``), on</span>
-<span class="sd">        the complete CSR pattern of :attr:`csrGenerator`, with :meth:`numberOfAssemblyWorkers` workers.</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">createSystemMatrixAssembly</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">assemblyType</span><span class="p">:</span> <span class="nb">type</span><span class="p">,</span> <span class="n">patternFillIn</span><span class="p">:</span> <span class="n">Callable</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">SystemMatrixAssembly</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The assembly of the system matrix of the equation system just built (option ``systemMatrixAssembly``), with</span>
+<span class="sd">        its CSR pattern and :meth:`numberOfAssemblyWorkers` workers.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
 <span class="sd">        assemblyType</span>
 <span class="sd">            The type of the assembly, one of :attr:`systemMatrixAssemblies`.</span>
+<span class="sd">        patternFillIn</span>
+<span class="sd">            The entries the pattern must have although no entity contributes them, see</span>
+<span class="sd">            :class:`~edelweissfe.numerics.systemmatrixassembly.VIJSystemMatrixAssembly`.</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
@@ -1066,7 +1061,7 @@
 <span class="sd">            The assembly.</span>
 <span class="sd">        """</span>
 
-        <span class="k">return</span> <span class="n">assemblyType</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">csrGenerator</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">numberOfAssemblyWorkers</span><span class="p">())</span></div>
+        <span class="k">return</span> <span class="n">assemblyType</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">numberOfAssemblyWorkers</span><span class="p">(),</span> <span class="n">patternFillIn</span><span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="NIST.forEachChunk">
@@ -2184,10 +2179,10 @@
         <span class="c1"># the extra structural entries to drift from the reference path; but the pattern then changes from one</span>
         <span class="c1"># Newton iteration to the next, so a solver like blockamg, which reuses its hierarchy, keeps them.</span>
         <span class="c1">#</span>
-        <span class="c1"># The CSR generator's own matrix (the threaded condensation works in place on it) must never be compacted:</span>
-        <span class="c1"># the generator scatters every update into its full-length buffer via a fixed map. A copy is pruned instead.</span>
+        <span class="c1"># The assembly's own matrix (the threaded condensation works in place on it) must never be compacted: the</span>
+        <span class="c1"># assembly writes every update into its full-length buffer via a fixed map. A copy is pruned instead.</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">mpcTransformation</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_shouldPruneCondensedMatrixZeros</span><span class="p">():</span>
-            <span class="k">if</span> <span class="n">K</span> <span class="ow">is</span> <span class="bp">self</span><span class="o">.</span><span class="n">csrGenerator</span><span class="o">.</span><span class="n">csrMatrix</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">K</span> <span class="ow">is</span> <span class="bp">self</span><span class="o">.</span><span class="n">_K</span><span class="o">.</span><span class="n">csrMatrix</span><span class="p">:</span>
                 <span class="n">K</span> <span class="o">=</span> <span class="n">K</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
             <span class="n">K</span><span class="o">.</span><span class="n">eliminate_zeros</span><span class="p">()</span>
 

@@ -121,7 +121,6 @@
 <span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.dofvector</span><span class="w"> </span><span class="kn">import</span> <span class="n">DofVector</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.parallelizationutilities</span><span class="w"> </span><span class="kn">import</span> <span class="n">mapChunksInParallel</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.vijsystemmatrix</span><span class="w"> </span><span class="kn">import</span> <span class="n">VIJSystemMatrix</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.points.node</span><span class="w"> </span><span class="kn">import</span> <span class="n">Node</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.sets.nodeset</span><span class="w"> </span><span class="kn">import</span> <span class="n">NodeSet</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.variables.scalarvariable</span><span class="w"> </span><span class="kn">import</span> <span class="n">ScalarVariable</span>
@@ -136,10 +135,10 @@
 <span class="sd">    Specifically, `DofManager`:</span>
 <span class="sd">     * Analyzes the simulation domain (nodes, scalar variables, elements, constraints, and node sets).</span>
 <span class="sd">     * Collects and assigns global Degree-of-Freedom (DOF) indices for node fields and scalar variables.</span>
-<span class="sd">     * Manages entity-to-index mappings for fast scatter/gather operations.</span>
-<span class="sd">     * Generates sparse system matrix sparsity patterns (`I` and `J` vectors in COO/VIJ format).</span>
+<span class="sd">     * Manages entity-to-index mappings for fast scatter/gather operations: the global DOF list of every element and</span>
+<span class="sd">       constraint, from which a system matrix assembly derives where each block goes.</span>
 <span class="sd">     * Calculates accumulated elemental/constraint fluxes fieldwise for convergence tests.</span>
-<span class="sd">     * Constructs domain-aware `DofVector`, `ScatterDofVector`, and `VIJSystemMatrix` instances.</span>
+<span class="sd">     * Constructs domain-aware `DofVector` and `ScatterDofVector` instances.</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
@@ -153,12 +152,8 @@
 <span class="sd">        The list of Constraints for which DOF index mappings will be created.</span>
 <span class="sd">    nodeSets : list of NodeSet, optional</span>
 <span class="sd">        The list of NodeSets for which DOF index mappings will be created.</span>
-<span class="sd">    initializeVIJPattern : bool, optional</span>
-<span class="sd">        Whether to initialize the sparse VIJ pattern (`I` and `J` vectors) during construction. Default is True.</span>
 <span class="sd">    initializeAccumulatedNodalFluxesFieldwise : bool, optional</span>
 <span class="sd">        Whether to compute accumulated nodal fluxes fieldwise during construction. Default is True.</span>
-<span class="sd">    determiningIndexToHostObjectMapping : bool, optional</span>
-<span class="sd">        Whether to determine the mapping from global DOF indices to their host objects (e.g. Node) during construction. Default is True.</span>
 <span class="sd">    """</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
@@ -168,14 +163,8 @@
         <span class="n">elements</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">BaseNodeCouplingEntity</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">constraints</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">BaseNodeCouplingEntity</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">nodeSets</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">NodeSet</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">initializeVIJPattern</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
         <span class="n">initializeAccumulatedNodalFluxesFieldwise</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
-        <span class="n">determiningIndexToHostObjectMapping</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
-        <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
     <span class="p">):</span>
-        <span class="k">if</span> <span class="s2">"determiningIndexToHostObjectMappping"</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
-            <span class="n">determiningIndexToHostObjectMapping</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">"determiningIndexToHostObjectMappping"</span><span class="p">)</span>
-
         <span class="k">if</span> <span class="n">scalarVariables</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">scalarVariables</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="k">if</span> <span class="n">elements</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
@@ -198,12 +187,6 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">idcsOfNodeFieldsInDofVector</span> <span class="o">=</span> <span class="p">(</span>
             <span class="nb">dict</span><span class="p">()</span>
         <span class="p">)</span>  <span class="c1">#: Dictionary mapping a complete NodeField to all its indices in the DofVector</span>
-        <span class="c1">#: Reverse dictionary mapping an index to its Host object (e.g., a Node).</span>
-        <span class="c1">#:</span>
-        <span class="c1">#: .. warning::</span>
-        <span class="c1">#:    Not read within EdelweissFE (kept for external callers); building it costs a pass over</span>
-        <span class="c1">#:    every degree of freedom.</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">indexToHostObjectMapping</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">accumulatedElementNDof</span> <span class="o">=</span> <span class="mi">0</span>  <span class="c1">#: Accumulated number of element DOFs (= sum of element vector sizes)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">largestNumberOfElNDof</span> <span class="o">=</span> <span class="mi">0</span>  <span class="c1">#: Size of the largest element DOF vector</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">accumulatedConstraintNDof</span> <span class="o">=</span> <span class="mi">0</span>  <span class="c1">#: Accumulated number of constraint DOFs (= sum of constraint vector sizes)</span>
@@ -214,10 +197,6 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_fieldsOnNodeSets</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">idcsOfElementsInDofVector</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>  <span class="c1">#: Dictionary mapping an element to its indices in the DofVector</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">idcsOfConstraintsInDofVector</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>  <span class="c1">#: Dictionary mapping a constraint to its indices in the DofVector</span>
-
-        <span class="bp">self</span><span class="o">.</span><span class="n">_sizeVIJ</span> <span class="o">=</span> <span class="p">(</span>
-            <span class="mi">0</span>  <span class="c1">#: Total number of nonzero entries in the system matrix resulting from higher order entity contributions</span>
-        <span class="p">)</span>
 
         <span class="c1"># initialization:</span>
 
@@ -235,17 +214,9 @@
 
         <span class="c1">#: Which of the optional structures this manager carries, for :meth:`refreshConstraintIndices`.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_hasAccumulatedNodalFluxes</span> <span class="o">=</span> <span class="n">initializeAccumulatedNodalFluxesFieldwise</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_hasVIJPattern</span> <span class="o">=</span> <span class="n">initializeVIJPattern</span>
 
         <span class="k">if</span> <span class="n">initializeAccumulatedNodalFluxesFieldwise</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">nAccumulatedNodalFluxesFieldwise</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_computeAccumulatedNodalFluxesFieldWise</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">fields</span><span class="p">)</span>
-
-        <span class="k">if</span> <span class="n">initializeVIJPattern</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_sizeVIJ</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_accumulatedElementVIJSize</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">_accumulatedConstraintVIJSize</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">I</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">J</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">idcsOfHigherOrderEntitiesInVIJ</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_initializeVIJPattern</span><span class="p">()</span>
-
-        <span class="k">if</span> <span class="n">determiningIndexToHostObjectMapping</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">indexToHostObjectMapping</span> <span class="o">|=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_determineIndexToNodeMap</span><span class="p">()</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_determineDofsAndTheirIndices</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">nodeFields</span><span class="p">:</span> <span class="nb">list</span><span class="p">,</span> <span class="n">scalarVariables</span><span class="p">:</span> <span class="nb">list</span><span class="p">):</span>
 
@@ -272,14 +243,12 @@
 
         <span class="p">(</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">accumulatedElementNDof</span><span class="p">,</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_accumulatedElementVIJSize</span><span class="p">,</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_nAccumulatedNodalFluxesFieldwiseFromElements</span><span class="p">,</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">largestNumberOfElNDof</span><span class="p">,</span>
         <span class="p">)</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_gatherElementsInformation</span><span class="p">(</span><span class="n">elements</span><span class="p">)</span>
 
         <span class="p">(</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">accumulatedConstraintNDof</span><span class="p">,</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_accumulatedConstraintVIJSize</span><span class="p">,</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_nAccumulatedNodalFluxesFieldwiseFromConstraints</span><span class="p">,</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">largestNumberOfConstraintNDof</span><span class="p">,</span>
         <span class="p">)</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_gatherConstraintsInformation</span><span class="p">(</span><span class="n">constraints</span><span class="p">)</span>
@@ -321,7 +290,6 @@
 
         <span class="p">(</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">accumulatedConstraintNDof</span><span class="p">,</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_accumulatedConstraintVIJSize</span><span class="p">,</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_nAccumulatedNodalFluxesFieldwiseFromConstraints</span><span class="p">,</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">largestNumberOfConstraintNDof</span><span class="p">,</span>
         <span class="p">)</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_gatherConstraintsInformation</span><span class="p">(</span><span class="n">constraints</span><span class="p">)</span>
@@ -329,11 +297,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">idcsOfHigherOrderEntitiesInDofVector</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">idcsOfElementsInDofVector</span> <span class="o">|</span> <span class="bp">self</span><span class="o">.</span><span class="n">idcsOfConstraintsInDofVector</span>
 
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_hasAccumulatedNodalFluxes</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">nAccumulatedNodalFluxesFieldwise</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_computeAccumulatedNodalFluxesFieldWise</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">fields</span><span class="p">)</span>
-
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_hasVIJPattern</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_sizeVIJ</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_accumulatedElementVIJSize</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">_accumulatedConstraintVIJSize</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">I</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">J</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">idcsOfHigherOrderEntitiesInVIJ</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_initializeVIJPattern</span><span class="p">()</span></div>
+            <span class="bp">self</span><span class="o">.</span><span class="n">nAccumulatedNodalFluxesFieldwise</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_computeAccumulatedNodalFluxesFieldWise</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">fields</span><span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="DofManager.dofNumberingDigest">
@@ -439,6 +403,18 @@
             <span class="n">idcsOfScalarVariablesInDofVector</span><span class="p">,</span>
         <span class="p">)</span>
 
+<div class="viewcode-block" id="DofManager.indexToHostObjectMapping">
+<a class="viewcode-back" href="../../../documentation/dofmanager.html#edelweissfe.numerics.dofmanager.DofManager.indexToHostObjectMapping">[docs]</a>
+    <span class="nd">@cached_property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">indexToHostObjectMapping</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">Node</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""The node of every index of a field variable in the DofVector, built on first use: only the report of the</span>
+<span class="sd">        largest residual of an implicit solver reads it (through :meth:`getNodeForIndexInDofVector`), while building it</span>
+<span class="sd">        costs a pass over every degree of freedom, which a DOF manager that is never asked -- one of the many an explicit</span>
+<span class="sd">        solver builds over a run, say -- does not pay."""</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_determineIndexToNodeMap</span><span class="p">()</span></div>
+
+
     <span class="k">def</span><span class="w"> </span><span class="nf">_determineIndexToNodeMap</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">Node</span><span class="p">]:</span>
@@ -462,7 +438,7 @@
         <span class="k">return</span> <span class="n">indexToNodeMapping</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_computeAccumulatedNodalFluxesFieldWise</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">fields</span><span class="p">:</span> <span class="nb">list</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""For the VIJ (COO) system matrix and the Abaqus like convergence test,</span>
+<span class="w">        </span><span class="sd">"""For the Abaqus like convergence test,</span>
 <span class="sd">        the number of dofs 'entity-wise' is needed:</span>
 <span class="sd">        = Σ_(elements+constraints) Σ_nodes ( nDof (field) ).</span>
 
@@ -521,7 +497,7 @@
 
         <span class="k">return</span> <span class="n">nAccumulatedFluxesFieldwise</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_gatherElementsInformation</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">entities</span><span class="p">:</span> <span class="nb">list</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_gatherElementsInformation</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">entities</span><span class="p">:</span> <span class="nb">list</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">dict</span><span class="p">,</span> <span class="nb">int</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">"""Generates some auxiliary information,</span>
 <span class="sd">        which may be required by some modules of EdelweissFE.</span>
 
@@ -532,32 +508,28 @@
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
-<span class="sd">        tuple[int,int]</span>
+<span class="sd">        tuple[int, dict, int]</span>
 <span class="sd">            The tuple of</span>
 <span class="sd">                - number of accumulated elemental degrees of freedom.</span>
-<span class="sd">                - number of accumulated system matrix sizes.</span>
 <span class="sd">                - the number of  acummulated fluxes Σ_entities Σ_nodes ( nDof (field) ) for Abaqus-like convergence tests.</span>
 <span class="sd">                - largest occuring number of dofs on any element.</span>
 <span class="sd">        """</span>
         <span class="n">accumulatedEntityNDof</span> <span class="o">=</span> <span class="mi">0</span>
-        <span class="n">accumulatedEntityVIJSize</span> <span class="o">=</span> <span class="mi">0</span>
         <span class="n">largestNumberOfAnyEntitityDof</span> <span class="o">=</span> <span class="mi">0</span>
 
         <span class="k">for</span> <span class="n">e</span> <span class="ow">in</span> <span class="n">entities</span><span class="p">:</span>
             <span class="n">accumulatedEntityNDof</span> <span class="o">+=</span> <span class="n">e</span><span class="o">.</span><span class="n">nDof</span>
-            <span class="n">accumulatedEntityVIJSize</span> <span class="o">+=</span> <span class="n">e</span><span class="o">.</span><span class="n">nDof</span><span class="o">**</span><span class="mi">2</span>
             <span class="n">largestNumberOfAnyEntitityDof</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">e</span><span class="o">.</span><span class="n">nDof</span><span class="p">,</span> <span class="n">largestNumberOfAnyEntitityDof</span><span class="p">)</span>
 
         <span class="n">nAccumulatedFluxesFieldwise</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_accumulateNodalFluxesFieldwise</span><span class="p">(</span><span class="n">entities</span><span class="p">)</span>
 
         <span class="k">return</span> <span class="p">(</span>
             <span class="n">accumulatedEntityNDof</span><span class="p">,</span>
-            <span class="n">accumulatedEntityVIJSize</span><span class="p">,</span>
             <span class="n">nAccumulatedFluxesFieldwise</span><span class="p">,</span>
             <span class="n">largestNumberOfAnyEntitityDof</span><span class="p">,</span>
         <span class="p">)</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_gatherConstraintsInformation</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">entities</span><span class="p">:</span> <span class="nb">list</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_gatherConstraintsInformation</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">entities</span><span class="p">:</span> <span class="nb">list</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">dict</span><span class="p">,</span> <span class="nb">int</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">"""Generates some auxiliary information,</span>
 <span class="sd">        which may be required by some modules of EdelweissFE.</span>
 
@@ -568,29 +540,24 @@
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
-<span class="sd">        tuple[int,int]</span>
+<span class="sd">        tuple[int, dict, int]</span>
 <span class="sd">            The tuple of</span>
 <span class="sd">                - number of accumulated elemental degrees of freedom.</span>
-<span class="sd">                - number of accumulated system matrix sizes.</span>
 <span class="sd">                - the number of  acummulated fluxes Σ_entities Σ_nodes ( nDof (field) ) for Abaqus-like convergence tests.</span>
 <span class="sd">                - largest occuring number of dofs on any element.</span>
 <span class="sd">        """</span>
 
         <span class="n">accumulatedEntityNDof</span> <span class="o">=</span> <span class="mi">0</span>
-        <span class="n">accumulatedEntityVIJSize</span> <span class="o">=</span> <span class="mi">0</span>
         <span class="n">largestNumberOfAnyEntitityDof</span> <span class="o">=</span> <span class="mi">0</span>
 
         <span class="k">for</span> <span class="n">e</span> <span class="ow">in</span> <span class="n">entities</span><span class="p">:</span>
             <span class="n">accumulatedEntityNDof</span> <span class="o">+=</span> <span class="n">e</span><span class="o">.</span><span class="n">nDof</span>
-            <span class="c1"># Use the constraint-declared VIJ size (may be sparse, i.e. &lt; nDof**2).</span>
-            <span class="n">accumulatedEntityVIJSize</span> <span class="o">+=</span> <span class="n">e</span><span class="o">.</span><span class="n">getVIJContributionSize</span><span class="p">()</span>
             <span class="n">largestNumberOfAnyEntitityDof</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">e</span><span class="o">.</span><span class="n">nDof</span><span class="p">,</span> <span class="n">largestNumberOfAnyEntitityDof</span><span class="p">)</span>
 
         <span class="n">nAccumulatedFluxesFieldwise</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_accumulateNodalFluxesFieldwise</span><span class="p">(</span><span class="n">entities</span><span class="p">)</span>
 
         <span class="k">return</span> <span class="p">(</span>
             <span class="n">accumulatedEntityNDof</span><span class="p">,</span>
-            <span class="n">accumulatedEntityVIJSize</span><span class="p">,</span>
             <span class="n">nAccumulatedFluxesFieldwise</span><span class="p">,</span>
             <span class="n">largestNumberOfAnyEntitityDof</span><span class="p">,</span>
         <span class="p">)</span>
@@ -769,62 +736,6 @@
         <span class="p">)</span>
 
         <span class="k">return</span> <span class="n">dofIndices</span><span class="p">,</span> <span class="n">nodePositions</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="nf">_initializeVIJPattern</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="nb">dict</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">"""Generate the IJ pattern for VIJ (COO) system matrices.</span>
-
-<span class="sd">        Returns</span>
-<span class="sd">        -------</span>
-<span class="sd">        tuple</span>
-<span class="sd">             - I vector</span>
-<span class="sd">             - J vector</span>
-<span class="sd">             - the entities to system matrix entry mapping.</span>
-<span class="sd">        """</span>
-
-        <span class="n">entitiesInVIJ</span> <span class="o">=</span> <span class="p">{}</span>
-
-        <span class="n">sizeVIJ</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sizeVIJ</span>
-
-        <span class="n">I</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">sizeVIJ</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">intc</span><span class="p">)</span>  <span class="c1"># noqa: E741</span>
-        <span class="n">J</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">sizeVIJ</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">intc</span><span class="p">)</span>  <span class="c1"># noqa: E741</span>
-        <span class="n">idxInVIJ</span> <span class="o">=</span> <span class="mi">0</span>
-
-        <span class="c1"># The entities follow one another in the VIJ vectors, so where each one starts is known before any of them</span>
-        <span class="c1"># writes; each then fills only its own part of I and J, and they do so in chunks on the thread pool.</span>
-        <span class="k">for</span> <span class="n">entity</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">idcsOfHigherOrderEntitiesInDofVector</span><span class="p">:</span>
-            <span class="n">entitiesInVIJ</span><span class="p">[</span><span class="n">entity</span><span class="p">]</span> <span class="o">=</span> <span class="n">idxInVIJ</span>
-            <span class="n">idxInVIJ</span> <span class="o">+=</span> <span class="n">entity</span><span class="o">.</span><span class="n">getVIJContributionSize</span><span class="p">()</span>
-
-        <span class="k">def</span><span class="w"> </span><span class="nf">initializeChunk</span><span class="p">(</span><span class="n">entitiesWithIndices</span><span class="p">):</span>
-            <span class="k">for</span> <span class="n">entity</span><span class="p">,</span> <span class="n">entityIdcsInDofVector</span> <span class="ow">in</span> <span class="n">entitiesWithIndices</span><span class="p">:</span>
-                <span class="n">entity</span><span class="o">.</span><span class="n">initializeVIJContribution</span><span class="p">(</span><span class="n">entityIdcsInDofVector</span><span class="p">,</span> <span class="n">I</span><span class="p">,</span> <span class="n">J</span><span class="p">,</span> <span class="n">entitiesInVIJ</span><span class="p">[</span><span class="n">entity</span><span class="p">])</span>
-
-        <span class="n">mapChunksInParallel</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">idcsOfHigherOrderEntitiesInDofVector</span><span class="o">.</span><span class="n">items</span><span class="p">()),</span> <span class="n">initializeChunk</span><span class="p">)</span>
-
-        <span class="k">return</span> <span class="n">I</span><span class="p">,</span> <span class="n">J</span><span class="p">,</span> <span class="n">entitiesInVIJ</span>
-
-<div class="viewcode-block" id="DofManager.constructVIJSystemMatrix">
-<a class="viewcode-back" href="../../../documentation/dofmanager.html#edelweissfe.numerics.dofmanager.DofManager.constructVIJSystemMatrix">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">constructVIJSystemMatrix</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">VIJSystemMatrix</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""Construct a VIJ (COO) Sparse System matrix object, which also has knowledge about</span>
-<span class="sd">        the location of each entity.</span>
-
-<span class="sd">        Returns</span>
-<span class="sd">        -------</span>
-<span class="sd">        VIJSystemMatrix</span>
-<span class="sd">            The system Matrix.</span>
-<span class="sd">        """</span>
-
-        <span class="n">nDof</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">nDof</span>
-        <span class="n">I</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">I</span>  <span class="c1"># noqa: E741</span>
-        <span class="n">J</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">J</span>
-
-        <span class="k">return</span> <span class="n">VIJSystemMatrix</span><span class="p">(</span><span class="n">nDof</span><span class="p">,</span> <span class="n">I</span><span class="p">,</span> <span class="n">J</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">idcsOfHigherOrderEntitiesInVIJ</span><span class="p">)</span></div>
-
 
 <div class="viewcode-block" id="DofManager.constructDofVector">
 <a class="viewcode-back" href="../../../documentation/dofmanager.html#edelweissfe.numerics.dofmanager.DofManager.constructDofVector">[docs]</a>

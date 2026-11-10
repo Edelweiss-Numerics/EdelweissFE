@@ -111,7 +111,6 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.config.timing</span><span class="w"> </span><span class="kn">import</span> <span class="n">createTimingDict</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.constraints.base.constraintbase</span><span class="w"> </span><span class="kn">import</span> <span class="n">ConstraintBase</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.models.femodel</span><span class="w"> </span><span class="kn">import</span> <span class="n">FEModel</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.csrgeneratorv2</span><span class="w"> </span><span class="kn">import</span> <span class="n">CSRGenerator</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.dofmanager</span><span class="w"> </span><span class="kn">import</span> <span class="n">DofVector</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.numerics.systemmatrixassembly</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">SystemMatrixAssembly</span><span class="p">,</span>
@@ -408,7 +407,6 @@
         <span class="n">U</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
         <span class="n">P</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
         <span class="n">dU</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">csrGenerator</span> <span class="o">=</span> <span class="n">CSRGenerator</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="p">)</span>
         <span class="n">K</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">createSystemMatrixAssembly</span><span class="p">(</span><span class="n">VIJSystemMatrixAssembly</span><span class="p">)</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">readStateFromModel</span><span class="p">(</span><span class="n">U</span><span class="p">)</span>
