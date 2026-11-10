@@ -117,7 +117,8 @@ solver.
 **Which fields.** Only the fields whose inertia is a mass
 (:func:`~edelweissfe.config.phenomena.carriesLinearMomentum`, i.e. the displacement) are integrated
 in time. Rows and columns of the mass and the damping belonging to any other field are zeroed, and
-those fields keep the parent's quasi-static treatment. A nonzero inertia an element reports there --
+those fields keep the parent's quasi-static treatment: their velocity and acceleration are zero, and
+so is what the model receives for them at acceptance. A nonzero inertia an element reports there --
 a rotational inertia, or the micro-inertia of a gradient-enhanced element -- is discarded with a
 warning, once per field. A model with no such field is refused.
 
@@ -474,7 +475,7 @@ class NonlinearImplicitDynamic(NIST):
         self._V = None
         self._A = None
         #: The names of the fields of the current equation system that carry a mass, whose velocity and acceleration
-        #: this solver reads from and writes to the model.
+        #: this solver reads from the model; it writes them to every field, zero where there is no mass.
         self._dynamicFields = None
 
         self._validateNewmarkParameters()
@@ -843,7 +844,8 @@ class NonlinearImplicitDynamic(NIST):
         """Read the state the next increment starts from out of the model, into the vectors of the equation system just
         (re)built: the solution, as in the parent, and the velocity and the acceleration of the fields carrying a mass,
         where the last accepted increment (or the checkpoint, or nothing -- a start from rest) left them, and where a
-        refinement has meanwhile interpolated them onto the nodes it created.
+        refinement has meanwhile interpolated them onto the nodes it created. After a quasi-static step, they are zero:
+        the step starts from rest.
 
         Parameters
         ----------
@@ -857,9 +859,8 @@ class NonlinearImplicitDynamic(NIST):
         self.equationSystemLayout.readStateFromModel(U, self._V, self._A, self._dynamicFields)
 
     def writeResultsToModel(self, U: DofVector, dU: DofVector, P: DofVector):
-        """Write the results of a converged increment to the model, as the parent does, and the velocity and the
-        acceleration of the fields carrying a mass with them: what field outputs read, what a checkpoint stores, and
-        what the next equation system reads back.
+        """Write the results of a converged increment to the model, as the parent does, with the velocity and the
+        acceleration (see :meth:`writeVelocityAndAccelerationToModel`).
 
         The force written is the internal force with the inertial and damping forces of the converged state,
         :math:`\\boldsymbol{f}_\\mathrm{int} + \\boldsymbol{M} \\ddot{\\boldsymbol{u}}_{n+1} + \\boldsymbol{C}
@@ -886,7 +887,17 @@ class NonlinearImplicitDynamic(NIST):
             internalInertialAndDampingForce = self.theDofManager.constructDofVector()
             internalInertialAndDampingForce[:] = P + system.massTimes(self._A) + system.C @ np.asarray(self._V)
 
-        super().writeResultsToModel(U, dU, internalInertialAndDampingForce, self._V, self._A, self._dynamicFields)
+        super().writeResultsToModel(U, dU, internalInertialAndDampingForce)
+
+    def writeVelocityAndAccelerationToModel(self):
+        """Write the velocity and the acceleration of the converged increment to every field, as part of
+        :meth:`writeResultsToModel`, instead of the parent's state at rest: what field outputs read, what a checkpoint
+        stores, and what the next equation system reads back. The fields carrying a mass get the state of their
+        Newmark integration; every other field, which this solver treats quasi-statically, is at rest, and gets zero,
+        which is what the solver's vectors hold there.
+        """
+
+        self.equationSystemLayout.writeVelocityAndAccelerationToModel(self._V, self._A)
 
     def _updateNewmarkSystem(self, model: FEModel, stepActions: dict) -> _NewmarkSystem:
         """The Newmark operators and state for the parent's current equation system, assembled if
@@ -1531,8 +1542,9 @@ class NonlinearImplicitDynamic(NIST):
         system.A[:] = 0.0
         system.A[system.dynamicDofs] = A0[system.dynamicDofs]
         # It completes the state the increment starts from: a rebuild before the increment is accepted -- a retry
-        # after a cutback whose contact search changes the connectivity -- reads it back from the model.
-        self.equationSystemLayout.writeVelocityAndAccelerationToModel(system.V, system.A, system.dynamicFields)
+        # after a cutback whose contact search changes the connectivity -- reads it back from the model. Every field,
+        # as at acceptance: a field without a mass is at rest.
+        self.equationSystemLayout.writeVelocityAndAccelerationToModel(system.V, system.A)
 
         self.journal.message(
             "acceleration from equilibrium at t = {:g}: ||a0||inf = {:e}".format(

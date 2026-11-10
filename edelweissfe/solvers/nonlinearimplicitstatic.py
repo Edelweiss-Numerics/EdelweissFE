@@ -882,22 +882,13 @@ class NIST(NonlinearSolverBase):
 
         self.equationSystemLayout.readStateFromModel(U)
 
-    def writeResultsToModel(
-        self,
-        U: DofVector,
-        dU: DofVector,
-        P: DofVector,
-        V: DofVector = None,
-        A: DofVector = None,
-        dynamicFields: list = None,
-    ):
+    def writeResultsToModel(self, U: DofVector, dU: DofVector, P: DofVector):
         """Write the results of a converged increment to the model, through the model's layout of the equation system:
         the incremental degrees of freedom are set to zero first, from where the next increment starts them (see
         :meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.zeroIncrementalCoefficients`), then the
-        solution, its increment and the internal force are written (see
-        :meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeResultsToModel`). A solver that
-        integrates in time passes its velocity and acceleration as well, and the internal force with its inertial and
-        damping forces.
+        solution, its increment and the force are written (see
+        :meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeResultsToModel`), and the velocity
+        and the acceleration (see :meth:`writeVelocityAndAccelerationToModel`).
 
         Parameters
         ----------
@@ -908,16 +899,21 @@ class NIST(NonlinearSolverBase):
         P
             The internal force (with the inertial and damping forces of a solver that integrates in time); None to
             leave the model's as it is.
-        V
-            The velocity of a solver that integrates in time; None for a static solver.
-        A
-            The acceleration of a solver that integrates in time; None for a static solver.
-        dynamicFields
-            The names of the fields the solver integrates in time; None for a static solver.
         """
 
         self.equationSystemLayout.zeroIncrementalCoefficients(U)
-        self.equationSystemLayout.writeResultsToModel(U, dU, P, V, A, dynamicFields)
+        self.equationSystemLayout.writeResultsToModel(U, dU, P)
+        self.writeVelocityAndAccelerationToModel()
+
+    def writeVelocityAndAccelerationToModel(self):
+        """Write the velocity and the acceleration of a converged increment to the model, as part of
+        :meth:`writeResultsToModel`. A quasi-static solver does not integrate in time: the state it accepts is at
+        rest, with zero velocity and acceleration on every field (see
+        :meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeZeroVelocityAndAccelerationToModel`),
+        so a dynamic step that follows starts from rest. A solver that integrates in time writes its own.
+        """
+
+        self.equationSystemLayout.writeZeroVelocityAndAccelerationToModel()
 
     def createSystemMatrixAssembly(self, assemblyType: type) -> SystemMatrixAssembly:
         """The assembly of the system matrix of the equation system just built (option ``systemMatrixAssembly``), on

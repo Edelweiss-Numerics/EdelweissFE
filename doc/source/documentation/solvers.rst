@@ -98,7 +98,9 @@ A solver solves; what the equation system is made of, the model says. ``NIST``, 
    * the state the solution vector (and the velocity and acceleration of a dynamic solver) starts from after a
      rebuild, :meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.readStateFromModel`, and where the
      results of an accepted increment go,
-     :meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeResultsToModel` (see
+     :meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeResultsToModel`, with the velocity and
+     the acceleration of a dynamic solver,
+     :meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeVelocityAndAccelerationToModel` (see
      :doc:`nodefieldresults`);
    * the model the linear solver is set up for.
 

@@ -41,7 +41,12 @@ Every solver passes these entries through the model's layout of its equation sys
 (:class:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout`), and in no other way:
 :meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.readStateFromModel` when it (re)builds the
 system, :meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeResultsToModel` when it accepts
-an increment.
+an increment, and, if it integrates in time,
+:meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeVelocityAndAccelerationToModel` for the
+velocity and the acceleration. A quasi-static solver does not integrate in time: the state it accepts is at rest, and it writes zero to
+``V`` and ``A`` of every node field
+(:meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeZeroVelocityAndAccelerationToModel`), so
+that a dynamic step after it starts from rest.
 
 A step hands the next one the model's state at its end time: the solution, and the velocity and the acceleration at
 that time. The explicit solvers integrate the velocity staggered half an increment behind the solution, and so write
@@ -87,21 +92,57 @@ The entries
        summed over the nodes of a support, it is the reaction force. Zero at a node without element.
      - at acceptance
 
+The Lagrange multipliers of constraints are scalar variables, not node field entries
+(:class:`~edelweissfe.variables.scalarvariable.ScalarVariable`). They are state as well: each holds its total
+value, written at acceptance and read back at every rebuild. A constraint that is not active keeps the value it
+had.
+
+What each solver writes
+-----------------------
+
+Every solver writes ``U`` and ``dU`` of every node field at acceptance, and these:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 18 28 28 26
+
+   * - Solver
+     - ``P``
+     - ``V``
+     - ``A``
+   * - ``NIST``, ``NISTParallel``, ``NISTPArcLength``, ``NEST``
+     - the internal force
+     - zero
+     - zero
+   * - ``NID``, ``NIDParallel``
+     - :math:`\boldsymbol{f}_\mathrm{int} + \boldsymbol{M} \boldsymbol{a} + \boldsymbol{C} \boldsymbol{v}` of the
+       converged state
+     - :math:`\boldsymbol{v}_{n+1}` on the fields with a mass; zero on the others, which it treats quasi-statically
+     - :math:`\boldsymbol{a}_{n+1}`, likewise; at the start of a step and after a refinement, the acceleration from
+       equilibrium, written at the start of the increment
+   * - ``NED``, ``NEDParallel``
+     - :math:`\boldsymbol{f}_\mathrm{int} + \boldsymbol{f}_\mathrm{net}`; :math:`\boldsymbol{f}_\mathrm{int}` at a
+       prescribed motion and on a multi-point-constraint slave
+     - :math:`\boldsymbol{v}_{n+1/2}` (on a field integrated by forward Euler, the rate of the increment just taken);
+       at the end of the step, the velocity at its end time
+     - :math:`\boldsymbol{a}_{n+1}` (on a field integrated by forward Euler, the one with which
+       :math:`\boldsymbol{v}_{n+1/2} + \tfrac{1}{2} \Delta t \, \boldsymbol{a}_{n+1}` is the rate at the end of the
+       increment); zero at a prescribed motion; on a multi-point-constraint slave, from its masters
+   * - ``MeshfreeExplicitDynamic`` (EdelweissMeshfree)
+     - :math:`\boldsymbol{f}_\mathrm{int} + \boldsymbol{M} \boldsymbol{a}`
+     - as ``NED``, on the nodes of the kernel functions
+     - :math:`\boldsymbol{a} = \boldsymbol{M}^{-1} \boldsymbol{f}_\mathrm{net}`; zero on a node without mass
+
 In the explicit solver (``NED``), the inertial and damping forces of a node with an equation of motion are the
 net force the next velocity update divides by, so its ``P`` is the internal force plus that net force: the force of
 the loads and the constraints acting there. At a node with a prescribed motion, the acceleration at the end of an
 increment is set by the prescribed velocity of the next one, which is not known when the increment is accepted, so
 its ``P`` is the internal force alone: the support reaction, without the inertia of the support node's own lumped
-mass. Its ``A`` is the acceleration at the end of the increment, the one with which the velocity at that time, half an
-increment after its ``V``, satisfies the equation of motion; zero at a prescribed motion. A multi-point-constraint
-slave integrates no equation of motion of its own: its inertia and its force are folded onto its masters, so its ``P``
-is its internal force, and it takes its ``V`` and ``A`` from its masters. The net force itself is the solver's state,
-not an entry (see :mod:`~edelweissfe.solvers.nonlinearexplicitdynamic`).
-
-The Lagrange multipliers of constraints are scalar variables, not node field entries
-(:class:`~edelweissfe.variables.scalarvariable.ScalarVariable`). They are state as well: each holds its total
-value, written at acceptance and read back at every rebuild. A constraint that is not active keeps the value it
-had.
+mass, and its ``A`` is zero. A multi-point-constraint slave integrates no equation of motion of its own: its inertia
+and its force are folded onto its masters, so its ``P`` is its internal force, and it takes its ``V`` and ``A`` from
+its masters. Elsewhere, its ``A`` is the acceleration with which the velocity at the end of the increment, half an
+increment after its ``V``, satisfies the equation of motion. The net force itself is the solver's state, not an entry
+(see :mod:`~edelweissfe.solvers.nonlinearexplicitdynamic`).
 
 Models whose equation system covers a part of their nodes
 ---------------------------------------------------------
@@ -114,12 +155,15 @@ accepted increment, which is their meaningful nodal value. Nodes outside the act
 zero in every entry.
 
 The explicit meshfree solver carries the velocity of the kernel functions in ``V``: it writes ``V`` by node at
-acceptance and reads it back by node whenever its equation system is rebuilt, so that a node keeps its velocity
-when the active domain changes around it; a node that becomes active starts at rest. Its increment ends on other
-kernel functions than it started on -- the particles move, and reach other nodes -- so it writes the results in two
-parts, each through the layout of the equation system that holds them: ``dU`` on the nodes the increment was taken
-on, ``P`` and ``V`` on the nodes of the configuration it ends in. A node that left the active domain in that
-increment therefore keeps its ``dU``, and holds zero in ``P`` and ``V``.
+acceptance and reads it back by node whenever its equation system is rebuilt, also at the start of a step, so that a
+node keeps its velocity when the active domain changes around it; a node that becomes active starts at rest. Its
+increment ends on other kernel functions than it started on -- the particles move, and reach other nodes -- so it
+writes the results in two parts, each through the layout of the equation system that holds them: ``dU`` on the nodes
+the increment was taken on, ``P``, ``V`` and ``A`` on the nodes of the configuration it ends in. A node that left the
+active domain in that increment therefore keeps its ``dU``, and holds zero in ``P``, ``V`` and ``A``. Its zero-length
+increment evaluates the forces of the configuration the step starts from, and writes them, when the model's nodes
+are at rest; a step that continues the motion the model holds at its nodes evaluates no force there, and leaves ``P``
+as it is.
 
 Using the entries in code
 -------------------------
@@ -132,11 +176,3 @@ since its rows are addressed by position; on a node set, its rows are found by n
 numbered field can be read or written there (e.g. the node field of the model, while the equation system numbers
 that of an active domain). A restart checkpoint holds every entry of every node field, and a
 checkpoint lacking one is refused (see :doc:`restart`).
-
-Where the solvers do not follow this page yet
----------------------------------------------
-
-The meanings above are being made to hold in every solver. Until then, these deviations remain; each is removed
-from this list together with the deviation:
-
-- A quasi-static step after a dynamic one leaves ``V`` and ``A`` of the last dynamic increment in the model.
