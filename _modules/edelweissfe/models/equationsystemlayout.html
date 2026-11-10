@@ -114,6 +114,7 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.timesteppers.timestep</span><span class="w"> </span><span class="kn">import</span> <span class="n">TimeStep</span>
 
 <span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.fields.nodefield</span><span class="w"> </span><span class="kn">import</span> <span class="n">NodeField</span>
     <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.models.femodel</span><span class="w"> </span><span class="kn">import</span> <span class="n">FEModel</span>
 
 
@@ -215,8 +216,8 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">writeResultsToModel</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">U</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
-        <span class="n">dU</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
-        <span class="n">P</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
+        <span class="n">dU</span><span class="p">:</span> <span class="n">DofVector</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">P</span><span class="p">:</span> <span class="n">DofVector</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">V</span><span class="p">:</span> <span class="n">DofVector</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">A</span><span class="p">:</span> <span class="n">DofVector</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">dynamicFields</span><span class="p">:</span> <span class="nb">list</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -226,14 +227,20 @@
 <span class="sd">        names of the node fields, the solution to the scalar variables, and, for a solver that integrates in time, the</span>
 <span class="sd">        velocity ``V`` and the acceleration ``A`` (see :meth:`writeVelocityAndAccelerationToModel`).</span>
 
+<span class="sd">        A solver whose increment ends on another equation system than it started on writes in two parts, each through</span>
+<span class="sd">        the layout of the system that holds the values: EdelweissMeshfree's explicit solver takes the increment on the</span>
+<span class="sd">        kernel functions the particles reached at its start, and evaluates the force on those they reach at its end.</span>
+<span class="sd">        It passes None for the entries the other part writes.</span>
+
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
 <span class="sd">        U</span>
 <span class="sd">            The solution.</span>
 <span class="sd">        dU</span>
-<span class="sd">            The increment of the solution.</span>
+<span class="sd">            The increment of the solution; None to leave the entry ``dU`` of the node fields as it is.</span>
 <span class="sd">        P</span>
-<span class="sd">            The internal force, the sum of the elements' residual contributions.</span>
+<span class="sd">            The internal force, the sum of the elements' residual contributions; None to leave the entry ``P`` of the</span>
+<span class="sd">            node fields as it is.</span>
 <span class="sd">        V</span>
 <span class="sd">            The velocity; None to leave the entry ``V`` of the node fields as it is.</span>
 <span class="sd">        A</span>
@@ -243,9 +250,11 @@
 <span class="sd">        """</span>
 
         <span class="k">for</span> <span class="n">nodeField</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">nodeFields</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">dofManager</span><span class="o">.</span><span class="n">writeDofVectorToNodeField</span><span class="p">(</span><span class="n">U</span><span class="p">,</span> <span class="n">nodeField</span><span class="p">,</span> <span class="s2">"U"</span><span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">dofManager</span><span class="o">.</span><span class="n">writeDofVectorToNodeField</span><span class="p">(</span><span class="n">P</span><span class="p">,</span> <span class="n">nodeField</span><span class="p">,</span> <span class="s2">"P"</span><span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">dofManager</span><span class="o">.</span><span class="n">writeDofVectorToNodeField</span><span class="p">(</span><span class="n">dU</span><span class="p">,</span> <span class="n">nodeField</span><span class="p">,</span> <span class="s2">"dU"</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">writeEntryOfNodeField</span><span class="p">(</span><span class="n">U</span><span class="p">,</span> <span class="n">nodeField</span><span class="p">,</span> <span class="s2">"U"</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">P</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">writeEntryOfNodeField</span><span class="p">(</span><span class="n">P</span><span class="p">,</span> <span class="n">nodeField</span><span class="p">,</span> <span class="s2">"P"</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">dU</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">writeEntryOfNodeField</span><span class="p">(</span><span class="n">dU</span><span class="p">,</span> <span class="n">nodeField</span><span class="p">,</span> <span class="s2">"dU"</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">dofManager</span><span class="o">.</span><span class="n">writeDofVectorToScalarVariables</span><span class="p">(</span><span class="n">U</span><span class="p">)</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">writeVelocityAndAccelerationToModel</span><span class="p">(</span><span class="n">V</span><span class="p">,</span> <span class="n">A</span><span class="p">,</span> <span class="n">dynamicFields</span><span class="p">)</span></div>
@@ -270,9 +279,32 @@
 
         <span class="k">for</span> <span class="n">nodeField</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_nodeFieldsWithVelocity</span><span class="p">(</span><span class="n">dynamicFields</span><span class="p">):</span>
             <span class="k">if</span> <span class="n">V</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">dofManager</span><span class="o">.</span><span class="n">writeDofVectorToNodeField</span><span class="p">(</span><span class="n">V</span><span class="p">,</span> <span class="n">nodeField</span><span class="p">,</span> <span class="s2">"V"</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">writeEntryOfNodeField</span><span class="p">(</span><span class="n">V</span><span class="p">,</span> <span class="n">nodeField</span><span class="p">,</span> <span class="s2">"V"</span><span class="p">)</span>
             <span class="k">if</span> <span class="n">A</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">dofManager</span><span class="o">.</span><span class="n">writeDofVectorToNodeField</span><span class="p">(</span><span class="n">A</span><span class="p">,</span> <span class="n">nodeField</span><span class="p">,</span> <span class="s2">"A"</span><span class="p">)</span></div>
+                <span class="bp">self</span><span class="o">.</span><span class="n">writeEntryOfNodeField</span><span class="p">(</span><span class="n">A</span><span class="p">,</span> <span class="n">nodeField</span><span class="p">,</span> <span class="s2">"A"</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="EquationSystemLayout.writeEntryOfNodeField">
+<a class="viewcode-back" href="../../../documentation/models.html#edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeEntryOfNodeField">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">writeEntryOfNodeField</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dofVector</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">nodeField</span><span class="p">:</span> <span class="s2">"NodeField"</span><span class="p">,</span> <span class="n">entry</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Write a vector of the equation system to one entry of one node field of the model; every write of</span>
+<span class="sd">        :meth:`writeResultsToModel` and :meth:`writeVelocityAndAccelerationToModel` goes through here.</span>
+
+<span class="sd">        In a finite element model, the equation system numbers every node of the field, so the whole entry is written.</span>
+<span class="sd">        A model whose equation system covers a part of its nodes writes the entry on these nodes, and sets it to zero</span>
+<span class="sd">        on the others.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        dofVector</span>
+<span class="sd">            The vector of the equation system.</span>
+<span class="sd">        nodeField</span>
+<span class="sd">            The node field of the model.</span>
+<span class="sd">        entry</span>
+<span class="sd">            The entry, one of :attr:`NodeField.ENTRIES &lt;edelweissfe.fields.nodefield.NodeField.ENTRIES&gt;`.</span>
+<span class="sd">        """</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">dofManager</span><span class="o">.</span><span class="n">writeDofVectorToNodeField</span><span class="p">(</span><span class="n">dofVector</span><span class="p">,</span> <span class="n">nodeField</span><span class="p">,</span> <span class="n">entry</span><span class="p">)</span></div>
 
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_nodeFieldsWithVelocity</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dynamicFields</span><span class="p">:</span> <span class="nb">list</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>

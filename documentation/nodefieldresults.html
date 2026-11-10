@@ -145,9 +145,10 @@ restart checkpoint must carry for the run to continue;</p></li>
 <li><p><strong>result</strong> – what a solver writes for output and for the user; no solver reads it back.</p></li>
 </ul>
 <p>Iterations work on the solver’s vectors only. A cut back increment writes nothing. An accepted increment writes
-every entry, once. A rebuilt equation system (a changed mesh, a changed active domain, a changed coupling) reads
-the state entries from the model. A refinement of the mesh interpolates the state entries onto the nodes it
-creates; the results there are zero until the next accepted increment.</p>
+every entry, once (the explicit meshfree solver in two parts, see below). A rebuilt equation system (a changed mesh,
+a changed active domain, a changed coupling) reads the state entries from the model. A refinement of the mesh
+interpolates the state entries onto the nodes it creates; the results there are zero until the next accepted
+increment.</p>
 <p>Every solver passes these entries through the model’s layout of its equation system
 (<a class="reference internal" href="models.html#edelweissfe.models.equationsystemlayout.EquationSystemLayout" title="edelweissfe.models.equationsystemlayout.EquationSystemLayout"><code class="xref py py-class docutils literal notranslate"><span class="pre">EquationSystemLayout</span></code></a>), and in no other way:
 <a class="reference internal" href="models.html#edelweissfe.models.equationsystemlayout.EquationSystemLayout.readStateFromModel" title="edelweissfe.models.equationsystemlayout.EquationSystemLayout.readStateFromModel"><code class="xref py py-meth docutils literal notranslate"><span class="pre">readStateFromModel()</span></code></a> when it (re)builds the
@@ -214,6 +215,13 @@ freedom are the coefficients of the increment, starting at zero in every increme
 material points carry the state. On these nodes, <code class="docutils literal notranslate"><span class="pre">U</span></code> is zero and <code class="docutils literal notranslate"><span class="pre">dU</span></code> holds the coefficients of the last
 accepted increment, which is their meaningful nodal value. Nodes outside the active domain of an increment hold
 zero in every entry.</p>
+<p>The explicit meshfree solver carries the velocity of the kernel functions in <code class="docutils literal notranslate"><span class="pre">V</span></code>: it writes <code class="docutils literal notranslate"><span class="pre">V</span></code> by node at
+acceptance and reads it back by node whenever its equation system is rebuilt, so that a node keeps its velocity
+when the active domain changes around it; a node that becomes active starts at rest. Its increment ends on other
+kernel functions than it started on – the particles move, and reach other nodes – so it writes the results in two
+parts, each through the layout of the equation system that holds them: <code class="docutils literal notranslate"><span class="pre">dU</span></code> on the nodes the increment was taken
+on, <code class="docutils literal notranslate"><span class="pre">P</span></code> and <code class="docutils literal notranslate"><span class="pre">V</span></code> on the nodes of the configuration it ends in. A node that left the active domain in that
+increment therefore keeps its <code class="docutils literal notranslate"><span class="pre">dU</span></code>, and holds zero in <code class="docutils literal notranslate"><span class="pre">P</span></code> and <code class="docutils literal notranslate"><span class="pre">V</span></code>.</p>
 </section>
 <section id="using-the-entries-in-code">
 <h2>Using the entries in code<a class="headerlink" href="#using-the-entries-in-code" title="Link to this heading"></a></h2>
@@ -237,8 +245,6 @@ sign of the internal force – and reads it back when it builds its equation sys
 <li><p>The implicit dynamic solver (<code class="docutils literal notranslate"><span class="pre">NonlinearImplicitDynamic</span></code>) writes as <code class="docutils literal notranslate"><span class="pre">P</span></code> the internal force without the inertial
 and damping forces, and its zero increment at a step start writes <code class="docutils literal notranslate"><span class="pre">P</span></code> as zero.</p></li>
 <li><p>A quasi-static step after a dynamic one leaves <code class="docutils literal notranslate"><span class="pre">V</span></code> and <code class="docutils literal notranslate"><span class="pre">A</span></code> of the last dynamic increment in the model.</p></li>
-<li><p>In a meshfree model, <code class="docutils literal notranslate"><span class="pre">U</span></code> at the incremental nodes is the sum of their increments since the equation system was
-last built, and the explicit meshfree solver writes no node field entry.</p></li>
 </ul>
 </section>
 </section>
