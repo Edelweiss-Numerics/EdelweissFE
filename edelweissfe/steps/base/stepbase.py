@@ -36,9 +36,11 @@ from edelweissfe.journal.journal import Journal
 from edelweissfe.models.femodel import FEModel
 from edelweissfe.timesteppers.base.timestepperbase import TimeStepperBase
 from edelweissfe.utils import performancetiming
+from edelweissfe.utils.checkpoint import ResumeCheckpoint
 from edelweissfe.utils.exceptions import (
     ConditionalStop,
     IncrementFailed,
+    MeshChangedSinceCheckpoint,
     ReachedMaxIncrements,
     ReachedMinIncrementSize,
     StepFailed,
@@ -102,6 +104,14 @@ class StepIncrementationSchema:
         ),
         dtype=bool,
         default=True,
+    )
+    maxCheckpointFallbacks: int = schemaField(
+        description=(
+            "How often the step may fall back to its latest restart checkpoint when an increment fails and cannot be "
+            "cut back any further; the step then continues from there with a smaller increment. 0: never."
+        ),
+        dtype=int,
+        default=0,
     )
 
 
@@ -168,6 +178,9 @@ class StepBase(ABC):
         self.increaseFactor = options.increaseFactor
         self.goodIncrementsBeforeIncrease = options.goodIncrementsBeforeIncrease
         self.makeZeroIncrementFirst = options.makeZeroIncrementFirst
+        self.maxCheckpointFallbacks = options.maxCheckpointFallbacks
+        if self.maxCheckpointFallbacks < 0:
+            raise ValueError("maxCheckpointFallbacks must not be negative, got {:}".format(self.maxCheckpointFallbacks))
 
         self.timeStepper = self._createTimeStepper()
 
@@ -193,6 +206,7 @@ class StepBase(ABC):
                 prepare the increment     topology update when due
                 propose an increment      time stepper
                 attempt it                solver; if it fails: reject it, retry smaller
+                                          (at the minimum size: fall back to a checkpoint, if allowed)
                 accept it                 solver, then time stepper
                 write output              field outputs, output managers, restart checkpoint last
             end the step
@@ -201,6 +215,11 @@ class StepBase(ABC):
         exactly the state the next increment starts from -- and a resumed step simply continues
         this loop. It begins like any step, and then takes over the checkpointed state, in this one
         place.
+
+        An increment that fails at the minimum increment size fails the step, unless the step may
+        fall back to a checkpoint (``maxCheckpointFallbacks``, see :meth:`fallBackToCheckpoint`):
+        it then continues from its latest restart checkpoint, as a resumed step would, with a
+        smaller increment.
 
         Parameters
         ----------
@@ -219,6 +238,12 @@ class StepBase(ABC):
         outputManagers = [m for m in outputManagers if not m.writesRestartCheckpoints] + [
             m for m in outputManagers if m.writesRestartCheckpoints
         ]
+        restartWriters = [m.name for m in outputManagers if m.writesRestartCheckpoints]
+        if self.maxCheckpointFallbacks and len(restartWriters) != 1:
+            raise ValueError(
+                "step {:}: maxCheckpointFallbacks needs exactly one restart output (*output, type=restart) to fall "
+                "back to its checkpoints, found {:}: {:}".format(self.number, len(restartWriters), restartWriters)
+            )
 
         if resumeFrom is not None:
             resumeFrom.restoreTimeStepper(self)
@@ -234,10 +259,11 @@ class StepBase(ABC):
 
             solver.beginStep(self, model, fieldOutputController, outputManagers)
             if resumeFrom is not None:
-                resumeFrom.restoreStep(self, model.outputManagers)
+                resumeFrom.restoreStep(self)
                 # Closed here, before the first increment: see ResumeCheckpoint.close.
                 resumeFrom.close()
             try:
+                fallbacksLeft = self.maxCheckpointFallbacks
                 isRetry = False
                 while not timeStepper.isFinished():
                     solver.prepareIncrement(self, model, isRetry)
@@ -247,7 +273,12 @@ class StepBase(ABC):
                         solver.attemptIncrement(self, model, timeStep)
                     except IncrementFailed as e:
                         journal.message(str(e), solver.identification, 1)
-                        timeStepper.rejectTimeStep(e.cutbackFactor)
+                        try:
+                            timeStepper.rejectTimeStep(e.cutbackFactor)
+                        except ReachedMinIncrementSize:
+                            if not fallbacksLeft:
+                                raise
+                            fallbacksLeft = self.fallBackToCheckpoint(model, outputManagers, fallbacksLeft)
                         for manager in outputManagers:
                             manager.finalizeFailedIncrement(statusInfoDict=solver.incrementStatus)
                         isRetry = True
@@ -282,3 +313,133 @@ class StepBase(ABC):
             fieldOutputController.finalizeStep()
             for manager in outputManagers:
                 manager.finalizeStep()
+
+    def fallBackToCheckpoint(self, model: FEModel, outputManagers: list, fallbacksLeft: int) -> int:
+        """Continue the step from its latest restart checkpoint, after an increment failed and could not
+        be cut back any further, and cut the increment back from there.
+
+        The increments accepted after the checkpoint are discarded, and the step resumes from the
+        checkpoint exactly as a resumed run does (see :class:`~edelweissfe.utils.checkpoint.ResumeCheckpoint`):
+        the model, the time stepper, the solver, the step actions, the output managers and the field
+        outputs take over the checkpointed state, so that the output of the discarded increments is
+        overwritten, not duplicated. The solver ends the abandoned attempt and begins anew from the
+        checkpoint. The retried increments then take a different, smaller path through the same
+        load history. If the increment the checkpoint holds cannot be cut back either, the step
+        falls back further, to the checkpoint before it.
+
+        A checkpoint written after the last increment the step accepted holds the state the failed
+        increment started from, from where every increment size down to the minimum has just
+        failed: falling back to it would only retry them. The step goes back to the checkpoint
+        before it instead. With a checkpoint after every accepted increment (``writeInterval=1``), the
+        latest one always is such a checkpoint.
+
+        The checkpoints are those of the step's restart output, of which there is exactly one, as
+        long as their files hold them -- a resumed step's included: the checkpoint it resumed from,
+        and those before it. Every checkpoint serves one fallback at most: falling back again takes
+        the checkpoint before it, unless newer ones were written since. The step may fall back to
+        checkpoints of its own only, and only as long as its mesh has not changed since (a mesh
+        change cannot be undone).
+
+        Parameters
+        ----------
+        model
+            The model tree.
+        outputManagers
+            The output managers of the step.
+        fallbacksLeft
+            How often the step may still fall back.
+
+        Returns
+        -------
+        int
+            How often the step may fall back after this.
+
+        Raises
+        ------
+        ReachedMinIncrementSize
+            If there is no checkpoint of this step left to fall back to, or no fallback is left.
+        StepFailed
+            If the mesh has changed since the checkpoint, with a message saying so.
+        """
+
+        journal = self.journal
+        solver = self.solver
+        restartWriter = next(m for m in outputManagers if m.writesRestartCheckpoints)
+
+        while fallbacksLeft:
+            checkpoint = self.latestCheckpointOfStep(restartWriter)
+            if checkpoint is None:
+                journal.errorMessage("No restart checkpoint of this step left to fall back to", solver.identification)
+                raise ReachedMinIncrementSize()
+            if checkpoint.numberOfIncrementsDone == self.timeStepper.numberOfIncrementsDone():
+                journal.message(
+                    "Restart checkpoint {:} holds the state the failed increment started from: going back to the one "
+                    "before it".format(checkpoint.fileName),
+                    solver.identification,
+                    1,
+                )
+                checkpoint.close()
+                restartWriter.dropLatestCheckpoint()
+                continue
+            try:
+                try:
+                    checkpoint.restoreModel(model, journal)
+                except MeshChangedSinceCheckpoint as e:
+                    # The checkpoints are offered newest first: all that are left are older still.
+                    raise StepFailed(
+                        "cannot fall back to restart checkpoint {:} at time {:}: it predates a mesh change (model "
+                        "modifier {:} at time {:}), and a mesh change cannot be undone. No usable checkpoint is "
+                        "left: every remaining one predates the mesh change as well".format(
+                            checkpoint.fileName, checkpoint.time, e.firstChange.modifier, e.firstChange.time
+                        )
+                    ) from e
+                fallbacksLeft -= 1
+                journal.message(
+                    "Falling back to restart checkpoint {:} at time {:}".format(checkpoint.fileName, model.time),
+                    solver.identification,
+                    1,
+                )
+                solver.endStep(self, model)
+                checkpoint.restoreTimeStepper(self)
+                solver.beginStep(self, model, self.fieldOutputController, outputManagers)
+                checkpoint.restoreStep(self)
+            finally:
+                checkpoint.close()
+            # It has served its fallback. Restored with the step, the restart output's record of its checkpoints is the
+            # one of when this checkpoint was written, which ends with it.
+            restartWriter.dropLatestCheckpoint()
+
+            try:
+                self.timeStepper.rejectTimeStep(self.cutbackFactor)
+                return fallbacksLeft
+            except ReachedMinIncrementSize:
+                continue
+
+        journal.errorMessage("No checkpoint fallback left", solver.identification)
+        raise ReachedMinIncrementSize()
+
+    def latestCheckpointOfStep(self, restartWriter) -> ResumeCheckpoint | None:
+        """Open the latest restart checkpoint ``restartWriter`` offers (see
+        :meth:`~edelweissfe.outputmanagers.base.outputmanagerbase.OutputManagerBase.latestCheckpoint`),
+        if it belongs to this step. The writer's checkpoints are offered newest first, so once one
+        belongs to an earlier step, all that remain do.
+
+        Parameters
+        ----------
+        restartWriter
+            The output manager writing the restart checkpoints of this step.
+
+        Returns
+        -------
+        ResumeCheckpoint | None
+            The opened checkpoint, or None if no checkpoint of this step is left.
+        """
+
+        fileName = restartWriter.latestCheckpoint()
+        if fileName is None:
+            return None
+        checkpoint = ResumeCheckpoint(fileName)
+        if checkpoint.stepNumber != self.number:
+            checkpoint.close()
+            return None
+        return checkpoint

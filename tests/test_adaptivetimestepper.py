@@ -25,7 +25,8 @@
 #  The full text of the license can be found in the file LICENSE.md at
 #  the top level directory of EdelweissFE.
 """The adaptive time stepper as a state machine: a proposal changes nothing, an accepted increment
-advances the step, a rejected one is retried smaller from exactly where the step stood."""
+advances the step, a rejected one is retried smaller from exactly where the step stood, down to the minimum size,
+which it shares with the simple time stepper."""
 
 import pytest
 
@@ -36,6 +37,7 @@ from edelweissfe.steps.adaptivestepforexplicitsimulations import (
     AdaptiveStepForExplicitSimulations,
 )
 from edelweissfe.timesteppers.adaptivetimestepper import AdaptiveTimeStepper
+from edelweissfe.timesteppers.simpletimestepper import SimpleTimeStepper
 from edelweissfe.utils.exceptions import ReachedMaxIncrements, ReachedMinIncrementSize
 
 
@@ -51,6 +53,20 @@ def _timeStepper(**overrides) -> AdaptiveTimeStepper:
     )
     kwargs.update(overrides)
     return AdaptiveTimeStepper(**kwargs)
+
+
+def _simpleTimeStepper(**overrides) -> SimpleTimeStepper:
+    kwargs = dict(
+        currentTime=0.0,
+        stepLength=1.0,
+        startIncrement=0.1,
+        maxIncrement=1.0,
+        minIncrement=0.01,
+        maxNumberIncrements=100,
+        journal=Journal(verbose=False),
+    )
+    kwargs.update(overrides)
+    return SimpleTimeStepper(**kwargs)
 
 
 @pytest.mark.parametrize("makeZeroIncrementFirst", [True, False])
@@ -209,3 +225,20 @@ def test_more_increments_than_allowed_are_refused():
         timeStepper.acceptTimeStep(timeStepper.proposeTimeStep())
     with pytest.raises(ReachedMaxIncrements):
         timeStepper.proposeTimeStep()
+
+
+@pytest.mark.parametrize("timeStepperOf", [_timeStepper, _simpleTimeStepper], ids=["adaptive", "simple"])
+def test_a_failed_remainder_below_the_minimum_increment_is_not_retried(timeStepperOf):
+    """The last increment of a step is what remains of the step, and may be smaller than the minimum increment. If it
+    fails, no smaller increment is left to retry: the cutback to the minimum size would be clamped to the remainder
+    again, and the step would retry it for ever, since a rejection does not count towards the maximum number of
+    increments. A step that may fall back to a restart checkpoint must get the chance to."""
+
+    timeStepper = timeStepperOf(startIncrement=0.3, maxIncrement=0.3, minIncrement=0.2)
+    for _ in range(4):  # the zero increment and three of 0.3
+        timeStepper.acceptTimeStep(timeStepper.proposeTimeStep())
+
+    remainder = timeStepper.proposeTimeStep()
+    assert remainder.stepProgressIncrement == pytest.approx(0.1)
+    with pytest.raises(ReachedMinIncrementSize):
+        timeStepper.rejectTimeStep(0.5)

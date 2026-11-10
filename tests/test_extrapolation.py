@@ -48,6 +48,7 @@ from edelweissfe.stepactions.base.dirichletbase import DirichletBase
 from edelweissfe.timesteppers.timestep import TimeStep
 from edelweissfe.utils.exceptions import ReachedMaxIterations
 from edelweissfe.utils.inputfileparser import parseInputFile
+from edelweissfe.variables.scalarvariable import ScalarVariable
 
 INCREMENT = 0.125
 
@@ -134,13 +135,15 @@ def displacements(model) -> np.ndarray:
 # --- the extrapolation formulas ---------------------------------------------------------------------------------------
 
 
-def solverWithHistory(extrapolation, sizes, dUs) -> NIST:
-    """A NIST solver whose accepted history is the given increments (oldest first), sizes in step progress."""
-    solver = NIST(loadConfiguration({}), Journal(verbose=False), extrapolation=extrapolation)
+def solverWithHistory(extrapolation, sizes, dUs, dofNumbering="the numbering", **options) -> NIST:
+    """A NIST solver whose accepted history is the given increments (oldest first), sizes in step progress, accepted in
+    an equation system with the given digest of its DOF numbering."""
+    solver = NIST(loadConfiguration({}), Journal(verbose=False), extrapolation=extrapolation, **options)
     timeSteps = [TimeStep(i + 1, size, 0.0, size, 0.0, 0.0) for i, size in enumerate(sizes)]
     solver.prevTimeStep, solver.dU = timeSteps[-1], np.array(dUs[-1], dtype=float)
     if len(sizes) > 1:
         solver.timeStepBeforePrev, solver.dUBeforePrev = timeSteps[-2], np.array(dUs[-2], dtype=float)
+    solver.dofNumberingOfLastIncrement = dofNumbering
     return solver
 
 
@@ -319,21 +322,54 @@ def test_prediction_across_a_change_of_the_connectivity(tmp_path, increments, mo
 def test_a_rebuild_that_renumbers_the_degrees_of_freedom_drops_the_prediction(tmp_path):
     model = run(tmp_path, deck())
     field = model.nodeFields["displacement"]
-    numbering = DofManager([field]).dofNumbering()
+    numbering = DofManager([field]).dofNumberingDigest
 
-    assert DofManager([field]).dofNumbering() == numbering
+    assert DofManager([field]).dofNumberingDigest == numbering
     renumbered = NodeField("displacement", field.dimension, list(reversed(field.nodes)))
-    assert DofManager([renumbered]).dofNumbering() != numbering
+    assert DofManager([renumbered]).dofNumberingDigest != numbering
 
-    solver = NIST(loadConfiguration({}), Journal(verbose=False), extrapolateAcrossConnectivityChange=True)
-    solver.theDofManager = DofManager([renumbered])
-    assert not solver.predictionSurvivesRebuild(numbering)
-    solver.theDofManager = DofManager([field])
-    assert solver.predictionSurvivesRebuild(numbering)
-    # at the first increment of a resumed step, the numbering of the checkpoint is assumed
-    assert solver.predictionSurvivesRebuild(None)
+    lastIncrement = np.zeros(field.dimension * len(field.nodes))
+    solver = solverWithHistory("linear", [0.1], [lastIncrement], numbering, extrapolateAcrossConnectivityChange=True)
+    # a rebuild after a change of the connectivity alone (True), or at the first increment of a step that continues
+    # from a checkpoint (False): the prediction survives only if the rebuilt system numbers the DOFs alike
+    for connectivityHasChanged in (True, False):
+        solver.theDofManager = DofManager([renumbered])
+        assert not solver.predictionSurvivesRebuild(False, connectivityHasChanged)
+        solver.theDofManager = DofManager([field])
+        assert solver.predictionSurvivesRebuild(False, connectivityHasChanged)
+    # never after a change of the topology
+    assert not solver.predictionSurvivesRebuild(True, False)
+    # a prediction without the digest of its numbering cannot be compared, and does not survive
+    solver.dofNumberingOfLastIncrement = None
+    assert not solver.predictionSurvivesRebuild(False, False)
+    solver.dofNumberingOfLastIncrement = numbering
+    # across a change of the connectivity only with the option
     solver.options["extrapolateAcrossConnectivityChange"] = False
-    assert not solver.predictionSurvivesRebuild(numbering)
+    assert not solver.predictionSurvivesRebuild(False, True)
+    assert solver.predictionSurvivesRebuild(False, False)
+
+
+def test_a_rebuild_that_numbers_other_scalar_variables_drops_the_prediction():
+    """Two constraints with one Lagrange multiplier each, one switched on and the other off, then the other way round
+    (a constraint may switch within a step): the two equation systems have as many degrees of freedom, but the last one
+    numbers another multiplier. The digest names the scalar variables, by the names the model holds them under, so the
+    prediction does not survive the switch."""
+
+    numbering = DofManager([], [ScalarVariable("tieA_0")]).dofNumberingDigest
+
+    # the same names in another run, with other objects: the same numbering
+    assert DofManager([], [ScalarVariable("tieA_0")]).dofNumberingDigest == numbering
+    assert DofManager([], [ScalarVariable("tieB_0")]).dofNumberingDigest != numbering
+    assert (
+        DofManager([], [ScalarVariable("tieA_0"), ScalarVariable("tieB_0")]).dofNumberingDigest
+        != DofManager([], [ScalarVariable("tieB_0"), ScalarVariable("tieA_0")]).dofNumberingDigest
+    )
+
+    solver = solverWithHistory("linear", [0.1], [[0.5]], numbering, extrapolateAcrossConnectivityChange=True)
+    solver.theDofManager = DofManager([], [ScalarVariable("tieB_0")])
+    assert not solver.predictionSurvivesRebuild(False, True)
+    solver.theDofManager = DofManager([], [ScalarVariable("tieA_0")])
+    assert solver.predictionSurvivesRebuild(False, True)
 
 
 def test_the_history_of_a_quadratic_extrapolation_is_checkpointed():
@@ -344,7 +380,9 @@ def test_the_history_of_a_quadratic_extrapolation_is_checkpointed():
     np.testing.assert_array_equal(restored.dUBeforePrev, [1.0, 2.0])
     assert restored.timeStepBeforePrev.stepProgressIncrement == 0.2
     np.testing.assert_array_equal(predict(restored, 0.1)[0], predict(solver, 0.1)[0])
+    # with the digest of the numbering the history is a vector of
+    assert restored.dofNumberingOfLastIncrement == "the numbering"
 
-    # a linear extrapolation keeps no older history: its checkpoint is what it always was
+    # a linear extrapolation keeps no older history
     linear = solverWithHistory("linear", [0.1], [[3.0, 4.0]])
-    assert set(linear.getRestartData()) == {"prevTimeStep", "dU"}
+    assert set(linear.getRestartData()) == {"prevTimeStep", "dU", "dofNumberingOfLastIncrement"}

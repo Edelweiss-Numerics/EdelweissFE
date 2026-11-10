@@ -110,7 +110,7 @@ def _buildSingleElementModel():
 def test_femodel_restart_roundtrip(tmp_path):
     model, element = _buildSingleElementModel()
 
-    model.scalarVariables["dummy"] = ScalarVariable()
+    model.scalarVariables["dummy"] = ScalarVariable("dummy")
     model.scalarVariables["dummy"].value = 1.23
 
     fakeConstraint = _FakeRestartableConstraint()

@@ -31,9 +31,17 @@
 
 
 class ScalarVariable:
-    """A basic scalar variable, not tied to a spatial position."""
+    """A basic scalar variable, not tied to a spatial position.
 
-    def __init__(
-        self,
-    ):
+    Parameters
+    ----------
+    name
+        The name under which the model holds it (see :attr:`~edelweissfe.models.femodel.FEModel.scalarVariables`),
+        the same in every run of the model: a restart checkpoint stores its value under this name, and the numbering
+        of the degrees of freedom names it so
+        (:attr:`~edelweissfe.numerics.dofmanager.DofManager.dofNumberingDigest`).
+    """
+
+    def __init__(self, name: str):
+        self.name = name
         self.value = 0.0

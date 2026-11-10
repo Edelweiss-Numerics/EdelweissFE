@@ -30,7 +30,9 @@
 This module contains important classes for describing the global equation system by means of a sparse system.
 """
 
+import hashlib
 from collections import Counter
+from functools import cached_property
 from itertools import chain
 
 import numpy as np
@@ -168,6 +170,10 @@ class DofManager:
 
     def _determineDofsAndTheirIndices(self, nodeFields: list, scalarVariables: list):
 
+        nodeFields = list(nodeFields)
+        #: The NodeFields this DofManager numbers, by name.
+        self.numberedNodeFields = {nodeField.name: nodeField for nodeField in nodeFields}
+
         (
             self._nDofNodeFields,
             self.idcsOfFieldVariablesInDofVector,
@@ -248,24 +254,30 @@ class DofManager:
             self._sizeVIJ = self._accumulatedElementVIJSize + self._accumulatedConstraintVIJSize
             self.I, self.J, self.idcsOfHigherOrderEntitiesInVIJ = self._initializeVIJPattern()
 
-    def dofNumbering(self) -> tuple:
-        """What decides the index of every degree of freedom: the fields with their slices in the DofVector, the field
-        variables (the nodes' entries of each field) in the order they are numbered, and the scalar variables in the
-        order they are numbered. Two managers whose numberings compare equal give every degree of freedom the same
-        index, so a DofVector of one is a DofVector of the other -- e.g., before and after a rebuild caused by a
-        contact search, which changes the coupling of the degrees of freedom but not their numbering.
+    @cached_property
+    def dofNumberingDigest(self) -> str:
+        """A digest, a hexadecimal string, of what decides the index of every degree of freedom: for every field, its
+        name, its dimension, its slice in the DofVector and the labels of its nodes in the order they are numbered; and
+        the names of the scalar variables, which follow, in the order they are numbered. Two equation systems with the
+        same digest give every degree of freedom the same index, so a DofVector of one is a DofVector of the other --
+        e.g., before and after a rebuild caused by a contact search, which changes the coupling of the degrees of
+        freedom but not their numbering. The scalar variables are named, not counted: they are those of the
+        constraints switched on, which a constraint may change within a step (switched from outside, or by itself), so
+        that two systems with as many scalar variables may number different ones.
 
-        Returns
-        -------
-        tuple
-            The numbering, to be compared with ``==``; field and scalar variables compare by identity.
-        """
+        The digest names the nodes by their labels, so it is the same in every run of a model: a restart checkpoint
+        holds it together with the vectors it numbers. Computed at the first request; the numbering of a DofManager
+        does not change."""
 
-        return (
-            tuple(self.idcsOfFieldsInDofVector.items()),
-            tuple(self.idcsOfFieldVariablesInDofVector),
-            tuple(self.idcsOfScalarVariablesInDofVector),
-        )
+        digest = hashlib.blake2b(digest_size=16)
+        for fieldName, fieldIndices in self.idcsOfFieldsInDofVector.items():
+            nodeField = self.numberedNodeFields[fieldName]
+            digest.update(repr((fieldName, nodeField.dimension, fieldIndices.start, fieldIndices.stop)).encode())
+            labels = np.fromiter((node.label for node in nodeField.nodes), dtype=np.int64, count=len(nodeField.nodes))
+            digest.update(labels.tobytes())
+        digest.update(repr([scalarVariable.name for scalarVariable in self.idcsOfScalarVariablesInDofVector]).encode())
+
+        return digest.hexdigest()
 
     def _reserveSpaceForNodeFields(
         self,

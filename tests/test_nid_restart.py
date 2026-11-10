@@ -37,9 +37,11 @@ velocity and the acceleration are node-field entries the solver publishes after 
 increment, so they SHOULD travel with the checkpoint through the very same mechanism as ``U`` --
 but "should" is exactly what a restart test is for. Both are compared here, not only ``U``: a
 resumed run that restored ``U`` and silently started ``V``/``A`` from zero would still produce a
-plausible ``U`` curve. Also pinned: a resumed step must NOT recompute its initial acceleration
-from equilibrium (a cold step does), because that would replace the checkpointed, scheme-consistent
-acceleration by one that agrees only to solver tolerance.
+plausible ``U`` curve. Also pinned: a step resumed after its first real increment must NOT recompute
+its initial acceleration from equilibrium (a cold step does), because that would replace the
+checkpointed, scheme-consistent acceleration by one that agrees only to solver tolerance -- while a
+step resumed from the checkpoint written after its zero increment must compute it, as the
+uninterrupted run did in its first real increment.
 """
 
 from pathlib import Path
@@ -111,3 +113,34 @@ def test_restart_resume_matches_uninterrupted_reference(tmp_path):
     np.testing.assert_allclose(resumedField["U"], referenceU, rtol=0.0, atol=1e-12)
     np.testing.assert_allclose(resumedField["V"], referenceV, rtol=0.0, atol=1e-11)
     np.testing.assert_allclose(resumedField["A"], referenceA, rtol=0.0, atol=1e-10)
+
+
+def test_a_run_resumed_after_the_zero_increment_computes_the_initial_acceleration(tmp_path):
+    """The load is applied suddenly, so the step starts with the acceleration from equilibrium, a_0 = F / M, which its
+    first real increment computes. A run that stops after the zero increment has written a checkpoint before that:
+    resumed from it, the step computes a_0 as the uninterrupted run did, and ends where it ended. Starting from the
+    acceleration the checkpoint holds, zero, it would lose dt / 2 a_0 of the velocity for good."""
+
+    referenceModel, _ = _run(tmp_path, "full", _deck(DT))
+    referenceField = referenceModel.nodeFields["displacement"]
+
+    checkpointBaseName = tmp_path / "ckpt"
+    restartWriter = (
+        "\n*output, type=restart, name=restartwriter\n"
+        f"writeInterval=1, baseName={checkpointBaseName}, numberOfFilesToKeep=3\n"
+    )
+    # maxNumInc=0: the zero increment, and no real one
+    _run(tmp_path, "truncated", _deck(DT, maxNumInc=0, extra=restartWriter))
+    checkpoint = _mostRecentCheckpoint(tmp_path)
+    with h5py.File(checkpoint, "r") as f:
+        assert int(f.attrs["numberOfIncrementsDone"]) == 1, "the checkpoint must be the one after the zero increment"
+        assert float(f.attrs["time"]) == 0.0
+        np.testing.assert_array_equal(f["nodeFields"]["displacement"]["A"][:], 0.0)
+
+    resumedModel, _ = _run(tmp_path, "resume", _deck(DT, extra=f"\n*restart, readFrom={checkpoint}\n"))
+    assert abs(resumedModel.time - referenceModel.time) < 1e-10
+
+    resumedField = resumedModel.nodeFields["displacement"]
+    np.testing.assert_allclose(resumedField["U"], referenceField["U"], rtol=0.0, atol=1e-12)
+    np.testing.assert_allclose(resumedField["V"], referenceField["V"], rtol=0.0, atol=1e-11)
+    np.testing.assert_allclose(resumedField["A"], referenceField["A"], rtol=0.0, atol=1e-10)

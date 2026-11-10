@@ -195,9 +195,10 @@ class _FieldOutputBase:
         self.f_export = fExport_x
         self.timeHistory = []
         self.export = export
-        #: The size of the export file the run has written so far. Before its first write, a
-        #: process truncates the file to it: a cold run starts the file afresh, and a resumed run
-        #: drops whatever the interrupted run wrote after its checkpoint.
+        #: The size of the export file the run has written so far. Before its first write after
+        #: a start or a restored checkpoint, the file is truncated to it: a cold run starts the file
+        #: afresh, a resumed run drops whatever the interrupted run wrote after its checkpoint, and
+        #: a step falling back to a checkpoint drops the rows of the increments it discards.
         self._exportedBytes = 0
         self._exportFileTruncated = False
         self._reshape_to_dimensions = reshape_to_dimensions
@@ -402,6 +403,7 @@ class _FieldOutputBase:
 
         self.timeHistory = [float(t) for t in data["timeHistory"]]
         self._exportedBytes = int(data["exportedBytes"])
+        self._exportFileTruncated = False
         if self.appendResults:
             self.result, offset = [], 0
             for shape in data["resultShapes"]:
