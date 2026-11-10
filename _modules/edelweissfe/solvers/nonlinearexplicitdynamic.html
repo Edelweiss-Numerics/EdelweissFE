@@ -493,6 +493,10 @@
         <span class="c1">#: Lumped operators kept across a connectivity-only rebuild; see</span>
         <span class="c1">#: :class:`_ReusableExplicitOperators`.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_reusableOperators</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="c1">#: What the model's current equation system is made of (see</span>
+        <span class="c1">#: :meth:`~edelweissfe.models.femodel.FEModel.buildEquationSystem`): the numbering of its degrees of</span>
+        <span class="c1">#: freedom, and how the state and the results pass between the model and the vectors of the increments.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">equationSystemLayout</span> <span class="o">=</span> <span class="kc">None</span>
 
 <div class="viewcode-block" id="NED.beginStep">
 <a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearexplicitdynamic.NED.beginStep">[docs]</a>
@@ -614,13 +618,12 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">_buildSystem</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">buildEquationSystem</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">step</span><span class="p">,</span> <span class="n">previous</span><span class="o">=</span><span class="kc">None</span> <span class="k">if</span> <span class="n">meshChanged</span> <span class="k">else</span> <span class="n">theSystem</span><span class="p">))</span>
             <span class="n">theSystem</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_system</span>
 
-        <span class="n">U</span><span class="p">,</span> <span class="n">V</span><span class="p">,</span> <span class="n">P</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_U</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_V</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_P</span>
+        <span class="n">V</span><span class="p">,</span> <span class="n">P</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_V</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_P</span>
 
         <span class="k">if</span> <span class="n">meshChanged</span><span class="p">:</span>
             <span class="c1"># The net force is not re-evaluated on the new mesh: that would run the constitutive law</span>
             <span class="c1"># off-cycle and write into the material state. Zeroing it is an O(dT) error for one increment.</span>
             <span class="n">P</span><span class="p">[:]</span> <span class="o">=</span> <span class="mf">0.0</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">publishNodeFields</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">U</span><span class="p">,</span> <span class="n">V</span><span class="p">,</span> <span class="n">P</span><span class="p">)</span>
 
             <span class="bp">self</span><span class="o">.</span><span class="n">reportTopologyChangeConservation</span><span class="p">(</span><span class="n">lumpedTotalsBefore</span><span class="p">,</span> <span class="n">momentumBefore</span><span class="p">,</span> <span class="n">kineticBefore</span><span class="p">,</span> <span class="n">V</span><span class="p">,</span> <span class="n">model</span><span class="p">)</span>
 
@@ -782,13 +785,13 @@
 <span class="sd">            The increment.</span>
 <span class="sd">        """</span>
 
-        <span class="n">U</span><span class="p">,</span> <span class="n">V</span><span class="p">,</span> <span class="n">P</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_U</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_V</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_P</span>
+        <span class="n">U</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">V</span><span class="p">,</span> <span class="n">P</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_U</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dU</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_V</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_P</span>
 
         <span class="c1"># The zero increment is not recorded, so the first real increment is the leapfrog's half step.</span>
         <span class="k">if</span> <span class="n">timeStep</span><span class="o">.</span><span class="n">timeIncrement</span> <span class="o">&gt;</span> <span class="mf">0.0</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">prevTimeStep</span> <span class="o">=</span> <span class="n">timeStep</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">publishNodeFields</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">U</span><span class="p">,</span> <span class="n">V</span><span class="p">,</span> <span class="n">P</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">writeResultsToModel</span><span class="p">(</span><span class="n">U</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">P</span><span class="p">,</span> <span class="n">V</span><span class="p">)</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">updateRigidBodies</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">)</span>
 
@@ -1203,35 +1206,35 @@
                 <span class="p">)</span></div>
 
 
-<div class="viewcode-block" id="NED.publishNodeFields">
-<a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearexplicitdynamic.NED.publishNodeFields">[docs]</a>
-    <span class="nd">@performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"publish node fields"</span><span class="p">)</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">publishNodeFields</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">:</span> <span class="n">FEModel</span><span class="p">,</span> <span class="n">U</span><span class="p">,</span> <span class="n">V</span><span class="p">,</span> <span class="n">P</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">"""Write the solution, velocity and force to the node fields and the scalar variables.</span>
+<div class="viewcode-block" id="NED.writeResultsToModel">
+<a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearexplicitdynamic.NED.writeResultsToModel">[docs]</a>
+    <span class="nd">@performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"write results to nodes"</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">writeResultsToModel</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">U</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">dU</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">P</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">V</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Write the results of an increment to the model, through the model's layout of the equation system: the</span>
+<span class="sd">        solution, its increment, the force and the velocity to the node fields, and the solution to the scalar</span>
+<span class="sd">        variables (see :meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeResultsToModel`); the</span>
+<span class="sd">        incremental degrees of freedom are set to zero first, from where the next increment starts them (see</span>
+<span class="sd">        :meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.zeroIncrementalCoefficients`).</span>
 
-<span class="sd">        Published every increment, not only on output increments, for two reasons: an h-adaptivity</span>
+<span class="sd">        Written at every accepted increment, not only on output increments, for two reasons: an h-adaptivity</span>
 <span class="sd">        event can fall on any increment and its interpolation reads these entries, and a restart</span>
 <span class="sd">        checkpoint written from the node fields is the only way an explicit run can resume with its</span>
 <span class="sd">        kinetic state intact. It is an O(nDof) copy.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
-<span class="sd">        model</span>
-<span class="sd">            The model tree.</span>
 <span class="sd">        U</span>
 <span class="sd">            The solution vector.</span>
-<span class="sd">        V</span>
-<span class="sd">            The velocity vector.</span>
+<span class="sd">        dU</span>
+<span class="sd">            The solution increment vector of the increment.</span>
 <span class="sd">        P</span>
 <span class="sd">            The net force vector.</span>
+<span class="sd">        V</span>
+<span class="sd">            The velocity vector.</span>
 <span class="sd">        """</span>
 
-        <span class="k">for</span> <span class="n">field</span> <span class="ow">in</span> <span class="n">model</span><span class="o">.</span><span class="n">nodeFields</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">writeDofVectorToNodeField</span><span class="p">(</span><span class="n">U</span><span class="p">,</span> <span class="n">field</span><span class="p">,</span> <span class="s2">"U"</span><span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">writeDofVectorToNodeField</span><span class="p">(</span><span class="n">P</span><span class="p">,</span> <span class="n">field</span><span class="p">,</span> <span class="s2">"P"</span><span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">writeDofVectorToNodeField</span><span class="p">(</span><span class="n">V</span><span class="p">,</span> <span class="n">field</span><span class="p">,</span> <span class="s2">"V"</span><span class="p">)</span>
-
-        <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">writeDofVectorToScalarVariables</span><span class="p">(</span><span class="n">U</span><span class="p">)</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">equationSystemLayout</span><span class="o">.</span><span class="n">zeroIncrementalCoefficients</span><span class="p">(</span><span class="n">U</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">equationSystemLayout</span><span class="o">.</span><span class="n">writeResultsToModel</span><span class="p">(</span><span class="n">U</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">P</span><span class="p">,</span> <span class="n">V</span><span class="o">=</span><span class="n">V</span><span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="NED.updateConstraintConnectivity">
@@ -1517,11 +1520,11 @@
 <span class="sd">            against the prescribed Dirichlet conditions.</span>
 <span class="sd">        previous</span>
 <span class="sd">            The system being replaced, when this is a rebuild rather than the initial build. Its</span>
-<span class="sd">            solution, velocity and force are carried over verbatim rather than re-read from the node</span>
-<span class="sd">            fields, which do not hold the velocity at all. A rebuild triggered by a constraint's</span>
-<span class="sd">            connectivity leaves the mesh -- hence the DOF layout -- untouched, and that is checked</span>
-<span class="sd">            rather than assumed: copying between two different layouts would mis-index every vector</span>
-<span class="sd">            silently.</span>
+<span class="sd">            solution, velocity and force are carried over verbatim rather than re-read from the model:</span>
+<span class="sd">            they are the vectors the increment continues from. A rebuild triggered by a</span>
+<span class="sd">            constraint's connectivity leaves the mesh -- hence the DOF layout -- untouched, and that is</span>
+<span class="sd">            checked rather than assumed: copying between two different layouts would mis-index every</span>
+<span class="sd">            vector silently.</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
@@ -1546,9 +1549,10 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">refreshConstraintIndices</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">activeConstraints</span><span class="p">())</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">journal</span><span class="o">.</span><span class="n">message</span><span class="p">(</span><span class="s2">"Creating monolithic equation system"</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">identification</span><span class="p">,</span> <span class="n">verbosity</span><span class="p">)</span>
-            <span class="c1"># The numbering of the model's degrees of freedom; this solver evaluates the model's elements itself, and</span>
-            <span class="c1"># assembles no system matrix.</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">buildEquationSystem</span><span class="p">(</span><span class="n">withSystemMatrix</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span><span class="o">.</span><span class="n">dofManager</span>
+            <span class="c1"># The numbering of the model's degrees of freedom, and how the state passes between the model and the</span>
+            <span class="c1"># vectors; this solver evaluates the model's elements itself, and assembles no system matrix.</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">equationSystemLayout</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">buildEquationSystem</span><span class="p">(</span><span class="n">withSystemMatrix</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">equationSystemLayout</span><span class="o">.</span><span class="n">dofManager</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">journal</span><span class="o">.</span><span class="n">message</span><span class="p">(</span>
             <span class="s2">"total size of eq. system: </span><span class="si">{:}</span><span class="s2">"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">nDof</span><span class="p">),</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">identification</span><span class="p">,</span>
@@ -1586,14 +1590,12 @@
         <span class="n">P</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>  <span class="c1"># initialize reaction vector</span>
 
         <span class="k">if</span> <span class="ow">not</span> <span class="n">isRebuild</span><span class="p">:</span>
-            <span class="k">for</span> <span class="n">fieldName</span><span class="p">,</span> <span class="n">field</span> <span class="ow">in</span> <span class="n">model</span><span class="o">.</span><span class="n">nodeFields</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
-                <span class="n">U</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">writeNodeFieldToDofVector</span><span class="p">(</span><span class="n">U</span><span class="p">,</span> <span class="n">field</span><span class="p">,</span> <span class="s2">"U"</span><span class="p">)</span>
+            <span class="c1"># After an h-adaptivity event, the solution and the velocity interpolated onto the new nodes are</span>
+            <span class="c1"># read back here (see hadaptivity.WARM_STARTED_NODE_FIELD_ENTRIES).</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">equationSystemLayout</span><span class="o">.</span><span class="n">readStateFromModel</span><span class="p">(</span><span class="n">U</span><span class="p">,</span> <span class="n">V</span><span class="p">)</span>
+            <span class="c1"># The net force, which drives the first velocity update, is read back from the model's entry P.</span>
+            <span class="k">for</span> <span class="n">field</span> <span class="ow">in</span> <span class="n">model</span><span class="o">.</span><span class="n">nodeFields</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
                 <span class="n">P</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">writeNodeFieldToDofVector</span><span class="p">(</span><span class="n">P</span><span class="p">,</span> <span class="n">field</span><span class="p">,</span> <span class="s2">"P"</span><span class="p">)</span>
-                <span class="c1"># After an h-adaptivity event, the velocity interpolated onto the new nodes is read back</span>
-                <span class="c1"># here (see hadaptivity.WARM_STARTED_NODE_FIELD_ENTRIES).</span>
-                <span class="n">V</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">writeNodeFieldToDofVector</span><span class="p">(</span><span class="n">V</span><span class="p">,</span> <span class="n">field</span><span class="p">,</span> <span class="s2">"V"</span><span class="p">)</span>
-
-            <span class="n">U</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">writeScalarVariablesToDofVector</span><span class="p">(</span><span class="n">U</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="k">if</span> <span class="n">previous</span><span class="o">.</span><span class="n">U</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="n">U</span><span class="o">.</span><span class="n">shape</span><span class="p">:</span>
                 <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
@@ -1603,8 +1605,8 @@
                     <span class="s2">"cannot be carried across safely."</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">U</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">previous</span><span class="o">.</span><span class="n">U</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
                 <span class="p">)</span>
 
-            <span class="c1"># Carried straight over, not re-read from the node fields: the velocity is not a node</span>
-            <span class="c1"># field, so re-reading would silently resume from rest.</span>
+            <span class="c1"># Carried straight over: the numbering is the same, and these are the vectors the increment</span>
+            <span class="c1"># continues from.</span>
             <span class="n">U</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">previous</span><span class="o">.</span><span class="n">U</span>
             <span class="n">V</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">previous</span><span class="o">.</span><span class="n">V</span>
             <span class="n">P</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">previous</span><span class="o">.</span><span class="n">P</span>

@@ -221,8 +221,9 @@
 <span class="sd">``computeInitialAcceleration=False`` to continue a step from whatever acceleration was carried over.</span>
 
 <span class="sd">**State and restart.** Velocity and acceleration are ordinary node-field entries, ``V`` and ``A``,</span>
-<span class="sd">written after every converged increment alongside the parent's ``U``/``P``/``dU`` -- the same</span>
-<span class="sd">mechanism the explicit solver uses for its velocity. That makes them part of every checkpoint the</span>
+<span class="sd">read from the model whenever the equation system is (re)built and written at the acceptance of every</span>
+<span class="sd">increment alongside the parent's ``U``/``P``/``dU``, both through the model's layout of the equation</span>
+<span class="sd">system -- the same mechanism the explicit solver uses for its velocity. That makes them part of every checkpoint the</span>
 <span class="sd">``*output, type=restart`` manager writes and of every ``*fieldOutput`` (``result=V``,</span>
 <span class="sd">``result=A``), with no solver-specific restart code beyond the marker of whether the initial</span>
 <span class="sd">acceleration is still to be computed.</span>
@@ -394,7 +395,8 @@
 <span class="sd">        Each dynamic field's total assembled mass (:meth:`NonlinearImplicitDynamic._totalMassByField`),</span>
 <span class="sd">        a property of ``M`` alone, so computed once here rather than per accepted increment.</span>
 <span class="sd">    V, A</span>
-<span class="sd">        The velocity and acceleration at the last converged increment.</span>
+<span class="sd">        The velocity and acceleration at the last converged increment: the solver's own vectors of the</span>
+<span class="sd">        current equation system, read from the model when it was built.</span>
 <span class="sd">    """</span>
 
     <span class="n">dofManager</span><span class="p">:</span> <span class="n">DofManager</span>
@@ -544,6 +546,13 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_currentIncrement</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="c1">#: The non-time-integrated fields a discarded inertia has already been warned about.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_fieldsWarnedAboutDiscardedInertia</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+        <span class="c1">#: The velocity and the acceleration of the current equation system, read from the model when it is</span>
+        <span class="c1">#: (re)built (see :meth:`readStateFromModel`), and the state of the last converged increment from then on.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_V</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_A</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="c1">#: The names of the fields of the current equation system that carry a mass, whose velocity and acceleration</span>
+        <span class="c1">#: this solver reads from and writes to the model.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_dynamicFields</span> <span class="o">=</span> <span class="kc">None</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_validateNewmarkParameters</span><span class="p">()</span>
 
@@ -849,9 +858,10 @@
 <a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitdynamic.NonlinearImplicitDynamic.finalizeIncrement">[docs]</a>
     <span class="nd">@performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"finalize increment"</span><span class="p">)</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">finalizeIncrement</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">:</span> <span class="n">FEModel</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">"""The converged trial kinematics become the state; see the parent's hook. Only an accepted</span>
-<span class="sd">        increment gets here -- a failing one leaves by exception and keeps the previous velocity</span>
-<span class="sd">        and acceleration for the cutback.</span>
+<span class="w">        </span><span class="sd">"""The converged trial kinematics become the state of the solver, which the model receives at</span>
+<span class="sd">        the acceptance of the increment (see :meth:`writeResultsToModel`); see the parent's hook. Only a</span>
+<span class="sd">        converged increment gets here -- a failing one leaves by exception and keeps the previous</span>
+<span class="sd">        velocity and acceleration for the cutback.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
@@ -864,7 +874,6 @@
 
         <span class="n">system</span><span class="o">.</span><span class="n">V</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">increment</span><span class="o">.</span><span class="n">V_np</span>
         <span class="n">system</span><span class="o">.</span><span class="n">A</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">increment</span><span class="o">.</span><span class="n">A_np</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_writeVelocityAndAccelerationToNodeFields</span><span class="p">(</span><span class="n">system</span><span class="p">,</span> <span class="n">model</span><span class="p">)</span>
 
         <span class="c1"># What a topology change before the next increment is compared against.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_conservedAtLastAccept</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_conservedQuantities</span><span class="p">(</span><span class="n">system</span><span class="p">,</span> <span class="n">model</span><span class="p">)</span>
@@ -919,23 +928,45 @@
         <span class="n">A_np</span><span class="p">[</span><span class="n">dynamicDofs</span><span class="p">]</span> <span class="o">=</span> <span class="n">ANew</span>
         <span class="n">V_np</span><span class="p">[</span><span class="n">dynamicDofs</span><span class="p">]</span> <span class="o">=</span> <span class="n">VNew</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_writeVelocityAndAccelerationToNodeFields</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">system</span><span class="p">:</span> <span class="n">_NewmarkSystem</span><span class="p">,</span> <span class="n">model</span><span class="p">:</span> <span class="n">FEModel</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">"""Write the committed velocity and acceleration to the ``V`` and ``A`` entries of the</span>
-<span class="sd">        dynamic fields' node fields -- what field outputs read, what a checkpoint stores, and what</span>
-<span class="sd">        the next equation system reads them back from.</span>
+<div class="viewcode-block" id="NonlinearImplicitDynamic.readStateFromModel">
+<a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitdynamic.NonlinearImplicitDynamic.readStateFromModel">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">readStateFromModel</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">U</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Read the state the next increment starts from out of the model, into the vectors of the equation system just</span>
+<span class="sd">        (re)built: the solution, as in the parent, and the velocity and the acceleration of the fields carrying a mass,</span>
+<span class="sd">        where the last accepted increment (or the checkpoint, or nothing -- a start from rest) left them, and where a</span>
+<span class="sd">        refinement has meanwhile interpolated them onto the nodes it created.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
-<span class="sd">        system</span>
-<span class="sd">            The current Newmark system.</span>
-<span class="sd">        model</span>
-<span class="sd">            The model tree.</span>
+<span class="sd">        U</span>
+<span class="sd">            The solution vector of the equation system, zero, overwritten.</span>
 <span class="sd">        """</span>
 
-        <span class="k">for</span> <span class="n">fieldName</span> <span class="ow">in</span> <span class="n">system</span><span class="o">.</span><span class="n">dynamicFields</span><span class="p">:</span>
-            <span class="n">field</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">nodeFields</span><span class="p">[</span><span class="n">fieldName</span><span class="p">]</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">writeDofVectorToNodeField</span><span class="p">(</span><span class="n">system</span><span class="o">.</span><span class="n">V</span><span class="p">,</span> <span class="n">field</span><span class="p">,</span> <span class="s2">"V"</span><span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">writeDofVectorToNodeField</span><span class="p">(</span><span class="n">system</span><span class="o">.</span><span class="n">A</span><span class="p">,</span> <span class="n">field</span><span class="p">,</span> <span class="s2">"A"</span><span class="p">)</span>
+        <span class="n">_</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dynamicFields</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_locateDynamicDofs</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_V</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_A</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">equationSystemLayout</span><span class="o">.</span><span class="n">readStateFromModel</span><span class="p">(</span><span class="n">U</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_V</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_A</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dynamicFields</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="NonlinearImplicitDynamic.writeResultsToModel">
+<a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitdynamic.NonlinearImplicitDynamic.writeResultsToModel">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">writeResultsToModel</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">U</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">dU</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">P</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Write the results of a converged increment to the model, as the parent does, and the velocity and the</span>
+<span class="sd">        acceleration of the fields carrying a mass with them: what field outputs read, what a checkpoint stores, and</span>
+<span class="sd">        what the next equation system reads back.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        U</span>
+<span class="sd">            The solution.</span>
+<span class="sd">        dU</span>
+<span class="sd">            The solution increment.</span>
+<span class="sd">        P</span>
+<span class="sd">            The internal force.</span>
+<span class="sd">        """</span>
+
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">writeResultsToModel</span><span class="p">(</span><span class="n">U</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">P</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_V</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_A</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dynamicFields</span><span class="p">)</span></div>
+
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_updateNewmarkSystem</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">:</span> <span class="n">FEModel</span><span class="p">,</span> <span class="n">stepActions</span><span class="p">:</span> <span class="nb">dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">_NewmarkSystem</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">"""The Newmark operators and state for the parent's current equation system, assembled if</span>
@@ -943,11 +974,10 @@
 
 <span class="sd">        The parent rebuilds its :class:`~edelweissfe.numerics.dofmanager.DofManager` at the start</span>
 <span class="sd">        of a step and whenever the topology or a constraint's connectivity changes; the operators</span>
-<span class="sd">        are bound to that manager by identity and follow it. The velocity and acceleration are then</span>
-<span class="sd">        read back from the node fields, where the last converged increment (or the checkpoint, or</span>
-<span class="sd">        nothing -- a start from rest) left them, and where a refinement has meanwhile interpolated</span>
-<span class="sd">        them onto the nodes it created. A step changing a material property mid-step invalidates the</span>
-<span class="sd">        density, so the operators are reassembled every increment of such a step.</span>
+<span class="sd">        are bound to that manager by identity and follow it. The velocity and acceleration are the</span>
+<span class="sd">        ones the rebuild has read from the model (see :meth:`readStateFromModel`). A step changing a</span>
+<span class="sd">        material property mid-step invalidates the density, so the operators are reassembled every</span>
+<span class="sd">        increment of such a step.</span>
 
 <span class="sd">        A rebuild that follows a recorded **topology change** -- a ``model.topology.history`` grown</span>
 <span class="sd">        since the last build, or since the step started -- additionally re-arms the</span>
@@ -990,16 +1020,6 @@
         <span class="k">with</span> <span class="n">performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"newmark system setup"</span><span class="p">):</span>
             <span class="n">dynamicDofs</span><span class="p">,</span> <span class="n">dynamicFields</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_locateDynamicDofs</span><span class="p">()</span>
 
-            <span class="k">if</span> <span class="n">dofManagerChanged</span><span class="p">:</span>
-                <span class="n">V</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
-                <span class="n">A</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
-                <span class="k">for</span> <span class="n">fieldName</span> <span class="ow">in</span> <span class="n">dynamicFields</span><span class="p">:</span>
-                    <span class="n">field</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">nodeFields</span><span class="p">[</span><span class="n">fieldName</span><span class="p">]</span>
-                    <span class="n">V</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">writeNodeFieldToDofVector</span><span class="p">(</span><span class="n">V</span><span class="p">,</span> <span class="n">field</span><span class="p">,</span> <span class="s2">"V"</span><span class="p">)</span>
-                    <span class="n">A</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">writeNodeFieldToDofVector</span><span class="p">(</span><span class="n">A</span><span class="p">,</span> <span class="n">field</span><span class="p">,</span> <span class="s2">"A"</span><span class="p">)</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="n">V</span><span class="p">,</span> <span class="n">A</span> <span class="o">=</span> <span class="n">system</span><span class="o">.</span><span class="n">V</span><span class="p">,</span> <span class="n">system</span><span class="o">.</span><span class="n">A</span>
-
         <span class="n">reusedMassAndDamping</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="k">if</span> <span class="p">(</span>
             <span class="n">dofManagerChanged</span>
@@ -1026,8 +1046,8 @@
             <span class="n">MRowBlocks</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_rowBlocks</span><span class="p">(</span><span class="n">M</span><span class="p">,</span> <span class="n">_MASS_ROWS_PER_BLOCK</span><span class="p">),</span>
             <span class="n">MRowsPerBlock</span><span class="o">=</span><span class="n">_MASS_ROWS_PER_BLOCK</span><span class="p">,</span>
             <span class="n">massByField</span><span class="o">=</span><span class="n">massByField</span><span class="p">,</span>
-            <span class="n">V</span><span class="o">=</span><span class="n">V</span><span class="p">,</span>
-            <span class="n">A</span><span class="o">=</span><span class="n">A</span><span class="p">,</span>
+            <span class="n">V</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_V</span><span class="p">,</span>
+            <span class="n">A</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_A</span><span class="p">,</span>
         <span class="p">)</span>
 
         <span class="k">if</span> <span class="n">dofManagerChanged</span> <span class="ow">and</span> <span class="n">topologyChanged</span><span class="p">:</span>
@@ -1593,7 +1613,9 @@
 
         <span class="n">system</span><span class="o">.</span><span class="n">A</span><span class="p">[:]</span> <span class="o">=</span> <span class="mf">0.0</span>
         <span class="n">system</span><span class="o">.</span><span class="n">A</span><span class="p">[</span><span class="n">system</span><span class="o">.</span><span class="n">dynamicDofs</span><span class="p">]</span> <span class="o">=</span> <span class="n">A0</span><span class="p">[</span><span class="n">system</span><span class="o">.</span><span class="n">dynamicDofs</span><span class="p">]</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_writeVelocityAndAccelerationToNodeFields</span><span class="p">(</span><span class="n">system</span><span class="p">,</span> <span class="n">model</span><span class="p">)</span>
+        <span class="c1"># It completes the state the increment starts from: a rebuild before the increment is accepted -- a retry</span>
+        <span class="c1"># after a cutback whose contact search changes the connectivity -- reads it back from the model.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">equationSystemLayout</span><span class="o">.</span><span class="n">writeVelocityAndAccelerationToModel</span><span class="p">(</span><span class="n">system</span><span class="o">.</span><span class="n">V</span><span class="p">,</span> <span class="n">system</span><span class="o">.</span><span class="n">A</span><span class="p">,</span> <span class="n">system</span><span class="o">.</span><span class="n">dynamicFields</span><span class="p">)</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">journal</span><span class="o">.</span><span class="n">message</span><span class="p">(</span>
             <span class="s2">"acceleration from equilibrium at t = </span><span class="si">{:g}</span><span class="s2">: ||a0||inf = </span><span class="si">{:e}</span><span class="s2">"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>

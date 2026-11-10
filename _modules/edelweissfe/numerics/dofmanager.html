@@ -899,21 +899,52 @@
                 <span class="s2">"written as a whole only by the DofManager that numbers it"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">nodeField</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
             <span class="p">)</span>
 
+    <span class="k">def</span><span class="w"> </span><span class="nf">_locateNodeFieldOnNodeSet</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">nodeField</span><span class="p">:</span> <span class="n">NodeField</span><span class="p">,</span> <span class="n">nodeSet</span><span class="p">:</span> <span class="n">NodeSet</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="nb">list</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""Where the values of a NodeField on the nodes of a node set lie, in the DofVector and in the NodeField: the</span>
+<span class="sd">        nodes of the set whose field is part of this equation system (see :meth:`locateFieldOnNodeSet`).</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        nodeField</span>
+<span class="sd">            The NodeField.</span>
+<span class="sd">        nodeSet</span>
+<span class="sd">            The NodeSet.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        tuple[np.ndarray, list]</span>
+<span class="sd">            - The indices of the degrees of freedom in the DofVector, node after node.</span>
+<span class="sd">            - The rows of these nodes in the NodeField, in the same order.</span>
+<span class="sd">        """</span>
+
+        <span class="n">indices</span><span class="p">,</span> <span class="n">nodePositions</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">locateFieldOnNodeSet</span><span class="p">(</span><span class="n">nodeField</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">nodeSet</span><span class="p">)</span>
+        <span class="n">nodes</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">nodeSet</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">indices</span><span class="p">,</span> <span class="p">[</span><span class="n">nodeField</span><span class="o">.</span><span class="n">indexOfNode</span><span class="p">(</span><span class="n">nodes</span><span class="p">[</span><span class="n">position</span><span class="p">])</span> <span class="k">for</span> <span class="n">position</span> <span class="ow">in</span> <span class="n">nodePositions</span><span class="p">]</span>
+
 <div class="viewcode-block" id="DofManager.writeDofVectorToNodeField">
 <a class="viewcode-back" href="../../../documentation/dofmanager.html#edelweissfe.numerics.dofmanager.DofManager.writeDofVectorToNodeField">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">writeDofVectorToNodeField</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dofVector</span><span class="p">,</span> <span class="n">nodeField</span><span class="p">,</span> <span class="n">resultName</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">"""Write the current values of an entire NodeField from the respective locations in a given DofVector.</span>
-
+    <span class="k">def</span><span class="w"> </span><span class="nf">writeDofVectorToNodeField</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">dofVector</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">nodeField</span><span class="p">:</span> <span class="n">NodeField</span><span class="p">,</span> <span class="n">resultName</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">nodeSet</span><span class="p">:</span> <span class="n">NodeSet</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">NodeField</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Write the values of a NodeField from the respective locations in a given DofVector; the counterpart of</span>
+<span class="sd">        :meth:`writeNodeFieldToDofVector`.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
 <span class="sd">        dofVector</span>
 <span class="sd">            The source DofVector.</span>
 <span class="sd">        nodeField</span>
-<span class="sd">            The NodeField to get the updated values: one this DofManager numbers, see :attr:`numberedNodeFields`.</span>
+<span class="sd">            The NodeField to get the updated values. Written as a whole, it must be the one this DofManager numbers</span>
+<span class="sd">            (see :attr:`numberedNodeFields`); written on a node set, any node field of a field this DofManager numbers,</span>
+<span class="sd">            since its rows are then found by node.</span>
 <span class="sd">        resultName</span>
 <span class="sd">            The entry of the NodeField to write, one of</span>
 <span class="sd">            :attr:`NodeField.ENTRIES &lt;edelweissfe.fields.nodefield.NodeField.ENTRIES&gt;`.</span>
+<span class="sd">        nodeSet</span>
+<span class="sd">            The NodeSet to write: its nodes whose field is part of this equation system (see</span>
+<span class="sd">            :meth:`locateFieldOnNodeSet`); the other rows of the NodeField keep their values. If None, all nodes of the</span>
+<span class="sd">            NodeField are written.</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
@@ -925,14 +956,20 @@
 <span class="sd">        KeyError</span>
 <span class="sd">            If the entry is not one a node field holds.</span>
 <span class="sd">        ValueError</span>
-<span class="sd">            If this DofManager does not number the NodeField.</span>
+<span class="sd">            If this DofManager does not number the field, or, written as a whole, numbers another NodeField of that</span>
+<span class="sd">            name.</span>
 <span class="sd">        """</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">_checkNodeFieldAccess</span><span class="p">(</span><span class="n">nodeField</span><span class="p">,</span> <span class="n">resultName</span><span class="p">,</span> <span class="n">wholeField</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_checkNodeFieldAccess</span><span class="p">(</span><span class="n">nodeField</span><span class="p">,</span> <span class="n">resultName</span><span class="p">,</span> <span class="n">wholeField</span><span class="o">=</span><span class="n">nodeSet</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">)</span>
 
-        <span class="n">indices</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">idcsOfNodeFieldsInDofVector</span><span class="p">[</span><span class="n">nodeField</span><span class="o">.</span><span class="n">name</span><span class="p">]</span>
-        <span class="n">data</span> <span class="o">=</span> <span class="n">dofVector</span><span class="p">[</span><span class="n">indices</span><span class="p">]</span>
-        <span class="n">nodeField</span><span class="p">[</span><span class="n">resultName</span><span class="p">][:]</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">reshape</span><span class="p">((</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">nodeField</span><span class="o">.</span><span class="n">dimension</span><span class="p">))</span>
+        <span class="k">if</span> <span class="n">nodeSet</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">indices</span><span class="p">,</span> <span class="n">rowsInNodeField</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_locateNodeFieldOnNodeSet</span><span class="p">(</span><span class="n">nodeField</span><span class="p">,</span> <span class="n">nodeSet</span><span class="p">)</span>
+            <span class="n">nodeField</span><span class="p">[</span><span class="n">resultName</span><span class="p">][</span><span class="n">rowsInNodeField</span><span class="p">]</span> <span class="o">=</span> <span class="n">dofVector</span><span class="p">[</span><span class="n">indices</span><span class="p">]</span><span class="o">.</span><span class="n">reshape</span><span class="p">((</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">nodeField</span><span class="o">.</span><span class="n">dimension</span><span class="p">))</span>
+
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">indices</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">idcsOfNodeFieldsInDofVector</span><span class="p">[</span><span class="n">nodeField</span><span class="o">.</span><span class="n">name</span><span class="p">]</span>
+            <span class="n">data</span> <span class="o">=</span> <span class="n">dofVector</span><span class="p">[</span><span class="n">indices</span><span class="p">]</span>
+            <span class="n">nodeField</span><span class="p">[</span><span class="n">resultName</span><span class="p">][:]</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">reshape</span><span class="p">((</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">nodeField</span><span class="o">.</span><span class="n">dimension</span><span class="p">))</span>
 
         <span class="k">return</span> <span class="n">nodeField</span></div>
 
@@ -976,9 +1013,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_checkNodeFieldAccess</span><span class="p">(</span><span class="n">nodeField</span><span class="p">,</span> <span class="n">resultName</span><span class="p">,</span> <span class="n">wholeField</span><span class="o">=</span><span class="n">nodeSet</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">)</span>
 
         <span class="k">if</span> <span class="n">nodeSet</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">indices</span><span class="p">,</span> <span class="n">nodePositions</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">locateFieldOnNodeSet</span><span class="p">(</span><span class="n">nodeField</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">nodeSet</span><span class="p">)</span>
-            <span class="n">nodes</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">nodeSet</span><span class="p">)</span>
-            <span class="n">rowsInNodeField</span> <span class="o">=</span> <span class="p">[</span><span class="n">nodeField</span><span class="o">.</span><span class="n">indexOfNode</span><span class="p">(</span><span class="n">nodes</span><span class="p">[</span><span class="n">position</span><span class="p">])</span> <span class="k">for</span> <span class="n">position</span> <span class="ow">in</span> <span class="n">nodePositions</span><span class="p">]</span>
+            <span class="n">indices</span><span class="p">,</span> <span class="n">rowsInNodeField</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_locateNodeFieldOnNodeSet</span><span class="p">(</span><span class="n">nodeField</span><span class="p">,</span> <span class="n">nodeSet</span><span class="p">)</span>
             <span class="n">dofVector</span><span class="p">[</span><span class="n">indices</span><span class="p">]</span> <span class="o">=</span> <span class="n">nodeField</span><span class="p">[</span><span class="n">resultName</span><span class="p">][</span><span class="n">rowsInNodeField</span><span class="p">]</span><span class="o">.</span><span class="n">flatten</span><span class="p">()</span>
 
         <span class="k">else</span><span class="p">:</span>

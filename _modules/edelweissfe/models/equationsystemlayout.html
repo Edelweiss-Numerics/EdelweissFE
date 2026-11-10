@@ -157,36 +157,74 @@
         <span class="c1">#: whose node fields are the ones the DOF manager numbers: here, the model itself.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">modelForLinearSolver</span> <span class="o">=</span> <span class="n">model</span>
 
-<div class="viewcode-block" id="EquationSystemLayout.writeSolutionToDofVector">
-<a class="viewcode-back" href="../../../documentation/models.html#edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeSolutionToDofVector">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">writeSolutionToDofVector</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">U</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DofVector</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""Write the solution the model carries from increment to increment into the solution vector of a (re)built</span>
-<span class="sd">        equation system, from which the next increment starts. In a finite element model, every node carries its total</span>
-<span class="sd">        solution: the entry ``U`` of every node field is written, and the values of the scalar variables (e.g. the</span>
-<span class="sd">        Lagrange multipliers of constraints).</span>
+<div class="viewcode-block" id="EquationSystemLayout.readStateFromModel">
+<a class="viewcode-back" href="../../../documentation/models.html#edelweissfe.models.equationsystemlayout.EquationSystemLayout.readStateFromModel">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">readStateFromModel</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">U</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">V</span><span class="p">:</span> <span class="n">DofVector</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">A</span><span class="p">:</span> <span class="n">DofVector</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">dynamicFields</span><span class="p">:</span> <span class="nb">list</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Read the state the model carries from increment to increment into the vectors of a (re)built equation</span>
+<span class="sd">        system, from which the next increment starts (see the documentation page *Node field results*): the solution</span>
+<span class="sd">        ``U``, and, for a solver that integrates in time, the velocity ``V`` and the acceleration ``A``.</span>
+
+<span class="sd">        In a finite element model, every node carries its total solution: the entry ``U`` of every node field is read</span>
+<span class="sd">        into ``U``, and the values of the scalar variables (e.g. the Lagrange multipliers of constraints). The entries</span>
+<span class="sd">        ``V`` and ``A`` of the node fields are read into ``V`` and ``A``, if given.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
 <span class="sd">        U</span>
-<span class="sd">            The solution vector of the equation system, overwritten.</span>
-
-<span class="sd">        Returns</span>
-<span class="sd">        -------</span>
-<span class="sd">        DofVector</span>
-<span class="sd">            The solution vector.</span>
+<span class="sd">            The solution vector of the equation system, zero, overwritten.</span>
+<span class="sd">        V</span>
+<span class="sd">            The velocity vector of the equation system, zero, overwritten; None if the solver has none.</span>
+<span class="sd">        A</span>
+<span class="sd">            The acceleration vector of the equation system, zero, overwritten; None if the solver has none.</span>
+<span class="sd">        dynamicFields</span>
+<span class="sd">            The names of the fields whose velocity and acceleration are read, e.g. those the solver integrates in time;</span>
+<span class="sd">            None for every field.</span>
 <span class="sd">        """</span>
 
         <span class="k">for</span> <span class="n">nodeField</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">nodeFields</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
-            <span class="n">U</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">dofManager</span><span class="o">.</span><span class="n">writeNodeFieldToDofVector</span><span class="p">(</span><span class="n">U</span><span class="p">,</span> <span class="n">nodeField</span><span class="p">,</span> <span class="s2">"U"</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">dofManager</span><span class="o">.</span><span class="n">writeNodeFieldToDofVector</span><span class="p">(</span><span class="n">U</span><span class="p">,</span> <span class="n">nodeField</span><span class="p">,</span> <span class="s2">"U"</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dofManager</span><span class="o">.</span><span class="n">writeScalarVariablesToDofVector</span><span class="p">(</span><span class="n">U</span><span class="p">)</span>
 
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">dofManager</span><span class="o">.</span><span class="n">writeScalarVariablesToDofVector</span><span class="p">(</span><span class="n">U</span><span class="p">)</span></div>
+        <span class="k">for</span> <span class="n">nodeField</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_nodeFieldsWithVelocity</span><span class="p">(</span><span class="n">dynamicFields</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">V</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">dofManager</span><span class="o">.</span><span class="n">writeNodeFieldToDofVector</span><span class="p">(</span><span class="n">V</span><span class="p">,</span> <span class="n">nodeField</span><span class="p">,</span> <span class="s2">"V"</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">A</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">dofManager</span><span class="o">.</span><span class="n">writeNodeFieldToDofVector</span><span class="p">(</span><span class="n">A</span><span class="p">,</span> <span class="n">nodeField</span><span class="p">,</span> <span class="s2">"A"</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="EquationSystemLayout.zeroIncrementalCoefficients">
+<a class="viewcode-back" href="../../../documentation/models.html#edelweissfe.models.equationsystemlayout.EquationSystemLayout.zeroIncrementalCoefficients">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">zeroIncrementalCoefficients</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">U</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Set the degrees of freedom of the nodes that carry no total solution to zero in the solution vector of a</span>
+<span class="sd">        converged increment, before its results are written to the model: these *incremental* degrees of freedom are</span>
+<span class="sd">        the coefficients of one increment, and every increment starts them at zero (see</span>
+<span class="sd">        the documentation page *Node field results*).</span>
+
+<span class="sd">        In a finite element model, every node carries its total solution, so there is nothing to do here. A meshfree</span>
+<span class="sd">        model, whose background grid and kernel functions are incremental, sets their degrees of freedom to zero.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        U</span>
+<span class="sd">            The solution vector of the converged increment, modified in place.</span>
+<span class="sd">        """</span></div>
 
 
 <div class="viewcode-block" id="EquationSystemLayout.writeResultsToModel">
 <a class="viewcode-back" href="../../../documentation/models.html#edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeResultsToModel">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">writeResultsToModel</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">U</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">dU</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">P</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">"""Write the results of a converged increment to the model: the solution ``U``, its increment ``dU`` and the</span>
-<span class="sd">        reaction ``P`` to the entries of the same names of the node fields, and the solution to the scalar variables.</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">writeResultsToModel</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">U</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
+        <span class="n">dU</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
+        <span class="n">P</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
+        <span class="n">V</span><span class="p">:</span> <span class="n">DofVector</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">A</span><span class="p">:</span> <span class="n">DofVector</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">dynamicFields</span><span class="p">:</span> <span class="nb">list</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Write the results of an accepted increment to the model, once (see the documentation page *Node field</span>
+<span class="sd">        results*): the solution ``U``, its increment ``dU`` and the internal force ``P`` to the entries of the same</span>
+<span class="sd">        names of the node fields, the solution to the scalar variables, and, for a solver that integrates in time, the</span>
+<span class="sd">        velocity ``V`` and the acceleration ``A`` (see :meth:`writeVelocityAndAccelerationToModel`).</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
@@ -195,16 +233,66 @@
 <span class="sd">        dU</span>
 <span class="sd">            The increment of the solution.</span>
 <span class="sd">        P</span>
-<span class="sd">            The reaction, the sum of the elements' internal forces.</span>
+<span class="sd">            The internal force, the sum of the elements' residual contributions.</span>
+<span class="sd">        V</span>
+<span class="sd">            The velocity; None to leave the entry ``V`` of the node fields as it is.</span>
+<span class="sd">        A</span>
+<span class="sd">            The acceleration; None to leave the entry ``A`` of the node fields as it is.</span>
+<span class="sd">        dynamicFields</span>
+<span class="sd">            The names of the fields whose velocity and acceleration are written; None for every field.</span>
 <span class="sd">        """</span>
 
         <span class="k">for</span> <span class="n">nodeField</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">nodeFields</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">dofManager</span><span class="o">.</span><span class="n">writeDofVectorToNodeField</span><span class="p">(</span><span class="n">U</span><span class="p">,</span> <span class="n">nodeField</span><span class="p">,</span> <span class="s2">"U"</span><span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">dofManager</span><span class="o">.</span><span class="n">writeDofVectorToNodeField</span><span class="p">(</span><span class="n">P</span><span class="p">,</span> <span class="n">nodeField</span><span class="p">,</span> <span class="s2">"P"</span><span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">dofManager</span><span class="o">.</span><span class="n">writeDofVectorToNodeField</span><span class="p">(</span><span class="n">dU</span><span class="p">,</span> <span class="n">nodeField</span><span class="p">,</span> <span class="s2">"dU"</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dofManager</span><span class="o">.</span><span class="n">writeDofVectorToScalarVariables</span><span class="p">(</span><span class="n">U</span><span class="p">)</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">dofManager</span><span class="o">.</span><span class="n">writeDofVectorToScalarVariables</span><span class="p">(</span><span class="n">U</span><span class="p">)</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">writeVelocityAndAccelerationToModel</span><span class="p">(</span><span class="n">V</span><span class="p">,</span> <span class="n">A</span><span class="p">,</span> <span class="n">dynamicFields</span><span class="p">)</span></div>
 
+
+<div class="viewcode-block" id="EquationSystemLayout.writeVelocityAndAccelerationToModel">
+<a class="viewcode-back" href="../../../documentation/models.html#edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeVelocityAndAccelerationToModel">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">writeVelocityAndAccelerationToModel</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">V</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">A</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span> <span class="n">dynamicFields</span><span class="p">:</span> <span class="nb">list</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Write the velocity and the acceleration to the entries ``V`` and ``A`` of the node fields: at acceptance,</span>
+<span class="sd">        as part of :meth:`writeResultsToModel`, and when a solver completes the state an increment starts from, e.g.</span>
+<span class="sd">        the acceleration the implicit dynamic solver computes from equilibrium at the start of a step.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        V</span>
+<span class="sd">            The velocity; None to leave the entry ``V`` as it is.</span>
+<span class="sd">        A</span>
+<span class="sd">            The acceleration; None to leave the entry ``A`` as it is.</span>
+<span class="sd">        dynamicFields</span>
+<span class="sd">            The names of the fields whose velocity and acceleration are written; None for every field.</span>
+<span class="sd">        """</span>
+
+        <span class="k">for</span> <span class="n">nodeField</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_nodeFieldsWithVelocity</span><span class="p">(</span><span class="n">dynamicFields</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">V</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">dofManager</span><span class="o">.</span><span class="n">writeDofVectorToNodeField</span><span class="p">(</span><span class="n">V</span><span class="p">,</span> <span class="n">nodeField</span><span class="p">,</span> <span class="s2">"V"</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">A</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">dofManager</span><span class="o">.</span><span class="n">writeDofVectorToNodeField</span><span class="p">(</span><span class="n">A</span><span class="p">,</span> <span class="n">nodeField</span><span class="p">,</span> <span class="s2">"A"</span><span class="p">)</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_nodeFieldsWithVelocity</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dynamicFields</span><span class="p">:</span> <span class="nb">list</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The node fields of the model whose velocity and acceleration a solver reads or writes.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        dynamicFields</span>
+<span class="sd">            Their names, or None for every node field.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        list</span>
+<span class="sd">            The node fields.</span>
+<span class="sd">        """</span>
+
+        <span class="k">if</span> <span class="n">dynamicFields</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">nodeFields</span><span class="o">.</span><span class="n">values</span><span class="p">())</span>
+
+        <span class="k">return</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">nodeFields</span><span class="p">[</span><span class="n">fieldName</span><span class="p">]</span> <span class="k">for</span> <span class="n">fieldName</span> <span class="ow">in</span> <span class="n">dynamicFields</span><span class="p">]</span>
 
 <div class="viewcode-block" id="EquationSystemLayout.updateMaterialPoints">
 <a class="viewcode-back" href="../../../documentation/models.html#edelweissfe.models.equationsystemlayout.EquationSystemLayout.updateMaterialPoints">[docs]</a>

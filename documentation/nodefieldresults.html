@@ -146,7 +146,13 @@ restart checkpoint must carry for the run to continue;</p></li>
 </ul>
 <p>Iterations work on the solver’s vectors only. A cut back increment writes nothing. An accepted increment writes
 every entry, once. A rebuilt equation system (a changed mesh, a changed active domain, a changed coupling) reads
-the state entries from the model.</p>
+the state entries from the model. A refinement of the mesh interpolates the state entries onto the nodes it
+creates; the results there are zero until the next accepted increment.</p>
+<p>Every solver passes these entries through the model’s layout of its equation system
+(<a class="reference internal" href="models.html#edelweissfe.models.equationsystemlayout.EquationSystemLayout" title="edelweissfe.models.equationsystemlayout.EquationSystemLayout"><code class="xref py py-class docutils literal notranslate"><span class="pre">EquationSystemLayout</span></code></a>), and in no other way:
+<a class="reference internal" href="models.html#edelweissfe.models.equationsystemlayout.EquationSystemLayout.readStateFromModel" title="edelweissfe.models.equationsystemlayout.EquationSystemLayout.readStateFromModel"><code class="xref py py-meth docutils literal notranslate"><span class="pre">readStateFromModel()</span></code></a> when it (re)builds the
+system, <a class="reference internal" href="models.html#edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeResultsToModel" title="edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeResultsToModel"><code class="xref py py-meth docutils literal notranslate"><span class="pre">writeResultsToModel()</span></code></a> when it accepts
+an increment.</p>
 </section>
 <section id="the-entries">
 <h2>The entries<a class="headerlink" href="#the-entries" title="Link to this heading"></a></h2>
@@ -215,7 +221,9 @@ zero in every entry.</p>
 instance, by adaptive mesh refinement) keeps all of them. Reading or writing an entry through the
 <a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofmanager.DofManager" title="edelweissfe.numerics.dofmanager.DofManager"><code class="xref py py-class docutils literal notranslate"><span class="pre">DofManager</span></code></a> refuses a name that is not one of the five, and a node field
 the DofManager does not number: a node field is read or written as a whole only by the DofManager that numbers it,
-since its rows are addressed by position. A restart checkpoint holds every entry of every node field, and a
+since its rows are addressed by position; on a node set, its rows are found by node, so that any node field of a
+numbered field can be read or written there (e.g. the node field of the model, while the equation system numbers
+that of an active domain). A restart checkpoint holds every entry of every node field, and a
 checkpoint lacking one is refused (see <a class="reference internal" href="restart.html"><span class="doc">Restart</span></a>).</p>
 </section>
 <section id="where-the-solvers-do-not-follow-this-page-yet">
@@ -225,11 +233,10 @@ from this list together with the deviation:</p>
 <ul class="simple">
 <li><p>The explicit solver (<code class="docutils literal notranslate"><span class="pre">NED</span></code>) writes as <code class="docutils literal notranslate"><span class="pre">P</span></code> the net force that accelerates the nodes,
 <span class="math notranslate nohighlight">\(\boldsymbol{f}_\mathrm{ext} - \boldsymbol{f}_\mathrm{int}\)</span> including loads and constraints – the opposite
-sign of the internal force – and reads it back when it builds its equation system. It does not write <code class="docutils literal notranslate"><span class="pre">dU</span></code>.</p></li>
+sign of the internal force – and reads it back when it builds its equation system.</p></li>
 <li><p>The implicit dynamic solver (<code class="docutils literal notranslate"><span class="pre">NonlinearImplicitDynamic</span></code>) writes as <code class="docutils literal notranslate"><span class="pre">P</span></code> the internal force without the inertial
 and damping forces, and its zero increment at a step start writes <code class="docutils literal notranslate"><span class="pre">P</span></code> as zero.</p></li>
 <li><p>A quasi-static step after a dynamic one leaves <code class="docutils literal notranslate"><span class="pre">V</span></code> and <code class="docutils literal notranslate"><span class="pre">A</span></code> of the last dynamic increment in the model.</p></li>
-<li><p>After a refinement, h-adaptivity writes <code class="docutils literal notranslate"><span class="pre">U</span></code> also into <code class="docutils literal notranslate"><span class="pre">P</span></code>, until the next accepted increment.</p></li>
 <li><p>In a meshfree model, <code class="docutils literal notranslate"><span class="pre">U</span></code> at the incremental nodes is the sum of their increments since the equation system was
 last built, and the explicit meshfree solver writes no node field entry.</p></li>
 </ul>

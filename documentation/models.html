@@ -522,17 +522,45 @@ what its methods do; the solver calls them the same way.</p>
 <p class="rubric">Methods</p>
 <table class="autosummary longtable docutils align-default">
 <tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.models.equationsystemlayout.EquationSystemLayout.updateMaterialPoints" title="edelweissfe.models.equationsystemlayout.EquationSystemLayout.updateMaterialPoints"><code class="xref py py-obj docutils literal notranslate"><span class="pre">updateMaterialPoints</span></code></a>(dU, timeStep, forEachChunk)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.models.equationsystemlayout.EquationSystemLayout.readStateFromModel" title="edelweissfe.models.equationsystemlayout.EquationSystemLayout.readStateFromModel"><code class="xref py py-obj docutils literal notranslate"><span class="pre">readStateFromModel</span></code></a>(U[, V, A, dynamicFields])</p></td>
+<td><p>Read the state the model carries from increment to increment into the vectors of a (re)built equation system, from which the next increment starts (see the documentation page <em>Node field results</em>): the solution <code class="docutils literal notranslate"><span class="pre">U</span></code>, and, for a solver that integrates in time, the velocity <code class="docutils literal notranslate"><span class="pre">V</span></code> and the acceleration <code class="docutils literal notranslate"><span class="pre">A</span></code>.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.models.equationsystemlayout.EquationSystemLayout.updateMaterialPoints" title="edelweissfe.models.equationsystemlayout.EquationSystemLayout.updateMaterialPoints"><code class="xref py py-obj docutils literal notranslate"><span class="pre">updateMaterialPoints</span></code></a>(dU, timeStep, forEachChunk)</p></td>
 <td><p>Bring the material points that belong to no element up to date with the trial solution increment, right before the solver computes the elements.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeResultsToModel" title="edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeResultsToModel"><code class="xref py py-obj docutils literal notranslate"><span class="pre">writeResultsToModel</span></code></a>(U, dU, P)</p></td>
-<td><p>Write the results of a converged increment to the model: the solution <code class="docutils literal notranslate"><span class="pre">U</span></code>, its increment <code class="docutils literal notranslate"><span class="pre">dU</span></code> and the reaction <code class="docutils literal notranslate"><span class="pre">P</span></code> to the entries of the same names of the node fields, and the solution to the scalar variables.</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeResultsToModel" title="edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeResultsToModel"><code class="xref py py-obj docutils literal notranslate"><span class="pre">writeResultsToModel</span></code></a>(U, dU, P[, V, A, ...])</p></td>
+<td><p>Write the results of an accepted increment to the model, once (see the documentation page <em>Node field results</em>): the solution <code class="docutils literal notranslate"><span class="pre">U</span></code>, its increment <code class="docutils literal notranslate"><span class="pre">dU</span></code> and the internal force <code class="docutils literal notranslate"><span class="pre">P</span></code> to the entries of the same names of the node fields, the solution to the scalar variables, and, for a solver that integrates in time, the velocity <code class="docutils literal notranslate"><span class="pre">V</span></code> and the acceleration <code class="docutils literal notranslate"><span class="pre">A</span></code> (see <a class="reference internal" href="#edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeVelocityAndAccelerationToModel" title="edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeVelocityAndAccelerationToModel"><code class="xref py py-meth docutils literal notranslate"><span class="pre">writeVelocityAndAccelerationToModel()</span></code></a>).</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeSolutionToDofVector" title="edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeSolutionToDofVector"><code class="xref py py-obj docutils literal notranslate"><span class="pre">writeSolutionToDofVector</span></code></a>(U)</p></td>
-<td><p>Write the solution the model carries from increment to increment into the solution vector of a (re)built equation system, from which the next increment starts.</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeVelocityAndAccelerationToModel" title="edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeVelocityAndAccelerationToModel"><code class="xref py py-obj docutils literal notranslate"><span class="pre">writeVelocityAndAccelerationToModel</span></code></a>(V, A[, ...])</p></td>
+<td><p>Write the velocity and the acceleration to the entries <code class="docutils literal notranslate"><span class="pre">V</span></code> and <code class="docutils literal notranslate"><span class="pre">A</span></code> of the node fields: at acceptance, as part of <a class="reference internal" href="#edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeResultsToModel" title="edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeResultsToModel"><code class="xref py py-meth docutils literal notranslate"><span class="pre">writeResultsToModel()</span></code></a>, and when a solver completes the state an increment starts from, e.g. the acceleration the implicit dynamic solver computes from equilibrium at the start of a step.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.models.equationsystemlayout.EquationSystemLayout.zeroIncrementalCoefficients" title="edelweissfe.models.equationsystemlayout.EquationSystemLayout.zeroIncrementalCoefficients"><code class="xref py py-obj docutils literal notranslate"><span class="pre">zeroIncrementalCoefficients</span></code></a>(U)</p></td>
+<td><p>Set the degrees of freedom of the nodes that carry no total solution to zero in the solution vector of a converged increment, before its results are written to the model: these <em>incremental</em> degrees of freedom are the coefficients of one increment, and every increment starts them at zero (see the documentation page <em>Node field results</em>).</p></td>
 </tr>
 </tbody>
 </table>
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.models.equationsystemlayout.EquationSystemLayout.readStateFromModel">
+<span class="sig-name descname"><span class="pre">readStateFromModel</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">U</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">V</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">A</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dynamicFields</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/models/equationsystemlayout.html#EquationSystemLayout.readStateFromModel"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.models.equationsystemlayout.EquationSystemLayout.readStateFromModel" title="Link to this definition"></a></dt>
+<dd><p>Read the state the model carries from increment to increment into the vectors of a (re)built equation
+system, from which the next increment starts (see the documentation page <em>Node field results</em>): the solution
+<code class="docutils literal notranslate"><span class="pre">U</span></code>, and, for a solver that integrates in time, the velocity <code class="docutils literal notranslate"><span class="pre">V</span></code> and the acceleration <code class="docutils literal notranslate"><span class="pre">A</span></code>.</p>
+<p>In a finite element model, every node carries its total solution: the entry <code class="docutils literal notranslate"><span class="pre">U</span></code> of every node field is read
+into <code class="docutils literal notranslate"><span class="pre">U</span></code>, and the values of the scalar variables (e.g. the Lagrange multipliers of constraints). The entries
+<code class="docutils literal notranslate"><span class="pre">V</span></code> and <code class="docutils literal notranslate"><span class="pre">A</span></code> of the node fields are read into <code class="docutils literal notranslate"><span class="pre">V</span></code> and <code class="docutils literal notranslate"><span class="pre">A</span></code>, if given.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>U</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The solution vector of the equation system, zero, overwritten.</p></li>
+<li><p><strong>V</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The velocity vector of the equation system, zero, overwritten; None if the solver has none.</p></li>
+<li><p><strong>A</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The acceleration vector of the equation system, zero, overwritten; None if the solver has none.</p></li>
+<li><p><strong>dynamicFields</strong> (<em>list</em>) – The names of the fields whose velocity and acceleration are read, e.g. those the solver integrates in time;
+None for every field.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
 <dl class="py method">
 <dt class="sig sig-object py" id="edelweissfe.models.equationsystemlayout.EquationSystemLayout.updateMaterialPoints">
 <span class="sig-name descname"><span class="pre">updateMaterialPoints</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dU</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">timeStep</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">forEachChunk</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/models/equationsystemlayout.html#EquationSystemLayout.updateMaterialPoints"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.models.equationsystemlayout.EquationSystemLayout.updateMaterialPoints" title="Link to this definition"></a></dt>
@@ -564,36 +592,54 @@ material points evaluate their material, before the solver computes the cells, w
 
 <dl class="py method">
 <dt class="sig sig-object py" id="edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeResultsToModel">
-<span class="sig-name descname"><span class="pre">writeResultsToModel</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">U</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dU</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">P</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/models/equationsystemlayout.html#EquationSystemLayout.writeResultsToModel"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeResultsToModel" title="Link to this definition"></a></dt>
-<dd><p>Write the results of a converged increment to the model: the solution <code class="docutils literal notranslate"><span class="pre">U</span></code>, its increment <code class="docutils literal notranslate"><span class="pre">dU</span></code> and the
-reaction <code class="docutils literal notranslate"><span class="pre">P</span></code> to the entries of the same names of the node fields, and the solution to the scalar variables.</p>
+<span class="sig-name descname"><span class="pre">writeResultsToModel</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">U</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dU</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">P</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">V</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">A</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dynamicFields</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/models/equationsystemlayout.html#EquationSystemLayout.writeResultsToModel"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeResultsToModel" title="Link to this definition"></a></dt>
+<dd><p>Write the results of an accepted increment to the model, once (see the documentation page <em>Node field
+results</em>): the solution <code class="docutils literal notranslate"><span class="pre">U</span></code>, its increment <code class="docutils literal notranslate"><span class="pre">dU</span></code> and the internal force <code class="docutils literal notranslate"><span class="pre">P</span></code> to the entries of the same
+names of the node fields, the solution to the scalar variables, and, for a solver that integrates in time, the
+velocity <code class="docutils literal notranslate"><span class="pre">V</span></code> and the acceleration <code class="docutils literal notranslate"><span class="pre">A</span></code> (see <a class="reference internal" href="#edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeVelocityAndAccelerationToModel" title="edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeVelocityAndAccelerationToModel"><code class="xref py py-meth docutils literal notranslate"><span class="pre">writeVelocityAndAccelerationToModel()</span></code></a>).</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>U</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The solution.</p></li>
 <li><p><strong>dU</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The increment of the solution.</p></li>
-<li><p><strong>P</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The reaction, the sum of the elements’ internal forces.</p></li>
+<li><p><strong>P</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The internal force, the sum of the elements’ residual contributions.</p></li>
+<li><p><strong>V</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The velocity; None to leave the entry <code class="docutils literal notranslate"><span class="pre">V</span></code> of the node fields as it is.</p></li>
+<li><p><strong>A</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The acceleration; None to leave the entry <code class="docutils literal notranslate"><span class="pre">A</span></code> of the node fields as it is.</p></li>
+<li><p><strong>dynamicFields</strong> (<em>list</em>) – The names of the fields whose velocity and acceleration are written; None for every field.</p></li>
 </ul>
 </dd>
 </dl>
 </dd></dl>
 
 <dl class="py method">
-<dt class="sig sig-object py" id="edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeSolutionToDofVector">
-<span class="sig-name descname"><span class="pre">writeSolutionToDofVector</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">U</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/models/equationsystemlayout.html#EquationSystemLayout.writeSolutionToDofVector"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeSolutionToDofVector" title="Link to this definition"></a></dt>
-<dd><p>Write the solution the model carries from increment to increment into the solution vector of a (re)built
-equation system, from which the next increment starts. In a finite element model, every node carries its total
-solution: the entry <code class="docutils literal notranslate"><span class="pre">U</span></code> of every node field is written, and the values of the scalar variables (e.g. the
-Lagrange multipliers of constraints).</p>
+<dt class="sig sig-object py" id="edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeVelocityAndAccelerationToModel">
+<span class="sig-name descname"><span class="pre">writeVelocityAndAccelerationToModel</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">V</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">A</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dynamicFields</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/models/equationsystemlayout.html#EquationSystemLayout.writeVelocityAndAccelerationToModel"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeVelocityAndAccelerationToModel" title="Link to this definition"></a></dt>
+<dd><p>Write the velocity and the acceleration to the entries <code class="docutils literal notranslate"><span class="pre">V</span></code> and <code class="docutils literal notranslate"><span class="pre">A</span></code> of the node fields: at acceptance,
+as part of <a class="reference internal" href="#edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeResultsToModel" title="edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeResultsToModel"><code class="xref py py-meth docutils literal notranslate"><span class="pre">writeResultsToModel()</span></code></a>, and when a solver completes the state an increment starts from, e.g.
+the acceleration the implicit dynamic solver computes from equilibrium at the start of a step.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>U</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The solution vector of the equation system, overwritten.</p>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>V</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The velocity; None to leave the entry <code class="docutils literal notranslate"><span class="pre">V</span></code> as it is.</p></li>
+<li><p><strong>A</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The acceleration; None to leave the entry <code class="docutils literal notranslate"><span class="pre">A</span></code> as it is.</p></li>
+<li><p><strong>dynamicFields</strong> (<em>list</em>) – The names of the fields whose velocity and acceleration are written; None for every field.</p></li>
+</ul>
 </dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>The solution vector.</p>
-</dd>
-<dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p><a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector">DofVector</a></p>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.models.equationsystemlayout.EquationSystemLayout.zeroIncrementalCoefficients">
+<span class="sig-name descname"><span class="pre">zeroIncrementalCoefficients</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">U</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/models/equationsystemlayout.html#EquationSystemLayout.zeroIncrementalCoefficients"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.models.equationsystemlayout.EquationSystemLayout.zeroIncrementalCoefficients" title="Link to this definition"></a></dt>
+<dd><p>Set the degrees of freedom of the nodes that carry no total solution to zero in the solution vector of a
+converged increment, before its results are written to the model: these <em>incremental</em> degrees of freedom are
+the coefficients of one increment, and every increment starts them at zero (see
+the documentation page <em>Node field results</em>).</p>
+<p>In a finite element model, every node carries its total solution, so there is nothing to do here. A meshfree
+model, whose background grid and kernel functions are incremental, sets their degrees of freedom to zero.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>U</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The solution vector of the converged increment, modified in place.</p>
 </dd>
 </dl>
 </dd></dl>

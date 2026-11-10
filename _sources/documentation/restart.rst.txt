@@ -133,11 +133,12 @@ Declare it. Every solver, convergence criterion, time stepper, constraint and ou
 which of its attributes it carries from one increment to the next, by name and type, and the
 checkpoint writes and reads exactly those, as they are (:mod:`~edelweissfe.utils.checkpointedstate`):
 
-.. code-block:: python
-
-    class NIST(NonlinearSolverBase):
-        #: The predictor's state between increments: the last accepted increment and its dU.
-        checkpointedState = {"prevTimeStep": TimeStep, "dU": np.ndarray}
+.. literalinclude:: ../../../edelweissfe/solvers/nonlinearimplicitstatic.py
+   :language: python
+   :caption: The declaration of the implicit solver, ``NIST``
+   :start-at: checkpointedState = {
+   :end-at: }
+   :dedent: 4
 
 A component that carries nothing declares an empty mapping. One whose state is not a plain attribute
 (Ensight's sequence bookkeeping, a frozen contact search) overrides ``getRestartData`` and

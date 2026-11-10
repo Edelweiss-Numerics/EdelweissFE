@@ -508,9 +508,9 @@
     <span class="c1">#: freedom these dU are vectors of; and the state of the convergence criterion.</span>
     <span class="n">checkpointedState</span> <span class="o">=</span> <span class="p">{</span>
         <span class="s2">"prevTimeStep"</span><span class="p">:</span> <span class="n">TimeStep</span><span class="p">,</span>
-        <span class="s2">"dU"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
-        <span class="s2">"timeStepBeforePrev"</span><span class="p">:</span> <span class="n">TimeStep</span><span class="p">,</span>
-        <span class="s2">"dUBeforePrev"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+        <span class="s2">"dUOfLastIncrement"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+        <span class="s2">"timeStepOfIncrementBeforeLast"</span><span class="p">:</span> <span class="n">TimeStep</span><span class="p">,</span>
+        <span class="s2">"dUOfIncrementBeforeLast"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
         <span class="s2">"dofNumberingOfLastIncrement"</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
         <span class="s2">"convergenceCriterion"</span><span class="p">:</span> <span class="n">ConvergenceCriterionBase</span><span class="p">,</span>
     <span class="p">}</span>
@@ -537,15 +537,17 @@
 
         <span class="c1">#: The last accepted increment, from which the predictor extrapolates (None: no extrapolation).</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">prevTimeStep</span> <span class="o">=</span> <span class="kc">None</span>
-        <span class="c1">#: The solution increment of the last accepted increment.</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">dU</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="c1">#: The solution increment of the last accepted increment, kept for the predictor: a copy, since the working</span>
+        <span class="c1">#: increment of the equation system changes in every iteration, and the model's entry ``dU`` is a result,</span>
+        <span class="c1">#: which no solver reads back.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dUOfLastIncrement</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="c1">#: The accepted increment before :attr:`prevTimeStep`, kept for a quadratic extrapolation only (else None).</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">timeStepBeforePrev</span> <span class="o">=</span> <span class="kc">None</span>
-        <span class="c1">#: The solution increment of :attr:`timeStepBeforePrev`.</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">dUBeforePrev</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">timeStepOfIncrementBeforeLast</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="c1">#: The solution increment of :attr:`timeStepOfIncrementBeforeLast`.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dUOfIncrementBeforeLast</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="c1">#: The digest of the numbering of the degrees of freedom of the equation system the last increment was accepted</span>
-        <span class="c1">#: in (:attr:`~edelweissfe.numerics.dofmanager.DofManager.dofNumberingDigest`): :attr:`dU` is a</span>
-        <span class="c1">#: vector of it, and so is :attr:`dUBeforePrev`, which is kept only as long as the prediction</span>
+        <span class="c1">#: in (:attr:`~edelweissfe.numerics.dofmanager.DofManager.dofNumberingDigest`): :attr:`dUOfLastIncrement` is a</span>
+        <span class="c1">#: vector of it, and so is :attr:`dUOfIncrementBeforeLast`, which is kept only as long as the prediction</span>
         <span class="c1">#: survives the rebuilds of the equation system (see :meth:`predictionSurvivesRebuild`).</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">dofNumberingOfLastIncrement</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="c1">#: The convergence criterion of the current step, created when the step begins (None before).</span>
@@ -704,9 +706,9 @@
 
         <span class="c1"># A step starts without a predictor state; a resumed step takes over the checkpointed one.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">prevTimeStep</span> <span class="o">=</span> <span class="kc">None</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">dU</span> <span class="o">=</span> <span class="kc">None</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">timeStepBeforePrev</span> <span class="o">=</span> <span class="kc">None</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">dUBeforePrev</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dUOfLastIncrement</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">timeStepOfIncrementBeforeLast</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dUOfIncrementBeforeLast</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">dofNumberingOfLastIncrement</span> <span class="o">=</span> <span class="kc">None</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">validateModelCapabilities</span><span class="p">(</span><span class="n">model</span><span class="p">)</span>
@@ -842,7 +844,7 @@
                 <span class="n">P</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
                 <span class="n">dU</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
 
-                <span class="n">U</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">equationSystemLayout</span><span class="o">.</span><span class="n">writeSolutionToDofVector</span><span class="p">(</span><span class="n">U</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">readStateFromModel</span><span class="p">(</span><span class="n">U</span><span class="p">)</span>
 
                 <span class="k">with</span> <span class="n">performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"mpc transformation build"</span><span class="p">):</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">mpcTransformation</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">buildMPCTransformation</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">step</span><span class="o">.</span><span class="n">actions</span><span class="p">)</span>
@@ -923,7 +925,7 @@
 
             <span class="c1"># Commit the settled state as a converged sub-increment (no output): elements integrate</span>
             <span class="c1"># incrementally from the committed state, so otherwise U and the internal state disagree.</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">equationSystemLayout</span><span class="o">.</span><span class="n">writeResultsToModel</span><span class="p">(</span><span class="n">U</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">P</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">writeResultsToModel</span><span class="p">(</span><span class="n">U</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">P</span><span class="p">)</span>
             <span class="n">model</span><span class="o">.</span><span class="n">advanceToTime</span><span class="p">(</span><span class="n">equilibrationTimeStep</span><span class="o">.</span><span class="n">totalTime</span><span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_U</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dU</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_P</span> <span class="o">=</span> <span class="n">U</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">P</span>
 
@@ -970,6 +972,61 @@
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_U</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dU</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_P</span> <span class="o">=</span> <span class="n">U</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">P</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_iterationCounter</span> <span class="o">=</span> <span class="n">iterationCounter</span></div>
+
+
+<div class="viewcode-block" id="NIST.readStateFromModel">
+<a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.readStateFromModel">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">readStateFromModel</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">U</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Read the state the next increment starts from out of the model, into the vectors of the equation system just</span>
+<span class="sd">        (re)built: here, the solution, through the model's layout of the equation system (see</span>
+<span class="sd">        :meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.readStateFromModel`). A solver that</span>
+<span class="sd">        integrates in time reads its velocity and acceleration as well.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        U</span>
+<span class="sd">            The solution vector of the equation system, zero, overwritten.</span>
+<span class="sd">        """</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">equationSystemLayout</span><span class="o">.</span><span class="n">readStateFromModel</span><span class="p">(</span><span class="n">U</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="NIST.writeResultsToModel">
+<a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitstatic.NIST.writeResultsToModel">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">writeResultsToModel</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">U</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
+        <span class="n">dU</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
+        <span class="n">P</span><span class="p">:</span> <span class="n">DofVector</span><span class="p">,</span>
+        <span class="n">V</span><span class="p">:</span> <span class="n">DofVector</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">A</span><span class="p">:</span> <span class="n">DofVector</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">dynamicFields</span><span class="p">:</span> <span class="nb">list</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Write the results of a converged increment to the model, through the model's layout of the equation system:</span>
+<span class="sd">        the incremental degrees of freedom are set to zero first, from where the next increment starts them (see</span>
+<span class="sd">        :meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.zeroIncrementalCoefficients`), then the</span>
+<span class="sd">        solution, its increment and the internal force are written (see</span>
+<span class="sd">        :meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeResultsToModel`). A solver that</span>
+<span class="sd">        integrates in time passes its velocity and acceleration as well.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        U</span>
+<span class="sd">            The solution.</span>
+<span class="sd">        dU</span>
+<span class="sd">            The solution increment.</span>
+<span class="sd">        P</span>
+<span class="sd">            The internal force.</span>
+<span class="sd">        V</span>
+<span class="sd">            The velocity of a solver that integrates in time; None for a static solver.</span>
+<span class="sd">        A</span>
+<span class="sd">            The acceleration of a solver that integrates in time; None for a static solver.</span>
+<span class="sd">        dynamicFields</span>
+<span class="sd">            The names of the fields the solver integrates in time; None for a static solver.</span>
+<span class="sd">        """</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">equationSystemLayout</span><span class="o">.</span><span class="n">zeroIncrementalCoefficients</span><span class="p">(</span><span class="n">U</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">equationSystemLayout</span><span class="o">.</span><span class="n">writeResultsToModel</span><span class="p">(</span><span class="n">U</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">P</span><span class="p">,</span> <span class="n">V</span><span class="p">,</span> <span class="n">A</span><span class="p">,</span> <span class="n">dynamicFields</span><span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="NIST.createSystemMatrixAssembly">
@@ -1087,16 +1144,16 @@
 
         <span class="c1"># The predictor's history: a quadratic extrapolation needs the accepted increment before the last one, too.</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s2">"extrapolation"</span><span class="p">]</span> <span class="o">==</span> <span class="s2">"quadratic"</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">prevTimeStep</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">timeStepBeforePrev</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">dUBeforePrev</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">prevTimeStep</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">dU</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">timeStepOfIncrementBeforeLast</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">dUOfIncrementBeforeLast</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">prevTimeStep</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">dUOfLastIncrement</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">timeStepBeforePrev</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">dUBeforePrev</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">timeStepOfIncrementBeforeLast</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">dUOfIncrementBeforeLast</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span>
         <span class="c1"># After a model change, dU contains the remesh settling transient: optionally do not extrapolate it.</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_modelHasChanged</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="s2">"extrapolateAfterModelChange"</span><span class="p">]:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">prevTimeStep</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">prevTimeStep</span> <span class="o">=</span> <span class="n">timeStep</span>
         <span class="c1"># A copy: the next increment iterates on dU in place, and may fail.</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">dU</span> <span class="o">=</span> <span class="n">dU</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dUOfLastIncrement</span> <span class="o">=</span> <span class="n">dU</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">dofNumberingOfLastIncrement</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">dofNumberingDigest</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">convergenceCriterion</span><span class="o">.</span><span class="n">acceptIncrement</span><span class="p">()</span>
 
@@ -1104,7 +1161,7 @@
             <span class="n">step</span><span class="o">.</span><span class="n">timeStepper</span><span class="o">.</span><span class="n">preventIncrementIncrease</span><span class="p">()</span>
 
         <span class="k">with</span> <span class="n">performancetiming</span><span class="o">.</span><span class="n">timeit</span><span class="p">(</span><span class="s2">"write results to nodes"</span><span class="p">):</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">equationSystemLayout</span><span class="o">.</span><span class="n">writeResultsToModel</span><span class="p">(</span><span class="n">U</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">P</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">writeResultsToModel</span><span class="p">(</span><span class="n">U</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">P</span><span class="p">)</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">updateRigidBodies</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">)</span>
 
@@ -1273,9 +1330,9 @@
             <span class="k">return</span> <span class="n">dU</span><span class="p">,</span> <span class="kc">False</span>
 
         <span class="n">weightOfLast</span><span class="p">,</span> <span class="n">weightOfBeforeLast</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">extrapolationWeights</span><span class="p">(</span><span class="n">extrapolation</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">,</span> <span class="n">prevTimeStep</span><span class="p">)</span>
-        <span class="n">np</span><span class="o">.</span><span class="n">multiply</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dU</span><span class="p">,</span> <span class="n">weightOfLast</span><span class="p">,</span> <span class="n">out</span><span class="o">=</span><span class="n">dU</span><span class="p">)</span>
+        <span class="n">np</span><span class="o">.</span><span class="n">multiply</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dUOfLastIncrement</span><span class="p">,</span> <span class="n">weightOfLast</span><span class="p">,</span> <span class="n">out</span><span class="o">=</span><span class="n">dU</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">weightOfBeforeLast</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">dU</span> <span class="o">+=</span> <span class="n">weightOfBeforeLast</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">dUBeforePrev</span>
+            <span class="n">dU</span> <span class="o">+=</span> <span class="n">weightOfBeforeLast</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">dUOfIncrementBeforeLast</span>
 
         <span class="n">dU</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">applyDirichletToResidual</span><span class="p">(</span><span class="n">timeStep</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">dirichlets</span><span class="p">)</span>
 
@@ -1318,8 +1375,8 @@
         <span class="n">h</span> <span class="o">=</span> <span class="n">timeStep</span><span class="o">.</span><span class="n">stepProgressIncrement</span>
         <span class="n">h_n</span> <span class="o">=</span> <span class="n">prevTimeStep</span><span class="o">.</span><span class="n">stepProgressIncrement</span>
 
-        <span class="k">if</span> <span class="n">extrapolation</span> <span class="o">==</span> <span class="s2">"quadratic"</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">extrapolates</span><span class="p">(</span><span class="n">extrapolation</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">timeStepBeforePrev</span><span class="p">):</span>
-            <span class="n">h_nm1</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">timeStepBeforePrev</span><span class="o">.</span><span class="n">stepProgressIncrement</span>
+        <span class="k">if</span> <span class="n">extrapolation</span> <span class="o">==</span> <span class="s2">"quadratic"</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">extrapolates</span><span class="p">(</span><span class="n">extrapolation</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">timeStepOfIncrementBeforeLast</span><span class="p">):</span>
+            <span class="n">h_nm1</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">timeStepOfIncrementBeforeLast</span><span class="o">.</span><span class="n">stepProgressIncrement</span>
             <span class="n">curvatureFactor</span> <span class="o">=</span> <span class="n">h</span> <span class="o">*</span> <span class="p">(</span><span class="n">h</span> <span class="o">+</span> <span class="n">h_n</span><span class="p">)</span> <span class="o">/</span> <span class="p">(</span><span class="n">h_nm1</span> <span class="o">+</span> <span class="n">h_n</span><span class="p">)</span>
             <span class="k">return</span> <span class="n">h</span> <span class="o">/</span> <span class="n">h_n</span> <span class="o">+</span> <span class="n">curvatureFactor</span> <span class="o">/</span> <span class="n">h_n</span><span class="p">,</span> <span class="o">-</span><span class="p">(</span><span class="n">curvatureFactor</span> <span class="o">/</span> <span class="n">h_nm1</span><span class="p">)</span>
 

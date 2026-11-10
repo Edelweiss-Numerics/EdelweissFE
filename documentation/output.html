@@ -694,7 +694,7 @@ orders checkpoints independently of file times.</p></li>
 
 <dl class="py data">
 <dt class="sig sig-object py" id="edelweissfe.utils.checkpoint.CHECKPOINT_FORMAT_VERSION">
-<span class="sig-prename descclassname"><span class="pre">edelweissfe.utils.checkpoint.</span></span><span class="sig-name descname"><span class="pre">CHECKPOINT_FORMAT_VERSION</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">11</span></span><a class="headerlink" href="#edelweissfe.utils.checkpoint.CHECKPOINT_FORMAT_VERSION" title="Link to this definition"></a></dt>
+<span class="sig-prename descclassname"><span class="pre">edelweissfe.utils.checkpoint.</span></span><span class="sig-name descname"><span class="pre">CHECKPOINT_FORMAT_VERSION</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">12</span></span><a class="headerlink" href="#edelweissfe.utils.checkpoint.CHECKPOINT_FORMAT_VERSION" title="Link to this definition"></a></dt>
 <dd><p>a run resumes
 only from checkpoints of its own layout.</p>
 <dl class="field-list simple">
@@ -709,8 +709,16 @@ unpacked by one module:</p>
 <p id="module-edelweissfe.utils.checkpointedstate">The state a component carries from one increment to the next, written to and read from a restart
 checkpoint as it is.</p>
 <p>A component <em>declares</em> that state: a mapping of attribute name to type, for instance the implicit
-solver’s</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">checkpointedState</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"prevTimeStep"</span><span class="p">:</span> <span class="n">TimeStep</span><span class="p">,</span> <span class="s2">"dU"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">}</span>
+solver’s – the last accepted increments and their dU, the digest of the numbering of the degrees of freedom these
+are vectors of, and the convergence criterion, a helper object (see below):</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">checkpointedState</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">"prevTimeStep"</span><span class="p">:</span> <span class="n">TimeStep</span><span class="p">,</span>
+    <span class="s2">"dUOfLastIncrement"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+    <span class="s2">"timeStepOfIncrementBeforeLast"</span><span class="p">:</span> <span class="n">TimeStep</span><span class="p">,</span>
+    <span class="s2">"dUOfIncrementBeforeLast"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+    <span class="s2">"dofNumberingOfLastIncrement"</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="s2">"convergenceCriterion"</span><span class="p">:</span> <span class="n">ConvergenceCriterionBase</span><span class="p">,</span>
+<span class="p">}</span>
 </pre></div>
 </div>
 <p>and <a class="reference internal" href="#edelweissfe.utils.checkpointedstate.packState" title="edelweissfe.utils.checkpointedstate.packState"><code class="xref py py-func docutils literal notranslate"><span class="pre">packState()</span></code></a> / <a class="reference internal" href="#edelweissfe.utils.checkpointedstate.unpackState" title="edelweissfe.utils.checkpointedstate.unpackState"><code class="xref py py-func docutils literal notranslate"><span class="pre">unpackState()</span></code></a> turn the declared attributes into the flat mapping of

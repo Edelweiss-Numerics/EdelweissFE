@@ -106,11 +106,19 @@
 <span class="sd">checkpoint as it is.</span>
 
 <span class="sd">A component *declares* that state: a mapping of attribute name to type, for instance the implicit</span>
-<span class="sd">solver's</span>
+<span class="sd">solver's -- the last accepted increments and their dU, the digest of the numbering of the degrees of freedom these</span>
+<span class="sd">are vectors of, and the convergence criterion, a helper object (see below):</span>
 
 <span class="sd">.. code-block:: python</span>
 
-<span class="sd">    checkpointedState = {"prevTimeStep": TimeStep, "dU": np.ndarray}</span>
+<span class="sd">    checkpointedState = {</span>
+<span class="sd">        "prevTimeStep": TimeStep,</span>
+<span class="sd">        "dUOfLastIncrement": np.ndarray,</span>
+<span class="sd">        "timeStepOfIncrementBeforeLast": TimeStep,</span>
+<span class="sd">        "dUOfIncrementBeforeLast": np.ndarray,</span>
+<span class="sd">        "dofNumberingOfLastIncrement": str,</span>
+<span class="sd">        "convergenceCriterion": ConvergenceCriterionBase,</span>
+<span class="sd">    }</span>
 
 <span class="sd">and :func:`packState` / :func:`unpackState` turn the declared attributes into the flat mapping of</span>
 <span class="sd">arrays a checkpoint stores, and back. An empty mapping declares that a component carries nothing</span>

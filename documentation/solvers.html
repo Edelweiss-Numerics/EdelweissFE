@@ -311,7 +311,11 @@ of the degrees of freedom it holds – until the next rebuild – and takes from
 locates the degrees of freedom of a field on a node set, those a Dirichlet boundary condition prescribes or a node
 force loads (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofmanager.DofManager.locateFieldOnNodeSet" title="edelweissfe.numerics.dofmanager.DofManager.locateFieldOnNodeSet"><code class="xref py py-meth docutils literal notranslate"><span class="pre">locateFieldOnNodeSet()</span></code></a>);</p></li>
 <li><p>the elements, a list of everything the solver computes like an element (<code class="docutils literal notranslate"><span class="pre">computeElements</span></code>);</p></li>
-<li><p>where the solution vector starts from after a rebuild, and where the results of a converged increment go;</p></li>
+<li><p>the state the solution vector (and the velocity and acceleration of a dynamic solver) starts from after a
+rebuild, <a class="reference internal" href="models.html#edelweissfe.models.equationsystemlayout.EquationSystemLayout.readStateFromModel" title="edelweissfe.models.equationsystemlayout.EquationSystemLayout.readStateFromModel"><code class="xref py py-meth docutils literal notranslate"><span class="pre">readStateFromModel()</span></code></a>, and where the
+results of an accepted increment go,
+<a class="reference internal" href="models.html#edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeResultsToModel" title="edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeResultsToModel"><code class="xref py py-meth docutils literal notranslate"><span class="pre">writeResultsToModel()</span></code></a> (see
+<a class="reference internal" href="nodefieldresults.html"><span class="doc">Node field results</span></a>);</p></li>
 <li><p>the model the linear solver is set up for.</p></li>
 </ul>
 </li>
@@ -327,8 +331,9 @@ the elements.</p></li>
 <a class="reference internal" href="#edelweissfe.solvers.nonlinearimplicitstatic.NIST.forEachChunk" title="edelweissfe.solvers.nonlinearimplicitstatic.NIST.forEachChunk"><code class="xref py py-meth docutils literal notranslate"><span class="pre">forEachChunk()</span></code></a>, so that they are evaluated on the same threads.</p>
 <p>The other solvers ask a part of these questions. <code class="docutils literal notranslate"><span class="pre">NID</span></code> and <code class="docutils literal notranslate"><span class="pre">NEST</span></code> derive from <code class="docutils literal notranslate"><span class="pre">NIST</span></code>, and build, fill and write
 back their equation systems through the layout; <code class="docutils literal notranslate"><span class="pre">NEST</span></code> builds its system once per step and has no topology update,
-and <code class="docutils literal notranslate"><span class="pre">NID</span></code> assembles its mass matrix from the model’s finite elements. <code class="docutils literal notranslate"><span class="pre">NED</span></code> takes only the numbering of the
-degrees of freedom from the layout, and evaluates the model’s finite elements in its own loop.</p>
+and <code class="docutils literal notranslate"><span class="pre">NID</span></code> assembles its mass matrix from the model’s finite elements. <code class="docutils literal notranslate"><span class="pre">NED</span></code> takes the numbering of the
+degrees of freedom from the layout and passes the state and the results through it, and evaluates the model’s finite
+elements in its own loop.</p>
 <p>A finite element model answers as follows: its constraints update the nodes they couple (a contact constraint
 searches for the surface it touches); its equation system numbers all nodes and the active constraints with their
 scalar variables; its elements are the finite elements; every node carries its total solution from increment to
@@ -523,35 +528,41 @@ material points evaluate their material; the cells then integrate the result.</p
 <tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.solvers.nonlinearimplicitstatic.NIST.quadraticLineSearch" title="edelweissfe.solvers.nonlinearimplicitstatic.NIST.quadraticLineSearch"><code class="xref py py-obj docutils literal notranslate"><span class="pre">quadraticLineSearch</span></code></a>(largestResidualAt)</p></td>
 <td><p>The step length <span class="math notranslate nohighlight">\(\alpha\)</span> by which a Newton correction is scaled, for a Newton iteration that overshoots or oscillates (e.g., materials switching between loading and unloading).</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.solvers.nonlinearimplicitstatic.NIST.refuseOptionsThatMeanNothing" title="edelweissfe.solvers.nonlinearimplicitstatic.NIST.refuseOptionsThatMeanNothing"><code class="xref py py-obj docutils literal notranslate"><span class="pre">refuseOptionsThatMeanNothing</span></code></a>(options, ...)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.solvers.nonlinearimplicitstatic.NIST.readStateFromModel" title="edelweissfe.solvers.nonlinearimplicitstatic.NIST.readStateFromModel"><code class="xref py py-obj docutils literal notranslate"><span class="pre">readStateFromModel</span></code></a>(U)</p></td>
+<td><p>Read the state the next increment starts from out of the model, into the vectors of the equation system just (re)built: here, the solution, through the model's layout of the equation system (see <a class="reference internal" href="models.html#edelweissfe.models.equationsystemlayout.EquationSystemLayout.readStateFromModel" title="edelweissfe.models.equationsystemlayout.EquationSystemLayout.readStateFromModel"><code class="xref py py-meth docutils literal notranslate"><span class="pre">readStateFromModel()</span></code></a>).</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.solvers.nonlinearimplicitstatic.NIST.refuseOptionsThatMeanNothing" title="edelweissfe.solvers.nonlinearimplicitstatic.NIST.refuseOptionsThatMeanNothing"><code class="xref py py-obj docutils literal notranslate"><span class="pre">refuseOptionsThatMeanNothing</span></code></a>(options, ...)</p></td>
 <td><p>Refuse an option that a declaration of options sets where it means nothing, with the options in force after the declaration.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.solvers.nonlinearimplicitstatic.NIST.schema" title="edelweissfe.solvers.nonlinearimplicitstatic.NIST.schema"><code class="xref py py-obj docutils literal notranslate"><span class="pre">schema</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.solvers.nonlinearimplicitstatic.NIST.schema" title="edelweissfe.solvers.nonlinearimplicitstatic.NIST.schema"><code class="xref py py-obj docutils literal notranslate"><span class="pre">schema</span></code></a></p></td>
 <td><p>Option schema for this solver, per OptionSchemaProvider.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.solvers.nonlinearimplicitstatic.NIST.selectLinearSolverForStep" title="edelweissfe.solvers.nonlinearimplicitstatic.NIST.selectLinearSolverForStep"><code class="xref py py-obj docutils literal notranslate"><span class="pre">selectLinearSolverForStep</span></code></a>()</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.solvers.nonlinearimplicitstatic.NIST.selectLinearSolverForStep" title="edelweissfe.solvers.nonlinearimplicitstatic.NIST.selectLinearSolverForStep"><code class="xref py py-obj docutils literal notranslate"><span class="pre">selectLinearSolverForStep</span></code></a>()</p></td>
 <td><p>Make <a class="reference internal" href="#edelweissfe.solvers.nonlinearimplicitstatic.NIST.linSolver" title="edelweissfe.solvers.nonlinearimplicitstatic.NIST.linSolver"><code class="xref py py-attr docutils literal notranslate"><span class="pre">linSolver</span></code></a> the linear solver the step about to begin names (<code class="docutils literal notranslate"><span class="pre">linsolver</span></code>): the one of the previous step if it names the same, else a new one.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setRestartData</span></code>(data)</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setRestartData</span></code>(data)</p></td>
 <td><p>Restore the state <code class="xref py py-meth docutils literal notranslate"><span class="pre">getRestartData()</span></code> returned, so that the resumed step continues exactly where the uninterrupted run would have.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.solvers.nonlinearimplicitstatic.NIST.setTrialState" title="edelweissfe.solvers.nonlinearimplicitstatic.NIST.setTrialState"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setTrialState</span></code></a>(dU, ddU, stepLength)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.solvers.nonlinearimplicitstatic.NIST.setTrialState" title="edelweissfe.solvers.nonlinearimplicitstatic.NIST.setTrialState"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setTrialState</span></code></a>(dU, ddU, stepLength)</p></td>
 <td><p>Set the trial state of a line search at a step length <span class="math notranslate nohighlight">\(\alpha\)</span> along the correction, and return its solution increment, <span class="math notranslate nohighlight">\(\Delta \boldsymbol{U} + \alpha \, \Delta\Delta \boldsymbol{U}\)</span>, at which the model is evaluated next; the iterate stays where it is.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.solvers.nonlinearimplicitstatic.NIST.solveForCorrection" title="edelweissfe.solvers.nonlinearimplicitstatic.NIST.solveForCorrection"><code class="xref py py-obj docutils literal notranslate"><span class="pre">solveForCorrection</span></code></a>(K_, R, dirichlets)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.solvers.nonlinearimplicitstatic.NIST.solveForCorrection" title="edelweissfe.solvers.nonlinearimplicitstatic.NIST.solveForCorrection"><code class="xref py py-obj docutils literal notranslate"><span class="pre">solveForCorrection</span></code></a>(K_, R, dirichlets)</p></td>
 <td><p>Solve the linearized system of a Newton iteration, <span class="math notranslate nohighlight">\(\boldsymbol{K} \, \Delta\Delta \boldsymbol{U} = \boldsymbol{R}\)</span>, for the correction <span class="math notranslate nohighlight">\(\Delta\Delta \boldsymbol{U}\)</span>.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.solvers.nonlinearimplicitstatic.NIST.solveIncrement" title="edelweissfe.solvers.nonlinearimplicitstatic.NIST.solveIncrement"><code class="xref py py-obj docutils literal notranslate"><span class="pre">solveIncrement</span></code></a>(U_n, dU, P, K, stepActions, ...)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.solvers.nonlinearimplicitstatic.NIST.solveIncrement" title="edelweissfe.solvers.nonlinearimplicitstatic.NIST.solveIncrement"><code class="xref py py-obj docutils literal notranslate"><span class="pre">solveIncrement</span></code></a>(U_n, dU, P, K, stepActions, ...)</p></td>
 <td><p>Newton's method for the solution increment of an increment.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">updateRigidBodies</span></code>(model, timeStep)</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">updateRigidBodies</span></code>(model, timeStep)</p></td>
 <td><p>Refresh the kinematics of all rigid bodies in the model after a converged increment.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">updateTopologyAndConnectivity</span></code>(model, step[, ...])</p></td>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">updateTopologyAndConnectivity</span></code>(model, step[, ...])</p></td>
 <td><p>Run the topology update, then let every mesh-dependent consumer catch up on it.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">validateModelCapabilities</span></code>(model)</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">validateModelCapabilities</span></code>(model)</p></td>
 <td><p>Validate whether the solver supports the active features/constraints of the model.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.solvers.nonlinearimplicitstatic.NIST.writeResultsToModel" title="edelweissfe.solvers.nonlinearimplicitstatic.NIST.writeResultsToModel"><code class="xref py py-obj docutils literal notranslate"><span class="pre">writeResultsToModel</span></code></a>(U, dU, P[, V, A, ...])</p></td>
+<td><p>Write the results of a converged increment to the model, through the model's layout of the equation system: the incremental degrees of freedom are set to zero first, from where the next increment starts them (see <a class="reference internal" href="models.html#edelweissfe.models.equationsystemlayout.EquationSystemLayout.zeroIncrementalCoefficients" title="edelweissfe.models.equationsystemlayout.EquationSystemLayout.zeroIncrementalCoefficients"><code class="xref py py-meth docutils literal notranslate"><span class="pre">zeroIncrementalCoefficients()</span></code></a>), then the solution, its increment and the internal force are written (see <a class="reference internal" href="models.html#edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeResultsToModel" title="edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeResultsToModel"><code class="xref py py-meth docutils literal notranslate"><span class="pre">writeResultsToModel()</span></code></a>).</p></td>
 </tr>
 </tbody>
 </table>
@@ -1330,6 +1341,20 @@ Dirichlet degrees of freedom.</p>
 </dd></dl>
 
 <dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.solvers.nonlinearimplicitstatic.NIST.readStateFromModel">
+<span class="sig-name descname"><span class="pre">readStateFromModel</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">U</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/solvers/nonlinearimplicitstatic.html#NIST.readStateFromModel"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.solvers.nonlinearimplicitstatic.NIST.readStateFromModel" title="Link to this definition"></a></dt>
+<dd><p>Read the state the next increment starts from out of the model, into the vectors of the equation system just
+(re)built: here, the solution, through the model’s layout of the equation system (see
+<a class="reference internal" href="models.html#edelweissfe.models.equationsystemlayout.EquationSystemLayout.readStateFromModel" title="edelweissfe.models.equationsystemlayout.EquationSystemLayout.readStateFromModel"><code class="xref py py-meth docutils literal notranslate"><span class="pre">readStateFromModel()</span></code></a>). A solver that
+integrates in time reads its velocity and acceleration as well.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>U</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The solution vector of the equation system, zero, overwritten.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
 <dt class="sig sig-object py" id="edelweissfe.solvers.nonlinearimplicitstatic.NIST.refuseOptionsThatMeanNothing">
 <span class="sig-name descname"><span class="pre">refuseOptionsThatMeanNothing</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">options</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">declaredOptions</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/solvers/nonlinearimplicitstatic.html#NIST.refuseOptionsThatMeanNothing"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.solvers.nonlinearimplicitstatic.NIST.refuseOptionsThatMeanNothing" title="Link to this definition"></a></dt>
 <dd><p>Refuse an option that a declaration of options sets where it means nothing, with the options in force after
@@ -1481,9 +1506,32 @@ the load parameter an unknown of the iterations, through the predictor and the m
 </dl>
 </dd></dl>
 
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.solvers.nonlinearimplicitstatic.NIST.writeResultsToModel">
+<span class="sig-name descname"><span class="pre">writeResultsToModel</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">U</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dU</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">P</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">V</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">A</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dynamicFields</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/solvers/nonlinearimplicitstatic.html#NIST.writeResultsToModel"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.solvers.nonlinearimplicitstatic.NIST.writeResultsToModel" title="Link to this definition"></a></dt>
+<dd><p>Write the results of a converged increment to the model, through the model’s layout of the equation system:
+the incremental degrees of freedom are set to zero first, from where the next increment starts them (see
+<a class="reference internal" href="models.html#edelweissfe.models.equationsystemlayout.EquationSystemLayout.zeroIncrementalCoefficients" title="edelweissfe.models.equationsystemlayout.EquationSystemLayout.zeroIncrementalCoefficients"><code class="xref py py-meth docutils literal notranslate"><span class="pre">zeroIncrementalCoefficients()</span></code></a>), then the
+solution, its increment and the internal force are written (see
+<a class="reference internal" href="models.html#edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeResultsToModel" title="edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeResultsToModel"><code class="xref py py-meth docutils literal notranslate"><span class="pre">writeResultsToModel()</span></code></a>). A solver that
+integrates in time passes its velocity and acceleration as well.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>U</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The solution.</p></li>
+<li><p><strong>dU</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The solution increment.</p></li>
+<li><p><strong>P</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The internal force.</p></li>
+<li><p><strong>V</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The velocity of a solver that integrates in time; None for a static solver.</p></li>
+<li><p><strong>A</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The acceleration of a solver that integrates in time; None for a static solver.</p></li>
+<li><p><strong>dynamicFields</strong> (<em>list</em>) – The names of the fields the solver integrates in time; None for a static solver.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
 <dl class="py attribute">
 <dt class="sig sig-object py" id="edelweissfe.solvers.nonlinearimplicitstatic.NIST.checkpointedState">
-<span class="sig-name descname"><span class="pre">checkpointedState</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">dict</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">{'convergenceCriterion':</span> <span class="pre">&lt;class</span> <span class="pre">'edelweissfe.solvers.base.convergencecriteria.ConvergenceCriterionBase'&gt;,</span> <span class="pre">'dU':</span> <span class="pre">&lt;class</span> <span class="pre">'numpy.ndarray'&gt;,</span> <span class="pre">'dUBeforePrev':</span> <span class="pre">&lt;class</span> <span class="pre">'numpy.ndarray'&gt;,</span> <span class="pre">'dofNumberingOfLastIncrement':</span> <span class="pre">&lt;class</span> <span class="pre">'str'&gt;,</span> <span class="pre">'prevTimeStep':</span> <span class="pre">&lt;class</span> <span class="pre">'edelweissfe.timesteppers.timestep.TimeStep'&gt;,</span> <span class="pre">'timeStepBeforePrev':</span> <span class="pre">&lt;class</span> <span class="pre">'edelweissfe.timesteppers.timestep.TimeStep'&gt;}</span></span><a class="headerlink" href="#edelweissfe.solvers.nonlinearimplicitstatic.NIST.checkpointedState" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">checkpointedState</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">dict</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">{'convergenceCriterion':</span> <span class="pre">&lt;class</span> <span class="pre">'edelweissfe.solvers.base.convergencecriteria.ConvergenceCriterionBase'&gt;,</span> <span class="pre">'dUOfIncrementBeforeLast':</span> <span class="pre">&lt;class</span> <span class="pre">'numpy.ndarray'&gt;,</span> <span class="pre">'dUOfLastIncrement':</span> <span class="pre">&lt;class</span> <span class="pre">'numpy.ndarray'&gt;,</span> <span class="pre">'dofNumberingOfLastIncrement':</span> <span class="pre">&lt;class</span> <span class="pre">'str'&gt;,</span> <span class="pre">'prevTimeStep':</span> <span class="pre">&lt;class</span> <span class="pre">'edelweissfe.timesteppers.timestep.TimeStep'&gt;,</span> <span class="pre">'timeStepOfIncrementBeforeLast':</span> <span class="pre">&lt;class</span> <span class="pre">'edelweissfe.timesteppers.timestep.TimeStep'&gt;}</span></span><a class="headerlink" href="#edelweissfe.solvers.nonlinearimplicitstatic.NIST.checkpointedState" title="Link to this definition"></a></dt>
 <dd><p>the last accepted increment and its dU, for a quadratic
 extrapolation the accepted increment before it and its dU, and the digest of the numbering of the degrees of
 freedom these dU are vectors of; and the state of the convergence criterion.</p>
@@ -1501,23 +1549,30 @@ freedom these dU are vectors of; and the state of the convergence criterion.</p>
 </dd></dl>
 
 <dl class="py attribute">
-<dt class="sig sig-object py" id="edelweissfe.solvers.nonlinearimplicitstatic.NIST.dU">
-<span class="sig-name descname"><span class="pre">dU</span></span><a class="headerlink" href="#edelweissfe.solvers.nonlinearimplicitstatic.NIST.dU" title="Link to this definition"></a></dt>
-<dd><p>The solution increment of the last accepted increment.</p>
+<dt class="sig sig-object py" id="edelweissfe.solvers.nonlinearimplicitstatic.NIST.dUOfIncrementBeforeLast">
+<span class="sig-name descname"><span class="pre">dUOfIncrementBeforeLast</span></span><a class="headerlink" href="#edelweissfe.solvers.nonlinearimplicitstatic.NIST.dUOfIncrementBeforeLast" title="Link to this definition"></a></dt>
+<dd><p>The solution increment of <a class="reference internal" href="#edelweissfe.solvers.nonlinearimplicitstatic.NIST.timeStepOfIncrementBeforeLast" title="edelweissfe.solvers.nonlinearimplicitstatic.NIST.timeStepOfIncrementBeforeLast"><code class="xref py py-attr docutils literal notranslate"><span class="pre">timeStepOfIncrementBeforeLast</span></code></a>.</p>
 </dd></dl>
 
 <dl class="py attribute">
-<dt class="sig sig-object py" id="edelweissfe.solvers.nonlinearimplicitstatic.NIST.dUBeforePrev">
-<span class="sig-name descname"><span class="pre">dUBeforePrev</span></span><a class="headerlink" href="#edelweissfe.solvers.nonlinearimplicitstatic.NIST.dUBeforePrev" title="Link to this definition"></a></dt>
-<dd><p>The solution increment of <a class="reference internal" href="#edelweissfe.solvers.nonlinearimplicitstatic.NIST.timeStepBeforePrev" title="edelweissfe.solvers.nonlinearimplicitstatic.NIST.timeStepBeforePrev"><code class="xref py py-attr docutils literal notranslate"><span class="pre">timeStepBeforePrev</span></code></a>.</p>
+<dt class="sig sig-object py" id="edelweissfe.solvers.nonlinearimplicitstatic.NIST.dUOfLastIncrement">
+<span class="sig-name descname"><span class="pre">dUOfLastIncrement</span></span><a class="headerlink" href="#edelweissfe.solvers.nonlinearimplicitstatic.NIST.dUOfLastIncrement" title="Link to this definition"></a></dt>
+<dd><p>a copy, since the working
+increment of the equation system changes in every iteration, and the model’s entry <code class="docutils literal notranslate"><span class="pre">dU</span></code> is a result,
+which no solver reads back.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>The solution increment of the last accepted increment, kept for the predictor</p>
+</dd>
+</dl>
 </dd></dl>
 
 <dl class="py attribute">
 <dt class="sig sig-object py" id="edelweissfe.solvers.nonlinearimplicitstatic.NIST.dofNumberingOfLastIncrement">
 <span class="sig-name descname"><span class="pre">dofNumberingOfLastIncrement</span></span><a class="headerlink" href="#edelweissfe.solvers.nonlinearimplicitstatic.NIST.dofNumberingOfLastIncrement" title="Link to this definition"></a></dt>
 <dd><p>The digest of the numbering of the degrees of freedom of the equation system the last increment was accepted
-in (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofmanager.DofManager.dofNumberingDigest" title="edelweissfe.numerics.dofmanager.DofManager.dofNumberingDigest"><code class="xref py py-attr docutils literal notranslate"><span class="pre">dofNumberingDigest</span></code></a>): <a class="reference internal" href="#edelweissfe.solvers.nonlinearimplicitstatic.NIST.dU" title="edelweissfe.solvers.nonlinearimplicitstatic.NIST.dU"><code class="xref py py-attr docutils literal notranslate"><span class="pre">dU</span></code></a> is a
-vector of it, and so is <a class="reference internal" href="#edelweissfe.solvers.nonlinearimplicitstatic.NIST.dUBeforePrev" title="edelweissfe.solvers.nonlinearimplicitstatic.NIST.dUBeforePrev"><code class="xref py py-attr docutils literal notranslate"><span class="pre">dUBeforePrev</span></code></a>, which is kept only as long as the prediction
+in (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofmanager.DofManager.dofNumberingDigest" title="edelweissfe.numerics.dofmanager.DofManager.dofNumberingDigest"><code class="xref py py-attr docutils literal notranslate"><span class="pre">dofNumberingDigest</span></code></a>): <a class="reference internal" href="#edelweissfe.solvers.nonlinearimplicitstatic.NIST.dUOfLastIncrement" title="edelweissfe.solvers.nonlinearimplicitstatic.NIST.dUOfLastIncrement"><code class="xref py py-attr docutils literal notranslate"><span class="pre">dUOfLastIncrement</span></code></a> is a
+vector of it, and so is <a class="reference internal" href="#edelweissfe.solvers.nonlinearimplicitstatic.NIST.dUOfIncrementBeforeLast" title="edelweissfe.solvers.nonlinearimplicitstatic.NIST.dUOfIncrementBeforeLast"><code class="xref py py-attr docutils literal notranslate"><span class="pre">dUOfIncrementBeforeLast</span></code></a>, which is kept only as long as the prediction
 survives the rebuilds of the equation system (see <a class="reference internal" href="#edelweissfe.solvers.nonlinearimplicitstatic.NIST.predictionSurvivesRebuild" title="edelweissfe.solvers.nonlinearimplicitstatic.NIST.predictionSurvivesRebuild"><code class="xref py py-meth docutils literal notranslate"><span class="pre">predictionSurvivesRebuild()</span></code></a>).</p>
 </dd></dl>
 
@@ -1586,8 +1641,8 @@ need it later (see ModelModifierBase.actsOnlyAtSimulationStart and NED.validateM
 </dd></dl>
 
 <dl class="py attribute">
-<dt class="sig sig-object py" id="edelweissfe.solvers.nonlinearimplicitstatic.NIST.timeStepBeforePrev">
-<span class="sig-name descname"><span class="pre">timeStepBeforePrev</span></span><a class="headerlink" href="#edelweissfe.solvers.nonlinearimplicitstatic.NIST.timeStepBeforePrev" title="Link to this definition"></a></dt>
+<dt class="sig sig-object py" id="edelweissfe.solvers.nonlinearimplicitstatic.NIST.timeStepOfIncrementBeforeLast">
+<span class="sig-name descname"><span class="pre">timeStepOfIncrementBeforeLast</span></span><a class="headerlink" href="#edelweissfe.solvers.nonlinearimplicitstatic.NIST.timeStepOfIncrementBeforeLast" title="Link to this definition"></a></dt>
 <dd><p>The accepted increment before <a class="reference internal" href="#edelweissfe.solvers.nonlinearimplicitstatic.NIST.prevTimeStep" title="edelweissfe.solvers.nonlinearimplicitstatic.NIST.prevTimeStep"><code class="xref py py-attr docutils literal notranslate"><span class="pre">prevTimeStep</span></code></a>, kept for a quadratic extrapolation only (else None).</p>
 </dd></dl>
 
@@ -1995,35 +2050,41 @@ cannot switch abruptly either, as a tangent of materials switching between loadi
 <tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">quadraticLineSearch</span></code>(largestResidualAt)</p></td>
 <td><p>The step length <span class="math notranslate nohighlight">\(\alpha\)</span> by which a Newton correction is scaled, for a Newton iteration that overshoots or oscillates (e.g., materials switching between loading and unloading).</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">refuseOptionsThatMeanNothing</span></code>(options, ...)</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">readStateFromModel</span></code>(U)</p></td>
+<td><p>Read the state the next increment starts from out of the model, into the vectors of the equation system just (re)built: here, the solution, through the model's layout of the equation system (see <a class="reference internal" href="models.html#edelweissfe.models.equationsystemlayout.EquationSystemLayout.readStateFromModel" title="edelweissfe.models.equationsystemlayout.EquationSystemLayout.readStateFromModel"><code class="xref py py-meth docutils literal notranslate"><span class="pre">readStateFromModel()</span></code></a>).</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">refuseOptionsThatMeanNothing</span></code>(options, ...)</p></td>
 <td><p>Refuse an option that a declaration of options sets where it means nothing, with the options in force after the declaration.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">schema</span></code></p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">schema</span></code></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">selectLinearSolverForStep</span></code>()</p></td>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">selectLinearSolverForStep</span></code>()</p></td>
 <td><p>Make <code class="xref py py-attr docutils literal notranslate"><span class="pre">linSolver</span></code> the linear solver the step about to begin names (<code class="docutils literal notranslate"><span class="pre">linsolver</span></code>): the one of the previous step if it names the same, else a new one.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setRestartData</span></code>(data)</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setRestartData</span></code>(data)</p></td>
 <td><p>Restore the state <code class="xref py py-meth docutils literal notranslate"><span class="pre">getRestartData()</span></code> returned, so that the resumed step continues exactly where the uninterrupted run would have.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setTrialState</span></code>(dU, ddU, stepLength)</p></td>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setTrialState</span></code>(dU, ddU, stepLength)</p></td>
 <td><p>Set the trial state of a line search at a step length <span class="math notranslate nohighlight">\(\alpha\)</span> along the correction, and return its solution increment, <span class="math notranslate nohighlight">\(\Delta \boldsymbol{U} + \alpha \, \Delta\Delta \boldsymbol{U}\)</span>, at which the model is evaluated next; the iterate stays where it is.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">solveForCorrection</span></code>(K_, R, dirichlets)</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">solveForCorrection</span></code>(K_, R, dirichlets)</p></td>
 <td><p>Solve the linearized system of a Newton iteration, <span class="math notranslate nohighlight">\(\boldsymbol{K} \, \Delta\Delta \boldsymbol{U} = \boldsymbol{R}\)</span>, for the correction <span class="math notranslate nohighlight">\(\Delta\Delta \boldsymbol{U}\)</span>.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">solveIncrement</span></code>(U_n, dU, P, K, stepActions, ...)</p></td>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">solveIncrement</span></code>(U_n, dU, P, K, stepActions, ...)</p></td>
 <td><p>Newton's method for the solution increment of an increment.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">updateRigidBodies</span></code>(model, timeStep)</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">updateRigidBodies</span></code>(model, timeStep)</p></td>
 <td><p>Refresh the kinematics of all rigid bodies in the model after a converged increment.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">updateTopologyAndConnectivity</span></code>(model, step[, ...])</p></td>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">updateTopologyAndConnectivity</span></code>(model, step[, ...])</p></td>
 <td><p>Run the topology update, then let every mesh-dependent consumer catch up on it.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">validateModelCapabilities</span></code>(model)</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">validateModelCapabilities</span></code>(model)</p></td>
 <td><p>Validate whether the solver supports the active features/constraints of the model.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">writeResultsToModel</span></code>(U, dU, P[, V, A, ...])</p></td>
+<td><p>Write the results of a converged increment to the model, through the model's layout of the equation system: the incremental degrees of freedom are set to zero first, from where the next increment starts them (see <a class="reference internal" href="models.html#edelweissfe.models.equationsystemlayout.EquationSystemLayout.zeroIncrementalCoefficients" title="edelweissfe.models.equationsystemlayout.EquationSystemLayout.zeroIncrementalCoefficients"><code class="xref py py-meth docutils literal notranslate"><span class="pre">zeroIncrementalCoefficients()</span></code></a>), then the solution, its increment and the internal force are written (see <a class="reference internal" href="models.html#edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeResultsToModel" title="edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeResultsToModel"><code class="xref py py-meth docutils literal notranslate"><span class="pre">writeResultsToModel()</span></code></a>).</p></td>
 </tr>
 </tbody>
 </table>
@@ -2353,7 +2414,8 @@ and the load parameter (<a class="reference internal" href="#edelweissfe.solvers
 <p>Every arc length step scales its own reference load – the change of its loads and prescribed displacements over
 the step – from <span class="math notranslate nohighlight">\(\lambda = 0\)</span>, so it starts from the loads the steps before it ended with; at its end, every
 load keeps the value the step applied (see <a class="reference internal" href="#edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength.applyStepActionsAtStepEnd" title="edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength.applyStepActionsAtStepEnd"><code class="xref py py-meth docutils literal notranslate"><span class="pre">applyStepActionsAtStepEnd()</span></code></a>). The load parameter of the step being
-solved is published as <code class="docutils literal notranslate"><span class="pre">model.additionalParameters[&quot;arc</span> <span class="pre">length</span> <span class="pre">parameter&quot;]</span></code>, e.g. for a load-displacement curve.</p>
+solved is written to the model at the acceptance of every increment, as
+<code class="docutils literal notranslate"><span class="pre">model.additionalParameters[&quot;arc</span> <span class="pre">length</span> <span class="pre">parameter&quot;]</span></code>, e.g. for a load-displacement curve.</p>
 <p>The re-equilibration after a model change (option <code class="docutils literal notranslate"><span class="pre">equilibrateAfterModelChange</span></code>) is an arc length increment of
 size zero, solved by <a class="reference internal" href="#edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength.solveIncrement" title="edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength.solveIncrement"><code class="xref py py-meth docutils literal notranslate"><span class="pre">solveIncrement()</span></code></a> like any other: the controller’s equation asks for a change of zero, so
 the controlled quantity stays where the last accepted increment left it, and the load parameter is solved for, and
@@ -2381,7 +2443,7 @@ the load parameter it reaches, committed with its state, is the one the next inc
 <table class="autosummary longtable docutils align-default">
 <tbody>
 <tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength.acceptIncrement" title="edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength.acceptIncrement"><code class="xref py py-obj docutils literal notranslate"><span class="pre">acceptIncrement</span></code></a>(step, model, timeStep)</p></td>
-<td><p>Accept the increment as <a class="reference internal" href="#edelweissfe.solvers.nonlinearimplicitstatic.NIST.acceptIncrement" title="edelweissfe.solvers.nonlinearimplicitstatic.NIST.acceptIncrement"><code class="xref py py-meth docutils literal notranslate"><span class="pre">acceptIncrement()</span></code></a> does, and keep the increment of the load parameter for the predictor alongside the solution increment.</p></td>
+<td><p>Accept the increment as <a class="reference internal" href="#edelweissfe.solvers.nonlinearimplicitstatic.NIST.acceptIncrement" title="edelweissfe.solvers.nonlinearimplicitstatic.NIST.acceptIncrement"><code class="xref py py-meth docutils literal notranslate"><span class="pre">acceptIncrement()</span></code></a> does, write the load parameter to the model with the results, and keep the increment of the load parameter for the predictor alongside the solution increment.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength.applyCorrection" title="edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength.applyCorrection"><code class="xref py py-obj docutils literal notranslate"><span class="pre">applyCorrection</span></code></a>(dU, ddU_0, stepLength)</p></td>
 <td><p>Move the iterate, the pair of the solution increment and the increment of the load parameter, by their corrections at the step length a line search chose (1 without one), see <a class="reference internal" href="#edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength.correctionAtStepLength" title="edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength.correctionAtStepLength"><code class="xref py py-meth docutils literal notranslate"><span class="pre">correctionAtStepLength()</span></code></a>.</p></td>
@@ -2536,35 +2598,41 @@ the load parameter it reaches, committed with its state, is the one the next inc
 <tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">quadraticLineSearch</span></code>(largestResidualAt)</p></td>
 <td><p>The step length <span class="math notranslate nohighlight">\(\alpha\)</span> by which a Newton correction is scaled, for a Newton iteration that overshoots or oscillates (e.g., materials switching between loading and unloading).</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">refuseOptionsThatMeanNothing</span></code>(options, ...)</p></td>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">readStateFromModel</span></code>(U)</p></td>
+<td><p>Read the state the next increment starts from out of the model, into the vectors of the equation system just (re)built: here, the solution, through the model's layout of the equation system (see <a class="reference internal" href="models.html#edelweissfe.models.equationsystemlayout.EquationSystemLayout.readStateFromModel" title="edelweissfe.models.equationsystemlayout.EquationSystemLayout.readStateFromModel"><code class="xref py py-meth docutils literal notranslate"><span class="pre">readStateFromModel()</span></code></a>).</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">refuseOptionsThatMeanNothing</span></code>(options, ...)</p></td>
 <td><p>Refuse an option that a declaration of options sets where it means nothing, with the options in force after the declaration.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength.schema" title="edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength.schema"><code class="xref py py-obj docutils literal notranslate"><span class="pre">schema</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength.schema" title="edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength.schema"><code class="xref py py-obj docutils literal notranslate"><span class="pre">schema</span></code></a></p></td>
 <td><p>Option schema for this solver, per OptionSchemaProvider.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">selectLinearSolverForStep</span></code>()</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">selectLinearSolverForStep</span></code>()</p></td>
 <td><p>Make <code class="xref py py-attr docutils literal notranslate"><span class="pre">linSolver</span></code> the linear solver the step about to begin names (<code class="docutils literal notranslate"><span class="pre">linsolver</span></code>): the one of the previous step if it names the same, else a new one.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setRestartData</span></code>(data)</p></td>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setRestartData</span></code>(data)</p></td>
 <td><p>Restore the state <code class="xref py py-meth docutils literal notranslate"><span class="pre">getRestartData()</span></code> returned, so that the resumed step continues exactly where the uninterrupted run would have.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength.setTrialState" title="edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength.setTrialState"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setTrialState</span></code></a>(dU, ddU_0, stepLength)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength.setTrialState" title="edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength.setTrialState"><code class="xref py py-obj docutils literal notranslate"><span class="pre">setTrialState</span></code></a>(dU, ddU_0, stepLength)</p></td>
 <td><p>Set the trial state of a line search at a step length along the correction of the pair: the solution increment and the load parameter, both moved by their corrections at that step length, which satisfy the controller's equation (see <a class="reference internal" href="#edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength.correctionAtStepLength" title="edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength.correctionAtStepLength"><code class="xref py py-meth docutils literal notranslate"><span class="pre">correctionAtStepLength()</span></code></a>); the iterate stays where it is.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength.solveForCorrection" title="edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength.solveForCorrection"><code class="xref py py-obj docutils literal notranslate"><span class="pre">solveForCorrection</span></code></a>(K_, R, dirichlets)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength.solveForCorrection" title="edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength.solveForCorrection"><code class="xref py py-obj docutils literal notranslate"><span class="pre">solveForCorrection</span></code></a>(K_, R, dirichlets)</p></td>
 <td><p>Solve the linearized system for two right-hand sides at once: the out-of-balance force <span class="math notranslate nohighlight">\(R_0 = R\)</span>, and the reference load <span class="math notranslate nohighlight">\(R_f\)</span>, for the corrections <span class="math notranslate nohighlight">\(\Delta\Delta U_0\)</span> and <span class="math notranslate nohighlight">\(\Delta\Delta U_f\)</span>.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength.solveIncrement" title="edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength.solveIncrement"><code class="xref py py-obj docutils literal notranslate"><span class="pre">solveIncrement</span></code></a>(U_n, dU, P, K, stepActions, ...)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength.solveIncrement" title="edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength.solveIncrement"><code class="xref py py-obj docutils literal notranslate"><span class="pre">solveIncrement</span></code></a>(U_n, dU, P, K, stepActions, ...)</p></td>
 <td><p>Newton's method for the solution increment and the increment of the load parameter together: the iterations of <a class="reference internal" href="#edelweissfe.solvers.nonlinearimplicitstatic.NIST.solveIncrement" title="edelweissfe.solvers.nonlinearimplicitstatic.NIST.solveIncrement"><code class="xref py py-meth docutils literal notranslate"><span class="pre">solveIncrement()</span></code></a>, into which the load parameter enters through the hooks of this class.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">updateRigidBodies</span></code>(model, timeStep)</p></td>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">updateRigidBodies</span></code>(model, timeStep)</p></td>
 <td><p>Refresh the kinematics of all rigid bodies in the model after a converged increment.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">updateTopologyAndConnectivity</span></code>(model, step[, ...])</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">updateTopologyAndConnectivity</span></code>(model, step[, ...])</p></td>
 <td><p>Run the topology update, then let every mesh-dependent consumer catch up on it.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">validateModelCapabilities</span></code>(model)</p></td>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">validateModelCapabilities</span></code>(model)</p></td>
 <td><p>Validate whether the solver supports the active features/constraints of the model.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">writeResultsToModel</span></code>(U, dU, P[, V, A, ...])</p></td>
+<td><p>Write the results of a converged increment to the model, through the model's layout of the equation system: the incremental degrees of freedom are set to zero first, from where the next increment starts them (see <a class="reference internal" href="models.html#edelweissfe.models.equationsystemlayout.EquationSystemLayout.zeroIncrementalCoefficients" title="edelweissfe.models.equationsystemlayout.EquationSystemLayout.zeroIncrementalCoefficients"><code class="xref py py-meth docutils literal notranslate"><span class="pre">zeroIncrementalCoefficients()</span></code></a>), then the solution, its increment and the internal force are written (see <a class="reference internal" href="models.html#edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeResultsToModel" title="edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeResultsToModel"><code class="xref py py-meth docutils literal notranslate"><span class="pre">writeResultsToModel()</span></code></a>).</p></td>
 </tr>
 </tbody>
 </table>
@@ -2589,7 +2657,8 @@ the load parameter it reaches, committed with its state, is the one the next inc
 <dt class="sig sig-object py" id="edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength.acceptIncrement">
 <span class="sig-name descname"><span class="pre">acceptIncrement</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">step</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">timeStep</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/solvers/nonlinearimplicitstaticparallelarclength.html#NISTPArcLength.acceptIncrement"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength.acceptIncrement" title="Link to this definition"></a></dt>
 <dd><p>Accept the increment as <a class="reference internal" href="#edelweissfe.solvers.nonlinearimplicitstatic.NIST.acceptIncrement" title="edelweissfe.solvers.nonlinearimplicitstatic.NIST.acceptIncrement"><code class="xref py py-meth docutils literal notranslate"><span class="pre">acceptIncrement()</span></code></a> does,
-and keep the increment of the load parameter for the predictor alongside the solution increment.</p>
+write the load parameter to the model with the results, and keep the increment of the load parameter for the
+predictor alongside the solution increment.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -2975,7 +3044,7 @@ solution it belongs to.</p>
 
 <dl class="py attribute">
 <dt class="sig sig-object py" id="edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength.checkpointedState">
-<span class="sig-name descname"><span class="pre">checkpointedState</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">dict</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">{'Lambda':</span> <span class="pre">&lt;class</span> <span class="pre">'float'&gt;,</span> <span class="pre">'convergenceCriterion':</span> <span class="pre">&lt;class</span> <span class="pre">'edelweissfe.solvers.base.convergencecriteria.ConvergenceCriterionBase'&gt;,</span> <span class="pre">'dLambda':</span> <span class="pre">&lt;class</span> <span class="pre">'float'&gt;,</span> <span class="pre">'dLambdaBeforePrev':</span> <span class="pre">&lt;class</span> <span class="pre">'float'&gt;,</span> <span class="pre">'dU':</span> <span class="pre">&lt;class</span> <span class="pre">'numpy.ndarray'&gt;,</span> <span class="pre">'dUBeforePrev':</span> <span class="pre">&lt;class</span> <span class="pre">'numpy.ndarray'&gt;,</span> <span class="pre">'dofNumberingOfLastIncrement':</span> <span class="pre">&lt;class</span> <span class="pre">'str'&gt;,</span> <span class="pre">'prevTimeStep':</span> <span class="pre">&lt;class</span> <span class="pre">'edelweissfe.timesteppers.timestep.TimeStep'&gt;,</span> <span class="pre">'timeStepBeforePrev':</span> <span class="pre">&lt;class</span> <span class="pre">'edelweissfe.timesteppers.timestep.TimeStep'&gt;}</span></span><a class="headerlink" href="#edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength.checkpointedState" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">checkpointedState</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">dict</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">{'Lambda':</span> <span class="pre">&lt;class</span> <span class="pre">'float'&gt;,</span> <span class="pre">'convergenceCriterion':</span> <span class="pre">&lt;class</span> <span class="pre">'edelweissfe.solvers.base.convergencecriteria.ConvergenceCriterionBase'&gt;,</span> <span class="pre">'dLambdaOfIncrementBeforeLast':</span> <span class="pre">&lt;class</span> <span class="pre">'float'&gt;,</span> <span class="pre">'dLambdaOfLastIncrement':</span> <span class="pre">&lt;class</span> <span class="pre">'float'&gt;,</span> <span class="pre">'dUOfIncrementBeforeLast':</span> <span class="pre">&lt;class</span> <span class="pre">'numpy.ndarray'&gt;,</span> <span class="pre">'dUOfLastIncrement':</span> <span class="pre">&lt;class</span> <span class="pre">'numpy.ndarray'&gt;,</span> <span class="pre">'dofNumberingOfLastIncrement':</span> <span class="pre">&lt;class</span> <span class="pre">'str'&gt;,</span> <span class="pre">'prevTimeStep':</span> <span class="pre">&lt;class</span> <span class="pre">'edelweissfe.timesteppers.timestep.TimeStep'&gt;,</span> <span class="pre">'timeStepOfIncrementBeforeLast':</span> <span class="pre">&lt;class</span> <span class="pre">'edelweissfe.timesteppers.timestep.TimeStep'&gt;}</span></span><a class="headerlink" href="#edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength.checkpointedState" title="Link to this definition"></a></dt>
 <dd><p>the load parameter the step has reached, and the predictor’s state, NIST’s plus
 the increments of the load parameter that belong to its accepted increments.</p>
 <dl class="field-list simple">
@@ -2986,15 +3055,15 @@ the increments of the load parameter that belong to its accepted increments.</p>
 </dd></dl>
 
 <dl class="py attribute">
-<dt class="sig sig-object py" id="edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength.dLambda">
-<span class="sig-name descname"><span class="pre">dLambda</span></span><a class="headerlink" href="#edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength.dLambda" title="Link to this definition"></a></dt>
-<dd><p>The increment of the load parameter in the last accepted increment, from which the predictor extrapolates.</p>
+<dt class="sig sig-object py" id="edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength.dLambdaOfIncrementBeforeLast">
+<span class="sig-name descname"><span class="pre">dLambdaOfIncrementBeforeLast</span></span><a class="headerlink" href="#edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength.dLambdaOfIncrementBeforeLast" title="Link to this definition"></a></dt>
+<dd><p>The increment of the load parameter in the accepted increment before, for a quadratic extrapolation.</p>
 </dd></dl>
 
 <dl class="py attribute">
-<dt class="sig sig-object py" id="edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength.dLambdaBeforePrev">
-<span class="sig-name descname"><span class="pre">dLambdaBeforePrev</span></span><a class="headerlink" href="#edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength.dLambdaBeforePrev" title="Link to this definition"></a></dt>
-<dd><p>The increment of the load parameter in the accepted increment before, for a quadratic extrapolation.</p>
+<dt class="sig sig-object py" id="edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength.dLambdaOfLastIncrement">
+<span class="sig-name descname"><span class="pre">dLambdaOfLastIncrement</span></span><a class="headerlink" href="#edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength.dLambdaOfLastIncrement" title="Link to this definition"></a></dt>
+<dd><p>The increment of the load parameter in the last accepted increment, from which the predictor extrapolates.</p>
 </dd></dl>
 
 <dl class="py attribute">
@@ -3622,7 +3691,7 @@ the line search chooses: the line search cannot leave the equation unsatisfied, 
 not satisfy it yet.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">fallBackToQuasiNewton</span></code>: the tangent of the first iteration serves both right-hand sides.</p></li>
 </ul>
-<p>Every converged increment publishes the load parameter of its step as
+<p>Every accepted increment writes the load parameter of its step to the model, with its results, as
 <code class="docutils literal notranslate"><span class="pre">model.additionalParameters[&quot;arc</span> <span class="pre">length</span> <span class="pre">parameter&quot;]</span></code>, e.g. for a load-displacement curve. The solver checkpoints the
 load parameter of the step and the increments of it its predictor extrapolates, the loads what they keep from step to
 step, and the controller the change of its controlled quantity over the step, so an arc length controlled run resumes
@@ -3737,8 +3806,9 @@ after the zero increment: every later checkpoint carries the acceleration, and r
 replace a consistent state with one that agrees only to solver tolerance. Switch it off with
 <code class="docutils literal notranslate"><span class="pre">computeInitialAcceleration=False</span></code> to continue a step from whatever acceleration was carried over.</p>
 <p><strong>State and restart.</strong> Velocity and acceleration are ordinary node-field entries, <code class="docutils literal notranslate"><span class="pre">V</span></code> and <code class="docutils literal notranslate"><span class="pre">A</span></code>,
-written after every converged increment alongside the parent’s <code class="docutils literal notranslate"><span class="pre">U</span></code>/<code class="docutils literal notranslate"><span class="pre">P</span></code>/<code class="docutils literal notranslate"><span class="pre">dU</span></code> – the same
-mechanism the explicit solver uses for its velocity. That makes them part of every checkpoint the
+read from the model whenever the equation system is (re)built and written at the acceptance of every
+increment alongside the parent’s <code class="docutils literal notranslate"><span class="pre">U</span></code>/<code class="docutils literal notranslate"><span class="pre">P</span></code>/<code class="docutils literal notranslate"><span class="pre">dU</span></code>, both through the model’s layout of the equation
+system – the same mechanism the explicit solver uses for its velocity. That makes them part of every checkpoint the
 <code class="docutils literal notranslate"><span class="pre">*output,</span> <span class="pre">type=restart</span></code> manager writes and of every <code class="docutils literal notranslate"><span class="pre">*fieldOutput</span></code> (<code class="docutils literal notranslate"><span class="pre">result=V</span></code>,
 <code class="docutils literal notranslate"><span class="pre">result=A</span></code>), with no solver-specific restart code beyond the marker of whether the initial
 acceleration is still to be computed.</p>
@@ -3962,7 +4032,7 @@ top of the Newton loop of <a class="reference internal" href="#edelweissfe.solve
 <td><p>The weights of the last accepted increment and of the one before it in the prediction of <code class="xref py py-meth docutils literal notranslate"><span class="pre">extrapolateLastIncrement()</span></code>: <span class="math notranslate nohighlight">\(\Delta U = w_n \, \Delta U_n + w_{n-1} \, \Delta U_{n-1}\)</span>, with</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.solvers.nonlinearimplicitdynamic.NonlinearImplicitDynamic.finalizeIncrement" title="edelweissfe.solvers.nonlinearimplicitdynamic.NonlinearImplicitDynamic.finalizeIncrement"><code class="xref py py-obj docutils literal notranslate"><span class="pre">finalizeIncrement</span></code></a>(model)</p></td>
-<td><p>The converged trial kinematics become the state; see the parent's hook.</p></td>
+<td><p>The converged trial kinematics become the state of the solver, which the model receives at the acceptance of the increment (see <a class="reference internal" href="#edelweissfe.solvers.nonlinearimplicitdynamic.NonlinearImplicitDynamic.writeResultsToModel" title="edelweissfe.solvers.nonlinearimplicitdynamic.NonlinearImplicitDynamic.writeResultsToModel"><code class="xref py py-meth docutils literal notranslate"><span class="pre">writeResultsToModel()</span></code></a>); see the parent's hook.</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">firstIterateNeedsCorrection</span></code>(dirichlets)</p></td>
 <td><p>Whether the first iterate of an increment without a prediction -- the converged state of the last increment -- needs a correction before it can be checked for convergence (see <a class="reference internal" href="#edelweissfe.solvers.nonlinearimplicitdynamic.NonlinearImplicitDynamic.solveIncrement" title="edelweissfe.solvers.nonlinearimplicitdynamic.NonlinearImplicitDynamic.solveIncrement"><code class="xref py py-meth docutils literal notranslate"><span class="pre">solveIncrement()</span></code></a>): if Dirichlet boundary conditions act, whose prescribed increment the first correction makes.</p></td>
@@ -4012,38 +4082,44 @@ top of the Newton loop of <a class="reference internal" href="#edelweissfe.solve
 <tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">quadraticLineSearch</span></code>(largestResidualAt)</p></td>
 <td><p>The step length <span class="math notranslate nohighlight">\(\alpha\)</span> by which a Newton correction is scaled, for a Newton iteration that overshoots or oscillates (e.g., materials switching between loading and unloading).</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">refuseOptionsThatMeanNothing</span></code>(options, ...)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.solvers.nonlinearimplicitdynamic.NonlinearImplicitDynamic.readStateFromModel" title="edelweissfe.solvers.nonlinearimplicitdynamic.NonlinearImplicitDynamic.readStateFromModel"><code class="xref py py-obj docutils literal notranslate"><span class="pre">readStateFromModel</span></code></a>(U)</p></td>
+<td><p>Read the state the next increment starts from out of the model, into the vectors of the equation system just (re)built: the solution, as in the parent, and the velocity and the acceleration of the fields carrying a mass, where the last accepted increment (or the checkpoint, or nothing -- a start from rest) left them, and where a refinement has meanwhile interpolated them onto the nodes it created.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">refuseOptionsThatMeanNothing</span></code>(options, ...)</p></td>
 <td><p>Refuse an option that a declaration of options sets where it means nothing, with the options in force after the declaration.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.solvers.nonlinearimplicitdynamic.NonlinearImplicitDynamic.reportTopologyChangeConservation" title="edelweissfe.solvers.nonlinearimplicitdynamic.NonlinearImplicitDynamic.reportTopologyChangeConservation"><code class="xref py py-obj docutils literal notranslate"><span class="pre">reportTopologyChangeConservation</span></code></a>(before, after)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.solvers.nonlinearimplicitdynamic.NonlinearImplicitDynamic.reportTopologyChangeConservation" title="edelweissfe.solvers.nonlinearimplicitdynamic.NonlinearImplicitDynamic.reportTopologyChangeConservation"><code class="xref py py-obj docutils literal notranslate"><span class="pre">reportTopologyChangeConservation</span></code></a>(before, after)</p></td>
 <td><p>Report what a topology change did to the quantities that ought to survive it: every dynamic field's total mass is checked (and raises when violated), momentum and kinetic energy are reported -- see <code class="xref py py-mod docutils literal notranslate"><span class="pre">conservationchecks</span></code> for which of them is exact when.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.solvers.nonlinearimplicitdynamic.NonlinearImplicitDynamic.schema" title="edelweissfe.solvers.nonlinearimplicitdynamic.NonlinearImplicitDynamic.schema"><code class="xref py py-obj docutils literal notranslate"><span class="pre">schema</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.solvers.nonlinearimplicitdynamic.NonlinearImplicitDynamic.schema" title="edelweissfe.solvers.nonlinearimplicitdynamic.NonlinearImplicitDynamic.schema"><code class="xref py py-obj docutils literal notranslate"><span class="pre">schema</span></code></a></p></td>
 <td><p>Option schema for this solver, per OptionSchemaProvider.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">selectLinearSolverForStep</span></code>()</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">selectLinearSolverForStep</span></code>()</p></td>
 <td><p>Make <code class="xref py py-attr docutils literal notranslate"><span class="pre">linSolver</span></code> the linear solver the step about to begin names (<code class="docutils literal notranslate"><span class="pre">linsolver</span></code>): the one of the previous step if it names the same, else a new one.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setRestartData</span></code>(data)</p></td>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setRestartData</span></code>(data)</p></td>
 <td><p>Restore the state <code class="xref py py-meth docutils literal notranslate"><span class="pre">getRestartData()</span></code> returned, so that the resumed step continues exactly where the uninterrupted run would have.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setTrialState</span></code>(dU, ddU, stepLength)</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setTrialState</span></code>(dU, ddU, stepLength)</p></td>
 <td><p>Set the trial state of a line search at a step length <span class="math notranslate nohighlight">\(\alpha\)</span> along the correction, and return its solution increment, <span class="math notranslate nohighlight">\(\Delta \boldsymbol{U} + \alpha \, \Delta\Delta \boldsymbol{U}\)</span>, at which the model is evaluated next; the iterate stays where it is.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">solveForCorrection</span></code>(K_, R, dirichlets)</p></td>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">solveForCorrection</span></code>(K_, R, dirichlets)</p></td>
 <td><p>Solve the linearized system of a Newton iteration, <span class="math notranslate nohighlight">\(\boldsymbol{K} \, \Delta\Delta \boldsymbol{U} = \boldsymbol{R}\)</span>, for the correction <span class="math notranslate nohighlight">\(\Delta\Delta \boldsymbol{U}\)</span>.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.solvers.nonlinearimplicitdynamic.NonlinearImplicitDynamic.solveIncrement" title="edelweissfe.solvers.nonlinearimplicitdynamic.NonlinearImplicitDynamic.solveIncrement"><code class="xref py py-obj docutils literal notranslate"><span class="pre">solveIncrement</span></code></a>(U_n, dU, P, K, stepActions, ...)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.solvers.nonlinearimplicitdynamic.NonlinearImplicitDynamic.solveIncrement" title="edelweissfe.solvers.nonlinearimplicitdynamic.NonlinearImplicitDynamic.solveIncrement"><code class="xref py py-obj docutils literal notranslate"><span class="pre">solveIncrement</span></code></a>(U_n, dU, P, K, stepActions, ...)</p></td>
 <td><p>Newton-Raphson scheme on the Newmark-effective equation of motion of an increment.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">updateRigidBodies</span></code>(model, timeStep)</p></td>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">updateRigidBodies</span></code>(model, timeStep)</p></td>
 <td><p>Refresh the kinematics of all rigid bodies in the model after a converged increment.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">updateTopologyAndConnectivity</span></code>(model, step[, ...])</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">updateTopologyAndConnectivity</span></code>(model, step[, ...])</p></td>
 <td><p>Run the topology update, then let every mesh-dependent consumer catch up on it.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">validateModelCapabilities</span></code>(model)</p></td>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">validateModelCapabilities</span></code>(model)</p></td>
 <td><p>Validate whether the solver supports the active features/constraints of the model.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.solvers.nonlinearimplicitdynamic.NonlinearImplicitDynamic.writeResultsToModel" title="edelweissfe.solvers.nonlinearimplicitdynamic.NonlinearImplicitDynamic.writeResultsToModel"><code class="xref py py-obj docutils literal notranslate"><span class="pre">writeResultsToModel</span></code></a>(U, dU, P)</p></td>
+<td><p>Write the results of a converged increment to the model, as the parent does, and the velocity and the acceleration of the fields carrying a mass with them: what field outputs read, what a checkpoint stores, and what the next equation system reads back.</p></td>
 </tr>
 </tbody>
 </table>
@@ -4108,9 +4184,10 @@ left, which is what carries the kinematic state across steps.</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="edelweissfe.solvers.nonlinearimplicitdynamic.NonlinearImplicitDynamic.finalizeIncrement">
 <span class="sig-name descname"><span class="pre">finalizeIncrement</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/solvers/nonlinearimplicitdynamic.html#NonlinearImplicitDynamic.finalizeIncrement"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.solvers.nonlinearimplicitdynamic.NonlinearImplicitDynamic.finalizeIncrement" title="Link to this definition"></a></dt>
-<dd><p>The converged trial kinematics become the state; see the parent’s hook. Only an accepted
-increment gets here – a failing one leaves by exception and keeps the previous velocity
-and acceleration for the cutback.</p>
+<dd><p>The converged trial kinematics become the state of the solver, which the model receives at
+the acceptance of the increment (see <a class="reference internal" href="#edelweissfe.solvers.nonlinearimplicitdynamic.NonlinearImplicitDynamic.writeResultsToModel" title="edelweissfe.solvers.nonlinearimplicitdynamic.NonlinearImplicitDynamic.writeResultsToModel"><code class="xref py py-meth docutils literal notranslate"><span class="pre">writeResultsToModel()</span></code></a>); see the parent’s hook. Only a
+converged increment gets here – a failing one leaves by exception and keeps the previous
+velocity and acceleration for the cutback.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>model</strong> (<a class="reference internal" href="models.html#edelweissfe.models.femodel.FEModel" title="edelweissfe.models.femodel.FEModel"><em>FEModel</em></a>) – The model tree.</p>
@@ -4135,6 +4212,20 @@ assembled from.</p>
 <li><p><strong>model</strong> (<a class="reference internal" href="models.html#edelweissfe.models.femodel.FEModel" title="edelweissfe.models.femodel.FEModel"><em>FEModel</em></a>) – The model tree.</p></li>
 <li><p><strong>timeStep</strong> (<em>TimeStep</em>) – The time step.</p></li>
 </ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.solvers.nonlinearimplicitdynamic.NonlinearImplicitDynamic.readStateFromModel">
+<span class="sig-name descname"><span class="pre">readStateFromModel</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">U</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/solvers/nonlinearimplicitdynamic.html#NonlinearImplicitDynamic.readStateFromModel"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.solvers.nonlinearimplicitdynamic.NonlinearImplicitDynamic.readStateFromModel" title="Link to this definition"></a></dt>
+<dd><p>Read the state the next increment starts from out of the model, into the vectors of the equation system just
+(re)built: the solution, as in the parent, and the velocity and the acceleration of the fields carrying a mass,
+where the last accepted increment (or the checkpoint, or nothing – a start from rest) left them, and where a
+refinement has meanwhile interpolated them onto the nodes it created.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>U</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The solution vector of the equation system, zero, overwritten.</p>
 </dd>
 </dl>
 </dd></dl>
@@ -4206,9 +4297,26 @@ appearing at that instant is answered by the initial acceleration, not by a disp
 </dl>
 </dd></dl>
 
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.solvers.nonlinearimplicitdynamic.NonlinearImplicitDynamic.writeResultsToModel">
+<span class="sig-name descname"><span class="pre">writeResultsToModel</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">U</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dU</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">P</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/solvers/nonlinearimplicitdynamic.html#NonlinearImplicitDynamic.writeResultsToModel"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.solvers.nonlinearimplicitdynamic.NonlinearImplicitDynamic.writeResultsToModel" title="Link to this definition"></a></dt>
+<dd><p>Write the results of a converged increment to the model, as the parent does, and the velocity and the
+acceleration of the fields carrying a mass with them: what field outputs read, what a checkpoint stores, and
+what the next equation system reads back.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>U</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The solution.</p></li>
+<li><p><strong>dU</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The solution increment.</p></li>
+<li><p><strong>P</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The internal force.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
 <dl class="py attribute">
 <dt class="sig sig-object py" id="edelweissfe.solvers.nonlinearimplicitdynamic.NonlinearImplicitDynamic.checkpointedState">
-<span class="sig-name descname"><span class="pre">checkpointedState</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">dict</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">{'_conservationCheck':</span> <span class="pre">&lt;class</span> <span class="pre">'edelweissfe.solvers.base.conservationchecks.ConservationCheck'&gt;,</span> <span class="pre">'_conservedAtLastAccept':</span> <span class="pre">&lt;class</span> <span class="pre">'edelweissfe.solvers.nonlinearimplicitdynamic._ConservedQuantities'&gt;,</span> <span class="pre">'_initialAccelerationPending':</span> <span class="pre">&lt;class</span> <span class="pre">'bool'&gt;,</span> <span class="pre">'convergenceCriterion':</span> <span class="pre">&lt;class</span> <span class="pre">'edelweissfe.solvers.base.convergencecriteria.ConvergenceCriterionBase'&gt;,</span> <span class="pre">'dU':</span> <span class="pre">&lt;class</span> <span class="pre">'numpy.ndarray'&gt;,</span> <span class="pre">'dUBeforePrev':</span> <span class="pre">&lt;class</span> <span class="pre">'numpy.ndarray'&gt;,</span> <span class="pre">'dofNumberingOfLastIncrement':</span> <span class="pre">&lt;class</span> <span class="pre">'str'&gt;,</span> <span class="pre">'prevTimeStep':</span> <span class="pre">&lt;class</span> <span class="pre">'edelweissfe.timesteppers.timestep.TimeStep'&gt;,</span> <span class="pre">'timeStepBeforePrev':</span> <span class="pre">&lt;class</span> <span class="pre">'edelweissfe.timesteppers.timestep.TimeStep'&gt;}</span></span><a class="headerlink" href="#edelweissfe.solvers.nonlinearimplicitdynamic.NonlinearImplicitDynamic.checkpointedState" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">checkpointedState</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">dict</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">{'_conservationCheck':</span> <span class="pre">&lt;class</span> <span class="pre">'edelweissfe.solvers.base.conservationchecks.ConservationCheck'&gt;,</span> <span class="pre">'_conservedAtLastAccept':</span> <span class="pre">&lt;class</span> <span class="pre">'edelweissfe.solvers.nonlinearimplicitdynamic._ConservedQuantities'&gt;,</span> <span class="pre">'_initialAccelerationPending':</span> <span class="pre">&lt;class</span> <span class="pre">'bool'&gt;,</span> <span class="pre">'convergenceCriterion':</span> <span class="pre">&lt;class</span> <span class="pre">'edelweissfe.solvers.base.convergencecriteria.ConvergenceCriterionBase'&gt;,</span> <span class="pre">'dUOfIncrementBeforeLast':</span> <span class="pre">&lt;class</span> <span class="pre">'numpy.ndarray'&gt;,</span> <span class="pre">'dUOfLastIncrement':</span> <span class="pre">&lt;class</span> <span class="pre">'numpy.ndarray'&gt;,</span> <span class="pre">'dofNumberingOfLastIncrement':</span> <span class="pre">&lt;class</span> <span class="pre">'str'&gt;,</span> <span class="pre">'prevTimeStep':</span> <span class="pre">&lt;class</span> <span class="pre">'edelweissfe.timesteppers.timestep.TimeStep'&gt;,</span> <span class="pre">'timeStepOfIncrementBeforeLast':</span> <span class="pre">&lt;class</span> <span class="pre">'edelweissfe.timesteppers.timestep.TimeStep'&gt;}</span></span><a class="headerlink" href="#edelweissfe.solvers.nonlinearimplicitdynamic.NonlinearImplicitDynamic.checkpointedState" title="Link to this definition"></a></dt>
 <dd><p>The predictor’s state, as in the parent, the drift the conservation checks accumulate over the
 step, the conserved totals after the last accepted increment, which a topology change is
 compared against, and whether the next increment computes the acceleration from equilibrium
@@ -4568,7 +4676,7 @@ initial-acceleration solve evaluate the elements in parallel.</p>
 <td><p>The weights of the last accepted increment and of the one before it in the prediction of <code class="xref py py-meth docutils literal notranslate"><span class="pre">extrapolateLastIncrement()</span></code>: <span class="math notranslate nohighlight">\(\Delta U = w_n \, \Delta U_n + w_{n-1} \, \Delta U_{n-1}\)</span>, with</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">finalizeIncrement</span></code>(model)</p></td>
-<td><p>The converged trial kinematics become the state; see the parent's hook.</p></td>
+<td><p>The converged trial kinematics become the state of the solver, which the model receives at the acceptance of the increment (see <code class="xref py py-meth docutils literal notranslate"><span class="pre">writeResultsToModel()</span></code>); see the parent's hook.</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">firstIterateNeedsCorrection</span></code>(dirichlets)</p></td>
 <td><p>Whether the first iterate of an increment without a prediction -- the converged state of the last increment -- needs a correction before it can be checked for convergence (see <code class="xref py py-meth docutils literal notranslate"><span class="pre">solveIncrement()</span></code>): if Dirichlet boundary conditions act, whose prescribed increment the first correction makes.</p></td>
@@ -4618,38 +4726,44 @@ initial-acceleration solve evaluate the elements in parallel.</p>
 <tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">quadraticLineSearch</span></code>(largestResidualAt)</p></td>
 <td><p>The step length <span class="math notranslate nohighlight">\(\alpha\)</span> by which a Newton correction is scaled, for a Newton iteration that overshoots or oscillates (e.g., materials switching between loading and unloading).</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">refuseOptionsThatMeanNothing</span></code>(options, ...)</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">readStateFromModel</span></code>(U)</p></td>
+<td><p>Read the state the next increment starts from out of the model, into the vectors of the equation system just (re)built: the solution, as in the parent, and the velocity and the acceleration of the fields carrying a mass, where the last accepted increment (or the checkpoint, or nothing -- a start from rest) left them, and where a refinement has meanwhile interpolated them onto the nodes it created.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">refuseOptionsThatMeanNothing</span></code>(options, ...)</p></td>
 <td><p>Refuse an option that a declaration of options sets where it means nothing, with the options in force after the declaration.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">reportTopologyChangeConservation</span></code>(before, after)</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">reportTopologyChangeConservation</span></code>(before, after)</p></td>
 <td><p>Report what a topology change did to the quantities that ought to survive it: every dynamic field's total mass is checked (and raises when violated), momentum and kinetic energy are reported -- see <code class="xref py py-mod docutils literal notranslate"><span class="pre">conservationchecks</span></code> for which of them is exact when.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">schema</span></code></p></td>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">schema</span></code></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">selectLinearSolverForStep</span></code>()</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">selectLinearSolverForStep</span></code>()</p></td>
 <td><p>Make <code class="xref py py-attr docutils literal notranslate"><span class="pre">linSolver</span></code> the linear solver the step about to begin names (<code class="docutils literal notranslate"><span class="pre">linsolver</span></code>): the one of the previous step if it names the same, else a new one.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setRestartData</span></code>(data)</p></td>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setRestartData</span></code>(data)</p></td>
 <td><p>Restore the state <code class="xref py py-meth docutils literal notranslate"><span class="pre">getRestartData()</span></code> returned, so that the resumed step continues exactly where the uninterrupted run would have.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setTrialState</span></code>(dU, ddU, stepLength)</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setTrialState</span></code>(dU, ddU, stepLength)</p></td>
 <td><p>Set the trial state of a line search at a step length <span class="math notranslate nohighlight">\(\alpha\)</span> along the correction, and return its solution increment, <span class="math notranslate nohighlight">\(\Delta \boldsymbol{U} + \alpha \, \Delta\Delta \boldsymbol{U}\)</span>, at which the model is evaluated next; the iterate stays where it is.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">solveForCorrection</span></code>(K_, R, dirichlets)</p></td>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">solveForCorrection</span></code>(K_, R, dirichlets)</p></td>
 <td><p>Solve the linearized system of a Newton iteration, <span class="math notranslate nohighlight">\(\boldsymbol{K} \, \Delta\Delta \boldsymbol{U} = \boldsymbol{R}\)</span>, for the correction <span class="math notranslate nohighlight">\(\Delta\Delta \boldsymbol{U}\)</span>.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">solveIncrement</span></code>(U_n, dU, P, K, stepActions, ...)</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">solveIncrement</span></code>(U_n, dU, P, K, stepActions, ...)</p></td>
 <td><p>Newton-Raphson scheme on the Newmark-effective equation of motion of an increment.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">updateRigidBodies</span></code>(model, timeStep)</p></td>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">updateRigidBodies</span></code>(model, timeStep)</p></td>
 <td><p>Refresh the kinematics of all rigid bodies in the model after a converged increment.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">updateTopologyAndConnectivity</span></code>(model, step[, ...])</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">updateTopologyAndConnectivity</span></code>(model, step[, ...])</p></td>
 <td><p>Run the topology update, then let every mesh-dependent consumer catch up on it.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">validateModelCapabilities</span></code>(model)</p></td>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">validateModelCapabilities</span></code>(model)</p></td>
 <td><p>Validate whether the solver supports the active features/constraints of the model.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">writeResultsToModel</span></code>(U, dU, P)</p></td>
+<td><p>Write the results of a converged increment to the model, as the parent does, and the velocity and the acceleration of the fields carrying a mass with them: what field outputs read, what a checkpoint stores, and what the next equation system reads back.</p></td>
 </tr>
 </tbody>
 </table>
@@ -5879,35 +5993,41 @@ topology history prints that replay in a table of its own (top-level <code class
 <tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">quadraticLineSearch</span></code>(largestResidualAt)</p></td>
 <td><p>The step length <span class="math notranslate nohighlight">\(\alpha\)</span> by which a Newton correction is scaled, for a Newton iteration that overshoots or oscillates (e.g., materials switching between loading and unloading).</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">refuseOptionsThatMeanNothing</span></code>(options, ...)</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">readStateFromModel</span></code>(U)</p></td>
+<td><p>Read the state the next increment starts from out of the model, into the vectors of the equation system just (re)built: here, the solution, through the model's layout of the equation system (see <a class="reference internal" href="models.html#edelweissfe.models.equationsystemlayout.EquationSystemLayout.readStateFromModel" title="edelweissfe.models.equationsystemlayout.EquationSystemLayout.readStateFromModel"><code class="xref py py-meth docutils literal notranslate"><span class="pre">readStateFromModel()</span></code></a>).</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">refuseOptionsThatMeanNothing</span></code>(options, ...)</p></td>
 <td><p>Refuse an option that a declaration of options sets where it means nothing, with the options in force after the declaration.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.solvers.nonlinearexplicitstatic.NEST.schema" title="edelweissfe.solvers.nonlinearexplicitstatic.NEST.schema"><code class="xref py py-obj docutils literal notranslate"><span class="pre">schema</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.solvers.nonlinearexplicitstatic.NEST.schema" title="edelweissfe.solvers.nonlinearexplicitstatic.NEST.schema"><code class="xref py py-obj docutils literal notranslate"><span class="pre">schema</span></code></a></p></td>
 <td><p>Option schema for this solver, per OptionSchemaProvider.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">selectLinearSolverForStep</span></code>()</p></td>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">selectLinearSolverForStep</span></code>()</p></td>
 <td><p>Make <a class="reference internal" href="#edelweissfe.solvers.nonlinearexplicitstatic.NEST.linSolver" title="edelweissfe.solvers.nonlinearexplicitstatic.NEST.linSolver"><code class="xref py py-attr docutils literal notranslate"><span class="pre">linSolver</span></code></a> the linear solver the step about to begin names (<code class="docutils literal notranslate"><span class="pre">linsolver</span></code>): the one of the previous step if it names the same, else a new one.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setRestartData</span></code>(data)</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setRestartData</span></code>(data)</p></td>
 <td><p>Restore the state <code class="xref py py-meth docutils literal notranslate"><span class="pre">getRestartData()</span></code> returned, so that the resumed step continues exactly where the uninterrupted run would have.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setTrialState</span></code>(dU, ddU, stepLength)</p></td>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setTrialState</span></code>(dU, ddU, stepLength)</p></td>
 <td><p>Set the trial state of a line search at a step length <span class="math notranslate nohighlight">\(\alpha\)</span> along the correction, and return its solution increment, <span class="math notranslate nohighlight">\(\Delta \boldsymbol{U} + \alpha \, \Delta\Delta \boldsymbol{U}\)</span>, at which the model is evaluated next; the iterate stays where it is.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">solveForCorrection</span></code>(K_, R, dirichlets)</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">solveForCorrection</span></code>(K_, R, dirichlets)</p></td>
 <td><p>Solve the linearized system of a Newton iteration, <span class="math notranslate nohighlight">\(\boldsymbol{K} \, \Delta\Delta \boldsymbol{U} = \boldsymbol{R}\)</span>, for the correction <span class="math notranslate nohighlight">\(\Delta\Delta \boldsymbol{U}\)</span>.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.solvers.nonlinearexplicitstatic.NEST.solveIncrement" title="edelweissfe.solvers.nonlinearexplicitstatic.NEST.solveIncrement"><code class="xref py py-obj docutils literal notranslate"><span class="pre">solveIncrement</span></code></a>(U_n, dU, P, K, stepActions, ...)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.solvers.nonlinearexplicitstatic.NEST.solveIncrement" title="edelweissfe.solvers.nonlinearexplicitstatic.NEST.solveIncrement"><code class="xref py py-obj docutils literal notranslate"><span class="pre">solveIncrement</span></code></a>(U_n, dU, P, K, stepActions, ...)</p></td>
 <td><p>Explicit Runge-Kutta scheme to solve for an increment.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">updateRigidBodies</span></code>(model, timeStep)</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">updateRigidBodies</span></code>(model, timeStep)</p></td>
 <td><p>Refresh the kinematics of all rigid bodies in the model after a converged increment.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">updateTopologyAndConnectivity</span></code>(model, step[, ...])</p></td>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">updateTopologyAndConnectivity</span></code>(model, step[, ...])</p></td>
 <td><p>Run the topology update, then let every mesh-dependent consumer catch up on it.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.solvers.nonlinearexplicitstatic.NEST.validateModelCapabilities" title="edelweissfe.solvers.nonlinearexplicitstatic.NEST.validateModelCapabilities"><code class="xref py py-obj docutils literal notranslate"><span class="pre">validateModelCapabilities</span></code></a>(model)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.solvers.nonlinearexplicitstatic.NEST.validateModelCapabilities" title="edelweissfe.solvers.nonlinearexplicitstatic.NEST.validateModelCapabilities"><code class="xref py py-obj docutils literal notranslate"><span class="pre">validateModelCapabilities</span></code></a>(model)</p></td>
 <td><p>Refuse, on top of the base checks, a constraint that is switched on and needs its connectivity updated in every increment, i.e. a contact, which searches for what it touches: this solver never performs the update.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">writeResultsToModel</span></code>(U, dU, P[, V, A, ...])</p></td>
+<td><p>Write the results of a converged increment to the model, through the model's layout of the equation system: the incremental degrees of freedom are set to zero first, from where the next increment starts them (see <a class="reference internal" href="models.html#edelweissfe.models.equationsystemlayout.EquationSystemLayout.zeroIncrementalCoefficients" title="edelweissfe.models.equationsystemlayout.EquationSystemLayout.zeroIncrementalCoefficients"><code class="xref py py-meth docutils literal notranslate"><span class="pre">zeroIncrementalCoefficients()</span></code></a>), then the solution, its increment and the internal force are written (see <a class="reference internal" href="models.html#edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeResultsToModel" title="edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeResultsToModel"><code class="xref py py-meth docutils literal notranslate"><span class="pre">writeResultsToModel()</span></code></a>).</p></td>
 </tr>
 </tbody>
 </table>
@@ -6320,35 +6440,41 @@ indirection.</p>
 <tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">quadraticLineSearch</span></code>(largestResidualAt)</p></td>
 <td><p>The step length <span class="math notranslate nohighlight">\(\alpha\)</span> by which a Newton correction is scaled, for a Newton iteration that overshoots or oscillates (e.g., materials switching between loading and unloading).</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">refuseOptionsThatMeanNothing</span></code>(options, ...)</p></td>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">readStateFromModel</span></code>(U)</p></td>
+<td><p>Read the state the next increment starts from out of the model, into the vectors of the equation system just (re)built: here, the solution, through the model's layout of the equation system (see <a class="reference internal" href="models.html#edelweissfe.models.equationsystemlayout.EquationSystemLayout.readStateFromModel" title="edelweissfe.models.equationsystemlayout.EquationSystemLayout.readStateFromModel"><code class="xref py py-meth docutils literal notranslate"><span class="pre">readStateFromModel()</span></code></a>).</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">refuseOptionsThatMeanNothing</span></code>(options, ...)</p></td>
 <td><p>Refuse an option that a declaration of options sets where it means nothing, with the options in force after the declaration.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">schema</span></code></p></td>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">schema</span></code></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">selectLinearSolverForStep</span></code>()</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">selectLinearSolverForStep</span></code>()</p></td>
 <td><p>Make <code class="xref py py-attr docutils literal notranslate"><span class="pre">linSolver</span></code> the linear solver the step about to begin names (<code class="docutils literal notranslate"><span class="pre">linsolver</span></code>): the one of the previous step if it names the same, else a new one.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setRestartData</span></code>(data)</p></td>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setRestartData</span></code>(data)</p></td>
 <td><p>Restore the state <code class="xref py py-meth docutils literal notranslate"><span class="pre">getRestartData()</span></code> returned, so that the resumed step continues exactly where the uninterrupted run would have.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setTrialState</span></code>(dU, ddU, stepLength)</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setTrialState</span></code>(dU, ddU, stepLength)</p></td>
 <td><p>Set the trial state of a line search at a step length <span class="math notranslate nohighlight">\(\alpha\)</span> along the correction, and return its solution increment, <span class="math notranslate nohighlight">\(\Delta \boldsymbol{U} + \alpha \, \Delta\Delta \boldsymbol{U}\)</span>, at which the model is evaluated next; the iterate stays where it is.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">solveForCorrection</span></code>(K_, R, dirichlets)</p></td>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">solveForCorrection</span></code>(K_, R, dirichlets)</p></td>
 <td><p>Solve the linearized system of a Newton iteration, <span class="math notranslate nohighlight">\(\boldsymbol{K} \, \Delta\Delta \boldsymbol{U} = \boldsymbol{R}\)</span>, for the correction <span class="math notranslate nohighlight">\(\Delta\Delta \boldsymbol{U}\)</span>.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">solveIncrement</span></code>(U_n, dU, P, K, stepActions, ...)</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">solveIncrement</span></code>(U_n, dU, P, K, stepActions, ...)</p></td>
 <td><p>Explicit Runge-Kutta scheme to solve for an increment.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">updateRigidBodies</span></code>(model, timeStep)</p></td>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">updateRigidBodies</span></code>(model, timeStep)</p></td>
 <td><p>Refresh the kinematics of all rigid bodies in the model after a converged increment.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">updateTopologyAndConnectivity</span></code>(model, step[, ...])</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">updateTopologyAndConnectivity</span></code>(model, step[, ...])</p></td>
 <td><p>Run the topology update, then let every mesh-dependent consumer catch up on it.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">validateModelCapabilities</span></code>(model)</p></td>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">validateModelCapabilities</span></code>(model)</p></td>
 <td><p>Refuse, on top of the base checks, a constraint that is switched on and needs its connectivity updated in every increment, i.e. a contact, which searches for what it touches: this solver never performs the update.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">writeResultsToModel</span></code>(U, dU, P[, V, A, ...])</p></td>
+<td><p>Write the results of a converged increment to the model, through the model's layout of the equation system: the incremental degrees of freedom are set to zero first, from where the next increment starts them (see <a class="reference internal" href="models.html#edelweissfe.models.equationsystemlayout.EquationSystemLayout.zeroIncrementalCoefficients" title="edelweissfe.models.equationsystemlayout.EquationSystemLayout.zeroIncrementalCoefficients"><code class="xref py py-meth docutils literal notranslate"><span class="pre">zeroIncrementalCoefficients()</span></code></a>), then the solution, its increment and the internal force are written (see <a class="reference internal" href="models.html#edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeResultsToModel" title="edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeResultsToModel"><code class="xref py py-meth docutils literal notranslate"><span class="pre">writeResultsToModel()</span></code></a>).</p></td>
 </tr>
 </tbody>
 </table>
@@ -6678,35 +6804,35 @@ one.</p></li>
 <tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">printResidualOutlierNodes</span></code>(residualOutliers)</p></td>
 <td><p>Print which nodes have the largest residuals.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.solvers.nonlinearexplicitdynamic.NED.publishNodeFields" title="edelweissfe.solvers.nonlinearexplicitdynamic.NED.publishNodeFields"><code class="xref py py-obj docutils literal notranslate"><span class="pre">publishNodeFields</span></code></a>(model, U, V, P)</p></td>
-<td><p>Write the solution, velocity and force to the node fields and the scalar variables.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.solvers.nonlinearexplicitdynamic.NED.reportTopologyChangeConservation" title="edelweissfe.solvers.nonlinearexplicitdynamic.NED.reportTopologyChangeConservation"><code class="xref py py-obj docutils literal notranslate"><span class="pre">reportTopologyChangeConservation</span></code></a>(...)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.solvers.nonlinearexplicitdynamic.NED.reportTopologyChangeConservation" title="edelweissfe.solvers.nonlinearexplicitdynamic.NED.reportTopologyChangeConservation"><code class="xref py py-obj docutils literal notranslate"><span class="pre">reportTopologyChangeConservation</span></code></a>(...)</p></td>
 <td><p>Report what a topology change did to the quantities that ought to survive it.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.solvers.nonlinearexplicitdynamic.NED.schema" title="edelweissfe.solvers.nonlinearexplicitdynamic.NED.schema"><code class="xref py py-obj docutils literal notranslate"><span class="pre">schema</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.solvers.nonlinearexplicitdynamic.NED.schema" title="edelweissfe.solvers.nonlinearexplicitdynamic.NED.schema"><code class="xref py py-obj docutils literal notranslate"><span class="pre">schema</span></code></a></p></td>
 <td><p>Option schema for this solver, per OptionSchemaProvider.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.solvers.nonlinearexplicitdynamic.NED.secondOrderMomentum" title="edelweissfe.solvers.nonlinearexplicitdynamic.NED.secondOrderMomentum"><code class="xref py py-obj docutils literal notranslate"><span class="pre">secondOrderMomentum</span></code></a>(mass, V, model)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.solvers.nonlinearexplicitdynamic.NED.secondOrderMomentum" title="edelweissfe.solvers.nonlinearexplicitdynamic.NED.secondOrderMomentum"><code class="xref py py-obj docutils literal notranslate"><span class="pre">secondOrderMomentum</span></code></a>(mass, V, model)</p></td>
 <td><p>The linear momentum of the fields whose inertia is a mass, per spatial component; see <code class="xref py py-func docutils literal notranslate"><span class="pre">linearMomentum()</span></code>.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setRestartData</span></code>(data)</p></td>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setRestartData</span></code>(data)</p></td>
 <td><p>Restore the state <code class="xref py py-meth docutils literal notranslate"><span class="pre">getRestartData()</span></code> returned, so that the resumed step continues exactly where the uninterrupted run would have.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.solvers.nonlinearexplicitdynamic.NED.solveIncrement" title="edelweissfe.solvers.nonlinearexplicitdynamic.NED.solveIncrement"><code class="xref py py-obj docutils literal notranslate"><span class="pre">solveIncrement</span></code></a>(U_n, dU, V, P, Minv, ...)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.solvers.nonlinearexplicitdynamic.NED.solveIncrement" title="edelweissfe.solvers.nonlinearexplicitdynamic.NED.solveIncrement"><code class="xref py py-obj docutils literal notranslate"><span class="pre">solveIncrement</span></code></a>(U_n, dU, V, P, Minv, ...)</p></td>
 <td><p>Standard explicit update scheme to solve for an increment.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.solvers.nonlinearexplicitdynamic.NED.updateConstraintConnectivity" title="edelweissfe.solvers.nonlinearexplicitdynamic.NED.updateConstraintConnectivity"><code class="xref py py-obj docutils literal notranslate"><span class="pre">updateConstraintConnectivity</span></code></a>(model)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.solvers.nonlinearexplicitdynamic.NED.updateConstraintConnectivity" title="edelweissfe.solvers.nonlinearexplicitdynamic.NED.updateConstraintConnectivity"><code class="xref py py-obj docutils literal notranslate"><span class="pre">updateConstraintConnectivity</span></code></a>(model)</p></td>
 <td><p>Let the constraints whose connectivity is the outcome of a search re-run that search.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">updateRigidBodies</span></code>(model, timeStep)</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">updateRigidBodies</span></code>(model, timeStep)</p></td>
 <td><p>Refresh the kinematics of all rigid bodies in the model after a converged increment.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">updateTopologyAndConnectivity</span></code>(model, step[, ...])</p></td>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">updateTopologyAndConnectivity</span></code>(model, step[, ...])</p></td>
 <td><p>Run the topology update, then let every mesh-dependent consumer catch up on it.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.solvers.nonlinearexplicitdynamic.NED.validateModelCapabilities" title="edelweissfe.solvers.nonlinearexplicitdynamic.NED.validateModelCapabilities"><code class="xref py py-obj docutils literal notranslate"><span class="pre">validateModelCapabilities</span></code></a>(model)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.solvers.nonlinearexplicitdynamic.NED.validateModelCapabilities" title="edelweissfe.solvers.nonlinearexplicitdynamic.NED.validateModelCapabilities"><code class="xref py py-obj docutils literal notranslate"><span class="pre">validateModelCapabilities</span></code></a>(model)</p></td>
 <td><p>Refuse the model features this solver cannot integrate, on top of the base checks.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.solvers.nonlinearexplicitdynamic.NED.writeResultsToModel" title="edelweissfe.solvers.nonlinearexplicitdynamic.NED.writeResultsToModel"><code class="xref py py-obj docutils literal notranslate"><span class="pre">writeResultsToModel</span></code></a>(U, dU, P, V)</p></td>
+<td><p>Write the results of an increment to the model, through the model's layout of the equation system: the solution, its increment, the force and the velocity to the node fields, and the solution to the scalar variables (see <a class="reference internal" href="models.html#edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeResultsToModel" title="edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeResultsToModel"><code class="xref py py-meth docutils literal notranslate"><span class="pre">writeResultsToModel()</span></code></a>); the incremental degrees of freedom are set to zero first, from where the next increment starts them (see <a class="reference internal" href="models.html#edelweissfe.models.equationsystemlayout.EquationSystemLayout.zeroIncrementalCoefficients" title="edelweissfe.models.equationsystemlayout.EquationSystemLayout.zeroIncrementalCoefficients"><code class="xref py py-meth docutils literal notranslate"><span class="pre">zeroIncrementalCoefficients()</span></code></a>).</p></td>
 </tr>
 </tbody>
 </table>
@@ -6794,11 +6920,11 @@ refreshed rather than rebuilt and the lumped operators are kept; see
 <li><p><strong>step</strong> – The step being solved; its actions are needed to check the multi-point constraints
 against the prescribed Dirichlet conditions.</p></li>
 <li><p><strong>previous</strong> (<a class="reference internal" href="#edelweissfe.solvers.nonlinearexplicitdynamic.ExplicitSystem" title="edelweissfe.solvers.nonlinearexplicitdynamic.ExplicitSystem"><em>ExplicitSystem</em></a>) – The system being replaced, when this is a rebuild rather than the initial build. Its
-solution, velocity and force are carried over verbatim rather than re-read from the node
-fields, which do not hold the velocity at all. A rebuild triggered by a constraint’s
-connectivity leaves the mesh – hence the DOF layout – untouched, and that is checked
-rather than assumed: copying between two different layouts would mis-index every vector
-silently.</p></li>
+solution, velocity and force are carried over verbatim rather than re-read from the model:
+they are the vectors the increment continues from. A rebuild triggered by a
+constraint’s connectivity leaves the mesh – hence the DOF layout – untouched, and that is
+checked rather than assumed: copying between two different layouts would mis-index every
+vector silently.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
@@ -6908,26 +7034,6 @@ increment that increment has to use.</p>
 <li><p><strong>step</strong> – The step being solved.</p></li>
 <li><p><strong>model</strong> (<a class="reference internal" href="models.html#edelweissfe.models.femodel.FEModel" title="edelweissfe.models.femodel.FEModel"><em>FEModel</em></a>) – The model tree.</p></li>
 <li><p><strong>isRetry</strong> (<em>bool</em>) – Never True: this solver does not retry increments.</p></li>
-</ul>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="edelweissfe.solvers.nonlinearexplicitdynamic.NED.publishNodeFields">
-<span class="sig-name descname"><span class="pre">publishNodeFields</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">U</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">V</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">P</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/solvers/nonlinearexplicitdynamic.html#NED.publishNodeFields"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.solvers.nonlinearexplicitdynamic.NED.publishNodeFields" title="Link to this definition"></a></dt>
-<dd><p>Write the solution, velocity and force to the node fields and the scalar variables.</p>
-<p>Published every increment, not only on output increments, for two reasons: an h-adaptivity
-event can fall on any increment and its interpolation reads these entries, and a restart
-checkpoint written from the node fields is the only way an explicit run can resume with its
-kinetic state intact. It is an O(nDof) copy.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>model</strong> (<a class="reference internal" href="models.html#edelweissfe.models.femodel.FEModel" title="edelweissfe.models.femodel.FEModel"><em>FEModel</em></a>) – The model tree.</p></li>
-<li><p><strong>U</strong> – The solution vector.</p></li>
-<li><p><strong>V</strong> – The velocity vector.</p></li>
-<li><p><strong>P</strong> – The net force vector.</p></li>
 </ul>
 </dd>
 </dl>
@@ -7094,11 +7200,43 @@ refused even while it is out of reach: it may come within reach during the step.
 </dl>
 </dd></dl>
 
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.solvers.nonlinearexplicitdynamic.NED.writeResultsToModel">
+<span class="sig-name descname"><span class="pre">writeResultsToModel</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">U</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dU</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">P</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">V</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/solvers/nonlinearexplicitdynamic.html#NED.writeResultsToModel"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.solvers.nonlinearexplicitdynamic.NED.writeResultsToModel" title="Link to this definition"></a></dt>
+<dd><p>Write the results of an increment to the model, through the model’s layout of the equation system: the
+solution, its increment, the force and the velocity to the node fields, and the solution to the scalar
+variables (see <a class="reference internal" href="models.html#edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeResultsToModel" title="edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeResultsToModel"><code class="xref py py-meth docutils literal notranslate"><span class="pre">writeResultsToModel()</span></code></a>); the
+incremental degrees of freedom are set to zero first, from where the next increment starts them (see
+<a class="reference internal" href="models.html#edelweissfe.models.equationsystemlayout.EquationSystemLayout.zeroIncrementalCoefficients" title="edelweissfe.models.equationsystemlayout.EquationSystemLayout.zeroIncrementalCoefficients"><code class="xref py py-meth docutils literal notranslate"><span class="pre">zeroIncrementalCoefficients()</span></code></a>).</p>
+<p>Written at every accepted increment, not only on output increments, for two reasons: an h-adaptivity
+event can fall on any increment and its interpolation reads these entries, and a restart
+checkpoint written from the node fields is the only way an explicit run can resume with its
+kinetic state intact. It is an O(nDof) copy.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>U</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The solution vector.</p></li>
+<li><p><strong>dU</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The solution increment vector of the increment.</p></li>
+<li><p><strong>P</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The net force vector.</p></li>
+<li><p><strong>V</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The velocity vector.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
 <dl class="py attribute">
 <dt class="sig sig-object py" id="edelweissfe.solvers.nonlinearexplicitdynamic.NED.checkpointedState">
 <span class="sig-name descname"><span class="pre">checkpointedState</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">dict</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">{'_conservationCheck':</span> <span class="pre">&lt;class</span> <span class="pre">'edelweissfe.solvers.base.conservationchecks.ConservationCheck'&gt;,</span> <span class="pre">'_externalWork':</span> <span class="pre">&lt;class</span> <span class="pre">'float'&gt;,</span> <span class="pre">'_warnedAboutMissingExternalWork':</span> <span class="pre">&lt;class</span> <span class="pre">'bool'&gt;,</span> <span class="pre">'_warnedAboutMissingInternalEnergy':</span> <span class="pre">&lt;class</span> <span class="pre">'bool'&gt;,</span> <span class="pre">'prevTimeStep':</span> <span class="pre">&lt;class</span> <span class="pre">'edelweissfe.timesteppers.timestep.TimeStep'&gt;}</span></span><a class="headerlink" href="#edelweissfe.solvers.nonlinearexplicitdynamic.NED.checkpointedState" title="Link to this definition"></a></dt>
 <dd><p>The last completed increment (read by the central-difference velocity update) and the external
 work, an accumulator that cannot be reconstructed from the solution.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="edelweissfe.solvers.nonlinearexplicitdynamic.NED.equationSystemLayout">
+<span class="sig-name descname"><span class="pre">equationSystemLayout</span></span><a class="headerlink" href="#edelweissfe.solvers.nonlinearexplicitdynamic.NED.equationSystemLayout" title="Link to this definition"></a></dt>
+<dd><p>What the model’s current equation system is made of (see
+<a class="reference internal" href="models.html#edelweissfe.models.femodel.FEModel.buildEquationSystem" title="edelweissfe.models.femodel.FEModel.buildEquationSystem"><code class="xref py py-meth docutils literal notranslate"><span class="pre">buildEquationSystem()</span></code></a>): the numbering of its degrees of
+freedom, and how the state and the results pass between the model and the vectors of the increments.</p>
 </dd></dl>
 
 <dl class="py attribute">
@@ -7353,35 +7491,35 @@ the update runs on whole vectors instead of indexed subsets, and gives the same 
 <tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">printResidualOutlierNodes</span></code>(residualOutliers)</p></td>
 <td><p>Print which nodes have the largest residuals.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">publishNodeFields</span></code>(model, U, V, P)</p></td>
-<td><p>Write the solution, velocity and force to the node fields and the scalar variables.</p></td>
-</tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">reportTopologyChangeConservation</span></code>(...)</p></td>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">reportTopologyChangeConservation</span></code>(...)</p></td>
 <td><p>Report what a topology change did to the quantities that ought to survive it.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">schema</span></code></p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">schema</span></code></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">secondOrderMomentum</span></code>(mass, V, model)</p></td>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">secondOrderMomentum</span></code>(mass, V, model)</p></td>
 <td><p>The linear momentum of the fields whose inertia is a mass, per spatial component; see <code class="xref py py-func docutils literal notranslate"><span class="pre">linearMomentum()</span></code>.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setRestartData</span></code>(data)</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">setRestartData</span></code>(data)</p></td>
 <td><p>Restore the state <code class="xref py py-meth docutils literal notranslate"><span class="pre">getRestartData()</span></code> returned, so that the resumed step continues exactly where the uninterrupted run would have.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">solveIncrement</span></code>(U_n, dU, V, P, Minv, ...)</p></td>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">solveIncrement</span></code>(U_n, dU, V, P, Minv, ...)</p></td>
 <td><p>Standard explicit update scheme to solve for an increment.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">updateConstraintConnectivity</span></code>(model)</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">updateConstraintConnectivity</span></code>(model)</p></td>
 <td><p>Let the constraints whose connectivity is the outcome of a search re-run that search.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">updateRigidBodies</span></code>(model, timeStep)</p></td>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">updateRigidBodies</span></code>(model, timeStep)</p></td>
 <td><p>Refresh the kinematics of all rigid bodies in the model after a converged increment.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">updateTopologyAndConnectivity</span></code>(model, step[, ...])</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">updateTopologyAndConnectivity</span></code>(model, step[, ...])</p></td>
 <td><p>Run the topology update, then let every mesh-dependent consumer catch up on it.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">validateModelCapabilities</span></code>(model)</p></td>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">validateModelCapabilities</span></code>(model)</p></td>
 <td><p>Refuse the model features this solver cannot integrate, on top of the base checks.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">writeResultsToModel</span></code>(U, dU, P, V)</p></td>
+<td><p>Write the results of an increment to the model, through the model's layout of the equation system: the solution, its increment, the force and the velocity to the node fields, and the solution to the scalar variables (see <a class="reference internal" href="models.html#edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeResultsToModel" title="edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeResultsToModel"><code class="xref py py-meth docutils literal notranslate"><span class="pre">writeResultsToModel()</span></code></a>); the incremental degrees of freedom are set to zero first, from where the next increment starts them (see <a class="reference internal" href="models.html#edelweissfe.models.equationsystemlayout.EquationSystemLayout.zeroIncrementalCoefficients" title="edelweissfe.models.equationsystemlayout.EquationSystemLayout.zeroIncrementalCoefficients"><code class="xref py py-meth docutils literal notranslate"><span class="pre">zeroIncrementalCoefficients()</span></code></a>).</p></td>
 </tr>
 </tbody>
 </table>

@@ -216,7 +216,8 @@
 <span class="sd">    Every arc length step scales its own reference load -- the change of its loads and prescribed displacements over</span>
 <span class="sd">    the step -- from :math:`\\lambda = 0`, so it starts from the loads the steps before it ended with; at its end, every</span>
 <span class="sd">    load keeps the value the step applied (see :meth:`applyStepActionsAtStepEnd`). The load parameter of the step being</span>
-<span class="sd">    solved is published as ``model.additionalParameters["arc length parameter"]``, e.g. for a load-displacement curve.</span>
+<span class="sd">    solved is written to the model at the acceptance of every increment, as</span>
+<span class="sd">    ``model.additionalParameters["arc length parameter"]``, e.g. for a load-displacement curve.</span>
 
 <span class="sd">    The re-equilibration after a model change (option ``equilibrateAfterModelChange``) is an arc length increment of</span>
 <span class="sd">    size zero, solved by :meth:`solveIncrement` like any other: the controller's equation asks for a change of zero, so</span>
@@ -245,17 +246,21 @@
 
     <span class="c1">#: The state between increments: the load parameter the step has reached, and the predictor's state, NIST's plus</span>
     <span class="c1">#: the increments of the load parameter that belong to its accepted increments.</span>
-    <span class="n">checkpointedState</span> <span class="o">=</span> <span class="n">NISTParallel</span><span class="o">.</span><span class="n">checkpointedState</span> <span class="o">|</span> <span class="p">{</span><span class="s2">"Lambda"</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="s2">"dLambda"</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="s2">"dLambdaBeforePrev"</span><span class="p">:</span> <span class="nb">float</span><span class="p">}</span>
+    <span class="n">checkpointedState</span> <span class="o">=</span> <span class="n">NISTParallel</span><span class="o">.</span><span class="n">checkpointedState</span> <span class="o">|</span> <span class="p">{</span>
+        <span class="s2">"Lambda"</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+        <span class="s2">"dLambdaOfLastIncrement"</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+        <span class="s2">"dLambdaOfIncrementBeforeLast"</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+    <span class="p">}</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">jobInfo</span><span class="p">,</span> <span class="n">journal</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
         <span class="c1">#: The load parameter of the current step, reached by its last converged increment.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">Lambda</span> <span class="o">=</span> <span class="mf">0.0</span>
         <span class="c1">#: The increment of the load parameter in the last accepted increment, from which the predictor extrapolates.</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">dLambda</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dLambdaOfLastIncrement</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="c1">#: The increment of the load parameter in the accepted increment before, for a quadratic extrapolation.</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">dLambdaBeforePrev</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dLambdaOfIncrementBeforeLast</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="c1">#: The increment of the load parameter of the converged attempt, until the increment is accepted.</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_dLambda</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_dLambdaOfConvergedAttempt</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="c1">#: The controller of the current step, or None.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">arcLengthController</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="c1">#: What the arc length method adds to the iterations of the increment being solved; None between increments.</span>
@@ -352,8 +357,8 @@
         <span class="c1"># A step starts from the load parameter zero and without a predictor state; a resumed step takes over the</span>
         <span class="c1"># checkpointed ones.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">Lambda</span> <span class="o">=</span> <span class="mf">0.0</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">dLambda</span> <span class="o">=</span> <span class="kc">None</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">dLambdaBeforePrev</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dLambdaOfLastIncrement</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dLambdaOfIncrementBeforeLast</span> <span class="o">=</span> <span class="kc">None</span>
 
         <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">beginStep</span><span class="p">(</span><span class="n">step</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">fieldOutputController</span><span class="p">,</span> <span class="n">outputmanagers</span><span class="p">)</span></div>
 
@@ -522,11 +527,9 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">arcLengthIncrement</span> <span class="o">=</span> <span class="kc">None</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">Lambda</span> <span class="o">+=</span> <span class="n">dLambda</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_dLambda</span> <span class="o">=</span> <span class="n">dLambda</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_dLambdaOfConvergedAttempt</span> <span class="o">=</span> <span class="n">dLambda</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">arcLengthController</span><span class="o">.</span><span class="n">finishIncrement</span><span class="p">(</span><span class="n">U_n</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">dLambda</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="p">)</span>
-        <span class="c1"># published for the outputs: the external load is the dead load plus the reference load times this</span>
-        <span class="n">model</span><span class="o">.</span><span class="n">additionalParameters</span><span class="p">[</span><span class="s2">"arc length parameter"</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">Lambda</span>
 
         <span class="k">for</span> <span class="n">stepActionType</span> <span class="ow">in</span> <span class="n">stepActions</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
             <span class="k">for</span> <span class="n">action</span> <span class="ow">in</span> <span class="n">stepActionType</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
@@ -888,9 +891,9 @@
             <span class="k">return</span> <span class="mf">0.0</span>
 
         <span class="n">weightOfLast</span><span class="p">,</span> <span class="n">weightOfBeforeLast</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">extrapolationWeights</span><span class="p">(</span><span class="n">extrapolation</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">,</span> <span class="n">prevTimeStep</span><span class="p">)</span>
-        <span class="n">dLambda</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">dLambda</span> <span class="o">*</span> <span class="n">weightOfLast</span>
+        <span class="n">dLambda</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">dLambdaOfLastIncrement</span> <span class="o">*</span> <span class="n">weightOfLast</span>
         <span class="k">if</span> <span class="n">weightOfBeforeLast</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">dLambda</span> <span class="o">+=</span> <span class="n">weightOfBeforeLast</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">dLambdaBeforePrev</span>
+            <span class="n">dLambda</span> <span class="o">+=</span> <span class="n">weightOfBeforeLast</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">dLambdaOfIncrementBeforeLast</span>
 
         <span class="k">return</span> <span class="n">dLambda</span></div>
 
@@ -899,7 +902,8 @@
 <a class="viewcode-back" href="../../../documentation/solvers.html#edelweissfe.solvers.nonlinearimplicitstaticparallelarclength.NISTPArcLength.acceptIncrement">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">acceptIncrement</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">step</span><span class="p">,</span> <span class="n">model</span><span class="p">:</span> <span class="n">FEModel</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">:</span> <span class="n">TimeStep</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">"""Accept the increment as :meth:`~edelweissfe.solvers.nonlinearimplicitstatic.NIST.acceptIncrement` does,</span>
-<span class="sd">        and keep the increment of the load parameter for the predictor alongside the solution increment.</span>
+<span class="sd">        write the load parameter to the model with the results, and keep the increment of the load parameter for the</span>
+<span class="sd">        predictor alongside the solution increment.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
@@ -914,11 +918,15 @@
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">arcLengthController</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">acceptIncrement</span><span class="p">(</span><span class="n">step</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">)</span>
 
-        <span class="n">dLambdaOfLastIncrement</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">dLambda</span>
+        <span class="c1"># for the outputs: the external load is the dead load plus the reference load times this</span>
+        <span class="n">model</span><span class="o">.</span><span class="n">additionalParameters</span><span class="p">[</span><span class="s2">"arc length parameter"</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">Lambda</span>
+        <span class="n">dLambdaOfIncrementBeforeLast</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">dLambdaOfLastIncrement</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">acceptIncrement</span><span class="p">(</span><span class="n">step</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">timeStep</span><span class="p">)</span>
         <span class="c1"># the increment before the last one is kept just as long as the solution's is</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">dLambdaBeforePrev</span> <span class="o">=</span> <span class="n">dLambdaOfLastIncrement</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">timeStepBeforePrev</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">dLambda</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dLambda</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dLambda</span><span class="p">,</span> <span class="kc">None</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dLambdaOfIncrementBeforeLast</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">dLambdaOfIncrementBeforeLast</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">timeStepOfIncrementBeforeLast</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dLambdaOfLastIncrement</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dLambdaOfConvergedAttempt</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dLambdaOfConvergedAttempt</span><span class="p">,</span> <span class="kc">None</span></div>
 
 
 <div class="viewcode-block" id="NISTPArcLength.applyStepActionsAtStepEnd">
