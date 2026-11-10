@@ -620,6 +620,29 @@
             <span class="n">mpc</span><span class="o">.</span><span class="n">acceptLastState</span><span class="p">()</span></div>
 
 
+<div class="viewcode-block" id="FEModel.advanceVelocity">
+<a class="viewcode-back" href="../../../documentation/models.html#edelweissfe.models.femodel.FEModel.advanceVelocity">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">advanceVelocity</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">timeIncrement</span><span class="p">:</span> <span class="nb">float</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Advance the velocity of the model by its acceleration over a time increment, :math:`\\boldsymbol{V}</span>
+<span class="sd">        \\leftarrow \\boldsymbol{V} + \\Delta t \\, \\boldsymbol{A}`, in every node field, on every node.</span>
+
+<span class="sd">        An explicit solver integrates the velocity staggered half an increment behind the solution within its step,</span>
+<span class="sd">        and publishes the acceleration at the end of every increment. At the end of its step, it advances the velocity</span>
+<span class="sd">        by the half increment it lags behind, so that the step leaves the velocity at its end time, as every solver</span>
+<span class="sd">        does (see the documentation page *Node field results*). Where the acceleration is zero, the velocity stays as</span>
+<span class="sd">        it is. The model does this itself, without an equation system: a step resumed at its very end has built none.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        timeIncrement</span>
+<span class="sd">            The time increment.</span>
+<span class="sd">        """</span>
+
+        <span class="k">for</span> <span class="n">nodeField</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">nodeFields</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+            <span class="n">velocity</span> <span class="o">=</span> <span class="n">nodeField</span><span class="p">[</span><span class="s2">"V"</span><span class="p">]</span>
+            <span class="n">velocity</span> <span class="o">+=</span> <span class="n">timeIncrement</span> <span class="o">*</span> <span class="n">nodeField</span><span class="p">[</span><span class="s2">"A"</span><span class="p">]</span></div>
+
+
     <span class="k">def</span><span class="w"> </span><span class="nf">_acceptElementStates</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">"""Let every element accept its computed state, across the available threads.</span>
 

@@ -1007,7 +1007,8 @@
 <span class="sd">        :meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.zeroIncrementalCoefficients`), then the</span>
 <span class="sd">        solution, its increment and the internal force are written (see</span>
 <span class="sd">        :meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeResultsToModel`). A solver that</span>
-<span class="sd">        integrates in time passes its velocity and acceleration as well.</span>
+<span class="sd">        integrates in time passes its velocity and acceleration as well, and the internal force with its inertial and</span>
+<span class="sd">        damping forces.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
@@ -1016,7 +1017,8 @@
 <span class="sd">        dU</span>
 <span class="sd">            The solution increment.</span>
 <span class="sd">        P</span>
-<span class="sd">            The internal force.</span>
+<span class="sd">            The internal force (with the inertial and damping forces of a solver that integrates in time); None to</span>
+<span class="sd">            leave the model's as it is.</span>
 <span class="sd">        V</span>
 <span class="sd">            The velocity of a solver that integrates in time; None for a static solver.</span>
 <span class="sd">        A</span>

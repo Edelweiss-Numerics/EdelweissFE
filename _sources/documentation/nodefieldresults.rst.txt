@@ -24,16 +24,32 @@ what lives within one equation system.* An entry is therefore of one of two kind
 - **result** -- what a solver writes for output and for the user; no solver reads it back.
 
 Iterations work on the solver's vectors only. A cut back increment writes nothing. An accepted increment writes
-every entry, once (the explicit meshfree solver in two parts, see below). A rebuilt equation system (a changed mesh,
-a changed active domain, a changed coupling) reads the state entries from the model. A refinement of the mesh
-interpolates the state entries onto the nodes it creates; the results there are zero until the next accepted
-increment.
+every entry, once (the explicit meshfree solver in two parts, see below). The exceptions are the increments of the
+dynamic solvers ``NED`` and ``NID`` that integrate nothing: they evaluate no force, so they leave ``P`` as the last
+accepted increment wrote it, of this step or of the step before. These are
+
+- the zero-length increment before the first increment of a step, in both; ``NED``'s leaves the acceleration ``A``
+  as well;
+- in ``NID``, also an increment of negligible length: the round-off remainder the time stepper may leave at the end
+  of a step (see :mod:`~edelweissfe.solvers.nonlinearimplicitdynamic`).
+
+A rebuilt equation system (a changed mesh, a changed active domain, a changed coupling) reads the state entries from
+the model. A refinement of the mesh interpolates the state entries onto the nodes it creates; the results there are
+zero until the next accepted increment.
 
 Every solver passes these entries through the model's layout of its equation system
 (:class:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout`), and in no other way:
 :meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.readStateFromModel` when it (re)builds the
 system, :meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeResultsToModel` when it accepts
 an increment.
+
+A step hands the next one the model's state at its end time: the solution, and the velocity and the acceleration at
+that time. The explicit solvers integrate the velocity staggered half an increment behind the solution, and so write
+that staggered velocity at every accepted increment; at the end of their step, the model advances it by the half
+increment it lags behind, with the acceleration (:meth:`~edelweissfe.models.femodel.FEModel.advanceVelocity`, the one
+change of these entries that needs no equation system). A dynamic step starts from this state: the implicit dynamic
+solver from the velocity, completing the acceleration from equilibrium; the explicit solver ``NED`` from both, without
+evaluating anything (see :mod:`~edelweissfe.solvers.nonlinearexplicitdynamic`).
 
 The entries
 -----------
@@ -56,8 +72,8 @@ The entries
        inertia. Zero after a quasi-static step, which leaves the model at rest, and on a field the implicit dynamic
        solver treats quasi-statically, one without a mass. A field without inertia that the explicit solver integrates
        by forward Euler, through its damping, has a rate as well: its ``V`` is the rate of the increment just taken.
-       The explicit solver integrates the velocity staggered by half an increment: its ``V`` is
-       :math:`\boldsymbol{v}_{n+1/2}`.
+       The explicit solver integrates the velocity staggered by half an increment: within its step, its ``V`` is
+       :math:`\boldsymbol{v}_{n+1/2}`, and the end of the step advances it to the end time (see above).
      - at acceptance; the implicit dynamic solver completes ``A`` at the start of an increment
    * - ``dU``
      - result
@@ -70,6 +86,17 @@ The entries
        (see :ref:`residual-and-tangent-convention`). At a support that no load acts on, it is the support reaction;
        summed over the nodes of a support, it is the reaction force. Zero at a node without element.
      - at acceptance
+
+In the explicit solver (``NED``), the inertial and damping forces of a node with an equation of motion are the
+net force the next velocity update divides by, so its ``P`` is the internal force plus that net force: the force of
+the loads and the constraints acting there. At a node with a prescribed motion, the acceleration at the end of an
+increment is set by the prescribed velocity of the next one, which is not known when the increment is accepted, so
+its ``P`` is the internal force alone: the support reaction, without the inertia of the support node's own lumped
+mass. Its ``A`` is the acceleration at the end of the increment, the one with which the velocity at that time, half an
+increment after its ``V``, satisfies the equation of motion; zero at a prescribed motion. A multi-point-constraint
+slave integrates no equation of motion of its own: its inertia and its force are folded onto its masters, so its ``P``
+is its internal force, and it takes its ``V`` and ``A`` from its masters. The net force itself is the solver's state,
+not an entry (see :mod:`~edelweissfe.solvers.nonlinearexplicitdynamic`).
 
 The Lagrange multipliers of constraints are scalar variables, not node field entries
 (:class:`~edelweissfe.variables.scalarvariable.ScalarVariable`). They are state as well: each holds its total
@@ -112,9 +139,4 @@ Where the solvers do not follow this page yet
 The meanings above are being made to hold in every solver. Until then, these deviations remain; each is removed
 from this list together with the deviation:
 
-- The explicit solver (``NED``) writes as ``P`` the net force that accelerates the nodes,
-  :math:`\boldsymbol{f}_\mathrm{ext} - \boldsymbol{f}_\mathrm{int}` including loads and constraints -- the opposite
-  sign of the internal force -- and reads it back when it builds its equation system.
-- The implicit dynamic solver (``NonlinearImplicitDynamic``) writes as ``P`` the internal force without the inertial
-  and damping forces, and its zero increment at a step start writes ``P`` as zero.
 - A quasi-static step after a dynamic one leaves ``V`` and ``A`` of the last dynamic increment in the model.

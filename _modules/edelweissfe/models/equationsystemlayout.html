@@ -223,7 +223,7 @@
         <span class="n">dynamicFields</span><span class="p">:</span> <span class="nb">list</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">):</span>
 <span class="w">        </span><span class="sd">"""Write the results of an accepted increment to the model, once (see the documentation page *Node field</span>
-<span class="sd">        results*): the solution ``U``, its increment ``dU`` and the internal force ``P`` to the entries of the same</span>
+<span class="sd">        results*): the solution ``U``, its increment ``dU`` and the force ``P`` to the entries of the same</span>
 <span class="sd">        names of the node fields, the solution to the scalar variables, and, for a solver that integrates in time, the</span>
 <span class="sd">        velocity ``V`` and the acceleration ``A`` (see :meth:`writeVelocityAndAccelerationToModel`).</span>
 
@@ -239,8 +239,8 @@
 <span class="sd">        dU</span>
 <span class="sd">            The increment of the solution; None to leave the entry ``dU`` of the node fields as it is.</span>
 <span class="sd">        P</span>
-<span class="sd">            The internal force, the sum of the elements' residual contributions; None to leave the entry ``P`` of the</span>
-<span class="sd">            node fields as it is.</span>
+<span class="sd">            The internal force, the sum of the elements' residual contributions, with the inertial and damping forces</span>
+<span class="sd">            of a solver that integrates in time; None to leave the entry ``P`` of the node fields as it is.</span>
 <span class="sd">        V</span>
 <span class="sd">            The velocity; None to leave the entry ``V`` of the node fields as it is.</span>
 <span class="sd">        A</span>

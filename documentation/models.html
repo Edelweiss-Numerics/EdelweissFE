@@ -17,6 +17,7 @@
       <script src="../_static/documentation_options.js?v=17e2f33f"></script>
       <script src="../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+      <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-mml-chtml.js"></script>
     <script src="../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
@@ -154,28 +155,31 @@ for nodes and scalar degrees of freedem, and it manages the fields.</p>
 <tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.models.femodel.FEModel.advanceToTime" title="edelweissfe.models.femodel.FEModel.advanceToTime"><code class="xref py py-obj docutils literal notranslate"><span class="pre">advanceToTime</span></code></a>(time)</p></td>
 <td><p>Accept the current state of the model and sub instances, and set the new time.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.models.femodel.FEModel.buildEquationSystem" title="edelweissfe.models.femodel.FEModel.buildEquationSystem"><code class="xref py py-obj docutils literal notranslate"><span class="pre">buildEquationSystem</span></code></a>([withSystemMatrix])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.models.femodel.FEModel.advanceVelocity" title="edelweissfe.models.femodel.FEModel.advanceVelocity"><code class="xref py py-obj docutils literal notranslate"><span class="pre">advanceVelocity</span></code></a>(timeIncrement)</p></td>
+<td><p>Advance the velocity of the model by its acceleration over a time increment, <span class="math notranslate nohighlight">\(\boldsymbol{V} \leftarrow \boldsymbol{V} + \Delta t \, \boldsymbol{A}\)</span>, in every node field, on every node.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.models.femodel.FEModel.buildEquationSystem" title="edelweissfe.models.femodel.FEModel.buildEquationSystem"><code class="xref py py-obj docutils literal notranslate"><span class="pre">buildEquationSystem</span></code></a>([withSystemMatrix])</p></td>
 <td><p>Lay out the global equation system of the model as it is now: number its degrees of freedom, and say which elements contribute to it, see <a class="reference internal" href="#edelweissfe.models.equationsystemlayout.EquationSystemLayout" title="edelweissfe.models.equationsystemlayout.EquationSystemLayout"><code class="xref py py-class docutils literal notranslate"><span class="pre">EquationSystemLayout</span></code></a>.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.models.femodel.FEModel.createElement" title="edelweissfe.models.femodel.FEModel.createElement"><code class="xref py py-obj docutils literal notranslate"><span class="pre">createElement</span></code></a>(element)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.models.femodel.FEModel.createElement" title="edelweissfe.models.femodel.FEModel.createElement"><code class="xref py py-obj docutils literal notranslate"><span class="pre">createElement</span></code></a>(element)</p></td>
 <td><p>Add a freshly created element to the model.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.models.femodel.FEModel.createNode" title="edelweissfe.models.femodel.FEModel.createNode"><code class="xref py py-obj docutils literal notranslate"><span class="pre">createNode</span></code></a>(node)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.models.femodel.FEModel.createNode" title="edelweissfe.models.femodel.FEModel.createNode"><code class="xref py py-obj docutils literal notranslate"><span class="pre">createNode</span></code></a>(node)</p></td>
 <td><p>Add a freshly created node to the model.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.models.femodel.FEModel.prepareYourself" title="edelweissfe.models.femodel.FEModel.prepareYourself"><code class="xref py py-obj docutils literal notranslate"><span class="pre">prepareYourself</span></code></a>(journal)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.models.femodel.FEModel.prepareYourself" title="edelweissfe.models.femodel.FEModel.prepareYourself"><code class="xref py py-obj docutils literal notranslate"><span class="pre">prepareYourself</span></code></a>(journal)</p></td>
 <td><p>Prepare the model for a simulation.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.models.femodel.FEModel.readRestart" title="edelweissfe.models.femodel.FEModel.readRestart"><code class="xref py py-obj docutils literal notranslate"><span class="pre">readRestart</span></code></a>(restartFile[, journal])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.models.femodel.FEModel.readRestart" title="edelweissfe.models.femodel.FEModel.readRestart"><code class="xref py py-obj docutils literal notranslate"><span class="pre">readRestart</span></code></a>(restartFile[, journal])</p></td>
 <td><p>Read the state of the model from a restart checkpoint written by <a class="reference internal" href="#edelweissfe.models.femodel.FEModel.writeRestart" title="edelweissfe.models.femodel.FEModel.writeRestart"><code class="xref py py-meth docutils literal notranslate"><span class="pre">writeRestart()</span></code></a>.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.models.femodel.FEModel.removeElement" title="edelweissfe.models.femodel.FEModel.removeElement"><code class="xref py py-obj docutils literal notranslate"><span class="pre">removeElement</span></code></a>(elNumber)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.models.femodel.FEModel.removeElement" title="edelweissfe.models.femodel.FEModel.removeElement"><code class="xref py py-obj docutils literal notranslate"><span class="pre">removeElement</span></code></a>(elNumber)</p></td>
 <td><p>Remove an element from the model.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.models.femodel.FEModel.updateConnectivity" title="edelweissfe.models.femodel.FEModel.updateConnectivity"><code class="xref py py-obj docutils literal notranslate"><span class="pre">updateConnectivity</span></code></a>()</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.models.femodel.FEModel.updateConnectivity" title="edelweissfe.models.femodel.FEModel.updateConnectivity"><code class="xref py py-obj docutils literal notranslate"><span class="pre">updateConnectivity</span></code></a>()</p></td>
 <td><p>Bring the coupling of the degrees of freedom up to date with the converged state, before an increment: which nodes the entities of the equation system couple.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.models.femodel.FEModel.writeRestart" title="edelweissfe.models.femodel.FEModel.writeRestart"><code class="xref py py-obj docutils literal notranslate"><span class="pre">writeRestart</span></code></a>(restartFile)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.models.femodel.FEModel.writeRestart" title="edelweissfe.models.femodel.FEModel.writeRestart"><code class="xref py py-obj docutils literal notranslate"><span class="pre">writeRestart</span></code></a>(restartFile)</p></td>
 <td><p>Write the current (converged) state of the model to a restart checkpoint.</p></td>
 </tr>
 </tbody>
@@ -207,6 +211,23 @@ frictional history of a contact switched off for a step.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>time</strong> (<em>float</em>) – The new time.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="edelweissfe.models.femodel.FEModel.advanceVelocity">
+<span class="sig-name descname"><span class="pre">advanceVelocity</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">timeIncrement</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/models/femodel.html#FEModel.advanceVelocity"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.models.femodel.FEModel.advanceVelocity" title="Link to this definition"></a></dt>
+<dd><p>Advance the velocity of the model by its acceleration over a time increment, <span class="math notranslate nohighlight">\(\boldsymbol{V}
+\leftarrow \boldsymbol{V} + \Delta t \, \boldsymbol{A}\)</span>, in every node field, on every node.</p>
+<p>An explicit solver integrates the velocity staggered half an increment behind the solution within its step,
+and publishes the acceleration at the end of every increment. At the end of its step, it advances the velocity
+by the half increment it lags behind, so that the step leaves the velocity at its end time, as every solver
+does (see the documentation page <em>Node field results</em>). Where the acceleration is zero, the velocity stays as
+it is. The model does this itself, without an equation system: a step resumed at its very end has built none.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>timeIncrement</strong> (<em>float</em>) – The time increment.</p>
 </dd>
 </dl>
 </dd></dl>
@@ -532,7 +553,7 @@ what its methods do; the solver calls them the same way.</p>
 <td><p>Write a vector of the equation system to one entry of one node field of the model; every write of <a class="reference internal" href="#edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeResultsToModel" title="edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeResultsToModel"><code class="xref py py-meth docutils literal notranslate"><span class="pre">writeResultsToModel()</span></code></a> and <a class="reference internal" href="#edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeVelocityAndAccelerationToModel" title="edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeVelocityAndAccelerationToModel"><code class="xref py py-meth docutils literal notranslate"><span class="pre">writeVelocityAndAccelerationToModel()</span></code></a> goes through here.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeResultsToModel" title="edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeResultsToModel"><code class="xref py py-obj docutils literal notranslate"><span class="pre">writeResultsToModel</span></code></a>(U, dU, P[, V, A, ...])</p></td>
-<td><p>Write the results of an accepted increment to the model, once (see the documentation page <em>Node field results</em>): the solution <code class="docutils literal notranslate"><span class="pre">U</span></code>, its increment <code class="docutils literal notranslate"><span class="pre">dU</span></code> and the internal force <code class="docutils literal notranslate"><span class="pre">P</span></code> to the entries of the same names of the node fields, the solution to the scalar variables, and, for a solver that integrates in time, the velocity <code class="docutils literal notranslate"><span class="pre">V</span></code> and the acceleration <code class="docutils literal notranslate"><span class="pre">A</span></code> (see <a class="reference internal" href="#edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeVelocityAndAccelerationToModel" title="edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeVelocityAndAccelerationToModel"><code class="xref py py-meth docutils literal notranslate"><span class="pre">writeVelocityAndAccelerationToModel()</span></code></a>).</p></td>
+<td><p>Write the results of an accepted increment to the model, once (see the documentation page <em>Node field results</em>): the solution <code class="docutils literal notranslate"><span class="pre">U</span></code>, its increment <code class="docutils literal notranslate"><span class="pre">dU</span></code> and the force <code class="docutils literal notranslate"><span class="pre">P</span></code> to the entries of the same names of the node fields, the solution to the scalar variables, and, for a solver that integrates in time, the velocity <code class="docutils literal notranslate"><span class="pre">V</span></code> and the acceleration <code class="docutils literal notranslate"><span class="pre">A</span></code> (see <a class="reference internal" href="#edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeVelocityAndAccelerationToModel" title="edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeVelocityAndAccelerationToModel"><code class="xref py py-meth docutils literal notranslate"><span class="pre">writeVelocityAndAccelerationToModel()</span></code></a>).</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeVelocityAndAccelerationToModel" title="edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeVelocityAndAccelerationToModel"><code class="xref py py-obj docutils literal notranslate"><span class="pre">writeVelocityAndAccelerationToModel</span></code></a>(V, A[, ...])</p></td>
 <td><p>Write the velocity and the acceleration to the entries <code class="docutils literal notranslate"><span class="pre">V</span></code> and <code class="docutils literal notranslate"><span class="pre">A</span></code> of the node fields: at acceptance, as part of <a class="reference internal" href="#edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeResultsToModel" title="edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeResultsToModel"><code class="xref py py-meth docutils literal notranslate"><span class="pre">writeResultsToModel()</span></code></a>, and when a solver completes the state an increment starts from, e.g. the acceleration the implicit dynamic solver computes from equilibrium at the start of a step.</p></td>
@@ -616,7 +637,7 @@ on the others.</p>
 <dt class="sig sig-object py" id="edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeResultsToModel">
 <span class="sig-name descname"><span class="pre">writeResultsToModel</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">U</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dU</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">P</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">V</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">A</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dynamicFields</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/models/equationsystemlayout.html#EquationSystemLayout.writeResultsToModel"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeResultsToModel" title="Link to this definition"></a></dt>
 <dd><p>Write the results of an accepted increment to the model, once (see the documentation page <em>Node field
-results</em>): the solution <code class="docutils literal notranslate"><span class="pre">U</span></code>, its increment <code class="docutils literal notranslate"><span class="pre">dU</span></code> and the internal force <code class="docutils literal notranslate"><span class="pre">P</span></code> to the entries of the same
+results</em>): the solution <code class="docutils literal notranslate"><span class="pre">U</span></code>, its increment <code class="docutils literal notranslate"><span class="pre">dU</span></code> and the force <code class="docutils literal notranslate"><span class="pre">P</span></code> to the entries of the same
 names of the node fields, the solution to the scalar variables, and, for a solver that integrates in time, the
 velocity <code class="docutils literal notranslate"><span class="pre">V</span></code> and the acceleration <code class="docutils literal notranslate"><span class="pre">A</span></code> (see <a class="reference internal" href="#edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeVelocityAndAccelerationToModel" title="edelweissfe.models.equationsystemlayout.EquationSystemLayout.writeVelocityAndAccelerationToModel"><code class="xref py py-meth docutils literal notranslate"><span class="pre">writeVelocityAndAccelerationToModel()</span></code></a>).</p>
 <p>A solver whose increment ends on another equation system than it started on writes in two parts, each through
@@ -628,8 +649,8 @@ It passes None for the entries the other part writes.</p>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>U</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The solution.</p></li>
 <li><p><strong>dU</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a><em> | </em><em>None</em>) – The increment of the solution; None to leave the entry <code class="docutils literal notranslate"><span class="pre">dU</span></code> of the node fields as it is.</p></li>
-<li><p><strong>P</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a><em> | </em><em>None</em>) – The internal force, the sum of the elements’ residual contributions; None to leave the entry <code class="docutils literal notranslate"><span class="pre">P</span></code> of the
-node fields as it is.</p></li>
+<li><p><strong>P</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a><em> | </em><em>None</em>) – The internal force, the sum of the elements’ residual contributions, with the inertial and damping forces
+of a solver that integrates in time; None to leave the entry <code class="docutils literal notranslate"><span class="pre">P</span></code> of the node fields as it is.</p></li>
 <li><p><strong>V</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The velocity; None to leave the entry <code class="docutils literal notranslate"><span class="pre">V</span></code> of the node fields as it is.</p></li>
 <li><p><strong>A</strong> (<a class="reference internal" href="dofmanager.html#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The acceleration; None to leave the entry <code class="docutils literal notranslate"><span class="pre">A</span></code> of the node fields as it is.</p></li>
 <li><p><strong>dynamicFields</strong> (<em>list</em>) – The names of the fields whose velocity and acceleration are written; None for every field.</p></li>

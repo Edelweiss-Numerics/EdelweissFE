@@ -206,7 +206,8 @@
 <span class="sd">real increment -- the whole dynamic response skipped. An increment shorter than :math:`10^{-10}` of</span>
 <span class="sd">the time elapsed in the step is skipped for the same reason: it is the round-off remainder the</span>
 <span class="sd">stepper's progress accumulation leaves at the end of a step (400 increments of 0.0025 leave 2e-14),</span>
-<span class="sd">and the Newmark update would divide by its square.</span>
+<span class="sd">and the Newmark update would divide by its square. A skipped increment evaluates no force, so it</span>
+<span class="sd">leaves the node field result ``P`` as the last accepted increment wrote it.</span>
 
 <span class="sd">**Initial acceleration.** At the start of a step the acceleration is computed from equilibrium,</span>
 <span class="sd">:math:`\\boldsymbol{M} \\ddot{\\boldsymbol{u}}_0 = \\boldsymbol{P}_\\mathrm{ext}(t_0) - \\boldsymbol{P}_\\mathrm{int}(\\boldsymbol{u}_0)</span>
@@ -226,7 +227,11 @@
 <span class="sd">system -- the same mechanism the explicit solver uses for its velocity. That makes them part of every checkpoint the</span>
 <span class="sd">``*output, type=restart`` manager writes and of every ``*fieldOutput`` (``result=V``,</span>
 <span class="sd">``result=A``), with no solver-specific restart code beyond the marker of whether the initial</span>
-<span class="sd">acceleration is still to be computed.</span>
+<span class="sd">acceleration is still to be computed. The force written as ``P`` is the internal force with the</span>
+<span class="sd">inertial and damping forces of the converged state, :math:`\\boldsymbol{f}_\\mathrm{int} +</span>
+<span class="sd">\\boldsymbol{M} \\ddot{\\boldsymbol{u}}_{n+1} + \\boldsymbol{C} \\dot{\\boldsymbol{u}}_{n+1}`, as the</span>
+<span class="sd">documentation page :doc:`/documentation/nodefieldresults` defines it: at a support without load, the</span>
+<span class="sd">reaction.</span>
 
 <span class="sd">**Live h-adaptivity.** A ``*modelModifier, type=hAdaptivity`` refining the mesh mid-step is</span>
 <span class="sd">supported. Three things make that work, and only the third is this solver's own:</span>
@@ -731,6 +736,9 @@
                 <span class="mi">2</span><span class="p">,</span>
             <span class="p">)</span>
             <span class="n">dU</span><span class="p">[:]</span> <span class="o">=</span> <span class="mf">0.0</span>
+            <span class="c1"># No Newmark increment, so no force of this state is evaluated: the model keeps the force it holds (see</span>
+            <span class="c1"># writeResultsToModel).</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_currentIncrement</span> <span class="o">=</span> <span class="kc">None</span>
             <span class="k">return</span> <span class="n">U_n</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">P</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="p">{</span><span class="n">field</span><span class="p">:</span> <span class="p">[]</span> <span class="k">for</span> <span class="n">field</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">idcsOfFieldsInDofVector</span><span class="p">}</span>
 
         <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">solveIncrement</span><span class="p">(</span>
@@ -955,6 +963,13 @@
 <span class="sd">        acceleration of the fields carrying a mass with them: what field outputs read, what a checkpoint stores, and</span>
 <span class="sd">        what the next equation system reads back.</span>
 
+<span class="sd">        The force written is the internal force with the inertial and damping forces of the converged state,</span>
+<span class="sd">        :math:`\\boldsymbol{f}_\\mathrm{int} + \\boldsymbol{M} \\ddot{\\boldsymbol{u}}_{n+1} + \\boldsymbol{C}</span>
+<span class="sd">        \\dot{\\boldsymbol{u}}_{n+1}` (see the documentation page *Node field results*): at a support that no load</span>
+<span class="sd">        acts on, the reaction, the inertia of the support's own mass included. A skipped (zero-length or negligible)</span>
+<span class="sd">        increment evaluates no force; the model keeps the force the last accepted increment wrote, of this step or of</span>
+<span class="sd">        the step before.</span>
+
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
 <span class="sd">        U</span>
@@ -962,10 +977,18 @@
 <span class="sd">        dU</span>
 <span class="sd">            The solution increment.</span>
 <span class="sd">        P</span>
-<span class="sd">            The internal force.</span>
+<span class="sd">            The internal force, the elements' residual contributions.</span>
 <span class="sd">        """</span>
 
-        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">writeResultsToModel</span><span class="p">(</span><span class="n">U</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">P</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_V</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_A</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dynamicFields</span><span class="p">)</span></div>
+        <span class="n">increment</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_currentIncrement</span>
+        <span class="k">if</span> <span class="n">increment</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">internalInertialAndDampingForce</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">system</span> <span class="o">=</span> <span class="n">increment</span><span class="o">.</span><span class="n">system</span>
+            <span class="n">internalInertialAndDampingForce</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">theDofManager</span><span class="o">.</span><span class="n">constructDofVector</span><span class="p">()</span>
+            <span class="n">internalInertialAndDampingForce</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">P</span> <span class="o">+</span> <span class="n">system</span><span class="o">.</span><span class="n">massTimes</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_A</span><span class="p">)</span> <span class="o">+</span> <span class="n">system</span><span class="o">.</span><span class="n">C</span> <span class="o">@</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_V</span><span class="p">)</span>
+
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">writeResultsToModel</span><span class="p">(</span><span class="n">U</span><span class="p">,</span> <span class="n">dU</span><span class="p">,</span> <span class="n">internalInertialAndDampingForce</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_V</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_A</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dynamicFields</span><span class="p">)</span></div>
 
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_updateNewmarkSystem</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">:</span> <span class="n">FEModel</span><span class="p">,</span> <span class="n">stepActions</span><span class="p">:</span> <span class="nb">dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">_NewmarkSystem</span><span class="p">:</span>
