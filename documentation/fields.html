@@ -20,7 +20,7 @@
     <script src="../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Elements" href="elements.html" />
+    <link rel="next" title="Node field results" href="nodefieldresults.html" />
     <link rel="prev" title="Field outputs" href="fieldoutputmanager.html" /> 
 </head>
 
@@ -64,13 +64,14 @@
 <li class="toctree-l2"><a class="reference internal" href="assembly.html">System matrix assembly</a></li>
 <li class="toctree-l2"><a class="reference internal" href="fieldoutputmanager.html">Field outputs</a></li>
 <li class="toctree-l2 current"><a class="current reference internal" href="#">Fields</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#module-edelweissfe.fields.nodefield"><code class="docutils literal notranslate"><span class="pre">NodeField</span></code> - A physical field on nodes</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#nodefield-a-physical-field-on-nodes"><code class="docutils literal notranslate"><span class="pre">NodeField</span></code> - A physical field on nodes</a><ul>
 <li class="toctree-l4"><a class="reference internal" href="#edelweissfe.fields.nodefield.NodeField"><code class="docutils literal notranslate"><span class="pre">NodeField</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="#edelweissfe.fields.nodefield.NodeFieldSubset"><code class="docutils literal notranslate"><span class="pre">NodeFieldSubset</span></code></a></li>
 </ul>
 </li>
 </ul>
 </li>
+<li class="toctree-l2"><a class="reference internal" href="nodefieldresults.html">Node field results</a></li>
 <li class="toctree-l2"><a class="reference internal" href="elements.html">Elements</a></li>
 <li class="toctree-l2"><a class="reference internal" href="exceptions.html">Exceptions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generators.html">Generators</a></li>
@@ -124,13 +125,18 @@
              
   <section id="fields">
 <h1>Fields<a class="headerlink" href="#fields" title="Link to this heading"></a></h1>
-<section id="module-edelweissfe.fields.nodefield">
-<span id="nodefield-a-physical-field-on-nodes"></span><h2><code class="docutils literal notranslate"><span class="pre">NodeField</span></code> - A physical field on nodes<a class="headerlink" href="#module-edelweissfe.fields.nodefield" title="Link to this heading"></a></h2>
-<dl class="py class">
+<section id="nodefield-a-physical-field-on-nodes">
+<h2><code class="docutils literal notranslate"><span class="pre">NodeField</span></code> - A physical field on nodes<a class="headerlink" href="#nodefield-a-physical-field-on-nodes" title="Link to this heading"></a></h2>
+<p>The entries <code class="docutils literal notranslate"><span class="pre">U</span></code>, <code class="docutils literal notranslate"><span class="pre">dU</span></code>, <code class="docutils literal notranslate"><span class="pre">P</span></code>, <code class="docutils literal notranslate"><span class="pre">V</span></code> and <code class="docutils literal notranslate"><span class="pre">A</span></code> every node field holds, and their meaning, are defined in
+<a class="reference internal" href="nodefieldresults.html"><span class="doc">Node field results</span></a>.</p>
+<span class="target" id="module-edelweissfe.fields.nodefield"></span><dl class="py class">
 <dt class="sig sig-object py" id="edelweissfe.fields.nodefield.NodeField">
 <span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">edelweissfe.fields.nodefield.</span></span><span class="sig-name descname"><span class="pre">NodeField</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">fieldName</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dimension</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nodeSet</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/fields/nodefield.html#NodeField"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.fields.nodefield.NodeField" title="Link to this definition"></a></dt>
 <dd><p>This class represents a node field.
-A node field associates every node with multiple entries (e.g., flux and effort) of a field variable.
+A node field associates every node with the entries of a field variable listed in <a class="reference internal" href="#edelweissfe.fields.nodefield.NodeField.ENTRIES" title="edelweissfe.fields.nodefield.NodeField.ENTRIES"><code class="xref py py-attr docutils literal notranslate"><span class="pre">ENTRIES</span></code></a>:
+the solution <code class="docutils literal notranslate"><span class="pre">U</span></code>, its increment <code class="docutils literal notranslate"><span class="pre">dU</span></code>, the nodal force <code class="docutils literal notranslate"><span class="pre">P</span></code>, and the rates <code class="docutils literal notranslate"><span class="pre">V</span></code> and <code class="docutils literal notranslate"><span class="pre">A</span></code>. Every
+node field holds all of them, from its construction on; their meaning is defined once, in
+<a class="reference internal" href="nodefieldresults.html"><span class="doc">Node field results</span></a>.
 Furthermore, for convencience, it allows to get fast access to values for individual nodes or node sets.</p>
 <p>The purpose is to store field data in an efficient, contiguos manner rather than distributing it across
 all individual nodes.</p>
@@ -173,16 +179,13 @@ all individual nodes.</p>
 <tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.fields.nodefield.NodeField.copyEntriesFromOther" title="edelweissfe.fields.nodefield.NodeField.copyEntriesFromOther"><code class="xref py py-obj docutils literal notranslate"><span class="pre">copyEntriesFromOther</span></code></a>(other[, fieldValueEntries])</p></td>
 <td><p>Copy values from another NodeField.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.fields.nodefield.NodeField.createFieldValueEntry" title="edelweissfe.fields.nodefield.NodeField.createFieldValueEntry"><code class="xref py py-obj docutils literal notranslate"><span class="pre">createFieldValueEntry</span></code></a>(name)</p></td>
-<td><p>Add an empty entry with given name for the field, e.g, 'U' or 'P' for flux or effort entries.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.fields.nodefield.NodeField.indexOfNode" title="edelweissfe.fields.nodefield.NodeField.indexOfNode"><code class="xref py py-obj docutils literal notranslate"><span class="pre">indexOfNode</span></code></a>(node)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.fields.nodefield.NodeField.indexOfNode" title="edelweissfe.fields.nodefield.NodeField.indexOfNode"><code class="xref py py-obj docutils literal notranslate"><span class="pre">indexOfNode</span></code></a>(node)</p></td>
 <td><p>The row index of a node's entries within this field's value arrays.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.fields.nodefield.NodeField.resize" title="edelweissfe.fields.nodefield.NodeField.resize"><code class="xref py py-obj docutils literal notranslate"><span class="pre">resize</span></code></a>(nodes)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.fields.nodefield.NodeField.resize" title="edelweissfe.fields.nodefield.NodeField.resize"><code class="xref py py-obj docutils literal notranslate"><span class="pre">resize</span></code></a>(nodes)</p></td>
 <td><p>Resize this NodeField in-place for a new list of associated nodes, preserving values for every node identity present both before and after the resize (e.g. AMR-retained nodes keep their converged state; new nodes get a zeroed entry until a caller fills it in, e.g. with an interpolated warm start).</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.fields.nodefield.NodeField.subset" title="edelweissfe.fields.nodefield.NodeField.subset"><code class="xref py py-obj docutils literal notranslate"><span class="pre">subset</span></code></a>(subset)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.fields.nodefield.NodeField.subset" title="edelweissfe.fields.nodefield.NodeField.subset"><code class="xref py py-obj docutils literal notranslate"><span class="pre">subset</span></code></a>(subset)</p></td>
 <td><p>Get a view on a subset of the field.</p></td>
 </tr>
 </tbody>
@@ -191,12 +194,12 @@ all individual nodes.</p>
 <dt class="sig sig-object py" id="edelweissfe.fields.nodefield.NodeField.addEntriesFromOther">
 <span class="sig-name descname"><span class="pre">addEntriesFromOther</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">other</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fieldValueEntries</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/fields/nodefield.html#NodeField.addEntriesFromOther"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.fields.nodefield.NodeField.addEntriesFromOther" title="Link to this definition"></a></dt>
 <dd><p>Add values from another NodeField.
-If the fields differ, the intersection is considered.</p>
+Of the nodes, the intersection is considered.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>subset</strong> – The sub NodeField.</p></li>
-<li><p><strong>fieldValueEntries</strong> (<em>list</em><em>[</em><em>str</em><em>] </em><em>| </em><em>dict</em><em>[</em><em>str</em><em>, </em><em>str</em><em>]</em>) – The entries which should be added. Default: all common entries are added.
+<li><p><strong>other</strong> – The NodeField to add from.</p></li>
+<li><p><strong>fieldValueEntries</strong> (<em>list</em><em>[</em><em>str</em><em>] </em><em>| </em><em>dict</em><em>[</em><em>str</em><em>, </em><em>str</em><em>]</em>) – The entries which should be added. Default: all entries are added.
 May be a list of entry names shared by both fields, or a dict mapping an
 entry name on <code class="docutils literal notranslate"><span class="pre">other</span></code> to the (possibly differently named) entry name on
 <code class="docutils literal notranslate"><span class="pre">self</span></code> it should be accumulated into.</p></li>
@@ -209,30 +212,13 @@ entry name on <code class="docutils literal notranslate"><span class="pre">other
 <dt class="sig sig-object py" id="edelweissfe.fields.nodefield.NodeField.copyEntriesFromOther">
 <span class="sig-name descname"><span class="pre">copyEntriesFromOther</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">other</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fieldValueEntries</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/fields/nodefield.html#NodeField.copyEntriesFromOther"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.fields.nodefield.NodeField.copyEntriesFromOther" title="Link to this definition"></a></dt>
 <dd><p>Copy values from another NodeField.
-If the fields differ, the intersection is considered.</p>
+Of the nodes, the intersection is considered; the other nodes of this field get zero.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>subset</strong> – The sub NodeField.</p></li>
+<li><p><strong>other</strong> – The NodeField to copy from.</p></li>
 <li><p><strong>fieldValueEntries</strong> (<em>list</em><em>[</em><em>str</em><em>]</em>) – The list of entries which should be copied. Default: all entries are copied.</p></li>
 </ul>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="edelweissfe.fields.nodefield.NodeField.createFieldValueEntry">
-<span class="sig-name descname"><span class="pre">createFieldValueEntry</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/fields/nodefield.html#NodeField.createFieldValueEntry"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.fields.nodefield.NodeField.createFieldValueEntry" title="Link to this definition"></a></dt>
-<dd><p>Add an empty entry with given name for the field, e.g, ‘U’ or ‘P’ for flux or effort entries.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>name</strong> (<em>str</em>) – The name of the entry.</p>
-</dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>The new entry</p>
-</dd>
-<dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p>np.ndarray</p>
 </dd>
 </dl>
 </dd></dl>
@@ -292,6 +278,19 @@ Only nodes with this field active are retained, exactly as at construction.</p>
 </dl>
 </dd></dl>
 
+<dl class="py attribute">
+<dt class="sig sig-object py" id="edelweissfe.fields.nodefield.NodeField.ENTRIES">
+<span class="sig-name descname"><span class="pre">ENTRIES</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">('U',</span> <span class="pre">'dU',</span> <span class="pre">'P',</span> <span class="pre">'V',</span> <span class="pre">'A')</span></span><a class="headerlink" href="#edelweissfe.fields.nodefield.NodeField.ENTRIES" title="Link to this definition"></a></dt>
+<dd><p>the solution <code class="docutils literal notranslate"><span class="pre">U</span></code>,
+the increment <code class="docutils literal notranslate"><span class="pre">dU</span></code> of the last accepted increment, the nodal force <code class="docutils literal notranslate"><span class="pre">P</span></code>, and the rate <code class="docutils literal notranslate"><span class="pre">V</span></code> and
+second rate <code class="docutils literal notranslate"><span class="pre">A</span></code> of the solution. There are no others.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>The entries every node field holds, see <a class="reference internal" href="nodefieldresults.html"><span class="doc">Node field results</span></a></p>
+</dd>
+</dl>
+</dd></dl>
+
 </dd></dl>
 
 <dl class="py class">
@@ -306,37 +305,17 @@ Only nodes with this field active are retained, exactly as at construction.</p>
 <tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">copyEntriesFromOther</span></code>(other[, fieldValueEntries])</p></td>
 <td><p>Copy values from another NodeField.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.fields.nodefield.NodeFieldSubset.createFieldValueEntry" title="edelweissfe.fields.nodefield.NodeFieldSubset.createFieldValueEntry"><code class="xref py py-obj docutils literal notranslate"><span class="pre">createFieldValueEntry</span></code></a>(name)</p></td>
-<td><p>Add an empty entry with given name for the field, e.g, 'U' or 'P' for flux or effort entries.</p></td>
-</tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">indexOfNode</span></code>(node)</p></td>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">indexOfNode</span></code>(node)</p></td>
 <td><p>The row index of a node's entries within this field's value arrays.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">resize</span></code>(nodes)</p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">resize</span></code>(nodes)</p></td>
 <td><p>Resize this NodeField in-place for a new list of associated nodes, preserving values for every node identity present both before and after the resize (e.g. AMR-retained nodes keep their converged state; new nodes get a zeroed entry until a caller fills it in, e.g. with an interpolated warm start).</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#edelweissfe.fields.nodefield.NodeFieldSubset.subset" title="edelweissfe.fields.nodefield.NodeFieldSubset.subset"><code class="xref py py-obj docutils literal notranslate"><span class="pre">subset</span></code></a>(subset)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#edelweissfe.fields.nodefield.NodeFieldSubset.subset" title="edelweissfe.fields.nodefield.NodeFieldSubset.subset"><code class="xref py py-obj docutils literal notranslate"><span class="pre">subset</span></code></a>(subset)</p></td>
 <td><p>Get a view on a subset of the field.</p></td>
 </tr>
 </tbody>
 </table>
-<dl class="py method">
-<dt class="sig sig-object py" id="edelweissfe.fields.nodefield.NodeFieldSubset.createFieldValueEntry">
-<span class="sig-name descname"><span class="pre">createFieldValueEntry</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/fields/nodefield.html#NodeFieldSubset.createFieldValueEntry"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.fields.nodefield.NodeFieldSubset.createFieldValueEntry" title="Link to this definition"></a></dt>
-<dd><p>Add an empty entry with given name for the field, e.g, ‘U’ or ‘P’ for flux or effort entries.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>name</strong> – The name of the entry.</p>
-</dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>The new entry</p>
-</dd>
-<dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p>np.ndarray</p>
-</dd>
-</dl>
-</dd></dl>
-
 <dl class="py method">
 <dt class="sig sig-object py" id="edelweissfe.fields.nodefield.NodeFieldSubset.subset">
 <span class="sig-name descname"><span class="pre">subset</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">subset</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/edelweissfe/fields/nodefield.html#NodeFieldSubset.subset"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#edelweissfe.fields.nodefield.NodeFieldSubset.subset" title="Link to this definition"></a></dt>
@@ -364,7 +343,7 @@ Only nodes with this field active are retained, exactly as at construction.</p>
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
         <a href="fieldoutputmanager.html" class="btn btn-neutral float-left" title="Field outputs" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="elements.html" class="btn btn-neutral float-right" title="Elements" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="nodefieldresults.html" class="btn btn-neutral float-right" title="Node field results" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>

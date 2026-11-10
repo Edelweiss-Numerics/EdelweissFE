@@ -65,6 +65,7 @@
 <li class="toctree-l2"><a class="reference internal" href="assembly.html">System matrix assembly</a></li>
 <li class="toctree-l2"><a class="reference internal" href="fieldoutputmanager.html">Field outputs</a></li>
 <li class="toctree-l2"><a class="reference internal" href="fields.html">Fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="nodefieldresults.html">Node field results</a></li>
 <li class="toctree-l2"><a class="reference internal" href="elements.html">Elements</a></li>
 <li class="toctree-l2"><a class="reference internal" href="exceptions.html">Exceptions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generators.html">Generators</a></li>
@@ -748,7 +749,8 @@ Doerfler set. The halo grows only within the refineable elements, so it never le
 and it is applied <em>after</em> the <code class="docutils literal notranslate"><span class="pre">maxRefinedFraction</span></code> cap, so the final count may exceed it.</p></li>
 <li><p><strong>recovery</strong> – Recovery method: <code class="docutils literal notranslate"><span class="pre">'averaging'</span></code> (volume-weighted nodal averaging, ZZ 1987) or <code class="docutils literal notranslate"><span class="pre">'spr'</span></code>
 (superconvergent patch recovery, ZZ 1992 – the sharper choice for serendipity elements).</p></li>
-<li><p><strong>entry</strong> – Node-field value entry to read (<code class="docutils literal notranslate"><span class="pre">'U'</span></code>, the current converged field, by default).</p></li>
+<li><p><strong>entry</strong> – Node-field value entry to read, one of <a class="reference internal" href="fields.html#edelweissfe.fields.nodefield.NodeField.ENTRIES" title="edelweissfe.fields.nodefield.NodeField.ENTRIES"><code class="xref py py-attr docutils literal notranslate"><span class="pre">ENTRIES</span></code></a>
+(<code class="docutils literal notranslate"><span class="pre">'U'</span></code>, the current converged field, by default).</p></li>
 </ul>
 </dd>
 </dl>

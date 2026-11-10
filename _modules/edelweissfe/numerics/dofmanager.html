@@ -250,7 +250,7 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">_determineDofsAndTheirIndices</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">nodeFields</span><span class="p">:</span> <span class="nb">list</span><span class="p">,</span> <span class="n">scalarVariables</span><span class="p">:</span> <span class="nb">list</span><span class="p">):</span>
 
         <span class="n">nodeFields</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">nodeFields</span><span class="p">)</span>
-        <span class="c1">#: The NodeFields this DofManager numbers, by name.</span>
+        <span class="c1">#: The NodeFields this DofManager numbers, by name: the only ones it reads from and writes to as a whole.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">numberedNodeFields</span> <span class="o">=</span> <span class="p">{</span><span class="n">nodeField</span><span class="o">.</span><span class="n">name</span><span class="p">:</span> <span class="n">nodeField</span> <span class="k">for</span> <span class="n">nodeField</span> <span class="ow">in</span> <span class="n">nodeFields</span><span class="p">}</span>
 
         <span class="p">(</span>
@@ -862,6 +862,43 @@
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">indexToHostObjectMapping</span><span class="p">[</span><span class="n">index</span><span class="p">]</span></div>
 
 
+    <span class="k">def</span><span class="w"> </span><span class="nf">_checkNodeFieldAccess</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">nodeField</span><span class="p">:</span> <span class="n">NodeField</span><span class="p">,</span> <span class="n">resultName</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">wholeField</span><span class="p">:</span> <span class="nb">bool</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Refuse an access to a node field entry this DofManager cannot serve: an entry no node field holds, a field</span>
+<span class="sd">        it does not number, or -- for an access to the field as a whole, which addresses its rows by position -- a</span>
+<span class="sd">        node field other than the one it numbers, even of the same name (e.g. the node field of the model, while</span>
+<span class="sd">        this DofManager numbers that of an active domain).</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        nodeField</span>
+<span class="sd">            The NodeField accessed.</span>
+<span class="sd">        resultName</span>
+<span class="sd">            The entry accessed.</span>
+<span class="sd">        wholeField</span>
+<span class="sd">            Whether the field is accessed as a whole, rather than on the nodes of a node set.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        KeyError</span>
+<span class="sd">            If the entry is not one of :attr:`NodeField.ENTRIES &lt;edelweissfe.fields.nodefield.NodeField.ENTRIES&gt;`.</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If this DofManager does not number the field, or, for an access as a whole, numbers another node field</span>
+<span class="sd">            of that name.</span>
+<span class="sd">        """</span>
+
+        <span class="k">if</span> <span class="n">resultName</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">NodeField</span><span class="o">.</span><span class="n">ENTRIES</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span>
+                <span class="s2">"a node field holds the entries </span><span class="si">{:}</span><span class="s2">, not '</span><span class="si">{:}</span><span class="s2">'"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="s2">", "</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">NodeField</span><span class="o">.</span><span class="n">ENTRIES</span><span class="p">),</span> <span class="n">resultName</span><span class="p">)</span>
+            <span class="p">)</span>
+        <span class="n">numberedNodeField</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">numberedNodeFields</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">nodeField</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">numberedNodeField</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"this equation system does not number the node field '</span><span class="si">{:}</span><span class="s2">'"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">nodeField</span><span class="o">.</span><span class="n">name</span><span class="p">))</span>
+        <span class="k">if</span> <span class="n">wholeField</span> <span class="ow">and</span> <span class="n">nodeField</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">numberedNodeField</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">"this equation system numbers another node field '</span><span class="si">{:}</span><span class="s2">' than the one given: a node field is read or "</span>
+                <span class="s2">"written as a whole only by the DofManager that numbers it"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">nodeField</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
+            <span class="p">)</span>
+
 <div class="viewcode-block" id="DofManager.writeDofVectorToNodeField">
 <a class="viewcode-back" href="../../../documentation/dofmanager.html#edelweissfe.numerics.dofmanager.DofManager.writeDofVectorToNodeField">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">writeDofVectorToNodeField</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dofVector</span><span class="p">,</span> <span class="n">nodeField</span><span class="p">,</span> <span class="n">resultName</span><span class="p">):</span>
@@ -873,18 +910,25 @@
 <span class="sd">        dofVector</span>
 <span class="sd">            The source DofVector.</span>
 <span class="sd">        nodeField</span>
-<span class="sd">            The NodeField to get the updated values.</span>
-<span class="sd">        resultname</span>
-<span class="sd">            The name of the value entries held by the NodeField.</span>
+<span class="sd">            The NodeField to get the updated values: one this DofManager numbers, see :attr:`numberedNodeFields`.</span>
+<span class="sd">        resultName</span>
+<span class="sd">            The entry of the NodeField to write, one of</span>
+<span class="sd">            :attr:`NodeField.ENTRIES &lt;edelweissfe.fields.nodefield.NodeField.ENTRIES&gt;`.</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
 <span class="sd">        NodeField</span>
 <span class="sd">            The updated NodeField.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        KeyError</span>
+<span class="sd">            If the entry is not one a node field holds.</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If this DofManager does not number the NodeField.</span>
 <span class="sd">        """</span>
 
-        <span class="k">if</span> <span class="n">resultName</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">nodeField</span><span class="p">:</span>
-            <span class="n">nodeField</span><span class="o">.</span><span class="n">createFieldValueEntry</span><span class="p">(</span><span class="n">resultName</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_checkNodeFieldAccess</span><span class="p">(</span><span class="n">nodeField</span><span class="p">,</span> <span class="n">resultName</span><span class="p">,</span> <span class="n">wholeField</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 
         <span class="n">indices</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">idcsOfNodeFieldsInDofVector</span><span class="p">[</span><span class="n">nodeField</span><span class="o">.</span><span class="n">name</span><span class="p">]</span>
         <span class="n">data</span> <span class="o">=</span> <span class="n">dofVector</span><span class="p">[</span><span class="n">indices</span><span class="p">]</span>
@@ -906,9 +950,12 @@
 <span class="sd">        dofVector</span>
 <span class="sd">            The result DofVector.</span>
 <span class="sd">        nodeField</span>
-<span class="sd">            The NodeField holding the values.</span>
-<span class="sd">        resultname</span>
-<span class="sd">            The name of the value entries held by the NodeField.</span>
+<span class="sd">            The NodeField holding the values. Read as a whole, it must be the one this DofManager numbers (see</span>
+<span class="sd">            :attr:`numberedNodeFields`); read on a node set, any node field of a field this DofManager numbers, since</span>
+<span class="sd">            its rows are then found by node.</span>
+<span class="sd">        resultName</span>
+<span class="sd">            The entry of the NodeField to read, one of</span>
+<span class="sd">            :attr:`NodeField.ENTRIES &lt;edelweissfe.fields.nodefield.NodeField.ENTRIES&gt;`.</span>
 <span class="sd">        NodeSet</span>
 <span class="sd">            The NodeSet to consider: its nodes whose field is part of this equation system (see</span>
 <span class="sd">            :meth:`locateFieldOnNodeSet`). If None, all nodes of the NodeField are considered.</span>
@@ -917,7 +964,16 @@
 <span class="sd">        -------</span>
 <span class="sd">        DofVector</span>
 <span class="sd">            The DofVector.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        KeyError</span>
+<span class="sd">            If the entry is not one a node field holds.</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If this DofManager does not number the field, or, read as a whole, numbers another NodeField of that name.</span>
 <span class="sd">        """</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_checkNodeFieldAccess</span><span class="p">(</span><span class="n">nodeField</span><span class="p">,</span> <span class="n">resultName</span><span class="p">,</span> <span class="n">wholeField</span><span class="o">=</span><span class="n">nodeSet</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">)</span>
 
         <span class="k">if</span> <span class="n">nodeSet</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">indices</span><span class="p">,</span> <span class="n">nodePositions</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">locateFieldOnNodeSet</span><span class="p">(</span><span class="n">nodeField</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">nodeSet</span><span class="p">)</span>

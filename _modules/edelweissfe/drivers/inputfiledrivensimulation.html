@@ -115,7 +115,7 @@
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.config.configurator</span><span class="w"> </span><span class="kn">import</span> <span class="n">loadConfiguration</span><span class="p">,</span> <span class="n">updateConfiguration</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.config.linsolve</span><span class="w"> </span><span class="kn">import</span> <span class="n">linearSolverDefinitionsFromInputFile</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.config.phenomena</span><span class="w"> </span><span class="kn">import</span> <span class="n">carriesLinearMomentum</span><span class="p">,</span> <span class="n">domainMapping</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.config.phenomena</span><span class="w"> </span><span class="kn">import</span> <span class="n">domainMapping</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.config.solvers</span><span class="w"> </span><span class="kn">import</span> <span class="n">getSolverByName</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">edelweissfe.helpers.inputfilehelpers</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">createFieldOutputFromInputFile</span><span class="p">,</span>
@@ -214,22 +214,12 @@
     <span class="k">for</span> <span class="n">updateConfig</span> <span class="ow">in</span> <span class="n">inputfile</span><span class="p">[</span><span class="s2">"updateConfiguration"</span><span class="p">]:</span>
         <span class="n">updateConfiguration</span><span class="p">(</span><span class="n">updateConfig</span><span class="p">,</span> <span class="n">jobInfo</span><span class="p">,</span> <span class="n">journal</span><span class="p">)</span>
 
-    <span class="c1"># Create the entries 'U' (flux) and 'P' (effort) on every node field, and 'V' (velocity) and 'A'</span>
-    <span class="c1"># (acceleration) on the mass-carrying ones (zero unless a dynamic solver writes them). Must happen</span>
-    <span class="c1"># before the field outputs are initialized, so that ``result=V``/``result=A`` outputs are valid.</span>
-    <span class="k">for</span> <span class="n">nodeField</span> <span class="ow">in</span> <span class="n">model</span><span class="o">.</span><span class="n">nodeFields</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
-        <span class="n">nodeField</span><span class="o">.</span><span class="n">createFieldValueEntry</span><span class="p">(</span><span class="s2">"U"</span><span class="p">)</span>
-        <span class="n">nodeField</span><span class="o">.</span><span class="n">createFieldValueEntry</span><span class="p">(</span><span class="s2">"P"</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">carriesLinearMomentum</span><span class="p">(</span><span class="n">nodeField</span><span class="o">.</span><span class="n">name</span><span class="p">):</span>
-            <span class="n">nodeField</span><span class="o">.</span><span class="n">createFieldValueEntry</span><span class="p">(</span><span class="s2">"V"</span><span class="p">)</span>
-            <span class="n">nodeField</span><span class="o">.</span><span class="n">createFieldValueEntry</span><span class="p">(</span><span class="s2">"A"</span><span class="p">)</span>
-
     <span class="n">model</span><span class="o">.</span><span class="n">_linkFieldVariableObjects</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">nodeSets</span><span class="p">[</span><span class="s2">"all"</span><span class="p">])</span>
 
     <span class="c1"># *restart, readFrom=...: the model rebuilt from the .inp file gets its converged state and</span>
-    <span class="c1"># model.time overwritten from the checkpoint. Must run after the node field entries are created</span>
-    <span class="c1"># and after advanceToTime (which would reset model.time). Steps before the checkpoint's step are</span>
-    <span class="c1"># skipped; AMR topology changes are replayed; resuming past a `modelupdate` is refused.</span>
+    <span class="c1"># model.time overwritten from the checkpoint. Must run after advanceToTime (which would reset</span>
+    <span class="c1"># model.time). Steps before the checkpoint's step are skipped; AMR topology changes are replayed;</span>
+    <span class="c1"># resuming past a `modelupdate` is refused.</span>
     <span class="n">restartDefinitions</span> <span class="o">=</span> <span class="n">inputfile</span><span class="p">[</span><span class="s2">"restart"</span><span class="p">]</span>
     <span class="n">resumeCheckpoint</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">resumeStepNumber</span> <span class="o">=</span> <span class="kc">None</span>

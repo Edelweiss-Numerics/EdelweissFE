@@ -64,6 +64,7 @@
 <li class="toctree-l2"><a class="reference internal" href="assembly.html">System matrix assembly</a></li>
 <li class="toctree-l2"><a class="reference internal" href="fieldoutputmanager.html">Field outputs</a></li>
 <li class="toctree-l2"><a class="reference internal" href="fields.html">Fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="nodefieldresults.html">Node field results</a></li>
 <li class="toctree-l2"><a class="reference internal" href="elements.html">Elements</a></li>
 <li class="toctree-l2"><a class="reference internal" href="exceptions.html">Exceptions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generators.html">Generators</a></li>
@@ -210,7 +211,7 @@ performance table of its own, before the resumed step’s table</p></td>
 </tr>
 <tr class="row-odd"><td><p>node fields, scalar variables, element state, additional parameters (e.g. the load parameter the arc length
 method publishes)</p></td>
-<td><p>read</p></td>
+<td><p>read; a node field with all its entries (see <a class="reference internal" href="nodefieldresults.html"><span class="doc">Node field results</span></a>), a checkpoint lacking one is refused</p></td>
 </tr>
 <tr class="row-even"><td><p>rigid bodies</p></td>
 <td><p>their surface nodes are moved to the restored configuration</p></td>

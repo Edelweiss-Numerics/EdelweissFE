@@ -78,6 +78,7 @@
 <li class="toctree-l2"><a class="reference internal" href="assembly.html">System matrix assembly</a></li>
 <li class="toctree-l2"><a class="reference internal" href="fieldoutputmanager.html">Field outputs</a></li>
 <li class="toctree-l2"><a class="reference internal" href="fields.html">Fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="nodefieldresults.html">Node field results</a></li>
 <li class="toctree-l2"><a class="reference internal" href="elements.html">Elements</a></li>
 <li class="toctree-l2"><a class="reference internal" href="exceptions.html">Exceptions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generators.html">Generators</a></li>
@@ -290,7 +291,9 @@ the checkpoint cannot go back to it, since a mesh change cannot be undone.</p>
 </dd>
 <dt class="field-even">Raises<span class="colon">:</span></dt>
 <dd class="field-even"><ul class="simple">
-<li><p><a class="reference internal" href="exceptions.html#edelweissfe.utils.exceptions.RestartError" title="edelweissfe.utils.exceptions.RestartError"><strong>RestartError</strong></a> – If the model is not the one the checkpoint was written from, before anything is restored.</p></li>
+<li><p><a class="reference internal" href="exceptions.html#edelweissfe.utils.exceptions.RestartError" title="edelweissfe.utils.exceptions.RestartError"><strong>RestartError</strong></a> – If the model is not the one the checkpoint was written from, before anything is restored, or
+if the checkpoint does not hold every entry of a node field (see
+<a class="reference internal" href="fields.html#edelweissfe.fields.nodefield.NodeField.ENTRIES" title="edelweissfe.fields.nodefield.NodeField.ENTRIES"><code class="xref py py-attr docutils literal notranslate"><span class="pre">ENTRIES</span></code></a>).</p></li>
 <li><p><a class="reference internal" href="exceptions.html#edelweissfe.utils.exceptions.MeshChangedSinceCheckpoint" title="edelweissfe.utils.exceptions.MeshChangedSinceCheckpoint"><strong>MeshChangedSinceCheckpoint</strong></a> – If the model’s mesh has changed since the checkpoint was written, before anything is restored.</p></li>
 </ul>
 </dd>

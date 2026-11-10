@@ -110,6 +110,7 @@
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="fields.html">Fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="nodefieldresults.html">Node field results</a></li>
 <li class="toctree-l2"><a class="reference internal" href="elements.html">Elements</a></li>
 <li class="toctree-l2"><a class="reference internal" href="exceptions.html">Exceptions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generators.html">Generators</a></li>
@@ -903,7 +904,8 @@ It operates on NodeFields.</p>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>name</strong> (<em>str</em>) – The name of this FieldOutput.</p></li>
 <li><p><strong>nodeField</strong> – The NodeField, on which this FieldOutput operates.</p></li>
-<li><p><strong>result</strong> (<em>str</em>) – The name of the result entry in the NodeField.</p></li>
+<li><p><strong>result</strong> (<em>str</em>) – The name of the result entry in the NodeField, one of
+<a class="reference internal" href="fields.html#edelweissfe.fields.nodefield.NodeField.ENTRIES" title="edelweissfe.fields.nodefield.NodeField.ENTRIES"><code class="xref py py-attr docutils literal notranslate"><span class="pre">ENTRIES</span></code></a>.</p></li>
 <li><p><strong>model</strong> (<a class="reference internal" href="models.html#edelweissfe.models.femodel.FEModel" title="edelweissfe.models.femodel.FEModel"><em>FEModel</em></a>) – The model tree instance.</p></li>
 <li><p><strong>journal</strong> (<a class="reference internal" href="journal.html#edelweissfe.journal.journal.Journal" title="edelweissfe.journal.journal.Journal"><em>Journal</em></a>) – The journal object for logging.</p></li>
 <li><p><strong>saveHistory</strong> (<em>bool</em>) – Save the complete history or only the last result.</p></li>
@@ -912,8 +914,11 @@ It operates on NodeFields.</p>
 <li><p><strong>fExport_x</strong> (<em>Callable</em>) – Apply a math function on the results before exporting.</p></li>
 </ul>
 </dd>
-<dt class="field-even">Attributes<span class="colon">:</span></dt>
-<dd class="field-even"><dl class="simple">
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>KeyError</strong> – If the result is not an entry a node field holds.</p>
+</dd>
+<dt class="field-odd">Attributes<span class="colon">:</span></dt>
+<dd class="field-odd"><dl class="simple">
 <dt><a class="reference internal" href="#edelweissfe.utils.fieldoutput._FieldOutputBase.resultVersion" title="edelweissfe.utils.fieldoutput._FieldOutputBase.resultVersion"><code class="xref py py-obj docutils literal notranslate"><span class="pre">resultVersion</span></code></a></dt><dd><p>The number of changes of <code class="xref py py-attr docutils literal notranslate"><span class="pre">result</span></code> so far – its updates and a restart’s load: the key of whatever is derived from the result and kept until it changes (e.g.</p>
 </dd>
 </dl>

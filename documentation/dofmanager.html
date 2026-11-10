@@ -100,6 +100,7 @@
 <li class="toctree-l2"><a class="reference internal" href="assembly.html">System matrix assembly</a></li>
 <li class="toctree-l2"><a class="reference internal" href="fieldoutputmanager.html">Field outputs</a></li>
 <li class="toctree-l2"><a class="reference internal" href="fields.html">Fields</a></li>
+<li class="toctree-l2"><a class="reference internal" href="nodefieldresults.html">Node field results</a></li>
 <li class="toctree-l2"><a class="reference internal" href="elements.html">Elements</a></li>
 <li class="toctree-l2"><a class="reference internal" href="exceptions.html">Exceptions</a></li>
 <li class="toctree-l2"><a class="reference internal" href="generators.html">Generators</a></li>
@@ -348,8 +349,9 @@ mutated in place would leave those plans silently stale.</p>
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>dofVector</strong> – The source DofVector.</p></li>
-<li><p><strong>nodeField</strong> – The NodeField to get the updated values.</p></li>
-<li><p><strong>resultname</strong> – The name of the value entries held by the NodeField.</p></li>
+<li><p><strong>nodeField</strong> – The NodeField to get the updated values: one this DofManager numbers, see <code class="xref py py-attr docutils literal notranslate"><span class="pre">numberedNodeFields</span></code>.</p></li>
+<li><p><strong>resultName</strong> – The entry of the NodeField to write, one of
+<a class="reference internal" href="fields.html#edelweissfe.fields.nodefield.NodeField.ENTRIES" title="edelweissfe.fields.nodefield.NodeField.ENTRIES"><code class="xref py py-attr docutils literal notranslate"><span class="pre">NodeField.ENTRIES</span></code></a>.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
@@ -357,6 +359,12 @@ mutated in place would leave those plans silently stale.</p>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p><a class="reference internal" href="fields.html#edelweissfe.fields.nodefield.NodeField" title="edelweissfe.fields.nodefield.NodeField">NodeField</a></p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><ul class="simple">
+<li><p><strong>KeyError</strong> – If the entry is not one a node field holds.</p></li>
+<li><p><strong>ValueError</strong> – If this DofManager does not number the NodeField.</p></li>
+</ul>
 </dd>
 </dl>
 </dd></dl>
@@ -382,11 +390,13 @@ does not number keeps its value.</p>
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>dofVector</strong> (<a class="reference internal" href="#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector"><em>DofVector</em></a>) – The result DofVector.</p></li>
-<li><p><strong>nodeField</strong> (<a class="reference internal" href="fields.html#edelweissfe.fields.nodefield.NodeField" title="edelweissfe.fields.nodefield.NodeField"><em>NodeField</em></a>) – The NodeField holding the values.</p></li>
-<li><p><strong>resultname</strong> – The name of the value entries held by the NodeField.</p></li>
+<li><p><strong>nodeField</strong> (<a class="reference internal" href="fields.html#edelweissfe.fields.nodefield.NodeField" title="edelweissfe.fields.nodefield.NodeField"><em>NodeField</em></a>) – The NodeField holding the values. Read as a whole, it must be the one this DofManager numbers (see
+<code class="xref py py-attr docutils literal notranslate"><span class="pre">numberedNodeFields</span></code>); read on a node set, any node field of a field this DofManager numbers, since
+its rows are then found by node.</p></li>
+<li><p><strong>resultName</strong> (<em>str</em>) – The entry of the NodeField to read, one of
+<a class="reference internal" href="fields.html#edelweissfe.fields.nodefield.NodeField.ENTRIES" title="edelweissfe.fields.nodefield.NodeField.ENTRIES"><code class="xref py py-attr docutils literal notranslate"><span class="pre">NodeField.ENTRIES</span></code></a>.</p></li>
 <li><p><strong>NodeSet</strong> – The NodeSet to consider: its nodes whose field is part of this equation system (see
 <a class="reference internal" href="#edelweissfe.numerics.dofmanager.DofManager.locateFieldOnNodeSet" title="edelweissfe.numerics.dofmanager.DofManager.locateFieldOnNodeSet"><code class="xref py py-meth docutils literal notranslate"><span class="pre">locateFieldOnNodeSet()</span></code></a>). If None, all nodes of the NodeField are considered.</p></li>
-<li><p><strong>resultName</strong> (<em>str</em>)</p></li>
 <li><p><strong>nodeSet</strong> (<a class="reference internal" href="sets.html#edelweissfe.sets.nodeset.NodeSet" title="edelweissfe.sets.nodeset.NodeSet"><em>NodeSet</em></a>)</p></li>
 </ul>
 </dd>
@@ -395,6 +405,12 @@ does not number keeps its value.</p>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p><a class="reference internal" href="#edelweissfe.numerics.dofvector.DofVector" title="edelweissfe.numerics.dofvector.DofVector">DofVector</a></p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><ul class="simple">
+<li><p><strong>KeyError</strong> – If the entry is not one a node field holds.</p></li>
+<li><p><strong>ValueError</strong> – If this DofManager does not number the field, or, read as a whole, numbers another NodeField of that name.</p></li>
+</ul>
 </dd>
 </dl>
 </dd></dl>

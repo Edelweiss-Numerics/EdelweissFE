@@ -670,8 +670,8 @@
         <span class="n">nodeFieldsGroup</span> <span class="o">=</span> <span class="n">f</span><span class="o">.</span><span class="n">create_group</span><span class="p">(</span><span class="s2">"nodeFields"</span><span class="p">)</span>
         <span class="k">for</span> <span class="n">nf</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">nodeFields</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
             <span class="n">nodeFieldGroup</span> <span class="o">=</span> <span class="n">nodeFieldsGroup</span><span class="o">.</span><span class="n">create_group</span><span class="p">(</span><span class="n">nf</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
-            <span class="k">for</span> <span class="n">entryName</span><span class="p">,</span> <span class="n">entryValues</span> <span class="ow">in</span> <span class="n">nf</span><span class="o">.</span><span class="n">_values</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
-                <span class="n">nodeFieldGroup</span><span class="o">.</span><span class="n">create_dataset</span><span class="p">(</span><span class="n">entryName</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="n">entryValues</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">entryName</span> <span class="ow">in</span> <span class="n">NodeField</span><span class="o">.</span><span class="n">ENTRIES</span><span class="p">:</span>
+                <span class="n">nodeFieldGroup</span><span class="o">.</span><span class="n">create_dataset</span><span class="p">(</span><span class="n">entryName</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="n">nf</span><span class="p">[</span><span class="n">entryName</span><span class="p">])</span>
 
         <span class="n">scalarVariablesGroup</span> <span class="o">=</span> <span class="n">f</span><span class="o">.</span><span class="n">create_group</span><span class="p">(</span><span class="s2">"scalarVariables"</span><span class="p">)</span>
         <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">scalarVariable</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">scalarVariables</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
@@ -726,7 +726,9 @@
 <span class="sd">        Raises</span>
 <span class="sd">        ------</span>
 <span class="sd">        RestartError</span>
-<span class="sd">            If the model is not the one the checkpoint was written from, before anything is restored.</span>
+<span class="sd">            If the model is not the one the checkpoint was written from, before anything is restored, or</span>
+<span class="sd">            if the checkpoint does not hold every entry of a node field (see</span>
+<span class="sd">            :attr:`~edelweissfe.fields.nodefield.NodeField.ENTRIES`).</span>
 <span class="sd">        MeshChangedSinceCheckpoint</span>
 <span class="sd">            If the model's mesh has changed since the checkpoint was written, before anything is restored.</span>
 <span class="sd">        """</span>
@@ -750,6 +752,13 @@
             <span class="k">raise</span> <span class="n">RestartError</span><span class="p">(</span><span class="s2">"the topology decisions of the model differ from those the checkpoint records"</span><span class="p">)</span>
         <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">appliedRecords</span><span class="p">)</span> <span class="o">&gt;</span> <span class="nb">len</span><span class="p">(</span><span class="n">recordGroups</span><span class="p">):</span>
             <span class="k">raise</span> <span class="n">MeshChangedSinceCheckpoint</span><span class="p">(</span><span class="n">appliedRecords</span><span class="p">[</span><span class="nb">len</span><span class="p">(</span><span class="n">recordGroups</span><span class="p">)])</span>
+        <span class="k">for</span> <span class="n">fieldName</span><span class="p">,</span> <span class="n">storedField</span> <span class="ow">in</span> <span class="n">f</span><span class="p">[</span><span class="s2">"nodeFields"</span><span class="p">]</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">if</span> <span class="nb">set</span><span class="p">(</span><span class="n">storedField</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span> <span class="o">!=</span> <span class="nb">set</span><span class="p">(</span><span class="n">NodeField</span><span class="o">.</span><span class="n">ENTRIES</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="n">RestartError</span><span class="p">(</span>
+                    <span class="s2">"the checkpoint holds the entries </span><span class="si">{:}</span><span class="s2"> of node field </span><span class="si">{:}</span><span class="s2">, not </span><span class="si">{:}</span><span class="s2">"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span>
+                        <span class="s2">", "</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">sorted</span><span class="p">(</span><span class="n">storedField</span><span class="o">.</span><span class="n">keys</span><span class="p">())),</span> <span class="n">fieldName</span><span class="p">,</span> <span class="s2">", "</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">NodeField</span><span class="o">.</span><span class="n">ENTRIES</span><span class="p">)</span>
+                    <span class="p">)</span>
+                <span class="p">)</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">time</span> <span class="o">=</span> <span class="n">f</span><span class="o">.</span><span class="n">attrs</span><span class="p">[</span><span class="s2">"time"</span><span class="p">]</span>
 
@@ -776,12 +785,8 @@
             <span class="k">if</span> <span class="n">storedField</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="k">raise</span> <span class="n">RestartError</span><span class="p">(</span><span class="s2">"the checkpoint holds no node field </span><span class="si">{:}</span><span class="s2">"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">nf</span><span class="o">.</span><span class="n">name</span><span class="p">))</span>
 
-            <span class="c1"># Iterate the checkpoint's entries, not the model's -- entries created only later by a</span>
-            <span class="c1"># solver (e.g. the explicit solver's 'V') would otherwise never be restored.</span>
-            <span class="k">for</span> <span class="n">entryName</span><span class="p">,</span> <span class="n">storedValues</span> <span class="ow">in</span> <span class="n">storedField</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
-                <span class="k">if</span> <span class="n">entryName</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">nf</span><span class="p">:</span>
-                    <span class="n">nf</span><span class="o">.</span><span class="n">createFieldValueEntry</span><span class="p">(</span><span class="n">entryName</span><span class="p">)</span>
-                <span class="n">storedValues</span><span class="o">.</span><span class="n">read_direct</span><span class="p">(</span><span class="n">nf</span><span class="p">[</span><span class="n">entryName</span><span class="p">])</span>
+            <span class="k">for</span> <span class="n">entryName</span> <span class="ow">in</span> <span class="n">NodeField</span><span class="o">.</span><span class="n">ENTRIES</span><span class="p">:</span>
+                <span class="n">storedField</span><span class="p">[</span><span class="n">entryName</span><span class="p">]</span><span class="o">.</span><span class="n">read_direct</span><span class="p">(</span><span class="n">nf</span><span class="p">[</span><span class="n">entryName</span><span class="p">])</span>
 
         <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">scalarVariable</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">scalarVariables</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
             <span class="n">scalarVariable</span><span class="o">.</span><span class="n">value</span> <span class="o">=</span> <span class="n">f</span><span class="p">[</span><span class="s2">"scalarVariables"</span><span class="p">]</span><span class="o">.</span><span class="n">attrs</span><span class="p">[</span><span class="n">name</span><span class="p">]</span>

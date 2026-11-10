@@ -122,7 +122,10 @@
 <span class="k">class</span><span class="w"> </span><span class="nc">NodeField</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""</span>
 <span class="sd">    This class represents a node field.</span>
-<span class="sd">    A node field associates every node with multiple entries (e.g., flux and effort) of a field variable.</span>
+<span class="sd">    A node field associates every node with the entries of a field variable listed in :attr:`ENTRIES`:</span>
+<span class="sd">    the solution ``U``, its increment ``dU``, the nodal force ``P``, and the rates ``V`` and ``A``. Every</span>
+<span class="sd">    node field holds all of them, from its construction on; their meaning is defined once, in</span>
+<span class="sd">    :doc:`/documentation/nodefieldresults`.</span>
 <span class="sd">    Furthermore, for convencience, it allows to get fast access to values for individual nodes or node sets.</span>
 
 <span class="sd">    The purpose is to store field data in an efficient, contiguos manner rather than distributing it across</span>
@@ -159,6 +162,11 @@
 <span class="sd">        The associated nodes. Only nodes with active fields are considered.</span>
 <span class="sd">    """</span>
 
+    <span class="c1">#: The entries every node field holds, see :doc:`/documentation/nodefieldresults`: the solution ``U``,</span>
+    <span class="c1">#: the increment ``dU`` of the last accepted increment, the nodal force ``P``, and the rate ``V`` and</span>
+    <span class="c1">#: second rate ``A`` of the solution. There are no others.</span>
+    <span class="n">ENTRIES</span> <span class="o">=</span> <span class="p">(</span><span class="s2">"U"</span><span class="p">,</span> <span class="s2">"dU"</span><span class="p">,</span> <span class="s2">"P"</span><span class="p">,</span> <span class="s2">"V"</span><span class="p">,</span> <span class="s2">"A"</span><span class="p">)</span>
+
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">fieldName</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">dimension</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">nodeSet</span><span class="p">:</span> <span class="n">NodeSet</span><span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">name</span> <span class="o">=</span> <span class="n">fieldName</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">associatedSet</span> <span class="o">=</span> <span class="n">nodeSet</span>
@@ -166,7 +174,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">dimension</span> <span class="o">=</span> <span class="n">dimension</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_indicesOfNodesInArray</span> <span class="o">=</span> <span class="p">{</span><span class="n">n</span><span class="p">:</span> <span class="n">i</span> <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">n</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">nodes</span><span class="p">)}</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_subsetCache</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_values</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_values</span> <span class="o">=</span> <span class="p">{</span><span class="n">entry</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">nodes</span><span class="p">),</span> <span class="n">dimension</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span> <span class="k">for</span> <span class="n">entry</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">ENTRIES</span><span class="p">}</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_version</span> <span class="o">=</span> <span class="mi">0</span>  <span class="c1">#: bumped on every in-place mutation (resize); stable identity for AMR</span>
 
 <div class="viewcode-block" id="NodeField.resize">
@@ -220,9 +228,6 @@
     <span class="k">def</span><span class="w"> </span><span class="fm">__getitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">):</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_values</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="fm">__contains__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">):</span>
-        <span class="k">return</span> <span class="n">key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_values</span>
-
 <div class="viewcode-block" id="NodeField.indexOfNode">
 <a class="viewcode-back" href="../../../documentation/fields.html#edelweissfe.fields.nodefield.NodeField.indexOfNode">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">indexOfNode</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">node</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
@@ -240,27 +245,6 @@
 <span class="sd">            The row index.</span>
 <span class="sd">        """</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_indicesOfNodesInArray</span><span class="p">[</span><span class="n">node</span><span class="p">]</span></div>
-
-
-<div class="viewcode-block" id="NodeField.createFieldValueEntry">
-<a class="viewcode-back" href="../../../documentation/fields.html#edelweissfe.fields.nodefield.NodeField.createFieldValueEntry">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">createFieldValueEntry</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""</span>
-<span class="sd">        Add an empty entry with given name for the field, e.g, 'U' or 'P' for flux or effort entries.</span>
-
-<span class="sd">        Parameters</span>
-<span class="sd">        ----------</span>
-<span class="sd">        name</span>
-<span class="sd">            The name of the entry.</span>
-
-<span class="sd">        Returns</span>
-<span class="sd">        -------</span>
-<span class="sd">        np.ndarray</span>
-<span class="sd">            The new entry</span>
-<span class="sd">        """</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_values</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">nodes</span><span class="p">),</span> <span class="bp">self</span><span class="o">.</span><span class="n">dimension</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span>
-
-        <span class="k">return</span> <span class="bp">self</span><span class="p">[</span><span class="n">name</span><span class="p">]</span></div>
 
 
 <div class="viewcode-block" id="NodeField.subset">
@@ -309,18 +293,18 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">copyEntriesFromOther</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">,</span> <span class="n">fieldValueEntries</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">"""</span>
 <span class="sd">        Copy values from another NodeField.</span>
-<span class="sd">        If the fields differ, the intersection is considered.</span>
+<span class="sd">        Of the nodes, the intersection is considered; the other nodes of this field get zero.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
-<span class="sd">        subset</span>
-<span class="sd">            The sub NodeField.</span>
+<span class="sd">        other</span>
+<span class="sd">            The NodeField to copy from.</span>
 <span class="sd">        fieldValueEntries</span>
 <span class="sd">            The list of entries which should be copied. Default: all entries are copied.</span>
 <span class="sd">        """</span>
 
         <span class="k">if</span> <span class="ow">not</span> <span class="n">fieldValueEntries</span><span class="p">:</span>
-            <span class="n">fieldValueEntries</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_values</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span> <span class="o">&amp;</span> <span class="n">other</span><span class="o">.</span><span class="n">_values</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span>
+            <span class="n">fieldValueEntries</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">ENTRIES</span>
 
         <span class="n">commonNodes</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_indicesOfNodesInArray</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span> <span class="o">&amp;</span> <span class="n">other</span><span class="o">.</span><span class="n">_indicesOfNodesInArray</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span>
 
@@ -336,21 +320,21 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">addEntriesFromOther</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">,</span> <span class="n">fieldValueEntries</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">"""</span>
 <span class="sd">        Add values from another NodeField.</span>
-<span class="sd">        If the fields differ, the intersection is considered.</span>
+<span class="sd">        Of the nodes, the intersection is considered.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
-<span class="sd">        subset</span>
-<span class="sd">            The sub NodeField.</span>
+<span class="sd">        other</span>
+<span class="sd">            The NodeField to add from.</span>
 <span class="sd">        fieldValueEntries</span>
-<span class="sd">            The entries which should be added. Default: all common entries are added.</span>
+<span class="sd">            The entries which should be added. Default: all entries are added.</span>
 <span class="sd">            May be a list of entry names shared by both fields, or a dict mapping an</span>
 <span class="sd">            entry name on ``other`` to the (possibly differently named) entry name on</span>
 <span class="sd">            ``self`` it should be accumulated into.</span>
 <span class="sd">        """</span>
 
         <span class="k">if</span> <span class="ow">not</span> <span class="n">fieldValueEntries</span><span class="p">:</span>
-            <span class="n">fieldValueEntries</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_values</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span> <span class="o">&amp;</span> <span class="n">other</span><span class="o">.</span><span class="n">_values</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span>
+            <span class="n">fieldValueEntries</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">ENTRIES</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">fieldValueEntries</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
             <span class="n">fieldValueEntries</span> <span class="o">=</span> <span class="p">{</span><span class="n">entry</span><span class="p">:</span> <span class="n">entry</span> <span class="k">for</span> <span class="n">entry</span> <span class="ow">in</span> <span class="n">fieldValueEntries</span><span class="p">}</span>
 
@@ -402,12 +386,6 @@
     <span class="k">def</span><span class="w"> </span><span class="fm">__contains__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_healIfParentResized</span><span class="p">()</span>
         <span class="k">return</span> <span class="n">key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">nodes</span>
-
-<div class="viewcode-block" id="NodeFieldSubset.createFieldValueEntry">
-<a class="viewcode-back" href="../../../documentation/fields.html#edelweissfe.fields.nodefield.NodeFieldSubset.createFieldValueEntry">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">createFieldValueEntry</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">):</span>
-        <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s2">"Invalid operation on subset of a NodeField"</span><span class="p">)</span></div>
-
 
 <div class="viewcode-block" id="NodeFieldSubset.subset">
 <a class="viewcode-back" href="../../../documentation/fields.html#edelweissfe.fields.nodefield.NodeFieldSubset.subset">[docs]</a>
