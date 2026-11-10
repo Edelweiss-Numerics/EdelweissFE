@@ -165,6 +165,15 @@ increment evaluates the forces of the configuration the step starts from, and wr
 are at rest; a step that continues the motion the model holds at its nodes evaluates no force there, and leaves ``P``
 as it is.
 
+The implicit dynamic solver (``NID``) integrates the inertia of the entities that integrate their own either in the
+entities or at the nodes they couple (option ``inertia``, see :mod:`~edelweissfe.solvers.nonlinearimplicitdynamic`).
+In the entities, they carry their velocity and acceleration in their state, and ``V`` and ``A`` of the nodes they
+couple are zero; at the nodes, ``NID`` carries them in ``V`` and ``A`` by node. Either way, ``P`` holds the inertial
+force: in the entities' residual contributions, or added at the nodes. The two keep the motion of the entities in
+different places, and nothing transfers it between them: a step whose ``inertia`` would take it from where the model
+does not hold it refuses to start
+(:meth:`~edelweissfe.models.equationsystemlayout.EquationSystemLayout.carriersOfTheMotion`).
+
 Using the entries in code
 -------------------------
 

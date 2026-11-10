@@ -32,12 +32,17 @@ guard against a dynamic degree of freedom that received no mass.
 Reuses the SDOF deck from ``test_nid_newmark`` (one Marmot ``C3D8``/``LinearElastic`` bar).
 """
 
+import functools
+import re
+from pathlib import Path
+
 import numpy as np
 import pytest
 
 # tests/ carries no __init__.py, so pytest's default (prepend) import mode puts this directory on
 # sys.path and sibling test modules import by their bare module name -- same convention as
 # test_nid_restart.py.
+from test_model_equation_system import _solve, _strip
 from test_nid_newmark import (
     BETA,
     FORCE,
@@ -51,6 +56,18 @@ from test_nid_newmark import (
     _run,
     _tipHistories,
 )
+
+from edelweissfe.config.configurator import loadConfiguration
+from edelweissfe.drivers.inputfiledrivensimulation import finiteElementSimulation
+from edelweissfe.journal.journal import Journal
+from edelweissfe.models.equationsystemlayout import EquationSystemLayout
+from edelweissfe.models.femodel import FEModel
+from edelweissfe.solvers.nonlinearimplicitdynamic import NonlinearImplicitDynamic
+from edelweissfe.solvers.nonlinearimplicitstatic import NIST
+from edelweissfe.utils.inputfileparser import parseInputFile
+
+#: A deck of the explicit static solver NEST.
+_NEST_DECK = Path(__file__).resolve().parent.parent / "testfiles" / "marmot" / "NEST" / "test.inp"
 
 
 def test_backward_euler_damps_energy_monotonically(tmp_path):
@@ -207,3 +224,131 @@ def test_reports_the_assembled_total_mass(tmp_path, monkeypatch):
     assert reported and set(reported[0]) == {"displacement"}
     # the whole unit bar: rho * volume
     np.testing.assert_allclose(reported[0]["displacement"], RHO, rtol=1e-12)
+
+
+def test_the_quasi_static_and_the_dynamic_solver_give_the_entities_their_newmark_parameters():
+    """The solver is the one source of the Newmark parameters of the entities that integrate their own inertia: NIST
+    passes zero, NID its own with inertia=entities and zero with inertia=nodes, where it integrates their inertia at
+    the nodes instead."""
+
+    journal = Journal(verbose=False)
+    jobInfo = loadConfiguration(dict())
+    assert NIST(jobInfo, journal).newmarkParametersOfEntities() == (0.0, 0.0)
+
+    inEntities = NonlinearImplicitDynamic(jobInfo, journal, newmarkBeta=0.3, newmarkGamma=0.6)
+    assert inEntities.newmarkParametersOfEntities() == (0.3, 0.6)
+
+    atNodes = NonlinearImplicitDynamic(jobInfo, journal, newmarkBeta=0.3, newmarkGamma=0.6, inertia="nodes")
+    assert atNodes.newmarkParametersOfEntities() == (0.0, 0.0)
+
+    with pytest.raises(ValueError, match=re.escape("inertia=entities|nodes")):
+        NonlinearImplicitDynamic(jobInfo, journal, inertia="grid")
+
+
+class _NewmarkParametersGiven(Exception):
+    """Stops the run once the solver has given the entities their Newmark parameters."""
+
+
+def test_the_explicit_static_solver_gives_the_entities_no_inertia(tmp_path, monkeypatch):
+    """NEST is quasi-static: at the start of its step, it gives the entities that integrate their own inertia zero
+    Newmark parameters, as NIST does, so that entities that a dynamic step before gave its parameters carry no inertia
+    under it."""
+
+    given = []
+
+    def recordAndStop(self, beta, gamma):
+        given.append((beta, gamma))
+        raise _NewmarkParametersGiven()
+
+    monkeypatch.setattr(FEModel, "setNewmarkParametersOfEntities", recordAndStop)
+    monkeypatch.chdir(tmp_path)
+    with pytest.raises(_NewmarkParametersGiven):
+        finiteElementSimulation(parseInputFile(str(_NEST_DECK)), verbose=False, suppressPlots=True)
+
+    assert given == [(0.0, 0.0)]
+
+
+class _LayoutWithoutNodalInertia(EquationSystemLayout):
+    """The layout of a model none of whose nodes carries a mass the solver integrates: as in a model whose entities
+    carry the inertia and integrate it themselves (``inertia=entities``). It reports the motion of these entities where
+    the model says, and their lumped mass as zero: they lie nowhere."""
+
+    def dofsWithNodalInertia(self, fieldNames):
+        return np.zeros(0, dtype=int)
+
+    def assembleLumpedMassOfEntitiesWithOwnInertia(self, forEachChunk):
+        return self.dofManager.constructDofVector()
+
+    def carriersOfTheMotion(self):
+        return set(self.model.motionHeldIn)
+
+
+class _ModelWithoutNodalInertia(FEModel):
+    """A finite element model that answers with :class:`_LayoutWithoutNodalInertia`, and holds the motion of entities
+    that integrate their own inertia (which it does not model) in the given places."""
+
+    def __init__(self, dimension, motionHeldIn=()):
+        super().__init__(dimension)
+        self.motionHeldIn = motionHeldIn
+
+    def buildEquationSystem(self):
+        layout = super().buildEquationSystem()
+        return _LayoutWithoutNodalInertia(self, layout.dofManager, layout.elements)
+
+
+def test_a_model_without_nodal_inertia_gets_no_mass_assembled():
+    """With no degree of freedom to integrate in time, NID assembles no mass and adds no Newmark terms: the elements of
+    the strip, from the pure-Python library, have no consistent mass, which an assembly would ask them for. What is
+    left is the quasi-static answer."""
+
+    journal = Journal(verbose=False)
+    quasiStatic = _solve(_strip(FEModel(2), 2), NIST, journal)
+    withoutNodalInertia = _solve(_strip(_ModelWithoutNodalInertia(2), 2), NonlinearImplicitDynamic, journal)
+
+    expected, actual = quasiStatic.nodeFields["displacement"], withoutNodalInertia.nodeFields["displacement"]
+    assert np.max(np.abs(expected["U"])) > 0.0
+    for entry in ("U", "P"):
+        np.testing.assert_allclose(
+            actual[entry], expected[entry], rtol=1e-10, atol=1e-14 * np.max(np.abs(expected[entry]))
+        )
+    for entry in ("V", "A"):
+        np.testing.assert_array_equal(actual[entry], 0.0)
+
+
+@pytest.mark.parametrize(
+    "inertia, motionHeldIn, refused",
+    [
+        ("nodes", ("entities",), True),
+        ("entities", ("nodes",), True),
+        ("entities", ("entities",), False),
+        ("nodes", ("nodes",), False),
+        ("entities", ("entities", "nodes"), False),
+        ("nodes", (), False),
+    ],
+)
+def test_a_step_refuses_to_start_where_the_motion_of_the_entities_is_not_taken_from(inertia, motionHeldIn, refused):
+    """NID takes the motion of the entities that integrate their own inertia from their state (``entities``) or from
+    the nodes they couple (``nodes``), and nothing transfers it between the two: a step that would take it from where
+    the model does not hold it refuses to start, rather than starting the entities from rest. Held in both places, or
+    nowhere (at rest), the step starts."""
+
+    journal = Journal(verbose=False)
+    model = _strip(_ModelWithoutNodalInertia(2, motionHeldIn), 2)
+    solverClass = functools.partial(NonlinearImplicitDynamic, inertia=inertia)
+
+    if refused:
+        with pytest.raises(ValueError, match="inertia={:} takes it".format(inertia)):
+            _solve(model, solverClass, journal)
+    else:
+        _solve(model, solverClass, journal)
+        assert np.max(np.abs(model.nodeFields["displacement"]["U"])) > 0.0
+
+
+def test_inertia_at_the_nodes_is_refused_for_a_model_without_entities_that_integrate_their_own():
+    """inertia=nodes integrates the inertia of the entities that integrate their own at the nodes; a finite element
+    model has none (its layout assembles no lumped mass of them), so the option means nothing there and is refused."""
+
+    journal = Journal(verbose=False)
+    solverClass = functools.partial(NonlinearImplicitDynamic, inertia="nodes")
+    with pytest.raises(ValueError, match="inertia=nodes means nothing"):
+        _solve(_strip(FEModel(2), 2), solverClass, journal)

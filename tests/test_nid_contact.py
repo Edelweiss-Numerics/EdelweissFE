@@ -115,9 +115,9 @@ def _run(tmp_path, name: str, monkeypatch, forceReassembly: bool):
             )
         return result
 
-    def assemble(self, model, dynamicDofs, dynamicFields):
+    def assemble(self, model, dynamicDofs, dynamicFields, lumpedMassOfEntities):
         record["assembled"] += 1
-        return _TRUE_ASSEMBLE(self, model, dynamicDofs, dynamicFields)
+        return _TRUE_ASSEMBLE(self, model, dynamicDofs, dynamicFields, lumpedMassOfEntities)
 
     monkeypatch.setattr(NonlinearImplicitDynamic, "_reuseMassAndDamping", reuse)
     monkeypatch.setattr(NonlinearImplicitDynamic, "_assembleMassAndDamping", assemble)

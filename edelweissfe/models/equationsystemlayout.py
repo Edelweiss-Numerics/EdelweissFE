@@ -33,6 +33,8 @@ equation system, see :meth:`~edelweissfe.models.femodel.FEModel.buildEquationSys
 from collections.abc import Callable
 from typing import TYPE_CHECKING
 
+import numpy as np
+
 from edelweissfe.numerics.dofmanager import DofManager, DofVector
 from edelweissfe.timesteppers.timestep import TimeStep
 
@@ -78,6 +80,9 @@ class EquationSystemLayout:
         #: The model the linear solver is set up for (see :meth:`~edelweissfe.linsolve.base.LinearSolver.setModel`),
         #: whose node fields are the ones the DOF manager numbers: here, the model itself.
         self.modelForLinearSolver = model
+        #: The material points that belong to no element, which :meth:`updateMaterialPoints` updates: none in a
+        #: finite element model, whose elements evaluate the material at their own quadrature points.
+        self.materialPoints = []
 
     def readStateFromModel(self, U: DofVector, V: DofVector = None, A: DofVector = None, dynamicFields: list = None):
         """Read the state the model carries from increment to increment into the vectors of a (re)built equation
@@ -251,6 +256,73 @@ class EquationSystemLayout:
             return list(self.model.nodeFields.values())
 
         return [self.model.nodeFields[fieldName] for fieldName in dynamicFields]
+
+    def dofsWithNodalInertia(self, fieldNames: list) -> np.ndarray:
+        """The degrees of freedom of the given fields whose inertia is that of the nodes, i.e. the mass the elements
+        assemble: those the implicit dynamic solver integrates in time with its own Newmark scheme.
+
+        In a finite element model, every node carries its total solution and every element its mass, so these are all
+        degrees of freedom of the fields. A model whose entities carry their state in themselves, and with it the
+        inertia, leaves out the nodes these entities couple: their values are the coefficients of one increment (see
+        :meth:`assembleLumpedMassOfEntitiesWithOwnInertia`).
+
+        Parameters
+        ----------
+        fieldNames
+            The names of the fields, e.g. those whose inertia is a mass.
+
+        Returns
+        -------
+        np.ndarray
+            The indices of the degrees of freedom in the vectors of the equation system, sorted.
+        """
+
+        isWithNodalInertia = np.zeros(self.dofManager.nDof, dtype=bool)
+        for fieldName in fieldNames:
+            isWithNodalInertia[self.dofManager.idcsOfFieldsInDofVector[fieldName]] = True
+
+        return np.flatnonzero(isWithNodalInertia)
+
+    def assembleLumpedMassOfEntitiesWithOwnInertia(
+        self, forEachChunk: Callable[[list, Callable], None]
+    ) -> DofVector | None:
+        """The lumped (diagonal) mass, at the nodes they couple, of the entities that integrate their own inertia (see
+        :meth:`~edelweissfe.models.femodel.FEModel.setNewmarkParametersOfEntities`): what the implicit dynamic solver
+        adds to the mass of the nodes when it integrates the inertia of these entities there instead (option
+        ``inertia=nodes``). Such entities may move with every increment, so this mass is one of the current
+        configuration.
+
+        A finite element model has no such entity: None.
+
+        Parameters
+        ----------
+        forEachChunk
+            The solver's loop over chunks of independent entities, see :meth:`updateMaterialPoints`.
+
+        Returns
+        -------
+        DofVector | None
+            The lumped mass, one value per degree of freedom; None if the model has no such entity.
+        """
+
+        return None
+
+    def carriersOfTheMotion(self) -> set[str]:
+        """Where the model holds the motion of its entities that integrate their own inertia: ``"entities"`` if such
+        an entity carries a velocity or an acceleration in its own state, ``"nodes"`` if a node these entities couple
+        carries one in the entries ``V`` and ``A`` of the model's node fields. Asked by the implicit dynamic solver at
+        the start of a step: it takes the motion from one of the two, as its option ``inertia`` says, and nothing
+        transfers it from the other.
+
+        A finite element model has no such entity: none.
+
+        Returns
+        -------
+        set[str]
+            ``"entities"``, ``"nodes"``, both or none.
+        """
+
+        return set()
 
     def updateMaterialPoints(self, dU: DofVector, timeStep: TimeStep, forEachChunk: Callable[[list, Callable], None]):
         """Bring the material points that belong to no element up to date with the trial solution increment, right
