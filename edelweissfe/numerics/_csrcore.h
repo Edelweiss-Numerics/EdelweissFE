@@ -733,10 +733,10 @@ public:
 // is the slot of every value of every block. A block is scattered one of two ways:
 //
 // - row by row: the slot of a value is indptr[row] + offset, where offset is the position of its
-//   column within its row. The length of most rows is set by the stencil (for RKPM by the support
-//   radius), not by the DOF count, so the offset fits in uint16 -- half the width of the int32 gather
+//   column within its row. The length of most rows is set by the stencil (how many nodes the entities
+//   couple), not by the DOF count, so the offset fits in uint16 -- half the width of the int32 gather
 //   index it replaces, and it makes the value array unnecessary entirely. This is how the dense
-//   blocks of the elements, cells and particles are scattered.
+//   blocks of the elements and the other entities are scattered.
 // - value by value: every value keeps its absolute slot, an int. This is how a listed block is
 //   scattered (its values share no rows to factor out), and a dense block with a DOF in a row too
 //   long for a 16-bit offset: a row that grows with the model, not with the stencil -- the reference

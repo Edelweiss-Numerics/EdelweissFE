@@ -13,8 +13,8 @@ Both paths are in ``edelweissfe.numerics.csrgeneratorv2``, backed by the C++ hea
 The block of an entity
 ----------------------
 
-Every element, constraint, cell or particle contributes a block to the system matrix, and knows it only in its own
-numbering: row ``a`` and column ``b`` of the block are its ``a``-th and ``b``-th degree of freedom
+Every element, constraint or other entity that couples nodes contributes a block to the system matrix, and knows it
+only in its own numbering: row ``a`` and column ``b`` of the block are its ``a``-th and ``b``-th degree of freedom
 (:class:`~edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase`). Where these lie in the global
 system is its global DOF list, which the :class:`~edelweissfe.numerics.dofmanager.DofManager` numbers; the DOF manager
 knows nothing about the system matrix.
@@ -35,7 +35,7 @@ the layout: a list can have exactly ``nDof**2`` entries, as a rigid body contact
 assembly never guesses it. It declares it once, by overriding the list or not: a subclass that also declares
 ``couplesAllItsDofs`` is refused when it is defined, since the direct path reads the flag and the VIJ path the list,
 and two declarations that disagree would assemble two different matrices. An extension type, which cannot inherit the
-base class (the Marmot elements, cells and particles), declares a dense block itself, with the dense list.
+base class (the Marmot elements, for one), declares a dense block itself, with the dense list.
 
 The entity writes its tangent into the view
 :meth:`~edelweissfe.numerics.systemmatrixcontributor.SystemMatrixContributorBase.shapeBlock` makes of the values of
@@ -105,7 +105,7 @@ grows with the number of entities touching a DOF, not with the DOF count itself 
 ``gather_sources`` become relative to the CSR result they produce. Their size is set by the number of values of all
 blocks; the CSR pattern's is set by ``nnz``. A discretisation where many entities contribute to the same entries (a
 wide stencil, or overlapping supports) can have the staging arrays dwarf the actual result by a wide margin. For the
-dense blocks of the elements, cells and particles, the direct path holds 2 bytes per value instead of 20.
+dense blocks of the elements and the other entities, the direct path holds 2 bytes per value instead of 20.
 
 In the implicit solvers
 -----------------------

@@ -26,8 +26,8 @@
 #  the top level directory of EdelweissFE.
 #  ---------------------------------------------------------------------
 
-"""The entities that contribute a block to the system matrix -- elements, constraints, and in EdelweissMeshfree cells
-and particles -- and the layout of that block.
+"""The entities that contribute a block to the system matrix -- elements, constraints, and whatever else couples
+nodes -- and the layout of that block.
 
 An entity knows its block only in its own numbering: row ``a`` and column ``b`` of the block are its ``a``-th and
 ``b``-th degree of freedom. Where these lie in the global system (the global DOF list of the entity, see
@@ -118,7 +118,7 @@ class SystemMatrixContributorBase:
 
     The layout is declared once, by the override: a subclass that declares :attr:`couplesAllItsDofs` itself is refused
     when it is defined, as a second declaration could contradict the first. An extension type, which cannot inherit
-    this class (the Marmot elements, cells and particles), declares both itself: a dense block, whose
+    this class (the Marmot elements, for one), declares both itself: a dense block, whose
     :meth:`localEntriesOfBlock` is :func:`denseBlockLocalEntries`.
 
     Parameters
