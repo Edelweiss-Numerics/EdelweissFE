@@ -646,7 +646,7 @@ def test_abaqus_zero_flux_field_with_round_off_residual():
     # A nonlocal field driven by the local strain (e.g., GM7's nonlocal strain at a load close to zero) has a residual
     # of round-off size, not exactly zero, and a correction of the size of its own increment. The linear case
     # (1e-13 <= 1e-8 * 1e-2) applies irrespective of the correction, also without flux.
-    criterion = AbaqusConvergenceCriterion()
+    criterion = abaqus()
     dU = np.array([1e-15])
     roundOff = criterion.checkField("strain", np.array([1e-13]), np.array([4e-15]), dU, 1e-14, 1)
     assert roundOff.fluxResidualConverged and roundOff.correctionConverged
